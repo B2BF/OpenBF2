@@ -25,10 +25,35 @@ const char* const kGameConsoleTag = "hfe.game";
 
 } // namespace
 
-#if !DEDICATED
-// bf2Engine console defaults; playMovie is registered only in client images.
+// bf2Engine console defaults and the engine lifecycle commands, registered in both images.
 BF2_CONSOLE_OBJECT("bf2Engine", 2, 0)
 
+// hostServer selects server mode and a level (dedicated PE executor 0x412330). The optional second
+// argument is the game mode; the one-argument form defaults it to "conquest", as shipped.
+namespace {
+void engineHostServer(const std::string& level, const std::string& gameMode = "conquest")
+{
+    ::dice::hfe::bf2Engine->hostServer(level, gameMode);
+}
+// startGame and shutdownGame take no console arguments (PE executors 0x412140 / 0x4121F0); the
+// shipped arms call startGame(false, false) and shutdownGame(true).
+void engineStartGame()
+{
+    ::dice::hfe::bf2Engine->startGame(false, false);
+}
+void engineShutdownGame()
+{
+    ::dice::hfe::bf2Engine->shutdownGame(true);
+}
+} // namespace
+BF2_CONSOLE_METHOD_1_2_ACTIVE(hostServer, engineHostServer, ::dice::hfe::bf2Engine != 0,
+                              std::string, std::string, kGameConsoleTag)
+BF2_CONSOLE_METHOD_0_ACTIVE(startGame, engineStartGame, ::dice::hfe::bf2Engine != 0,
+                            kGameConsoleTag)
+BF2_CONSOLE_METHOD_0_ACTIVE(shutdownGame, engineShutdownGame, ::dice::hfe::bf2Engine != 0,
+                            kGameConsoleTag)
+
+#if !DEDICATED
 // playMovie takes a filename and flag. Flag 1 prevents skipping; other flags
 // allow it. The binding requires a live engine.
 namespace {

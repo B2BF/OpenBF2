@@ -294,6 +294,12 @@ BF2_CONSOLE_OBJECT("ObjectTemplate", 2, 1) // fullAccess, COCPhysics
 // Engine-type constants must be registered before integer property parsing.
 BF2_CONSOLE_PROPERTY(engineType, int, activeEngine(), setEngineType, getEngineType, kObjTemplVehicleConsoleTag)
 
+// Propeller rotation axis (EngineTemplate, dedicated PE executor writes the raw field via the
+// template's accessor pair) and the spring axis-fixation flag.
+BF2_CONSOLE_PROPERTY(propRotAxis, int, activeEngine(), setPropRotAxis, getPropRotAxis,
+                     kObjTemplVehicleConsoleTag)
+BF2_CONSOLE_FIELD(fixAxisSpring, bool, activeSpring(), m_fixAxisSpring, kObjTemplVehicleConsoleTag)
+
 // The gear block - the three named dwords of the six-dword gap between the two
 // OverTimeDistributions (EngineTemplate.h +0x3C8/+0x3CC/+0x3D0, names proven by the engine
 // objects that consume them: getGearRatio walks curveB over g / numberOfGears, getCurrentRatio =

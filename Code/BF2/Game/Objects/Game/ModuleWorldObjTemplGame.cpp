@@ -477,6 +477,76 @@ struct GameTemplateConsoleAccess
         playerControlObject()->setVehicleType(type);
     }
 
+    // Occupancy and exit-policy fields retail registers as plain ObjectTemplate properties, each
+    // gated on CID_PlayerControlObjectTemplate (dedicated PE executors 0x4B78F0 etc. read/write the
+    // raw field; disableSpawnPointsOnEnter normalizes its stored byte to 0/1).
+    static bool getAllowDucking() { return playerControlObject()->m_allowDucking; }
+    static void setAllowDucking(bool value) { playerControlObject()->m_allowDucking = value; }
+    static bool getDisableInputWhileDucking()
+    {
+        return playerControlObject()->m_disableInputWhileDucking;
+    }
+    static void setDisableInputWhileDucking(bool value)
+    {
+        playerControlObject()->m_disableInputWhileDucking = value;
+    }
+    static bool getDontClearTeamOnExit() { return playerControlObject()->m_dontClearTeamOnExit; }
+    static void setDontClearTeamOnExit(bool value)
+    {
+        playerControlObject()->m_dontClearTeamOnExit = value;
+    }
+    static bool getDestroyOnExit() { return playerControlObject()->m_destroyOnExit; }
+    static void setDestroyOnExit(bool value) { playerControlObject()->m_destroyOnExit = value; }
+    static bool getDontAllowExit() { return playerControlObject()->m_dontAllowExit; }
+    static void setDontAllowExit(bool value) { playerControlObject()->m_dontAllowExit = value; }
+    static bool getDisableSpawnPointsOnEnter()
+    {
+        return playerControlObject()->m_disableSpawnPointsOnEnter;
+    }
+    static void setDisableSpawnPointsOnEnter(bool value)
+    {
+        playerControlObject()->m_disableSpawnPointsOnEnter = value;
+    }
+    static bool getToggleWeapon() { return playerControlObject()->m_toggleWeapon; }
+    static void setToggleWeapon(bool value) { playerControlObject()->m_toggleWeapon = value; }
+    static bool getIsOpenVehicle() { return playerControlObject()->m_isOpenVehicle; }
+    static void setIsOpenVehicle(bool value) { playerControlObject()->m_isOpenVehicle = value; }
+    static int getCrewKitIndex() { return playerControlObject()->m_crewKitIndex; }
+    static void setCrewKitIndex(int value) { playerControlObject()->m_crewKitIndex = value; }
+    static float getBoundingRadiusModifierWhenOccupied()
+    {
+        return playerControlObject()->m_boundingRadiusModifierWhenOccupied;
+    }
+    static void setBoundingRadiusModifierWhenOccupied(float value)
+    {
+        playerControlObject()->m_boundingRadiusModifierWhenOccupied = value;
+    }
+    // addTargetObjectTypeToWatch appends to the watched-type set; duplicates collapse.
+    static void addTargetObjectTypeToWatch(int type)
+    {
+        playerControlObject()->m_targetObjectTypesToWatch.insert(type);
+    }
+    // Seat name and rotation limits dispatch through the template's own accessors, matching retail's
+    // virtual seat-component set/get pair (dedicated PE executors 0x4B27B0 / 0x4B34A0 / 0x4B3670).
+    static std::string getSeatParent() { return playerControlObject()->getSeatParent(); }
+    static void setSeatParent(const std::string& value) { playerControlObject()->setSeatParent(value); }
+    static float getSeatLeftRotationLimit()
+    {
+        return playerControlObject()->getSeatLeftRotationLimit();
+    }
+    static void setSeatLeftRotationLimit(float value)
+    {
+        playerControlObject()->setSeatLeftRotationLimit(value);
+    }
+    static float getSeatRightRotationLimit()
+    {
+        return playerControlObject()->getSeatRightRotationLimit();
+    }
+    static void setSeatRightRotationLimit(float value)
+    {
+        playerControlObject()->setSeatRightRotationLimit(value);
+    }
+
     static SoldierTemplate* soldier()
     {
         return static_cast<SoldierTemplate*>(getActiveTemplate(CID_SoldierTemplate));
@@ -832,6 +902,86 @@ BF2_CONSOLE_PROPERTY(soldierExitPosition, Vec3,
 BF2_CONSOLE_PROPERTY(soldierExitRotation, Vec3,
                      GameTemplateConsoleAccess::playerControlObject(),
                      setSoldierExitRotation, getSoldierExitRotation, kObjTemplGameConsoleTag)
+
+// Occupant entry/exit policy, ducking and seat setup. Retail registers each as a plain ObjectTemplate
+// property (or, for addTargetObjectTypeToWatch, a one-int method) gated on CID_PlayerControlObjectTemplate.
+BF2_CONSOLE_PROPERTY_FN(allowDucking, bool,
+                        getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                        GameTemplateConsoleAccess::getAllowDucking(),
+                        GameTemplateConsoleAccess::setAllowDucking, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(disableInputWhileDucking, bool,
+                        getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                        GameTemplateConsoleAccess::getDisableInputWhileDucking(),
+                        GameTemplateConsoleAccess::setDisableInputWhileDucking,
+                        kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(dontClearTeamOnExit, bool,
+                        getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                        GameTemplateConsoleAccess::getDontClearTeamOnExit(),
+                        GameTemplateConsoleAccess::setDontClearTeamOnExit, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(destroyOnExit, bool,
+                        getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                        GameTemplateConsoleAccess::getDestroyOnExit(),
+                        GameTemplateConsoleAccess::setDestroyOnExit, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(dontAllowExit, bool,
+                        getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                        GameTemplateConsoleAccess::getDontAllowExit(),
+                        GameTemplateConsoleAccess::setDontAllowExit, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(disableSpawnPointsOnEnter, bool,
+                        getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                        GameTemplateConsoleAccess::getDisableSpawnPointsOnEnter(),
+                        GameTemplateConsoleAccess::setDisableSpawnPointsOnEnter,
+                        kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(toggleWeapon, bool,
+                        getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                        GameTemplateConsoleAccess::getToggleWeapon(),
+                        GameTemplateConsoleAccess::setToggleWeapon, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(isOpenVehicle, bool,
+                        getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                        GameTemplateConsoleAccess::getIsOpenVehicle(),
+                        GameTemplateConsoleAccess::setIsOpenVehicle, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(crewKitIndex, int,
+                        getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                        GameTemplateConsoleAccess::getCrewKitIndex(),
+                        GameTemplateConsoleAccess::setCrewKitIndex, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(boundingRadiusModifierWhenOccupied, float,
+                        getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                        GameTemplateConsoleAccess::getBoundingRadiusModifierWhenOccupied(),
+                        GameTemplateConsoleAccess::setBoundingRadiusModifierWhenOccupied,
+                        kObjTemplGameConsoleTag)
+BF2_CONSOLE_METHOD_1_ACTIVE(addTargetObjectTypeToWatch,
+                            GameTemplateConsoleAccess::addTargetObjectTypeToWatch,
+                            getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                            int, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(seatParent, std::string,
+                        getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                        GameTemplateConsoleAccess::getSeatParent(),
+                        GameTemplateConsoleAccess::setSeatParent, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(seatLeftRotationLimit, float,
+                        getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                        GameTemplateConsoleAccess::getSeatLeftRotationLimit(),
+                        GameTemplateConsoleAccess::setSeatLeftRotationLimit, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(seatRightRotationLimit, float,
+                        getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                        GameTemplateConsoleAccess::getSeatRightRotationLimit(),
+                        GameTemplateConsoleAccess::setSeatRightRotationLimit, kObjTemplGameConsoleTag)
+
+// Ground-effect and destroyable-window bundle fields exposed as plain ObjectTemplate properties.
+namespace {
+GroundEffectBundleTemplate* activeGroundEffectBundle()
+{
+    return static_cast<GroundEffectBundleTemplate*>(
+        getActiveTemplate(CID_GroundEffectBundleTemplate));
+}
+DestroyableWindowsBundleTemplate* activeDestroyableWindowsBundle()
+{
+    return static_cast<DestroyableWindowsBundleTemplate*>(
+        getActiveTemplate(CID_DestroyableWindowsBundleTemplate));
+}
+} // namespace
+BF2_CONSOLE_FIELD(maxTriggerDistance, float, activeGroundEffectBundle(),
+                  m_maxTriggerDistance, kObjTemplGameConsoleTag)
+BF2_CONSOLE_FIELD(clientHitDetection, bool, activeDestroyableWindowsBundle(),
+                  clientHitDetection, kObjTemplGameConsoleTag)
 
 // Stock parachutes preserve the soldier's camera pitch when entering and leaving the seat.
 BF2_CONSOLE_OBJECT("ObjectTemplate", 2, 15)

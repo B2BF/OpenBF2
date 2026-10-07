@@ -51,7 +51,6 @@ void objTemplSaveInSeparateFileSet(bool v)
 BF2_CONSOLE_PROPERTY_FN(saveInSeparateFile, bool, objectTemplateManager->getActiveObjectTemplate() != 0, (objectTemplateManager->getActiveObjectTemplate()->getFlags() & 1) != 0, objTemplSaveInSeparateFileSet, kObjectManagerConsoleTag)
 
 // Boolean properties update the active template's flags; an unused retail scratch store is omitted.
-// createNotInGrid and createInvisible stay held until their grid/visibility effects are play-tested together.
 // castsDynamicShadow is held under RW-261. Retail duplicates active-template queries; this helper uses one.
 // The create command's current category differs from retail (2,0); this block uses (2,11).
 namespace {
@@ -71,6 +70,10 @@ bool objTemplFlagGet()
 }
 } // namespace
 BF2_CONSOLE_PROPERTY_FN(createVisibleInEditor, bool, objectTemplateManager->getActiveObjectTemplate() != 0, objTemplFlagGet<0x8>(), objTemplFlagSet<0x8>, kObjectManagerConsoleTag)
+// createNotInGrid and createInvisible set/clear template flag bits 2 and 4 (dedicated PE executors
+// 0x6CE8C0 / 0x6CEAE0); makeScript writes them back from the same bits.
+BF2_CONSOLE_PROPERTY_FN(createNotInGrid, bool, objectTemplateManager->getActiveObjectTemplate() != 0, objTemplFlagGet<0x2>(), objTemplFlagSet<0x2>, kObjectManagerConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(createInvisible, bool, objectTemplateManager->getActiveObjectTemplate() != 0, objTemplFlagGet<0x4>(), objTemplFlagSet<0x4>, kObjectManagerConsoleTag)
 
 // Read/write bit 0x10 on the active template, excluding it from editor saveAll output.
 namespace {

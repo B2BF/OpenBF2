@@ -478,6 +478,41 @@ class BF2_CC_NAME : public ::dice::hfe::ConsoleObjectBaseImpl                   
 static BF2_CC_NAME BF2_CC_INSTANCE;                                                                \
 }
 
+// Registers a dynamic void command accepting one or two arguments. The one-argument arm uses the
+// target's C++ default argument; both arms gate on activeExpr.
+#define BF2_CONSOLE_METHOD_1_2_ACTIVE(fnName, target, activeExpr, A0, A1, listTag)                  \
+namespace {                                                                                        \
+class BF2_CC_NAME : public ::dice::hfe::ConsoleObjectBaseImpl                                      \
+{                                                                                                  \
+    BF2_CC_HEAD(fnName, 0, 1, 2, "void", true)                                                     \
+            m_argTypes[0] = #A0;                                                                   \
+            m_argTypes[1] = #A1;                                                                   \
+    BF2_CC_TAIL(2, listTag)                                                                        \
+    virtual bool isObjectActive() const { return (activeExpr); }                                   \
+    virtual void executeObjectMethod()                                                             \
+    {                                                                                              \
+        if (m_argCount == 1)                                                                       \
+        {                                                                                          \
+            m_hasReturnValue = false;                                                              \
+            target(BF2_CC_ARG(A0, 0));                                                             \
+        }                                                                                          \
+        else if (m_argCount == 2)                                                                  \
+        {                                                                                          \
+            m_hasReturnValue = false;                                                              \
+            target(BF2_CC_ARG(A0, 0), BF2_CC_ARG(A1, 1));                                          \
+        }                                                                                          \
+    }                                                                                              \
+    virtual void setArgFromString(int index, const std::string& value)                             \
+    {                                                                                              \
+        BF2_CC_CONVERT(A0, 1)                                                                      \
+        BF2_CC_CONVERT(A1, 2)                                                                      \
+    }                                                                                              \
+    BF2_CC_NO_RETURN_AS_STRING                                                                     \
+    BF2_CC_COMMON_HOOKS                                                                            \
+};                                                                                                 \
+static BF2_CC_NAME BF2_CC_INSTANCE;                                                                \
+}
+
 // Registers a void command accepting two or three arguments. The short form uses the target's C++ default argument.
 #define BF2_CONSOLE_METHOD_2_3(fnName, target, A0, A1, A2, listTag)                                \
 namespace {                                                                                        \
