@@ -7,6 +7,8 @@
 #include "GameLogic.h"            // the messages.* bindings reach the concrete class
 #include "ServerGameLogic.h"      // ServerGameLogic::createObject - the gameLogic.createObject receiver
 #include "VoiceMessages.h"
+#include "../../Scene/Object/PlayerManager.h"   // world::playerManager - player.kit's receiver
+#include "../Objects/IPlayer.h"                 // world::IPlayer - player.kit's active player
 #include "../../Math/Vec3.h"      // Vec4 - the fogStartEndAndBase property's complete type
 #include <string>
 
@@ -297,6 +299,24 @@ BF2_CONSOLE_OBJECT("Renderer", 2, 0)
 
 BF2_CONSOLE_PROPERTY(fogStartEndAndBase, Vec4, gameLogic,
                      setFogStartEndAndBase, getFogStartEndAndBase, kGameLogicConsoleTag)
+
+// player.kit - reads or sets the active player's kit index. Dedicated PE defaults 0x75A5C0; ctor
+// 0x41C520 (vtable off_7886E8, +0xA1 = 1); the shared gate 0x41C040 is `playerManager &&
+// getActivePlayer() != 0`; executor 0x41C670 dispatches IPlayer::getKit / setKit on the active
+// player. Retail appends this binding to the same gameLogic list (0x83C4EC).
+BF2_CONSOLE_OBJECT("Player", 2, 0)
+namespace {
+world::IPlayer* activeGamePlayer()
+{
+    return world::playerManager ? world::playerManager->getActivePlayer() : 0;
+}
+void gameLogicSetActivePlayerKit(int kit)
+{
+    activeGamePlayer()->setKit(kit);
+}
+} // namespace
+BF2_CONSOLE_PROPERTY_FN(kit, int, activeGamePlayer() != 0, activeGamePlayer()->getKit(),
+                        gameLogicSetActivePlayerKit, kGameLogicConsoleTag)
 
 } // namespace hfe
 } // namespace dice

@@ -6,11 +6,14 @@
 #include "ObjectTypes/Base/ObjectTemplateManager.h"
 #include "../../Game/Objects/IObject.h"
 #include "../../Game/Objects/IObjectTemplate.h"
+#include "PlayerManager.h"                      // playerManager - Player.active's receiver
+#include "../../Game/Objects/IPlayer.h"         // world::IPlayer - Player.active's argument/result
 #include "../../Game/Objects/ObjectLayoutAccess.h"   // Object.togglePause - the raw +0x14 template read
 #include "../../Game/Objects/Fx/EffectBundle.h"      // Object.togglePause - EffectBundle::togglePause
 #include "../../Core/Ids.h"                           // CID_EffectBundleTemplate
 #include "../../Math/Mat4.h"                     // get/setRotationZXY - Object.rotation
 #include "../../Math/Vec3.h"
+#include <sstream>
 #include <string>
 
 namespace dice {
@@ -237,6 +240,76 @@ BF2_CONSOLE_METHOD_1_ACTIVE(setLightSourceMask, objectSetLightSourceMask, object
 // slot 81). No null guard in either arm - it dereferences what isObjectActive vouched for, the
 // block's majority behaviour.
 BF2_CONSOLE_PROPERTY(disableChildren, bool, objectManager->getActiveObject(), setDisableChildren, getDisableChildren, kObjectManagerConsoleTag)
+
+// Player.active - get or select the active player. Written out rather than through a macro because
+// the two argument counts differ in their return: argc 0 returns the active player, argc 1 sets it
+// and publishes no value. Dedicated PE defaults 0x773610; ctor 0x6CFF50 (vtable off_7FE598,
+// +0xA1 = 0); isObjectActive 0x4921F0 is unconditionally true; executor 0x6D0090 reads the active
+// player through playerManager +0x80 / writes it through +0x84. A name argument resolves through
+// playerManager->getPlayerFromName (PE parser 0x6DB5D0, slot +0x1C); the getter formats the player's
+// name, or NoPlayer when null (PE formatter 0x6DB5A0). Registered on the objectManager/world-Module
+// list, matching the retail translation unit.
+BF2_CONSOLE_OBJECT("Player", 2, 0)
+namespace {
+class ConsoleClassPlayerActive : public ::dice::hfe::ConsoleObjectBaseImpl
+{
+public:
+    ConsoleClassPlayerActive()
+    {
+        m_objectName     = ::dice::hfe::consoleDefaultName();
+        m_access         = ::dice::hfe::consoleDefaultAccess();
+        m_category       = ::dice::hfe::consoleDefaultCategory();
+        m_functionName   = "active";
+        m_type           = 1;
+        m_minNoArgs      = 0;
+        m_maxNoArgs      = 1;
+        m_returnType     = "IPlayer*";
+        m_hasReturnValue = false;
+        m_isDynamic      = false;
+        m_argTypes[0]    = "IPlayer*";
+        m_argNeedsConversion[0] = (std::string(m_argTypes[0]) == "std::string") ? 0 : -1;
+        ::dice::hfe::consoleBindingList(kObjectManagerConsoleTag).push_back(this);
+    }
+    virtual bool isObjectActive() const { return true; }
+    virtual void executeObjectMethod()
+    {
+        if (m_argCount == 0)
+        {
+            m_hasReturnValue = true;
+            m_returnValue = playerManager->getActivePlayer();
+        }
+        else if (m_argCount == 1)
+        {
+            m_hasReturnValue = false;
+            playerManager->setActivePlayer(BF2_CC_ARG(IPlayer*, 0));
+        }
+    }
+    virtual std::string getReturnValueAsString() const
+    {
+        if (!m_hasReturnValue)
+            return std::string();
+        if (!m_returnValue)
+            return std::string("NoPlayer");
+        return m_returnValue->getName();
+    }
+    virtual void setArgFromString(int index, const std::string& value)
+    {
+        if (index == 1)
+        {
+            static IPlayer* s = 0;
+            std::string name;
+            std::istringstream in(value);
+            in >> name;
+            s = playerManager->getPlayerFromName(name);
+            m_args[0] = reinterpret_cast<std::string*>(&s);
+        }
+    }
+    BF2_CC_COMMON_HOOKS
+private:
+    IPlayer* m_returnValue;
+};
+static ConsoleClassPlayerActive s_consoleClassPlayerActive;
+} // namespace
 
 // Handed to the console registry by world::Module::init, the way the original registers 0x8B1B944.
 ConsoleObjectList& objectManagerConsoleObjects()

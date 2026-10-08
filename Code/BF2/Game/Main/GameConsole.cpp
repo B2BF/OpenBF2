@@ -6,6 +6,7 @@
 #include "../../Core/Ids.h"     // IID_IGame - game.radioMessage's interface query
 #include "BF2Engine.h"
 #include "Game.h"               // operator>>(istream&, TargetChannel&) - game.radioMessage's converter
+#include "../IGameServer.h"     // IGameServer::sayAll/sayTeam - game.sayAll/sayTeam's receiver interface
 #include "../Utility/Vars.h"    // vars.set's receiver - Vars::set(std::string, std::string)
 #include "../../Scene/Object/PlayerManager.h"   // game.radioMessage's sender - the local human
 #if !DEDICATED
@@ -112,6 +113,26 @@ void gameSetSimulationRate(int rate)                    //  / PE 434AE6 SET arm 
 } // namespace
 BF2_CONSOLE_PROPERTY_FN(simulationRate, int, queryGame() != 0, queryGame()->getSimulationRate(),
                         gameSetSimulationRate, kGameConsoleTag)
+
+// game.sayAll / game.sayTeam are file-static methods on the access-level-1 Game object (dedicated
+// PE defaults 0x759920, ctors 0x410E60 / 0x411040, vtable off_785128 / off_7851B8). The shared
+// gate 0x411170 requires IGameServer from the game interface; the executors (0x410F50 / 0x4111A0)
+// re-resolve it and call the interface's sayAll / sayTeam, discarding the bool result.
+BF2_CONSOLE_OBJECT("Game", 1, 0)
+namespace {
+IGameServer* queryGameServer()                          //  [CHOSEN] name
+{
+    return ::dice::hfe::game
+        ? static_cast<IGameServer*>(::dice::hfe::game->queryInterface(IID_IGameServer)) : 0;
+}
+
+void gameSayAll(const std::string& text) { queryGameServer()->sayAll(text); }
+void gameSayTeam(int team, const std::string& text) { queryGameServer()->sayTeam(team, text); }
+} // namespace
+BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(sayAll, gameSayAll, queryGameServer() != 0,
+                                   std::string, kGameConsoleTag)
+BF2_CONSOLE_METHOD_2_STATIC_ACTIVE(sayTeam, gameSayTeam, queryGameServer() != 0,
+                                   int, std::string, kGameConsoleTag)
 
 #if !DEDICATED
 // Client Game properties at access level 1. [UNRESOLVED] Dedicated registration

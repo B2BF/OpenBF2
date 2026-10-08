@@ -117,6 +117,11 @@ BF2_CONSOLE_OBJECT("physics", 2, 0)
 BF2_CONSOLE_PROPERTY(gravity, float, static_cast<IPhysicsSystem*>(basicPhysicsSystem),
                      setGravity, getGravity, kPhysicsConsoleTag)
 
+// airDensityZeroAtHeight - the altitude where air density reaches zero (dedicated PE gate
+// 0x6923B0 on the physics singleton, executor 0x6927E0 dispatches the virtual set/get pair).
+BF2_CONSOLE_PROPERTY(airDensityZeroAtHeight, float, static_cast<IPhysicsSystem*>(basicPhysicsSystem),
+                     setAirDensityZeroAtHeight, getAirDensityZeroAtHeight, kPhysicsConsoleTag)
+
 ConsoleObjectList& physicsConsoleObjects()
 {
     return consoleBindingList(kPhysicsConsoleTag);
