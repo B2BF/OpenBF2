@@ -5,6 +5,7 @@
 #include "../../Core/SettingsRepostitory.h"   // settings->boolGet("GSIsServer") - the getters' gate
 #include "../IGameLogic.h"
 #include "GameLogic.h"            // the messages.* bindings reach the concrete class
+#include "ServerGameLogic.h"      // ServerGameLogic::createObject - the gameLogic.createObject receiver
 #include "VoiceMessages.h"
 #include "../../Math/Vec3.h"      // Vec4 - the fogStartEndAndBase property's complete type
 #include <string>
@@ -52,9 +53,22 @@ void gameLogicSetBeforeSpawnCamera(Vec3 position, Vec3 direction)
     static_cast<GameLogic*>(gameLogic)->setBeforeSpawnCamera(position, direction);
 }
 
-// The two camera getters select the server gameLogic exactly as ConsoleClass322..325 do: the
-// GSIsServer setting first, then the published gameLogic pointer.
-GameLogic* gameLogicCameraReadTarget()
+// ConsoleClass195 (PE ctor 0x419620, executor 0x419710, gate 0x418D60). The executor re-derives the
+// server gameLogic behind the GSIsServer gate and calls the concrete class's createObject. The same
+// single body is present in the client PE (ctor 0x43AA9A, executor 0x43AB0B, target 0x4DCB40): the
+// receiver is always ServerGameLogic because the gate requires GSIsServer, and when GSIsServer is
+// set BF2Engine::startGame calls setGameLogic(CID_ServerGameLogic) (the client's non-server path
+// uses CID_ClientGameLogic = 121006). One std::string, no return value.
+void gameLogicCreateObject(std::string name)
+{
+    static_cast<ServerGameLogic*>(gameLogic)->createObject(name);
+}
+
+// The shared `GSIsServer && gameLogic` gate: returns the published gameLogic only while the
+// process is a server, else null. The two camera getters, the createObject method and its
+// property bindings all select their receiver through it (PE executors 0x88F7C0/0x88F620 and
+// gate 0x418D60).
+GameLogic* serverGameLogic()
 {
     if (!settings->boolGet(std::string("GSIsServer"), false))
         return 0;
@@ -63,12 +77,12 @@ GameLogic* gameLogicCameraReadTarget()
 
 Vec3 gameLogicGetBeforeSpawnCameraPosition()
 {
-    return gameLogicCameraReadTarget()->getBeforeSpawnCameraPosition();
+    return serverGameLogic()->getBeforeSpawnCameraPosition();
 }
 
 Vec3 gameLogicGetBeforeSpawnCameraDirection()
 {
-    return gameLogicCameraReadTarget()->getBeforeSpawnCameraDirection();
+    return serverGameLogic()->getBeforeSpawnCameraDirection();
 }
 
 // Stock GameLogicInit.con and level Init.con ticket policy. PE constructors/executors:
@@ -145,14 +159,18 @@ BF2_CONSOLE_METHOD_2_STATIC_ACTIVE(setTeamName, gameLogicSetTeamName, gameLogic 
                                    int, std::string, kGameLogicConsoleTag)
 BF2_CONSOLE_METHOD_2_STATIC_ACTIVE(setBeforeSpawnCamera, gameLogicSetBeforeSpawnCamera,
                                    gameLogic != 0, Vec3, Vec3, kGameLogicConsoleTag)
+// ConsoleClass195 - exec 0x419710, gate 0x418D60 (GSIsServer && gameLogic), argc exactly 1,
+// returns void. Only caller of ServerGameLogic::createObject.
+BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(createObject, gameLogicCreateObject,
+                                   serverGameLogic() != 0, std::string, kGameLogicConsoleTag)
 // ConsoleClass201/202 - exec 0x88F7C0 / 0x88F620, 0 args, dynamic, return Vec3; active only while
 // GSIsServer is set. The setter above uses the plain gameLogic check instead.
 BF2_CONSOLE_METHOD_0_RET_ACTIVE(getBeforeSpawnCameraPosition,
                                 gameLogicGetBeforeSpawnCameraPosition, Vec3,
-                                gameLogicCameraReadTarget() != 0, kGameLogicConsoleTag)
+                                serverGameLogic() != 0, kGameLogicConsoleTag)
 BF2_CONSOLE_METHOD_0_RET_ACTIVE(getBeforeSpawnCameraDirection,
                                 gameLogicGetBeforeSpawnCameraDirection, Vec3,
-                                gameLogicCameraReadTarget() != 0, kGameLogicConsoleTag)
+                                serverGameLogic() != 0, kGameLogicConsoleTag)
 BF2_CONSOLE_METHOD_2_STATIC_ACTIVE(setDefaultNumberOfTickets,
                                    gameLogicSetDefaultNumberOfTickets, gameLogic != 0,
                                    U32, U32, kGameLogicConsoleTag)

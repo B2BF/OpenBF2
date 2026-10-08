@@ -950,6 +950,85 @@ world::IObject* ServerGameLogic::spawnObject(const world::IObjectTemplate* objec
     return game->createObjectOnAllClients(objectTemplate, position, rotation, true, 0, team);   // IGame +0x78
 }
 
+// gameLogic.createObject - the ConsoleClass195 executor's only callee (ELF 0x4a8020,
+// dedicated PE 0x455B60). Looks the template up by name and spawns it at the local player's
+// vehicle, or free camera when enabled. The transform's third row is scaled before the
+// translation is added: soldiers use 1.0, every other class 10.0. A projectile result is
+// activated, and the +0x274 debug scale (0 unless a script sets it) launches the new object.
+void ServerGameLogic::createObject(std::string name)
+{
+    world::IObjectTemplate* const objectTemplate = world::objectTemplateManager->getTemplate(name);
+    if (!objectTemplate)
+        return;
+
+    world::IPlayer* player = world::playerManager->getLocalHumanPlayer();
+    if (!player)
+    {
+        // No local human player: only proceed when exactly one player is connected.
+        if (world::playerManager->getNumberOfPlayers() != 1)
+            return;
+        const std::list<world::IPlayer*>& players = world::playerManager->getPlayers();
+        player = players.empty() ? 0 : players.front();
+    }
+
+    if (player && !player->getVehicle())
+        return;
+
+    // The spawn transform is the identity unless a player (and its vehicle/camera) exists.
+    Mat4 transform = Mat4::getIdentity();
+    if (player)
+    {
+        world::IObject* const source = player->getFreeCameraEnabled()
+            ? player->getFreeCamera()
+            : player->getVehicle();
+        transform = source->getAbsoluteTransformation();
+    }
+
+    float zDegrees = 0.0f, xDegrees = 0.0f, yDegrees = 0.0f;
+    getRotationZXY(transform, zDegrees, xDegrees, yDegrees);
+
+    Vec3 rotation;
+    rotation.x = -yDegrees;
+    rotation.y = -xDegrees;
+    rotation.z = -zDegrees;
+
+    const float scale = (objectTemplate->getClassID() == world::CID_SoldierTemplate) ? 1.0f : 10.0f;
+
+    Vec3 position;
+    position.x = scale * transform.m[8] + transform.m[12];
+    position.y = scale * transform.m[9] + transform.m[13];
+    position.z = scale * transform.m[10] + transform.m[14];
+
+    world::IObject* const object = game->createObjectOnAllClients(objectTemplate, position, rotation,
+                                                                  true, 0, 0);
+    world::objectManager->setActiveObject(object);                                    // ObjectManager +0x94
+
+    if (object->queryInterface(world::IID_IProjectileObject))
+        static_cast<world::GenericProjectile*>(object)->activate();
+
+    // Debug scale, 0 unless a script sets it. When positive it launches the new object by
+    // scaling its transform's third row into the physics node's positional speed.
+    const float spawnScale = *reinterpret_cast<const float*>(&m_dword274);
+    if (spawnScale > 0.0f)
+    {
+        if (void* const physics = world::object_detail::LayoutAccess::physicsNode(object))
+        {
+            world::IPhysicsNode* const node = static_cast<world::IPhysicsNode*>(physics);
+            const Mat4& objectTransform = object->getAbsoluteTransformation();
+            Vec3 speed;
+            speed.x = spawnScale * objectTransform.m[8];
+            speed.y = spawnScale * objectTransform.m[9];
+            speed.z = spawnScale * objectTransform.m[10];
+            node->setPositionalSpeed(speed);
+
+            Vec3 zero;
+            zero.x = zero.y = zero.z = 0.0f;
+            node->setPositionalAcceleration(zero);
+            node->setRotationalSpeed(zero);
+        }
+    }
+}
+
 // Returns the current map-list index.
 int ServerGameLogic::getCurrentLevel() const
 {
