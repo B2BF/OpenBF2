@@ -1132,11 +1132,24 @@ DestroyableWindowsBundleTemplate* activeDestroyableWindowsBundle()
     return static_cast<DestroyableWindowsBundleTemplate*>(
         getActiveTemplate(CID_DestroyableWindowsBundleTemplate));
 }
+// PE executor 0x4AAB70 writes the window count; the value is the int at template +568
+// (openBF2 DestroyableWindowsBundleTemplate::numWindows at +0x188).
+void objectTemplateSetNumWindows(int count)
+{
+    activeDestroyableWindowsBundle()->numWindows = count;
+}
 } // namespace
 BF2_CONSOLE_FIELD(maxTriggerDistance, float, activeGroundEffectBundle(),
                   m_maxTriggerDistance, kObjTemplGameConsoleTag)
 BF2_CONSOLE_FIELD(clientHitDetection, bool, activeDestroyableWindowsBundle(),
                   clientHitDetection, kObjTemplGameConsoleTag)
+// objectTemplate.setNumWindows - dedicated PE gate 0x4AAAF0 =
+// `getActiveTemplate(0xC4DC = CID_DestroyableWindowsBundleTemplate) != 0`; ctor 0x4AAA00,
+// executor 0x4AAB70, one int argument, void, file-static. Set-only: the shipped executor's only
+// arm is argc 1.
+BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(setNumWindows, objectTemplateSetNumWindows,
+                                   activeDestroyableWindowsBundle() != 0, int,
+                                   kObjTemplGameConsoleTag)
 
 // Stock parachutes preserve the soldier's camera pitch when entering and leaving the seat.
 BF2_CONSOLE_OBJECT("ObjectTemplate", 2, 15)

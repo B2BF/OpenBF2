@@ -48,6 +48,13 @@ void gameLogicSetTeamName(int team, const std::string& name)
     gameLogic->setTeamName(team, name);
 }
 
+// PE ctor 0x414E20, executor 0x414F50, shared gate 0x416B40 (`dword_83BF50 != 0`, i.e. gameLogic).
+// argc exactly 2; dispatches IGameLogic +0x1F8 GameLogic::setTeamLanguage(int, const std::string&).
+void gameLogicSetTeamLanguage(int team, const std::string& language)
+{
+    gameLogic->setTeamLanguage(team, language);
+}
+
 // Pre-spawn free-camera transform. Linux64 server ELF 0x87D9A0 (ConsoleClass199) and win32 client
 // 0x43B055 both read two Vec3 arguments and call GameLogic::setBeforeSpawnCamera directly.
 void gameLogicSetBeforeSpawnCamera(Vec3 position, Vec3 direction)
@@ -158,6 +165,8 @@ BF2_CONSOLE_METHOD_4_STATIC_ACTIVE(setKit, gameLogicSetKit, gameLogic != 0,
 BF2_CONSOLE_METHOD_2_STATIC_ACTIVE(setTeamFlag, gameLogicSetTeamFlag, gameLogic != 0,
                                    int, std::string, kGameLogicConsoleTag)
 BF2_CONSOLE_METHOD_2_STATIC_ACTIVE(setTeamName, gameLogicSetTeamName, gameLogic != 0,
+                                   int, std::string, kGameLogicConsoleTag)
+BF2_CONSOLE_METHOD_2_STATIC_ACTIVE(setTeamLanguage, gameLogicSetTeamLanguage, gameLogic != 0,
                                    int, std::string, kGameLogicConsoleTag)
 BF2_CONSOLE_METHOD_2_STATIC_ACTIVE(setBeforeSpawnCamera, gameLogicSetBeforeSpawnCamera,
                                    gameLogic != 0, Vec3, Vec3, kGameLogicConsoleTag)
