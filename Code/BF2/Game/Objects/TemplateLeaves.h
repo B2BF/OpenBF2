@@ -215,7 +215,8 @@ public:
 
 private:
     friend class DropVehicle;
-    /* ELF +0x164 / PE +0x210 */ int m_destroyVehicleTime;
+    friend struct GameTemplateConsoleAccess;     // recovered ObjectTemplate.noPassengerTimeToLive
+    /* ELF +0x164 / PE +0x210 */ int m_destroyVehicleTime;   // console `noPassengerTimeToLive`
 };
 
 // BundleTemplate leaves share the 80-slot interface.

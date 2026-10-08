@@ -17,6 +17,7 @@ class GrapplingHookRope;
 class GrapplingHookRopeContainer;
 class IPlayer;
 class PlayerControlObject;
+struct GameTemplateConsoleAccess;                    // ModuleWorldObjTemplGame.cpp rope console bridge
 
 // The trailing template word is intentionally left uninitialized and copied into the live rope during initialization.
 class GrapplingHookRopeTemplate : public SimpleObjectTemplate
@@ -47,6 +48,7 @@ protected:
     friend class GrapplingHookRope;
     friend class GrapplingHookRopeContainer;
     friend class PlayerControlObject;
+    friend struct GameTemplateConsoleAccess;      // recovered ObjectTemplate.* rope-console executors
 
     // layout, offsets 356..467. SimpleObjectTemplate occupies 0..355.
     // Every default below is from the full ctor read.
@@ -67,13 +69,33 @@ protected:
                                                      // a plain integer immediate, and 0x1C read
                                                      // as a float would be a denormal, so int)
 
-    // 380..463: 21 consecutive unnamed floats - the rope simulation constants. [UNRESOLVED]
-    // individually, exactly as the header block above explains: no accessors, no console bindings,
-    // and their recovered consumers still do not attest the original property names. Naming them
-    // would mint 21 invented names. The defaults are what a rebuild actually needs - content that
-    // omits a property inherits them - and those are recovered in full.
-    /* 380 */ float _ropeParams[21];                 // 380..463
-    /* 464 */ float _float1D0;                       // [UNRESOLVED]; ctor deliberately leaves it
+    // 380..463: the rope simulation constants, in shipped order. The names are the retail
+    // ObjectTemplate console properties, recovered from the dedicated PE: the template ctor
+    // sub_578E10 writes the block at +0x240..+0x294 and each generated console executor writes its
+    // field at PE +0x244..+0x290 and +0x294 (PE offset = openBF2 offset + 0xC4). The leading
+    // +0x240 field has no console property, so it keeps the consumer's descriptive name.
+    /* 380 */ float m_ropeUnusedLifetime;            // PE +0x240, ctor 40.0; no console property
+    /* 384 */ float m_throwStrength;                 // PE +0x244  ObjectTemplate.throwStrength
+    /* 388 */ float m_upThrowBoost;                  // PE +0x248  ObjectTemplate.upThrowBoost
+    /* 392 */ float m_degradeThrowStrength;          // PE +0x24C  ObjectTemplate.degradeThrowStrength
+    /* 396 */ float m_throwStrength2;                // PE +0x250  ObjectTemplate.throwStrength2
+    /* 400 */ float m_upThrowBoost2;                 // PE +0x254  ObjectTemplate.upThrowBoost2
+    /* 404 */ float m_degradeThrowStrength2;         // PE +0x258  ObjectTemplate.degradeThrowStrength2
+    /* 408 */ float m_dropStrength;                  // PE +0x25C  ObjectTemplate.dropStrength
+    /* 412 */ float m_upDropBoost;                   // PE +0x260  ObjectTemplate.upDropBoost
+    /* 416 */ float m_degradeDropStrength;           // PE +0x264  ObjectTemplate.degradeDropStrength
+    /* 420 */ float m_linkAttachMovement;            // PE +0x268  ObjectTemplate.linkAttachMovement
+    /* 424 */ float m_linkAttachTime;                // PE +0x26C  ObjectTemplate.linkAttachTime
+    /* 428 */ float m_dismountCheckOffset;           // PE +0x270  ObjectTemplate.dismountCheckOffset
+    /* 432 */ float m_minYNormal;                    // PE +0x274  ObjectTemplate.minYNormal
+    /* 436 */ float m_attachClimberRadius;           // PE +0x278  ObjectTemplate.attachClimberRadius
+    /* 440 */ float m_climbingSpeed;                 // PE +0x27C  ObjectTemplate.climbingSpeed
+    /* 444 */ float m_elasticity;                    // PE +0x280  ObjectTemplate.elasticity
+    /* 448 */ float m_airFriction;                   // PE +0x284  ObjectTemplate.airFriction
+    /* 452 */ float m_climbableAngle;                // PE +0x288  ObjectTemplate.climbableAngle
+    /* 456 */ float m_dismountAngle;                 // PE +0x28C  ObjectTemplate.dismountAngle
+    /* 460 */ float m_climbersAttachForce;           // PE +0x290  ObjectTemplate.climbersAttachForce
+    /* 464 */ float m_awakeTime;                     // PE +0x294  ObjectTemplate.awakeTime; ctor leaves it unwritten
                                                      // uninitialized; initialize reads it
 };
 
