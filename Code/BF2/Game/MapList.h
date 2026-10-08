@@ -41,7 +41,9 @@ public:
     // Returns false on invalid input or when modification is disallowed.
     bool insertEntry(int, const std::string&, const std::string&, int, bool);
     bool appendEntry(const std::string&, const std::string&, int, bool);
-    void removeEntry(int);
+    // Removes the entry at idx, shifting the current selection down when it pointed at or past
+    // the removed entry. Returns false on an out-of-range index or when modification is disallowed.
+    bool removeEntry(int idx, bool modifiableOverride = false);
     void moveUp(int);
     void moveDown(int);
     bool checkIfValidEntry(const std::string&, const std::string&);            //   NOT const
