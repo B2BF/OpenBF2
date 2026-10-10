@@ -94,6 +94,7 @@ void HudChat::addGameMessage(std::wstring text, world::IPlayer* player, int team
 }
 void HudChat::addPlayerMessage(std::wstring text, world::IPlayer* player, int)
 {
+    if (!player) return;
     if (player && hudManager->isPlayerIgnored(player->getId())) return;
     m_remaining[0] = m_duration[0];
     const int capacity = m_capacity[0];
