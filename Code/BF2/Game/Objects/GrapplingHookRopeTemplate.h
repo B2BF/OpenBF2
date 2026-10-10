@@ -72,9 +72,10 @@ protected:
     // 380..463: the rope simulation constants, in shipped order. The names are the retail
     // ObjectTemplate console properties, recovered from the dedicated PE: the template ctor
     // sub_578E10 writes the block at +0x240..+0x294 and each generated console executor writes its
-    // field at PE +0x244..+0x290 and +0x294 (PE offset = openBF2 offset + 0xC4). The leading
-    // +0x240 field has no console property, so it keeps the consumer's descriptive name.
-    /* 380 */ float m_ropeUnusedLifetime;            // PE +0x240, ctor 40.0; no console property
+    // field at PE +0x244..+0x290 and +0x294 (PE offset = openBF2 offset + 0xC4). The leading +0x240
+    // field is the `objectTemplate.timeout` property (executor 0x4BA3C0), kept under the consumer's
+    // descriptive name.
+    /* 380 */ float m_ropeUnusedLifetime;            // PE +0x240, ctor 40.0; console ObjectTemplate.timeout
     /* 384 */ float m_throwStrength;                 // PE +0x244  ObjectTemplate.throwStrength
     /* 388 */ float m_upThrowBoost;                  // PE +0x248  ObjectTemplate.upThrowBoost
     /* 392 */ float m_degradeThrowStrength;          // PE +0x24C  ObjectTemplate.degradeThrowStrength

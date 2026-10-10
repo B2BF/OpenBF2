@@ -181,7 +181,9 @@ class ZiplineTemplate : public SimpleObjectTemplate
           /* 0x170 */ float m_entryRadius;         // ELF-named, ctor 3.0f - see the above
           /* 0x174 */ float m_collisionStartRadius;// ELF-named, ctor 2.0f
           /* 0x178 */ float m_ziplineSoldierHeight;// console-named, ctor 1.4899999f
-          /* 0x17C */ float _float17C;             // [UNRESOLVED] ctor 1000.0f
+          /* 0x17C */ float _float17C;             // ctor 1000.0f; console ObjectTemplate.Timeout
+                                                   // (PE +0x240, executor 0x4B9750); Zipline::
+                                                   // updateTimeOut compares the live timer to it
           /* 0x180 */ float m_creationHeightOffset;// [CHOSEN name] ctor 0.5f; both placement
                                                    // helpers add it to their vertical origin
           /* 0x184 */ float m_minZiplineLength;    // [CHOSEN name] ctor 3.0f - checkForEntry squares

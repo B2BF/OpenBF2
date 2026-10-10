@@ -385,6 +385,17 @@ struct GameTemplateConsoleAccess
     static float getAwakeTime() { return grapplingHookRope()->m_awakeTime; }
     static void setAwakeTime(float v) { grapplingHookRope()->m_awakeTime = v; }
 
+    // ObjectTemplate.timeout writes the GrapplingHookRope template's PE +0x240 word - the field the
+    // rope consumer names its unused lifetime (GrapplingHookRopeTemplate::m_ropeUnusedLifetime).
+    static float getRopeTimeout() { return grapplingHookRope()->m_ropeUnusedLifetime; }
+    static void setRopeTimeout(float v) { grapplingHookRope()->m_ropeUnusedLifetime = v; }
+
+    // ObjectTemplate.Timeout writes the Zipline template's PE +0x240 word, which
+    // Zipline::updateTimeOut compares the live timer against (ZiplineTemplate::_float17C).
+    static ZiplineTemplate* zipline() { return static_cast<ZiplineTemplate*>(getActiveTemplate(CID_ZiplineTemplate)); }
+    static float getZiplineTimeout() { return zipline()->_float17C; }
+    static void setZiplineTimeout(float v) { zipline()->_float17C = v; }
+
     // DropVehicleTemplate: the console field is the recovered m_destroyVehicleTime (PE +0x210).
     static DropVehicleTemplate* activeDropVehicleTemplate()
     {
@@ -1112,6 +1123,21 @@ BF2_CONSOLE_PROPERTY_FN(awakeTime, float,
                         getActiveTemplate(CID_GrapplingHookRopeTemplate) != 0,
                         GameTemplateConsoleAccess::getAwakeTime(),
                         GameTemplateConsoleAccess::setAwakeTime, kObjTemplGameConsoleTag)
+
+// The template self-removal timeout, a float->float property at PE +0x240 of two different templates.
+// Retail registers it twice: `timeout` gated on the active GrapplingHookRopeTemplate (PE ctor
+// 0x4BA270, gate 0x4BC4A0, executor 0x4BA3C0) and `Timeout` gated on the active ZiplineTemplate (PE
+// ctor 0x4B9600, gate 0x4B9C30, executor 0x4B9750). The spellings differ only in case because retail
+// is case-sensitive; the registry lookup is not, so both rows share one key and the active template's
+// gate selects the matching one.
+BF2_CONSOLE_PROPERTY_FN(timeout, float,
+                        getActiveTemplate(CID_GrapplingHookRopeTemplate) != 0,
+                        GameTemplateConsoleAccess::getRopeTimeout(),
+                        GameTemplateConsoleAccess::setRopeTimeout, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(Timeout, float,
+                        getActiveTemplate(CID_ZiplineTemplate) != 0,
+                        GameTemplateConsoleAccess::getZiplineTimeout(),
+                        GameTemplateConsoleAccess::setZiplineTimeout, kObjTemplGameConsoleTag)
 
 // DropVehicleTemplate: PE gate sub_4BE080 = getActiveTemplate(40020); the int executor stores the
 // recovered m_destroyVehicleTime at PE +0x210 (int -> int).
