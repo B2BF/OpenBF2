@@ -387,6 +387,7 @@ std::string objectTemplateList(const std::string& filter)
 // ctor 0x6CE090 (vtable off_7FDCE0, m_type = 2, argc 0, returns std::string, m_isDynamic = 1).
 // isObjectActive 0x6CE130 = `getActiveObjectTemplate() != 0`; executor 0x6CE150 returns the active
 // template's name.
+BF2_CONSOLE_OBJECT("objectTemplate", 2, 0)
 namespace {
 class ConsoleClassObjectTemplateName : public ConsoleObjectBaseImpl
 {
