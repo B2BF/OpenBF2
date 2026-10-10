@@ -781,6 +781,9 @@ BF2_CONSOLE_PROPERTY(zoom.disableMuzzleWhenZoomed, bool, activeDefaultZoomCompTe
                      setDisableMuzzleWhenZoomed, getDisableMuzzleWhenZoomed, kWeaponConsoleTag)
 
 // ToggleCameraCompTemplate's six camera-switch properties (IID 50440/CID 38118).
+// [CHOSEN, not recovered] The shipped metadata registers both view modes as CameraViewMode, but the
+// accessors store them as int (and the sibling cameraId commands are int). int is kept so each
+// command binds the accessor it calls; the enum's identifiers remain unresolved.
 BF2_CONSOLE_PROPERTY(zoom.changeCameraId, int, activeToggleCameraCompTemplate(),
                      setChangeCameraId, getChangeCameraId, kWeaponConsoleTag)
 BF2_CONSOLE_PROPERTY(zoom.changeCameraViewMode, int, activeToggleCameraCompTemplate(),
@@ -842,6 +845,8 @@ BF2_CONSOLE_PROPERTY(animation.useShiftAnimation, bool, activeDefaultAnimationCo
                      setUseShiftAnimation, getUseShiftAnimation, kWeaponConsoleTag)
 BF2_CONSOLE_PROPERTY(animation.shiftDelay, float, activeDefaultAnimationCompTemplate(),
                      setShiftDelay, getShiftDelay, kWeaponConsoleTag)
+// [CHOSEN, not recovered] The shipped metadata registers loopingFire as float, but the accessor is
+// a bool; bool is kept so the command binds the accessor it calls.
 BF2_CONSOLE_PROPERTY(animation.loopingFire, bool, activeDefaultAnimationCompTemplate(),
                      setLoopingFire, getLoopingFire, kWeaponConsoleTag)
 

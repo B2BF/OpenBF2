@@ -85,15 +85,17 @@ void animSysSave(const std::string& path)        { activeTemplate()->save(path);
 void animSysReloadScript()                       { activeTemplate()->reloadScript(); }
 
 // Bundle and trigger listings return console strings; the static type list needs no active template.
-void animSysCreateBundle(const std::string& n)   { getActiveBundleManager()->createBundle(n); }
+// The generated console methods return the created object; the shipped executor exposes that
+// pointer through the standard pointer formatter.
+anim::Bundle* animSysCreateBundle(const std::string& n)   { return getActiveBundleManager()->createBundle(n); }
 void animSysDeleteActiveBundle()                 { getActiveBundleManager()->deleteActiveBundle(); }
 void animSysSetActiveBundle(const std::string& n){ getActiveBundleManager()->setActiveBundle(n); }
 std::string animSysListBundles()                 { return getActiveBundleManager()->listBundles(); }
 // two arguments: `animationSystem.createTrigger Trigger root` is type then name, in that order -
 // 8,007 shipped lines say so, and the mangling agrees (createTrigger(std::string, std::string)).
-void animSysCreateTrigger(const std::string& type, const std::string& name)
+anim::Trigger* animSysCreateTrigger(const std::string& type, const std::string& name)
 {
-    getActiveTriggerManager()->createTrigger(type, name);
+    return getActiveTriggerManager()->createTrigger(type, name);
 }
 void animSysDeleteActiveTrigger()                { getActiveTriggerManager()->deleteActiveTrigger(); }
 void animSysSetActiveTrigger(const std::string& n)
@@ -226,7 +228,7 @@ anim::BoneAnimation* activeAnimation()
     return anim::animationManager ? anim::animationManager->getActiveAnimation() : 0;
 }
 
-void animSysCreateAnimation(const std::string& n) { anim::animationManager->getAnimation(n); }
+anim::BoneAnimation* animSysCreateAnimation(const std::string& n) { return anim::animationManager->getAnimation(n); }
 std::string animSysListAnimations()               { return anim::animationManager->listAnimations(); }
 void animSysSetActiveAnimation(const std::string& n)
 {
@@ -262,14 +264,16 @@ BF2_CONSOLE_METHOD_0_ACTIVE(saveActive, animSysSaveActive, activeTemplate() != 0
 BF2_CONSOLE_METHOD_1_ACTIVE(save, animSysSave, activeTemplate() != 0, std::string, kBoneAnimConsoleTag)
 BF2_CONSOLE_METHOD_0_ACTIVE(reloadScript, animSysReloadScript, activeTemplate() != 0, kBoneAnimConsoleTag)
 
-BF2_CONSOLE_METHOD_1_ACTIVE(createBundle, animSysCreateBundle, getActiveBundleManager() != 0, std::string, kBoneAnimConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(createBundle, animSysCreateBundle, anim::Bundle*,
+                                getActiveBundleManager() != 0, std::string, kBoneAnimConsoleTag)
 BF2_CONSOLE_METHOD_0_ACTIVE(deleteActiveBundle, animSysDeleteActiveBundle, getActiveBundleManager() != 0, kBoneAnimConsoleTag)
 BF2_CONSOLE_METHOD_0_RET_ACTIVE(listBundles, animSysListBundles, std::string, getActiveBundleManager() != 0, kBoneAnimConsoleTag)
 BF2_CONSOLE_PROPERTY_FN(activeBundle, std::string, getActiveBundleManager() != 0,
                         getActiveBundleManager()->getActiveBundle(),
                         animSysSetActiveBundle, kBoneAnimConsoleTag)
 
-BF2_CONSOLE_METHOD_2_ACTIVE(createTrigger, animSysCreateTrigger, getActiveTriggerManager() != 0, std::string, std::string, kBoneAnimConsoleTag)
+BF2_CONSOLE_METHOD_2_RET_ACTIVE(createTrigger, animSysCreateTrigger, anim::Trigger*,
+                                getActiveTriggerManager() != 0, std::string, std::string, kBoneAnimConsoleTag)
 BF2_CONSOLE_METHOD_0_ACTIVE(deleteActiveTrigger, animSysDeleteActiveTrigger, getActiveTriggerManager() != 0, kBoneAnimConsoleTag)
 BF2_CONSOLE_METHOD_0_RET_ACTIVE(listTriggers, animSysListTriggers, std::string, getActiveTriggerManager() != 0, kBoneAnimConsoleTag)
 BF2_CONSOLE_METHOD_0_RET_ACTIVE(listTriggerTypes, animSysListTriggerTypes, std::string, true, kBoneAnimConsoleTag)
@@ -277,7 +281,8 @@ BF2_CONSOLE_PROPERTY_FN(activeTrigger, std::string, getActiveTriggerManager() !=
                         getActiveTriggerManager()->getActiveTrigger(),
                         animSysSetActiveTrigger, kBoneAnimConsoleTag)
 
-BF2_CONSOLE_METHOD_1_ACTIVE(createAnimation, animSysCreateAnimation, anim::animationManager != 0, std::string, kBoneAnimConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(createAnimation, animSysCreateAnimation, anim::BoneAnimation*,
+                                anim::animationManager != 0, std::string, kBoneAnimConsoleTag)
 BF2_CONSOLE_METHOD_0_RET_ACTIVE(listAnimations, animSysListAnimations, std::string, anim::animationManager != 0, kBoneAnimConsoleTag)
 BF2_CONSOLE_PROPERTY_FN(activeAnimation, std::string, anim::animationManager != 0,
                         anim::animationManager->getActiveAnimationFile(),

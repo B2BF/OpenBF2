@@ -20,6 +20,12 @@ namespace dice {
 namespace hfe {
 namespace world {
 
+// [CHOSEN, not recovered] Console metadata aliases. The generated executors here move three dwords
+// for these colours, so the three-float alias reproduces the reported metadata shape; the Math type
+// of the same name holds four floats (Math/Vec3.h). The material flags are the metadata's "uint".
+typedef Math::Vec3 Vec3ColorFloatIntensity;
+typedef unsigned int uint;
+
 // [CHOSEN, not recovered] Retail's console metadata spelling. The generated executor stores the
 // parsed value as one unsigned dword and all 201 stock uses are numeric; keeping the alias local
 // preserves that exact content path without inventing a new public engine type or an unread
@@ -296,7 +302,7 @@ BF2_CONSOLE_PROPERTY(windType,          std::string, activeWindAffector(), setWi
 BF2_CONSOLE_PROPERTY(windIsDynamic,     bool,        activeWindAffector(), setWindIsDynamic,     getWindIsDynamic,     kObjTemplBaseConsoleTag)
 BF2_CONSOLE_PROPERTY(windBlowTime,      float,       activeWindAffector(), setWindBlowTime,      getWindBlowTime,      kObjTemplBaseConsoleTag)
 BF2_CONSOLE_PROPERTY(widnBlowTime,      float,       activeWindAffector(), setWindBlowTime,      getWindBlowTime,      kObjTemplBaseConsoleTag)
-BF2_CONSOLE_PROPERTY(windDirection,     Math::Vec3,  activeWindAffector(), setWindDirection,     getWindDirection,     kObjTemplBaseConsoleTag)
+BF2_CONSOLE_PROPERTY(windDirection,     Vec3,        activeWindAffector(), setWindDirection,     getWindDirection,     kObjTemplBaseConsoleTag)
 BF2_CONSOLE_PROPERTY(windFalloff,       float,       activeWindAffector(), setWindFalloff,       getWindFalloff,       kObjTemplBaseConsoleTag)
 BF2_CONSOLE_PROPERTY(windRadialFalloff, float,       activeWindAffector(), setWindRadialFalloff, getWindRadialFalloff, kObjTemplBaseConsoleTag)
 BF2_CONSOLE_PROPERTY(windSpeed,         float,       activeWindAffector(), setWindSpeed,         getWindSpeed,         kObjTemplBaseConsoleTag)
@@ -412,13 +418,13 @@ BF2_CONSOLE_PROPERTY_FN(insideDamageThreshold, float, activeCamera() != 0,
                         BaseTemplateConsoleAccess::setCamInsideDamageThreshold, kObjTemplBaseConsoleTag)
 BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(setHasTarget, BaseTemplateConsoleAccess::setCamHasTarget,
                                    activeCamera() != 0, bool, kObjTemplBaseConsoleTag)
-BF2_CONSOLE_PROPERTY_FN(insideStaticSunColor, Vec3, activeCamera() != 0,
+BF2_CONSOLE_PROPERTY_FN(insideStaticSunColor, Vec3ColorFloatIntensity, activeCamera() != 0,
                         BaseTemplateConsoleAccess::getCamInsideStaticSunColor(),
                         BaseTemplateConsoleAccess::setCamInsideStaticSunColor, kObjTemplBaseConsoleTag)
-BF2_CONSOLE_PROPERTY_FN(insideStaticSunDamageColor, Vec3, activeCamera() != 0,
+BF2_CONSOLE_PROPERTY_FN(insideStaticSunDamageColor, Vec3ColorFloatIntensity, activeCamera() != 0,
                         BaseTemplateConsoleAccess::getCamInsideStaticSunDamageColor(),
                         BaseTemplateConsoleAccess::setCamInsideStaticSunDamageColor, kObjTemplBaseConsoleTag)
-BF2_CONSOLE_PROPERTY_FN(insideStaticSunAmbientColor, Vec3, activeCamera() != 0,
+BF2_CONSOLE_PROPERTY_FN(insideStaticSunAmbientColor, Vec3ColorFloatIntensity, activeCamera() != 0,
                         BaseTemplateConsoleAccess::getCamInsideStaticSunAmbientColor(),
                         BaseTemplateConsoleAccess::setCamInsideStaticSunAmbientColor, kObjTemplBaseConsoleTag)
 
@@ -579,12 +585,12 @@ BF2_CONSOLE_PROPERTY(treeCollisionDiameter, float, activeSimple(), setTreeCollis
 // The general sub-table - SetConsoleClassDefaults("ObjectTemplate", 2, 1) at 0x8671A9A.
 BF2_CONSOLE_OBJECT("ObjectTemplate", 2, 1)
 
-// objectTemplate.collisionMesh - ConsoleClass105 (ctor site 0x86723C9). SET-only, as shipped:
-// a bare read does nothing and answers nothing.
-BF2_CONSOLE_PROPERTY_SETONLY(collisionMesh, std::string, getActiveTemplate(CID_SimpleObjectTemplate) != 0, objTemplCollisionMeshSet, kObjTemplBaseConsoleTag)
+// objectTemplate.collisionMesh - ConsoleClass105 (ctor site 0x86723C9). A void one-argument method
+// in the shipped PE (metadata argc 1..1, return void); a bare read does nothing and answers nothing.
+BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(collisionMesh, objTemplCollisionMeshSet, getActiveTemplate(CID_SimpleObjectTemplate) != 0, std::string, kObjTemplBaseConsoleTag)
 
-// Alternate console spelling for collisionMesh.
-BF2_CONSOLE_PROPERTY_SETONLY(setCollisionMesh, std::string, getActiveTemplate(CID_SimpleObjectTemplate) != 0, objTemplCollisionMeshSet, kObjTemplBaseConsoleTag)
+// Alternate console spelling for collisionMesh (the same void one-argument method shape).
+BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(setCollisionMesh, objTemplCollisionMeshSet, getActiveTemplate(CID_SimpleObjectTemplate) != 0, std::string, kObjTemplBaseConsoleTag)
 
 // Reads or sets the AI-template name used by object and weapon lookup in bot games.
 BF2_CONSOLE_PROPERTY_FN(aiTemplate, std::string, getActiveTemplate(CID_SimpleObjectTemplate) != 0,
@@ -608,26 +614,25 @@ BF2_CONSOLE_PROPERTY(geometry, std::string, activeSimple(), setGeometry, getGeom
 // setMaterial/getMaterial at primary slots +0xC4/+0xC8; PE 0x4E6A70 uses +0xC0/+0xC4.
 BF2_CONSOLE_PROPERTY(material, int, activeSimple(), setMaterial, getMaterial, kObjTemplBaseConsoleTag)
 
-// objectTemplate.anchor - ConsoleClass111 (ctor site 0x8671FA3, exec 0x8678A80): a Math::Vec3
-// property - setAnchor (+0xA4) / getAnchor (+0xA0). The slash-separated text form ("x/y/z") is
-// the console's Vec3 convention, recovered from this binding's own generated pair and packaged
-// as the stream operators in Math/Vec3.{h,cpp}; #Math::Vec3 also reproduces the ELF's metadata
-// type string exactly. The 12-byte return member and the '/'-joined GET reply come free from the
-// property family once those operators exist.
-BF2_CONSOLE_PROPERTY(anchor, Math::Vec3, activeSimple(), setAnchor, getAnchor, kObjTemplBaseConsoleTag)
+// objectTemplate.anchor - ConsoleClass111 (ctor site 0x8671FA3, exec 0x8678A80): a Vec3 property -
+// setAnchor (+0xA4) / getAnchor (+0xA0). The slash-separated text form ("x/y/z") is the console's
+// Vec3 convention, recovered from this binding's own generated pair and packaged as the stream
+// operators in Math/Vec3.{h,cpp}. The shipped PE registers the metadata type as "Vec3" (the ELF
+// uses "Math::Vec3"); the dedicated-server dump follows the PE. The 12-byte return member and the
+// '/'-joined GET reply come free from the property family once those operators exist.
+BF2_CONSOLE_PROPERTY(anchor, Vec3, activeSimple(), setAnchor, getAnchor, kObjTemplBaseConsoleTag)
 
 // objectTemplate.mapMaterial - ConsoleClass107 (ctor site 0x86721D8, exec 0x86780B0): argc
 // exactly 3, target = the template's own mapMaterial(unsigned, const std::string&, unsigned)
-// (+0x100). The ELF metadata spells the two numeric argTypes "uint"; this registers
-// "unsigned int" until a metadata-name override is warranted (only autoCompletion and
-// getTypeDescription read the strings).
+// (+0x100). The ELF/PE metadata spells the two numeric argTypes "uint"; the local alias above
+// registers exactly that string.
 namespace {
 void objTemplMapMaterialSet(unsigned int index, const std::string& material, unsigned int flags)
 {
     activeSimple()->mapMaterial(index, material, flags);
 }
 } // namespace
-BF2_CONSOLE_METHOD_3(mapMaterial, objTemplMapMaterialSet, getActiveTemplate(CID_SimpleObjectTemplate) != 0, unsigned int, std::string, unsigned int, kObjTemplBaseConsoleTag)
+BF2_CONSOLE_METHOD_3(mapMaterial, objTemplMapMaterialSet, getActiveTemplate(CID_SimpleObjectTemplate) != 0, uint, std::string, uint, kObjTemplBaseConsoleTag)
 
 // Network descriptor, mobile-physics and child-template bindings, selected by the active template class.
 BF2_CONSOLE_PROPERTY(networkableInfo, std::string, activeSimple(), setNetworkableInfo, getNetworkableInfo, kObjTemplBaseConsoleTag)
@@ -712,10 +717,10 @@ BF2_CONSOLE_FIELD(PivotPosition,  Math::Vec3,         activeRotBundle(), m_pivot
 BF2_CONSOLE_FIELD(inputToYaw,     io::PlayerInputMap, activeRotBundle(), m_inputToYaw,     kObjTemplBaseConsoleTag)
 BF2_CONSOLE_FIELD(inputToPitch,   io::PlayerInputMap, activeRotBundle(), m_inputToPitch,   kObjTemplBaseConsoleTag)
 BF2_CONSOLE_FIELD(inputToRoll,    io::PlayerInputMap, activeRotBundle(), m_inputToRoll,    kObjTemplBaseConsoleTag)
-BF2_CONSOLE_FIELD(minRotation,    Vec3,               activeRotBundle(), m_minRotation,    kObjTemplBaseConsoleTag)
-BF2_CONSOLE_FIELD(maxRotation,    Vec3,               activeRotBundle(), m_maxRotation,    kObjTemplBaseConsoleTag)
-BF2_CONSOLE_FIELD(maxSpeed,       Vec3,               activeRotBundle(), m_maxSpeed,       kObjTemplBaseConsoleTag)
-BF2_CONSOLE_FIELD(acceleration,   Vec3,               activeRotBundle(), m_acceleration,   kObjTemplBaseConsoleTag)
+BF2_CONSOLE_FIELD(minRotation,    Math::Vec3,         activeRotBundle(), m_minRotation,    kObjTemplBaseConsoleTag)
+BF2_CONSOLE_FIELD(maxRotation,    Math::Vec3,         activeRotBundle(), m_maxRotation,    kObjTemplBaseConsoleTag)
+BF2_CONSOLE_FIELD(maxSpeed,       Math::Vec3,         activeRotBundle(), m_maxSpeed,       kObjTemplBaseConsoleTag)
+BF2_CONSOLE_FIELD(acceleration,   Math::Vec3,         activeRotBundle(), m_acceleration,   kObjTemplBaseConsoleTag)
 BF2_CONSOLE_FIELD(automaticReset, bool,               activeRotBundle(), m_automaticReset, kObjTemplBaseConsoleTag)
 
 // Rotation speed, stabilization and reset properties. Preserve the console spelling continousRotationSpeed.
@@ -735,9 +740,9 @@ BF2_CONSOLE_FIELD(restoreRotationOnExit,       bool,       activeRotBundle(), m_
 BF2_CONSOLE_FIELD(capMaxSpeed,                 bool,       activeRotBundle(), m_capMaxSpeed,                 kObjTemplBaseConsoleTag)
 
 // Rotational-bundle regulation ranges. Player-control templates have separate bindings with the same names.
-BF2_CONSOLE_FIELD(regulateYaw,                 Math::Vec2, activeRotBundle(), m_regulateYaw,                 kObjTemplBaseConsoleTag)
-BF2_CONSOLE_FIELD(regulatePitch,               Math::Vec2, activeRotBundle(), m_regulatePitch,               kObjTemplBaseConsoleTag)
-BF2_CONSOLE_FIELD(regulateRoll,                Math::Vec2, activeRotBundle(), m_regulateRoll,                kObjTemplBaseConsoleTag)
+BF2_CONSOLE_FIELD(regulateYaw,                 Vec2,      activeRotBundle(), m_regulateYaw,                 kObjTemplBaseConsoleTag)
+BF2_CONSOLE_FIELD(regulatePitch,               Vec2,      activeRotBundle(), m_regulatePitch,               kObjTemplBaseConsoleTag)
+BF2_CONSOLE_FIELD(regulateRoll,                Vec2,      activeRotBundle(), m_regulateRoll,                kObjTemplBaseConsoleTag)
 
 // LightSource console bindings: category COCLight (18), 35 rows in shipped order.
 // Class-gated executors re-read the active template; geometry accesses the raw string field.
@@ -745,10 +750,6 @@ BF2_CONSOLE_FIELD(regulateRoll,                Math::Vec2, activeRotBundle(), m_
 // Range/angle setters report fatal errors above their caps (100 / 180); empty arguments are gets.
 // RW-261: the earlier objectManager castsDynamicShadow row remains withheld, so this
 // LightSource-specific row currently receives those calls. Registration order matters.
-
-// [CHOSEN, not recovered] Local alias preserves console metadata spelling for a three-float color.
-// The Math type with the same name contains four floats and is a different representation.
-typedef Math::Vec3 Vec3ColorFloatIntensity;
 
 namespace {
 LightSourceTemplate* activeLightSource()

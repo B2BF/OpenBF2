@@ -1575,14 +1575,12 @@ void objTemplSoldierCollisionBone(std::string name, int material, Vec3 offset,
     activeSoldierTempl()->setSkeletonCollisionBone(name, material, offset, radius, length);
 }
 } // namespace
-BF2_CONSOLE_PROPERTY_SETONLY(geometry1P, std::string,
-                             getActiveTemplate(CID_SoldierTemplate) != 0,
-                             GameTemplateConsoleAccess::setSoldierGeometry1P,
-                             kObjTemplGameConsoleTag)
-BF2_CONSOLE_PROPERTY_SETONLY(geometry3P, std::string,
-                             getActiveTemplate(CID_SoldierTemplate) != 0,
-                             GameTemplateConsoleAccess::setSoldierGeometry3P,
-                             kObjTemplGameConsoleTag)
+BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(geometry1P, GameTemplateConsoleAccess::setSoldierGeometry1P,
+                                   getActiveTemplate(CID_SoldierTemplate) != 0,
+                                   std::string, kObjTemplGameConsoleTag)
+BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(geometry3P, GameTemplateConsoleAccess::setSoldierGeometry3P,
+                                   getActiveTemplate(CID_SoldierTemplate) != 0,
+                                   std::string, kObjTemplGameConsoleTag)
 BF2_CONSOLE_METHOD_1_ACTIVE(skeleton1P, objTemplSoldierSkeleton1P, getActiveTemplate(CID_SoldierTemplate) != 0, std::string, kObjTemplGameConsoleTag)
 BF2_CONSOLE_METHOD_1_ACTIVE(skeleton3P, objTemplSoldierSkeleton3P, getActiveTemplate(CID_SoldierTemplate) != 0, std::string, kObjTemplGameConsoleTag)
 BF2_CONSOLE_METHOD_1_ACTIVE(animationSystem1P, objTemplSoldierAnimSystem1P, getActiveTemplate(CID_SoldierTemplate) != 0, std::string, kObjTemplGameConsoleTag)
@@ -1660,7 +1658,7 @@ BF2_CONSOLE_METHOD_1_ACTIVE(animationSystem3P, objTemplAnimatedBundleAnimSystem3
                             std::string, kObjTemplGameConsoleTag)
 
 // Kit loadout, geometry, ability and unlock properties. addKitVehicleMod takes a template name and modification value.
-BF2_CONSOLE_PROPERTY_FN(kitType, KitType, getActiveTemplate(CID_KitTemplate) != 0,
+BF2_CONSOLE_PROPERTY_FN(kitType, hfe::KitType, getActiveTemplate(CID_KitTemplate) != 0,
                         GameTemplateConsoleAccess::getKitType(),
                         GameTemplateConsoleAccess::setKitType, kObjTemplGameConsoleTag)
 BF2_CONSOLE_PROPERTY_FN(timeToLiveAfterDeath, float, getActiveTemplate(CID_KitTemplate) != 0,
