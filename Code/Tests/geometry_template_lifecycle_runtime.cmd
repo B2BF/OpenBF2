@@ -4,6 +4,8 @@ rem [TEMP] Strict x86 actual GeometryTemplateManager lifecycle fixture, no game 
 if defined BF2_TEST_ABI_NATIVE if not "%BF2_TEST_ABI_NATIVE%"=="1" (echo Only the native plugin ABI is supported.& exit /b 2)
 call "%~dp0..\Build\vsdevcmd.cmd" x86
 if errorlevel 1 exit /b 1
+call "%~dp0..\Build\dxsdk.cmd" x86
+if errorlevel 1 exit /b 1
 set "TASK_ROOT=%~dp0.."
 if not defined BF2_BUILD_OUT set "BF2_BUILD_OUT=%~dp0..\Build\hemi_draw_20260922\gtm_tests"
 if not exist "%BF2_BUILD_OUT%" mkdir "%BF2_BUILD_OUT%"

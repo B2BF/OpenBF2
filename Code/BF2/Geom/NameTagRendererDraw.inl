@@ -21,6 +21,7 @@
 #include "../RendDX9/Texture.h"
 #include "../RendMisc/IRenderer.h"
 #include "../RendMisc/IRenderView.h"
+#include "../../RendDX9Abi/D3dx9Sdk.h"
 
 // The host interfaces, imported the way BundledMeshDraw.cpp / XpLightManager.cpp import them: under
 // the retail (compat) host ABI, HfeAbi.h already supplies ClassManager's VC7.1 registration carriers,
@@ -50,13 +51,8 @@
 #include <map>
 #include <utility>
 
-// D3DXMatrixRotationZ - the d3dx9_25 import behind the thunk 0x101C4ACE (called by drawArrows and
-// drawIcons). Declared raw because the modern SDK ships no D3DX9 headers, exactly as RenderView.cpp
-// declares D3DXMatrixOrthoLH: the D3DXMATRIX* is sixteen floats (a Mat4 here). Two 4-byte parameters
-// -> @8; /alternatename bridges the decorated reference onto the undecorated import.
-struct D3DXMATRIX;
-extern "C" D3DXMATRIX* __stdcall D3DXMatrixRotationZ(D3DXMATRIX* out, float angle);
-#pragma comment(linker, "/alternatename:_D3DXMatrixRotationZ@8=_D3DXMatrixRotationZ")
+// D3DXMatrixRotationZ is the d3dx9_25 import behind the thunk 0x101C4ACE (called by drawArrows and
+// drawIcons); its D3DXMATRIX is sixteen floats (a Mat4 here).
 
 namespace dice {
 namespace hfe {

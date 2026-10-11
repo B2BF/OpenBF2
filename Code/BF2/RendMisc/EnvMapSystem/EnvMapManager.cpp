@@ -12,25 +12,13 @@
 #include "../../../RendDX9Abi/EngineFile.h"
 #include "../../../RendDX9Abi/Frontier.h"
 #include "../../../RendDX9Abi/PluginEntry.h"
+#include "../../../RendDX9Abi/D3dx9Sdk.h"
 #include <cmath>
 #include <cstdio>
 #include <map>
 #include <new>
 #include <sstream>
 #include <string>
-
-// d3dx9_25 exports undecorated names; the decorated references resolve at link time (the Effect.cpp
-// /alternatename convention, D3dx9_25.def's header). Both are real static imports of the shipped
-// image (IAT 0x101DB4C4 and 0x101DB4A8).
-extern "C" HRESULT WINAPI D3DXLoadSurfaceFromSurface(
-    IDirect3DSurface9* destination, const PALETTEENTRY* destinationPalette,
-    const RECT* destinationRect, IDirect3DSurface9* source,
-    const PALETTEENTRY* sourcePalette, const RECT* sourceRect,
-    DWORD filter, D3DCOLOR colourKey);
-extern "C" HRESULT WINAPI D3DXFilterTexture(
-    IDirect3DBaseTexture9* baseTexture, const PALETTEENTRY* palette, UINT sourceLevel, DWORD filter);
-#pragma comment(linker, "/alternatename:_D3DXLoadSurfaceFromSurface@32=_D3DXLoadSurfaceFromSurface")
-#pragma comment(linker, "/alternatename:_D3DXFilterTexture@16=_D3DXFilterTexture")
 
 namespace dice { namespace hfe {
 namespace dx9rend {
@@ -335,13 +323,13 @@ bool EnvMapManager::generateEnvMaps()
             IDirect3DSurface9* const destination=
                 dx9rend::textureGetLevelSurface(object->m_entry->texture,0u,face);
             IDirect3DSurface9* const source=dx9rend::textureGetLevelSurface(target,0u,face);
-            D3DXLoadSurfaceFromSurface(destination,0,0,source,0,0,0xFFFFFFFFu,0);
+            D3DXLoadSurfaceFromSurface(destination,0,0,source,0,0,D3DX_DEFAULT,0); // IAT 0x101DB4C4
             destination->Release();
             source->Release();
         }
         if(target && --target->refCount==0)
         { dx9rend::textureDtor(target); ::renddx9abi::engineFree(target); }
-        const HRESULT hr=D3DXFilterTexture(object->m_entry->texture->baseTexture,0,0,0xFFFFFFFFu);
+        const HRESULT hr=D3DXFilterTexture(object->m_entry->texture->baseTexture,0,0,D3DX_DEFAULT); // IAT 0x101DB4A8
         if(hr)
             ::renddx9abi::logf("RendMisc/EnvMapSystem/EnvMapManager.cpp:452 Could not generate mip maps on "
                                "envmap cube texture (hr=0x%08X)",static_cast<unsigned int>(hr));

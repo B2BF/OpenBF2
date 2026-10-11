@@ -66,8 +66,16 @@ def package(args):
         "licenses/RSA-MD5.txt": leading_notice(external / "GameSpy/md5c.c"),
         "licenses/GameSpy.txt": leading_notice(external / "GameSpy/gcdkey/gcdkeys.h"),
     }
+    roles = PACKAGES[args.platform]
+    unknown = sorted(set(args.omit) - set(roles))
+    if unknown:
+        raise ValueError("Cannot omit {}: {} packages only {}".format(
+            ", ".join(unknown), args.platform, ", ".join(roles)))
     plans = []
-    for role, (directory, names) in PACKAGES[args.platform].items():
+    for role, (directory, names) in roles.items():
+        if role in args.omit:
+            print("Omitted by request: openbf2-{}-{}".format(args.platform, role))
+            continue
         files = {name: args.build_dir / directory / name for name in names}
         files.update(common)
         package_notices = dict(notices)
@@ -151,6 +159,9 @@ def main():
     parser.add_argument("--source-dir", type=Path, default=Path(__file__).resolve().parents[2])
     parser.add_argument("--revision", required=True, help="Full source commit SHA")
     parser.add_argument("--repository", required=True, help="GitHub owner/repository")
+    parser.add_argument("--omit", action="append", default=[], metavar="ROLE",
+                        help="Skip one package role of this platform (repeatable); every other "
+                             "role stays required")
     args = parser.parse_args()
     if not re.fullmatch(r"[0-9a-fA-F]{40}", args.revision):
         parser.error("--revision must be a full 40-character commit SHA")

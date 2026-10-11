@@ -20,41 +20,18 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <d3d9.h>
+#include "../../RendDX9Abi/D3dx9Sdk.h"
 #include <string.h>
 #include <list>
 #include <new>
 
 
-// D3DXGetImageInfoFromFileInMemory - statically imported from d3dx9_25.dll exactly as the shipped
-// image imports it (the call at 0x10018842 goes through the import thunk). Same decoration dance as
-// D3DXCreateEffect: the DLL exports the undecorated name, the compiler references the __stdcall
-// decorated one, and /alternatename bridges them. Three 4-byte parameters -> @12.
+// D3DXGetImageInfoFromFileInMemory (the call at 0x10018842) and D3DXSaveTextureToFileA
+// (textureManagerSaveTexture, sub_10017F90, IAT 0x101DB4BC) are static imports of d3dx9_25.dll.
 
 // D3DXIMAGE_INFO is seven dwords - Width, Height, Depth, MipLevels, Format, ResourceType,
 // ImageFileFormat - confirmed by the 28-byte stack slot and the `rep movsd` of 7 at 0x1001885B.
-
-struct D3DXImageInfo
-{
-    unsigned int width;          // +0x00
-    unsigned int height;         // +0x04
-    unsigned int depth;          // +0x08
-    unsigned int mipLevels;      // +0x0C
-    unsigned int format;         // +0x10  D3DFORMAT
-    unsigned int resourceType;   // +0x14  D3DRESOURCETYPE: 3 = texture, 4 = volume, 5 = cube
-    unsigned int imageFileFormat;// +0x18  D3DXIMAGE_FILEFORMAT: 2 = TGA, 4 = DDS
-};
-
-extern "C" long __stdcall D3DXGetImageInfoFromFileInMemory(const void* srcData,
-                                                           unsigned int srcDataSize,
-                                                           D3DXImageInfo* srcInfo);
-#pragma comment(linker, "/alternatename:_D3DXGetImageInfoFromFileInMemory@12=_D3DXGetImageInfoFromFileInMemory")
-
-// D3DXSaveTextureToFileA - textureManagerSaveTexture's (sub_10017F90) call, through the import thunk
-// (IAT 0x101DB4BC). Four 4-byte parameters -> @16; the same bridge as above.
-extern "C" long __stdcall D3DXSaveTextureToFileA(const char* destinationFile, unsigned int fileFormat,
-                                                 IDirect3DBaseTexture9* source,
-                                                 const PALETTEENTRY* sourcePalette);
-#pragma comment(linker, "/alternatename:_D3DXSaveTextureToFileA@16=_D3DXSaveTextureToFileA")
+static_assert(sizeof(D3DXIMAGE_INFO) == 0x1C, "textureSetFileInfo copies D3DXIMAGE_INFO as 0x1C bytes");
 
 namespace dice {
 namespace hfe {
@@ -296,7 +273,7 @@ private:
     EngineTexture* createCubeTexture(unsigned int w, unsigned int format, unsigned int mips,
                                      unsigned int usage, EngineTexture* tex);
     bool seekPastHeaderAndSkippedMips(::renddx9abi::EngineStream& stream,
-                                      D3DXImageInfo& info, int mipSkip);
+                                      D3DXIMAGE_INFO& info, int mipSkip);
 
     void*             m_vptr;             // +0x00
     void*             m_listenerVptr;     // +0x04
@@ -503,13 +480,13 @@ void TextureManager::findTexturePath(vc71::string& out, const vc71::string& name
 // without moving the current stream position.
 
 bool TextureManager::seekPastHeaderAndSkippedMips(::renddx9abi::EngineStream& stream,
-                                                  D3DXImageInfo& info, int mipSkip)
+                                                  D3DXIMAGE_INFO& info, int mipSkip)
 {
-    if (info.imageFileFormat == 2)                         // TGA
+    if (info.ImageFileFormat == D3DXIFF_TGA)
     {
-        const int bpp = bitsPerPixel(info.format);
+        const int bpp = bitsPerPixel(info.Format);
         int offset = 18;
-        if (info.width >= static_cast<unsigned int>(m_smallestMipSide))
+        if (info.Width >= static_cast<unsigned int>(m_smallestMipSide))
         {
             int remaining = mipSkip;
             for (;;)
@@ -517,13 +494,13 @@ bool TextureManager::seekPastHeaderAndSkippedMips(::renddx9abi::EngineStream& st
                 const int next = remaining - 1;
                 if (!remaining)
                     break;
-                if (info.mipLevels <= 1)
+                if (info.MipLevels <= 1)
                     break;
-                offset += static_cast<int>(bpp * info.width * info.height) >> 3;
-                const unsigned int w = info.width >> 1;
-                info.height >>= 1;
-                info.width = w;
-                --info.mipLevels;
+                offset += static_cast<int>(bpp * info.Width * info.Height) >> 3;
+                const unsigned int w = info.Width >> 1;
+                info.Height >>= 1;
+                info.Width = w;
+                --info.MipLevels;
                 if (w < static_cast<unsigned int>(m_smallestMipSide))
                     break;
                 remaining = next;
@@ -533,23 +510,23 @@ bool TextureManager::seekPastHeaderAndSkippedMips(::renddx9abi::EngineStream& st
         return true;
     }
 
-    if (info.imageFileFormat == 4)                         // DDS
+    if (info.ImageFileFormat == D3DXIFF_DDS)
     {
-        const int bpp = bitsPerPixel(info.format);
+        const int bpp = bitsPerPixel(info.Format);
         int offset = 128;
 
-        if (info.resourceType == 3)                        // 2D only
+        if (info.ResourceType == D3DRTYPE_TEXTURE)         // 2D only
         {
-            const unsigned int fmt = info.format;
+            const unsigned int fmt = info.Format;
             if (fmt == 827611204 || fmt == 861165636 || fmt == 894720068)   // DXT1 / DXT3 / DXT5
             {
-                const unsigned int mips = info.mipLevels;
-                int w = static_cast<int>(info.width);
-                int h = static_cast<int>(info.height);
-                const int lastW = (static_cast<int>(info.width)  >> (mips - 1) <= 0)
-                                      ? 0 : static_cast<int>(info.width)  >> (mips - 1);
-                const int lastH = (static_cast<int>(info.height) >> (mips - 1) <= 0)
-                                      ? 0 : static_cast<int>(info.height) >> (mips - 1);
+                const unsigned int mips = info.MipLevels;
+                int w = static_cast<int>(info.Width);
+                int h = static_cast<int>(info.Height);
+                const int lastW = (static_cast<int>(info.Width)  >> (mips - 1) <= 0)
+                                      ? 0 : static_cast<int>(info.Width)  >> (mips - 1);
+                const int lastH = (static_cast<int>(info.Height) >> (mips - 1) <= 0)
+                                      ? 0 : static_cast<int>(info.Height) >> (mips - 1);
                 if (mips > 1)
                 {
                     do
@@ -560,9 +537,9 @@ bool TextureManager::seekPastHeaderAndSkippedMips(::renddx9abi::EngineStream& st
                             break;
                         const int smaller = (w >= h) ? h : w;
                         if (smaller < m_smallestMipSide)
-                            --info.mipLevels;
+                            --info.MipLevels;
                     }
-                    while (info.mipLevels > 1);
+                    while (info.MipLevels > 1);
                 }
             }
 
@@ -572,12 +549,12 @@ bool TextureManager::seekPastHeaderAndSkippedMips(::renddx9abi::EngineStream& st
                 do
                 {
                     --remaining;
-                    if (info.mipLevels <= 1)
+                    if (info.MipLevels <= 1)
                         break;
-                    const unsigned int w = info.width;
+                    const unsigned int w = info.Width;
                     if (w == 1)
                         break;
-                    const unsigned int h = info.height;
+                    const unsigned int h = info.Height;
                     if (h == 1)
                         break;
                     const unsigned int smallest = static_cast<unsigned int>(m_smallestMipSide);
@@ -586,9 +563,9 @@ bool TextureManager::seekPastHeaderAndSkippedMips(::renddx9abi::EngineStream& st
                     if ((h >> 1) < smallest)
                         break;
                     offset += static_cast<int>(bpp * w * h) >> 3;
-                    info.width  = w >> 1;
-                    info.height = h >> 1;
-                    --info.mipLevels;
+                    info.Width  = w >> 1;
+                    info.Height = h >> 1;
+                    --info.MipLevels;
                 }
                 while (remaining);
             }
@@ -804,7 +781,7 @@ EngineTexture* TextureManager::loadTextureFromFile(const vc71::string& name, Eng
     ::renddx9abi::EngineStream stream;
     stream.open(path);   // shipped: no null check on the returned stream
 
-    D3DXImageInfo info;
+    D3DXIMAGE_INFO info;
     ::memset(&info, 0, sizeof(info));
     {
         void* probe = ::renddx9abi::engineAlloc(0x7C);
@@ -813,7 +790,7 @@ EngineTexture* TextureManager::loadTextureFromFile(const vc71::string& name, Eng
         ::renddx9abi::engineFree(probe);
     }
 
-    const D3DXImageInfo originalInfo = info;               // the rep-movsd copy at 0x1001885B keeps
+    const D3DXIMAGE_INFO originalInfo = info;              // the rep-movsd copy at 0x1001885B keeps
                                                            // the original for the +0x0C stamp
 
     int mipSkip = 0;
@@ -835,15 +812,15 @@ EngineTexture* TextureManager::loadTextureFromFile(const vc71::string& name, Eng
 
     EngineTexture* result = 0;
 
-    if (info.resourceType == 3)
+    if (info.ResourceType == D3DRTYPE_TEXTURE)
     {
-        const unsigned int fmt = info.format;
-        result = create2DOrVolumeTexture(info.width, info.height, 1, fmt, info.mipLevels, 0, tex);
+        const unsigned int fmt = info.Format;
+        result = create2DOrVolumeTexture(info.Width, info.Height, 1, fmt, info.MipLevels, 0, tex);
         const int bpp = bitsPerPixel(fmt);
-        for (unsigned int mip = 0; mip < info.mipLevels; ++mip)
+        for (unsigned int mip = 0; mip < info.MipLevels; ++mip)
         {
-            int w = static_cast<int>(info.width >> mip);  if (w < 1) w = 1;
-            int h = static_cast<int>(info.height >> mip); if (h < 1) h = 1;
+            int w = static_cast<int>(info.Width >> mip);  if (w < 1) w = 1;
+            int h = static_cast<int>(info.Height >> mip); if (h < 1) h = 1;
             if (w >= m_smallestMipSide && h >= m_smallestMipSide)
             {
                 TextureLockRecord* rec = textureLock(result, mip, 0x7FFFFFFF);
@@ -852,17 +829,17 @@ EngineTexture* TextureManager::loadTextureFromFile(const vc71::string& name, Eng
             }
         }
     }
-    else if (info.resourceType == 4)
+    else if (info.ResourceType == D3DRTYPE_VOLUMETEXTURE)
     {
-        const unsigned int fmt = info.format;
-        result = create2DOrVolumeTexture(info.width, info.height, info.depth, fmt,
-                                         info.mipLevels, 0, tex);
+        const unsigned int fmt = info.Format;
+        result = create2DOrVolumeTexture(info.Width, info.Height, info.Depth, fmt,
+                                         info.MipLevels, 0, tex);
         const int bpp = bitsPerPixel(fmt);
-        for (unsigned int mip = 0; mip < info.mipLevels; ++mip)
+        for (unsigned int mip = 0; mip < info.MipLevels; ++mip)
         {
-            int w = static_cast<int>(info.width >> mip);  if (w < 1) w = 1;
-            int h = static_cast<int>(info.height >> mip); if (h < 1) h = 1;
-            int d = static_cast<int>(info.depth >> mip);  if (d < 1) d = 1;
+            int w = static_cast<int>(info.Width >> mip);  if (w < 1) w = 1;
+            int h = static_cast<int>(info.Height >> mip); if (h < 1) h = 1;
+            int d = static_cast<int>(info.Depth >> mip);  if (d < 1) d = 1;
             TextureLockRecord* rec = textureLock(result, mip, 0x7FFFFFFF);
             stream.read(rec->pBits, static_cast<unsigned int>(bpp * w * h * d / 8));
             textureUnlock(result, rec);
@@ -870,21 +847,21 @@ EngineTexture* TextureManager::loadTextureFromFile(const vc71::string& name, Eng
     }
     else
     {
-        const unsigned int originalMips = info.mipLevels;
+        const unsigned int originalMips = info.MipLevels;
         if (deviceCapsPixelShaderMajor() < 2)              // sub_100010D0 on dword_1023B980
-            info.mipLevels = 1;
-        const unsigned int fmt = info.format;
-        result = createCubeTexture(info.width, fmt, info.mipLevels, 0, tex);
+            info.MipLevels = 1;
+        const unsigned int fmt = info.Format;
+        result = createCubeTexture(info.Width, fmt, info.MipLevels, 0, tex);
         const int bpp = bitsPerPixel(fmt);
         for (int face = 0; face < 6; ++face)
         {
             for (unsigned int mip = 0; mip < originalMips; ++mip)
             {
-                unsigned int edge = info.width >> mip;
+                unsigned int edge = info.Width >> mip;
                 if (static_cast<int>(edge) < 4)
                     edge = 4;
                 const int bytes = static_cast<int>(bpp * edge * edge) / 8;
-                if (mip < info.mipLevels)
+                if (mip < info.MipLevels)
                 {
                     TextureLockRecord* rec = textureLock(result, mip, static_cast<unsigned int>(face));
                     stream.read(rec->pBits, static_cast<unsigned int>(bytes));
@@ -909,8 +886,8 @@ EngineTexture* TextureManager::loadTextureFromFile(const vc71::string& name, Eng
     ::renddx9abi::logf("TextureManager: loaded \"%s\" -> 0x%08X  %ux%ux%u fmt=%u type=%u mips=%u "
                        "(file had %u) pool=%d skip=%d",
                        path.c_str(), ::renddx9abi::addr(result),
-                       info.width, info.height, info.depth, info.format, info.resourceType,
-                       info.mipLevels, originalInfo.mipLevels,
+                       info.Width, info.Height, info.Depth, info.Format, info.ResourceType,
+                       info.MipLevels, originalInfo.MipLevels,
                        result ? result->pool : -1, mipSkip);
     return result;
 }
@@ -1586,7 +1563,7 @@ bool textureManagerSaveTexture(EngineTexture* texture, const vc71::string& name)
     ::renddx9abi::engineFilePrepareWrite(path);                              // FileManager +0x18 (3, 2, 0), release
     vc71::string writePath;
     ::renddx9abi::engineFileGetWritePath(path, writePath);                   // FileManager +0xA4
-    return D3DXSaveTextureToFileA(writePath.c_str(), 4u, texture->baseTexture, 0) == 0;
+    return D3DXSaveTextureToFileA(writePath.c_str(), D3DXIFF_DDS, texture->baseTexture, 0) == 0;
 }
 
 // The four reads the Texture constructor makes (Texture.cpp).

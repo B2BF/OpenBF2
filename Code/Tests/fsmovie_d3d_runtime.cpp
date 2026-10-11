@@ -20,9 +20,6 @@ bool createStateManager(void*);
 bool createBufferManager(IDirect3DDevice9*);
 bool stateManagerIsFullyRestored();
 } } }
-extern "C" long __stdcall D3DXCreateEffect(IDirect3DDevice9*,const void*,unsigned,
-    const void*,void*,unsigned,void*,void**,void**);
-#pragma comment(linker, "/alternatename:_D3DXCreateEffect@36=_D3DXCreateEffect")
 using namespace dice::hfe;
 using namespace dice::hfe::dx9rend;
 namespace {
@@ -174,12 +171,12 @@ int main(int argc,char** argv) {
     IDirect3DSwapChain9* chain=nullptr;device->GetSwapChain(0,&chain);
     *reinterpret_cast<IDirect3DSwapChain9***>(reinterpret_cast<char*>(&base)+228)=&chain;
     if(!check(createStateManager(device) && createBufferManager(device) && createShaderManager(&base,device),"construct actual state, buffer and shader managers"))return 1;
-    void* fx=nullptr;void* errors=nullptr;
+    ID3DXEffect* fx=nullptr;ID3DXBuffer* errors=nullptr;
     const HRESULT compiled=D3DXCreateEffect(device,source.data(),static_cast<unsigned>(source.size()),nullptr,nullptr,0,nullptr,&fx,&errors);
-    if(errors){typedef const char* (__stdcall* Text)(void*);std::printf("D3DX: %s\n",renddx9abi::d3dxSlot<Text>(errors,0x0c)(errors));renddx9abi::d3dxSlot<renddx9abi::D3dxReleaseFn>(errors,8)(errors);}
+    if(errors){std::printf("D3DX: %s\n",static_cast<const char*>(errors->GetBufferPointer()));errors->Release();}
     if(!check(SUCCEEDED(compiled) && fx,"compile stock LoadingScreen through real D3DX"))return 1;
     Effect* effect=createEffectObject();if(!check(effectBind(effect,fx),"actual effect bind registers parameters and installs real StateManager"))return 1;
-    renddx9abi::d3dxSlot<renddx9abi::D3dxReleaseFn>(fx,8)(fx);
+    fx->Release();
     auto manager=static_cast<ShaderManager*>(g_shaderManager);
     auto node=vc71::mapInsert(manager->effectCache,0x30,"mods/xpack/shaders/loadingscreen");vc71::mapNodeValueRef(node)=effect;
     IFSMoviePlayer* movie=reinterpret_cast<IFSMoviePlayer*>(geom::createFSMoviePlayer(80047u,nullptr));

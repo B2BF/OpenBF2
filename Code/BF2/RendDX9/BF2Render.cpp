@@ -47,6 +47,7 @@
 #endif
 #include "RendDX9Base.h"
 #include "Texture.h"
+#include "../../RendDX9Abi/D3dx9Sdk.h"
 // RW-266: the host classes the frame loop dispatches into, typed - see hostCalls below.
 // System, WindManager and PlayerManager carry no STL across the calls made on them, so both flavours
 // include them; the Menu class, ISwiffHost and ModInfo are native-only (their calls carry the host's
@@ -2917,14 +2918,6 @@ void rendererRestoreHemiState(const HemiRenderState& state)
 
 extern void* g_deviceCaps;   // RendDX9Init.cpp, dword_1023B980 - a D3DCAPS9 at +0
 
-// d3dx9_25!D3DXSaveSurfaceToFileA (IAT 0x101DB4C8), declared as RendDX9Init.cpp and HemiMapManager.cpp
-// declare it; the decorated reference resolves through the same /alternatename.
-extern "C" HRESULT WINAPI D3DXSaveSurfaceToFileA(const char* destinationFile, unsigned int fileFormat,
-                                                 IDirect3DSurface9* source,
-                                                 const PALETTEENTRY* sourcePalette,
-                                                 const RECT* sourceRect);
-#pragma comment(linker, "/alternatename:_D3DXSaveSurfaceToFileA@20=_D3DXSaveSurfaceToFileA")
-
 // byte_10238870, file-backed 1: DebugBoxMesh's draw gate (its draw, 0x10083530, runs only while it is
 // set). The cube-face render clears it around each face and restores it. [CHOSEN placement]: the
 // owner, GeomMisc\DebugBoxMesh.cpp (attested at 0x1020A7B8), is not in this tree - the definition
@@ -3162,7 +3155,7 @@ void rendererMakeTopWorldScreen(unsigned int resolution, renddx9abi::HostString 
     if (stream)
         stream->release();
     ::dice::hfe::fileManager->deleteFile(path);                                         // +0x20
-    D3DXSaveSurfaceToFileA(path.c_str(), 4u, target, 0, 0);                             // D3DXIFF_DDS
+    D3DXSaveSurfaceToFileA(path.c_str(), D3DXIFF_DDS, target, 0, 0);                    // IAT 0x101DB4C8
     D3DSURFACE_DESC unusedDesc;
     target->GetDesc(&unusedDesc);                                                        // +0x30
     target->Release();

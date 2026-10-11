@@ -2,6 +2,8 @@
 setlocal
 rem [TEMP] Actual x86 RenderQueues.cpp helper fixture. No original DLL is loaded.
 call "%~dp0..\Build\vsdevcmd.cmd" x86
+call "%~dp0..\Build\dxsdk.cmd" x86
+if errorlevel 1 exit /b 1
 set "TASK_ROOT=%~dp0.."
 if not defined BF2_BUILD_OUT set "BF2_BUILD_OUT=%~dp0..\Build\obj_renddx9_detail_helpers_runtime_20260916"
 if not exist "%BF2_BUILD_OUT%" mkdir "%BF2_BUILD_OUT%"

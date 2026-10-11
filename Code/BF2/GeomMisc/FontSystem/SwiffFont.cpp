@@ -14,7 +14,7 @@
 #include "../../RendDX9/RendDX9Base.h"
 #include "../../RendDX9/ShaderParameter.h"
 
-#include "../../../RendDX9Abi/D3dxEffect.h"
+#include "../../../RendDX9Abi/D3dx9Sdk.h"
 
 #include <stddef.h>
 #include <string.h>
@@ -528,7 +528,8 @@ void* paramGetHandle(void* p)     // +0x0C (sub_10021190): return m_handle
 void fxSetTexture(void* fx, void* handle, void* texture)
 {
     if (!fx) return;
-    ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxSetTextureFn>(fx, 0xD0)(fx, handle, texture);
+    static_cast<ID3DXEffect*>(fx)->SetTexture(::renddx9abi::d3dxHandle(handle),
+                                              static_cast<IDirect3DBaseTexture9*>(texture));
 }
 
 // Row-major 4x4 multiply, out = a * b (D3DXMatrixMultiply's convention).

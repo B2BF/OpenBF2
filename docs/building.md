@@ -24,7 +24,8 @@ Paths below are relative to the selected CMake build directory.
 
 The x86 preset uses `Reconstruction` with `BUILD_TESTING=ON`. Windows x64 uses `Release`;
 Linux uses `RelWithDebInfo`; both default to `BUILD_TESTING=OFF`. The client and editor
-are explicit targets, available only on Windows x86. The optional `bf2_aidll` target
+are explicit targets, available only on Windows x86, and need the
+[April 2005 DirectX SDK](#directx-sdk). The optional `bf2_aidll` target
 builds `bin/AIDLL_w32ded.dll`.
 
 A strict link resolves the image's symbols. Runtime behavior still needs validation.
@@ -34,6 +35,8 @@ diagnostic artifact and report the exact paths a run exercised.
 ## Windows prerequisites
 
 - MSVC C++ tools and Windows SDK, with x86 and x64 components as needed.
+- For the client, the editor and their renderer plugins: the April 2005 DirectX SDK
+  (see [DirectX SDK](#directx-sdk)). Dedicated servers do not need it.
 - CMake 3.21 or newer and Ninja on `PATH`.
 - Your own Battlefield 2 1.50 installation for runtime content and reference binaries.
   Compiling an archive or running engine-free checks does not require game content.
@@ -161,10 +164,9 @@ TextureAtlasBuilder uses its own static CRT and legacy float rounding to preserv
 output. It does not transfer ownership of CRT allocations across the DLL boundary;
 callback string references are borrowed. The rebuilt plugins
 do not depend on `Memory.dll`, `msvcr71.dll`, or `msvcp71.dll`.
-The renderer and atlas scripts can use the April 2005 DirectX SDK (D3DX version 25)
-through `DXSDK_DIR`; they also have a no-SDK import-library fallback. The runtime still
-needs the matching `d3dx9_25.dll`. Client runtime dependencies also include the game's
-Bink and Novint components, TextureAtlasBuilder, and an OpenAL provider for audio.
+The renderer and atlas DLLs compile and link against the installed DirectX SDK described
+below, and at run time need the matching `d3dx9_25.dll`. Client runtime dependencies also
+include the game's Bink and Novint components, TextureAtlasBuilder, and an OpenAL provider for audio.
 The audio build uses vendored Ogg/Vorbis by default; setting `BF2AUDIO_NO_VORBIS` omits it.
 
 The CMake client target stages all four rebuilt DLLs above. It also stages Python
@@ -183,6 +185,46 @@ The renderer registration host currently reaches device-dependent LightManager
 construction without supplying a device. That fixture crashes with both the pre-removal
 and native-only DLLs; it is not a passing startup acceptance gate. Restore its required
 host services before using it to claim plugin initialization coverage.
+
+### DirectX SDK
+
+`RendDX9.dll` and `TextureAtlasBuilder.dll` use the D3DX9 headers and import libraries of
+the installed **Microsoft DirectX 9.0 SDK (April 2005)**, `D3DX_SDK_VERSION` 25. That
+SDK's `d3dx9.lib` binds `d3dx9_25.dll`, the D3DX both shipped DLLs import, so the rebuilt
+renderer gets the same effect compiler and texture loaders as retail. Its `DxErr9.lib`
+supplies the atlas DLL's `DXGetErrorString9A`. A later SDK binds a later `d3dx9_NN.dll`
+with a different shader compiler; the June 2010 SDK, for example, binds `d3dx9_43.dll`
+and rejects `ps_1_x` targets by default. The build refuses such SDKs instead of linking
+them. There is no fallback without the SDK.
+
+`Code\Build\dxsdk.cmd` locates the SDK for every script that needs it: `renddx9.cmd`,
+`textureatlasbuilder.cmd` (and so the `bf2_client` and `bf2_editor` plugin steps), the
+renderer fixtures under `Code\Tests`, and the renderer section of `syntaxcheck.cmd`. It
+checks `DXSDK_DIR`, which the SDK installer sets, and then the SDK's default folder under
+`Program Files (x86)`. It accepts a directory only when `Include\d3dx9core.h` declares
+version 25 and `Lib\<arch>` holds `d3dx9.lib` and `DxErr9.lib`. Run it after
+`vsdevcmd.cmd`, because it *appends* the SDK's `Include` and `Lib\<arch>` directories to
+`INCLUDE` and `LIB`. The Windows SDK therefore still provides `d3d9.h`, `dinput.h`,
+`dsound.h`, `strsafe.h`, `d3d9.lib`, `dinput8.lib` and `dxguid.lib`; only the D3DX headers
+and libraries come from the DirectX SDK. It also sets `BF2_DXSDK_DIR` and `BF2_DXSDK_LIB`.
+Without a suitable SDK it names what is missing and fails. `syntaxcheck.cmd` then skips
+the renderer TUs and counts the skip as one failure.
+
+To check an installation, run the helper by itself. It prints the SDK it selected, or
+the reason it rejected each candidate:
+
+```powershell
+cmd /c Code\Build\dxsdk.cmd x86
+```
+
+The architecture argument selects `Lib\x86` or `Lib\x64`; the April 2005 SDK ships both,
+and its x64 `d3dx9.lib` binds the 64-bit `d3dx9_25.dll`. Renderer sources take D3DX
+through `Code/RendDX9Abi/D3dx9Sdk.h` and use the SDK's typed interfaces (`ID3DXEffect`
+and the others), not hand-declared prototypes or fixed vtable offsets. That D3DX layer is
+ready for a 64-bit client, but no x64 client, renderer or editor target exists yet.
+Include `D3dx9Sdk.h` only inside a `BF2_IMAGE_RENDDX9` or
+`BF2_IMAGE_TEXTUREATLASBUILDER` region: the engine images compile every `Code/BF2`
+source without a DirectX SDK.
 
 ## Editor
 

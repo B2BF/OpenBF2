@@ -15,9 +15,9 @@
 #include "../../RendDX9Abi/PluginEntry.h"
 #include "../../RendDX9Abi/Vc71Map.h"
 #include "../../RendDX9Abi/EngineFile.h"
-#include "../../RendDX9Abi/D3dxEffect.h"
 #include "../RendDX9/RendDX9Base.h"
 #include "../RendDX9/ShaderParameter.h"
+#include "../../RendDX9Abi/D3dx9Sdk.h"
 #if BF2_PLUGIN_ABI_NATIVE
 // RW-266: the host interfaces this file dispatches into, typed in this flavour - the
 // SwiffHost, the Swiff player and the server-logo manager (see hostSlot's wrappers below).
@@ -33,27 +33,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-
-// The four D3DX entry points the texture loader and the upload slots use. Undecorated exports from
-// d3dx9_25.dll, bridged the same way Effect.cpp bridges D3DXCreateEffect.
-extern "C" long __stdcall D3DXCreateTexture(void* device, unsigned int w, unsigned int h,
-                                            unsigned int mipLevels, unsigned long usage,
-                                            unsigned int format, unsigned int pool, void** outTex);
-extern "C" long __stdcall D3DXLoadSurfaceFromMemory(void* destSurface, const void* destPalette,
-                                                    const void* destRect, const void* srcMemory,
-                                                    unsigned int srcFormat, unsigned int srcPitch,
-                                                    const void* srcPalette, const void* srcRect,
-                                                    unsigned long filter, unsigned long colorKey);
-extern "C" long __stdcall D3DXGetImageInfoFromFileInMemory(const void* data, unsigned int size,
-                                                           void* outInfo);
-extern "C" long __stdcall D3DXCreateTextureFromFileInMemory(void* device, const void* data,
-                                                            unsigned int size, void** outTex);
-extern "C" void* __stdcall D3DXMatrixMultiply(float* out, const float* a, const float* b);
-#pragma comment(linker, "/alternatename:_D3DXCreateTexture@32=_D3DXCreateTexture")
-#pragma comment(linker, "/alternatename:_D3DXLoadSurfaceFromMemory@40=_D3DXLoadSurfaceFromMemory")
-#pragma comment(linker, "/alternatename:_D3DXGetImageInfoFromFileInMemory@12=_D3DXGetImageInfoFromFileInMemory")
-#pragma comment(linker, "/alternatename:_D3DXCreateTextureFromFileInMemory@16=_D3DXCreateTextureFromFileInMemory")
-#pragma comment(linker, "/alternatename:_D3DXMatrixMultiply@12=_D3DXMatrixMultiply")
 
 namespace dice {
 namespace hfe {
@@ -222,16 +201,18 @@ void smSetRenderState(unsigned int state, unsigned int value)
     reinterpret_cast<SmSetRenderStateFn>(vtbl[28 / 4])(sm, state, value);   // COM slot 7
 }
 
-// fx->SetTexture(handle, tex) / fx->CommitChanges() - raw D3DX, as the shipped bodies call them.
+// fx->SetTexture(handle, tex) / fx->CommitChanges() on the effect's D3DX interface, as the shipped
+// bodies call them.
 void fxSetTexture(void* fx, void* handle, void* texture)
 {
     if (!fx) return;
-    ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxSetTextureFn>(fx, 0xD0)(fx, handle, texture);
+    static_cast<ID3DXEffect*>(fx)->SetTexture(::renddx9abi::d3dxHandle(handle),
+                                              static_cast<IDirect3DBaseTexture9*>(texture));
 }
 void fxCommitChanges(void* fx)
 {
     if (!fx) return;
-    ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxCommitChangesFn>(fx, 0x104)(fx);
+    static_cast<ID3DXEffect*>(fx)->CommitChanges();
 }
 
 
@@ -582,10 +563,12 @@ int registryGetOrLoad(SwiffTextureRegistry& reg, const vc71::string& name,
 
     // D3DXIMAGE_INFO: Width at +0, Height at +4 (the caller reads only those two).
     unsigned int info[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-    D3DXGetImageInfoFromFileInMemory(file.data, file.size, info);
+    D3DXGetImageInfoFromFileInMemory(file.data, file.size,
+                                     reinterpret_cast<D3DXIMAGE_INFO*>(info));
 
-    void* texture = 0;
-    const long hr = D3DXCreateTextureFromFileInMemory(device, file.data, file.size, &texture);
+    IDirect3DTexture9* texture = 0;
+    const long hr = D3DXCreateTextureFromFileInMemory(static_cast<IDirect3DDevice9*>(device),
+                                                      file.data, file.size, &texture);
     ::renddx9abi::freeEngineFile(file);
     if (hr < 0 || !texture)
         return -1;
@@ -1116,14 +1099,15 @@ int __fastcall sr_uploadAlpha(void* self, void*, unsigned int w, unsigned int h,
     void* device = ::dice::hfe::dx9rend::renderDevice();
     if (!device)
         return -1;
-    void* tex = 0;
-    if (D3DXCreateTexture(device, w, h, 1, 0, 28, 1, &tex) < 0)
+    IDirect3DTexture9* tex = 0;
+    if (D3DXCreateTexture(static_cast<IDirect3DDevice9*>(device), w, h, 1, 0, D3DFMT_A8,
+                          D3DPOOL_MANAGED, &tex) < 0)
         return -1;
-    IDirect3DTexture9* t = static_cast<IDirect3DTexture9*>(tex);
+    IDirect3DTexture9* t = tex;
     IDirect3DSurface9* surface = 0;
     t->GetSurfaceLevel(0, &surface);
     RECT rect = { 0, 0, (LONG)w, (LONG)h };
-    if (D3DXLoadSurfaceFromMemory(surface, 0, 0, data, 28, w, 0, &rect, 0xFFFFFFFF, 0) < 0)
+    if (D3DXLoadSurfaceFromMemory(surface, 0, 0, data, D3DFMT_A8, w, 0, &rect, 0xFFFFFFFF, 0) < 0)
     {
         if (surface) surface->Release();
         t->Release();
@@ -1149,10 +1133,11 @@ int __fastcall sr_uploadRgba(void* self, void*, unsigned int* desc)
     void* device = ::dice::hfe::dx9rend::renderDevice();
     if (!device)
         return -1;
-    void* tex = 0;
-    if (D3DXCreateTexture(device, desc[1], desc[2], 1, 0, 21, 1, &tex) < 0)
+    IDirect3DTexture9* tex = 0;
+    if (D3DXCreateTexture(static_cast<IDirect3DDevice9*>(device), desc[1], desc[2], 1, 0,
+                          D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &tex) < 0)
         return -1;
-    IDirect3DTexture9* t = static_cast<IDirect3DTexture9*>(tex);
+    IDirect3DTexture9* t = tex;
     IDirect3DSurface9* surface = 0;
     t->GetSurfaceLevel(0, &surface);
 
@@ -1170,8 +1155,8 @@ int __fastcall sr_uploadRgba(void* self, void*, unsigned int* desc)
     }
 
     RECT rect = { 0, 0, (LONG)desc[1], (LONG)desc[2] };
-    if (D3DXLoadSurfaceFromMemory(surface, 0, 0, reinterpret_cast<void*>(desc[0]), 21, desc[3],
-                                  0, &rect, 0xFFFFFFFF, 0) < 0)
+    if (D3DXLoadSurfaceFromMemory(surface, 0, 0, reinterpret_cast<void*>(desc[0]),
+                                  D3DFMT_A8R8G8B8, desc[3], 0, &rect, 0xFFFFFFFF, 0) < 0)
     {
         if (surface) surface->Release();
         t->Release();
@@ -1283,7 +1268,9 @@ void __fastcall sr_beginDisplay(void* self, void*, int bgUnused, int vpX, int vp
         - (float)vpHeight * invMovieH;
 
     float combined[16];
-    D3DXMatrixMultiply(combined, s->mtxOrthoTwips, s->mtxRemap);
+    D3DXMatrixMultiply(reinterpret_cast<D3DXMATRIX*>(combined),
+                       reinterpret_cast<const D3DXMATRIX*>(s->mtxOrthoTwips),
+                       reinterpret_cast<const D3DXMATRIX*>(s->mtxRemap));
     paramSetValue(s->paramTransform, combined, 0);
 
     // The eleven state pairs, in the shipped order.
@@ -1477,8 +1464,12 @@ void __fastcall sr_setTransform(void* self, void*, const float* m2x3)
     local[15] = 1.0f;
 
     float step[16], combined[16];
-    D3DXMatrixMultiply(step, local, s->mtxOrthoTwips);
-    D3DXMatrixMultiply(combined, step, s->mtxRemap);
+    D3DXMatrixMultiply(reinterpret_cast<D3DXMATRIX*>(step),
+                       reinterpret_cast<const D3DXMATRIX*>(local),
+                       reinterpret_cast<const D3DXMATRIX*>(s->mtxOrthoTwips));
+    D3DXMatrixMultiply(reinterpret_cast<D3DXMATRIX*>(combined),
+                       reinterpret_cast<const D3DXMATRIX*>(step),
+                       reinterpret_cast<const D3DXMATRIX*>(s->mtxRemap));
     ::memcpy(s->mtxCurrent, combined, sizeof(combined));
     paramSetValue(s->paramTransform, combined, 0);
 }

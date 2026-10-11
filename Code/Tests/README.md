@@ -33,9 +33,10 @@ Additional component fixture inputs:
   Results go under `BF2_BUILD_OUT/collision_teardown_runtime`.
 - `hud_atlas_snapshot_runtime.cmd` requires `BF2_HUD_ATLAS_FIXTURE_DIR` with the fixture's
   matching 49-TU native renderer build in `native_obj/`. This object set must include
-  `49_QuadDrawer.obj`, `15_TextureManager.obj`, `d3dx9_25.lib` and `binkw32.lib`; the fixture
-  supplies its own TextureManager implementation at link time. Results go under that
-  fixture directory's `atlas_snapshot_runtime/` subdirectory.
+  `49_QuadDrawer.obj`, `15_TextureManager.obj` and `binkw32.lib`; D3DX links from the
+  April 2005 DirectX SDK that `Code\Build\dxsdk.cmd` locates. The fixture supplies its own
+  TextureManager implementation at link time. Results go under that fixture directory's
+  `atlas_snapshot_runtime/` subdirectory.
 
 Use separate fixture and output directories for concurrent runs. Both scripts report missing
 required inputs and exit before compilation.

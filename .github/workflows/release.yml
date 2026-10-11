@@ -40,11 +40,22 @@ jobs:
         run: |
           packages=(
             openbf2-windows-x86-server-diagnostic
-            openbf2-windows-x86-client-diagnostic
-            openbf2-windows-x86-editor-diagnostic
             openbf2-windows-x64-server
             openbf2-linux-x64-server
           )
+          # build.yml leaves these two out, with a notice, on a runner without the April 2005
+          # DirectX SDK.
+          sdk_packages=(
+            openbf2-windows-x86-client-diagnostic
+            openbf2-windows-x86-editor-diagnostic
+          )
+          for package in "${sdk_packages[@]}"; do
+            if [ -e "$package.zip" ]; then
+              packages+=("$package")
+            else
+              echo "::notice title=Package not attached::$package was not built (no DirectX SDK on the build runner)."
+            fi
+          done
           assets=()
           for package in "${packages[@]}"; do
             test -s "$package.zip"

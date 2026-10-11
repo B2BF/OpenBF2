@@ -26,6 +26,7 @@
 #include "../../RendMisc/IRenderView.h"
 #include "../../RendMisc/IRenderer.h"
 #include "../../../RendDX9Abi/BfMemory.h"
+#include "../../../RendDX9Abi/D3dx9Sdk.h"
 #include "../../../RendDX9Abi/Frontier.h"
 #include "../../../RendDX9Abi/PluginAbi.h"
 #include "../../../RendDX9Abi/PluginEntry.h"
@@ -60,12 +61,6 @@
 #include <cstring>
 #include <map>
 #include <new>
-
-// The D3DX sphere factory (d3dx9_25 exports undecorated names, XpLightManager.cpp's bridge).
-extern "C" HRESULT WINAPI D3DXCreateSphere(
-    IDirect3DDevice9* device, float radius, unsigned int slices,
-    unsigned int stacks, IUnknown** mesh, void** adjacency);
-#pragma comment(linker, "/alternatename:_D3DXCreateSphere@24=_D3DXCreateSphere")
 
 namespace dice {
 namespace hfe {
@@ -141,27 +136,6 @@ struct SampleTriangle
     unsigned char unread00[0x24];
     Vec3          normal[3];        // +0x24 / +0x30 / +0x3C
     unsigned char unread48[0x14];
-};
-
-// The ID3DXMesh slots the generator calls, in d3dx9mesh.h order (the prefix XpLightManager.cpp
-// declares as RendD3dxMesh; the build carries no D3DX headers).
-struct LightmapD3dxMesh : public IUnknown
-{
-    virtual HRESULT STDMETHODCALLTYPE DrawSubset(DWORD attributeId) = 0;       // +0x0C
-    virtual DWORD STDMETHODCALLTYPE GetNumFaces() = 0;                         // +0x10
-    virtual DWORD STDMETHODCALLTYPE GetNumVertices() = 0;                      // +0x14
-    virtual DWORD STDMETHODCALLTYPE GetFVF() = 0;                              // +0x18
-    virtual HRESULT STDMETHODCALLTYPE GetDeclaration(D3DVERTEXELEMENT9*) = 0;  // +0x1C
-    virtual DWORD STDMETHODCALLTYPE GetNumBytesPerVertex() = 0;                // +0x20
-    virtual DWORD STDMETHODCALLTYPE GetOptions() = 0;                          // +0x24
-    virtual HRESULT STDMETHODCALLTYPE GetDevice(IDirect3DDevice9**) = 0;       // +0x28
-    virtual HRESULT STDMETHODCALLTYPE CloneMeshFVF(
-        DWORD options, DWORD fvf, IDirect3DDevice9* device, IUnknown** clone) = 0;    // +0x2C
-    virtual HRESULT STDMETHODCALLTYPE CloneMesh(
-        DWORD options, const D3DVERTEXELEMENT9* declaration,
-        IDirect3DDevice9* device, IUnknown** clone) = 0;                       // +0x30
-    virtual HRESULT STDMETHODCALLTYPE GetVertexBuffer(IDirect3DVertexBuffer9**) = 0; // +0x34
-    virtual HRESULT STDMETHODCALLTYPE GetIndexBuffer(IDirect3DIndexBuffer9**) = 0;   // +0x38
 };
 
 // The light marker clone's declaration: one FLOAT3 position.
@@ -1017,13 +991,13 @@ LightmapGeneration::LightmapGeneration()
     }
 
     // The light marker: a 0.1 m sphere, cloned to a position-only declaration (D3DXMESH_MANAGED).
-    D3DXCreateSphere(renderDevice(), 0.1f, 20, 20, &m_lightMesh, 0);
-    IUnknown* clone = 0;
-    static_cast<LightmapD3dxMesh*>(m_lightMesh)->CloneMesh(0x220, kLightMeshDeclaration,
-                                                            renderDevice(), &clone);
+    D3DXCreateSphere(renderDevice(), 0.1f, 20, 20, reinterpret_cast<ID3DXMesh**>(&m_lightMesh), 0);
+    ID3DXMesh* clone = 0;
+    static_cast<ID3DXMesh*>(m_lightMesh)->CloneMesh(0x220, kLightMeshDeclaration,
+                                                     renderDevice(), &clone);
     m_lightMesh->Release();
     m_lightMesh = clone;
-    LightmapD3dxMesh* const mesh = static_cast<LightmapD3dxMesh*>(m_lightMesh);
+    ID3DXMesh* const mesh = static_cast<ID3DXMesh*>(m_lightMesh);
     mesh->GetVertexBuffer(&m_lightMeshVertices);
     mesh->GetIndexBuffer(&m_lightMeshIndices);
     m_lightMeshVertexCount = mesh->GetNumVertices();

@@ -16,6 +16,7 @@
 #include "../Math/Vec3.h"
 #include "../RendDX9/Ra/RaShader.h"           // raObjectParametersConstruct
 #include "../RendDX9/RendDX9Base.h"           // rendererFrameOrdinal, the render view
+#include "../../RendDX9Abi/D3dx9Sdk.h"        // ID3DXEffect - the shadow draw's commit
 #include "XpLightManager.h"                   // g_LightManager - the shadow lod
 #include "MeshTemplate.h"                     // MeshBounds / meshBoundsFinalize
 #include "SkinnedMeshTemplate.h"
@@ -778,9 +779,9 @@ void shaderParameterSetMatrixArray(void* parameter, Mat4* const* palette, unsign
 // effect. Byte-for-byte the shape StaticMesh.cpp's staticMeshEffectCommitChanges records.
 void skinnedMeshEffectCommitChanges(void* effect)
 {
-    void* const d3dx = *reinterpret_cast<void**>(static_cast<unsigned char*>(effect) + 8);
-    typedef void(__stdcall * Fn)(void*);
-    reinterpret_cast<Fn>((*reinterpret_cast<void***>(d3dx))[0x104 / sizeof(void*)])(d3dx);
+    ID3DXEffect* const d3dx =
+        *reinterpret_cast<ID3DXEffect**>(static_cast<unsigned char*>(effect) + 8);
+    d3dx->CommitChanges();
 }
 
 // The renderer's statistics block, its +0x23C word. Every shadow draw adds the material's primitive

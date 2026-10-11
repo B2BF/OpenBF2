@@ -14,15 +14,21 @@ it does not recover or change engine behavior, ABI, protocols, or file formats.
 
 | Runner | Configuration | Targets and checks |
 | --- | --- | --- |
-| Windows 2022, MSVC x86 | `msvc-x86` / `Reconstruction` | Python interpreter check; `bf2_run_checks`; `bf2_editor_run_checks`; `bf2_w32ded`; `bf2_aidll`; `bf2_client` and plugins; `bf2_editor` and plugins |
+| Windows 2022, MSVC x86 | `msvc-x86` / `Reconstruction` | Python interpreter check; `bf2_run_checks`; `bf2_editor_run_checks`; `bf2_w32ded`; `bf2_aidll`; with the April 2005 DirectX SDK only: `bf2_client` and plugins, `bf2_editor` and plugins |
 | Windows 2022, MSVC x64 | `msvc-x64` / `Release` | Python interpreter check; strict `bf2_w64ded` link |
 | Ubuntu 22.04, GCC x64 | `linux-x64` / `RelWithDebInfo` | Strict `bf2` link; `dice_py_check_run` |
 
 Windows builds initialize MSVC through the repository's `vsdevcmd.cmd`. They build
 Python into an architecture-specific output directory before CMake configuration,
 then pass its DLL/import-library paths explicitly. Linux installs CMake, Ninja,
-GCC and ncurses headers and builds Python through CMake. No game installation,
-retail binaries or legacy DirectX SDK are required for compilation.
+GCC and ncurses headers and builds Python through CMake. No game installation or
+retail binaries are required for compilation.
+
+The client and editor renderer plugins need the
+[April 2005 DirectX SDK](building.md#directx-sdk), which GitHub-hosted runners do not
+provide. The x86 job probes for it with `Code\Build\dxsdk.cmd`. Without it, the job
+posts a notice, skips `bf2_client` and `bf2_editor`, and packages only the x86 server.
+A runner with that SDK installed builds and packages both.
 
 Each hosted job has its own checkout. Client/plugin and editor builds run sequentially
 inside the x86 job because the client's plugin outputs use shared source-tree paths.
@@ -42,7 +48,9 @@ playability. Linux client/editor and Windows x64 client/editor targets do not ex
 The [packaging helper](../Code/Build/package_release.py) requires every listed runtime
 file to exist and be nonempty. It uses explicit manifests rather than copying output
 directories, so test executables, import libraries, maps, PDBs, and any locally staged
-retail companions are excluded.
+retail companions are excluded. `--omit ROLE` (repeatable) skips one package of the
+selected platform, for example `--omit client-diagnostic`; every other role stays
+required. CI passes it for the client and editor only when the DirectX SDK is absent.
 
 | ZIP filename | Runtime contents |
 | --- | --- |
@@ -95,8 +103,10 @@ platforms or source revisions.
 2. Create a release tag containing those files and publish a GitHub Release for it.
    Publishing either a regular release or a prerelease triggers the workflow; merely
    saving a draft does not. A tag push by itself runs CI without attaching release assets.
-3. The workflow rebuilds that tagged commit, then attaches all five ZIP/checksum pairs
-   only after every platform succeeds. Re-running the release workflow replaces the
+3. The workflow rebuilds that tagged commit, then attaches the ZIP/checksum pairs
+   only after every platform succeeds: the three server packages always, and the x86
+   client and editor packages when the build runner had the DirectX SDK. A missing
+   client or editor package is reported as a notice. Re-running the release workflow replaces the
    same named assets on that release; it never creates or edits a release's notes.
 
 [Workflow reruns](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs)

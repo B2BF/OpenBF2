@@ -9,7 +9,7 @@
 #include "RaShaderPermutator.h"
 
 #include "../../../RendDX9Abi/BfMemory.h"
-#include "../../../RendDX9Abi/D3dxEffect.h"
+#include "../../../RendDX9Abi/D3dx9Sdk.h"
 #include "../../../RendDX9Abi/EngineFile.h"
 #include "../../../RendDX9Abi/Frontier.h"
 #include "../../../RendDX9Abi/PluginEntry.h"
@@ -325,54 +325,29 @@ bool engineGetFileTime(const vc71::string& path, unsigned int& low, unsigned int
 #endif // BF2_PLUGIN_ABI_NATIVE
 
 
-// D3DX effect and error-buffer entry points used without legacy SDK headers.
+// Effect-compiler reads shared by readStringArrays and readDeprecationList.
 
-typedef long  (__stdcall* FxGetParameterDescFn)(void*, void* handle, void* descOut);
-typedef void* (__stdcall* FxGetParameterByNameFn)(void*, void* parent, const char* name);
-typedef void* (__stdcall* FxGetParameterElementFn)(void*, void* parent, unsigned int index);
-typedef void* (__stdcall* FxGetAnnotationByNameFn)(void*, void* handle, const char* name);
-typedef long  (__stdcall* FxGetStringFn)(void*, void* handle, const char** out);
-typedef unsigned long (__stdcall* FxReleaseFn)(void*);
-typedef void* (__stdcall* BufGetPointerFn)(void*);
-
-// D3DXPARAMETER_DESC. Only `Elements` is read, and its offset (+24) is what the shipped bodies
-// index; the rest is named from the documented struct so the size is right.
-struct FxParameterDesc
+D3DXHANDLE fxGetParameterByName(ID3DXEffectCompiler* fx, D3DXHANDLE parent, const char* name)
 {
-    const char*  Name;
-    const char*  Semantic;
-    unsigned int Class;
-    unsigned int Type;
-    unsigned int Rows;
-    unsigned int Columns;
-    unsigned int Elements;      // +24
-    unsigned int Annotations;
-    unsigned int StructMembers;
-    unsigned int Flags;
-    unsigned int Bytes;
-};
-
-void* fxGetParameterByName(void* fx, void* parent, const char* name)
-{
-    return ::renddx9abi::d3dxSlot<FxGetParameterByNameFn>(fx, 0x24)(fx, parent, name);
+    return fx->GetParameterByName(parent, name);
 }
 
-bool fxGetElementCount(void* fx, void* handle, unsigned int& elements)
+// Only D3DXPARAMETER_DESC::Elements (+24) is read by the shipped bodies.
+bool fxGetElementCount(ID3DXEffectCompiler* fx, D3DXHANDLE handle, unsigned int& elements)
 {
-    FxParameterDesc desc;
+    D3DXPARAMETER_DESC desc;
     ::memset(&desc, 0, sizeof(desc));
-    if (::renddx9abi::d3dxSlot<FxGetParameterDescFn>(fx, 0x10)(fx, handle, &desc) != 0)
+    if (fx->GetParameterDesc(handle, &desc) != 0)
         return false;
     elements = desc.Elements;
     return elements != 0;
 }
 
-const char* fxGetElementString(void* fx, void* handle, unsigned int index)
+const char* fxGetElementString(ID3DXEffectCompiler* fx, D3DXHANDLE handle, unsigned int index)
 {
-    void* const element =
-        ::renddx9abi::d3dxSlot<FxGetParameterElementFn>(fx, 0x2C)(fx, handle, index);
+    const D3DXHANDLE element = fx->GetParameterElement(handle, index);
     const char* text = 0;
-    ::renddx9abi::d3dxSlot<FxGetStringFn>(fx, 0xCC)(fx, element, &text);
+    fx->GetString(element, &text);
     return text;
 }
 
@@ -380,20 +355,16 @@ const char* fxGetElementString(void* fx, void* handle, unsigned int index)
 // Lazily uses d3dx9_24.dll to avoid compiler recursion in the April 2005 D3DX version.
 // The failure diagnostic retains its original debug-DLL spelling.
 
-typedef long (__stdcall* D3dxCreateEffectCompilerFn)(const char* srcData,
-                                                     unsigned int srcDataLen,
-                                                     const void* defines,
-                                                     void* include,
-                                                     unsigned long flags,
-                                                     void** compilerOut,
-                                                     void** parseErrorsOut);
+typedef HRESULT (WINAPI* D3dxCreateEffectCompilerFn)(LPCSTR, UINT, CONST D3DXMACRO*,
+                                                     LPD3DXINCLUDE, DWORD,
+                                                     LPD3DXEFFECTCOMPILER*, LPD3DXBUFFER*);
 
 HMODULE s_d3dxModule = 0;                       // dword_1023E108
 D3dxCreateEffectCompilerFn s_createEffectCompiler = 0;   // dword_1023E10C
 
 long createEffectCompiler(const char* srcData, unsigned int srcDataLen,
-                          const void* defines, void* include, unsigned long flags,
-                          void** compilerOut, void** parseErrorsOut)
+                          const D3DXMACRO* defines, LPD3DXINCLUDE include, unsigned long flags,
+                          ID3DXEffectCompiler** compilerOut, ID3DXBuffer** parseErrorsOut)
 {
     if (!s_d3dxModule)
     {
@@ -839,12 +810,13 @@ bool MetaFx::generate()
 {
     shaderMacros();
 
-    void* compiler = 0;
-    void* errors   = 0;
+    ID3DXEffectCompiler* compiler = 0;
+    ID3DXBuffer*         errors   = 0;
 
+    // m_macros holds the {Name, Definition} pairs flat, null pair last.
     const long hr = createEffectCompiler(
         m_source, m_sourceSize,
-        m_macros.empty() ? 0 : &m_macros[0],
+        reinterpret_cast<const D3DXMACRO*>(m_macros.empty() ? 0 : &m_macros[0]),
         0,
         ::dice::hfe::dx9rend::shaderManagerEffectFlags(g_shaderManager),
         &compiler, &errors);
@@ -856,8 +828,7 @@ bool MetaFx::generate()
 
         const char* text = 0;
         if (errors)
-            text = static_cast<const char*>(
-                ::renddx9abi::d3dxSlot<BufGetPointerFn>(errors, 0x0C)(errors));
+            text = static_cast<const char*>(errors->GetBufferPointer());
 
         // where THE MessageBox WAS. The caption and the buffer's text are the shipped ones, read
         // in the shipped order: the text comes out of the buffer before it is released, exactly as
@@ -871,7 +842,7 @@ bool MetaFx::generate()
         ::fflush(stderr);
 
         if (errors)
-            ::renddx9abi::d3dxSlot<FxReleaseFn>(errors, 0x08)(errors);
+            errors->Release();
 
         ::abort();
     }
@@ -938,7 +909,7 @@ bool MetaFx::generate()
     }
 
     readDeprecationList(compiler);
-    ::renddx9abi::d3dxSlot<FxReleaseFn>(compiler, 0x08)(compiler);
+    compiler->Release();
 
     return true;
 }
@@ -947,12 +918,15 @@ bool MetaFx::generate()
 // Appends common string-array values and per-literal annotations to element.
 // Annotation lookup uses the element name even when the literal parameter lookup is null.
 
-void MetaFx::readStringArrays(void* fx, MetaFxStruct& element, const vc71::string& suffix)
+void MetaFx::readStringArrays(void* effectCompiler, MetaFxStruct& element,
+                              const vc71::string& suffix)
 {
+    ID3DXEffectCompiler* const fx = static_cast<ID3DXEffectCompiler*>(effectCompiler);
+
     vc71::string lookup(element.name);
     lookup += suffix;
 
-    void* const handle = fxGetParameterByName(fx, 0, lookup.c_str());
+    const D3DXHANDLE handle = fxGetParameterByName(fx, 0, lookup.c_str());
     if (handle)
     {
         unsigned int elements = 0;
@@ -969,10 +943,8 @@ void MetaFx::readStringArrays(void* fx, MetaFxStruct& element, const vc71::strin
     for (MetaFxStringArray::const_iterator it = m_literalNames.begin();
          it != m_literalNames.end(); ++it)
     {
-        void* const parameter  = fxGetParameterByName(fx, 0, it->c_str());
-        void* const annotation =
-            ::renddx9abi::d3dxSlot<FxGetAnnotationByNameFn>(fx, 0x4C)(fx, parameter,
-                                                                      element.name.c_str());
+        const D3DXHANDLE parameter  = fxGetParameterByName(fx, 0, it->c_str());
+        const D3DXHANDLE annotation = fx->GetAnnotationByName(parameter, element.name.c_str());
         if (!annotation)
             continue;
 
@@ -992,17 +964,19 @@ void MetaFx::readStringArrays(void* fx, MetaFxStruct& element, const vc71::strin
 // Reads flattened deprecation groups, using empty strings as row separators.
 // Creates a first row even for an empty array and retains a trailing empty row.
 
-void MetaFx::readDeprecationList(void* fx)
+void MetaFx::readDeprecationList(void* effectCompiler)
 {
+    ID3DXEffectCompiler* const fx = static_cast<ID3DXEffectCompiler*>(effectCompiler);
+
     m_deprecation.clear();                      // sub_10040EA0(&deprecation, 0, vector<string>())
 
-    void* const handle = fxGetParameterByName(fx, 0, "DeprecationList");
+    const D3DXHANDLE handle = fxGetParameterByName(fx, 0, "DeprecationList");
     if (!handle)
         return;
 
-    FxParameterDesc desc;
+    D3DXPARAMETER_DESC desc;
     ::memset(&desc, 0, sizeof(desc));
-    ::renddx9abi::d3dxSlot<FxGetParameterDescFn>(fx, 0x10)(fx, handle, &desc);
+    fx->GetParameterDesc(handle, &desc);
 
     m_deprecation.push_back(MetaFxStringArray());
 

@@ -9,7 +9,7 @@
 #include "../Texture.h"                    // EngineTexture - the engine-texture holder apply
 
 #include "../../../RendDX9Abi/BfMemory.h"
-#include "../../../RendDX9Abi/D3dxEffect.h"
+#include "../../../RendDX9Abi/D3dx9Sdk.h"
 #include "../../../RendDX9Abi/Frontier.h"
 #include "../../../RendDX9Abi/HfeAbi.h"
 #include "../../../RendDX9Abi/PluginAbi.h"
@@ -19,13 +19,6 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
-
-// D3DXGetShaderVersion - the only D3DX entry this file needs.  `DWORD __stdcall (const DWORD*)`,
-// so the C++ reference is `_D3DXGetShaderVersion@4` while d3dx9_25.dll exports the plain name; the
-// pragma bridges the two exactly as Geom/SwiffRender.cpp and Geom/XpLightManager.cpp already do.
-// See RendDX9Abi/D3dx9_25.def for why the .def cannot carry the decoration itself.
-extern "C" unsigned long __stdcall D3DXGetShaderVersion(const unsigned long* function);
-#pragma comment(linker, "/alternatename:_D3DXGetShaderVersion@4=_D3DXGetShaderVersion")
 
 namespace dice {
 namespace hfe {
@@ -269,16 +262,6 @@ const RaParameterName kRaLightArrayNames[2] =
 
 namespace {
 
-inline void* const* d3dxTable(void* effect)
-{
-    return *static_cast<void* const* const*>(effect);
-}
-
-template <typename Fn> inline Fn d3dxFn(void* effect, unsigned int byteOffset)
-{
-    return reinterpret_cast<Fn>(d3dxTable(effect)[byteOffset / sizeof(void*)]);
-}
-
 inline unsigned char* holderPayload(void* self)
 {
     return static_cast<unsigned char*>(self) + 4;
@@ -287,44 +270,46 @@ inline unsigned char* holderPayload(void* self)
 // off_101E1480 slot 0 - sub_10037E20: SetVector(handle, &value).
 int __fastcall raApplyVec4(void* self, void*, void* effect, void* handle)
 {
-    return static_cast<int>(d3dxFn< ::renddx9abi::D3dxSetVectorFn>(effect, 0x88)(
-        effect, handle, holderPayload(self)));
+    return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetVector(
+        ::renddx9abi::d3dxHandle(handle),
+        reinterpret_cast<const D3DXVECTOR4*>(holderPayload(self))));
 }
 
 // off_101E1488 slot 0 - sub_10037E40: SetTexture(handle, value) - the value IS the D3D base texture.
 int __fastcall raApplyTexture(void* self, void*, void* effect, void* handle)
 {
-    return static_cast<int>(d3dxFn< ::renddx9abi::D3dxSetTextureFn>(effect, 0xD0)(
-        effect, handle, *reinterpret_cast<void**>(holderPayload(self))));
+    return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetTexture(
+        ::renddx9abi::d3dxHandle(handle),
+        *reinterpret_cast<IDirect3DBaseTexture9**>(holderPayload(self))));
 }
 
 // off_101E148C slot 0 - sub_1003A170: SetFloat(handle, value).
 int __fastcall raApplyFloat(void* self, void*, void* effect, void* handle)
 {
-    return static_cast<int>(d3dxFn< ::renddx9abi::D3dxSetFloatFn>(effect, 0x78)(
-        effect, handle, *reinterpret_cast<const float*>(holderPayload(self))));
+    return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetFloat(
+        ::renddx9abi::d3dxHandle(handle), *reinterpret_cast<const float*>(holderPayload(self))));
 }
 
 // off_101E1494 slot 0 - sub_1003A1A0: SetFloatArray(handle, value, 3).
 int __fastcall raApplyVec3(void* self, void*, void* effect, void* handle)
 {
-    return static_cast<int>(d3dxFn< ::renddx9abi::D3dxSetFloatArrayFn>(effect, 0x80)(
-        effect, handle, reinterpret_cast<const float*>(holderPayload(self)), 3u));
+    return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetFloatArray(
+        ::renddx9abi::d3dxHandle(handle), reinterpret_cast<const float*>(holderPayload(self)), 3u));
 }
 
 // off_101E149C slot 0 - sub_1003A1C0: SetFloatArray(handle, value, 2).  This is the table the
 // material block installs at its +0x140 ("NormalUnpack"), so that holder is a TWO-float one.
 int __fastcall raApplyVec2(void* self, void*, void* effect, void* handle)
 {
-    return static_cast<int>(d3dxFn< ::renddx9abi::D3dxSetFloatArrayFn>(effect, 0x80)(
-        effect, handle, reinterpret_cast<const float*>(holderPayload(self)), 2u));
+    return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetFloatArray(
+        ::renddx9abi::d3dxHandle(handle), reinterpret_cast<const float*>(holderPayload(self)), 2u));
 }
 
 // off_101E14A8 slot 0 - sub_1003A1E0: SetInt(handle, value).
 int __fastcall raApplyInt(void* self, void*, void* effect, void* handle)
 {
-    return static_cast<int>(d3dxFn< ::renddx9abi::D3dxSetIntFn>(effect, 0x68)(
-        effect, handle, *reinterpret_cast<const int*>(holderPayload(self))));
+    return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetInt(
+        ::renddx9abi::d3dxHandle(handle), *reinterpret_cast<const int*>(holderPayload(self))));
 }
 
 // off_101E14BC slot 0 - sub_1003A140: nothing (and 0) for a null texture, else SetTexture(handle,
@@ -334,15 +319,15 @@ int __fastcall raApplyEngineTexture(void* self, void*, void* effect, void* handl
     EngineTexture* const texture = *reinterpret_cast<EngineTexture**>(holderPayload(self));
     if (!texture)
         return 0;
-    return static_cast<int>(d3dxFn< ::renddx9abi::D3dxSetTextureFn>(effect, 0xD0)(
-        effect, handle, texture->baseTexture));
+    return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetTexture(
+        ::renddx9abi::d3dxHandle(handle), texture->baseTexture));
 }
 
 // off_101E1E78 slot 0 - sub_10046580: SetBool(handle, byte).
 int __fastcall raApplyBool(void* self, void*, void* effect, void* handle)
 {
-    return static_cast<int>(d3dxFn< ::renddx9abi::D3dxSetBoolFn>(effect, 0x58)(
-        effect, handle, static_cast<int>(*holderPayload(self))));
+    return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetBool(
+        ::renddx9abi::d3dxHandle(handle), static_cast<BOOL>(*holderPayload(self))));
 }
 
 // off_101E1E80 slot 0 - sub_100465A0 -> sub_100465C0: SetVector(handle, {f, f, f, f}).
@@ -350,8 +335,8 @@ int __fastcall raApplyFloatSplat(void* self, void*, void* effect, void* handle)
 {
     const float f = *reinterpret_cast<const float*>(holderPayload(self));
     const float splat[4] = { f, f, f, f };
-    return static_cast<int>(d3dxFn< ::renddx9abi::D3dxSetVectorFn>(effect, 0x88)(
-        effect, handle, splat));
+    return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetVector(
+        ::renddx9abi::d3dxHandle(handle), reinterpret_cast<const D3DXVECTOR4*>(splat)));
 }
 
 // off_101E1E88 slot 0 - sub_10046450.  The holder is {vptr, lightsHolder, resolver}: the resolver
@@ -363,24 +348,25 @@ int __fastcall raApplyLightRecordResolved(void* self, void*, void* effect, void*
     void** const words = static_cast<void**>(self);
     void* const record = reinterpret_cast<ResolveFn>(words[2])(
         static_cast<unsigned char*>(words[1]) + 4, 0);
-    return static_cast<int>(d3dxFn< ::renddx9abi::D3dxSetValueFn>(effect, 0x50)(
-        effect, handle, record, 68u));
+    return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetValue(
+        ::renddx9abi::d3dxHandle(handle), record, 68u));
 }
 
 // off_101E1E8C slot 0 - sub_100465F0: SetMatrixPointerArray(handle, pointers, count).
 int __fastcall raApplyMatrixPointerArray(void* self, void*, void* effect, void* handle)
 {
     void** const words = static_cast<void**>(self);
-    return static_cast<int>(d3dxFn< ::renddx9abi::D3dxSetMatrixPointerArrayFn>(effect, 0xA8)(
-        effect, handle, static_cast<const void* const*>(words[1]),
+    return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetMatrixPointerArray(
+        ::renddx9abi::d3dxHandle(handle), static_cast<const D3DXMATRIX**>(words[1]),
         static_cast<unsigned int>(reinterpret_cast<size_t>(words[2]))));
 }
 
 // off_101E1E94 slot 0 - sub_10046620: SetMatrix(handle, &value).
 int __fastcall raApplyMat4(void* self, void*, void* effect, void* handle)
 {
-    return static_cast<int>(d3dxFn< ::renddx9abi::D3dxSetMatrixFn>(effect, 0x98)(
-        effect, handle, holderPayload(self)));
+    return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetMatrix(
+        ::renddx9abi::d3dxHandle(handle),
+        reinterpret_cast<const D3DXMATRIX*>(holderPayload(self))));
 }
 
 // off_101E1E9C slot 0 - sub_100469F0 -> sub_10046A10: SetValue(handle, bytes, count), and
@@ -390,10 +376,11 @@ int __fastcall raApplyBytes(void* self, void*, void* effect, void* handle)
     const vc71::vector_layout& v =
         *reinterpret_cast<const vc71::vector_layout*>(holderPayload(self));
     if (v.first)
-        return static_cast<int>(d3dxFn< ::renddx9abi::D3dxSetValueFn>(effect, 0x50)(
-            effect, handle, v.first, static_cast<unsigned int>(v.last - v.first)));
-    return static_cast<int>(d3dxFn< ::renddx9abi::D3dxSetValueFn>(effect, 0x50)(
-        effect, handle, 0, 0u));
+        return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetValue(
+            ::renddx9abi::d3dxHandle(handle), v.first,
+            static_cast<unsigned int>(v.last - v.first)));
+    return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetValue(
+        ::renddx9abi::d3dxHandle(handle), 0, 0u));
 }
 
 // off_101E1EA4 slot 0 - sub_10046BC0: SetMatrixArray(handle, first, bytes / 64) (sub_10046410).
@@ -402,8 +389,8 @@ int __fastcall raApplyMat4Array(void* self, void*, void* effect, void* handle)
     const vc71::vector_layout& v =
         *reinterpret_cast<const vc71::vector_layout*>(holderPayload(self));
     const unsigned int count = v.first ? static_cast<unsigned int>(v.last - v.first) >> 6 : 0u;
-    return static_cast<int>(d3dxFn< ::renddx9abi::D3dxSetMatrixArrayFn>(effect, 0xA0)(
-        effect, handle, v.first, count));
+    return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetMatrixArray(
+        ::renddx9abi::d3dxHandle(handle), reinterpret_cast<const D3DXMATRIX*>(v.first), count));
 }
 
 // off_101E1EAC slot 0 - sub_10046BF0: SetVectorArray(handle, first, bytes / 16) (sub_10046430).
@@ -412,15 +399,15 @@ int __fastcall raApplyVec4Array(void* self, void*, void* effect, void* handle)
     const vc71::vector_layout& v =
         *reinterpret_cast<const vc71::vector_layout*>(holderPayload(self));
     const unsigned int count = v.first ? static_cast<unsigned int>(v.last - v.first) >> 4 : 0u;
-    return static_cast<int>(d3dxFn< ::renddx9abi::D3dxSetVectorArrayFn>(effect, 0x90)(
-        effect, handle, v.first, count));
+    return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetVectorArray(
+        ::renddx9abi::d3dxHandle(handle), reinterpret_cast<const D3DXVECTOR4*>(v.first), count));
 }
 
 // off_101DD3FC slot 0 - sub_1000BE00: SetValue(handle, pointer, 68) - the pointed-at RaLightRecord.
 int __fastcall raApplyLightRecordPointer(void* self, void*, void* effect, void* handle)
 {
-    return static_cast<int>(d3dxFn< ::renddx9abi::D3dxSetValueFn>(effect, 0x50)(
-        effect, handle, *reinterpret_cast<void**>(holderPayload(self)), 68u));
+    return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetValue(
+        ::renddx9abi::d3dxHandle(handle), *reinterpret_cast<void**>(holderPayload(self)), 68u));
 }
 
 #define RD9_RA_HOLDER_TABLE(name, apply)                                                       \
@@ -694,15 +681,6 @@ bool raContainsInsensitive(const vc71::string& haystack, const vc71::string& nee
     return ::strstr(loweredHaystack.c_str(), loweredNeedle.c_str()) != 0;
 }
 
-
-// D3DX effect entry-point types used by shader construction.
-
-typedef long  (__stdcall* D3dxFindNextValidTechniqueFn)(void*, void* after, void** out);  // +0x0F4
-typedef long  (__stdcall* D3dxOnResetDeviceFn)(void*);                                    // +0x118
-typedef void* (__stdcall* D3dxGetPassFn)(void*, void* technique, unsigned int index);     // +0x038
-typedef void* (__stdcall* D3dxGetParameterByNameFn)(void*, void* parent, const char* n);  // +0x024
-typedef void* (__stdcall* D3dxGetParameterElementFn)(void*, void* parent, unsigned int);  // +0x02C
-typedef long  (__stdcall* D3dxGetStringFn)(void*, void* parameter, const char** out);     // +0x0CC
 
 // Shared formatting buffer; overflow replaces the message with a fixed warning.
 char g_raFormatBuffer[0x1000];
@@ -1319,21 +1297,19 @@ unsigned int g_raReleaseClipPlanesAfterUse = 0;
 // Maps each valid effect technique's case-insensitive name hash to its handle.
 void RaShader::fillTechniqueMap()
 {
-    typedef D3dxFindNextValidTechniqueFn NextFn;                  // this file's typedef, +0xF4
-    struct TechniqueDesc { const char* name; unsigned int passes; unsigned int annotations; };
+    ID3DXEffect* const effect = static_cast<ID3DXEffect*>(m_effect);
 
-    void* handle = 0;
-    for (long hr = ::renddx9abi::d3dxSlot<NextFn>(m_effect, 0xF4)(m_effect, 0, &handle);
+    D3DXHANDLE handle = 0;
+    for (long hr = effect->FindNextValidTechnique(0, &handle);
          hr >= 0;
-         hr = ::renddx9abi::d3dxSlot<NextFn>(m_effect, 0xF4)(m_effect, handle, &handle))
+         hr = effect->FindNextValidTechnique(handle, &handle))
     {
         if (!handle)
             break;
-        TechniqueDesc desc = { 0, 0, 0 };
-        ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxGetTechniqueDescFn>(m_effect, 0x14)(
-            m_effect, handle, &desc);
-        const unsigned int key = raHashString(vc71::string(desc.name));
-        raTechniqueMapAt(m_techniques, key) = handle;
+        D3DXTECHNIQUE_DESC desc = { 0, 0, 0 };
+        effect->GetTechniqueDesc(handle, &desc);
+        const unsigned int key = raHashString(vc71::string(desc.Name));
+        raTechniqueMapAt(m_techniques, key) = ::renddx9abi::d3dxHandleValue(handle);
     }
 }
 
@@ -1370,10 +1346,9 @@ unsigned int RaShader::begin(RenderQueueEntry* entry)
         }
         stateManagerPush();
         shaderManagerSetActiveRaEffect(m_effect);
-        ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxSetTechniqueFn>(m_effect, 0xE8)(
-            m_effect, m_activeTechnique);
-        ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxBeginFn>(m_effect, 0xFC)(
-            m_effect, &passes, 7u);
+        static_cast<ID3DXEffect*>(m_effect)->SetTechnique(
+            ::renddx9abi::d3dxHandle(m_activeTechnique));
+        static_cast<ID3DXEffect*>(m_effect)->Begin(&passes, 7u);
         applyParameterSet(m_globalParameters, entry);            // sub_1004B210(this + 0x58)
     }
 
@@ -1385,7 +1360,7 @@ void RaShader::end()
 {
     if (!m_effect)
         return;
-    ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxEndFn>(m_effect, 0x10C)(m_effect);
+    static_cast<ID3DXEffect*>(m_effect)->End();
     shaderManagerSetActiveRaEffect(0);
     stateManagerPop();
 }
@@ -1394,13 +1369,13 @@ void RaShader::end()
 void RaShader::beginPass(unsigned int pass)
 {
     if (m_effect)
-        ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxBeginPassFn>(m_effect, 0x100)(m_effect, pass);
+        static_cast<ID3DXEffect*>(m_effect)->BeginPass(pass);
 }
 
 void RaShader::endPass()
 {
     if (m_effect)
-        ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxEndPassFn>(m_effect, 0x108)(m_effect);
+        static_cast<ID3DXEffect*>(m_effect)->EndPass();
 }
 
 // +0x10, sub_1004B340 (0x8A B).  The instance set (effect-gated), then every 16-byte plane of the
@@ -1518,15 +1493,13 @@ int* RaShader::shaderVersion()
     }
     if (m_byte134)
     {
-        typedef void* (__stdcall* GetParameterByNameFn)(void*, void* parent, const char* name);
-        void* const handle = ::renddx9abi::d3dxSlot<GetParameterByNameFn>(m_effect, 0x24)(
-            m_effect, 0, "ShaderVersion");
+        const D3DXHANDLE handle =
+            static_cast<ID3DXEffect*>(m_effect)->GetParameterByName(0, "ShaderVersion");
         int value = 0;
         int read = 0;
         if (handle)
         {
-            if (::renddx9abi::d3dxSlot< ::renddx9abi::D3dxGetIntFn>(m_effect, 0x6C)(
-                    m_effect, handle, &read) >= 0)
+            if (static_cast<ID3DXEffect*>(m_effect)->GetInt(handle, &read) >= 0)
                 value = read;
             else
                 value = 0;
@@ -1577,7 +1550,7 @@ void* RaShader::loadEffect()
 bool RaShader::build()
 {
     // -- 1. the effect
-    void* const effect = loadEffect();
+    ID3DXEffect* const effect = static_cast<ID3DXEffect*>(loadEffect());
     m_effect      = effect;                                              // +0x16C
     m_buildSerial = -1;                                                  // +0x174
     if (!effect)
@@ -1586,27 +1559,30 @@ bool RaShader::build()
     m_byte134 = 1;                                                       // +0x134
 
     // -- 2. the technique
-    m_technique = ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxGetTechniqueByNameFn>(effect, 0x34)(
-                      effect, "defaultTechnique");
+    m_technique = ::renddx9abi::d3dxHandleValue(effect->GetTechniqueByName("defaultTechnique"));
     if (!m_technique)
-        ::renddx9abi::d3dxSlot<D3dxFindNextValidTechniqueFn>(effect, 0xF4)(effect, 0, &m_technique);
+    {
+        D3DXHANDLE next = ::renddx9abi::d3dxHandle(m_technique);
+        effect->FindNextValidTechnique(0, &next);
+        m_technique = ::renddx9abi::d3dxHandleValue(next);
+    }
 
-    ::renddx9abi::d3dxSlot<D3dxOnResetDeviceFn>(effect, 0x118)(effect);
+    effect->OnResetDevice();
 
     if (!m_technique)
         return false;
 
     // +0x38 - GetPass(technique, 0).  The answer is discarded; see the note above.
-    ::renddx9abi::d3dxSlot<D3dxGetPassFn>(effect, 0x38)(effect, m_technique, 0);
+    effect->GetPass(::renddx9abi::d3dxHandle(m_technique), 0);
 
     // -- 3. the bound pixel-shader model
     stateManagerPush();
     {
         unsigned int passes = 0;
-        ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxBeginFn>(effect, 0xFC)(effect, &passes, 7);
-        ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxBeginPassFn>(effect, 0x100)(effect, 0);
-        ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxEndPassFn>(effect, 0x108)(effect);
-        ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxEndFn>(effect, 0x10C)(effect);
+        effect->Begin(&passes, 7);
+        effect->BeginPass(0);
+        effect->EndPass();
+        effect->End();
     }
 
     int shaderModel = 0;
@@ -1628,21 +1604,17 @@ bool RaShader::build()
     m_requiredVertexElements.last  = 0;
     m_requiredVertexElements.end   = 0;
 
-    void* const required =
-        ::renddx9abi::d3dxSlot<D3dxGetParameterByNameFn>(effect, 0x24)(effect, 0,
-                                                                       "reqVertexElement");
+    const D3DXHANDLE required = effect->GetParameterByName(0, "reqVertexElement");
     if (required)
     {
-        RaD3dxParameterDesc requiredDesc;
-        ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxGetParameterDescFn>(effect, 0x10)(
-            effect, required, &requiredDesc);
+        D3DXPARAMETER_DESC requiredDesc;
+        effect->GetParameterDesc(required, &requiredDesc);
 
-        for (unsigned int i = 0; i < requiredDesc.elements; ++i)
+        for (unsigned int i = 0; i < requiredDesc.Elements; ++i)
         {
-            void* const element =
-                ::renddx9abi::d3dxSlot<D3dxGetParameterElementFn>(effect, 0x2C)(effect, required, i);
+            const D3DXHANDLE element = effect->GetParameterElement(required, i);
             const char* value = 0;
-            ::renddx9abi::d3dxSlot<D3dxGetStringFn>(effect, 0xCC)(effect, element, &value);
+            effect->GetString(element, &value);
 
             int index = -1;
             {
@@ -1681,9 +1653,7 @@ bool RaShader::build()
     {
         const vc71::string& blockName = *reinterpret_cast<const vc71::string*>(cursor);
 
-        void* const block =
-            ::renddx9abi::d3dxSlot<D3dxGetParameterByNameFn>(effect, 0x24)(effect, 0,
-                                                                           blockName.c_str());
+        const D3DXHANDLE block = effect->GetParameterByName(0, blockName.c_str());
         if (!block)
             continue;
 
@@ -1696,28 +1666,24 @@ bool RaShader::build()
         if (!::_stricmp(blockName.c_str(), "TemplateParameters")) scope = m_templateParameters;
         if (!::_stricmp(blockName.c_str(), "GlobalParameters"))   scope = m_globalParameters;
 
-        RaD3dxParameterDesc blockDesc;
-        ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxGetParameterDescFn>(effect, 0x10)(
-            effect, block, &blockDesc);
+        D3DXPARAMETER_DESC blockDesc;
+        effect->GetParameterDesc(block, &blockDesc);
 
-        for (unsigned int member = 0; member < blockDesc.elements; ++member)
+        for (unsigned int member = 0; member < blockDesc.Elements; ++member)
         {
-            void* const element =
-                ::renddx9abi::d3dxSlot<D3dxGetParameterElementFn>(effect, 0x2C)(effect, block,
-                                                                                member);
+            const D3DXHANDLE element = effect->GetParameterElement(block, member);
             const char* memberName = 0;
-            ::renddx9abi::d3dxSlot<D3dxGetStringFn>(effect, 0xCC)(effect, element, &memberName);
+            effect->GetString(element, &memberName);
 
             // Initialize only the handle, descriptor's first word, and offset.
             RaBoundParameter record;                    // record.name default-constructs to ""
             unsigned int     blockIndex = 0;
             record.handle    = 0;
-            record.desc.name = 0;
+            record.desc.Name = 0;
             record.offset    = 0;
 
             record.handle =
-                ::renddx9abi::d3dxSlot<D3dxGetParameterByNameFn>(effect, 0x24)(effect, 0,
-                                                                                memberName);
+                ::renddx9abi::d3dxHandleValue(effect->GetParameterByName(0, memberName));
             if (!record.handle)
             {
                 // RaShader.cpp:410, severity 6, empty channel.  The shipped diagnostic goes through
@@ -1735,8 +1701,7 @@ bool RaShader::build()
                 record.name = memberName;
 
                 // THE name IS passed AS THE handle.  See the note above the body.
-                ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxGetParameterDescFn>(effect, 0x10)(
-                    effect, const_cast<char*>(memberName), &record.desc);
+                effect->GetParameterDesc(memberName, &record.desc);
 
                 // The five probes, in the shipped order.  The index each one assigns is its block's
                 // slot inside the scope array; see RaShader.h.

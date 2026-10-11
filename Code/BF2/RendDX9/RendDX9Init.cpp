@@ -16,21 +16,8 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <d3d9.h>
+#include "../../RendDX9Abi/D3dx9Sdk.h"
 #include <string.h>                    // strlen / memcpy - the display-mode probes
-
-
-// D3DX9 imports use __stdcall aliases because modern SDKs omit the legacy headers.
-
-#pragma comment(linker, "/alternatename:_D3DXAssembleShader@28=_D3DXAssembleShader")
-#pragma comment(linker, "/alternatename:_D3DXSaveSurfaceToFileA@20=_D3DXSaveSurfaceToFileA")
-extern "C" long __stdcall D3DXAssembleShader(const char* pSrcData, unsigned int SrcDataLen,
-                                             const void* pDefines, void* pInclude,
-                                             unsigned long Flags, void** ppShader,
-                                             void** ppErrorMsgs);
-extern "C" long __stdcall D3DXSaveSurfaceToFileA(const char* pDestFile, unsigned int DestFormat,
-                                                 IDirect3DSurface9* pSrcSurface,
-                                                 const PALETTEENTRY* pSrcPalette,
-                                                 const RECT* pSrcRect);
 
 namespace dice {
 namespace hfe {
@@ -1476,15 +1463,6 @@ bool rendererGetPresentSpinIfBusy(const void* renderer)
 
 namespace {
 
-// ID3DXBuffer (d3dx9mesh.h): IUnknown, then GetBufferPointer (+0x0C) and GetBufferSize (+0x10) - its
-// documented COM layout. The modern Windows SDK ships no D3DX headers (Ra/EffectManager.cpp reaches
-// the same interface by offset); the probe's `call [ecx+0Ch]` / `call [edx+8]` are these two slots.
-struct ProbeD3DXBuffer : public IUnknown
-{
-    virtual void* STDMETHODCALLTYPE GetBufferPointer() = 0;
-    virtual DWORD STDMETHODCALLTYPE GetBufferSize() = 0;
-};
-
 // the probe's vertex declaration: one FLOAT3 position in stream 0, then D3DDECL_END
 // ({0xFF, 0, unused, 0, 0, 0}). Handed to the device's CreateVertexDeclaration as it stands.
 const D3DVERTEXELEMENT9 kProbeDeclaration[2] =
@@ -1546,35 +1524,33 @@ bool rendererRenderProbe(void* renderer, const char* vertexShader, const char* p
 {
     RendDX9Base* const b = baseOf(renderer);
 
-    void* vsBuffer = 0;                                                 // [ebp-8]
-    void* vsErrors = 0;                                                 // [ebp-0Ch]
+    ID3DXBuffer* vsBuffer = 0;                                          // [ebp-8]
+    ID3DXBuffer* vsErrors = 0;                                          // [ebp-0Ch]
     D3DXAssembleShader(vertexShader, static_cast<unsigned int>(::strlen(vertexShader)),
                        0, 0, 0, &vsBuffer, &vsErrors);
     if (vsErrors)
     {
-        static_cast<ProbeD3DXBuffer*>(vsErrors)->GetBufferPointer();    // 0x1000A08C, discarded
+        vsErrors->GetBufferPointer();                                   // 0x1000A08C, discarded
         return false;                                                   // leaks, as shipped
     }
 
     IDirect3DVertexShader9* vs = 0;                                     // [ebp-10h]
-    b->device->CreateVertexShader(
-        static_cast<const DWORD*>(static_cast<ProbeD3DXBuffer*>(vsBuffer)->GetBufferPointer()),
-        &vs);                                                           // +0x16C,
+    b->device->CreateVertexShader(static_cast<const DWORD*>(vsBuffer->GetBufferPointer()),
+                                  &vs);                                 // +0x16C,
 
-    void* psBuffer = 0;                                                 // [ebp-14h]
-    void* psErrors = 0;                                                 // [ebp-18h]
+    ID3DXBuffer* psBuffer = 0;                                          // [ebp-14h]
+    ID3DXBuffer* psErrors = 0;                                          // [ebp-18h]
     D3DXAssembleShader(pixelShader, static_cast<unsigned int>(::strlen(pixelShader)),
                        0, 0, 0, &psBuffer, &psErrors);
     if (psErrors)
     {
-        static_cast<ProbeD3DXBuffer*>(psErrors)->GetBufferPointer();    // 0x1000A08C, discarded
+        psErrors->GetBufferPointer();                                   // 0x1000A08C, discarded
         return false;                                                   // leaks, as shipped
     }
 
     IDirect3DPixelShader9* ps = 0;                                      // [ebp-1Ch]
-    b->device->CreatePixelShader(
-        static_cast<const DWORD*>(static_cast<ProbeD3DXBuffer*>(psBuffer)->GetBufferPointer()),
-        &ps);                                                           // +0x1A8,
+    b->device->CreatePixelShader(static_cast<const DWORD*>(psBuffer->GetBufferPointer()),
+                                 &ps);                                  // +0x1A8,
 
     IDirect3DVertexDeclaration9* declaration = 0;                       // [ebp-20h]
     b->device->CreateVertexDeclaration(kProbeDeclaration, &declaration);  // +0x158,
@@ -1656,14 +1632,14 @@ bool rendererRenderProbe(void* renderer, const char* vertexShader, const char* p
 
     readback->UnlockRect();                                             // +0x38
     if (dumpFile)
-        D3DXSaveSurfaceToFileA(dumpFile, 4u /* D3DXIFF_DDS */, readback, 0, 0);
+        D3DXSaveSurfaceToFileA(dumpFile, D3DXIFF_DDS, readback, 0, 0);
 
     target->Release();                                                  // unguarded
-    releaseIfSet(static_cast<ProbeD3DXBuffer*>(vsBuffer));
-    releaseIfSet(static_cast<ProbeD3DXBuffer*>(vsErrors));
+    releaseIfSet(vsBuffer);
+    releaseIfSet(vsErrors);
     releaseIfSet(vs);
-    releaseIfSet(static_cast<ProbeD3DXBuffer*>(psBuffer));
-    releaseIfSet(static_cast<ProbeD3DXBuffer*>(psErrors));
+    releaseIfSet(psBuffer);
+    releaseIfSet(psErrors);
     releaseIfSet(ps);
     releaseIfSet(declaration);
     releaseIfSet(readback);

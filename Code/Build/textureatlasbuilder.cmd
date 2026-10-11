@@ -40,6 +40,11 @@ goto :usage
 :args_ok
 call "%~dp0vsdevcmd.cmd" x86
 if errorlevel 1 goto :fail
+rem The exact SDK generation the shipped image was built with (D3DX_SDK_VERSION 25 = April 2005):
+rem its d3dx9.lib names d3dx9_25.dll, and its DxErr9.lib is the very DXGetErrorString9A the shipped
+rem image linked (third-party code). dxsdk.cmd refuses any other SDK.
+call "%~dp0dxsdk.cmd" x86
+if errorlevel 1 goto :fail
 
 for %%I in ("%~dp0..") do set CODE=%%~fI
 set ABI=%CODE%\RendDX9Abi
@@ -53,34 +58,11 @@ if defined BF2_TEXTUREATLAS_BIN set "BIN=%BF2_TEXTUREATLAS_BIN%"
 for %%I in ("%OUT%") do set "OUT=%%~fI"
 for %%I in ("%BIN%") do set "BIN=%%~fI"
 
-rem The exact SDK generation the shipped image was built with (D3DX_SDK_VERSION 25 = April 2005):
-rem its d3dx9.lib names d3dx9_25.dll, and its DxErr9.lib is the very DXGetErrorString9A the shipped
-rem image linked (third-party code). Same detection as renddx9.cmd. Without it, d3dx9_25.lib is made
-rem from RendDX9Abi\D3dx9_25.def and DxErr9StandIn.cpp ([CHOSEN], error TEXT only) stands in.
-set "DXSDK_2005_ROOT="
-set "DXSDK_CANDIDATE="
-if defined DXSDK_DIR for %%I in ("%DXSDK_DIR%\.") do set "DXSDK_CANDIDATE=%%~fI"
-if defined DXSDK_CANDIDATE if exist "%DXSDK_CANDIDATE%\Include\d3dx9core.h" (
-    findstr /c:"#define D3DX_SDK_VERSION 25" "%DXSDK_CANDIDATE%\Include\d3dx9core.h" >nul 2>&1
-    if not errorlevel 1 if exist "%DXSDK_CANDIDATE%\Lib\x86\d3dx9.lib" set "DXSDK_2005_ROOT=%DXSDK_CANDIDATE%"
-)
-if not defined DXSDK_2005_ROOT if exist "C:\Program Files (x86)\Microsoft DirectX 9.0 SDK (April 2005)\Include\d3dx9core.h" (
-    findstr /c:"#define D3DX_SDK_VERSION 25" "C:\Program Files (x86)\Microsoft DirectX 9.0 SDK (April 2005)\Include\d3dx9core.h" >nul 2>&1
-    if not errorlevel 1 if exist "C:\Program Files (x86)\Microsoft DirectX 9.0 SDK (April 2005)\Lib\x86\d3dx9.lib" set "DXSDK_2005_ROOT=C:\Program Files (x86)\Microsoft DirectX 9.0 SDK (April 2005)"
-)
-rem BF2_TEXTUREATLAS_NO_SDK=1 forces the no-SDK fallback (to test it on a machine that has the SDK).
-if defined BF2_TEXTUREATLAS_NO_SDK set "DXSDK_2005_ROOT="
-set "D3DX25_LIB=%OUT%\d3dx9_25.lib"
-set "DXERR_LIBS="
-set DXERR_STANDIN=1
-if defined DXSDK_2005_ROOT set "D3DX25_LIB=%DXSDK_2005_ROOT%\Lib\x86\d3dx9.lib"
+set "D3DX25_LIB=%BF2_DXSDK_LIB%\d3dx9.lib"
 rem DxErr9.lib is a VC7.1 object: its DXTrace references __vsnprintf (legacy_stdio_definitions.lib)
 rem and MessageBox (user32.lib). /OPT:REF drops DXTrace, so neither reaches the import table - the
 rem ABI check below holds that.
-if defined DXSDK_2005_ROOT if exist "%DXSDK_2005_ROOT%\Lib\x86\DxErr9.lib" (
-    set DXERR_LIBS="%DXSDK_2005_ROOT%\Lib\x86\DxErr9.lib" legacy_stdio_definitions.lib user32.lib
-    set DXERR_STANDIN=0
-)
+set DXERR_LIBS="%BF2_DXSDK_LIB%\DxErr9.lib" legacy_stdio_definitions.lib user32.lib
 
 rem /MT                       - the static CRT and STL (see the header).
 rem /DBF2_IMAGE_TEXTUREATLASBUILDER - admits the TUs (they compile to nothing without it) and makes
@@ -97,8 +79,7 @@ echo   Native atlas heap, CRT=/MT
 echo   CODE=%CODE%
 echo   OUT=%OUT%
 echo   BIN=%BIN%
-if defined DXSDK_2005_ROOT (echo   D3DX: the April 2005 SDK's d3dx9.lib) else (echo   D3DX: no April 2005 SDK - d3dx9_25.lib from D3dx9_25.def)
-if "%DXERR_STANDIN%"=="1" (echo   DXGetErrorString9A: the [CHOSEN] stand-in, DxErr9StandIn.cpp) else (echo   DXGetErrorString9A: the SDK's DxErr9.lib)
+echo   D3DX: the April 2005 SDK's d3dx9.lib and DxErr9.lib
 if not exist "%OUT%" mkdir "%OUT%"
 if not exist "%OUT%" goto :fail
 if not exist "%BIN%" mkdir "%BIN%"
@@ -107,20 +88,10 @@ del /q "%OUT%\*.obj" >nul 2>&1
 del /q "%OUT%\*.log" >nul 2>&1
 
 rem ---------------------------------------------------------------------------
-rem STEP 1 - import library for d3dx9_25.dll when the matching SDK is absent.
+rem STEP 1 - import libraries: the DirectX SDK's, selected above. Nothing to generate.
 rem ---------------------------------------------------------------------------
 echo [1/4] import libraries
-type nul > "%OUT%\lib.log"
-set LIB_BAD=0
-if not defined DXSDK_2005_ROOT (
-    lib /nologo /def:"%ABI%\D3dx9_25.def" /machine:x86 /out:"%D3DX25_LIB%" >>"%OUT%\lib.log" 2>&1
-    if errorlevel 1 set LIB_BAD=1
-)
-if "%LIB_BAD%"=="0" goto :libs_ok
-echo   FAILED - see "%OUT%\lib.log"
-type "%OUT%\lib.log"
-goto :fail
-:libs_ok
+echo   "%D3DX25_LIB%"
 
 rem ---------------------------------------------------------------------------
 rem STEP 2 - compile. Explicit manifest, numbered objects (flat output dir), in the shipped image's
@@ -135,7 +106,6 @@ set SOURCES=^
  "%SRC%\DllMain.cpp" ^
  "%SRC%\TextureAtlasConfiguration.cpp" ^
  "%SRC%\TextureAtlasD3D9.cpp"
-if "%DXERR_STANDIN%"=="1" set SOURCES=!SOURCES! "%SRC%\DxErr9StandIn.cpp"
 
 set OK=0
 set BAD=0
@@ -242,7 +212,7 @@ if not errorlevel 1 (
 for %%D in (D3DXCreateTexture D3DXCreateTextureFromFileExA D3DXGetImageInfoFromFileA D3DXLoadSurfaceFromSurface D3DXSaveTextureToFileA) do (
     findstr /l /e /c:" %%D" "%OUT%\imports.txt" >nul
     if errorlevel 1 (
-        echo   imports:      d3dx9_25 %%D MISSING ^(or decorated - see D3dx9Imports.h^)
+        echo   imports:      d3dx9_25 %%D MISSING
         set /a ABI_BAD+=1
     )
 )

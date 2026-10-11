@@ -8,6 +8,8 @@ if not defined BF2_RENDERER_OBJECTS (echo Set BF2_RENDERER_OBJECTS to an isolate
 if not exist "%BF2_RENDERER_OBJECTS%\20_Effect.obj" (echo Native renderer objects are missing or the numbered manifest changed.& exit /b 2)
 call "%~dp0..\Build\vsdevcmd.cmd" x86
 if errorlevel 1 exit /b 1
+call "%~dp0..\Build\dxsdk.cmd" x86
+if errorlevel 1 exit /b 1
 set "TASK_CODE=%~dp0.."
 if not defined BF2_BUILD_OUT set "BF2_BUILD_OUT=%TASK_CODE%\Build\obj_effect_parameter_cache"
 if not exist "%BF2_BUILD_OUT%" mkdir "%BF2_BUILD_OUT%"
@@ -23,9 +25,7 @@ for %%F in (BfMemory Vc71String Frontier) do (
 )
 type nul >"%BF2_BUILD_OUT%\renderer.rsp"
 for %%F in ("%BF2_RENDERER_OBJECTS%\*.obj") do if /i not "%%~nF"=="20_Effect" if /i not "%%~nF"=="1_BfMemory" if /i not "%%~nF"=="3_Vc71String" if /i not "%%~nF"=="4_Frontier" echo "%%~fF">>"%BF2_BUILD_OUT%\renderer.rsp"
-lib /nologo /def:"%TASK_CODE%\RendDX9Abi\D3dx9_25.def" /machine:x86 /out:"%BF2_BUILD_OUT%\d3dx9_25.lib" >"%BF2_BUILD_OUT%\lib.log" 2>&1
-if errorlevel 1 (type "%BF2_BUILD_OUT%\lib.log" & exit /b 1)
-link /nologo /OPT:REF /INCREMENTAL:NO /DEBUG /SUBSYSTEM:CONSOLE /OUT:"%BF2_BUILD_OUT%\effect_parameter_cache_runtime.exe" /PDB:"%BF2_BUILD_OUT%\fixture.pdb" /MAP:"%BF2_BUILD_OUT%\fixture.map" "%BF2_BUILD_OUT%\fixture.obj" "%BF2_BUILD_OUT%\BfMemory.obj" "%BF2_BUILD_OUT%\Vc71String.obj" "%BF2_BUILD_OUT%\Frontier.obj" @"%BF2_BUILD_OUT%\renderer.rsp" "%BF2_BUILD_OUT%\d3dx9_25.lib" "%BF2_RENDERER_OBJECTS%\binkw32.lib" "%BF2_RENDERER_OBJECTS%\TextureAtlasBuilder.lib" kernel32.lib user32.lib d3d9.lib >"%BF2_BUILD_OUT%\link.log" 2>&1
+link /nologo /OPT:REF /INCREMENTAL:NO /DEBUG /SUBSYSTEM:CONSOLE /OUT:"%BF2_BUILD_OUT%\effect_parameter_cache_runtime.exe" /PDB:"%BF2_BUILD_OUT%\fixture.pdb" /MAP:"%BF2_BUILD_OUT%\fixture.map" "%BF2_BUILD_OUT%\fixture.obj" "%BF2_BUILD_OUT%\BfMemory.obj" "%BF2_BUILD_OUT%\Vc71String.obj" "%BF2_BUILD_OUT%\Frontier.obj" @"%BF2_BUILD_OUT%\renderer.rsp" "%BF2_DXSDK_LIB%\d3dx9.lib" "%BF2_RENDERER_OBJECTS%\binkw32.lib" "%BF2_RENDERER_OBJECTS%\TextureAtlasBuilder.lib" kernel32.lib user32.lib d3d9.lib >"%BF2_BUILD_OUT%\link.log" 2>&1
 if errorlevel 1 (type "%BF2_BUILD_OUT%\link.log" & exit /b 1)
 pushd "%BF2_BUILD_OUT%"
 effect_parameter_cache_runtime.exe >runtime.log 2>&1

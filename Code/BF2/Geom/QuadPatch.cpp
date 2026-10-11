@@ -10,6 +10,7 @@
 #include "../../RendDX9Abi/Frontier.h"
 #include "../../RendDX9Abi/Vc71String.h"
 #include "../../RendDX9Abi/Vc71Vector.h"
+#include "../../RendDX9Abi/D3dx9Sdk.h"
 #include "QuadPatch.h"
 #include "Terrain.h"
 #include "XpLightManager.h"
@@ -774,16 +775,16 @@ void QuadPatch::buildNormalVertexBuffer()
                 normalizeInPlace(average);
                 unsigned short half = 0;
                 float value = average.x;
-                D3DXFloat32To16Array(&half, &value, 1);
+                D3DXFloat32To16Array(reinterpret_cast<D3DXFLOAT16*>(&half), &value, 1);
                 *out++ = half;
                 value = average.y;
-                D3DXFloat32To16Array(&half, &value, 1);
+                D3DXFloat32To16Array(reinterpret_cast<D3DXFLOAT16*>(&half), &value, 1);
                 *out++ = half;
                 value = average.z;
-                D3DXFloat32To16Array(&half, &value, 1);
+                D3DXFloat32To16Array(reinterpret_cast<D3DXFLOAT16*>(&half), &value, 1);
                 *out++ = half;
                 value = 0.0f;
-                D3DXFloat32To16Array(&half, &value, 1);
+                D3DXFloat32To16Array(reinterpret_cast<D3DXFLOAT16*>(&half), &value, 1);
                 *out++ = half;
             }
         }

@@ -16,6 +16,7 @@
 #include "../../RendDX9/TextureAtlas/TextureAtlas.h"  // textureAtlasFind - sub_100156F0
 #include "../../../RendDX9Abi/Vc71String.h"
 #include "../../../RendDX9Abi/Vc71Vector.h"
+#include "../../../RendDX9Abi/D3dx9Sdk.h"
 #include "OverGrowthCell.h"
 
 #include <cfloat>
@@ -23,17 +24,8 @@
 #include <cstring>
 #include <vector>
 
-// The two d3dx9_25 imports appendGeometry calls (IAT 0x101DB46C / 0x101DB468). Declared raw, exactly as
-// RendMisc/RenderView.cpp declares D3DXMatrixInverse: the modern SDK ships no D3DX9 headers and the
-// D3DXMATRIX* is just 16 floats here; /alternatename bridges the decorated reference onto the
-// undecorated import. D3DXMatrixTranspose is not in RendDX9Abi\D3dx9_25.def (the no-SDK fallback
-// import library); the April 2005 SDK library carries it.
-struct D3DXMATRIX;
-extern "C" D3DXMATRIX* __stdcall D3DXMatrixInverse(D3DXMATRIX* out, float* determinant,
-                                                   const D3DXMATRIX* m);
-extern "C" D3DXMATRIX* __stdcall D3DXMatrixTranspose(D3DXMATRIX* out, const D3DXMATRIX* m);
-#pragma comment(linker, "/alternatename:_D3DXMatrixInverse@12=_D3DXMatrixInverse")
-#pragma comment(linker, "/alternatename:_D3DXMatrixTranspose@8=_D3DXMatrixTranspose")
+// appendGeometry calls two d3dx9_25 imports, D3DXMatrixInverse and D3DXMatrixTranspose (IAT
+// 0x101DB46C / 0x101DB468); their D3DXMATRIX* is just 16 floats here.
 
 namespace dice { namespace hfe {
 

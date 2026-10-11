@@ -6,6 +6,8 @@ rem own vtable; the `nullchild` run must stop at the emitter's NAMED stop (an un
 rem the manager fixture's frontier trap reports as UNEXPECTED with exit 87.
 if not defined BF2_BUILD_OUT exit /b 2
 call "%~dp0..\Build\vsdevcmd.cmd" x86
+call "%~dp0..\Build\dxsdk.cmd" x86
+if errorlevel 1 exit /b 1
 set "TASK_ROOT=%~dp0..\.."
 if not defined BF2_TEST_OPT set "BF2_TEST_OPT=/O2"
 for %%A in (1) do (

@@ -8,6 +8,9 @@ rem list; road_objects_runtime.cpp models the seams it adds.
 if defined BF2_TEST_ABI_NATIVE if not "%BF2_TEST_ABI_NATIVE%"=="1" (echo Only the native plugin ABI is supported.& exit /b 2)
 call "%~dp0..\Build\vsdevcmd.cmd" x86
 if errorlevel 1 exit /b 1
+rem D3DX declarations come from the April 2005 SDK; the D3DX bodies are this fixture's doubles.
+call "%~dp0..\Build\dxsdk.cmd" x86
+if errorlevel 1 exit /b 1
 set "ROOT=%~dp0..\BF2"
 set "ABI=%~dp0..\RendDX9Abi"
 if not defined BF2_BUILD_OUT set "BF2_BUILD_OUT=%~dp0..\Build\roads_rd1_20260930\fixture_1"

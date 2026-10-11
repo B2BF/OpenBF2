@@ -19,6 +19,7 @@
 #include "../RendDX9/Texture.h"
 #include "../RendMisc/EnvMapSystem/EnvMapManager.h"
 #include "../../RendDX9Abi/BfMemory.h"
+#include "../../RendDX9Abi/D3dx9Sdk.h"
 #include "../../RendDX9Abi/Frontier.h"        // renddx9abi::logf - dice's debug stream
 #include "../../RendDX9Abi/HostFileAbi.h"
 #include "../../RendDX9Abi/PluginAbi.h"
@@ -31,27 +32,6 @@
 #include <cstdio>
 #include <cstring>
 #include <new>
-
-// The D3DX entry points this TU calls - real static imports of the shipped image (d3dx9_25.dll, listed
-// in Code/RendDX9Abi/D3dx9_25.def since TerrainEditable R0). The fill callback is LPD3DXFILL2D:
-// (D3DXVECTOR4* out, const D3DXVECTOR2* texCoord, const D3DXVECTOR2* texelSize, void* data).
-typedef void (WINAPI* TerrainEditableFill2D)(float* out, const float* texCoord,
-                                             const float* texelSize, void* data);
-extern "C" HRESULT WINAPI D3DXFillTexture(IDirect3DTexture9* texture, TerrainEditableFill2D function,
-                                          void* data);
-extern "C" HRESULT WINAPI D3DXComputeBoundingSphere(
-    const ::dice::hfe::Vec3* firstPosition, DWORD vertexCount, DWORD stride,
-    ::dice::hfe::Vec3* centre, float* radius);
-// R2: the surface copy the edit copy, its commit and the road-mask downsample use (the declaration
-// and bridge XpLightManager.cpp already carries - eight arguments, @32).
-extern "C" HRESULT WINAPI D3DXLoadSurfaceFromSurface(
-    IDirect3DSurface9* destination, const PALETTEENTRY* destinationPalette,
-    const RECT* destinationRect, IDirect3DSurface9* source,
-    const PALETTEENTRY* sourcePalette, const RECT* sourceRect,
-    DWORD filter, D3DCOLOR colourKey);
-#pragma comment(linker, "/alternatename:_D3DXFillTexture@12=_D3DXFillTexture")
-#pragma comment(linker, "/alternatename:_D3DXComputeBoundingSphere@20=_D3DXComputeBoundingSphere")
-#pragma comment(linker, "/alternatename:_D3DXLoadSurfaceFromSurface@32=_D3DXLoadSurfaceFromSurface")
 
 namespace dice {
 namespace hfe {
@@ -177,7 +157,8 @@ void fillTexture(dx9rend::EngineTexture* texture, unsigned int value)
 // (`retn 10h`; the texel size is not read). State: QuadPatchEditable +0x128 (last u, last v, the
 // current cell's u / v start, the cell counters). The compares are the listing's: a coordinate below
 // the last one resets that axis; a step of more than 0.125 (flt_1021DD38) opens the next cell.
-void WINAPI checkerboardFill(float* out, const float* texCoord, const float*, void* data)
+void WINAPI checkerboardFill(D3DXVECTOR4* out, const D3DXVECTOR2* texCoord, const D3DXVECTOR2*,
+                             void* data)
 {
     float* const state = static_cast<float*>(data);
     float& lastU = state[0];
@@ -186,41 +167,41 @@ void WINAPI checkerboardFill(float* out, const float* texCoord, const float*, vo
     float& cellV = state[3];
     int& countU = reinterpret_cast<int*>(state)[4];
     int& countV = reinterpret_cast<int*>(state)[5];
-    if (texCoord[0] < lastU)
+    if (texCoord->x < lastU)
     {
         countU = 0;
         cellU = 0.0f;
     }
-    if (texCoord[1] < lastV)
+    if (texCoord->y < lastV)
     {
         countV = 0;
         cellV = 0.0f;
     }
-    if (texCoord[0] - cellU > 0.125f)
+    if (texCoord->x - cellU > 0.125f)
     {
         countU += 1;
-        cellU = texCoord[0];
+        cellU = texCoord->x;
     }
-    if (texCoord[1] - cellV > 0.125f)
+    if (texCoord->y - cellV > 0.125f)
     {
         countV += 1;
-        cellV = texCoord[1];
+        cellV = texCoord->y;
     }
     if ((countV + countU) % 2 == 0)
     {
-        out[0] = 0.81f;
-        out[1] = 0.81f;
-        out[2] = 0.75f;
+        out->x = 0.81f;
+        out->y = 0.81f;
+        out->z = 0.75f;
     }
     else
     {
-        out[0] = 0.94f;
-        out[1] = 0.94f;
-        out[2] = 0.91f;
+        out->x = 0.94f;
+        out->y = 0.94f;
+        out->z = 0.91f;
     }
-    out[3] = 1.0f;
-    lastU = texCoord[0];
-    lastV = texCoord[1];
+    out->w = 1.0f;
+    lastU = texCoord->x;
+    lastV = texCoord->y;
 }
 
 } // anonymous namespace
@@ -785,7 +766,8 @@ void QuadPatchEditable::computeBounds()
             ++point;
         }
     }
-    D3DXComputeBoundingSphere(points, static_cast<DWORD>(side * side), 12, &sphereCentre, &sphereRadius);
+    D3DXComputeBoundingSphere(reinterpret_cast<const D3DXVECTOR3*>(points), static_cast<DWORD>(side * side),
+                              12, reinterpret_cast<D3DXVECTOR3*>(&sphereCentre), &sphereRadius);
     ::renddx9abi::engineFree(points);
 }
 

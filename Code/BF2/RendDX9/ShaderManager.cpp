@@ -17,7 +17,7 @@
 #include "../../RendDX9Abi/Vc71Map.h"
 #include "../../RendDX9Abi/PluginEntry.h"
 #include "../../RendDX9Abi/EngineFile.h"
-#include "../../RendDX9Abi/D3dxEffect.h"   // OnLostDevice/OnResetDevice slots
+#include "../../RendDX9Abi/D3dx9Sdk.h"
 
 #if BF2_PLUGIN_ABI_NATIVE
 #include "../IO/File/FileManager.h"
@@ -496,8 +496,8 @@ void* const kShaderManagerIncludeVtable[2] =
 // Device notifications visit cached effects and nested generated effects without null guards.
 // Priority 5 releases device state first and restores it last.
 
-typedef long (__stdcall* D3dxOnLostDeviceFn)(void*);    // ID3DXEffect +0x114
-typedef long (__stdcall* D3dxOnResetDeviceFn)(void*);   // ID3DXEffect +0x118
+// ID3DXEffect::OnLostDevice or ID3DXEffect::OnResetDevice.
+typedef HRESULT (STDMETHODCALLTYPE ID3DXEffect::*EffectDeviceNotifyFn)();
 
 inline ShaderManager* smFromListener(void* listener)
 {
@@ -512,7 +512,7 @@ struct EffectSubNode
     EffectSubNode* parent;    // +0x04
     EffectSubNode* right;     // +0x08
     unsigned int   key;       // +0x0C
-    void*          effect;    // +0x10  ID3DXEffect*
+    ID3DXEffect*   effect;    // +0x10
     unsigned char  pad14[4];  // +0x14
     unsigned char  color;     // +0x18
     unsigned char  isNil;     // +0x19
@@ -540,37 +540,36 @@ EffectSubNode* effectSubNext(EffectSubNode* node)
 }
 
 // The +0x48 value's map at +0x9C: head at +0xA0. `add ebx, 9Ch` then `cmp esi, [ebx+4]`.
-template <typename Fn>
-void forEachSubEffect(void* object, unsigned int slot)
+void forEachSubEffect(void* object, EffectDeviceNotifyFn notify)
 {
     EffectSubNode* const head = *reinterpret_cast<EffectSubNode**>(
         static_cast<unsigned char*>(object) + 0xA0);
     for (EffectSubNode* node = head->left; node != head; node = effectSubNext(node))
-        ::renddx9abi::d3dxSlot<Fn>(node->effect, slot)(node->effect);
+        (node->effect->*notify)();
 }
 
-template <typename Fn>
-void forEachShaderManagerEffect(ShaderManager* sm, unsigned int slot)
+void forEachShaderManagerEffect(ShaderManager* sm, EffectDeviceNotifyFn notify)
 {
     for (vc71::map_node* node = vc71::mapFirst(sm->effectCache); node;
          node = vc71::mapNext(sm->effectCache, node))
     {
-        void* const d3dx = effectD3dxHandle(vc71::mapNodeValue(node));      // wrapper+0x08
-        ::renddx9abi::d3dxSlot<Fn>(d3dx, slot)(d3dx);
+        ID3DXEffect* const d3dx = static_cast<ID3DXEffect*>(
+            effectD3dxHandle(vc71::mapNodeValue(node)));                       // wrapper+0x08
+        (d3dx->*notify)();
     }
     for (vc71::map_node* node = vc71::mapFirst(sm->map48); node;
          node = vc71::mapNext(sm->map48, node))
-        forEachSubEffect<Fn>(vc71::mapNodeValue(node), slot);
+        forEachSubEffect(vc71::mapNodeValue(node), notify);
 }
 
 void __fastcall sm_onDeviceLost(void* listener, void*)
 {
-    forEachShaderManagerEffect<D3dxOnLostDeviceFn>(smFromListener(listener), 0x114);
+    forEachShaderManagerEffect(smFromListener(listener), &ID3DXEffect::OnLostDevice);
 }
 
 void __fastcall sm_onDeviceReset(void* listener, void*)
 {
-    forEachShaderManagerEffect<D3dxOnResetDeviceFn>(smFromListener(listener), 0x118);
+    forEachShaderManagerEffect(smFromListener(listener), &ID3DXEffect::OnResetDevice);
 }
 
 // shutdown only (the destroy broadcast, 0x10002600). The mapped objects' IBase
@@ -885,7 +884,7 @@ void shaderManagerSetCurrentEffect(void* effect)
 
 // The pre-draw CommitChanges walk - the first three calls of sub_10026880, in the shipped order:
 // the raw ID3DXEffect at +0xA0, the current Effect wrapper at +0x98 (through its ID3DXEffect at
-// wrapper+0x08), then the states-effect arm at +0x9C. ID3DXEffect vtbl +0x104 is CommitChanges.
+// wrapper+0x08), then the states-effect arm at +0x9C.
 // Nothing on the recovered paths writes +0x9C or +0xA0, so their arms stay guarded; the +0x9C
 // commit goes through sub_1001A0A0, which is unread - reaching it is a named frontier, not a
 // fabricated call.
@@ -896,19 +895,17 @@ void shaderManagerCommitCurrentEffects()
     if (!sm)
         return;
 
-    typedef long (__stdcall* CommitFn)(void*);
-
     if (sm->rawEffectA0)
     {
-        void* fx = reinterpret_cast<void*>(sm->rawEffectA0);
-        reinterpret_cast<CommitFn>((*static_cast<void***>(fx))[0x104 / 4])(fx);
+        ID3DXEffect* fx = reinterpret_cast<ID3DXEffect*>(sm->rawEffectA0);
+        fx->CommitChanges();
     }
     if (sm->currentEffect98)
     {
-        void* fx = *reinterpret_cast<void**>(
+        ID3DXEffect* fx = *reinterpret_cast<ID3DXEffect**>(
             static_cast<unsigned char*>(sm->currentEffect98) + 0x08);
         if (fx)
-            reinterpret_cast<CommitFn>((*static_cast<void***>(fx))[0x104 / 4])(fx);
+            fx->CommitChanges();
     }
     if (sm->statesEffect9C)
     {

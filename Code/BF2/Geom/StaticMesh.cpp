@@ -6,7 +6,7 @@
 #ifdef BF2_IMAGE_RENDDX9
 
 #include "../../RendDX9Abi/BfMemory.h"        // engineAlloc - the map sentinel
-#include "../../RendDX9Abi/D3dxEffect.h"      // D3dxCommitChangesFn - the shadow draw's commit
+#include "../../RendDX9Abi/D3dx9Sdk.h"        // ID3DXEffect - the shadow draw's commit
 #include "../../RendDX9Abi/EngineFile.h"      // engineFileExists / readEngineFile
 #include "../../RendDX9Abi/Frontier.h"
 #include "../../RendDX9Abi/PluginEntry.h"     // classManager - the WindManager lookup
@@ -2772,12 +2772,12 @@ void staticMeshCountShadowPrimitives(unsigned int primitives)
 }
 
 // `mov eax, [effect+8]; call [[eax]+104h]` - ID3DXEffect::CommitChanges on the wrapper's D3DX
-// effect.  D3dxEffect.h names the slot; the wrapper's +0x08 is the interface pointer.
+// effect.  The wrapper's +0x08 is the interface pointer.
 void staticMeshEffectCommitChanges(dx9rend::Effect* effect)
 {
-    void* const d3dx = *reinterpret_cast<void**>(reinterpret_cast<unsigned char*>(effect) + 8);
-    reinterpret_cast<::renddx9abi::D3dxCommitChangesFn>(
-        (*reinterpret_cast<void***>(d3dx))[0x104 / sizeof(void*)])(d3dx);
+    ID3DXEffect* const d3dx =
+        *reinterpret_cast<ID3DXEffect**>(reinterpret_cast<unsigned char*>(effect) + 8);
+    d3dx->CommitChanges();
 }
 
 dx9rend::ShaderParameter* staticMeshShadowParameter(dx9rend::Effect* effect, const char* name)

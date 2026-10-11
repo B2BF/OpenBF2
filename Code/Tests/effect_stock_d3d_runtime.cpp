@@ -27,10 +27,9 @@ std::vector<char> read(const char* path)
     std::fseek(f,0,SEEK_END);long bytes=std::ftell(f);std::rewind(f);
     std::vector<char> data(bytes);std::fread(data.data(),1,data.size(),f);std::fclose(f);return data;
 }
-void* parameter(void* fx,const char* name)
+D3DXHANDLE parameter(ID3DXEffect* fx,const char* name)
 {
-    typedef void* (__stdcall* Fn)(void*,void*,const char*);
-    return renddx9abi::d3dxSlot<Fn>(fx,0x24)(fx,nullptr,name);
+    return fx->GetParameterByName(nullptr,name);
 }
 bool saveFrame(IDirect3DDevice9* device,const char* path)
 {
@@ -85,14 +84,13 @@ int main(int argc,char** argv)
     std::printf("CreateDevice HRESULT=%08X\n",static_cast<unsigned>(hr));
     if(!check(SUCCEEDED(hr)&&device,"create actual HAL device with hardware vertex processing"))return 1;
     std::vector<D3DXMACRO> defines;for(auto item:kShaderDefines)defines.push_back({item.name,item.value});defines.push_back({nullptr,nullptr});
-    void* fx=nullptr;void* errors=nullptr;
+    ID3DXEffect* fx=nullptr;ID3DXBuffer* errors=nullptr;
     hr=D3DXCreateEffect(device,source.data(),static_cast<unsigned>(source.size()),defines.data(),nullptr,0,nullptr,&fx,&errors);
     if(errors)
     {
-        typedef void* (__stdcall* BufferFn)(void*);
-        auto text=static_cast<const char*>(renddx9abi::d3dxSlot<BufferFn>(errors,0x0C)(errors));
+        auto text=static_cast<const char*>(errors->GetBufferPointer());
         std::printf("D3DX compiler: %s\n",text);
-        renddx9abi::d3dxSlot<renddx9abi::D3dxReleaseFn>(errors,0x08)(errors);
+        errors->Release();
     }
     if(!check(SUCCEEDED(hr)&&fx,"compile unmodified stock shader with recovered static D3D defines"))return 1;
     if(!check(createBufferManager(device),"construct actual BufferManager for real declaration creation"))return 1;
@@ -115,9 +113,9 @@ int main(int argc,char** argv)
           "driver returns the stock declaration created by recovered annotation reader");
     const float identity[16]={1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
     for(const char* name:{"mWorld","mView","mProj"})
-        renddx9abi::d3dxSlot<renddx9abi::D3dxSetMatrixFn>(fx,0x98)(fx,parameter(fx,name),identity);
-    renddx9abi::d3dxSlot<renddx9abi::D3dxSetIntFn>(fx,0x68)(fx,parameter(fx,"dwZEnable"),0);
-    renddx9abi::d3dxSlot<renddx9abi::D3dxSetBoolFn>(fx,0x58)(fx,parameter(fx,"bZWriteEnable"),0);
+        fx->SetMatrix(parameter(fx,name),reinterpret_cast<const D3DXMATRIX*>(identity));
+    fx->SetInt(parameter(fx,"dwZEnable"),0);
+    fx->SetBool(parameter(fx,"bZWriteEnable"),0);
     struct Vertex { float x,y,z,r,g,b,a,u,v,u2,v2; };
     const Vertex vertices[]={
         {-0.75f,-0.75f,0,1,0,0,1,0,1,0,1}, {-0.75f,0.75f,0,1,0,0,1,0,0,0,0},
@@ -129,13 +127,13 @@ int main(int argc,char** argv)
     // and its deferred draw application are NOT initialized or bypassed silently.
     check(SUCCEEDED(device->SetVertexDeclaration(decl)),"bind actual recovered declaration directly for component draw");
     unsigned passes=0;
-    check(SUCCEEDED(renddx9abi::d3dxSlot<renddx9abi::D3dxBeginFn>(fx,0xFC)(fx,&passes,0))&&passes==3,"actual D3DX begin validates three-pass technique");
-    check(SUCCEEDED(renddx9abi::d3dxSlot<renddx9abi::D3dxBeginPassFn>(fx,0x100)(fx,0)),"actual stock notex pass applies shaders/states");
+    check(SUCCEEDED(fx->Begin(&passes,0))&&passes==3,"actual D3DX begin validates three-pass technique");
+    check(SUCCEEDED(fx->BeginPass(0)),"actual stock notex pass applies shaders/states");
     device->SetRenderState(D3DRS_CULLMODE,D3DCULL_NONE);
     hr=device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP,2,vertices,sizeof(Vertex));
     check(SUCCEEDED(hr),"actual DrawPrimitiveUP executes stock shaders");
-    renddx9abi::d3dxSlot<renddx9abi::D3dxEndPassFn>(fx,0x108)(fx);
-    renddx9abi::d3dxSlot<renddx9abi::D3dxEndFn>(fx,0x10C)(fx);
+    fx->EndPass();
+    fx->End();
     check(SUCCEEDED(device->EndScene()),"end actual D3D scene");
     check(saveFrame(device,argv[2]),"save actual GPU readback BMP");
     // Existing renderer final release / BufferManager teardown remain unwritten.

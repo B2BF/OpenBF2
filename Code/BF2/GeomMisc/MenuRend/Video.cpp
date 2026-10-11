@@ -14,6 +14,7 @@
 #include "../../../RendDX9Abi/Frontier.h"
 #include "../../../RendDX9Abi/Bink.h"
 #include "../../RendDX9/RendDX9Base.h"
+#include "../../../RendDX9Abi/D3dx9Sdk.h"
 
 #include <windows.h>
 #include <stddef.h>
@@ -26,18 +27,10 @@ namespace hfe {
 namespace dx9rend { void* renderDevice(); }     // RendDX9Base.h - the live IDirect3DDevice9
 namespace geom {
 
-// d3dx9_25.dll - the same decorated<->undecorated bridge Effect.cpp/TextureManager.cpp use. Eight
-// 4-byte parameters -> @32. The name is already in D3dx9_25.def.
-extern "C" long __stdcall D3DXCreateTexture(IDirect3DDevice9* dev, unsigned int w, unsigned int h,
-                                            unsigned int mips, unsigned long usage, unsigned int fmt,
-                                            unsigned int pool, IDirect3DTexture9** out);
-#pragma comment(linker, "/alternatename:_D3DXCreateTexture@32=_D3DXCreateTexture")
-
 // binkw32.dll exports decorated __stdcall names (_BinkOpen@8, ...). `lib /def` turns each def entry
 // into a thunk symbol with one extra leading underscore (__BinkOpen@8) while the DLL import name
 // stays correct, so a plain `extern "C" __stdcall BinkOpen` (symbol _BinkOpen@8) does not match the
-// lib's thunk. /alternatename bridges the two, exactly as Effect.cpp does for the undecorated D3DX
-// names - the opposite direction, but the same mechanism.
+// lib's thunk. /alternatename bridges the two.
 #pragma comment(linker, "/alternatename:_BinkOpen@8=__BinkOpen@8")
 #pragma comment(linker, "/alternatename:_BinkClose@4=__BinkClose@4")
 #pragma comment(linker, "/alternatename:_BinkWait@4=__BinkWait@4")

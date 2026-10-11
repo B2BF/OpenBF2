@@ -5,6 +5,7 @@
 #include "../../RendDX9Abi/HfeAbi.h"
 #include "../../RendDX9Abi/ModuleCommon.h"
 #include "../../RendDX9Abi/BfMemory.h"
+#include "../../RendDX9Abi/D3dx9Sdk.h"
 #include "../../RendDX9Abi/Frontier.h"
 #include "../../RendDX9Abi/Vc71Map.h"
 #include "RendDX9Base.h"
@@ -74,89 +75,74 @@ struct RaShaderConstants
 static_assert(sizeof(RaShaderConstants) == 0xAFC,
               "sub_1003ACA0 allocates exactly 0xAFC bytes");
 
-// ID3DXEffect is a COM-style interface: the PE inner calls push the interface pointer as the first
-// stack argument and dispatch with __stdcall, even though these outer record binders are ordinary
-// __thiscall members.
-typedef int (__stdcall* EffectSetFloatFn)(void*, int, unsigned int);
-typedef int (__stdcall* EffectSetIntFn)(void*, int, unsigned int);
-typedef int (__stdcall* EffectSetFloatArrayFn)(void*, int, const float*, unsigned int);
-typedef int (__stdcall* EffectSetVectorFn)(void*, int, const float*);
-typedef int (__stdcall* EffectSetTextureFn)(void*, int, IDirect3DBaseTexture9*);
-
-int __fastcall raBindVec4(void* self, void*, void* effect, int handle)
+// These outer record binders are ordinary __thiscall members; the effect and the D3DX handle arrive
+// as the two stack arguments RaShader::applyParameterVector passes to every holder's slot 0.
+int __fastcall raBindVec4(void* self, void*, void* effect, void* handle)
 {
-    void* const* const table = *static_cast<void* const* const*>(effect);
-    return reinterpret_cast<EffectSetVectorFn>(table[0x88 / 4])(
-        effect, handle, reinterpret_cast<const float*>(
+    return static_cast<ID3DXEffect*>(effect)->SetVector(
+        ::renddx9abi::d3dxHandle(handle), reinterpret_cast<const D3DXVECTOR4*>(
             static_cast<unsigned char*>(self) + 4));
 }
 
-int __fastcall raBindTexture(void* self, void*, void* effect, int handle)
+int __fastcall raBindTexture(void* self, void*, void* effect, void* handle)
 {
     IDirect3DBaseTexture9* const texture = *reinterpret_cast<IDirect3DBaseTexture9**>(
         static_cast<unsigned char*>(self) + 4);
-    void* const* const table = *static_cast<void* const* const*>(effect);
-    return reinterpret_cast<EffectSetTextureFn>(table[0xD0 / 4])(
-        effect, handle, texture);
+    return static_cast<ID3DXEffect*>(effect)->SetTexture(
+        ::renddx9abi::d3dxHandle(handle), texture);
 }
 
-int __fastcall raBindFloat(void* self, void*, void* effect, int handle)
+int __fastcall raBindFloat(void* self, void*, void* effect, void* handle)
 {
-    const unsigned int value = *reinterpret_cast<const unsigned int*>(
+    const FLOAT value = *reinterpret_cast<const FLOAT*>(
         static_cast<unsigned char*>(self) + 4);
-    void* const* const table = *static_cast<void* const* const*>(effect);
-    return reinterpret_cast<EffectSetFloatFn>(table[0x78 / 4])(
-        effect, handle, value);
+    return static_cast<ID3DXEffect*>(effect)->SetFloat(
+        ::renddx9abi::d3dxHandle(handle), value);
 }
 
-int __fastcall raBindVec3(void* self, void*, void* effect, int handle)
+int __fastcall raBindVec3(void* self, void*, void* effect, void* handle)
 {
-    void* const* const table = *static_cast<void* const* const*>(effect);
-    return reinterpret_cast<EffectSetFloatArrayFn>(table[0x80 / 4])(
-        effect, handle, reinterpret_cast<const float*>(
+    return static_cast<ID3DXEffect*>(effect)->SetFloatArray(
+        ::renddx9abi::d3dxHandle(handle), reinterpret_cast<const float*>(
             static_cast<unsigned char*>(self) + 4), 3);
 }
 
-int __fastcall raBindVec2(void* self, void*, void* effect, int handle)
+int __fastcall raBindVec2(void* self, void*, void* effect, void* handle)
 {
-    void* const* const table = *static_cast<void* const* const*>(effect);
-    return reinterpret_cast<EffectSetFloatArrayFn>(table[0x80 / 4])(
-        effect, handle, reinterpret_cast<const float*>(
+    return static_cast<ID3DXEffect*>(effect)->SetFloatArray(
+        ::renddx9abi::d3dxHandle(handle), reinterpret_cast<const float*>(
             static_cast<unsigned char*>(self) + 4), 2);
 }
 
 typedef float* (__fastcall* TransformVec3Fn)(float*, const float*);
 
-int __fastcall raBindTransformedVec3(void* self, void*, void* effect, int handle)
+int __fastcall raBindTransformedVec3(void* self, void*, void* effect, void* handle)
 {
     const unsigned int* const fields = static_cast<const unsigned int*>(self);
     const float* const source = reinterpret_cast<const float*>(fields[1] + 4);
     const TransformVec3Fn transform = reinterpret_cast<TransformVec3Fn>(fields[2]);
     float transformed[3];
     transform(transformed, source);
-    void* const* const table = *static_cast<void* const* const*>(effect);
-    return reinterpret_cast<EffectSetFloatArrayFn>(table[0x80 / 4])(
-        effect, handle, transformed, 3);
+    return static_cast<ID3DXEffect*>(effect)->SetFloatArray(
+        ::renddx9abi::d3dxHandle(handle), transformed, 3);
 }
 
-int __fastcall raBindInt(void* self, void*, void* effect, int handle)
+int __fastcall raBindInt(void* self, void*, void* effect, void* handle)
 {
-    const unsigned int value = *reinterpret_cast<const unsigned int*>(
+    const INT value = *reinterpret_cast<const INT*>(
         static_cast<unsigned char*>(self) + 4);
-    void* const* const table = *static_cast<void* const* const*>(effect);
-    return reinterpret_cast<EffectSetIntFn>(table[0x68 / 4])(
-        effect, handle, value);
+    return static_cast<ID3DXEffect*>(effect)->SetInt(
+        ::renddx9abi::d3dxHandle(handle), value);
 }
 
-int __fastcall raBindEngineTexture(void* self, void*, void* effect, int handle)
+int __fastcall raBindEngineTexture(void* self, void*, void* effect, void* handle)
 {
     EngineTexture* const texture = *reinterpret_cast<EngineTexture**>(
         static_cast<unsigned char*>(self) + 4);
     if (!texture)
         return 0;
-    void* const* const table = *static_cast<void* const* const*>(effect);
-    return reinterpret_cast<EffectSetTextureFn>(table[0xD0 / 4])(
-        effect, handle, texture->baseTexture);
+    return static_cast<ID3DXEffect*>(effect)->SetTexture(
+        ::renddx9abi::d3dxHandle(handle), texture->baseTexture);
 }
 
 float* __fastcall raScaleHalf(float* out, const float* value)
@@ -1566,52 +1552,6 @@ void renderQueuesFlushWorldPass()
 
 namespace {
 
-// The material-cache reset reaches the external ID3DXEffect::OnLostDevice method at +0x114.
-// Keep the instruction-proven prefix local to this call site so the invocation remains an
-// ordinary typed COM virtual call; none of the unrecovered prefix methods is exposed to callers.
-#define BF2_HEMI_D3DX_RESERVED(offset) virtual void __stdcall reserved_##offset() = 0
-class IHemiD3DXEffect
-{
-public:
-    BF2_HEMI_D3DX_RESERVED(000); BF2_HEMI_D3DX_RESERVED(004);
-    BF2_HEMI_D3DX_RESERVED(008); BF2_HEMI_D3DX_RESERVED(00C);
-    BF2_HEMI_D3DX_RESERVED(010); BF2_HEMI_D3DX_RESERVED(014);
-    BF2_HEMI_D3DX_RESERVED(018); BF2_HEMI_D3DX_RESERVED(01C);
-    BF2_HEMI_D3DX_RESERVED(020); BF2_HEMI_D3DX_RESERVED(024);
-    BF2_HEMI_D3DX_RESERVED(028); BF2_HEMI_D3DX_RESERVED(02C);
-    BF2_HEMI_D3DX_RESERVED(030); BF2_HEMI_D3DX_RESERVED(034);
-    BF2_HEMI_D3DX_RESERVED(038); BF2_HEMI_D3DX_RESERVED(03C);
-    BF2_HEMI_D3DX_RESERVED(040); BF2_HEMI_D3DX_RESERVED(044);
-    BF2_HEMI_D3DX_RESERVED(048); BF2_HEMI_D3DX_RESERVED(04C);
-    BF2_HEMI_D3DX_RESERVED(050); BF2_HEMI_D3DX_RESERVED(054);
-    BF2_HEMI_D3DX_RESERVED(058); BF2_HEMI_D3DX_RESERVED(05C);
-    BF2_HEMI_D3DX_RESERVED(060); BF2_HEMI_D3DX_RESERVED(064);
-    BF2_HEMI_D3DX_RESERVED(068); BF2_HEMI_D3DX_RESERVED(06C);
-    BF2_HEMI_D3DX_RESERVED(070); BF2_HEMI_D3DX_RESERVED(074);
-    BF2_HEMI_D3DX_RESERVED(078); BF2_HEMI_D3DX_RESERVED(07C);
-    BF2_HEMI_D3DX_RESERVED(080); BF2_HEMI_D3DX_RESERVED(084);
-    BF2_HEMI_D3DX_RESERVED(088); BF2_HEMI_D3DX_RESERVED(08C);
-    BF2_HEMI_D3DX_RESERVED(090); BF2_HEMI_D3DX_RESERVED(094);
-    BF2_HEMI_D3DX_RESERVED(098); BF2_HEMI_D3DX_RESERVED(09C);
-    BF2_HEMI_D3DX_RESERVED(0A0); BF2_HEMI_D3DX_RESERVED(0A4);
-    BF2_HEMI_D3DX_RESERVED(0A8); BF2_HEMI_D3DX_RESERVED(0AC);
-    BF2_HEMI_D3DX_RESERVED(0B0); BF2_HEMI_D3DX_RESERVED(0B4);
-    BF2_HEMI_D3DX_RESERVED(0B8); BF2_HEMI_D3DX_RESERVED(0BC);
-    BF2_HEMI_D3DX_RESERVED(0C0); BF2_HEMI_D3DX_RESERVED(0C4);
-    BF2_HEMI_D3DX_RESERVED(0C8); BF2_HEMI_D3DX_RESERVED(0CC);
-    BF2_HEMI_D3DX_RESERVED(0D0); BF2_HEMI_D3DX_RESERVED(0D4);
-    BF2_HEMI_D3DX_RESERVED(0D8); BF2_HEMI_D3DX_RESERVED(0DC);
-    BF2_HEMI_D3DX_RESERVED(0E0); BF2_HEMI_D3DX_RESERVED(0E4);
-    BF2_HEMI_D3DX_RESERVED(0E8); BF2_HEMI_D3DX_RESERVED(0EC);
-    BF2_HEMI_D3DX_RESERVED(0F0); BF2_HEMI_D3DX_RESERVED(0F4);
-    BF2_HEMI_D3DX_RESERVED(0F8); BF2_HEMI_D3DX_RESERVED(0FC);
-    BF2_HEMI_D3DX_RESERVED(100); BF2_HEMI_D3DX_RESERVED(104);
-    BF2_HEMI_D3DX_RESERVED(108); BF2_HEMI_D3DX_RESERVED(10C);
-    BF2_HEMI_D3DX_RESERVED(110);
-    virtual long __stdcall onLostDevice() = 0; // +0x114
-};
-#undef BF2_HEMI_D3DX_RESERVED
-
 struct HemiSmallTreeNode
 {
     HemiSmallTreeNode* left;
@@ -1649,7 +1589,7 @@ void resetOneHemiMaterialQueue(void* queue)
     {
         // Retail deliberately zeros the pointer without Release after OnLostDevice; this cache
         // does not own an additional COM reference here.
-        static_cast<IHemiD3DXEffect*>(effect)->onLostDevice();
+        static_cast<ID3DXEffect*>(effect)->OnLostDevice();           // +0x114
         effect = 0;
     }
 

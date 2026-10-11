@@ -16,22 +16,11 @@
 #include "../../../RendDX9Abi/ModuleCommon.h"
 #include "../../../RendDX9Abi/PluginEntry.h"
 #include "../../../RendDX9Abi/Vc71Vector.h"
+#include "../../../RendDX9Abi/D3dx9Sdk.h"
 
 #include <cstddef>
 #include <cstring>
 #include <new>
-
-extern "C" HRESULT WINAPI D3DXLoadSurfaceFromSurface(
-    IDirect3DSurface9* destination, const PALETTEENTRY* destinationPalette,
-    const RECT* destinationRect, IDirect3DSurface9* source,
-    const PALETTEENTRY* sourcePalette, const RECT* sourceRect,
-    DWORD filter, D3DCOLOR colourKey);
-extern "C" HRESULT WINAPI D3DXSaveSurfaceToFileA(
-    const char* destinationFile, unsigned int fileFormat, IDirect3DSurface9* source,
-    const PALETTEENTRY* sourcePalette, const RECT* sourceRect);
-
-#pragma comment(linker, "/alternatename:_D3DXLoadSurfaceFromSurface@32=_D3DXLoadSurfaceFromSurface")
-#pragma comment(linker, "/alternatename:_D3DXSaveSurfaceToFileA@20=_D3DXSaveSurfaceToFileA")
 
 namespace dice {
 namespace hfe {
@@ -402,7 +391,7 @@ bool HemiMapManager::makeHemiMap(unsigned long resolution, HemiMapName outputNam
 
     IDirect3DSurface9* surface =
         dx9rend::textureGetLevelSurface(sourceTexture, 0u, 0x7FFFFFFFu);
-    D3DXSaveSurfaceToFileA("lightingTex.dds", 4u, surface, 0, 0);
+    D3DXSaveSurfaceToFileA("lightingTex.dds", D3DXIFF_DDS, surface, 0, 0);
     surface->Release();
     releaseTexture(sourceTexture);
     newDepthStencil->Release();
@@ -437,7 +426,7 @@ bool HemiMapManager::makeHemiMap(unsigned long resolution, HemiMapName outputNam
     vc71::string outputPath(outputName.c_str());
     ::renddx9abi::engineFilePrepareWrite(outputPath);
     surface = dx9rend::textureGetLevelSurface(conversionTexture, 0u, 0x7FFFFFFFu);
-    D3DXSaveSurfaceToFileA(outputPath.c_str(), 4u, surface, 0, 0);
+    D3DXSaveSurfaceToFileA(outputPath.c_str(), D3DXIFF_DDS, surface, 0, 0);
     surface->Release();
     releaseTexture(lightingTexture);
     releaseTexture(conversionTexture);

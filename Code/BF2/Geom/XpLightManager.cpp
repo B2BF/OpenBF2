@@ -23,6 +23,7 @@
 #include "../RendDX9/RendDX9Base.h"
 #include "../RendDX9/ShaderParameter.h"
 #include "../RendDX9/Texture.h"
+#include "../../RendDX9Abi/D3dx9Sdk.h"
 
 // HfeAbi.h supplies the same four-slot IBase contract for the retail VC7.1 host ABI.  Reuse that
 // declaration while importing the recovered engine class interfaces below; their virtual method
@@ -66,67 +67,6 @@
 #include <stdexcept>
 #include <string.h>
 #include <vector>
-
-extern "C" HRESULT WINAPI D3DXLoadSurfaceFromSurface(
-    IDirect3DSurface9* destination, const PALETTEENTRY* destinationPalette,
-    const RECT* destinationRect, IDirect3DSurface9* source,
-    const PALETTEENTRY* sourcePalette, const RECT* sourceRect,
-    DWORD filter, D3DCOLOR colourKey);
-
-// The modern SDK no longer ships D3DX9 import declarations.  lib.exe gives the plain .def export
-// a cdecl-shaped thunk name, while this correct winapi declaration asks for the stdcall-decorated
-// name.  Bridge those names without lying about the calling convention (eight arguments = @32).
-#pragma comment(linker, "/alternatename:_D3DXLoadSurfaceFromSurface@32=_D3DXLoadSurfaceFromSurface")
-
-// dice's DirectX SDK supplied this interface through d3dx9mesh.h.  The current Windows SDK does
-// not, so retain the instruction-proven prefix used by LightManager::buildDebugGeometry rather
-// than taking a machine-local June 2010 SDK dependency.  The prefix ends at GetIndexBuffer because
-// no later ID3DXMesh slot is consumed here.
-struct RendD3dxMesh : public IUnknown
-{
-    virtual HRESULT STDMETHODCALLTYPE DrawSubset(DWORD attributeId) = 0;       // +0x0C
-    virtual DWORD STDMETHODCALLTYPE GetNumFaces() = 0;                         // +0x10
-    virtual DWORD STDMETHODCALLTYPE GetNumVertices() = 0;                      // +0x14
-    virtual DWORD STDMETHODCALLTYPE GetFVF() = 0;                              // +0x18
-    virtual HRESULT STDMETHODCALLTYPE GetDeclaration(D3DVERTEXELEMENT9*) = 0;  // +0x1C
-    virtual DWORD STDMETHODCALLTYPE GetNumBytesPerVertex() = 0;                // +0x20
-    virtual DWORD STDMETHODCALLTYPE GetOptions() = 0;                          // +0x24
-    virtual HRESULT STDMETHODCALLTYPE GetDevice(IDirect3DDevice9**) = 0;       // +0x28
-    virtual HRESULT STDMETHODCALLTYPE CloneMeshFVF(
-        DWORD options, DWORD fvf, IDirect3DDevice9* device,
-        RendD3dxMesh** clone) = 0;                                             // +0x2C
-    virtual HRESULT STDMETHODCALLTYPE CloneMesh(
-        DWORD options, const D3DVERTEXELEMENT9* declaration,
-        IDirect3DDevice9* device, RendD3dxMesh** clone) = 0;                   // +0x30
-    virtual HRESULT STDMETHODCALLTYPE GetVertexBuffer(IDirect3DVertexBuffer9**) = 0; // +0x34
-    virtual HRESULT STDMETHODCALLTYPE GetIndexBuffer(IDirect3DIndexBuffer9**) = 0;   // +0x38
-};
-
-extern "C" HRESULT WINAPI D3DXCreateSphere(
-    IDirect3DDevice9* device, float radius, unsigned int slices,
-    unsigned int stacks, RendD3dxMesh** mesh, void** adjacency);
-extern "C" HRESULT WINAPI D3DXCreateCylinder(
-    IDirect3DDevice9* device, float radius1, float radius2, float length,
-    unsigned int slices, unsigned int stacks, RendD3dxMesh** mesh, void** adjacency);
-extern "C" HRESULT WINAPI D3DXCreateBox(
-    IDirect3DDevice9* device, float width, float height, float depth,
-    RendD3dxMesh** mesh, void** adjacency);
-
-#pragma comment(linker, "/alternatename:_D3DXCreateSphere@24=_D3DXCreateSphere")
-#pragma comment(linker, "/alternatename:_D3DXCreateCylinder@32=_D3DXCreateCylinder")
-#pragma comment(linker, "/alternatename:_D3DXCreateBox@24=_D3DXCreateBox")
-
-// [PLATFORM] RendDX9 uses D3DX view/projection builders; the dedicated ELF counterparts
-// are empty. Mat4 and Vec3 supply the compatible float storage for these imports.
-struct D3DXMATRIX;
-struct D3DXVECTOR3;
-extern "C" D3DXMATRIX* WINAPI D3DXMatrixLookAtLH(
-    D3DXMATRIX* out, const D3DXVECTOR3* eye, const D3DXVECTOR3* at, const D3DXVECTOR3* up);
-extern "C" D3DXMATRIX* WINAPI D3DXMatrixOrthoLH(
-    D3DXMATRIX* out, float width, float height, float nearPlane, float farPlane);
-
-#pragma comment(linker, "/alternatename:_D3DXMatrixLookAtLH@16=_D3DXMatrixLookAtLH")
-#pragma comment(linker, "/alternatename:_D3DXMatrixOrthoLH@20=_D3DXMatrixOrthoLH")
 
 namespace dice {
 namespace hfe {
@@ -4897,18 +4837,18 @@ void buildLightDebugGeometry(void* self)
 {
     IDirect3DDevice9* const device = lmField<IDirect3DDevice9*>(self, 0x908);
 
-    RendD3dxMesh* sphereSource = 0;
-    RendD3dxMesh* sphere = 0;
+    ID3DXMesh* sphereSource = 0;
+    ID3DXMesh* sphere = 0;
     D3DXCreateSphere(device, 1.0f, 20, 20, &sphereSource, 0);
     sphereSource->CloneMeshFVF(0x660u, D3DFVF_XYZ, device, &sphere);
 
-    RendD3dxMesh* cylinderSource = 0;
-    RendD3dxMesh* cylinder = 0;
+    ID3DXMesh* cylinderSource = 0;
+    ID3DXMesh* cylinder = 0;
     D3DXCreateCylinder(device, 0.0f, 1.0f, 1.0f, 20, 20, &cylinderSource, 0);
     cylinderSource->CloneMeshFVF(0x660u, D3DFVF_XYZ, device, &cylinder);
 
-    RendD3dxMesh* boxSource = 0;
-    RendD3dxMesh* box = 0;
+    ID3DXMesh* boxSource = 0;
+    ID3DXMesh* box = 0;
     D3DXCreateBox(device, 1.0f, 1.0f, 1.0f, &boxSource, 0);
     boxSource->CloneMeshFVF(0x660u, D3DFVF_XYZ, device, &box);
 

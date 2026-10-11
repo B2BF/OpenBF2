@@ -6,6 +6,7 @@
 #ifdef BF2_IMAGE_RENDDX9
 
 #include "../RendDX9Base.h"
+#include "../../../RendDX9Abi/D3dx9Sdk.h"
 #include "../../../RendDX9Abi/Vc71Map.h"
 #include "../../../RendDX9Abi/Vc71String.h"
 #include "../../../RendDX9Abi/Vc71Vector.h"
@@ -119,28 +120,11 @@ extern RaVertexElementDesc g_desc_1023F044;   // TCrack2D
 
 // D3DXPARAMETER_DESC, 44 bytes.  The size is read from the image twice over - the build body
 // reserves ebp-0x21C..ebp-0x1F0 for one, and the 80-byte record below holds one at +0x04 with an
-// int at +0x30 - and `elements` at +0x18 is the only field any recovered body reads (`cmp
-// [ebp+var_C0], ebx` and `cmp [ebp+var_204], 0`, both of which are desc+0x18).  The remaining names
-// are the public D3DX9 ABI's, in its order; they are carried so the record has a shape rather than
-// a blob, and nothing in this tree reads them.  [INFERRED] for every field except `elements`.
-
-struct RaD3dxParameterDesc
-{
-    const char*  name;            // +0x00
-    const char*  semantic;        // +0x04
-    unsigned int parameterClass;  // +0x08
-    unsigned int type;            // +0x0C
-    unsigned int rows;            // +0x10
-    unsigned int columns;         // +0x14
-    unsigned int elements;        // +0x18  ← the only field read
-    unsigned int annotations;     // +0x1C
-    unsigned int structMembers;   // +0x20
-    unsigned int flags;           // +0x24
-    unsigned int bytes;           // +0x28
-};
+// int at +0x30 - and Elements at +0x18 is the only field any recovered body reads (`cmp
+// [ebp+var_C0], ebx` and `cmp [ebp+var_204], 0`, both of which are desc+0x18).
 
 #if defined(_M_IX86)
-static_assert(sizeof(RaD3dxParameterDesc) == 44, "D3DXPARAMETER_DESC is 44 bytes");
+static_assert(sizeof(D3DXPARAMETER_DESC) == 44, "D3DXPARAMETER_DESC is 44 bytes");
 #endif
 
 
@@ -149,7 +133,7 @@ static_assert(sizeof(RaD3dxParameterDesc) == 44, "D3DXPARAMETER_DESC is 44 bytes
 struct RaBoundParameter
 {
     void*               handle;   // +0x00  the D3DXHANDLE of the member, by name
-    RaD3dxParameterDesc desc;     // +0x04  GetParameterDesc's answer for that member
+    D3DXPARAMETER_DESC  desc;     // +0x04  GetParameterDesc's answer for that member
     int                 offset;   // +0x30  the registry index, or 0 when no registry knew it
     vc71::string        name;     // +0x34  the member's name
 };

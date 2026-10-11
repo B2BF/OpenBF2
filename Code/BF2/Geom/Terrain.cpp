@@ -12,6 +12,7 @@
 #include "../../RendDX9Abi/Vc71String.h"
 #include "../../RendDX9Abi/Vc71Vector.h"
 #include "../../RendDX9Abi/Vc71Map.h"
+#include "../../RendDX9Abi/D3dx9Sdk.h"
 #include "Terrain.h"
 #include "QuadPatch.h"
 #include "XpLightManager.h"
@@ -29,22 +30,6 @@
 #include <new>
 #include <cstdlib>
 #include <cstring>
-
-// The three D3DX calls optimizeLodIndices (sub_100DC0E0) makes - static imports of the shipped image
-// (IAT 0x101DB47C D3DXCreateMeshFVF, 0x101DB450 D3DXCreateMesh, 0x101DB41C D3DXCreateBuffer). The
-// decorated-to-undecorated bridge is the one Terrain.h documents for D3DXFloat32To16Array;
-// Code/RendDX9Abi/D3dx9_25.def lists them for the no-SDK build. The out-parameters are void
-// because the build carries no D3DX headers (the interfaces are declared by offset below).
-#pragma comment(linker, "/alternatename:_D3DXCreateMeshFVF@24=_D3DXCreateMeshFVF")
-#pragma comment(linker, "/alternatename:_D3DXCreateMesh@24=_D3DXCreateMesh")
-#pragma comment(linker, "/alternatename:_D3DXCreateBuffer@8=_D3DXCreateBuffer")
-extern "C" long __stdcall D3DXCreateMeshFVF(unsigned long numFaces, unsigned long numVertices,
-                                           unsigned long options, unsigned long fvf,
-                                           IDirect3DDevice9* device, void** mesh);
-extern "C" long __stdcall D3DXCreateMesh(unsigned long numFaces, unsigned long numVertices,
-                                        unsigned long options, const D3DVERTEXELEMENT9* declaration,
-                                        IDirect3DDevice9* device, void** mesh);
-extern "C" long __stdcall D3DXCreateBuffer(unsigned int NumBytes, void** ppBuffer);
 
 namespace dice {
 namespace hfe {
@@ -1259,61 +1244,6 @@ void Terrain::buildLegacyBaseGridVertexTable()
 // TerrainEditable builds a different grid and leaves this table null; its path must
 // avoid this optimizer until editor-only handling supplies a compatible route.
 
-namespace {
-
-// ID3DXBuffer and ID3DXMesh in their documented COM order (d3dx9mesh.h of the April 2005 SDK - D3DX
-// 25, the library the shipped image imports), declared here because the build carries no D3DX
-// headers (RendDX9Init.cpp declares ID3DXBuffer the same way). Every slot optimizeLodIndices calls
-// sits at the offset its call site uses: mesh +0x08 Release, +0x10 GetNumFaces, +0x3C / +0x40
-// Lock / UnlockVertexBuffer, +0x44 / +0x48 Lock / UnlockIndexBuffer, +0x58 GenerateAdjacency, +0x6C
-// OptimizeInplace; buffer +0x08 Release, +0x0C GetBufferPointer.
-struct LodD3DXBuffer : public IUnknown
-{
-    virtual void* STDMETHODCALLTYPE GetBufferPointer() = 0;                                  // +0x0C
-    virtual DWORD STDMETHODCALLTYPE GetBufferSize() = 0;                                     // +0x10
-};
-
-struct LodD3DXMesh : public IUnknown
-{
-    // ID3DXBaseMesh
-    virtual HRESULT STDMETHODCALLTYPE DrawSubset(DWORD attribId) = 0;                        // +0x0C
-    virtual DWORD   STDMETHODCALLTYPE GetNumFaces() = 0;                                     // +0x10
-    virtual DWORD   STDMETHODCALLTYPE GetNumVertices() = 0;                                  // +0x14
-    virtual DWORD   STDMETHODCALLTYPE GetFVF() = 0;                                          // +0x18
-    virtual HRESULT STDMETHODCALLTYPE GetDeclaration(D3DVERTEXELEMENT9* declaration) = 0;    // +0x1C
-    virtual DWORD   STDMETHODCALLTYPE GetNumBytesPerVertex() = 0;                            // +0x20
-    virtual DWORD   STDMETHODCALLTYPE GetOptions() = 0;                                      // +0x24
-    virtual HRESULT STDMETHODCALLTYPE GetDevice(IDirect3DDevice9** device) = 0;              // +0x28
-    virtual HRESULT STDMETHODCALLTYPE CloneMeshFVF(DWORD options, DWORD fvf,
-                                                   IDirect3DDevice9* device, void** clone) = 0;         // +0x2C
-    virtual HRESULT STDMETHODCALLTYPE CloneMesh(DWORD options, const D3DVERTEXELEMENT9* declaration,
-                                                IDirect3DDevice9* device, void** clone) = 0;            // +0x30
-    virtual HRESULT STDMETHODCALLTYPE GetVertexBuffer(IDirect3DVertexBuffer9** vertexBuffer) = 0;       // +0x34
-    virtual HRESULT STDMETHODCALLTYPE GetIndexBuffer(IDirect3DIndexBuffer9** indexBuffer) = 0;          // +0x38
-    virtual HRESULT STDMETHODCALLTYPE LockVertexBuffer(DWORD flags, void** data) = 0;        // +0x3C
-    virtual HRESULT STDMETHODCALLTYPE UnlockVertexBuffer() = 0;                              // +0x40
-    virtual HRESULT STDMETHODCALLTYPE LockIndexBuffer(DWORD flags, void** data) = 0;         // +0x44
-    virtual HRESULT STDMETHODCALLTYPE UnlockIndexBuffer() = 0;                               // +0x48
-    virtual HRESULT STDMETHODCALLTYPE GetAttributeTable(void* attributeTable, DWORD* size) = 0;         // +0x4C
-    virtual HRESULT STDMETHODCALLTYPE ConvertPointRepsToAdjacency(const DWORD* pointReps,
-                                                                  DWORD* adjacency) = 0;     // +0x50
-    virtual HRESULT STDMETHODCALLTYPE ConvertAdjacencyToPointReps(const DWORD* adjacency,
-                                                                  DWORD* pointReps) = 0;     // +0x54
-    virtual HRESULT STDMETHODCALLTYPE GenerateAdjacency(FLOAT epsilon, DWORD* adjacency) = 0; // +0x58
-    virtual HRESULT STDMETHODCALLTYPE UpdateSemantics(D3DVERTEXELEMENT9* declaration) = 0;   // +0x5C
-    // ID3DXMesh
-    virtual HRESULT STDMETHODCALLTYPE LockAttributeBuffer(DWORD flags, DWORD** data) = 0;    // +0x60
-    virtual HRESULT STDMETHODCALLTYPE UnlockAttributeBuffer() = 0;                           // +0x64
-    virtual HRESULT STDMETHODCALLTYPE Optimize(DWORD flags, const DWORD* adjacencyIn,
-                                               DWORD* adjacencyOut, DWORD* faceRemap,
-                                               void** vertexRemap, void** optimizedMesh) = 0;  // +0x68
-    virtual HRESULT STDMETHODCALLTYPE OptimizeInplace(DWORD flags, const DWORD* adjacencyIn,
-                                                      DWORD* adjacencyOut, DWORD* faceRemap,
-                                                      void** vertexRemap) = 0;               // +0x6C
-};
-
-} // anonymous namespace
-
 
 // Replaces the INDEX16 buffer with three optimized LOD ranges.
 // Failed locks skip generation; unlock still runs.
@@ -1392,15 +1322,17 @@ void Terrain::createLodIndices(unsigned short*& cursor, int lod, int x, int z, i
 
 // Reorders one leaf's indices in place for the vertex cache through D3DX meshes.
 // Requires the legacy base grid and successful device allocations; HRESULTs are unchecked.
+// D3DXCreateMeshFVF, D3DXCreateMesh and D3DXCreateBuffer are static imports of the shipped image
+// (IAT 0x101DB47C, 0x101DB450, 0x101DB41C).
 
 void Terrain::optimizeLodIndices(vc71::vector_layout& indices)
 {
-    LodD3DXMesh* mesh = 0;
+    ID3DXMesh* mesh = 0;
     {
         IDirect3DDevice9* const device = static_cast<dx9rend::RendDX9Base*>(dx9rend::g_rendererBase)->device;
         const int side = m_patchSize + 1;
         D3DXCreateMeshFVF(vc71::vectorSizeIn(indices, 2u) / 3u, static_cast<unsigned long>(side * side),
-                          0x110u, 2u, device, reinterpret_cast<void**>(&mesh));
+                          0x110u, 2u, device, &mesh);
     }
     void* data = 0;
     mesh->LockIndexBuffer(0, &data);
@@ -1418,8 +1350,8 @@ void Terrain::optimizeLodIndices(vc71::vector_layout& indices)
     }
     mesh->UnlockVertexBuffer();
 
-    LodD3DXBuffer* adjacency = 0;
-    D3DXCreateBuffer(12u * mesh->GetNumFaces(), reinterpret_cast<void**>(&adjacency));
+    ID3DXBuffer* adjacency = 0;
+    D3DXCreateBuffer(12u * mesh->GetNumFaces(), &adjacency);
     mesh->GenerateAdjacency(0.1f, static_cast<DWORD*>(adjacency->GetBufferPointer()));
     mesh->Release();
 
@@ -1428,7 +1360,7 @@ void Terrain::optimizeLodIndices(vc71::vector_layout& indices)
         IDirect3DDevice9* const device = static_cast<dx9rend::RendDX9Base*>(dx9rend::g_rendererBase)->device;
         const int side = m_patchSize + 1;
         D3DXCreateMesh(vc71::vectorSizeIn(indices, 2u) / 3u, static_cast<unsigned long>(side * side),
-                       0x110u, kDeclPatchSingle, device, reinterpret_cast<void**>(&mesh));
+                       0x110u, kDeclPatchSingle, device, &mesh);
     }
     data = 0;
     mesh->LockIndexBuffer(0, &data);
@@ -1618,8 +1550,8 @@ void Terrain::uploadSurroundingVertices(void* vertexBuffer, const vc71::vector_l
             {
                 float u = src[2];
                 float v = src[3];
-                D3DXFloat32To16Array(dst + 4, &u, 1);
-                D3DXFloat32To16Array(dst + 6, &v, 1);
+                D3DXFloat32To16Array(reinterpret_cast<D3DXFLOAT16*>(dst + 4), &u, 1);
+                D3DXFloat32To16Array(reinterpret_cast<D3DXFLOAT16*>(dst + 6), &v, 1);
                 dst += 8;
             }
             else

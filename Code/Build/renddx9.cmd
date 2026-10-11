@@ -20,6 +20,11 @@ if not "%~2"=="" goto :usage
 if not "%~1"=="" if /i not "%~1"=="native" goto :usage
 call "%~dp0vsdevcmd.cmd" x86
 if errorlevel 1 exit /b 1
+rem The D3DX headers and import library come from the installed April 2005 DirectX SDK, the
+rem generation whose d3dx9.lib binds d3dx9_25.dll as retail RendDX9 does. dxsdk.cmd refuses any
+rem other SDK and appends it to INCLUDE/LIB after the Windows SDK.
+call "%~dp0dxsdk.cmd" x86
+if errorlevel 1 exit /b 1
 
 for %%I in ("%~dp0..") do set CODE=%%~fI
 set ABI=%CODE%\RendDX9Abi
@@ -32,22 +37,7 @@ rem Agent/CI isolation keeps builds out of another contributor's directories.
 if defined BF2_RENDDX9_OUT set OUT=%BF2_RENDDX9_OUT%
 if defined BF2_RENDDX9_BIN set BIN=%BF2_RENDDX9_BIN%
 
-rem Prefer the stock import library from the exact SDK generation BF2 used.  Do not silently take
-rem a later d3dx9.lib: the June 2010 SDK's library names d3dx9_43.dll, while retail RendDX9 names
-rem d3dx9_25.dll.  Keep the narrow .def-generated library as the reproducible no-SDK fallback.
-set "DXSDK_2005_ROOT="
-set "DXSDK_CANDIDATE="
-if defined DXSDK_DIR for %%I in ("%DXSDK_DIR%\.") do set "DXSDK_CANDIDATE=%%~fI"
-if defined DXSDK_CANDIDATE if exist "%DXSDK_CANDIDATE%\Include\d3dx9core.h" (
-    findstr /c:"#define D3DX_SDK_VERSION 25" "%DXSDK_CANDIDATE%\Include\d3dx9core.h" >nul 2>&1
-    if not errorlevel 1 if exist "%DXSDK_CANDIDATE%\Lib\x86\d3dx9.lib" set "DXSDK_2005_ROOT=%DXSDK_CANDIDATE%"
-)
-if not defined DXSDK_2005_ROOT if exist "C:\Program Files (x86)\Microsoft DirectX 9.0 SDK (April 2005)\Include\d3dx9core.h" (
-    findstr /c:"#define D3DX_SDK_VERSION 25" "C:\Program Files (x86)\Microsoft DirectX 9.0 SDK (April 2005)\Include\d3dx9core.h" >nul 2>&1
-    if not errorlevel 1 if exist "C:\Program Files (x86)\Microsoft DirectX 9.0 SDK (April 2005)\Lib\x86\d3dx9.lib" set "DXSDK_2005_ROOT=C:\Program Files (x86)\Microsoft DirectX 9.0 SDK (April 2005)"
-)
-set "D3DX25_LIB=%OUT%\d3dx9_25.lib"
-if defined DXSDK_2005_ROOT set "D3DX25_LIB=%DXSDK_2005_ROOT%\Lib\x86\d3dx9.lib"
+set "D3DX25_LIB=%BF2_DXSDK_LIB%\d3dx9.lib"
 
 rem /MD - shares the rebuilt client's native CRT/STL ABI; BfMemory's native branch does
 rem   keep the global replacements, but routes them to that shared CRT and never references
@@ -75,18 +65,11 @@ del /q "%OUT%\*.log" >nul 2>&1
 rem ---------------------------------------------------------------------------
 rem STEP 1 - import libraries.
 rem
-rem Build the Bink import library. D3DX uses the exact April 2005 SDK library when present,
-rem or manufactures the same
-rem d3dx9_25.dll binding from the retained .def when that SDK is absent.
+rem Build the Bink and TextureAtlasBuilder import libraries. D3DX links the DirectX SDK's own
+rem d3dx9.lib (D3DX25_LIB above).
 rem ---------------------------------------------------------------------------
 set LIB_BAD=0
-if defined DXSDK_2005_ROOT (
-    >"%OUT%\lib.log" echo [D3DX] official April 2005 SDK import library: "%D3DX25_LIB%"
-) else (
-    >"%OUT%\lib.log" echo [D3DX] exact SDK absent; generating d3dx9_25.lib from D3dx9_25.def
-    lib /nologo /def:"%ABI%\D3dx9_25.def" /machine:x86 /out:"%D3DX25_LIB%" >>"%OUT%\lib.log" 2>&1
-    if errorlevel 1 set LIB_BAD=1
-)
+>"%OUT%\lib.log" echo [D3DX] DirectX SDK import library: "%D3DX25_LIB%"
 echo [1/4] import libraries - native ABI, no Memory.dll
 lib /nologo /def:"%ABI%\binkw32.def" /machine:x86 /out:"%OUT%\binkw32.lib" >>"%OUT%\lib.log" 2>&1
 if errorlevel 1 set LIB_BAD=1
@@ -340,6 +323,13 @@ if errorlevel 1 (
 findstr /i /c:"api-ms-win-crt-heap-" /c:"ucrtbase.dll" "%OUT%\dependents.txt" >nul
 if errorlevel 1 (
     echo   imports:      native shared CRT heap MISSING
+    set /a ABI_BAD+=1
+)
+rem Retail RendDX9 imports d3dx9_25.dll. A different D3DX DLL here means the link took another
+rem SDK's d3dx9.lib, with a different effect compiler behind it.
+findstr /i /c:"d3dx9_25.dll" "%OUT%\dependents.txt" >nul
+if errorlevel 1 (
+    echo   imports:      d3dx9_25.dll MISSING - D3DX must come from the April 2005 SDK
     set /a ABI_BAD+=1
 )
 if not "!ABI_BAD!"=="0" (

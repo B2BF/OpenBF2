@@ -7,7 +7,7 @@
 #include "../../../RendDX9Abi/Frontier.h"
 #include "../../../RendDX9Abi/PluginEntry.h"   // dice::hfe::fileManager - the +0x38 getFileInfo probe
 #include "../../../RendDX9Abi/Vc71Map.h"       // the 0x30-byte VC7.1 map the +0x54 MetaFx cache uses
-#include "../../../RendDX9Abi/D3dxEffect.h"    // the audited slot caller; every offset below is read
+#include "../../../RendDX9Abi/D3dx9Sdk.h"
 #include "../RendDX9Base.h"
 #include "../../RendMisc/IRenderer.h"   // Renderer +0xBC, typed (see below)
 #include "../../Game/Main/IVideoOptions.h"
@@ -59,24 +59,6 @@ extern void* g_stateManager;
 
 // Shared in-place shader deobfuscation.
 void deobfuscateShader(unsigned char* buf, unsigned int size);
-
-
-// D3DX imports declared locally because current Windows SDK headers omit D3DX9.
-
-struct RaD3DXMACRO
-{
-    const char* Name;
-    const char* Definition;
-};
-
-#pragma comment(linker, "/alternatename:_D3DXCreateEffect@36=_D3DXCreateEffect")
-#pragma comment(linker, "/alternatename:_D3DXCreateBuffer@8=_D3DXCreateBuffer")
-
-extern "C" long __stdcall D3DXCreateEffect(void* pDevice, const void* pSrcData,
-                                           unsigned int SrcDataLen, const RaD3DXMACRO* pDefines,
-                                           void* pInclude, unsigned long Flags, void* pPool,
-                                           void** ppEffect, void** ppCompilationErrors);
-extern "C" long __stdcall D3DXCreateBuffer(unsigned int NumBytes, void** ppBuffer);
 
 namespace Ra {
 
@@ -231,8 +213,9 @@ public:
     void* compileEffect(const vc71::string& name, int unused, void** effectOut);
 
     // Compiles source into an ID3DXBuffer containing effect bytecode.
-    void* compileEffectSource(const char* source, unsigned int sourceLen,
-                              const RaD3DXMACRO* defines, unsigned long* flags, void** errors);
+    ID3DXBuffer* compileEffectSource(const char* source, unsigned int sourceLen,
+                                     const D3DXMACRO* defines, unsigned long* flags,
+                                     ID3DXBuffer** errors);
 
     // sub_10033DB0, `retn 8`. Reads one effect file whole into an engine-heap, NUL-terminated
     // buffer. Falls back to the in-memory table and then to generating the permutation.
@@ -248,7 +231,7 @@ public:
     bool generateMissingShader(const vc71::string& name);
 
     // sub_10033170, `retn 8`. Write a compiled blob to the .cfx cache, index-XORed.
-    bool writeEffectCache(void* blob, const vc71::string& path);
+    bool writeEffectCache(ID3DXBuffer* blob, const vc71::string& path);
 
     // The include handler needs these three; it runs as a free __stdcall function on m_sub.
     const vc71::string& debugDefines() const { return m_debugDefines; }
@@ -609,8 +592,7 @@ void EffectManager::resetEffects()
     {
         if (node->effect)
         {
-            // Cached effects are COM interfaces: Release uses __stdcall and an explicit receiver.
-            ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxReleaseFn>(node->effect, 0x08)(node->effect);
+            static_cast<ID3DXEffect*>(static_cast<void*>(node->effect))->Release();
             node->effect = 0;
         }
 
@@ -1427,14 +1409,13 @@ unsigned int EffectManager::readEffectFile(const vc71::string& name, unsigned ch
 // Writes a binary compiled-effect cache with each byte XORed by its index.
 // Returns false if the output cannot be opened; individual writes are unchecked.
 
-bool EffectManager::writeEffectCache(void* blob, const vc71::string& path)
+bool EffectManager::writeEffectCache(ID3DXBuffer* blob, const vc71::string& path)
 {
     renddx9abi::HostStream* const file = raOpen(path, 0, 2);  // FileManager +0x18, the write pair
     if (!file)
         return false;
 
-    const unsigned int size =
-        ::renddx9abi::d3dxSlot<unsigned int (__stdcall*)(void*)>(blob, 0x10)(blob);
+    const unsigned int size = blob->GetBufferSize();
 
     char* const copy = static_cast<char*>(::renddx9abi::engineAlloc(size));
     if (!copy)
@@ -1448,9 +1429,7 @@ bool EffectManager::writeEffectCache(void* blob, const vc71::string& path)
         return false;
     }
 
-    const char* const src =
-        static_cast<const char*>(
-            ::renddx9abi::d3dxSlot<void* (__stdcall*)(void*)>(blob, 0x0C)(blob));
+    const char* const src = static_cast<const char*>(blob->GetBufferPointer());
     ::memcpy(copy, src, size);
 
     for (unsigned int i = 0; i < size; ++i)
@@ -1520,23 +1499,13 @@ const char* const kForce14[2][2] =
 // dword_101E12F8 - the minimum (major<<8 | minor) pixel-shader version each psmodel row needs.
 const unsigned int kMinPsVersion[5] = { 0x103u, 0x104u, 0x201u, 0x202u, 0x200u };
 
-// ID3DXBuffer and ID3DXEffectCompiler, by the offsets their call sites use.
-typedef unsigned long (__stdcall* RaBufReleaseFn)(void*);                      // +0x08
-typedef void*         (__stdcall* RaBufGetPointerFn)(void*);                   // +0x0C
-typedef unsigned int  (__stdcall* RaBufGetSizeFn)(void*);                      // +0x10
-typedef long (__stdcall* RaFxCompileEffectFn)(void*, unsigned long, void**, void**);  // +0x0EC
-typedef void* (__stdcall* RaFxGetTechniqueByNameFn)(void*, const char*);              // +0x034
-typedef long (__stdcall* RaFxFindNextValidTechniqueFn)(void*, void*, void**);         // +0x0F4
-typedef long (__stdcall* RaFxOnLostDeviceFn)(void*);                                  // +0x114
-typedef long (__stdcall* RaFxOnResetDeviceFn)(void*);                                 // +0x118
-typedef long (__stdcall* RaFxSetStateManagerFn)(void*, void*);                        // +0x11C
-
-inline void raRelease(void*& p)
+template <typename Interface>
+inline void raRelease(Interface*& p)
 {
     // sub_10035DC0 - `if (p) { p->Release(); p = 0; }`, the 23-byte helper every arm here uses.
     if (p)
     {
-        ::renddx9abi::d3dxSlot<RaBufReleaseFn>(p, 0x08)(p);
+        p->Release();
         p = 0;
     }
 }
@@ -1556,20 +1525,16 @@ bool rendererDeviceWasReset()
 // This local copy retains its module reference. Consolidate it with the permutator's
 // helper when that helper has a shared declaration and external linkage.
 
-typedef long (__stdcall* RaD3dxCreateEffectCompilerFn)(const char* srcData,
-                                                       unsigned int srcDataLen,
-                                                       const void* defines,
-                                                       void* include,
-                                                       unsigned long flags,
-                                                       void** compilerOut,
-                                                       void** parseErrorsOut);
+typedef HRESULT (WINAPI* RaD3dxCreateEffectCompilerFn)(LPCSTR, UINT, CONST D3DXMACRO*,
+                                                       LPD3DXINCLUDE, DWORD,
+                                                       LPD3DXEFFECTCOMPILER*, LPD3DXBUFFER*);
 
 HMODULE                      s_raD3dxModule = 0;              // dword_1023E108
 RaD3dxCreateEffectCompilerFn s_raCreateEffectCompiler = 0;    // dword_1023E10C
 
 long raCreateEffectCompiler(const char* srcData, unsigned int srcDataLen,
-                            const void* defines, void* include, unsigned long flags,
-                            void** compilerOut, void** parseErrorsOut)
+                            const D3DXMACRO* defines, LPD3DXINCLUDE include, unsigned long flags,
+                            ID3DXEffectCompiler** compilerOut, ID3DXBuffer** parseErrorsOut)
 {
     if (!s_raD3dxModule)
     {
@@ -1615,9 +1580,9 @@ void raFormatGuid(char out[40], const GUID& guid)
 // Returns a compiled-effect buffer, or null with compiler diagnostics in errors.
 // The optional second pass fixes projected-texture shaders for pixel shader 1.4.
 
-void* EffectManager::compileEffectSource(const char* source, unsigned int sourceLen,
-                                         const RaD3DXMACRO* defines, unsigned long* flags,
-                                         void** errors)
+ID3DXBuffer* EffectManager::compileEffectSource(const char* source, unsigned int sourceLen,
+                                                const D3DXMACRO* defines, unsigned long* flags,
+                                                ID3DXBuffer** errors)
 {
     {
         // The shipped expression, with the four copy-constructed temporaries MSVC emitted for it
@@ -1627,16 +1592,17 @@ void* EffectManager::compileEffectSource(const char* source, unsigned int source
         m_sub->text = generated;
     }
 
-    void* blob = 0;
+    ID3DXBuffer* blob = 0;
 
     for (int pass = 1; ; ++pass)
     {
-        void* compiler = 0;
+        ID3DXEffectCompiler* compiler = 0;
 
         // sub_1003C610 - the lazily-bound D3DXCreateEffectCompiler in d3dx9_24.dll, with `pInclude`
-        // set to this object's +0x44 sub-object.
+        // set to this object's +0x44 sub-object, whose +0x00 is the off_101E139C include table.
         const long created = raCreateEffectCompiler(
-            source, sourceLen, defines, m_sub, *flags, &compiler, errors);
+            source, sourceLen, defines, reinterpret_cast<LPD3DXINCLUDE>(m_sub), *flags, &compiler,
+            errors);
         if (created != 0)
         {
             raRelease(compiler);
@@ -1646,14 +1612,13 @@ void* EffectManager::compileEffectSource(const char* source, unsigned int source
         raRelease(*errors);
 
         blob = 0;
-        const long hr = ::renddx9abi::d3dxSlot<RaFxCompileEffectFn>(compiler, 0x0EC)(
-            compiler, *flags, &blob, errors);
+        const long hr = compiler->CompileEffect(*flags, &blob, errors);
         raRelease(compiler);
 
         if (hr != 0)
         {
             if (blob)
-                ::renddx9abi::d3dxSlot<RaBufReleaseFn>(blob, 0x08)(blob);
+                blob->Release();
             return 0;
         }
 
@@ -1797,15 +1762,15 @@ void* EffectManager::compileEffect(const vc71::string& name, int unused, void** 
         return 0;
     }
 
-    void* effect    = 0;
-    void* errors    = 0;
-    void* technique = 0;
+    ID3DXEffect* effect    = 0;
+    ID3DXBuffer* errors    = 0;
+    D3DXHANDLE   technique = 0;
 
     if (useCache)
     {
         // Read the cached effect again into D3DX-owned storage.
         // Local failure guards report a bad cache and leave a null effect for build failure.
-        void* buffer = 0;
+        ID3DXBuffer* buffer = 0;
         if (D3DXCreateBuffer(cacheInfo.size, &buffer) != 0)
             ::renddx9abi::logf("EffectManager.cpp:1000 (D3DXCreateBuffer(%u) failed for \"%s\")",
                                cacheInfo.size, cachePath.c_str());
@@ -1813,7 +1778,7 @@ void* EffectManager::compileEffect(const vc71::string& name, int unused, void** 
         renddx9abi::HostStream* const file = raOpen(cachePath, 2, 0);
         if (file && buffer)
         {
-            void* const dst = ::renddx9abi::d3dxSlot<RaBufGetPointerFn>(buffer, 0x0C)(buffer);
+            void* const dst = buffer->GetBufferPointer();
             const unsigned int read = file->read(dst, cacheInfo.size);
             if (read != cacheInfo.size)
                 ::renddx9abi::logf("EffectManager.cpp:1004 (read %u of %u from \"%s\")",
@@ -1824,19 +1789,17 @@ void* EffectManager::compileEffect(const vc71::string& name, int unused, void** 
 
         if (buffer)
         {
-            const unsigned int size =
-                ::renddx9abi::d3dxSlot<RaBufGetSizeFn>(buffer, 0x10)(buffer);
-            char* const bytes =
-                static_cast<char*>(::renddx9abi::d3dxSlot<RaBufGetPointerFn>(buffer, 0x0C)(buffer));
+            const unsigned int size = buffer->GetBufferSize();
+            char* const bytes = static_cast<char*>(buffer->GetBufferPointer());
             for (unsigned int i = 0; i < size; ++i)
                 bytes[i] = static_cast<char>(bytes[i] ^ static_cast<char>(i));
 
             const unsigned long createFlags = flags | (m_byte62 ? 0x800u : 0u);
             const long hr = D3DXCreateEffect(
                 m_device,
-                ::renddx9abi::d3dxSlot<RaBufGetPointerFn>(buffer, 0x0C)(buffer),
-                ::renddx9abi::d3dxSlot<RaBufGetSizeFn>(buffer, 0x10)(buffer),
-                0, 0, createFlags, m_effectPool, &effect, &errors);
+                buffer->GetBufferPointer(),
+                buffer->GetBufferSize(),
+                0, 0, createFlags, static_cast<LPD3DXEFFECTPOOL>(m_effectPool), &effect, &errors);
             if (hr != 0)
                 ::renddx9abi::logf("EffectManager.cpp:1016 Failed to create effect: hr=0x%08X (%s)",
                                    static_cast<unsigned>(hr), cachePath.c_str());
@@ -1844,12 +1807,10 @@ void* EffectManager::compileEffect(const vc71::string& name, int unused, void** 
 
         if (effect)
         {
-            technique = ::renddx9abi::d3dxSlot<RaFxGetTechniqueByNameFn>(effect, 0x34)(
-                effect, "defaultTechnique");
+            technique = effect->GetTechniqueByName("defaultTechnique");
             if (!technique)
-                ::renddx9abi::d3dxSlot<RaFxFindNextValidTechniqueFn>(effect, 0xF4)(
-                    effect, 0, &technique);
-            ::renddx9abi::d3dxSlot<RaFxOnLostDeviceFn>(effect, 0x114)(effect);
+                effect->FindNextValidTechnique(0, &technique);
+            effect->OnLostDevice();
 
             raRelease(buffer);
 
@@ -1858,13 +1819,11 @@ void* EffectManager::compileEffect(const vc71::string& name, int unused, void** 
             // Both OnLostDevice calls are shipped and both are kept.
             if (g_Renderer && rendererDeviceWasReset())
             {
-                ::renddx9abi::d3dxSlot<RaFxOnResetDeviceFn>(effect, 0x118)(effect);
-                technique = ::renddx9abi::d3dxSlot<RaFxGetTechniqueByNameFn>(effect, 0x34)(
-                    effect, "defaultTechnique");
+                effect->OnResetDevice();
+                technique = effect->GetTechniqueByName("defaultTechnique");
                 if (!technique)
-                    ::renddx9abi::d3dxSlot<RaFxFindNextValidTechniqueFn>(effect, 0xF4)(
-                        effect, 0, &technique);
-                ::renddx9abi::d3dxSlot<RaFxOnLostDeviceFn>(effect, 0x114)(effect);
+                    effect->FindNextValidTechnique(0, &technique);
+                effect->OnLostDevice();
             }
         }
         else
@@ -1913,7 +1872,7 @@ void* EffectManager::compileEffect(const vc71::string& name, int unused, void** 
                     psIndex = 0;
                 }
 
-                RaD3DXMACRO defines[7];
+                D3DXMACRO defines[7];
                 defines[0].Name = kVsModel[vsIndex][0];  defines[0].Definition = kVsModel[vsIndex][1];
                 defines[1].Name = kPsModel[psIndex][0];  defines[1].Definition = kPsModel[psIndex][1];
                 defines[2].Name = kForce14[forceIndex][0];
@@ -1927,7 +1886,7 @@ void* EffectManager::compileEffect(const vc71::string& name, int unused, void** 
                 raRelease(errors);
 
                 unsigned long passFlags = flags;      // the shipped body passes a copy by pointer
-                void* const blob = compileEffectSource(
+                ID3DXBuffer* const blob = compileEffectSource(
                     reinterpret_cast<const char*>(source), sourceLen, defines, &passFlags, &errors);
                 if (!blob)
                     continue;
@@ -1937,9 +1896,10 @@ void* EffectManager::compileEffect(const vc71::string& name, int unused, void** 
 
                 const long hr = D3DXCreateEffect(
                     m_device,
-                    ::renddx9abi::d3dxSlot<RaBufGetPointerFn>(blob, 0x0C)(blob),
-                    ::renddx9abi::d3dxSlot<RaBufGetSizeFn>(blob, 0x10)(blob),
-                    0, 0, createFlags, m_effectPool, &effect, &errors);
+                    blob->GetBufferPointer(),
+                    blob->GetBufferSize(),
+                    0, 0, createFlags, static_cast<LPD3DXEFFECTPOOL>(m_effectPool), &effect,
+                    &errors);
 
                 // NOT reproduced, AND nothing IS lost. 0x1003573D and 0x10035743 call
                 // DXGetErrorStringA (sub_1005F380, 48,672 B) and DXGetErrorDescription9A
@@ -1950,19 +1910,18 @@ void* EffectManager::compileEffect(const vc71::string& name, int unused, void** 
                 if (!effect)
                     continue;
 
-                ::renddx9abi::d3dxSlot<RaFxFindNextValidTechniqueFn>(effect, 0xF4)(
-                    effect, 0, &technique);
-                ::renddx9abi::d3dxSlot<RaFxOnLostDeviceFn>(effect, 0x114)(effect);
+                effect->FindNextValidTechnique(0, &technique);
+                effect->OnLostDevice();
 
                 if (technique)
                 {
                     g_anyEffectCompiled = 1;                  // byte_1023D950
                     writeEffectCache(blob, cachePath);
-                    ::renddx9abi::d3dxSlot<RaBufReleaseFn>(blob, 0x08)(blob);
+                    blob->Release();
                     goto compiled;
                 }
 
-                ::renddx9abi::d3dxSlot<RaBufReleaseFn>(blob, 0x08)(blob);
+                blob->Release();
                 raRelease(effect);
             }
             ++vsIndex;
@@ -1974,7 +1933,7 @@ compiled:
     {
         // Release the caller's previous effect before replacing it.
         if (*effectOut)
-            ::renddx9abi::d3dxSlot<RaBufReleaseFn>(*effectOut, 0x08)(*effectOut);
+            static_cast<ID3DXEffect*>(*effectOut)->Release();
         *effectOut = effect;
 
 
@@ -2075,7 +2034,8 @@ void* EffectManager::getEffect(const vc71::string& name)
                 vc71::mapNodeValueRef(node) = effect;
 
             // Requires the published StateManager.
-            ::renddx9abi::d3dxSlot<RaFxSetStateManagerFn>(effect, 0x11C)(effect, g_stateManager);
+            static_cast<ID3DXEffect*>(effect)->SetStateManager(
+                static_cast<LPD3DXEFFECTSTATEMANAGER>(g_stateManager));
         }
     }
 

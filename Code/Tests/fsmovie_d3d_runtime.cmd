@@ -12,16 +12,16 @@ if not exist "%TASK_NATIVE%\22_ShaderManager.obj" exit /b 2
 if not exist "%TASK_NATIVE%\TextureAtlasBuilder.lib" exit /b 2
 call "%~dp0..\Build\vsdevcmd.cmd" x86
 if errorlevel 1 exit /b 1
+call "%~dp0..\Build\dxsdk.cmd" x86
+if errorlevel 1 exit /b 1
 mkdir "%TASK_OUT%"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0fsmovie_stock_shader.ps1" -GameDirectory "%TASK_GAME%" -OutputFile "%TASK_OUT%\LoadingScreen.fx"
-if errorlevel 1 exit /b 1
-lib /nologo /def:"%TASK_CODE%\RendDX9Abi\D3dx9_25.def" /machine:x86 /out:"%TASK_OUT%\d3dx9_25.lib" >"%TASK_OUT%\imports.log" 2>&1
 if errorlevel 1 exit /b 1
 cl /nologo /c /MD /std:c++14 /permissive /EHsc /Od /Z7 /Gy /DBF2_IMAGE_RENDDX9 /DDEDICATED=0 /DBF2_PLUGIN_ABI_NATIVE=1 /D_ITERATOR_DEBUG_LEVEL=0 /D_CRT_SECURE_NO_WARNINGS /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%~dp0fsmovie_d3d_runtime.cpp" /Fo"%TASK_OUT%\fixture.obj" >"%TASK_OUT%\compile.log" 2>&1
 if errorlevel 1 (type "%TASK_OUT%\compile.log" & exit /b 1)
 type nul >"%TASK_OUT%\objects.rsp"
 for %%F in ("%TASK_NATIVE%\*.obj") do if /i not "%%~nF"=="22_ShaderManager" echo "%%~fF">>"%TASK_OUT%\objects.rsp"
-link /nologo /MACHINE:X86 /DEBUG /OPT:REF /INCREMENTAL:NO /SUBSYSTEM:CONSOLE /OUT:"%TASK_OUT%\fsmovie_d3d_runtime.exe" /PDB:"%TASK_OUT%\fixture.pdb" /MAP:"%TASK_OUT%\fixture.map" "%TASK_OUT%\fixture.obj" @"%TASK_OUT%\objects.rsp" "%TASK_OUT%\d3dx9_25.lib" "%TASK_NATIVE%\binkw32.lib" "%TASK_NATIVE%\TextureAtlasBuilder.lib" kernel32.lib user32.lib d3d9.lib >"%TASK_OUT%\link.log" 2>&1
+link /nologo /MACHINE:X86 /DEBUG /OPT:REF /INCREMENTAL:NO /SUBSYSTEM:CONSOLE /OUT:"%TASK_OUT%\fsmovie_d3d_runtime.exe" /PDB:"%TASK_OUT%\fixture.pdb" /MAP:"%TASK_OUT%\fixture.map" "%TASK_OUT%\fixture.obj" @"%TASK_OUT%\objects.rsp" "%BF2_DXSDK_LIB%\d3dx9.lib" "%TASK_NATIVE%\binkw32.lib" "%TASK_NATIVE%\TextureAtlasBuilder.lib" kernel32.lib user32.lib d3d9.lib >"%TASK_OUT%\link.log" 2>&1
 if errorlevel 1 (type "%TASK_OUT%\link.log" & exit /b 1)
 set "PATH=%TASK_GAME%;%PATH%"
 set "BF2_RENDDX9_FRONTIER="

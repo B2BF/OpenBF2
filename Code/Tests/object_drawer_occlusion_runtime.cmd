@@ -4,6 +4,8 @@ rem [TEMP] Strict native x86 actual-ObjectDrawer regression; no game or original
 if not "%~1"=="" (echo Usage: %~nx0& exit /b 2)
 call "%~dp0..\Build\vsdevcmd.cmd" x86
 if errorlevel 1 exit /b 1
+call "%~dp0..\Build\dxsdk.cmd" x86
+if errorlevel 1 exit /b 1
 set "TASK_ROOT=%~dp0.."
 if not defined BF2_BUILD_OUT set "BF2_BUILD_OUT=%~dp0..\Build\obj_culling_recovery_tests"
 if not exist "%BF2_BUILD_OUT%" mkdir "%BF2_BUILD_OUT%"

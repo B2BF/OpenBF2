@@ -8,6 +8,8 @@ rem
 rem The .occ files are extracted from the stock archives on first run into
 rem %BF2_BUILD_OUT%\occ\. BF2_GAME_DIR overrides the game folder.
 call "%~dp0..\Build\vsdevcmd.cmd" x86
+call "%~dp0..\Build\dxsdk.cmd" x86
+if errorlevel 1 exit /b 1
 set "TASK_ROOT=%~dp0.."
 if not defined BF2_GAME_DIR set "BF2_GAME_DIR=D:\B2BF Launcher\Battlefield2"
 if not defined BF2_BUILD_OUT set "BF2_BUILD_OUT=%~dp0..\Build\occluders_20260926"

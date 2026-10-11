@@ -21,12 +21,16 @@ int checks=0,failures=0;
 void check(bool value,const char* label)
 { ++checks;if(!value){++failures;std::fprintf(stderr,"FAIL: %s\n",label);} }
 std::vector<std::string> events;
+// A COM-shaped stand-in for ID3DXEffect: the vtable pointer first, then recorder state. The x86
+// table entries are __stdcall functions taking the object first, as the SDK interface's methods are.
 struct FakeD3dx
 {
     void** table;
     unsigned int passes;
     void* handle;
 };
+ID3DXEffect* asEffect(FakeD3dx* fake) { return reinterpret_cast<ID3DXEffect*>(fake); }
+D3DXHANDLE asHandle(void* handle) { return static_cast<D3DXHANDLE>(handle); }
 // [TEMP] D3DX reflection outputs for recorded technique/annotation cases only.
 struct TechniqueSeed
 {
@@ -53,8 +57,8 @@ void* __stdcall getTechniqueByName(void*,const char* name)
 long __stdcall getTechniqueDesc(void*,void* handle,void* output)
 {
     auto seed=static_cast<TechniqueSeed*>(handle);
-    auto desc=static_cast<dice::hfe::dx9rend::D3dxTechniqueDesc*>(output);
-    desc->name=seed->name;desc->passes=seed->passes;desc->annotations=seed->annotations;
+    auto desc=static_cast<D3DXTECHNIQUE_DESC*>(output);
+    desc->Name=seed->name;desc->Passes=seed->passes;desc->Annotations=seed->annotations;
     events.push_back(std::string("describe:")+seed->name);
     return -1; // The production caller must use outputs despite a failed HRESULT.
 }
@@ -74,8 +78,8 @@ void* __stdcall annotation(void*,void* handle,const char* name)
 long __stdcall parameterDesc(void*,void* handle,void* output)
 {
     auto values=static_cast<std::vector<int>*>(handle);
-    auto desc=static_cast<dice::hfe::dx9rend::D3dxParameterDescView*>(output);
-    desc->elements=static_cast<unsigned>(values->size());
+    auto desc=static_cast<D3DXPARAMETER_DESC*>(output);
+    desc->Elements=static_cast<unsigned>(values->size());
     return -1;
 }
 long __stdcall getInts(void*,void* handle,int* output,unsigned count)
@@ -148,7 +152,7 @@ int main()
     // Real constructor. Explicit process lifetime: Effect::release/destructor
     // remains an unrelated renderer frontier, and is not shadowed or invoked.
     Effect* effect=new Effect;
-    effect->m_d3dxEffect=&fake;
+    effect->m_d3dxEffect=asEffect(&fake);
     EffectTechnique* recordObject=new EffectTechnique;
     EffectTechnique* state=new EffectTechnique;
     auto record=reinterpret_cast<unsigned char*>(recordObject);
@@ -206,7 +210,7 @@ int main()
     table[0x5C/4]=reinterpret_cast<void*>(&getBool);
     table[0x74/4]=reinterpret_cast<void*>(&getInts);
     table[0xF0/4]=reinterpret_cast<void*>(&validate);
-    Effect* reflected=new Effect;reflected->m_d3dxEffect=&fake;
+    Effect* reflected=new Effect;reflected->m_d3dxEffect=asEffect(&fake);
     TechniqueSeed menu{"Menu",5,23,0,{},false,0};
     TechniqueSeed states{"Menu_States",2,91,0,{},true,7};
     TechniqueSeed quad{"QuadWithTexture",1,47,0,
@@ -279,24 +283,24 @@ int main()
 
     // Real bf2/xpack QuadCache annotation differences from the retained shader.
     quad.declaration={0,3,0,0, 0,3,10,0, 0,1,5,0, 0,1,5,1, 255,17,0,0};
-    void* cacheOutput=nullptr;reflected->readDeclaration(&quad,&cacheOutput);
+    void* cacheOutput=nullptr;reflected->readDeclaration(asHandle(&quad),&cacheOutput);
     check(recordedDeclaration[2].Offset==32 && recordedDeclaration[3].Offset==40,"bf2 QuadCache FLOAT4 color layout");
-    quad.declaration[5]=4;reflected->readDeclaration(&quad,&cacheOutput);
+    quad.declaration[5]=4;reflected->readDeclaration(asHandle(&quad),&cacheOutput);
     check(recordedDeclaration[2].Offset==20 && recordedDeclaration[3].Offset==28,"xpack QuadCache packed D3DCOLOR layout");
     // Adversarial finite annotations verify stream comparison before truncation.
     quad.declaration={0,3,0,0, 0,1,5,0, 256,0x101,0x105,0x102, 256,2,5,0,
                       1,4,10,0, 1,17,0,0, 255,17,0,0};
     void* output=reinterpret_cast<void*>(0x444);const int releasesBefore=declarationReleases;
-    check(reflected->readDeclaration(&quad,&output),"valid annotation returns true");
+    check(reflected->readDeclaration(asHandle(&quad),&output),"valid annotation returns true");
     check(recordedDeclaration[2].Stream==0 && recordedDeclaration[2].Offset==0 &&
           recordedDeclaration[2].Type==1 && recordedDeclaration[2].Usage==5 && recordedDeclaration[2].UsageIndex==2,
           "full stream change resets offset even when truncated stream is equal");
     check(recordedDeclaration[3].Offset==8 && recordedDeclaration[4].Offset==0 && recordedDeclaration[5].Offset==4,
           "offset accumulation follows type sizes and actual stream transitions");
     check(declarationReleases==releasesBefore,"annotation reader overwrites output without releasing previous wrapper");
-    declarationResult=nullptr;check(reflected->readDeclaration(&quad,&output) && !output,"null wrapper creation still reports annotation success");
+    declarationResult=nullptr;check(reflected->readDeclaration(asHandle(&quad),&output) && !output,"null wrapper creation still reports annotation success");
     quad.declaration.clear();output=reinterpret_cast<void*>(0x444);
-    check(!reflected->readDeclaration(&quad,&output) && !output,"missing Declaration clears output then returns false");
+    check(!reflected->readDeclaration(asHandle(&quad),&output) && !output,"missing Declaration clears output then returns false");
     const int widths[]={4,8,12,16,4,4,4,8,4,4,8,4,8,4,4,4,8,0};
     for(unsigned i=0;i<18;++i) check(vertexDeclarationTypeSize(i)==widths[i],"complete declaration type-size table");
     check(vertexDeclarationTypeSize(18)==0 && vertexDeclarationTypeSize(0xffffffff)==0,"unknown declaration types return zero after diagnostic");

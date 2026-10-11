@@ -14,12 +14,6 @@
 #include "../../RendDX9Abi/Vc71Vector.h"
 #include "../../RendDX9Abi/Vc71Map.h"
 
-// D3DXFloat32To16Array - the half-float packer the surrounding-ring uploads call when byte +0x3A8
-// selects the FLOAT16_2 vertex format. A static import of the shipped image (`dumpbin /imports`);
-// the decorated-to-undecorated bridge is the same one Effect.cpp documents for D3DXCreateEffect.
-#pragma comment(linker, "/alternatename:_D3DXFloat32To16Array@12=_D3DXFloat32To16Array")
-extern "C" void* __stdcall D3DXFloat32To16Array(void* pOut, const float* pIn, unsigned int n);
-
 namespace dice {
 namespace hfe {
 

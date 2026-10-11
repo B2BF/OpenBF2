@@ -16,6 +16,7 @@
 #include "../RendDX9/ShaderParameter.h"
 #include "../RendDX9/Texture.h"
 #include "../../RendDX9Abi/BfMemory.h"
+#include "../../RendDX9Abi/D3dx9Sdk.h"
 #include "../../RendDX9Abi/Frontier.h"        // renddx9abi::logf - dice's debug stream
 #include "../../RendDX9Abi/HostFileAbi.h"
 #include "../../RendDX9Abi/PluginAbi.h"
@@ -27,19 +28,6 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
-
-// The D3DX entry points this TU calls - static imports of the shipped image (Code/RendDX9Abi/
-// D3dx9_25.def), declared and bridged as QuadPatchEditable.cpp and XpLightManager.cpp do.
-extern "C" HRESULT WINAPI D3DXComputeBoundingSphere(
-    const ::dice::hfe::Vec3* firstPosition, DWORD vertexCount, DWORD stride,
-    ::dice::hfe::Vec3* centre, float* radius);
-extern "C" HRESULT WINAPI D3DXLoadSurfaceFromSurface(
-    IDirect3DSurface9* destination, const PALETTEENTRY* destinationPalette,
-    const RECT* destinationRect, IDirect3DSurface9* source,
-    const PALETTEENTRY* sourcePalette, const RECT* sourceRect,
-    DWORD filter, D3DCOLOR colourKey);
-#pragma comment(linker, "/alternatename:_D3DXComputeBoundingSphere@20=_D3DXComputeBoundingSphere")
-#pragma comment(linker, "/alternatename:_D3DXLoadSurfaceFromSurface@32=_D3DXLoadSurfaceFromSurface")
 
 namespace dice {
 namespace hfe {
@@ -475,7 +463,8 @@ void SurroundingPatchEditable::computeBounds()
         }
         while (z < spanPlusOne);
     }
-    D3DXComputeBoundingSphere(points, static_cast<DWORD>(sideCount * sideCount), 12, &boundsCenter, &boundsRadius);
+    D3DXComputeBoundingSphere(reinterpret_cast<const D3DXVECTOR3*>(points), static_cast<DWORD>(sideCount * sideCount),
+                              12, reinterpret_cast<D3DXVECTOR3*>(&boundsCenter), &boundsRadius);
     ::renddx9abi::engineFree(points);
 
     TerrainAabb box;

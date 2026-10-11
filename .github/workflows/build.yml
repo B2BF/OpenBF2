@@ -54,16 +54,38 @@ jobs:
           if errorlevel 1 exit /b 1
           cmake --build out/build/ci-${{ matrix.arch }} --target ${{ matrix.server }}
 
-      # Keep the client/plugin and editor builds sequential within this checkout.
-      - name: Build the x86 AI library and client with plugins
+      - name: Build the x86 AI library
         if: matrix.arch == 'x86'
         run: |
           call Code\Build\vsdevcmd.cmd x86
           if errorlevel 1 exit /b 1
-          cmake --build out/build/ci-x86 --target bf2_aidll bf2_client
+          cmake --build out/build/ci-x86 --target bf2_aidll
+
+      # RendDX9.dll and TextureAtlasBuilder.dll, and so the client and the editor, build against the
+      # April 2005 DirectX SDK (Code/Build/dxsdk.cmd). Hosted runners do not have it; without it both
+      # images are skipped with a notice and left out of the packages.
+      - name: Locate the April 2005 DirectX SDK
+        id: dxsdk
+        if: matrix.arch == 'x86'
+        run: |
+          call Code\Build\dxsdk.cmd x86
+          if errorlevel 1 (
+            echo ::notice title=DirectX SDK not installed::The x86 client and editor need the April 2005 DirectX SDK; they are not built or packaged on this runner.
+            echo found=false>> "%GITHUB_OUTPUT%"
+          ) else (
+            echo found=true>> "%GITHUB_OUTPUT%"
+          )
+
+      # Keep the client/plugin and editor builds sequential within this checkout.
+      - name: Build the x86 client with plugins
+        if: matrix.arch == 'x86' && steps.dxsdk.outputs.found == 'true'
+        run: |
+          call Code\Build\vsdevcmd.cmd x86
+          if errorlevel 1 exit /b 1
+          cmake --build out/build/ci-x86 --target bf2_client
 
       - name: Build the x86 editor with its plugins
-        if: matrix.arch == 'x86'
+        if: matrix.arch == 'x86' && steps.dxsdk.outputs.found == 'true'
         run: |
           call Code\Build\vsdevcmd.cmd x86
           if errorlevel 1 exit /b 1
@@ -72,7 +94,7 @@ jobs:
       # Future Windows signing belongs here, before packaging and checksums.
       # No signing credentials or signing step are configured yet.
       - name: Package Windows binaries
-        run: python Code/Build/package_release.py --platform windows-${{ matrix.arch }} --build-dir out/build/ci-${{ matrix.arch }} --output-dir out/packages --revision "%GITHUB_SHA%" --repository "%GITHUB_REPOSITORY%"
+        run: python Code/Build/package_release.py --platform windows-${{ matrix.arch }} --build-dir out/build/ci-${{ matrix.arch }} --output-dir out/packages --revision "%GITHUB_SHA%" --repository "%GITHUB_REPOSITORY%" ${{ (matrix.arch == 'x86' && steps.dxsdk.outputs.found != 'true') && '--omit client-diagnostic --omit editor-diagnostic' || '' }}
 
       - name: Upload Windows packages
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

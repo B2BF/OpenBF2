@@ -27,20 +27,19 @@
 // vtable/object file.  Keep these harness-only refusal bodies explicit rather than pulling the
 // retail D3DX DLL into the deterministic fixture.
 extern "C" HRESULT WINAPI D3DXCreateSphere(
-    IDirect3DDevice9*, float, unsigned int, unsigned int, RendD3dxMesh**, void**)
+    LPDIRECT3DDEVICE9, FLOAT, UINT, UINT, LPD3DXMESH*, LPD3DXBUFFER*)
 {
     return E_NOTIMPL;
 }
 
 extern "C" HRESULT WINAPI D3DXCreateCylinder(
-    IDirect3DDevice9*, float, float, float, unsigned int, unsigned int,
-    RendD3dxMesh**, void**)
+    LPDIRECT3DDEVICE9, FLOAT, FLOAT, FLOAT, UINT, UINT, LPD3DXMESH*, LPD3DXBUFFER*)
 {
     return E_NOTIMPL;
 }
 
 extern "C" HRESULT WINAPI D3DXCreateBox(
-    IDirect3DDevice9*, float, float, float, RendD3dxMesh**, void**)
+    LPDIRECT3DDEVICE9, FLOAT, FLOAT, FLOAT, LPD3DXMESH*, LPD3DXBUFFER*)
 {
     return E_NOTIMPL;
 }
@@ -48,9 +47,6 @@ extern "C" HRESULT WINAPI D3DXCreateBox(
 // [TEMP] [CHOSEN, not recovered]
 // Shadow-rendering link stubs report and abort if reached; ordinary checks do not render shadow maps.
 // The overgrowth, static-mesh, and terrain globals remain null. Tests driving quality 3 must provide them.
-
-struct D3DXMATRIX;
-struct D3DXVECTOR3;
 
 namespace {
 __declspec(noreturn) void g3FixtureRefusal(const char* name)
@@ -62,12 +58,12 @@ __declspec(noreturn) void g3FixtureRefusal(const char* name)
 }
 
 extern "C" D3DXMATRIX* WINAPI D3DXMatrixLookAtLH(
-    D3DXMATRIX*, const D3DXVECTOR3*, const D3DXVECTOR3*, const D3DXVECTOR3*)
+    D3DXMATRIX*, CONST D3DXVECTOR3*, CONST D3DXVECTOR3*, CONST D3DXVECTOR3*)
 {
     g3FixtureRefusal("D3DXMatrixLookAtLH");
 }
 
-extern "C" D3DXMATRIX* WINAPI D3DXMatrixOrthoLH(D3DXMATRIX*, float, float, float, float)
+extern "C" D3DXMATRIX* WINAPI D3DXMatrixOrthoLH(D3DXMATRIX*, FLOAT, FLOAT, FLOAT, FLOAT)
 {
     g3FixtureRefusal("D3DXMatrixOrthoLH");
 }

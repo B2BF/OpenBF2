@@ -19,6 +19,7 @@
 #include "../RendDX9/ShaderParameter.h"
 #include "../RendDX9/Texture.h"
 #include "../../RendDX9Abi/BfMemory.h"
+#include "../../RendDX9Abi/D3dx9Sdk.h"
 #include "../../RendDX9Abi/Frontier.h"        // renddx9abi::logf - dice's debug stream
 #include "../../RendDX9Abi/HostFileAbi.h"
 #include "../../RendDX9Abi/ModuleCommon.h"
@@ -38,33 +39,6 @@
 #include <sstream>
 #include <string>
 #include <vector>
-
-// The D3DX entry points this TU calls - real static imports of the shipped image (d3dx9_25.dll).
-// D3DX exports undecorated names; /alternatename maps this compiler's decorated references onto them
-// (see Code/RendDX9Abi/D3dx9_25.def). The Vec3 parameters are D3DXVECTOR3* (three floats).
-extern "C" HRESULT WINAPI D3DXComputeBoundingBox(
-    const ::dice::hfe::Vec3* firstPosition, DWORD vertexCount, DWORD stride,
-    ::dice::hfe::Vec3* minimum, ::dice::hfe::Vec3* maximum);
-extern "C" HRESULT WINAPI D3DXComputeBoundingSphere(
-    const ::dice::hfe::Vec3* firstPosition, DWORD vertexCount, DWORD stride,
-    ::dice::hfe::Vec3* centre, float* radius);
-extern "C" HRESULT WINAPI D3DXCreateRenderToSurface(
-    IDirect3DDevice9* device, UINT width, UINT height, D3DFORMAT format, BOOL depthStencil,
-    D3DFORMAT depthStencilFormat, void** renderToSurface);
-extern "C" HRESULT WINAPI D3DXLoadSurfaceFromSurface(
-    IDirect3DSurface9* destination, const PALETTEENTRY* destinationPalette,
-    const RECT* destinationRect, IDirect3DSurface9* source,
-    const PALETTEENTRY* sourcePalette, const RECT* sourceRect,
-    DWORD filter, D3DCOLOR colourKey);
-extern "C" HRESULT WINAPI D3DXSaveSurfaceToFileA(
-    const char* destinationFile, unsigned int fileFormat, IDirect3DSurface9* source,
-    const PALETTEENTRY* sourcePalette, const RECT* sourceRect);
-
-#pragma comment(linker, "/alternatename:_D3DXComputeBoundingBox@20=_D3DXComputeBoundingBox")
-#pragma comment(linker, "/alternatename:_D3DXComputeBoundingSphere@20=_D3DXComputeBoundingSphere")
-#pragma comment(linker, "/alternatename:_D3DXCreateRenderToSurface@28=_D3DXCreateRenderToSurface")
-#pragma comment(linker, "/alternatename:_D3DXLoadSurfaceFromSurface@32=_D3DXLoadSurfaceFromSurface")
-#pragma comment(linker, "/alternatename:_D3DXSaveSurfaceToFileA@20=_D3DXSaveSurfaceToFileA")
 
 namespace dice {
 namespace hfe {
@@ -186,18 +160,6 @@ void* classManagerGetSingletonAs(const ::renddx9abi::HostString& name, unsigned 
     return reinterpret_cast<GetSingletonAsFn>((*reinterpret_cast<void***>(manager))[0x4C / 4])(
         manager, name, iid);
 }
-
-// ID3DXRenderToSurface, in d3dx9core.h's slot order (the SDK header is not part of this build).
-struct RenderToSurface : public IUnknown
-{
-    virtual HRESULT __stdcall GetDevice(IDirect3DDevice9** device) = 0;                     // +0x0C
-    virtual HRESULT __stdcall GetDesc(void* description) = 0;                               // +0x10
-    virtual HRESULT __stdcall BeginScene(IDirect3DSurface9* surface,
-                                         const D3DVIEWPORT9* viewport) = 0;                 // +0x14
-    virtual HRESULT __stdcall EndScene(DWORD mipFilter) = 0;                                // +0x18
-    virtual HRESULT __stdcall OnLostDevice() = 0;                                           // +0x1C
-    virtual HRESULT __stdcall OnResetDevice() = 0;                                          // +0x20
-};
 
 #if !BF2_PLUGIN_ABI_NATIVE
 
@@ -723,13 +685,15 @@ void RoadEditable::buildGeometry(float /*width - not read*/, float /*maxError - 
     Vec3 maximum;
     minimum.x = minimum.y = minimum.z = 0.0f;
     maximum.x = maximum.y = maximum.z = 0.0f;
-    D3DXComputeBoundingBox(&vertices[0].position, static_cast<DWORD>(vertices.size()), 64u,
-                           &minimum, &maximum);
+    D3DXComputeBoundingBox(reinterpret_cast<const D3DXVECTOR3*>(&vertices[0].position),
+                           static_cast<DWORD>(vertices.size()), 64u,
+                           reinterpret_cast<D3DXVECTOR3*>(&minimum), reinterpret_cast<D3DXVECTOR3*>(&maximum));
     m_bounds.min = minimum;
     m_bounds.max = maximum;
     m_bounds.dirty = 1;
-    D3DXComputeBoundingSphere(&vertices[0].position, static_cast<DWORD>(vertices.size()), 64u,
-                              &m_centre, &m_radius);
+    D3DXComputeBoundingSphere(reinterpret_cast<const D3DXVECTOR3*>(&vertices[0].position),
+                              static_cast<DWORD>(vertices.size()), 64u,
+                              reinterpret_cast<D3DXVECTOR3*>(&m_centre), &m_radius);
     dx9rend::bufferManagerSwapPool(savedPool);
 }
 
@@ -968,9 +932,9 @@ void RoadEditable::projectToTerrain()
         if (device->CreateOffscreenPlainSurface(static_cast<UINT>(size), static_cast<UINT>(size), format,
                                                 D3DPOOL_SYSTEMMEM, &rendering, 0) != 0)
             continue;
-        RenderToSurface* target = 0;
+        ID3DXRenderToSurface* target = 0;
         if (D3DXCreateRenderToSurface(device, static_cast<UINT>(size), static_cast<UINT>(size), format,
-                                      FALSE, D3DFMT_UNKNOWN, reinterpret_cast<void**>(&target)) != 0)
+                                      FALSE, D3DFMT_UNKNOWN, &target) != 0)
         {
             rendering->Release();
             continue;
@@ -1043,7 +1007,7 @@ void RoadEditable::projectToTerrain()
             dx9rend::bufferManagerRemoveIndexBuffer(footprintIndices);
         }
         if (floatTarget)
-            D3DXSaveSurfaceToFileA("c:\\tbmTest.dds", 4u, rendering, 0, 0);   // D3DXIFF_DDS
+            D3DXSaveSurfaceToFileA("c:\\tbmTest.dds", D3DXIFF_DDS, rendering, 0, 0);
 
         const int x0 = static_cast<int>(std::floor(static_cast<double>(minimum.x)));
         const int z0 = static_cast<int>(std::floor(static_cast<double>(minimum.z)));

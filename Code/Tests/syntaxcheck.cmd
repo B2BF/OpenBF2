@@ -1110,6 +1110,11 @@ if errorlevel 1 set /a RC+=1
 @rem
 set FLAGS0=/nologo /Zs /std:c++14 /permissive /EHsc /MD /D_ITERATOR_DEBUG_LEVEL=0 /DBF2_PLUGIN_ABI_NATIVE=1 %PYINC% %ZIPINC% /DDEDICATED=0 /FI"%~dp0..\BF2\Core\BuildConfig.h"
 @echo == client configuration: /DDEDICATED=0 ==
+@rem The renderer and atlas TUs below compile against the April 2005 DirectX SDK's D3DX headers
+@rem (Code\Build\dxsdk.cmd). Without that SDK they are skipped and counted as one failure, so this
+@rem gate never passes while omitting them.
+call "%~dp0..\Build\dxsdk.cmd" x86
+if errorlevel 1 goto :renderer_tus_no_dxsdk
 @rem Bundled meshes and their reflection dependency are renderer-owned client sources.
 cl %FLAGS0% /DBF2_IMAGE_RENDDX9 "%~dp0..\BF2\Geom\BundledMesh.cpp"
 if errorlevel 1 set /a RC+=1
@@ -1227,6 +1232,11 @@ cl %FLAGS0% /DBF2_IMAGE_TEXTUREATLASBUILDER "%~dp0..\BF2\RendDX9\TextureAtlas\Te
 if errorlevel 1 set /a RC+=1
 cl %FLAGS0% /DBF2_IMAGE_RENDDX9 "%~dp0..\BF2\RendDX9\TextureAtlas\TextureAtlas.cpp"
 if errorlevel 1 set /a RC+=1
+goto :renderer_tus_done
+:renderer_tus_no_dxsdk
+@echo == renderer and TextureAtlasBuilder TUs SKIPPED - no April 2005 DirectX SDK ==
+set /a RC+=1
+:renderer_tus_done
 cl %FLAGS0% "%~dp0..\BF2\Game\Main\BF2.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS0% "%~dp0..\BF2\Game\Main\BF2Engine.cpp"

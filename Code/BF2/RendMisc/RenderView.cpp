@@ -8,28 +8,13 @@
 #include "../../RendDX9Abi/ModuleCommon.h"
 #include "../../RendDX9Abi/BfMemory.h"
 #include "../../RendDX9Abi/Frontier.h"
+#include "../../RendDX9Abi/D3dx9Sdk.h"
 
 #include <math.h>
 #include <stddef.h>
 #include <cstring>
 #include <cstdlib>
 #include <new>                                 // renderViewCopyConstruct's placement copy
-
-// D3DXMatrixOrthoLH - the projection builder's ortho arm (sub_101C28D0 calls the d3dx9_25 import).
-// Declared raw because the modern SDK ships no D3DX9 headers; the D3DXMATRIX* is just 16 floats
-// here. Five 4-byte parameters -> @20; /alternatename bridges the decorated reference onto the
-// undecorated import exactly as Effect.cpp does for D3DXCreateEffect.
-struct D3DXMATRIX;
-extern "C" D3DXMATRIX* __stdcall D3DXMatrixOrthoLH(D3DXMATRIX* out, float w, float h,
-                                                   float zn, float zf);
-#pragma comment(linker, "/alternatename:_D3DXMatrixOrthoLH@20=_D3DXMatrixOrthoLH")
-
-// D3DXMatrixInverse - the same arrangement for getInverseProjectionMatrixPtr (+0x90, PE
-// 0x101C2B40). Three 4-byte parameters -> @12. The middle one is the optional determinant out,
-// and the shipped call passes null for it.
-extern "C" D3DXMATRIX* __stdcall D3DXMatrixInverse(D3DXMATRIX* out, float* determinant,
-                                                   const D3DXMATRIX* m);
-#pragma comment(linker, "/alternatename:_D3DXMatrixInverse@12=_D3DXMatrixInverse")
 
 namespace dice {
 namespace hfe {
@@ -497,7 +482,8 @@ Mat4* RenderView::getLinearProjectionMatrixPtr()
 }
 
 
-// +0x90, The inverse projection, cached in m_matrix[7].
+// +0x90, PE 0x101C2B40. The inverse projection, cached in m_matrix[7]; D3DXMatrixInverse is the
+// d3dx9_25 import, and the shipped call passes no determinant out.
 
 // Rebuilds the inverse projection when dirty, retaining the copy before the inverse overwrites it.
 
@@ -547,6 +533,7 @@ void RenderView::rebuildProjection()
 
     if (m_projectionMode == 1)
     {
+        // the ortho arm: sub_101C28D0 calls the d3dx9_25 import.
         ::D3DXMatrixOrthoLH(reinterpret_cast<D3DXMATRIX*>(&m_matrix[4]), m_orthoWidth,
                             m_orthoHeight, m_nearPlane, m_nearPlane + m_farPlane);
     }

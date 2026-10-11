@@ -4,6 +4,8 @@ rem [TEMP] Strict optimized x86 EnvMapObject/template fixture, native renderer A
 if defined BF2_TEST_ABI_NATIVE if not "%BF2_TEST_ABI_NATIVE%"=="1" (echo Only the native plugin ABI is supported.& exit /b 2)
 call "%~dp0..\Build\vsdevcmd.cmd" x86
 if errorlevel 1 exit /b 1
+call "%~dp0..\Build\dxsdk.cmd" x86
+if errorlevel 1 exit /b 1
 set "TASK_OUT=%~dp0..\Build\bundled_height_20260923\envtest1"
 if defined BF2_BUILD_OUT set "TASK_OUT=%BF2_BUILD_OUT%"
 if not exist "%TASK_OUT%" mkdir "%TASK_OUT%"

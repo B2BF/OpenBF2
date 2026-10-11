@@ -6,9 +6,9 @@
 #include "../../../RendDX9Abi/ModuleCommon.h"
 #include "../../../RendDX9Abi/BfMemory.h"
 #include "../../../RendDX9Abi/PluginEntry.h"
-#include "../../../RendDX9Abi/D3dxEffect.h"
 #include "../../RendDX9/RendDX9Base.h"
 #include "../../RendDX9/ShaderParameter.h"
+#include "../../../RendDX9Abi/D3dx9Sdk.h"
 
 #include <new>
 #include <cstring>
@@ -284,9 +284,9 @@ void FSMoviePlayer::drawFrame()
         m_paramTransform->setValue(identity, 0);
         videoDoFrame(m_video);
 
-        void* fx = dx9rend::effectD3dxHandle(m_effect);
-        ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxSetTextureFn>(fx, 0xD0)(
-            fx, m_paramTexture->getD3DXParam(), videoTargetD3DTexture(m_videoTarget));
+        ID3DXEffect* fx = static_cast<ID3DXEffect*>(dx9rend::effectD3dxHandle(m_effect));
+        fx->SetTexture(::renddx9abi::d3dxHandle(m_paramTexture->getD3DXParam()),
+                       static_cast<IDirect3DBaseTexture9*>(videoTargetD3DTexture(m_videoTarget)));
         dx9rend::vertexBufferBindStream(m_vertexBuffer, 0);
         dx9rend::vertexDeclarationBind(m_vertexDeclaration);
         dx9rend::effectBegin(m_effect);
@@ -295,9 +295,8 @@ void FSMoviePlayer::drawFrame()
         dx9rend::effectEnd(m_effect);
         dx9rend::stateManagerPop();
 
-        fx = dx9rend::effectD3dxHandle(m_effect);
-        ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxSetTextureFn>(fx, 0xD0)(
-            fx, m_paramTexture->getD3DXParam(), 0);
+        fx = static_cast<ID3DXEffect*>(dx9rend::effectD3dxHandle(m_effect));
+        fx->SetTexture(::renddx9abi::d3dxHandle(m_paramTexture->getD3DXParam()), 0);
         dx9rend::rendererEndScene();
     }
     dx9rend::rendererPresent(2);

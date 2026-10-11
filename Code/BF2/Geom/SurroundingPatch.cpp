@@ -10,6 +10,7 @@
 #include "../../RendDX9Abi/Frontier.h"
 #include "../../RendDX9Abi/Vc71String.h"
 #include "../../RendDX9Abi/Vc71Vector.h"
+#include "../../RendDX9Abi/D3dx9Sdk.h"
 #include "QuadPatch.h"
 #include "Terrain.h"
 #include "../Math/Frustum.h"
@@ -155,10 +156,10 @@ void SurroundingPatch::load(int slotIndex, TerrainRawReader& reader)
             float y = src[1];
             float z = src[2];
             float w = 0.0f;
-            D3DXFloat32To16Array(dst,     &x, 1);
-            D3DXFloat32To16Array(dst + 2, &y, 1);
-            D3DXFloat32To16Array(dst + 4, &z, 1);
-            D3DXFloat32To16Array(dst + 6, &w, 1);
+            D3DXFloat32To16Array(reinterpret_cast<D3DXFLOAT16*>(dst),     &x, 1);
+            D3DXFloat32To16Array(reinterpret_cast<D3DXFLOAT16*>(dst + 2), &y, 1);
+            D3DXFloat32To16Array(reinterpret_cast<D3DXFLOAT16*>(dst + 4), &z, 1);
+            D3DXFloat32To16Array(reinterpret_cast<D3DXFLOAT16*>(dst + 6), &w, 1);
             dst += 8;
         }
     }

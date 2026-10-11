@@ -2,6 +2,8 @@
 setlocal
 rem [TEMP] Strict fixture, real owner source with synthetic host dependencies.
 call "%~dp0..\Build\vsdevcmd.cmd" x86
+call "%~dp0..\Build\dxsdk.cmd" x86
+if errorlevel 1 exit /b 1
 set "ROOT=%~dp0..\BF2"
 set "OUT=%~dp0..\Build\env_map_runtime_20260923"
 if not exist "%OUT%" mkdir "%OUT%"

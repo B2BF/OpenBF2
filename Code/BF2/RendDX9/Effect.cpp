@@ -9,7 +9,7 @@
 #include "../../RendDX9Abi/Vc71Map.h"
 #include "../../RendDX9Abi/Vc71Vector.h"
 #include "../../RendDX9Abi/Frontier.h"
-#include "../../RendDX9Abi/D3dxEffect.h"
+#include "../../RendDX9Abi/D3dx9Sdk.h"
 #include "../../RendDX9Abi/EngineFile.h"
 #include "../../RendDX9Abi/PluginEntry.h"
 #include "RendDX9Base.h"
@@ -47,23 +47,6 @@ extern IBase* g_Renderer;       // BF2Render.cpp
 
 // FXParameter.cpp
 ParameterOwner* createFXParameter(void* effect, void* d3dxHandle);
-
-// Only the fields bind reads. See RendDX9Abi/D3dxEffect.h for where the offsets come from.
-struct D3dxParameterDescView
-{
-    const char*  name;      const char*  semantic;
-    unsigned int paramClass; unsigned int type;
-    unsigned int rows;      unsigned int columns;
-    unsigned int elements;  unsigned int annotations;
-    unsigned int structMembers; unsigned int flags; unsigned int bytes;
-};
-
-struct D3dxTechniqueDesc      // D3DXTECHNIQUE_DESC - 12 bytes
-{
-    const char*  name;
-    unsigned int passes;
-    unsigned int annotations;
-};
 
 // [INFERRED] source spelling. a native value type, not
 // an ABI overlay. The retail 52-byte size includes its VC7 std::string.
@@ -205,13 +188,13 @@ public:
     // sub_1001E3A0, read in full. See the body.
     void* getShaderParameter(const vc71::string& name);
 
-    bool         bind(void* d3dxEffect);
+    bool         bind(ID3DXEffect* d3dxEffect);
     unsigned int populateParameters();
     void         flushPendingValues();
     int          validateTechniques();
     int          validateTechnique(const char* n);
     int          linkStateTechnique(const char* n);
-    bool         readDeclaration(void* technique, void** out);
+    bool         readDeclaration(D3DXHANDLE technique, void** out);
     bool         isParameterUsed(void* handle) const;
 
     bool         setTechniqueByName(const vc71::string& name);
@@ -220,7 +203,7 @@ public:
     void         beginPass(unsigned int index);
     void         end();
 
-    void* d3dxEffect() const { return m_d3dxEffect; }
+    ID3DXEffect* d3dxEffect() const { return m_d3dxEffect; }
     typedef std::map<std::string, EffectTechnique> TechniqueMap;
     TechniqueMap& techniqueMap() { return m_techniques; }
     unsigned int currentTechniquePassCount() const
@@ -248,7 +231,7 @@ public:
 private:
     void*            m_vptr;          // +0x00
     int              m_refCount;      // +0x04
-    void*            m_d3dxEffect;    // +0x08  ID3DXEffect*
+    ID3DXEffect*     m_d3dxEffect;    // +0x08
     vc71::string     m_string0C;      // +0x0C  the effect's name
     // Native private state from here on: subsequent comments denote retail offsets only.
     // No external reader uses these offsets; opaque technique pointers round-trip here.
@@ -346,10 +329,10 @@ void* Effect::getShaderParameter(const vc71::string& name)
 bool effectBind(Effect* self, void* d3dxEffect)
 {
     RD9_TRACE_AT("dice::hfe::dx9rend::Effect::bind", self, 0x00);
-    return self ? self->bind(d3dxEffect) : false;
+    return self ? self->bind(static_cast<ID3DXEffect*>(d3dxEffect)) : false;
 }
 
-bool Effect::bind(void* d3dxEffect)
+bool Effect::bind(ID3DXEffect* d3dxEffect)
 {
     if (m_d3dxEffect)
     {
@@ -373,7 +356,7 @@ bool Effect::bind(void* d3dxEffect)
     if (!d3dxEffect)
         return false;
 
-    ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxAddRefFn>(d3dxEffect, 0x04)(d3dxEffect);
+    d3dxEffect->AddRef();
     m_d3dxEffect = d3dxEffect;
 
     // when the ShaderManager's +0xA4 byte is clear -
@@ -384,8 +367,7 @@ bool Effect::bind(void* d3dxEffect)
         && !*(static_cast<unsigned char*>(g_shaderManager) + 0xA4)
         && g_stateManager)
     {
-        ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxSetStateManagerFn>(d3dxEffect, 0x11C)(
-            d3dxEffect, g_stateManager);
+        d3dxEffect->SetStateManager(static_cast<ID3DXEffectStateManager*>(g_stateManager));
     }
 
     const unsigned int populated = m_parameters.size ? 0u : populateParameters();
@@ -411,31 +393,29 @@ unsigned int Effect::populateParameters()
 
     for (unsigned int i = 0; ; ++i)
     {
-        void* h = ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxGetParameterFn>(m_d3dxEffect, 0x20)(
-            m_d3dxEffect, 0, i);
+        D3DXHANDLE h = m_d3dxEffect->GetParameter(0, i);
         if (!h)
             break;
 
-        D3dxParameterDescView desc;
+        D3DXPARAMETER_DESC desc;
         for (unsigned int k = 0; k < sizeof(desc) / 4; ++k)
             reinterpret_cast<unsigned int*>(&desc)[k] = 0;
-        ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxGetParameterDescFn>(m_d3dxEffect, 0x10)(
-            m_d3dxEffect, h, &desc);
+        m_d3dxEffect->GetParameterDesc(h, &desc);
 
-        if (!desc.semantic)
+        if (!desc.Semantic)
             continue;                       // no semantic - not registered at all
 
-        vc71::map_node* node = vc71::mapFind(m_parameters, desc.semantic);
+        vc71::map_node* node = vc71::mapFind(m_parameters, desc.Semantic);
         if (node)
         {
             ShaderParameter* const existing =
                 static_cast<ShaderParameter*>(vc71::mapNodeValueRef(node));
             if (existing)
-                existing->setD3DXParam(h);
+                existing->setD3DXParam(::renddx9abi::d3dxHandleValue(h));
             continue;
         }
 
-        ParameterOwner* const owner = createFXParameter(this, h);
+        ParameterOwner* const owner = createFXParameter(this, ::renddx9abi::d3dxHandleValue(h));
 
         void* const storage = ::renddx9abi::engineAlloc(sizeof(ShaderParameter));
         ShaderParameter* const handle = storage ? new (storage) ShaderParameter(owner) : 0;
@@ -443,7 +423,7 @@ unsigned int Effect::populateParameters()
         // own reference when allocation succeeded, leaving that handle as the sole owner.
         owner->release();
 
-        node = vc71::mapInsert(m_parameters, 0x30, desc.semantic);
+        node = vc71::mapInsert(m_parameters, 0x30, desc.Semantic);
         if (node)
             vc71::mapNodeValueRef(node) = handle;
         ++added;
@@ -483,16 +463,14 @@ int Effect::validateTechniques()
 {
     for (unsigned int i = 0; ; ++i)
     {
-        void* h = ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxGetTechniqueFn>(m_d3dxEffect, 0x30)(
-            m_d3dxEffect, i);
+        D3DXHANDLE h = m_d3dxEffect->GetTechnique(i);
         if (!h)
             break;
 
-        D3dxTechniqueDesc desc;
-        ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxGetTechniqueDescFn>(m_d3dxEffect, 0x14)(
-            m_d3dxEffect, h, &desc);
+        D3DXTECHNIQUE_DESC desc;
+        m_d3dxEffect->GetTechniqueDesc(h, &desc);
 
-        if (validateTechnique(desc.name) == 3)
+        if (validateTechnique(desc.Name) == 3)
             return 3;
     }
 
@@ -522,8 +500,7 @@ int Effect::validateTechnique(const char* name)
     record.validated = true;
     static const bool maxValidation = readBoolSetting("GSMaxValidation", false);
 
-    void* h = ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxGetTechniqueByNameFn>(m_d3dxEffect, 0x34)(
-        m_d3dxEffect, name);
+    D3DXHANDLE h = m_d3dxEffect->GetTechniqueByName(name);
     if (!h)
     {
         if (maxValidation)
@@ -531,11 +508,9 @@ int Effect::validateTechnique(const char* name)
         return 0;
     }
 
-    D3dxTechniqueDesc desc; // Ignored HRESULT; retail does not initialize this output.
-    ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxGetTechniqueDescFn>(m_d3dxEffect, 0x14)(
-        m_d3dxEffect, h, &desc);
-    const long hr = ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxValidateTechniqueFn>(
-        m_d3dxEffect, 0xF0)(m_d3dxEffect, h);
+    D3DXTECHNIQUE_DESC desc; // Ignored HRESULT; retail does not initialize this output.
+    m_d3dxEffect->GetTechniqueDesc(h, &desc);
+    const long hr = m_d3dxEffect->ValidateTechnique(h);
     if (hr != 0)
     {
         if (maxValidation)
@@ -543,8 +518,8 @@ int Effect::validateTechnique(const char* name)
         return 1;
     }
 
-    record.handle = h;
-    record.passes = desc.passes;
+    record.handle = ::renddx9abi::d3dxHandleValue(h);
+    record.passes = desc.Passes;
     readDeclaration(h, &record.declaration);
     return 2;
 }
@@ -554,12 +529,10 @@ int Effect::validateTechnique(const char* name)
 // record keeps constructor defaults for its pass count and declaration.
 int Effect::linkStateTechnique(const char* name)
 {
-    void* h = ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxGetTechniqueByNameFn>(m_d3dxEffect, 0x34)(
-        m_d3dxEffect, name);
+    D3DXHANDLE h = m_d3dxEffect->GetTechniqueByName(name);
     if (!h) return 0;
-    D3dxTechniqueDesc desc;
-    ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxGetTechniqueDescFn>(m_d3dxEffect, 0x14)(
-        m_d3dxEffect, h, &desc);
+    D3DXTECHNIQUE_DESC desc;
+    m_d3dxEffect->GetTechniqueDesc(h, &desc);
     std::string baseName(name);
     baseName.resize(::strstr(name, "_States") - name);
     TechniqueMap::iterator base = m_techniques.find(baseName);
@@ -571,14 +544,12 @@ int Effect::linkStateTechnique(const char* name)
     if (!base->second.states)
         base->second.states = new (std::nothrow) EffectTechnique;
     int restore = 0;
-    void* annotation = ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxGetAnnotationByNameFn>(m_d3dxEffect, 0x4C)(
-        m_d3dxEffect, h, "Restore");
+    D3DXHANDLE annotation = m_d3dxEffect->GetAnnotationByName(h, "Restore");
     if (annotation)
-        ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxGetBoolFn>(m_d3dxEffect, 0x5C)(
-            m_d3dxEffect, annotation, &restore);
+        m_d3dxEffect->GetBool(annotation, &restore);
     EffectTechnique& state = *base->second.states; // Retail has no allocation-failure guard.
     state.name = name;
-    state.handle = h;
+    state.handle = ::renddx9abi::d3dxHandleValue(h);
     state.restore = restore;
     state.validated = true;
     return 2;
@@ -587,22 +558,19 @@ int Effect::linkStateTechnique(const char* name)
 // Declaration consists of int quadruples {stream,type,usage,index}.
 // Preserve full-width stream comparisons before byte truncation, offset reset
 // on stream changes, zero offset for the 255 terminator, and ignored HRESULTs.
-bool Effect::readDeclaration(void* technique, void** out)
+bool Effect::readDeclaration(D3DXHANDLE technique, void** out)
 {
     *out = 0; // Does not release the previous declaration.
-    void* annotation = ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxGetAnnotationByNameFn>(m_d3dxEffect, 0x4C)(
-        m_d3dxEffect, technique, "Declaration");
+    D3DXHANDLE annotation = m_d3dxEffect->GetAnnotationByName(technique, "Declaration");
     if (!annotation) return false;
-    D3dxParameterDescView desc;
-    ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxGetParameterDescFn>(m_d3dxEffect, 0x10)(
-        m_d3dxEffect, annotation, &desc);
-    int* values = new int[desc.elements];
-    ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxGetIntArrayFn>(m_d3dxEffect, 0x74)(
-        m_d3dxEffect, annotation, values, desc.elements);
+    D3DXPARAMETER_DESC desc;
+    m_d3dxEffect->GetParameterDesc(annotation, &desc);
+    int* values = new int[desc.Elements];
+    m_d3dxEffect->GetIntArray(annotation, values, desc.Elements);
     int stream = values[0]; // Retail reads this even for zero elements.
-    D3DVERTEXELEMENT9* elements = new D3DVERTEXELEMENT9[desc.elements >> 2];
+    D3DVERTEXELEMENT9* elements = new D3DVERTEXELEMENT9[desc.Elements >> 2];
     unsigned int offset = 0;
-    for (unsigned int i = 0; i < (desc.elements >> 2); ++i)
+    for (unsigned int i = 0; i < (desc.Elements >> 2); ++i)
     {
         const int* source = values + 4 * i;
         if (source[0] != stream) { offset = 0; stream = source[0]; }
@@ -629,15 +597,14 @@ void* effectD3dxHandle(void* effect)
 }
 
 // With no selected technique every parameter is considered used. Otherwise the
-// compiled effect answers ID3DXBaseEffect::IsParameterUsed(handle, currentTechnique->handle).
+// compiled effect answers ID3DXEffect::IsParameterUsed(handle, currentTechnique->handle).
 bool Effect::isParameterUsed(void* handle) const
 {
     if (!m_currentTechnique)
         return true;
 
-    typedef int (__stdcall* D3dxIsParameterUsedFn)(void*, void*, void*);
-    return ::renddx9abi::d3dxSlot<D3dxIsParameterUsedFn>(m_d3dxEffect, 0xF8)(
-               m_d3dxEffect, handle, m_currentTechnique->handle) != 0;
+    return m_d3dxEffect->IsParameterUsed(::renddx9abi::d3dxHandle(handle),
+                                         ::renddx9abi::d3dxHandle(m_currentTechnique->handle)) != 0;
 }
 
 bool effectIsParameterUsed(void* effect, void* parameter)
@@ -667,21 +634,18 @@ bool effectHasTechnique(void* effect, const vc71::string& name)
     return node != self->techniqueMap().end() && node->second.handle != 0;
 }
 
-// sub_1001DB00, read in full. GetParameterByName(0, "ShaderVersion") is D3DX slot +0x24 and GetInt
-// slot +0x6C; a failed GetInt leaves 0 and clears the re-read flag the same way a success does.
+// sub_1001DB00, read in full. A failed GetInt leaves 0 and clears the re-read flag the same way a
+// success does.
 int* Effect::shaderVersion()
 {
     if (m_byte74)
     {
-        typedef void* (__stdcall* GetParameterByNameFn)(void*, void* parent, const char* name);
-        void* const handle = ::renddx9abi::d3dxSlot<GetParameterByNameFn>(m_d3dxEffect, 0x24)(
-            m_d3dxEffect, 0, "ShaderVersion");
+        const D3DXHANDLE handle = m_d3dxEffect->GetParameterByName(0, "ShaderVersion");
         int value = 0;
         int read = 0;
         if (handle)
         {
-            if (::renddx9abi::d3dxSlot< ::renddx9abi::D3dxGetIntFn>(m_d3dxEffect, 0x6C)(
-                    m_d3dxEffect, handle, &read) < 0)
+            if (m_d3dxEffect->GetInt(handle, &read) < 0)
             {
                 m_dword70 = 0;
                 m_byte74 = 0;
@@ -722,8 +686,7 @@ bool Effect::setTechniqueByName(const vc71::string& name)
     EffectTechnique* record = &node->second;
     m_currentTechnique = record;
     m_string38 = record->name.c_str();
-    ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxSetTechniqueFn>(m_d3dxEffect, 0xE8)(
-        m_d3dxEffect, record->handle);
+    m_d3dxEffect->SetTechnique(::renddx9abi::d3dxHandle(record->handle));
     return true;
 }
 
@@ -736,8 +699,7 @@ unsigned int Effect::begin()
     unsigned int passes = 0;
     const bool smDisabled =
         g_shaderManager && *(static_cast<unsigned char*>(g_shaderManager) + 0xA4) != 0;
-    ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxBeginFn>(m_d3dxEffect, 0xFC)(
-        m_d3dxEffect, &passes, smDisabled ? 0u : 7u);
+    m_d3dxEffect->Begin(&passes, smDisabled ? 0u : 7u);
 
     if (m_currentTechnique)
     {
@@ -757,17 +719,16 @@ unsigned int Effect::begin()
 void Effect::beginPass(unsigned int index)
 {
     if (m_byte6C)
-        ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxEndPassFn>(m_d3dxEffect, 0x108)(m_d3dxEffect);
-    ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxBeginPassFn>(m_d3dxEffect, 0x100)(
-        m_d3dxEffect, index);
+        m_d3dxEffect->EndPass();
+    m_d3dxEffect->BeginPass(index);
     m_byte6C = 1;
 }
 
 void Effect::end()
 {
     if (m_byte6C)
-        ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxEndPassFn>(m_d3dxEffect, 0x108)(m_d3dxEffect);
-    ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxEndFn>(m_d3dxEffect, 0x10C)(m_d3dxEffect);
+        m_d3dxEffect->EndPass();
+    m_d3dxEffect->End();
     m_byte6C = 0;
     shaderManagerSetCurrentEffect(0);
 }
@@ -803,8 +764,7 @@ void Effect::setTechniqueRecord(unsigned char* record)
     EffectTechnique* technique = reinterpret_cast<EffectTechnique*>(record);
     m_currentTechnique = technique;
     m_string38 = technique->name.c_str();
-    ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxSetTechniqueFn>(m_d3dxEffect, 0xE8)(
-        m_d3dxEffect, technique->handle);
+    m_d3dxEffect->SetTechnique(::renddx9abi::d3dxHandle(technique->handle));
 }
 
 // The record's +44 link points to the state technique.
@@ -816,25 +776,23 @@ void effectBeginTechniqueStateRecord(void* effect, unsigned char* record)
     EffectTechnique* state = technique->states;
     if (!state) return;
     Effect* self = static_cast<Effect*>(effect);
-    void* fx = self->d3dxEffect();
-    ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxSetTechniqueFn>(fx, 0xE8)(
-        fx, state->handle);
+    ID3DXEffect* fx = self->d3dxEffect();
+    fx->SetTechnique(::renddx9abi::d3dxHandle(state->handle));
     unsigned int passes; // Retail ignores failure and does not initialize the output.
     fx = self->d3dxEffect();
-    ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxBeginFn>(fx, 0xFC)(fx, &passes, 7);
+    fx->Begin(&passes, 7);
     if (passes != 0)
     {
         stateManagerPush();
         fx = self->d3dxEffect();
-        ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxBeginPassFn>(fx, 0x100)(fx, 0);
+        fx->BeginPass(0);
         fx = self->d3dxEffect();
-        ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxEndPassFn>(fx, 0x108)(fx);
+        fx->EndPass();
     }
     fx = self->d3dxEffect();
-    ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxEndFn>(fx, 0x10C)(fx);
+    fx->End();
     fx = self->d3dxEffect();
-    ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxSetTechniqueFn>(fx, 0xE8)(
-        fx, technique->handle);
+    fx->SetTechnique(::renddx9abi::d3dxHandle(technique->handle));
 }
 void effectEndTechniqueStateRecord(void* effect, unsigned char* record)
 {
@@ -842,25 +800,23 @@ void effectEndTechniqueStateRecord(void* effect, unsigned char* record)
     EffectTechnique* state = technique->states;
     if (!state) return;
     Effect* self = static_cast<Effect*>(effect);
-    void* fx = self->d3dxEffect();
-    ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxSetTechniqueFn>(fx, 0xE8)(
-        fx, state->handle);
+    ID3DXEffect* fx = self->d3dxEffect();
+    fx->SetTechnique(::renddx9abi::d3dxHandle(state->handle));
     unsigned int passes;
     fx = self->d3dxEffect();
-    ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxBeginFn>(fx, 0xFC)(fx, &passes, 7);
+    fx->Begin(&passes, 7);
     if (passes > 1)
     {
         fx = self->d3dxEffect();
-        ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxBeginPassFn>(fx, 0x100)(fx, 1);
+        fx->BeginPass(1);
         fx = self->d3dxEffect();
-        ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxEndPassFn>(fx, 0x108)(fx);
+        fx->EndPass();
         stateManagerPop();
     }
     fx = self->d3dxEffect();
-    ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxEndFn>(fx, 0x10C)(fx);
+    fx->End();
     fx = self->d3dxEffect();
-    ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxSetTechniqueFn>(fx, 0xE8)(
-        fx, technique->handle);
+    fx->SetTechnique(::renddx9abi::d3dxHandle(technique->handle));
 }
 void effectBeginTechniqueStates(void* effect, const vc71::string& name)
 {
@@ -984,8 +940,7 @@ void Effect::clearTextureParameters()
         {
             void* const handle =
                 static_cast<ShaderParameter*>(vc71::mapNodeValue(node))->getD3DXParam();  // +0x0C
-            ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxSetTextureFn>(m_d3dxEffect, 0xD0)(
-                m_d3dxEffect, handle, 0);                                        // SetTexture
+            m_d3dxEffect->SetTexture(::renddx9abi::d3dxHandle(handle), 0);
         }
     }
 }
@@ -997,23 +952,6 @@ void effectClearTextureParameters(Effect* effect)
 
 
 // THE compile - sub_1001E010, read in full and written.
-
-
-// D3DXMACRO and the one d3dx9_25 entry point, declared here because the modern Windows SDK does not
-// ship D3DX9 headers at all. Nine parameters, __stdcall - hence the "@36" in D3dx9_25.def.
-struct D3DXMACRO
-{
-    const char* Name;
-    const char* Definition;
-};
-
-// Match the import library's undecorated symbol while retaining the __stdcall calling convention.
-#pragma comment(linker, "/alternatename:_D3DXCreateEffect@36=_D3DXCreateEffect")
-
-extern "C" long __stdcall D3DXCreateEffect(void* pDevice, const void* pSrcData,
-                                           unsigned int SrcDataLen, const D3DXMACRO* pDefines,
-                                           void* pInclude, unsigned long Flags, void* pPool,
-                                           void** ppEffect, void** ppCompilationErrors);
 
 namespace {
 
@@ -1157,8 +1095,8 @@ void* compileEffectFromFile(const char* rawPath)
     // Save the source size before freeEngineFile clears the structure.
     const unsigned int sourceBytes = file.size;
 
-    void* effect = 0;
-    void* errors = 0;
+    ID3DXEffect* effect = 0;
+    ID3DXBuffer* errors = 0;
 
     void*        device = renderDevice();
     void*        include = shaderManagerInclude(g_shaderManager);
@@ -1169,9 +1107,11 @@ void* compileEffectFromFile(const char* rawPath)
     {
         std::string extended(reinterpret_cast<const char*>(file.data), file.size);
         extended += "\n#include \"mods/xpack/Shaders/StaticMesh_lightmapgen.fx\"\n";
-        void* extendedErrors = 0;
-        const long extendedHr = D3DXCreateEffect(device, extended.data(), static_cast<unsigned int>(extended.size()),
-                                                 reinterpret_cast<const D3DXMACRO*>(macros), include, flags, 0,
+        ID3DXBuffer* extendedErrors = 0;
+        const long extendedHr = D3DXCreateEffect(static_cast<IDirect3DDevice9*>(device), extended.data(),
+                                                 static_cast<unsigned int>(extended.size()),
+                                                 reinterpret_cast<const D3DXMACRO*>(macros),
+                                                 static_cast<ID3DXInclude*>(include), flags, 0,
                                                  &effect, &extendedErrors);
         if (extendedHr >= 0 && effect)
         {
@@ -1188,9 +1128,9 @@ void* compileEffectFromFile(const char* rawPath)
 #endif
 
     const long hr = device
-        ? D3DXCreateEffect(device, file.data, file.size,
+        ? D3DXCreateEffect(static_cast<IDirect3DDevice9*>(device), file.data, file.size,
                            reinterpret_cast<const D3DXMACRO*>(macros),
-                           include, flags, 0, &effect, &errors)
+                           static_cast<ID3DXInclude*>(include), flags, 0, &effect, &errors)
         : -1;
 
     ::renddx9abi::freeEngineFile(file);

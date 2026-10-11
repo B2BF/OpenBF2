@@ -14,6 +14,7 @@
 #include "../../RendDX9/RendDX9Base.h"            // the TextureManager seams
 #include "../../RendDX9/Texture.h"
 #include "../../../RendDX9Abi/BfMemory.h"
+#include "../../../RendDX9Abi/D3dx9Sdk.h"
 #include "../../../RendDX9Abi/EngineFile.h"       // EngineStream - FileManager open / read / seek
 #include "../../../RendDX9Abi/Frontier.h"         // renddx9abi::logf - dice's debug stream
 
@@ -21,18 +22,6 @@
 #include <cmath>
 #include <cstring>
 #include <float.h>                                // _isnan
-
-// d3dx9_25 exports undecorated names (D3dx9_25.def's header; EnvMapManager.cpp and
-// TerrainLightSampling.cpp declare the same pair).
-extern "C" HRESULT WINAPI D3DXLoadSurfaceFromSurface(
-    IDirect3DSurface9* destination, const PALETTEENTRY* destinationPalette,
-    const RECT* destinationRect, IDirect3DSurface9* source,
-    const PALETTEENTRY* sourcePalette, const RECT* sourceRect,
-    DWORD filter, D3DCOLOR colourKey);
-extern "C" HRESULT WINAPI D3DXFilterTexture(
-    IDirect3DBaseTexture9* baseTexture, const PALETTEENTRY* palette, UINT sourceLevel, DWORD filter);
-#pragma comment(linker, "/alternatename:_D3DXLoadSurfaceFromSurface@32=_D3DXLoadSurfaceFromSurface")
-#pragma comment(linker, "/alternatename:_D3DXFilterTexture@16=_D3DXFilterTexture")
 
 namespace dice {
 namespace hfe {

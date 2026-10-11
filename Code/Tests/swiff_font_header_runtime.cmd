@@ -2,6 +2,8 @@
 setlocal
 rem [TEMP] Native x86 regression for the production Swiff .dif Tokenizer/DifFont::load path.
 call "%~dp0..\Build\vsdevcmd.cmd" x86
+call "%~dp0..\Build\dxsdk.cmd" x86
+if errorlevel 1 exit /b 1
 for %%I in ("%~dp0..") do set "TASK_CODE=%%~fI"
 if not defined BF2_BUILD_OUT set "BF2_BUILD_OUT=%TASK_CODE%\Build\swiff_font_header_runtime_20260917"
 if not exist "%BF2_BUILD_OUT%" mkdir "%BF2_BUILD_OUT%"

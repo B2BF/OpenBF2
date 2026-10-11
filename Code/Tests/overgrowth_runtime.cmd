@@ -2,6 +2,8 @@
 setlocal
 rem [TEMP] Strict x86 client-image lifecycle check; output belongs to the caller.
 call "%~dp0..\Build\vsdevcmd.cmd" x86
+call "%~dp0..\Build\dxsdk.cmd" x86
+if errorlevel 1 exit /b 1
 set "TASK_ROOT=%~dp0.."
 if not defined BF2_BUILD_OUT set "BF2_BUILD_OUT=%TASK_ROOT%\Build\hemi_draw_20260922\overgrowth_test"
 if not exist "%BF2_BUILD_OUT%" mkdir "%BF2_BUILD_OUT%"

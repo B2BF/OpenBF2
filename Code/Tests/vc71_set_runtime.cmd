@@ -2,6 +2,8 @@
 setlocal
 rem [TEMP] [CHOSEN, not recovered] x86 VC7.1 set-layout topology/allocation fixture.
 call "%~dp0..\Build\vsdevcmd.cmd" x86
+call "%~dp0..\Build\dxsdk.cmd" x86
+if errorlevel 1 exit /b 1
 set "TASK_ROOT=%~dp0..\.."
 if not defined BF2_BUILD_OUT set "BF2_BUILD_OUT=%~dp0..\Build\obj_vc71_set_runtime_source_audit"
 if not exist "%BF2_BUILD_OUT%" mkdir "%BF2_BUILD_OUT%"
