@@ -161,6 +161,7 @@ BF2_CONSOLE_METHOD_0_STATIC_ACTIVE(toggleFullscreen, gameToggleFullscreen,
                                    ::dice::hfe::bf2Engine->getBF2Render() != 0, kGameConsoleTag)
 #endif
 
+#if 0 // [RETIRE-WHEN: demo recording feature is implemented]
 // demo.recordDemo / demo.stopRecording - dedicated PE defaults 0x759A2E ("demo", access 1,
 // category 0); ctors 0x411970 / 0x411B40 (vtable off_785498 / off_785528), both file-static and
 // returning "void". The shared gate 0x4113C0 is `dword_837F9C != 0` (bf2Engine); executors
@@ -174,6 +175,7 @@ BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(recordDemo, demoRecord, ::dice::hfe::bf2Engin
                                    std::string, kGameConsoleTag)
 BF2_CONSOLE_METHOD_0_STATIC_ACTIVE(stopRecording, demoStopRecording, ::dice::hfe::bf2Engine != 0,
                                    kGameConsoleTag)
+#endif
 
 // Handed to the console registry by ModuleBF2::init, the way the original registers 0x8AD45A8.
 ConsoleObjectList& gameConsoleObjects()
