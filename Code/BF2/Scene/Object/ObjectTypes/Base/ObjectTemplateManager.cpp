@@ -5,6 +5,9 @@
 // Include Ids before IObjectTemplate so later extern declarations retain the constants' internal linkage.
 #include "ObjectTemplateManager.h"
 #include <cstdio>    // [TEMP] probe F - createTemplate failure tracer; retire with RW-97
+#if !defined(_WIN32)
+#include <algorithm>
+#endif
 #include "../../../../Core/Ids.h"
 #include "../../../../Game/Objects/IObjectTemplate.h"     // [UNRESOLVED] true home; not attested
 #include "../../../../Game/Objects/ObjectTemplate.h"      // getClassID (+0x10) / preCache (+0x6C)
