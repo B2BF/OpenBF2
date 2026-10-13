@@ -17,6 +17,7 @@
 #include "../Common/GhostManager.h"        // the per-connection ghost update
 #include "../../Core/System.h"             // WorldPref::getTickCount
 #include "../DemoRecorder/DemoRecorder.h"  // a recording connection never sends
+#include "../DemoAvailableInfo.h"          // onAutoRecordingAvailable's block-9 payload
 
 #include <algorithm>                       // std::sort - the fairness queue
 #include "../GameEvents/ChallengeEvent.h"  // the first thing a server ever sends
@@ -1728,16 +1729,26 @@ void GameServer::flushDemoPackets(ServerConnection* conn, int tick)
     }
 }
 
-// [FRONTIER] [RETIRE-WHEN: demo-available-info] Requires DemoAvailableInfo's wire format
-// before constructing the URL/map data block for clients. Reached only after a configured
-// auto-demo hook completes; recording without a hook does not enter this boundary.
-void GameServer::onAutoRecordingAvailable(const std::string& /*fileName*/,
-                                          const std::string& /*mapName*/)
+// Announces a processed auto-recording to every connection that has started joining, as data
+// block 9. The URL is sv.demoDownloadURL with its first "{file}" replaced by the file name, or with
+// the name appended when there is no placeholder. Retail sends through the global game, not this.
+void GameServer::onAutoRecordingAvailable(const std::string& fileName,
+                                          const std::string& mapName)
 {
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::GameServer::onAutoRecordingAvailable reached "
-                         "(DemoAvailableInfo is unrecovered)\n");
-    std::fflush(stderr);
-    std::abort();
+    const std::string placeholder("{file}");
+    std::string url(serverSettings->m_demoDownloadURL);
+    const std::string::size_type at = url.find(placeholder);
+    if (at == std::string::npos)
+        url.append(fileName);
+    else
+        url.replace(at, placeholder.size(), fileName);
+
+    DemoAvailableInfo info;
+    info.setUrl(url);
+    info.setMapName(mapName);
+    const unsigned int size = info.getNetBufferSize();      // both images pack before taking the pointer
+    const void* const buffer = info.getNetBuffer();
+    static_cast<GameServer*>(game)->sendDataBlockToAll(9, buffer, size, true);
 }
 
 void GameServer::recordDemo(DemoRecorder* recorder)

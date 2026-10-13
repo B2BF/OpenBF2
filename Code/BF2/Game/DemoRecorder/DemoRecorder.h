@@ -67,7 +67,8 @@ public:
     bool isRenderingToFile() const;
     bool startRenderMovie();
 
-    // the DemoSpectatorCamera forwarders. Client playback; [FRONTIER] stops here.
+    // the DemoSpectatorCamera forwarders. quit and updateTicks run every recording frame and do
+    // nothing without a camera; every camera call is a [FRONTIER] stop.
     bool quit() const;
     void updateTicks(int ticks);
     void handlePlayerInput(float deltaTime);

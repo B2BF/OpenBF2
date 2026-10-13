@@ -329,19 +329,36 @@ bool DemoRecorder::startRenderMovie()
     return true;
 }
 
-// THE DemoSpectatorCamera forwarders - client playback. Each stops by name rather than invent a
-// call into an unrecovered 0xA4-byte class. None is reachable from a recording dedicated server.
+// THE DemoSpectatorCamera forwarders. Only client playback and camera-track recording own a camera,
+// so a recording dedicated server calls quit and updateTicks every frame with a null camera, and
+// both return without effect there. Every camera call stops by name rather than invent a call into
+// an unrecovered 0xA4-byte class; the remaining forwarders are client playback only.
 
+// Reports whether the playback camera track has ended. False without a camera.
 bool DemoRecorder::quit() const
 {
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::DemoRecorder::quit reached\n");
+    if (!demoSpectatorCamera)
+        return false;
+
+    // [FRONTIER] return demoSpectatorCamera->getEOF(); - replace this stop with that call once
+    // DemoSpectatorCamera is recovered. Unreachable until initRecord's camera arm or initPlayback
+    // sets the pointer.
+    std::fprintf(stderr, "[FRONTIER] dice::hfe::DemoSpectatorCamera::getEOF reached "
+                         "(from dice::hfe::DemoRecorder::quit)\n");
     std::fflush(stderr);
     std::abort();
 }
 
-void DemoRecorder::updateTicks(int)
+// Advances the camera track by this frame's tick count. Does nothing without a camera.
+void DemoRecorder::updateTicks(int ticks)
 {
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::DemoRecorder::updateTicks reached\n");
+    if (!demoSpectatorCamera)
+        return;
+
+    // [FRONTIER] demoSpectatorCamera->updateTicks(ticks); - same retirement condition as quit.
+    (void)ticks;
+    std::fprintf(stderr, "[FRONTIER] dice::hfe::DemoSpectatorCamera::updateTicks reached "
+                         "(from dice::hfe::DemoRecorder::updateTicks)\n");
     std::fflush(stderr);
     std::abort();
 }

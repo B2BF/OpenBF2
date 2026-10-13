@@ -7,6 +7,7 @@
 #include "BF2Engine.h"
 #include "Game.h"               // operator>>(istream&, TargetChannel&) - game.radioMessage's converter
 #include "../Utility/Vars.h"    // vars.set's receiver - Vars::set(std::string, std::string)
+#include "../IGameClient.h"     // the demo playback controls' receiver
 #include "../../Scene/Object/PlayerManager.h"   // game.radioMessage's sender - the local human
 #if !DEDICATED
 #include "BF2ClientSeams.h"     // BF2Render::toggleFullscreen - game.toggleFullscreen's target
@@ -24,6 +25,69 @@ namespace {
 const char* const kGameConsoleTag = "hfe.game";
 
 } // namespace
+
+// Demo recording commands at access level 1, available while the engine exists. Recording itself
+// needs a server game; BF2Engine::recordDemo reports the refusal on a client.
+BF2_CONSOLE_OBJECT("demo", 1, 0)
+
+namespace {
+void demoRecordDemo(const std::string& name)
+{
+    ::dice::hfe::bf2Engine->recordDemo(name);
+}
+
+void demoStopRecording()
+{
+    ::dice::hfe::bf2Engine->stopRecording();
+}
+
+void demoShutdownDemo()
+{
+    ::dice::hfe::bf2Engine->shutdownDemo();
+}
+} // namespace
+BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(recordDemo, demoRecordDemo, ::dice::hfe::bf2Engine != 0, std::string, kGameConsoleTag)
+BF2_CONSOLE_METHOD_0_STATIC_ACTIVE(stopRecording, demoStopRecording, ::dice::hfe::bf2Engine != 0, kGameConsoleTag)
+BF2_CONSOLE_METHOD_0_STATIC_ACTIVE(shutdownDemo, demoShutdownDemo, ::dice::hfe::bf2Engine != 0, kGameConsoleTag)
+
+// Demo playback controls at access level 2, driven by the HUD's demo radio menus. They act on the
+// game client, so a dedicated server never activates them.
+BF2_CONSOLE_OBJECT("demo", 2, 0)
+
+namespace {
+IGameClient* queryGameClient()                          //  [CHOSEN] name
+{
+    return ::dice::hfe::game
+        ? static_cast<IGameClient*>(::dice::hfe::game->queryInterface(IID_IGameClient)) : 0;
+}
+
+void demoRestartDemo()
+{
+    queryGameClient()->restartDemo();
+}
+
+// Content passes 1 for the next player and 0 for the previous one. IGameClient's name for this
+// slot, setDemoPaused, predates that evidence.
+void demoTogglePlayerDemo(bool next)
+{
+    queryGameClient()->setDemoPaused(next);
+}
+
+void demoToggleCameraDemo()
+{
+    queryGameClient()->slot50();
+}
+
+void demoToggleDemoPauseOrPlay()
+{
+    queryGameClient()->togglePause();
+}
+} // namespace
+BF2_CONSOLE_METHOD_0_STATIC_ACTIVE(restartDemo, demoRestartDemo, queryGameClient() != 0, kGameConsoleTag)
+BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(togglePlayerDemo, demoTogglePlayerDemo, queryGameClient() != 0, bool, kGameConsoleTag)
+BF2_CONSOLE_METHOD_0_STATIC_ACTIVE(toggleCameraDemo, demoToggleCameraDemo, queryGameClient() != 0, kGameConsoleTag)
+BF2_CONSOLE_METHOD_0_STATIC_ACTIVE(toggleDemoPauseOrPlay, demoToggleDemoPauseOrPlay, queryGameClient() != 0,
+                                   kGameConsoleTag)
 
 #if !DEDICATED
 // bf2Engine console defaults; playMovie is registered only in client images.
