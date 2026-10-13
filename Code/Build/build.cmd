@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 setlocal EnableDelayedExpansion
 rem ===========================================================================
 rem THE REAL BUILD - generates code and LINKS. Not a syntax check.
@@ -108,6 +108,11 @@ for /r "%ROOT%" %%F in (*.cpp) do (
             rem The repository contains source for more than one shipped image.  Compile every TU
             rem for coverage, but never link the seven AIDLL-only units into bf2_w32ded.exe.
             set "ENGINE_OBJECT=1"
+            rem Code\BF2\VoipServer is a THIRD server-side image (BF2VoipServer_w32ded.dll - see
+            rem bf2_voipserver in CMakeLists.txt). No unit in it is an engine member, so the whole
+            rem directory is excluded here; CMakeLists.txt mirrors this with bf2_voipserver_only_sources.
+            echo %%F | find /i "\BF2\VoipServer\" >nul
+            if not errorlevel 1 set "ENGINE_OBJECT=0"
             if /i "%%~fF"=="%ROOT%\Core\DllModule.cpp" set "ENGINE_OBJECT=0"
             rem The side-DLL image owns its globals translation unit.
             rem It defines the nineteen names initDll fills, zero-initialised; Core\Globals.cpp is

@@ -1,4 +1,6 @@
-// Voice-server routing and resources. Disabled voice is supported; enabled allocation and local-owner cleanup remain frontiers.
+// Voice-server client: settings copy, channel bring-up, the challenge handshake and the routing
+// packets the engine sends to the voice server. Remote and in-process (local) servers are both
+// supported; disabled voice allocates nothing.
 
 #include "VoipServerConnection.h"
 
@@ -20,9 +22,13 @@
 #include "../../Core/Ids.h"
 #include "../../Core/SystemInfo.h"
 #include "../../IO/Network/NetworkLayer/Socket/UDPSocket.h"
+#include "../../IO/Network/ProtocolLayer/NetServer.h"
 #include "../../Scene/Object/PlayerManager.h"
 #include "../IGame.h"
+#include "../IGameServer.h"
 #include "../Objects/IPlayer.h"
+#include "../../External/GameSpy/md5.h"            // MD5Digest - the challenge response
+#include "VoipServerInternal.h"
 
 #include <cerrno>
 #include <cstring>
@@ -38,7 +44,7 @@ extern ClassManager* classManager;                    // Core/Globals.cpp; PE ds
 static VoipServerConnection* s_instance = 0;
 
 namespace {
-void clearFailedVoipSendError()
+void clearFailedVoipSocketError()
 {
 #if defined(_WIN32)
     // PE calls WSAGetLastError even though it discards the value, then clears it.
@@ -96,12 +102,9 @@ void VoipServerConnection::ReleaseEnabledVoipResources()
 {
     if (!m_infoByte4315 && m_localVoipServer440C)
     {
-        // [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: voip-enabled-init]
-        // The local voice owner's stop/destruction contract is unresolved; abort before releasing it.
-        std::fprintf(stderr, "[FRONTIER] dice::hfe::VoipServerConnection::ReleaseEnabledVoipResources "
-                             "reached dice::hfe::VoipServerInternal::Stop/destructor\n");
-        std::fflush(stderr);
-        std::abort();
+        m_localVoipServer440C->Stop();
+        delete m_localVoipServer440C;
+        m_localVoipServer440C = 0;
     }
 
     if (m_routingLog4414)
@@ -124,6 +127,8 @@ VoipServerConnection::VoipServerConnection()
 {
     m_channel = 0;                                     // +0x04
     memset(m_packet, 0, sizeof(m_packet));             // covers the ELF's +0x4208 loop+memset zeroing
+    m_fullRoutingTimer = 0.0f;                         // +0x430C
+    memset(_pad4310, 0, sizeof(_pad4310));             // +0x4310
     m_infoByte4314  = 0;                               // +0x4314
     m_infoByte4315  = 0;                               // +0x4315
     memset(_pad4316, 0, sizeof(_pad4316));
@@ -203,8 +208,8 @@ bool VoipServerConnection::GetVoipServerSettings(IGameServerSettings* value)
 }
 #endif
 
-// Copies settings after the singleton lookup. Disabled voice succeeds without allocating resources.
-// [FRONTIER] Enabled voice stops before the unfinished allocation path.
+// Copies settings after the singleton lookup. Disabled voice succeeds without allocating resources;
+// enabled voice builds the channel (and the in-process server) through InitEnabledVoip.
 bool VoipServerConnection::Init()
 {
     // Both binaries discard this exact call's return. ELF: classManager ds:0x8AC85A0, vslot
@@ -235,19 +240,83 @@ bool VoipServerConnection::Init()
     if (!m_infoByte4314)
         return true;
 
-    return InitEnabledVoip();                          // [FRONTIER - only when voice is enabled]
+    return InitEnabledVoip();
 }
 
-// [FRONTIER] Voice-enabled initialization stops until UDP voice setup and the
-// in-process voice server are implemented. sv.voipEnabled 0 avoids this branch.
-// [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: voip-enabled-init]
+// Voice-enabled initialization: writes the fixed version string, opens and binds the voice
+// channel, points it at the BF server, and (unless voice is remote) creates and starts the
+// in-process voice server with a random shared password.
+// Recovered from fh2 Init 0x4CCCA0 and the x86 PE exe 0x54B130.
 bool VoipServerConnection::InitEnabledVoip()
 {
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::VoipServerConnection::InitEnabledVoip reached "
-                         "(sv.voipEnabled is 1; the in-process voice server is not recovered)\n");
-    std::fflush(stderr);
-    //std::abort();
-    return false;
+    char version[256];
+    sprintf(version, "%06d%06d%06d%06d", 1, 5, 3153, 0);
+    std::size_t versionLength = std::strlen(version);
+    if (versionLength <= 0x63)
+    {
+        m_versionCount = static_cast<int>(versionLength);
+        std::memcpy(m_versionBuffer, version, versionLength);
+        m_versionBuffer[versionLength] = 0;
+    }
+
+    m_channel = new io::UDPSocket();
+    if (!m_channel)
+        return false;
+
+    char listenAddress[128];
+    sprintf(listenAddress, ":%d", m_infoDword4404);
+    if (!m_channel->listen(std::string(listenAddress), false))
+    {
+        // The shipped code clears the last error here rather than failing.
+#if defined(_WIN32)
+        (void)WSAGetLastError();
+        WSASetLastError(0);
+#else
+        errno = 0;
+#endif
+    }
+
+    io::ISocket::Address address;
+    std::memset(&address, 0, sizeof(address));
+    *reinterpret_cast<unsigned short*>(&address.sockaddr[0]) = 2;                       // AF_INET
+    unsigned short peerPort = static_cast<unsigned short>(m_infoWord4400);
+    *reinterpret_cast<unsigned short*>(&address.sockaddr[2]) =
+        static_cast<unsigned short>((peerPort >> 8) | (peerPort << 8));                  // host -> network order
+    unsigned int peerAddress = static_cast<unsigned int>(m_infoDword4318);
+    if (peerAddress == 1)
+    {
+        // Address 1 selects local voice: resolve this server's own address.
+        std::string localAddress("127.0.0.1");
+        IGameServer* gameServer = static_cast<IGameServer*>(game->queryInterface(IID_IGameServer));
+        if (gameServer)
+        {
+            io::NetServer* netServer = gameServer->getNetServer();
+            if (netServer)
+                localAddress = netServer->getServerAddress();
+        }
+        peerAddress = static_cast<unsigned int>(inet_addr(localAddress.c_str()));
+    }
+    *reinterpret_cast<unsigned int*>(&address.sockaddr[4]) = peerAddress;
+    address.length = 16;
+    m_channel->setPeerAddress(address);
+
+    if (m_infoByte4315)
+        return true;                                   // remote voice server: nothing local to start
+
+    m_localVoipServer440C = new VoipServerInternal();
+    if (!m_localVoipServer440C)
+        return true;
+
+    // The generated one-time secret replaces the settings value: the challenge handler hashes
+    // m_sharedSecret, and the in-process server must expect the same bytes. The PE stores it in the
+    // shared-secret field (this+0x43FC) rather than a temporary, then hands that same string to the
+    // server's Start.
+    const int letterCount = rand() % 10 + 8;
+    m_sharedSecret = static_cast<char>(118);            // leading 'v'
+    for (int i = 0; i < letterCount; ++i)
+        m_sharedSecret += static_cast<char>(rand() % 26 + 'a');
+    m_localVoipServer440C->Start(m_sharedSecret, static_cast<unsigned int>(m_infoWord4400));
+    return true;
 }
 
 // Appends 24 version bytes and 20 session bytes, excluding terminators.
@@ -338,7 +407,7 @@ bool VoipServerConnection::UpdatePlayerRouting(world::IPlayer* player)
 packet_ready:
     ++cursor;
     if (!m_channel->send(m_packet, cursor))
-        clearFailedVoipSendError();
+        clearFailedVoipSocketError();
 
     if (m_routingLog4414)
     {
@@ -382,20 +451,174 @@ int VoipServerConnection::ResetPlayerRouting()
     m_packet[cursor] = 102;                            // *(this + 8 + cursor) = 102
     ++cursor;
     if (!m_channel->send(m_packet, cursor))
-        clearFailedVoipSendError();
+        clearFailedVoipSocketError();
     return 1;
 }
 
-// [CHOSEN, not recovered] Updates currently return immediately.
-// The original enabled path updates routing, debug logging, and packet reception.
+// PE 0x54B900, 78 B. Gated on the enabled byte: a server that never Init'ed VoIP does nothing.
+// Past the gate it resends the full routing table, then drains the channel.
 void VoipServerConnection::Update(float dt)
 {
-    return;
     if (!m_infoByte4314)
         return;
-    FullRoutingUpdate(dt);                             // [FRONTIER]
-    UpdateDebugLogging();                              // [FRONTIER]
-    Receive();                                         // [FRONTIER]
+
+    FullRoutingUpdate(dt);
+    Receive();
+}
+
+// PE 0x54B700, 502 B. Decrements the resend timer; on expiry, and while a PlayerManager exists,
+// rebuilds the 65-slot routing table, appends the invariant version/session header, tags message
+// 103 and sends it on the channel. Slot 64 holds players whose id is -1 or 255; other ids outside
+// 0..63 are dropped. A failed send clears the socket error rather than reporting it. AI players
+// and players with neither a command nor a valid squad contribute nothing.
+void VoipServerConnection::FullRoutingUpdate(float dt)
+{
+    m_fullRoutingTimer -= dt;
+    if (m_fullRoutingTimer >= 0.0f)
+        return;
+
+    m_fullRoutingTimer += 5.0f;
+    if (!world::playerManager)
+        return;
+
+    unsigned int table[65];
+    std::memset(table, 0, sizeof(table));
+
+    const std::list<world::IPlayer*>& players = world::playerManager->getPlayers();
+    for (std::list<world::IPlayer*>::const_iterator it = players.begin(); it != players.end(); ++it)
+    {
+        world::IPlayer* const player = *it;
+        if (player->getIsAIPlayer())
+            continue;
+
+        unsigned char flags = 0;
+        if (player->getTeam() == 2)
+            flags = 0x80;
+
+        const unsigned int squadId = static_cast<unsigned int>(player->getSquadId());
+        if (player->getIsCommander())
+        {
+            flags = static_cast<unsigned char>(flags | 0x40);
+        }
+        else if (player->getIsSquadLeader() && squadId != 0 && squadId <= 10u)
+        {
+            flags = static_cast<unsigned char>(flags | (squadId | 0x20u));
+        }
+        else if (squadId != 0 && squadId <= 10u)
+        {
+            flags = static_cast<unsigned char>(flags | (squadId & 0x0Fu));
+        }
+        else
+        {
+            continue;
+        }
+
+        const unsigned short sessionId = player->getVoipSessionId();
+        const unsigned int entry = (static_cast<unsigned int>(sessionId) << 16) | flags;
+
+        const int id = player->getId();
+        if (id == 255 || id == -1)
+            table[64] = entry;
+        else if (id >= 0 && id < 64)
+            table[id] = entry;
+    }
+
+    std::memcpy(m_packet, table, sizeof(table));
+    int cursor = 260;
+    PacketAppendVersionAndSessionId(cursor);
+    m_packet[cursor] = 103;
+    ++cursor;
+    if (!m_channel->send(m_packet, cursor))
+        clearFailedVoipSocketError();
+}
+
+// ELF 0x81275d0. Trailing packet-id extraction: reads the last byte of an n-byte datagram into
+// packetId and decrements length to n-1, the message-body length. A zero length reads nothing and
+// reports false.
+int VoipServerConnection::ExtractPacketId(unsigned char* buffer, int& length, unsigned char& packetId)
+{
+    if (length > 0)
+    {
+        packetId = buffer[length - 1];
+        --length;
+        return 1;
+    }
+    return 0;
+}
+
+// PE 0x54B000, ~0x7e / ELF 0x8127810. Non-blocking recv on the channel, then a materialisation of
+// the peer address that the shipped body never reads back. An empty read or a socket error returns
+// without dispatching; the error arm clears the socket error first. A datagram whose trailing id
+// byte is 104 is the BFVoipChallengeString handshake, and its response recomputes the session every
+// routing packet must carry.
+void VoipServerConnection::Receive()
+{
+    if (!m_channel)
+        return;
+
+    const int received = m_channel->receiveFrom(m_packet, 16896);
+
+    // getPeerAddress (vslot +0x20): the shipped body copies the 17-byte address into a local and
+    // discards it. [UNRESOLVED] No consumer is evident in the recovered body; the call is preserved
+    // for ordering.
+    const io::ISocket::Address peerAddress = m_channel->getPeerAddress();
+    (void)peerAddress;
+
+    if (received == -1)
+        clearFailedVoipSocketError();
+
+    if (received <= 0)
+        return;
+
+    int length = received;
+    unsigned char packetId = 0;
+    ExtractPacketId(m_packet, length, packetId);
+    if (packetId == 104)
+        HandlePacketChallengeString(reinterpret_cast<char*>(m_packet), length);
+}
+
+// PE 0x54AEA0, ELF 0x8127600 (HandlePacketChallengeString). The valid arm concatenates the 10-byte
+// challenge with the shared secret, hashes it and stores the truncated session in m_textBuffer,
+// which PacketAppendVersionAndSessionId then publishes on every routing packet.
+//
+// Any other length takes retail's assertion path:
+//   Debug(DebugTypeError, "VoipServerConnection.cpp", 631)
+//       << "BFVoipChallengeString packet length is invalid"
+// which aborts the process. The datagram is unauthenticated and remote, so any UDP packet ending in
+// 0x68 whose total length is not 11 kills the server - a remote denial of service.
+//
+// [CHOSEN, not recovered] A non-10 length is dropped silently instead of aborting. Such a datagram
+// cannot be a challenge, so ignoring it preserves every legitimate outcome while removing the DoS.
+// It is deliberately not logged: a diagnostic per malformed datagram would itself be a log-flood
+// vector. This is an intentional departure from retail, not recovered behavior.
+void VoipServerConnection::HandlePacketChallengeString(char* data, int length)
+{
+    if (length != 10)
+        return;
+
+    char challenge[11];
+    std::memcpy(challenge, data, 10);
+    challenge[10] = 0;
+
+    char joined[256];
+    std::sprintf(joined, "%s%s", challenge, m_sharedSecret.c_str());
+
+    char digest[33];
+    MD5Digest(reinterpret_cast<unsigned char*>(joined),
+              static_cast<unsigned int>(m_sharedSecret.size()) + 10u, digest);
+
+    const int digestLength = static_cast<int>(std::strlen(digest));
+    if (digestLength <= 0x63)
+    {
+        m_textCount = static_cast<unsigned int>(digestLength);
+        std::memcpy(m_textBuffer, digest, static_cast<std::size_t>(digestLength));
+        m_textBuffer[digestLength] = 0;
+    }
+    if (m_textCount > 20)
+    {
+        m_textCount = 20;
+        m_textBuffer[20] = 0;
+    }
 }
 
 // Chooses a random voice-session ID independently of playerId, restarting the player scan on collision.
