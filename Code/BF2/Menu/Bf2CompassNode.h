@@ -21,20 +21,22 @@ public:
     bool setTextureSizeForHud(float width, float height);
     bool setOffsetForHud(int offset);                     // 7D00D0, +10C
     bool setSnapOffsetForHud(int a, int b, int c, int d);
-    bool setSnapTextureForHud(bool primary, int texture);
+    bool setSnapTextureForHud(bool primary, TextureHandle texture);
 protected:
     // Member names [INFERRED] from paintSelf. The first five words are a Rect
     // whose origin setTextureSize always clears.
     Rect m_textureRect;             // +90..+A0
-    int m_snapTexturePrimary;       // +A4, drawn when the leading limit is hit
-    int m_snapTextureSecondary;     // +A8, drawn when the trailing limit is hit
+    TextureHandle m_snapTexturePrimary;   // +A4, drawn when the leading limit is hit
+    TextureHandle m_snapTextureSecondary; // +A8, drawn when the trailing limit is hit
     int m_offset;                   // +AC, added to the scrolled position
     int m_snapOffset[4];            // +B0..+BC; [1]/[0] vertical, [2]/[3] horizontal
     bool m_snapEnabled;             // +C0
     bool m_wrapEnabled;             // +C1
     unsigned char m_paddingc2[2];   // untouched
 };
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2CompassNode) == 196, "native Bf2CompassNode storage");
+#endif
 } }
 #endif
 #endif

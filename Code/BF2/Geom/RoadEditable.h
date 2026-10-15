@@ -12,8 +12,6 @@
 
 #include "IRoadEditable.h"
 #include "MeshTemplate.h"            // MeshBounds
-#include "UndergrowthSystem.h"       // Vc71Vec<T>
-#include "Vc71ValueList.h"
 #include "../Game/IEventListener.h"
 #include "../IO/Console/IConsoleSaveable.h"
 #include "../Math/Vec3.h"
@@ -21,6 +19,7 @@
 #include "../../RendDX9Abi/PluginAbi.h"     // renddx9abi::HostString
 
 #include <stddef.h>
+#include <list>
 #include <vector>
 
 namespace dice {
@@ -61,7 +60,7 @@ struct RoadEditableVertex
 };
 
 typedef std::vector<int>               RoadPolygon;
-typedef Vc71ValueList<RoadPolygon>     RoadPolygonList;
+typedef std::list<RoadPolygon>         RoadPolygonList;
 
 class RoadEditable : public IRoadEditable,
                      public ::dice::hfe::io::IConsoleSaveable,
@@ -138,7 +137,7 @@ public:
     IEditorSpline*              m_edge0;                        // +0x18  [INFERRED] type, never set
     IEditorSpline*              m_edge1;                        // +0x1C
     IPerlinNoise*               m_noise;                        // +0x20
-    Vc71Vec<Vec2>               m_textureScaleOffsets;          // +0x24
+    std::vector<Vec2>           m_textureScaleOffsets;          // +0x24
     int                         m_vertexCount;                  // +0x34
     int                         m_triangleCount;                // +0x38  not written by the ctor
     void*                       m_vertexBuffer;                 // +0x3C
@@ -180,31 +179,7 @@ static_assert(offsetof(RoadEditableVertex, needsUv) == 0x28, "flag byte at +0x28
 static_assert(offsetof(RoadEditableVertex, alpha) == 0x3C, "alpha at +0x3C");
 #endif
 
-// The retail flavour's layout is the shipped one. In the native flavour HostString is the host's
-// std::string, so the name takes that type's size instead - the object never crosses the boundary by
-// layout, only through its slots.
-#if defined(_M_IX86) && !BF2_PLUGIN_ABI_NATIVE
-static_assert(offsetof(RoadEditable, m_refCount) == 0x0C, "refCount at +0x0C");
-static_assert(offsetof(RoadEditable, m_template) == 0x10, "template at +0x10");
-static_assert(offsetof(RoadEditable, m_noise) == 0x20, "noise at +0x20");
-static_assert(offsetof(RoadEditable, m_textureScaleOffsets) == 0x24, "scale offsets at +0x24");
-static_assert(offsetof(RoadEditable, m_vertexCount) == 0x34, "vertex count at +0x34");
-static_assert(offsetof(RoadEditable, m_vertexBuffer) == 0x3C, "vertex buffer at +0x3C");
-static_assert(offsetof(RoadEditable, m_texture0) == 0x44, "texture 0 at +0x44");
-static_assert(offsetof(RoadEditable, m_effect) == 0x4C, "effect at +0x4C");
-static_assert(offsetof(RoadEditable, m_paramFogColor) == 0x6C, "fogColor handle at +0x6C");
-static_assert(offsetof(RoadEditable, m_centre) == 0x70, "sphere centre at +0x70");
-static_assert(offsetof(RoadEditable, m_radius) == 0x7C, "sphere radius at +0x7C");
-static_assert(offsetof(RoadEditable, m_bounds) == 0x80, "bounds at +0x80");
-static_assert(offsetof(RoadEditable, m_name) == 0xBC, "name at +0xBC");
-static_assert(offsetof(RoadEditable, m_pendingPolygons) == 0xD8, "pending polygons at +0xD8");
-static_assert(offsetof(RoadEditable, m_readyPolygons) == 0xE4, "ready polygons at +0xE4");
-static_assert(offsetof(RoadEditable, m_ghost) == 0xF0, "ghost byte at +0xF0");
-static_assert(offsetof(RoadEditable, m_priority) == 0xF4, "priority at +0xF4");
-static_assert(offsetof(RoadEditable, m_fadeDistAtStartLeft) == 0xF8, "fade start-left at +0xF8");
-static_assert(offsetof(RoadEditable, m_fadeDistAtEndRight) == 0x110, "fade end-right at +0x110");
-static_assert(sizeof(RoadEditable) == 0x118, "the factory 0x100B0A1B allocates 0x118");
-#endif
+// The object never crosses the boundary by layout, only through its slots.
 
 // RefFactory published by ModuleGeom::getClassList.
 IBase* __fastcall createRoadEditable(unsigned int iid, IBase* outer);

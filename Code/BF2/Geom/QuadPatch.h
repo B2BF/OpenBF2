@@ -6,8 +6,8 @@
 #define GEOM_QUADPATCH_H
 
 #include <cstddef>
+#include <vector>
 #include "../Math/Vec3.h"
-#include "../../RendDX9Abi/Vc71Vector.h"
 
 namespace dice {
 namespace hfe {
@@ -105,11 +105,11 @@ public:
     void drawFinal(TerrainCullerNode**& it);                         // 0x1018C910  the diffuse detail passes (LOD 0 per layer, then the lower LODs)
     void drawShadow();                                               // 0x1018DD00  pass 7: this patch's gathered shadow ranges
     bool gatherShadowRanges(void** lockedIndices, int* cursor);     // 0x1018BAE0  per shadow record -> sub_1018AC00 [UNREAD, stops]
-    void drawWater(TerrainCullerNode**& it, vc71::vector_layout* list,
+    void drawWater(TerrainCullerNode**& it, std::vector<TerrainCullerNode*>* list,
                    void* materialParameters, void* objectParameters); // 0x1018D800  the Ra water submit - see the body
 
     // the light passes' draws over the culler's gathered list
-    void drawGatheredNodes(TerrainCullerNode**& it, vc71::vector_layout* list,
+    void drawGatheredNodes(TerrainCullerNode**& it, std::vector<TerrainCullerNode*>* list,
                            int passLod0, int passOther);            // 0x10189210  per node: its pass, the morph constants, one uncracked range
     void drawPointLight(TerrainCullerNode**& it);                    // 0x1018C7F0  "TerrainPointLight": drawGatheredNodes, pass 13 / 1
 
@@ -122,7 +122,7 @@ public:
     void  buildNormalVertexBuffer();                                 // 0x10188680 1271 B  per-vertex normals from the heightmap into +0x5C
 
     Terrain*              terrain;              // +0x004
-    vc71::vector_layout   detailLayers;         // +0x008  QuadPatchDetailLayer* per detail texture (+1 slots, null-filled; first at +0x0C)
+    std::vector<QuadPatchDetailLayer*> detailLayers;   // +0x008  one per detail texture (+1 slots, null-filled)
     Vec3                  center;               // +0x018  patch origin + half a patch (load)
     // Owned vertex buffers; editable patches populate height and normal streams.
     // Loaded game patches leave these three optional buffers null.
@@ -239,7 +239,7 @@ struct TerrainCullerNode
 
     QuadPatch*            patch;                // +0x000  patches[fileByte] or null (0xFF)
     unsigned char*        lodTable;             // +0x004  the terrain's LOD table (leaf) or the parent's child table (load)
-    vc71::vector_layout   layerLodTables;       // +0x008  per detail layer of `patch`: the layer's LOD table (leaf) or the parent's child table (first at +0x0C)
+    std::vector<unsigned char*> layerLodTables; // +0x008  per detail layer of `patch`: the layer's LOD table (leaf) or the parent's child table
     // +0x018: a dx9rend Query (QueryManager.cpp) - proven by the pre-0x18 node builder
     // sub_100E4690, which stores QueryManager::createQuery's answer here (0x100E4E9E..0x100E4EA3),
     // and by the destructor, which releases it through the Query's inline --ref dance around its
@@ -281,8 +281,8 @@ public:
     void deleteNodeTree(TerrainCullerNode* node);
     void load(TerrainRawReader& reader);
     void loadNode(TerrainRawReader& reader, TerrainCullerNode* node);
-    vc71::vector_layout* visiblePatches()  { return &visible; }
-    vc71::vector_layout* gatheredPatches() { return &gathered; }
+    std::vector<TerrainCullerNode*>* visiblePatches()  { return &visible; }
+    std::vector<TerrainCullerNode*>* gatheredPatches() { return &gathered; }
 
     // the per-frame bodies
     void update();                                                   // 0x100E7080  slot +0x28 of Terrain calls it: LOD distance, the walk, the crack fixup
@@ -308,8 +308,8 @@ public:
     float                 lodFactor28;          // +0x028  2.0f
     float                 lodFactor2C;          // +0x02C  2.7f
     float                 lodFactor30;          // +0x030  3.0f - LOD 2 beyond lodDistance * this
-    vc71::vector_layout   visible;              // +0x034  the visible node list the draws walk (first at +0x38)
-    vc71::vector_layout   gathered;             // +0x044  the sphere gathers' node list (first at +0x48)
+    std::vector<TerrainCullerNode*> visible;    // +0x034  the visible node list the draws walk
+    std::vector<TerrainCullerNode*> gathered;   // +0x044  the sphere gathers' node list
     Frustum*              frustum;              // +0x054  update: the render view's frustum
     const float*          cameraPosition;       // +0x058  update: row 3 of the render view's +0x64 matrix
     const float*          gatherCentre;         // +0x05C  gatherSphere's centre
@@ -331,22 +331,8 @@ static_assert(offsetof(TerrainAabb, dirty) == 0x20, "box dirty byte at +0x20");
 static_assert(offsetof(TerrainAabb, centre) == 0x30, "box centre at +0x30");
 static_assert(sizeof(QuadPatchDetailLayer) == 0x3C, "detail layer is 0x3C bytes - see 0x1018A3A0");
 static_assert(offsetof(QuadPatchDetailLayer, terrain) == 0x34, "detail layer terrain at +0x34");
-static_assert(sizeof(QuadPatch) == 0x120, "QuadPatch is 0x120 bytes - see 0x100D8B20");
 static_assert(offsetof(QuadPatch, terrain) == 0x04, "QuadPatch terrain at +0x04 - one vptr ahead of it");
 static_assert(offsetof(QuadPatch, detailLayers) == 0x08, "QuadPatch detail layer vector at +0x08");
-static_assert(offsetof(QuadPatch, lastDrawnFrame) == 0x38, "QuadPatch frame stamp at +0x38");
-static_assert(offsetof(QuadPatch, vertexBuffer) == 0x60, "QuadPatch vertex buffer at +0x60");
-static_assert(offsetof(QuadPatch, worldXf) == 0x88, "QuadPatch world position at +0x88");
-static_assert(offsetof(QuadPatch, heightVertexBuffer) == 0x54, "QuadPatch height VB at +0x54 - see 0x1019DFDC");
-static_assert(offsetof(QuadPatch, normalVertexBuffer) == 0x5C, "QuadPatch normal VB at +0x5C - see 0x1018868E");
-static_assert(offsetof(QuadPatch, maxHeight) == 0x98, "QuadPatch max height at +0x98 - see 0x100D894F");
-static_assert(offsetof(QuadPatch, minHeight) == 0x9C, "QuadPatch min height at +0x9C - see 0x100D892F");
-static_assert(offsetof(QuadPatch, sphereCentre) == 0xA0, "QuadPatch sphere centre at +0xA0 - see 0x10188669");
-static_assert(offsetof(QuadPatch, sphereRadius) == 0xAC, "QuadPatch sphere radius at +0xAC - see 0x10188663");
-static_assert(offsetof(QuadPatch, currentDetailMap) == 0xC4, "QuadPatch detail-map cache at +0xC4");
-static_assert(offsetof(QuadPatch, lightRecord) == 0xC8, "QuadPatch light record at +0xC8");
-static_assert(offsetof(QuadPatch, hasNoDetailLayers) == 0x10C, "QuadPatch no-detail flag at +0x10C");
-static_assert(offsetof(QuadPatch, maxDetailLayerIndex) == 0x11C, "QuadPatch max layer at +0x11C");
 static_assert(sizeof(SurroundingPatch) == 0x168, "SurroundingPatch is 0x168 bytes - see 0x100D8BA0");
 static_assert(offsetof(SurroundingPatch, terrain) == 0x04, "SurroundingPatch terrain at +0x04");
 static_assert(offsetof(SurroundingPatch, originXf) == 0x58, "SurroundingPatch origin vector at +0x58");
@@ -354,20 +340,8 @@ static_assert(offsetof(SurroundingPatch, slot) == 0x84, "SurroundingPatch slot a
 static_assert(offsetof(SurroundingPatch, placement) == 0x8C, "SurroundingPatch transform at +0x8C");
 static_assert(offsetof(SurroundingPatch, bounds) == 0xCC, "SurroundingPatch bounds at +0xCC");
 static_assert(offsetof(SurroundingPatch, corners) == 0x108, "SurroundingPatch corners at +0x108");
-static_assert(sizeof(TerrainCullerNode) == 272, "culler node is 272 bytes - see 0x100E3FF0");
 static_assert(offsetof(TerrainCullerNode, layerLodTables) == 0x08, "node layer tables at +0x08");
-static_assert(offsetof(TerrainCullerNode, child) == 0x1C, "node children at +0x1C");
-static_assert(offsetof(TerrainCullerNode, bounds) == 0x50, "node bounds at +0x50");
-static_assert(offsetof(TerrainCullerNode, corners) == 0x8C, "node corners at +0x8C");
-static_assert(offsetof(TerrainCullerNode, fileByteEC) == 0xEC, "node file bytes at +0xEC");
-static_assert(offsetof(TerrainCullerNode, childrenWalked) == 0xF0, "node walked count at +0xF0");
-static_assert(offsetof(TerrainCullerNode, lod) == 0xF8, "node lod at +0xF8");
-static_assert(offsetof(TerrainCullerNode, crackMask) == 0x100, "node crack mask at +0x100");
-static_assert(sizeof(TerrainCuller) == 0x7C, "culler is 0x7C bytes - see 0x100D7920");
 static_assert(offsetof(TerrainCuller, visible) == 0x34, "visible list at +0x34");
-static_assert(offsetof(TerrainCuller, gathered) == 0x44, "gathered list at +0x44");
-static_assert(offsetof(TerrainCuller, frustum) == 0x54, "frustum at +0x54");
-static_assert(offsetof(TerrainCuller, nodeCount) == 0x74, "node count at +0x74");
 #endif
 
 } // namespace geom

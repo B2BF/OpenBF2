@@ -33,11 +33,13 @@ struct MarkerQuad
                                         //   {1,1,1,1} as constructed, {0,1,0,1} per marker
     float width, height;                // +18/+1C
     float rotation;                     // +20 radians; 0 for every marker
-    int texture;                        // +24 handle; 0 means nothing is drawn
+    TextureHandle texture;              // +24 handle; 0 means nothing is drawn
     std::uint32_t field28;              // +28 never written and never read
 };
+#if defined(_M_IX86)
 static_assert(sizeof(MarkerTarget) == 8, "retail MarkerTarget list payload");
 static_assert(sizeof(MarkerQuad) == 44, "retail MarkerQuad list payload");
+#endif
 
 class Bf2ObjectMarkerNode : public Node {
 public:
@@ -61,7 +63,7 @@ public:
     bool setLockTextOffsetForHud(int x, int y);           // 7CD1F0, +CC
     bool setLockTextForHud(bool enabled, std::string prefix);
     bool addLockTextNodeForHud(Bf2TransformNode* node);    // 7CD000, +D4
-    bool setTextureForHud(int index, int texture);         // 7CD1C0, +D8
+    bool setTextureForHud(int index, TextureHandle texture); // 7CD1C0, +D8
     bool setTextureSizeForHud(int index, float width, float height); // 7CD210, +DC
     bool setLockOnTypeForHud(int type);                   // 7CDDD0, +E0
     bool setWeaponForHud(int weapon);                     // 7CD1E0, +E4
@@ -75,7 +77,7 @@ protected:
     int m_objects;                       // PE+08, ctor argument, default5: the marker cap
     // [INFERRED] Marker range, refreshed from weapon targeting range or player view distance.
     float m_range;                       // PE+0C, zeroed
-    int m_textures[4];                   // PE+10, index<4 only; [3] is the range line's
+    TextureHandle m_textures[4];         // PE+10, index<4 only; [3] is the range line's
     hfe::Vec2 m_textureSizes[4];         // PE+20, every entry starts (32,32)
     hfe::Vec2 m_lockTextOffset;          // PE+40, starts (-3, 0)
     std::uint32_t m_field048;            // PE+48 [UNRESOLVED], zeroed
@@ -121,11 +123,13 @@ private:
     void updateRangeLine(hfe::Vec3 screen, const Rect* bounds);
     void updateMarkerLabels(const Rect* bounds);
     void drawMarkers(System* system, const Rect* bounds, RenderContext* context);
-    void drawMarker(float x, float y, float rotation, float width, float height, int texture,
+    void drawMarker(float x, float y, float rotation, float width, float height, TextureHandle texture,
                     System* system, const Rect* clip, RenderContext* context);
 };
 // Retail is 0x1CC; the four containers lose four bytes each on this toolchain.
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2ObjectMarkerNode) == 444, "native Bf2ObjectMarkerNode storage");
+#endif
 
 // an eight-byte zeroed .data block whose address is the default value
 // of every m_names entry. The destructor compares against it before releasing a

@@ -21,8 +21,8 @@ public:
     // [CHOSEN, not recovered] Native event-routing accessors.
     // [RETIRE-WHEN: bf2-picture-native-accessors] Replace them when the corresponding Node virtual methods are typed and validated.
     bool setTextureNameForHud(const char* name);         // 7AC810, +C8
-    bool setTextureForHud(int texture);                  // 7CDFC0, +CC
-    bool setSecondaryTextureForHud(int texture);
+    bool setTextureForHud(TextureHandle texture);        // 7CDFC0, +CC
+    bool setSecondaryTextureForHud(TextureHandle texture);
     bool setTextureNameBindingForHud(const char** binding); // 7AC850, +D4
     bool setRotationBindingForHud(const float* binding);  // 7ACA30, +D8
     bool setAdditionalRotationForHud(float degrees);      // 7ACA40, +DC
@@ -39,12 +39,14 @@ protected:
     const char** m_textureNameBinding;                   // +2C, default &m_textureName
     char* m_requestedTextureName;                        // +30, owned or identity sentinel
     char* m_previousTextureName;                         // +34, owned or identity sentinel
-    int m_secondaryTexture;                             // +38
+    TextureHandle m_secondaryTexture;                   // +38
     bool m_borderEnabled;                               // +3C
     int m_borderLeft, m_borderRight, m_borderTop, m_borderBottom; // +40..4C; fild in7ACAB0
     float m_borderRed, m_borderGreen, m_borderBlue, m_borderAlpha; // +50..5C
 };
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2PictureNode)==96, "native Bf2PictureNode storage");
+#endif
 
 // 87FB54, the shared empty literal the constructor stores at +28. Bf2BarNode's
 // indexed setter compares its argument against this address, so both classes
@@ -52,7 +54,7 @@ static_assert(sizeof(Bf2PictureNode)==96, "native Bf2PictureNode storage");
 extern const char* const emptyHudTextureName;
 
 // Sets the picture texture through the shared native accessor.
-bool dispatchPictureTexture(Bf2PictureNode*, int texture);
+bool dispatchPictureTexture(Bf2PictureNode*, TextureHandle texture);
 } }
 #endif
 #endif

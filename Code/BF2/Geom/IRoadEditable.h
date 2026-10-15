@@ -15,9 +15,7 @@
 #include <string>
 #endif
 
-#if !defined(BF2_IMAGE_RENDDX9) || BF2_PLUGIN_ABI_NATIVE
 #include <set>
-#endif
 
 namespace dice {
 namespace hfe {
@@ -42,39 +40,7 @@ typedef std::string RoadEditableString;
 // [CHOSEN, not recovered] Compatibility renderer builds use the VC7.1 12-byte header and 44-byte
 // nodes. The caller supplies the copy; the callee destroys it. Native images use std::set.
 
-#if !defined(BF2_IMAGE_RENDDX9) || BF2_PLUGIN_ABI_NATIVE
 typedef std::set<RoadEditableString> RoadTemplateNameSet;
-#else
-struct RoadTemplateNameSetNode
-{
-    RoadTemplateNameSetNode* left;      // +0x00
-    RoadTemplateNameSetNode* parent;    // +0x04
-    RoadTemplateNameSetNode* right;     // +0x08
-    unsigned char            value[28]; // +0x0C  a VC7.1 std::string
-    unsigned char            color;     // +0x28
-    unsigned char            isNil;     // +0x29
-    unsigned char            pad[2];
-};
-
-class RoadTemplateNameSet
-{
-public:
-    ~RoadTemplateNameSet();
-
-    void*                    comparator;   // +0x00  never written
-    RoadTemplateNameSetNode* head;         // +0x04
-    unsigned int             size;         // +0x08
-
-private:
-    RoadTemplateNameSet(const RoadTemplateNameSet&);
-    RoadTemplateNameSet& operator=(const RoadTemplateNameSet&);
-};
-
-#if defined(_M_IX86)
-static_assert(sizeof(RoadTemplateNameSetNode) == 0x2C, "the VC7.1 set<string> node is 44 bytes");
-static_assert(sizeof(RoadTemplateNameSet) == 12, "the VC7.1 set header is 12 bytes");
-#endif
-#endif
 
 
 // IRoad (IID 820010) - the three slots after the IBase quartet both road classes share.

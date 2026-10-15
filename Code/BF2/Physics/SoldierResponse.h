@@ -78,6 +78,9 @@ protected:
     // GenericFireArm::checkAreaToFireZipline samples +0xFA then +0xF9 directly in both ports
     // (ELF 0x8254940 / PE 0x5847C0). Narrow friend preserves that raw response-physics gate.
     friend class GenericFireArm;
+    // SoldierDeviationComp::updateDeviation reads the +0xFA ground-contact byte directly for an
+    // unparented soldier; the friend keeps that read on the named member.
+    friend class SoldierDeviationComp;
 
     // Layout 0x90..0xFB, every default from the 241-byte ctor.
     /* +0x90 */ int     m_refCount;                  // 1

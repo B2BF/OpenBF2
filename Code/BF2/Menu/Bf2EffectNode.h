@@ -21,7 +21,9 @@ public:
 protected:
     char* m_name; // +0C, owned clone
 };
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2EffectNode) == 16, "native Bf2EffectNode storage");
+#endif
 } }
 #endif
 #endif

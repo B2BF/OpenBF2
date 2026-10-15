@@ -13,6 +13,7 @@ namespace {
 float affineComponent(float a, float ma, float b, float mb,
                       float c, float mc, float translation)
 {
+#if defined(_M_IX86)
     float result;
     __asm {
         fld a
@@ -27,6 +28,11 @@ float affineComponent(float a, float ma, float b, float mb,
         fstp result
     }
     return result;
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    return static_cast<float>(static_cast<double>(a) * ma + static_cast<double>(b) * mb
+                              + static_cast<double>(c) * mc + translation);
+#endif
 }
 
 Vec3 affineInOrder(const Mat4& matrix, const Vec3& point, int first, int second, int third)
@@ -44,6 +50,7 @@ Vec3 affineInOrder(const Mat4& matrix, const Vec3& point, int first, int second,
 
 float screenCoordinate(float numerator, float denominator)
 {
+#if defined(_M_IX86)
     float result;
     __asm {
         fld numerator
@@ -51,6 +58,10 @@ float screenCoordinate(float numerator, float denominator)
         fstp result
     }
     return result;
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    return static_cast<float>(static_cast<double>(numerator) / denominator);
+#endif
 }
 
 void projectToScreen(const Vec3& clip, float halfWidth, float height, Vec3& result)
@@ -64,6 +75,7 @@ void projectToScreen(const Vec3& clip, float halfWidth, float height, Vec3& resu
     }
     const float x = clip.x, y = clip.y, z = clip.z;
     float outputX, outputY, outputZ;
+#if defined(_M_IX86)
     __asm {
         fld height
         fmul half
@@ -80,6 +92,14 @@ void projectToScreen(const Vec3& clip, float halfWidth, float height, Vec3& resu
         fstp outputY
         fstp outputZ
     }
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    const double halfHeight = static_cast<double>(height) * half;
+    const double inverse = 1.0 / z;
+    outputX = static_cast<float>(x * inverse * halfWidth);
+    outputY = static_cast<float>(-halfHeight * y * inverse);
+    outputZ = static_cast<float>(inverse);
+#endif
     result.x = outputX;
     result.y = outputY;
     result.z = outputZ;

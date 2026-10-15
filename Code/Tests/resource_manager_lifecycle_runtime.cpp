@@ -91,8 +91,6 @@ void expectPost(bool managed)
 namespace renddx9abi {
 void* engineAlloc(unsigned int size) { CHECK(size==20); return std::malloc(size); }
 void engineFree(void* p) { ++frees; std::free(p); }
-void* crtMalloc(size_t size) { return std::malloc(size); }
-void crtFree(void* p) { std::free(p); }
 void logf(const char*,...) {}
 unsigned int addr(const void* p) { return reinterpret_cast<unsigned int>(p); }
 }
@@ -119,7 +117,7 @@ void overGrowthPreLoadResources() { events.push_back("overPre"); }
 void overGrowthPostLoadResources() { CHECK(!resourceManagerIsReady()); events.push_back("overPost"); }
 int textureManagerSwapManaged(int value)
 { const int old=managedMode; managedMode=value; events.push_back("managed:"+std::to_string(value)); return old; }
-void* textureManagerGetTexture(const vc71::string& name)
+void* textureManagerGetTexture(const std::string& name)
 {
     CHECK(resourceManagerDefaultPriority()==7);
     acquisitions.push_back(name.c_str()); events.push_back("texture:"+std::string(name.c_str()));
@@ -129,14 +127,14 @@ void textureReleaseRef(EngineTexture*& texture)
 { CHECK(texture==textureSentinel); events.push_back("releaseTexture"); texture=0; }
 // Narrow pathname helper model. It preserves the already-recovered last-dot and '..' rule;
 // this test assesses ResourceManager's use of its result, not the helper's implementation.
-void pathGetExtension(vc71::string& out,const vc71::string& in)
+void pathGetExtension(std::string& out,const std::string& in)
 {
     const std::string value(in.c_str()); const size_t dot=value.rfind('.');
     out=(dot==std::string::npos || (dot>1 && value[dot-1]=='.')) ? "" : value.substr(dot+1).c_str();
 }
 // This fixture's atlas names are ASCII. Extended-Latin path normalization belongs to the
 // existing TextureManager helper's own contract, outside this ResourceManager test.
-void pathToLower(vc71::string& value)
+void pathToLower(std::string& value)
 {
     std::string lower(value.c_str());
     for(char& c:lower) c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));

@@ -31,7 +31,9 @@ public:
     int getInstanceCount() override { return actionNodeInstances; }
     unsigned int getInstanceSize() override { return sizeof(ActionNode); }
 };
+#if defined(_M_IX86)
 static_assert(sizeof(ActionNodeTypeDescriptor) == 16, "ActionNode metadata storage");
+#endif
 }
 
 ActionNode::ActionNode() : m_action(nullptr) {}
@@ -71,6 +73,8 @@ bool ActionNode::updateSelf(System* system, const NodeState* state,
     return true;
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(ActionNode) == 12, "client BFMeme ActionNode");
+#endif
 } }
 #endif

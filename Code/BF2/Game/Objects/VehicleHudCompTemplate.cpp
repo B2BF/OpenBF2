@@ -21,6 +21,7 @@
 #include <cfloat>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <sstream>
 
 #if !DEDICATED
@@ -35,7 +36,8 @@ namespace world {
 
 namespace {
 
-int resolveVehicleHudIcon(std::string name)
+// The handle is std::intptr_t: int on x86, the full texture address on native x64.
+std::intptr_t resolveVehicleHudIcon(std::string name)
 {
 #if !DEDICATED
     // deliberately calls getSystem twice on the success path.
@@ -212,9 +214,10 @@ public:
         return result;
     }
 
-    virtual int getVehicleIconPtr(int index)
+    virtual std::intptr_t getVehicleIconPtr(int index)
     {
-        std::vector<int>::const_iterator icon = m_template->m_vehicleHudIcons.vehicleIconPtrs.begin();
+        std::vector<std::intptr_t>::const_iterator icon =
+            m_template->m_vehicleHudIcons.vehicleIconPtrs.begin();
         if (index < m_template->getVehicleIconNumber())
             icon += index;
         if (icon != m_template->m_vehicleHudIcons.vehicleIconPtrs.end())
@@ -233,9 +236,10 @@ public:
         return result;
     }
 
-    virtual int getAbilityIconPtr(int index)
+    virtual std::intptr_t getAbilityIconPtr(int index)
     {
-        std::vector<int>::const_iterator icon = m_template->m_vehicleHudIcons.abilityIconPtrs.begin();
+        std::vector<std::intptr_t>::const_iterator icon =
+            m_template->m_vehicleHudIcons.abilityIconPtrs.begin();
         if (index < m_template->getAbilityIconNumber())
             icon += index;
         if (icon != m_template->m_vehicleHudIcons.abilityIconPtrs.end())

@@ -119,7 +119,7 @@ void verifyActiveParticles()
     }
     instance[0x14C]=1;
     IParticleSystemInstance* item=reinterpret_cast<IParticleSystemInstance*>(instance);
-    ParticleSystemInstanceList list={0,&item,&item+1,&item+1};
+    ParticleSystemInstanceList list(1,item);
     psmPrepareParticleRenderer(renderer,view,&list,0.25f,false);
     CHECK(psmDrawField<unsigned int>(renderer,0x1C38)==3);
     CHECK(sorted[0]==particles[0] && sorted[1]==particles[2] && sorted[2]==particles[1]);
@@ -189,8 +189,8 @@ void verifyActiveParticles()
     CHECK(gpuDraws.size()==2 && gpuDraws[0].count==20 && gpuDraws[1].count==2);
     CHECK(psmDrawField<unsigned int>(renderer,0x1DC4)==1 && mapping[0]==0);
     g_templatesById.clear();
-    vc71::vector_layout& retained=*reinterpret_cast<vc71::vector_layout*>(renderer+8);
-    ::operator delete(retained.first);
+    // Release the retained-instance list the prepare pass grew in the zeroed renderer span.
+    std::vector<unsigned char*>().swap(particleRendererList<unsigned char*>(renderer,8));
     allowGpu=false;
     g_HemiMapManager=0; g_ParticleSystemManager=0; g_LightManager=0;
 }

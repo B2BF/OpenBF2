@@ -11,7 +11,6 @@
 #include <windows.h>
 
 #include "../RendDX9Abi/HostFileAbi.h"
-#include "../RendDX9Abi/Vc71Vector.h"
 #include "../BF2/Geom/StaticMeshTemplate.h"
 
 
@@ -82,31 +81,14 @@ void fail(const char* file, const char* what)
     ++g_failures;
 }
 
-// The three record shapes the body documents.
-struct Group
+// Walks the records loadOccluders built through their typed StaticMeshOccluder* members.
+void checkGroups(const char* name,
+                 const dice::hfe::geom::StaticMeshTemplate::OccluderGroupVector& groups)
 {
-    ::vc71::vector_layout planes;   // +0x00, 32-byte elements
-    ::vc71::vector_layout points;   // +0x10, 12-byte elements
-    ::vc71::vector_layout edges;    // +0x20, 4-byte elements
-};
+    using dice::hfe::geom::StaticMeshOccluderGroup;
+    using dice::hfe::geom::StaticMeshOccluderPlane;
 
-unsigned int countIn(const ::vc71::vector_layout& v, unsigned int elem)
-{
-    return v.first ? static_cast<unsigned int>(v.last - v.first) / elem : 0u;
-}
-
-void checkFile(const char* name, const unsigned char* data, unsigned int size)
-{
-    // 0x2CC of zeroes, cast to the template. loadOccluders touches m_occluderGroups only.
-    static unsigned char storage[sizeof(dice::hfe::geom::StaticMeshTemplate)];
-    ::memset(storage, 0, sizeof(storage));
-    dice::hfe::geom::StaticMeshTemplate* const tmpl =
-        reinterpret_cast<dice::hfe::geom::StaticMeshTemplate*>(storage);
-
-    MemoryStream stream(data, size);
-    tmpl->loadOccluders(&stream);
-
-    const unsigned int groupCount = countIn(tmpl->m_occluderGroups, 48u);
+    const unsigned int groupCount = static_cast<unsigned int>(groups.size());
     if (groupCount == 0)
     {
         fail(name, "no occluder group was produced");
@@ -116,12 +98,11 @@ void checkFile(const char* name, const unsigned char* data, unsigned int size)
     unsigned int totalPlanes = 0;
     for (unsigned int g = 0; g < groupCount; ++g)
     {
-        const Group* const group =
-            reinterpret_cast<const Group*>(tmpl->m_occluderGroups.first + 48u * g);
+        const StaticMeshOccluderGroup* const group = &groups[g];
 
-        const unsigned int planeCount = countIn(group->planes, 32u);
-        const unsigned int pointCount = countIn(group->points, 12u);
-        const unsigned int edgeCount  = countIn(group->edges, 4u);
+        const unsigned int planeCount = static_cast<unsigned int>(group->planes.size());
+        const unsigned int pointCount = static_cast<unsigned int>(group->points.size());
+        const unsigned int edgeCount  = static_cast<unsigned int>(group->edges.size());
         totalPlanes += planeCount;
 
         if (planeCount == 0) { fail(name, "group has no planes"); continue; }
@@ -131,33 +112,28 @@ void checkFile(const char* name, const unsigned char* data, unsigned int size)
         // Every edge endpoint must address a real point.
         for (unsigned int e = 0; e < edgeCount; ++e)
         {
-            const unsigned char* const edge =
-                reinterpret_cast<const unsigned char*>(group->edges.first) + 4u * e;
+            const unsigned char* const edge = group->edges[e].points;
             if (edge[0] >= pointCount || edge[1] >= pointCount)
                 fail(name, "edge endpoint out of range");
         }
 
         for (unsigned int p = 0; p < planeCount; ++p)
         {
-            const unsigned char* const plane =
-                reinterpret_cast<const unsigned char*>(group->planes.first) + 32u * p;
-            const float* const eq = reinterpret_cast<const float*>(plane);
-            const ::vc71::vector_layout& refs =
-                *reinterpret_cast<const ::vc71::vector_layout*>(plane + 0x10);
+            const StaticMeshOccluderPlane& plane = group->planes[p];
+            const float* const eq = plane.plane;
+            const std::vector<unsigned short>& refs = plane.edgeReferences;
 
-            const unsigned int refCount = countIn(refs, 2u);
+            const unsigned int refCount = static_cast<unsigned int>(refs.size());
             if (refCount != 4)
             {
                 fail(name, "plane does not carry exactly four edge refs");
                 continue;
             }
 
-            // Every ref must address a real edge.
-            const unsigned char* const refBytes =
-                reinterpret_cast<const unsigned char*>(refs.first);
+            // Every ref must address a real edge; the edge index is the reference's low byte.
             for (unsigned int r = 0; r < 4; ++r)
             {
-                if (refBytes[2 * r] >= edgeCount)
+                if ((refs[r] & 0xFFu) >= edgeCount)
                     fail(name, "plane edge ref out of range");
             }
 
@@ -169,10 +145,8 @@ void checkFile(const char* name, const unsigned char* data, unsigned int size)
 
             // `d` is measured through edges[ref0].v0 - the anchor the body documents. If the
             // pointer arithmetic in the plane pass were wrong, this would not close.
-            const unsigned char* const edge0 =
-                reinterpret_cast<const unsigned char*>(group->edges.first) + 4u * refBytes[0];
-            const float* const anchor =
-                reinterpret_cast<const float*>(group->points.first) + 3u * edge0[0];
+            const unsigned char* const edge0 = group->edges[refs[0] & 0xFFu].points;
+            const float* const anchor = &group->points[edge0[0]].x;
             const double residual =
                 eq[0] * anchor[0] + eq[1] * anchor[1] + eq[2] * anchor[2] + eq[3];
             // The mesh coordinates run to a few tens of units, so scale the tolerance with them.
@@ -186,6 +160,23 @@ void checkFile(const char* name, const unsigned char* data, unsigned int size)
     }
 
     ::printf("  ok    %-44s groups=%u planes=%u\n", name, groupCount, totalPlanes);
+}
+
+void checkFile(const char* name, const unsigned char* data, unsigned int size)
+{
+    // Zeroed storage, cast to the template; loadOccluders touches m_occluderGroups only. Zero bytes
+    // are an empty std::vector under this build's _ITERATOR_DEBUG_LEVEL=0 STL.
+    static unsigned char storage[sizeof(dice::hfe::geom::StaticMeshTemplate)];
+    ::memset(storage, 0, sizeof(storage));
+    dice::hfe::geom::StaticMeshTemplate* const tmpl =
+        reinterpret_cast<dice::hfe::geom::StaticMeshTemplate*>(storage);
+
+    MemoryStream stream(data, size);
+    tmpl->loadOccluders(&stream);
+
+    checkGroups(name, tmpl->m_occluderGroups);
+    // Release this file's records before the storage is zeroed for the next one.
+    dice::hfe::geom::StaticMeshTemplate::OccluderGroupVector().swap(tmpl->m_occluderGroups);
 }
 
 } // namespace

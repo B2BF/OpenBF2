@@ -14,6 +14,7 @@ namespace {
 // bits when the caller selects extended precision (82B302..82B384).
 float moveOffset(float value, float start, float origin)
 {
+#if defined(_M_IX86)
     float result;
     __asm {
         fld value
@@ -22,9 +23,14 @@ float moveOffset(float value, float start, float origin)
         fstp result
     }
     return result;
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    return static_cast<float>(static_cast<double>(value) - start + origin);
+#endif
 }
 float outlineThickness(float dimension) // 82B6D9..82B6EF and three repeated arms
 {
+#if defined(_M_IX86)
     float result;
     __asm {
         fld1
@@ -33,6 +39,10 @@ float outlineThickness(float dimension) // 82B6D9..82B6EF and three repeated arm
         fstp result
     }
     return result;
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    return static_cast<float>(1.0 - dimension + dimension);
+#endif
 }
 TransformNode* asTransform(Node* node)
 {
@@ -215,6 +225,8 @@ bool MovePointer::event2(System* system, int, int) // 82B940; no enabled guard
     }
     return true;
 }
+#if defined(_M_IX86)
 static_assert(sizeof(MovePointer) == 64, "Native x86 MovePointer layout");
+#endif
 } }
 #endif

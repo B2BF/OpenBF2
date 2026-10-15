@@ -124,8 +124,14 @@ private:
     unsigned char m_flag42F;   // +0x42F
 };
 
+#if defined(_M_IX86)
 static_assert(sizeof(RenderView) == 1072,
               "dx9rend_Renderer_ctor allocates 1072 for the RenderView - see 0x1002D4C0");
+#endif
+// Every allocation is `new RenderView` (sizeof); the published size is what callers' copy storage
+// for renderViewCopyConstruct must hold (issue #7).
+static_assert(sizeof(RenderView) == dx9rend::kRenderViewObjectBytes,
+              "IRenderView.h publishes the RenderView object size");
 
 
 // Rend_RenderView_ctor, 0x101C2B90. complete.
@@ -244,6 +250,7 @@ void RenderView::setFov(float fovRadians)
         // PE101C252D..258B uses x87 fcos/fsin and retains the quotient while
         // storing zoom and computing its reciprocal. CRT overloads introduce
         // different rounding (including a non-unit zoom at the reference FOV).
+#if defined(_M_IX86)
         __asm {
             fld fovRadians
             fmul halfScale
@@ -280,6 +287,25 @@ void RenderView::setFov(float fovRadians)
         zoomDone:
             fstp st(0)
         }
+#else
+        // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates). Same order: the half
+        // fov stays unrounded, the half reference is stored as a float, both cotangents use the
+        // double cos/sin, and the reciprocal divides the unrounded quotient (issue #7).
+        const double halfFov = static_cast<double>(fovRadians) * static_cast<double>(halfScale);
+        referenceHalf = static_cast<float>(static_cast<double>(reference) *
+                                           static_cast<double>(halfScale));
+        const double cotFov = ::cos(halfFov) / ::sin(halfFov);
+        const double cotReference = ::cos(static_cast<double>(referenceHalf)) /
+                                    ::sin(static_cast<double>(referenceHalf));
+        const double zoom = cotFov / cotReference;
+        *zoomOut = static_cast<float>(zoom);
+        // fucompp + `test ah, 44h; jnp`: only an ordered zero stores the integer 0; an unordered
+        // (NaN) quotient takes the reciprocal arm.
+        if (zoom == 0.0)
+            *inverseOut = 0.0f;
+        else
+            *inverseOut = static_cast<float>(1.0 / zoom);
+#endif
     }
 
     m_fov      = fovRadians;
@@ -336,12 +362,18 @@ void RenderView::setAdjustedFov(float radians)
     }
     const float aspect = m_aspect;
     // The two products remain in x87 until the by-value float argument store.
+#if defined(_M_IX86)
     __asm {
         fld radians
         fmul aspect
         fmul scale
         fstp radians
     }
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates) (issue #7).
+    radians = static_cast<float>(static_cast<double>(radians) * static_cast<double>(aspect) *
+                                 static_cast<double>(scale));
+#endif
     setFov(radians);
 }
 float RenderView::getFov() { return m_fov; }

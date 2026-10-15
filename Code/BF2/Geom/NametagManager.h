@@ -9,13 +9,13 @@
 #define BF2_GEOM_NAMETAGMANAGER_H
 
 #include <cstddef>
+#include <map>
+#include <set>
+#include <vector>
 
 #include "../../RendDX9Abi/PluginAbi.h"
 #include "../../RendDX9Abi/HfeAbi.h"
-#include "../../RendDX9Abi/Vc71String.h"
-#include "../../RendDX9Abi/Vc71Vector.h"
-#include "../../RendDX9Abi/Vc71Map.h"
-#include "../../RendDX9Abi/Vc71IntMap.h"
+#include <string>
 #include "../Core/IBase.h"
 #include "../Core/WeakPtr.h"
 #include "../Math/Vec3.h"
@@ -39,7 +39,7 @@ class IWeaponObject;             // queryWeaponObject's answer (IID 38080)
 
 namespace geom {
 
-class NameTagRenderer;           // nt_renderer's class - Geom/NameTagRenderer.h, 0x3860 bytes each
+class NameTagRenderer;           // nt_renderer's class - Geom/NameTagRenderer.h, 0x3860 bytes each in the image
 
 
 // Console enum values select the first icon in each renderer icon group.
@@ -118,7 +118,8 @@ struct NametagFade
 };
 
 
-// Base nametag record. Renderer buffering and update helpers share this fixed layout.
+// Base nametag record, 0xC0 bytes in the image (0x10131360 lays it out). Renderer buffering,
+// drawing and the update helpers read its typed members.
 
 class NametagItem
 {
@@ -138,14 +139,15 @@ public:
     // Returns true for an object tag whose live template is a UAV vehicle.
     bool isUAV();
 
-    // data - offsets are the contract
+    // data - the `+0xNN` comments give the shipped x86 offsets. The members up to m_name still sit
+    // at them; the std::string members make every later native offset differ.
     // +0x04 is NOT a member: it is MSVC's padding after the vfptr of a class whose alignment is 8
     // (the doubles below). That is why no recovered body ever writes it - and this compiler
     // reproduces it, which the static_asserts below prove.
     int          m_slot;             // +0x08  renderer slot (allocateSlot), -1 = none
     int          m_type;             // +0x0C  TagType - selects renderer / slot tables
-    vc71::string m_name;             // +0x10  the text the renderer draws (0x101B2320 fonts +0x10)
-    vc71::string m_text2C;           // +0x2C  a second string [UNRESOLVED role - update closure]
+    std::string m_name;             // +0x10  the text the renderer draws (0x101B2320 fonts +0x10)
+    std::string m_text2C;           // +0x2C  a second string [UNRESOLVED role - update closure]
     Vec3         m_offset;           // +0x48  added to the owner position (player: 0; CP: y = pole
                                      //        height + 1; objects: y = radius or 1.2)
     int          m_distance;         // +0x54  handleEvent tests `(float)m_distance < 150`
@@ -159,18 +161,19 @@ public:
     int          m_flashColorIndex;  // +0x70  -1; the second (cross-fade) colour index, -1 = m_colorIndex
     float        m_timer;            // +0x74  0; call icon / flash time left (12, 30, 100 s)
     // Second icon indicating a control point more than two meters above/below the local vehicle.
-    int          m_elevationIcon;    // +0x78  -1
+    int          m_elevationIcon;    // +0x78  -1; stored at 0x1012CDF8 / 0x1012CE13
     float        m_iconRotation;     // +0x7C  0; a float: the update closure
                                      //        stores it with `fstp dword [ebx+7Ch]` (0x1012E6B2 /
                                      //        0x1012E6B9) and drawIcons (0x101B1FDD) passes it to
                                      //        D3DXMatrixRotationZ when flag 0x200 is set. [INFERRED name]
     int          m_team;             // +0x80  0; the owner's team
     // Timestamp of the last line-of-sight check; checks are spaced by at least 0.5 seconds.
-    double       m_lastSightCheckTime;   // +0x88  0; insertItem: (seeded Random step) * 2^-25
-    Vec3         m_worldPosition;    // +0x90  current world-space tag position
+    double       m_lastSightCheckTime;   // +0x88  0; insertItem: (seeded Random step) * 2^-25;
+                                         //        stored at 0x1012E88D
+    Vec3         m_worldPosition;    // +0x90  current world-space tag position (0x1012CD8D..9B)
     // Control-point height above the local vehicle, rounded by truncating delta + 0.5.
     // Written with the elevation icon selection; not otherwise read.
-    int          m_heightDelta;      // +0x9C  0
+    int          m_heightDelta;      // +0x9C  0; stored at 0x1012CDF0
     NametagFade  m_fade;             // +0xA0..+0xB7  0, 0, 0
     unsigned int m_flags;            // +0xB8  7 - NametagItemFlag
     bool         m_arrowMode;        // +0xBC  0; set = drawn as the off-screen arrow: the renderer's
@@ -179,7 +182,7 @@ public:
                                      //        [INFERRED name - nt_renderer's reading; nt_update writes it]
     bool         m_dirty;            // +0xBD  1; re-buffer requested (update/enableBuffering set it)
     // Current frustum-test result, required for bar rendering.
-    bool         m_inView;           // +0xBE  0
+    bool         m_inView;           // +0xBE  0; stored at 0x101305FE
     // renamed from m_unknownBF: isEnemyInSight's cached answer - in the
     // view cone (s_enemyDotLimit) AND a clear line of sight, re-tested at most every 0.5 s
     // (0x1012E8B1 / 0x1012E8BC). [INFERRED] name.
@@ -265,55 +268,26 @@ public:
 };
 
 
-// Retail-layout containers of the manager. raii wrappers so that construction and destruction run
-// in member order - which is exactly the order 0x1012F810 builds them and 0x1012F5A0 tears them
-// down (see the destructor's note).
+// The manager's containers. As members they are constructed and destroyed in member order - which
+// is exactly the order 0x1012F810 builds them and 0x1012F5A0 tears them down (see the destructor's
+// note).
 
-struct NametagItemMap : vc71::int_map_layout<NametagItem*>     // std::map<int, NametagItem*>
-{
-    NametagItemMap()  { construct(); }                          // sub_10131690 head
-    ~NametagItemMap() { destroy(); }                            // sub_10131A40 + free
-    // The copy constructor: 0x101327D0 (head, then the structural _Copy) is the image's copy of a
-    // map<int, 4-byte> - called by the update closure (0x1012FC70, 0x10130290) and, through
-    // 0x10132860, by the renderer (0x101B33A0); 0x10132580 destroys such a copy and 0x10132280 is its
-    // erase(first, last). which map those callers copy is theirs to establish - the node shape is the
-    // same for this map and NametagSlotMap.
-    NametagItemMap(const NametagItemMap& other) { construct(); copyFrom(other); }
-private:
-    NametagItemMap& operator=(const NametagItemMap&);
-};
+// key -> item (head sub_10131690, destroy sub_10131A40). The image's copy of a map<int, 4-byte>,
+// 0x101327D0, is called by the update closure (0x1012FC70, 0x10130290) and, through 0x10132860, by
+// the renderer (0x101B33A0); 0x10132580 destroys such a copy and 0x10132280 is its
+// erase(first, last). Which map those callers copy is theirs to establish - the node shape is the
+// same for this map and NametagSlotMap.
+typedef std::map<int, NametagItem*> NametagItemMap;
 
-struct NametagSlotMap : vc71::int_map_layout<int>               // std::map<int key, int slot>
-{
-    NametagSlotMap()  { construct(); }                          // sub_1008A320 head
-    ~NametagSlotMap() { destroy(); }                            // sub_1008A450 + free
-    NametagSlotMap(const NametagSlotMap& other) { construct(); copyFrom(other); }
-private:
-    NametagSlotMap& operator=(const NametagSlotMap&);
-};
+// key -> slot (head sub_1008A320, destroy sub_1008A450).
+typedef std::map<int, int> NametagSlotMap;
 
-struct NametagFreeSlotSet : vc71::set_layout                    // std::set<int> - 0x14-byte nodes
-{
-    NametagFreeSlotSet()  { construct(); }                      // sub_101315F0 head
-    ~NametagFreeSlotSet() { destroy(); }                        // sub_10131B00 + free
-private:
-    NametagFreeSlotSet(const NametagFreeSlotSet&);              // nothing in the image copies one
-    NametagFreeSlotSet& operator=(const NametagFreeSlotSet&);
-};
+// The slots not in use (head sub_101315F0, destroy sub_10131B00). Nothing in the image copies one.
+typedef std::set<int> NametagFreeSlotSet;
 
-// std::vector<float*> - the per-TagType pointers to the static float tables. Only ever resized
-// once, to three nulls (sub_10132390(3, 0)).
-struct NametagTableVector : vc71::vector_layout
-{
-    NametagTableVector() { first = 0; last = 0; end = 0; }      // `alloc` is never written - shipped
-    ~NametagTableVector();                                      // free first; zero first/last/end
-    void   resize(unsigned int count, float* value);            // sub_10132390 on an empty vector
-    float*& operator[](int index) { return reinterpret_cast<float**>(first)[index]; }
-    float*  at(int index) const   { return reinterpret_cast<float* const*>(first)[index]; }
-private:
-    NametagTableVector(const NametagTableVector&);
-    NametagTableVector& operator=(const NametagTableVector&);
-};
+// The per-TagType pointers to the static float tables. Only ever resized once, to three nulls
+// (sub_10132390(3, 0)).
+typedef std::vector<float*> NametagTableVector;
 
 
 // NametagManager - 0x5D8 bytes.
@@ -378,7 +352,7 @@ public:
     // the `nametags` console surface (non-virtual; the executors load ecx = the singleton)
     void  createBar(int itemId, int barStart, int barEnd);
     void  createIcon(int itemId);
-    void  setTexture(int count, vc71::string path, int x, int y, int width, int height);
+    void  setTexture(int count, std::string path, int x, int y, int width, int height);
     const Vec2& getCullDistance(int type);
     void  setCullDistance(int type, const Vec2& distance);
     float  getEnemyDotLimit();               void setEnemyDotLimit(float v);
@@ -495,8 +469,9 @@ public:
     // Returns the soldier's default weapon, adapting native and compatibility layouts.
     static IBase* soldierDefaultWeapon(world::IPlayerControlObject* control);
 
-    // the data contract
-    // Every field below is at its shipped offset; the static_asserts after the class hold them.
+    // the data, in shipped order
+    // The `+0xNN` comments give the shipped x86 offsets. The std containers make every native
+    // offset from m_colors on differ; the static_asserts after the class hold the ones that agree.
     int                     m_refCount;                 // +0x00C  1
     double                  m_time;                     // +0x010  0.0; update: += frame delta
     NametagTableVector      m_transformations;          // +0x018  float* per TagType (first +0x1C)
@@ -516,7 +491,7 @@ public:
                                                         //         is stored, back to -1 when used
     int                     m_barStart;                 // +0x3A0  0; createBar's second argument
     int                     m_barEnd;                   // +0x3A4  0; createBar's third argument
-    vc71::string            m_pendingBarPath;           // +0x3A8  the bar's first texture path
+    std::string            m_pendingBarPath;           // +0x3A8  the bar's first texture path
     int                     m_pendingBarRect[4];        // +0x3C4  0; its x, y, width, height
     int                     m_pad3D4;                   // +0x3D4  never touched
     double                  m_lastTargetCheckTime;      // +0x3D8  0.0; update: every 0.5 s
@@ -569,74 +544,22 @@ private:
     NametagManager& operator=(const NametagManager&);
 };
 
-// the layout contract, held where the shipped layout is reproducible
-// Every member above is a retail-layout type (vc71::* containers, Frustum, WeakPtr, scalars), so
-// the 0x5D8 size holds in both plugin flavours - native and retail-compatible alike.
+// The shipped offsets that still hold: the predicator, the frustum, and the members before the
+// first std container. The items and the manager hold std containers, so their sizes and later
+// offsets are native (the `+0xNN` comments keep the shipped ones).
 #if defined(_M_IX86)
-static_assert(sizeof(NametagItem) == 0xC0, "0x10131360 lays out 0xC0 bytes");
-static_assert(sizeof(PlayerNametagItem) == 0xD0, "0x10130820 allocates 0xD0");
-static_assert(sizeof(ObjectNametagItem) == 0xD0, "0x10130880 allocates 0xD0");
-static_assert(sizeof(OrderNametagItem) == 0x108, "0x10130910 / 0x10130970 allocate 0x108");
 static_assert(sizeof(NametagRayPredicator) == 0x10, "0x1012CC27 builds 16 bytes");
 static_assert(sizeof(Frustum) == 0x1E8, "the embedded frustum runs +0x3E8..+0x5CF");
-static_assert(sizeof(NametagManager) == 0x5D8, "RefFactory_geom_NametagManager allocates 0x5D8");
 
 static_assert(offsetof(NametagItem, m_slot) == 0x08, "item slot at +0x08");
 static_assert(offsetof(NametagItem, m_type) == 0x0C, "item type at +0x0C");
 static_assert(offsetof(NametagItem, m_name) == 0x10, "item name at +0x10");
-static_assert(offsetof(NametagItem, m_text2C) == 0x2C, "item second string at +0x2C");
-static_assert(offsetof(NametagItem, m_offset) == 0x48, "item offset at +0x48");
-static_assert(offsetof(NametagItem, m_distance) == 0x54, "item distance at +0x54");
-static_assert(offsetof(NametagItem, m_viewDistance) == 0x58, "item view distance at +0x58");
-static_assert(offsetof(NametagItem, m_rankIcon) == 0x60, "item rank icon at +0x60");
-static_assert(offsetof(NametagItem, m_colorIndex) == 0x64, "item colour index at +0x64");
-static_assert(offsetof(NametagItem, m_icon) == 0x68, "item icon at +0x68");
-static_assert(offsetof(NametagItem, m_callIcon) == 0x6C, "item call icon at +0x6C");
-static_assert(offsetof(NametagItem, m_flashColorIndex) == 0x70, "item flash colour at +0x70");
-static_assert(offsetof(NametagItem, m_timer) == 0x74, "item timer at +0x74");
-// the update closure's fields, renamed above - each offset is a store it makes.
-static_assert(offsetof(NametagItem, m_elevationIcon) == 0x78, "0x1012CDF8 / 0x1012CE13 store +0x78");
-static_assert(offsetof(NametagItem, m_iconRotation) == 0x7C, "0x1012E6B2 / 0x1012E6B9 store +0x7C");
-static_assert(offsetof(NametagItem, m_team) == 0x80, "item team at +0x80");
-static_assert(offsetof(NametagItem, m_lastSightCheckTime) == 0x88, "0x1012E88D stores +0x88");
-static_assert(offsetof(NametagItem, m_worldPosition) == 0x90, "0x1012CD8D..9B store +0x90..+0x98");
-static_assert(offsetof(NametagItem, m_heightDelta) == 0x9C, "0x1012CDF0 stores +0x9C");
-static_assert(offsetof(NametagItem, m_fade) == 0xA0, "item fade at +0xA0");
-static_assert(offsetof(NametagItem, m_flags) == 0xB8, "item flags at +0xB8");
-static_assert(offsetof(NametagItem, m_arrowMode) == 0xBC, "item arrow byte at +0xBC");
-static_assert(offsetof(NametagItem, m_dirty) == 0xBD, "item dirty byte at +0xBD");
-static_assert(offsetof(NametagItem, m_inView) == 0xBE, "0x101305FE stores +0xBE");
-static_assert(offsetof(NametagItem, m_inSight) == 0xBF, "0x1012E8B1 / 0x1012E8BC store +0xBF");
 static_assert(offsetof(NametagFade, m_sightTime) == 0x00 && offsetof(NametagFade, m_value) == 0x08
               && offsetof(NametagFade, m_time) == 0x10, "the fade triple at item +0xA0/+0xA8/+0xB0");
-static_assert(offsetof(PlayerNametagItem, m_player) == 0xC0, "player weak pointer at +0xC0");
-static_assert(offsetof(PlayerNametagItem, m_position) == 0xC4, "player position at +0xC4");
-static_assert(offsetof(ObjectNametagItem, m_object) == 0xC0, "object weak pointer at +0xC0");
-static_assert(offsetof(ObjectNametagItem, m_position) == 0xC4, "object position at +0xC4");
-static_assert(offsetof(OrderNametagItem, m_order) == 0xC0, "order at +0xC0");
-static_assert(offsetof(OrderNametagItem, m_orderType) == 0xF0, "order type at +0xF0");
-static_assert(offsetof(OrderNametagItem, m_targetPosition) == 0xF4, "order position at +0xF4");
-static_assert(offsetof(OrderNametagItem, m_target) == 0x100, "order target at +0x100");
 
 static_assert(offsetof(NametagManager, m_refCount) == 0x00C, "refcount at +0x0C");
 static_assert(offsetof(NametagManager, m_time) == 0x010, "time at +0x10");
 static_assert(offsetof(NametagManager, m_transformations) == 0x018, "transformation vector at +0x18");
-static_assert(offsetof(NametagManager, m_colors) == 0x028, "colour vector at +0x28");
-static_assert(offsetof(NametagManager, m_alphaArrays) == 0x038, "alpha arrays at +0x38");
-static_assert(offsetof(NametagManager, m_items) == 0x338, "item map at +0x338");
-static_assert(offsetof(NametagManager, m_renderers) == 0x344, "renderers at +0x344");
-static_assert(offsetof(NametagManager, m_bufferingEnabled) == 0x348, "buffering byte at +0x348");
-static_assert(offsetof(NametagManager, m_3dMapOn) == 0x349, "3d-map byte at +0x349");
-static_assert(offsetof(NametagManager, m_freeSlots) == 0x34C, "free-slot sets at +0x34C");
-static_assert(offsetof(NametagManager, m_slotMaps) == 0x370, "slot maps at +0x370");
-static_assert(offsetof(NametagManager, m_textureMode) == 0x394, "texture mode at +0x394");
-static_assert(offsetof(NametagManager, m_pendingBarPath) == 0x3A8, "bar path at +0x3A8");
-static_assert(offsetof(NametagManager, m_pendingBarRect) == 0x3C4, "bar rect at +0x3C4");
-static_assert(offsetof(NametagManager, m_lastTargetCheckTime) == 0x3D8, "target check time at +0x3D8");
-static_assert(offsetof(NametagManager, m_spectatedPlayer) == 0x3E0, "spectated player at +0x3E0");
-static_assert(offsetof(NametagManager, m_targetRoot) == 0x3E4, "target root at +0x3E4");
-static_assert(offsetof(NametagManager, m_frustum) == 0x3E8, "frustum at +0x3E8");
-static_assert(offsetof(NametagManager, m_isDemoPlayback) == 0x5D0, "demo byte at +0x5D0");
 #endif
 
 // ModuleGeom.cpp's g_NametagManager (the "NametagManager" singleton slot). NametagManager derives

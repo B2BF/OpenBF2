@@ -79,6 +79,7 @@ const char* describe(const void* p, char* out, size_t cap, bool codeOnly)
     return out;
 }
 
+#if defined(_M_IX86)
 void reportStack(const CONTEXT& ctx)
 {
     const unsigned char* const esp = reinterpret_cast<const unsigned char*>(ctx.Esp);
@@ -158,6 +159,155 @@ void reportRawWindow(const CONTEXT& ctx)
              addr(p), w[0], w[1], w[2], w[3]);
     }
 }
+#else
+// [PLATFORM] The x64 arms of the two stack reports: the same windows over RSP, in 64-bit words and
+// 16-digit addresses.
+inline unsigned long long full(const void* p)
+{
+    return static_cast<unsigned long long>(reinterpret_cast<UINT_PTR>(p));
+}
+
+void reportStack(const CONTEXT& ctx)
+{
+    const unsigned char* const rsp = reinterpret_cast<const unsigned char*>(ctx.Rsp);
+
+    MEMORY_BASIC_INFORMATION mbi;
+    if (::VirtualQuery(rsp, &mbi, sizeof(mbi)) != sizeof(mbi) || mbi.State != MEM_COMMIT)
+    {
+        logf("[CRASH] stack at 0x%016llX is not readable", static_cast<unsigned long long>(ctx.Rsp));
+        return;
+    }
+
+    // The committed region RSP sits in, capped at 4096 qwords (32 KB).
+    const unsigned char* const regionEnd =
+        static_cast<const unsigned char*>(mbi.BaseAddress) + mbi.RegionSize;
+    const unsigned char* end = rsp + 4096 * sizeof(UINT_PTR);
+    if (end > regionEnd)
+        end = regionEnd;
+
+    logf("[CRASH] stack scan from rsp=0x%016llX to 0x%016llX - every qword that points into "
+         "executable image memory, in stack order (deepest frame first):",
+         static_cast<unsigned long long>(ctx.Rsp), full(end));
+
+    char where[MAX_PATH + 32];
+    int shown = 0;
+    for (const unsigned char* p = rsp; p + sizeof(UINT_PTR) <= end; p += sizeof(UINT_PTR))
+    {
+        const void* const value =
+            reinterpret_cast<const void*>(*reinterpret_cast<const UINT_PTR*>(p));
+        if (value == 0)
+            continue;
+        if (describe(value, where, sizeof(where), true)[0] == '\0')
+            continue;
+
+        logf("[CRASH]   [rsp+0x%04X] 0x%016llX  %s",
+             static_cast<unsigned int>(p - rsp), full(value), where);
+
+        if (++shown >= 96)
+        {
+            logf("[CRASH]   ... stopped after 96 hits");
+            break;
+        }
+    }
+    if (shown == 0)
+        logf("[CRASH]   (no code pointers found - the stack window is data only)");
+}
+
+// The raw qwords either side of RSP, unfiltered, two per line.
+void reportRawWindow(const CONTEXT& ctx)
+{
+    const unsigned char* const rsp = reinterpret_cast<const unsigned char*>(ctx.Rsp);
+
+    MEMORY_BASIC_INFORMATION mbi;
+    if (::VirtualQuery(rsp, &mbi, sizeof(mbi)) != sizeof(mbi) || mbi.State != MEM_COMMIT)
+        return;
+
+    const unsigned char* const base = static_cast<const unsigned char*>(mbi.BaseAddress);
+    const unsigned char* const top  = base + mbi.RegionSize;
+
+    const unsigned char* from = (rsp - base >= 0x40) ? rsp - 0x40 : base;
+    const unsigned char* to = (top - rsp >= 0x80) ? rsp + 0x80 : top;
+
+    logf("[CRASH] raw stack around rsp (rsp itself is marked):");
+    for (const unsigned char* p = from; p + 16 <= to; p += 16)
+    {
+        const unsigned long long* const w = reinterpret_cast<const unsigned long long*>(p);
+        logf("[CRASH]   %c 0x%016llX: %016llX %016llX",
+             (p <= rsp && rsp < p + 16) ? '>' : ' ', full(p), w[0], w[1]);
+    }
+}
+
+// One step of the x64 unwind: RtlVirtualUnwind over the image's unwind data, or the leaf rule (the
+// return address at [rsp]) for a function that has none. Reads only the faulting thread's stack and
+// the loaded images; false if a read faults.
+bool unwindStep(CONTEXT& c)
+{
+    __try
+    {
+        DWORD64 imageBase = 0;
+        PRUNTIME_FUNCTION function = ::RtlLookupFunctionEntry(c.Rip, &imageBase, 0);
+        if (function)
+        {
+            void*   handlerData = 0;
+            DWORD64 establisher = 0;
+            ::RtlVirtualUnwind(UNW_FLAG_NHANDLER, imageBase, c.Rip, function, &c, &handlerData,
+                               &establisher, 0);
+        }
+        else
+        {
+            c.Rip = *reinterpret_cast<const DWORD64*>(c.Rsp);
+            c.Rsp += sizeof(DWORD64);
+        }
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return false;
+    }
+}
+
+// The registers and the unwound call chain. x64 code keeps no frame-pointer chain, so the walk uses
+// the images' unwind tables; it stops when RSP stops climbing or leaves committed memory.
+void reportRegistersAndFrames(const CONTEXT& ctx)
+{
+    char where[MAX_PATH + 32];
+
+    logf("[CRASH] rax=0x%016llX rbx=0x%016llX rcx=0x%016llX rdx=0x%016llX",
+         static_cast<unsigned long long>(ctx.Rax), static_cast<unsigned long long>(ctx.Rbx),
+         static_cast<unsigned long long>(ctx.Rcx), static_cast<unsigned long long>(ctx.Rdx));
+    logf("[CRASH] rsi=0x%016llX rdi=0x%016llX rbp=0x%016llX rsp=0x%016llX",
+         static_cast<unsigned long long>(ctx.Rsi), static_cast<unsigned long long>(ctx.Rdi),
+         static_cast<unsigned long long>(ctx.Rbp), static_cast<unsigned long long>(ctx.Rsp));
+    logf("[CRASH] r8 =0x%016llX r9 =0x%016llX r10=0x%016llX r11=0x%016llX",
+         static_cast<unsigned long long>(ctx.R8), static_cast<unsigned long long>(ctx.R9),
+         static_cast<unsigned long long>(ctx.R10), static_cast<unsigned long long>(ctx.R11));
+    logf("[CRASH] r12=0x%016llX r13=0x%016llX r14=0x%016llX r15=0x%016llX",
+         static_cast<unsigned long long>(ctx.R12), static_cast<unsigned long long>(ctx.R13),
+         static_cast<unsigned long long>(ctx.R14), static_cast<unsigned long long>(ctx.R15));
+    logf("[CRASH] rip=0x%016llX  %s", static_cast<unsigned long long>(ctx.Rip),
+         describe(reinterpret_cast<const void*>(ctx.Rip), where, sizeof(where), false));
+
+    CONTEXT c = ctx;
+    for (int i = 0; i < 24; ++i)
+    {
+        MEMORY_BASIC_INFORMATION mbi;
+        if (::VirtualQuery(reinterpret_cast<const void*>(c.Rsp), &mbi, sizeof(mbi)) != sizeof(mbi)
+            || mbi.State != MEM_COMMIT)
+            break;
+
+        const DWORD64 previousRsp = c.Rsp;
+        if (!unwindStep(c) || c.Rip == 0)
+            break;
+
+        logf("[CRASH] frame %2d: rsp=0x%016llX ret=0x%016llX  %s", i,
+             static_cast<unsigned long long>(c.Rsp), static_cast<unsigned long long>(c.Rip),
+             describe(reinterpret_cast<const void*>(c.Rip), where, sizeof(where), true));
+
+        if (c.Rsp <= previousRsp)
+            break;
+    }
+}
+#endif
 
 LONG CALLBACK vectoredHandler(EXCEPTION_POINTERS* info)
 {
@@ -187,6 +337,7 @@ LONG CALLBACK vectoredHandler(EXCEPTION_POINTERS* info)
     const CONTEXT& ctx = *info->ContextRecord;
     char where[MAX_PATH + 32];
 
+#if defined(_M_IX86)
     logf("[CRASH] ===============================================================================");
     logf("[CRASH] first-chance 0x%08X at 0x%08X  %s   (flags 0x%X, %u parameters)",
          static_cast<unsigned int>(rec.ExceptionCode), addr(rec.ExceptionAddress),
@@ -240,6 +391,31 @@ LONG CALLBACK vectoredHandler(EXCEPTION_POINTERS* info)
             break;
         frame = reinterpret_cast<const UINT_PTR*>(next);
     }
+#else
+    logf("[CRASH] ===============================================================================");
+    logf("[CRASH] first-chance 0x%08X at 0x%016llX  %s   (flags 0x%X, %u parameters)",
+         static_cast<unsigned int>(rec.ExceptionCode), full(rec.ExceptionAddress),
+         describe(rec.ExceptionAddress, where, sizeof(where), false),
+         static_cast<unsigned int>(rec.ExceptionFlags),
+         static_cast<unsigned int>(rec.NumberParameters));
+
+    for (DWORD i = 0; i < rec.NumberParameters && i < EXCEPTION_MAXIMUM_PARAMETERS; ++i)
+    {
+        logf("[CRASH]   ExceptionInformation[%u] = 0x%016llX", static_cast<unsigned int>(i),
+             static_cast<unsigned long long>(rec.ExceptionInformation[i]));
+    }
+
+    // Access-violation parameter zero distinguishes read (0), write (1), and execute (8) faults.
+    if (rec.ExceptionCode == EXCEPTION_ACCESS_VIOLATION && rec.NumberParameters >= 2)
+    {
+        const ULONG_PTR kind = rec.ExceptionInformation[0];
+        logf("[CRASH]   -> %s at 0x%016llX",
+             kind == 0 ? "READ" : kind == 1 ? "WRITE" : kind == 8 ? "EXECUTE (DEP)" : "access",
+             static_cast<unsigned long long>(rec.ExceptionInformation[1]));
+    }
+
+    reportRegistersAndFrames(ctx);
+#endif
 
     reportRawWindow(ctx);
     reportStack(ctx);

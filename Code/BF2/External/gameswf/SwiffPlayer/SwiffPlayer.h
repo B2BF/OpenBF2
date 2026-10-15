@@ -14,6 +14,9 @@
 #include "../../../../RendDX9Abi/HfeAbi.h"  // dice::hfe::IBase
 #include "../../../../RendDX9Abi/Frontier.h"
 
+#include <vector>
+#include <stdint.h>
+
 namespace dice {
 namespace hfe {
 namespace ui {
@@ -46,10 +49,13 @@ struct SwiffRenderHandler : public gameswf::render_handler
 {
     SwiffRenderHandler() {}
 
-    // NO data members - the subobject is exactly 4 bytes (its vtable ptr), matching the shipped
-    // layout (object is 1120 bytes). A Stage-3 forwarder reaches render_context the way the shipped
-    // code does: this subobject sits at object+4 and render_context at object+12, so the owner is
-    // reinterpret_cast<SwiffPlayer*>((char*)this - 4). No back-pointer member is stored.
+    // NO data members - the subobject is only its vtable ptr, as in the shipped layout. The handler
+    // is always SwiffPlayer::render_handler (retail: this subobject at object+4, render_context at
+    // object+12), so a forwarder reaches render_context through its owner, recovered from this
+    // member's offset by renderContext(). No back-pointer member is stored.
+
+    // The owning SwiffPlayer's render_context.
+    ISwiffRender* renderContext();
 
     virtual gameswf::bitmap_info* create_bitmap_info_empty();
     virtual gameswf::bitmap_info* create_bitmap_info_alpha(int w, int h, unsigned char* data);
@@ -152,9 +158,9 @@ public:
     // 23 +0x5C
     virtual ISwiffHost* getSwiffHost() = 0;
     // 24 +0x60
-    virtual char  renderCapability0(int a) = 0;
+    virtual char  renderCapability0(intptr_t a) = 0;
     // 25 +0x64
-    virtual char  renderCapability1(int a) = 0;
+    virtual char  renderCapability1(intptr_t a) = 0;
     // 26 +0x68
     virtual int   getMovieWidth() = 0;
     // 27 +0x6C
@@ -183,10 +189,10 @@ protected:
 };
 
 
-// SwiffPlayer - the 1120-byte object. Member order and offsets match the IDB local type
-// dice_hfe_SwiffPlayer_BF2 exactly; static_asserts in the .cpp hold the size and the load-bearing
-// offsets. The ISwiffPlayer base supplies the +0 vtable; the SwiffRenderHandler member supplies the
-// +4 one.
+// SwiffPlayer - member order matches the IDB local type dice_hfe_SwiffPlayer_BF2 (the retail object
+// is 1120 bytes; the +N comments are its offsets). The queued-mouse storage is a std::vector
+// (https://github.com/B2BF/OpenBF2/issues/7), so the native object's size differs from retail. The
+// ISwiffPlayer base supplies the +0 vtable; the SwiffRenderHandler member supplies the +4 one.
 
 class SwiffPlayer : public ISwiffPlayer
 {
@@ -221,8 +227,8 @@ public:
     virtual void  getTextInput1(void* outStdString);
     virtual void  setSwiffHost(ISwiffHost* host);
     virtual ISwiffHost* getSwiffHost();
-    virtual char  renderCapability0(int a);
-    virtual char  renderCapability1(int a);
+    virtual char  renderCapability0(intptr_t a);
+    virtual char  renderCapability1(intptr_t a);
     virtual int   getMovieWidth();
     virtual int   getMovieHeight();
     virtual void  renderSetPairState(int a, int b);
@@ -236,6 +242,9 @@ public:
     virtual void  setVoipUpdateFlag(char v);
 
 private:
+    // A queued mouse sample (12 bytes), the element of the queued-mouse vector.
+    struct MouseState { int x; int y; int buttons; };
+
     void initKeyTranslation();     // SwiffPlayer_initKeyTranslation 0x10005410
 
     // +4 - the embedded render handler. gameswf holds a pointer to it via set_render_handler.
@@ -281,12 +290,10 @@ private:
     // +1100 (+3 pad)
     unsigned char legacy_flag_44c;
     unsigned char pad_44d[3];
-    // +1104..+1116 - the queued-mouse vector (aux/begin/end/capacity), grown on the engine heap.
-    void*         queued_mouse_aux;
-    void*         queued_mouse_begin;
-    void*         queued_mouse_end;
-    void*         queued_mouse_capacity;
+    // +1104 - the queued mouse samples (retail: a 16-byte VC7.1 vector).
+    std::vector<MouseState> queued_mouse;
 
+    friend struct SwiffRenderHandler;   // renderContext() reaches render_context
     friend IBase* __fastcall RefFactory_ui_SwiffPlayer(unsigned int iid, IBase* parent);
 };
 

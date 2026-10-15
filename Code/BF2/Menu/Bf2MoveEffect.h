@@ -18,7 +18,9 @@ public:
     virtual bool setLength(Data* length);
     static TypeDescriptor* getClassType();               // 7CB620, metadata937A04
 };
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2MoveEffect) == 12, "native Bf2MoveEffect storage");
+#endif
 } }
 #endif
 #endif

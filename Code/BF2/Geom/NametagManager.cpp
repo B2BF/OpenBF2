@@ -19,9 +19,6 @@
 // The engine interfaces below are imported the way XpLightManager.cpp / BundledMeshDraw.cpp do it:
 // only their virtual interfaces cross the plugin boundary; in the retail-compatible flavour HfeAbi
 // already supplies ClassManager's VC7.1 carriers, so Core/ClassManager.h is kept out.
-#if !BF2_PLUGIN_ABI_NATIVE
-#define CORE_CLASSMANAGER_H
-#endif
 #include "../Game/IGame.h"
 #include "../Game/Objects/ObjectLayoutAccess.h"
 #include "../Game/Objects/IPlayer.h"
@@ -41,7 +38,6 @@
 #include "../Game/Objects/GameLogicComp/IArmorGLComp.h"
 #include "../Scene/Object/ObjectManager.h"
 #include "../Scene/Object/ObjectTypes/Game/IPlayerControlObject.h"
-#if BF2_PLUGIN_ABI_NATIVE
 // Native flavour only: the host is built from these very headers, so the compiler's own layout of
 // these classes IS the host's layout. The retail-compatible flavour reads the retail offsets
 // instead (see the host seams below) and must not see these classes' native-STL layouts.
@@ -56,10 +52,6 @@
 #include "../Game/Objects/StrategicObjectComp.h"     // addTouchItem: m_holder (a friend line)
 #include "../Menu/BF2HudManager.h"                   // getPlayerKit (+0x90) / enableVOHelpMessage (+0xF8)
 #include "../Menu/ISwiffHost.h"                      // getLocalizedString (+0xA8)
-#endif
-#if !BF2_PLUGIN_ABI_NATIVE
-#undef CORE_CLASSMANAGER_H
-#endif
 
 #include "../Math/Mat4.h"                            // nt_update
 #include "../RendMisc/IRenderer.h"                   // nt_update: Renderer +0xB0
@@ -189,15 +181,6 @@ inline world::IStrategicObjectComp* strategicComponent(world::IObject* object)
         world::object_detail::LayoutAccess::strategicObjectComponent(object));
 }
 
-#if !BF2_PLUGIN_ABI_NATIVE
-inline void* strategicHolder(world::IStrategicObjectComp* component)
-{
-    // StrategicObjectComp::m_holder, +0x14 in both images (vptr + four scalars precede it - see
-    // StrategicObjectComp.h); private there, so read at its fixed offset. 0x10130CA1. The native
-    // flavour reads it typed in addTouchItem, through StrategicObjectComp's friend line (RW-266).
-    return *reinterpret_cast<void* const*>(reinterpret_cast<const unsigned char*>(component) + 0x14);
-}
-#endif
 
 inline void* rootParent(void* object)
 {
@@ -214,22 +197,9 @@ inline float geometryBoundingRadius(void* geometry)
 }
 
 // host strings
-#if BF2_PLUGIN_ABI_NATIVE
 typedef std::wstring HostWString;
 inline const std::string& hostStdString(const renddx9abi::HostString& value) { return value; }
 inline const renddx9abi::HostString& fromHostStdString(const std::string& value) { return value; }
-#else
-typedef vc71::wstring HostWString;
-// The host receives these by reference, so only the static spelling changes (XpLightManager.cpp).
-inline const std::string& hostStdString(const renddx9abi::HostString& value)
-{
-    return *reinterpret_cast<const std::string*>(&value);
-}
-inline const renddx9abi::HostString& fromHostStdString(const std::string& value)
-{
-    return *reinterpret_cast<const renddx9abi::HostString*>(&value);
-}
-#endif
 
 // std::operator==(const std::string&, const char*) (MSVCP71 import, 0x10130ECD) - compare() == 0.
 inline bool hostStringEquals(const renddx9abi::HostString& value, const char* text)
@@ -246,15 +216,9 @@ inline bool hostStringEquals(const renddx9abi::HostString& value, const char* te
 inline bool swiffHostGetLocalizedString(IBase* swiffHost, HostWString& out,
                                         const renddx9abi::HostString& key)
 {
-#if BF2_PLUGIN_ABI_NATIVE
     // RW-266: in this flavour the flavour's string types ARE the host's std types, so the typed
     // interface applies - ISwiffHost slot 42 is +0xA8 (/d1reportSingleClassLayout).
     return static_cast<ui::ISwiffHost*>(swiffHost)->getLocalizedString(out, key);
-#else
-    typedef bool (__thiscall* LocalizeFn)(void*, HostWString&, const renddx9abi::HostString&);
-    return reinterpret_cast<LocalizeFn>((*reinterpret_cast<void***>(swiffHost))[0xA8 / 4])(
-        swiffHost, out, key);
-#endif
 }
 
 // Converts wide text using the current locale. The first size-error test intentionally
@@ -280,7 +244,7 @@ renddx9abi::HostString narrowString(const HostWString& wide)
 // internal linkage). 0xFFF limit; an overflow is replaced by the fixed warning.
 char g_nametagFormatBuffer[0x1000];
 
-vc71::string nametagFormatString(const char* format, ...)
+std::string nametagFormatString(const char* format, ...)
 {
     va_list args;
     va_start(args, format);
@@ -292,7 +256,7 @@ vc71::string nametagFormatString(const char* format, ...)
     else
         ::sprintf(g_nametagFormatBuffer, "%s",
                   "WARNING: The original message was too long for formatString(). \n");
-    return vc71::string(g_nametagFormatBuffer);
+    return std::string(g_nametagFormatBuffer);
 }
 
 // lcgrand_step (0x1009EF30) - RendDX9's copy of dice::hfe::Random::getRaw (ELF 0x8166CE0): two
@@ -317,7 +281,6 @@ unsigned int randomRaw(Random& random)
 }
 
 // Native and plugin host layouts.
-#if BF2_PLUGIN_ABI_NATIVE
 
 // Protected fields reached the way C++ allows from outside: a pointer-to-member formed inside a
 // derived class. Nothing is instantiated.
@@ -381,57 +344,6 @@ inline bool vehicleHudUsesPlayerIcon(world::IObjectComponent* hudComponent)
     return static_cast<world::IVehicleHudComp*>(hudComponent)->getHudInfo()->usePlayerIcon;
 }
 
-#else  // the retail-compatible flavour: the retail host's own offsets
-
-template <typename T>
-inline T& retailField(void* object, unsigned int offset)
-{
-    return *reinterpret_cast<T*>(static_cast<unsigned char*>(object) + offset);
-}
-
-// ControlPoint is `Bundle, IControlPoint` with the IControlPoint subobject at PE +0x154 (ELF +0x13C
-// - one VC7.1 std::string larger, 28 - 4 bytes); m_flagPoleHeight is ELF +0x174 / PE +0x18C.
-
-inline world::IObject* controlPointObject(world::ControlPoint* cp)
-{
-    return reinterpret_cast<world::IObject*>(cp);                          // the primary base, +0
-}
-inline int controlPointTeam(world::ControlPoint* cp)
-{
-    return reinterpret_cast<world::IControlPoint*>(
-        reinterpret_cast<unsigned char*>(cp) + 0x154)->getTeam();          // +0x154 subobject, +0x1C
-}
-inline float controlPointFlagPoleHeight(world::ControlPoint* cp)
-{
-    return retailField<float>(cp, 0x18C);
-}
-// SupplyObjectTemplate visibleOn3dMap / 3dMapIcon: ELF +0x1A4 / +0x1A8, PE +0x254 / +0x258.
-inline bool supplyVisibleOn3dMap(void* t) { return retailField<unsigned char>(t, 0x254) != 0; }
-inline int  supplyMapIcon(void* t)        { return retailField<int>(t, 0x258); }
-// GenericProjectileTemplate visibleOn3dMap / 3dMapIcon: ELF +0x1FA / +0x1FC, PE +0x2DA / +0x2DC.
-inline bool projectileVisibleOn3dMap(void* t) { return retailField<unsigned char>(t, 0x2DA) != 0; }
-inline int  projectileMapIcon(void* t)        { return retailField<int>(t, 0x2DC); }
-// IProjectileObject subobject slots, PE = ELF - 4 (one destructor slot): +0x60 = ELF +0x64
-// getTeam (thunk 0x8287740 -> 0x8287730), +0xC4 = ELF +0xC8 getTargetObject (0x8287230 ->
-// 0x8284880) - read from GenericProjectile's -316 subtable (ELF 0x88BC650).
-inline int projectileTeam(world::IObject*, void* projectile)
-{
-    typedef int (__thiscall* TeamFn)(void*);
-    return reinterpret_cast<TeamFn>((*reinterpret_cast<void***>(projectile))[0x60 / 4])(projectile);
-}
-inline world::IObject* projectileTarget(world::IObject*, void* projectile)
-{
-    typedef world::IObject* (__thiscall* TargetFn)(void*);
-    return reinterpret_cast<TargetFn>((*reinterpret_cast<void***>(projectile))[0xC4 / 4])(projectile);
-}
-// VehicleHudInfo::usePlayerIcon - PE +0x94 (an int and five 28-byte strings precede the flags).
-inline bool vehicleHudUsesPlayerIcon(world::IObjectComponent* hudComponent)
-{
-    return retailField<unsigned char>(
-        static_cast<world::IVehicleHudComp*>(hudComponent)->getHudInfo(), 0x94) != 0;
-}
-
-#endif // BF2_PLUGIN_ABI_NATIVE
 
 
 // [CHOSEN, not recovered] Preserve the reissue defect's unchanged item state without
@@ -446,8 +358,7 @@ inline void reissueOrderDefect()
 double nametagFrameDelta()
 {
     // g_Renderer +0x5E8 - the delta Renderer::update stores (BF2Render.cpp: self + 1512).
-    return *reinterpret_cast<const double*>(
-        static_cast<const unsigned char*>(static_cast<const void*>(dx9rend::g_Renderer)) + 0x5E8);
+    return dx9rend::rendererTailDouble(0x5E8);
 }
 
 
@@ -745,46 +656,6 @@ bool NametagRayPredicator::predicate(world::IObject* object)
 }
 
 
-// NametagTableVector
-
-NametagTableVector::~NametagTableVector()
-{
-    if (first)
-        ::renddx9abi::engineFree(first);
-    first = 0;
-    last = 0;
-    end = 0;
-}
-
-// sub_10132390(n, value) - vector::resize. The only use is resize(3, 0) on an empty vector, where
-// VC7.1's _Insert_n allocates exactly n elements (capacity 0 + 0/2 < n, so n).
-void NametagTableVector::resize(unsigned int count, float* value)
-{
-    const unsigned int size = first ? static_cast<unsigned int>((last - first) / sizeof(float*)) : 0u;
-    if (size >= count)
-    {
-        last = first + count * sizeof(float*);
-        return;
-    }
-    const unsigned int capacity =
-        first ? static_cast<unsigned int>((end - first) / sizeof(float*)) : 0u;
-    if (capacity < count)
-    {
-        char* const block = static_cast<char*>(::renddx9abi::engineAlloc(count * sizeof(float*)));
-        if (first)
-        {
-            ::memcpy(block, first, size * sizeof(float*));
-            ::renddx9abi::engineFree(first);
-        }
-        first = block;
-        last = block + size * sizeof(float*);
-        end = block + count * sizeof(float*);
-    }
-    for (unsigned int i = size; i < count; ++i)
-        reinterpret_cast<float**>(first)[i] = value;
-    last = first + count * sizeof(float*);
-}
-
 
 // NametagManager - construction and destruction
 
@@ -817,7 +688,7 @@ NametagManager::NametagManager()
     eventManager->registerEventHandler(ECGame, static_cast<IEventListener*>(this), 0);
 
     m_transformations.resize(3, 0);                                      // sub_10132390(3, 0)
-    m_colors.resize(3, 0);
+    m_colors.resize(3, 0);                                               //   (vector::resize)
 
     // operator new(0xA924): a count prefix of 3 and three NameTagRenderer ctors (0x101B2F00). A
     // failed allocation leaves a NULL array and the next line dereferences it - shipped; the
@@ -932,7 +803,7 @@ bool NametagManager::registerControlPointIcons(const renddx9abi::HostString& tea
 {
     const unsigned int iconsBefore = NameTagRenderer::iconCount();       // dword_102670AC
 
-    vc71::string path("Menu/Nametag/Neutral/miniMap_CP");
+    std::string path("Menu/Nametag/Neutral/miniMap_CP");
     NameTagRenderer::removeTexture(kIconControlPoint + 0, 0);             // (42, 0)
     NameTagRenderer::setTexture(kIconControlPoint + 0, 0, path, 0, 0, 16, 16);
 
@@ -969,7 +840,7 @@ void NametagManager::draw()
 bool NametagManager::addTouchItem(world::IPlayer* player)
 {
     NametagItem* item;
-    NametagItemMap::node* const found = m_items.find(player->getId() + kNametagKeyPlayer);   // inline key
+    const NametagItemMap::iterator found = m_items.find(player->getId() + kNametagKeyPlayer);   // inline key
     if (found == m_items.end())
     {
         item = createPlayerItem(player);
@@ -978,7 +849,7 @@ bool NametagManager::addTouchItem(world::IPlayer* player)
     }
     else
     {
-        item = found->value;
+        item = found->second;
         item->m_dirty = true;
     }
 
@@ -998,7 +869,7 @@ bool NametagManager::addTouchItem(world::ControlPoint* controlPoint)
 {
     world::IObject* const object = controlPointObject(controlPoint);
     NametagItem* item;
-    NametagItemMap::node* const found = m_items.find(static_cast<int>(objectId(object)) + kNametagKeyObject);
+    const NametagItemMap::iterator found = m_items.find(static_cast<int>(objectId(object)) + kNametagKeyObject);
     if (found == m_items.end())
     {
         item = createObjectItem(object);
@@ -1007,7 +878,7 @@ bool NametagManager::addTouchItem(world::ControlPoint* controlPoint)
     }
     else
     {
-        item = found->value;
+        item = found->second;
         item->m_dirty = true;
     }
 
@@ -1036,10 +907,10 @@ bool NametagManager::addTouchItem(world::ControlPoint* controlPoint)
 bool NametagManager::addTouchItem(world::IObject* object)
 {
     NametagItem* item;
-    NametagItemMap::node* const found = m_items.find(static_cast<int>(objectId(object)) + kNametagKeyObject);
+    const NametagItemMap::iterator found = m_items.find(static_cast<int>(objectId(object)) + kNametagKeyObject);
     if (found != m_items.end())
     {
-        item = found->value;
+        item = found->second;
         item->m_dirty = true;
     }
     else
@@ -1076,11 +947,7 @@ bool NametagManager::addTouchItem(world::IObject* object)
         item->m_offset.y = object->getVisualBoundingRadius();            // PE +0x90
         item->m_offset.x = 0.0f;
         item->m_offset.z = 0.0f;
-#if BF2_PLUGIN_ABI_NATIVE
         if (static_cast<world::StrategicObjectComp*>(component)->m_holder)  // +0x14 (RW-266)
-#else
-        if (strategicHolder(component))
-#endif
             item->m_flags |= NIF_UseHolderPosition;                      // byte +0xB9 |= 1
         item->m_flags &= ~NIF_Visible;
         item->m_colorIndex = 4;
@@ -1194,11 +1061,11 @@ bool NametagManager::addTouchItem(world::IObject* object)
 // 0x101310A0, 204 B, retn 0Ch.
 bool NametagManager::addTouchItem(SquadOrder* order, int orderType, const Vec3& position)
 {
-    NametagItemMap::node* const found = m_items.find(orderType + kNametagKeyOrder);
+    const NametagItemMap::iterator found = m_items.find(orderType + kNametagKeyOrder);
     NametagItem* item = 0;
     if (found != m_items.end())
     {
-        item = found->value;
+        item = found->second;
         item->m_dirty = true;
     }
     if (!item)
@@ -1225,11 +1092,11 @@ bool NametagManager::addTouchItem(SquadOrder* order, int orderType, world::IObje
     if (!target)
         return false;
 
-    NametagItemMap::node* const found = m_items.find(orderType + kNametagKeyOrder);
+    const NametagItemMap::iterator found = m_items.find(orderType + kNametagKeyOrder);
     NametagItem* item = 0;
     if (found != m_items.end())
     {
-        item = found->value;
+        item = found->second;
         item->m_dirty = true;
     }
     if (!item)
@@ -1265,7 +1132,7 @@ bool NametagManager::addTouchItem(world::IObject* object, int team)
     object->setName(hostStdString(name));                                // IObject PE +0x64
 
     NametagItem* item;
-    NametagItemMap::node* const found = m_items.find(static_cast<int>(objectId(object)) + kNametagKeyObject);
+    const NametagItemMap::iterator found = m_items.find(static_cast<int>(objectId(object)) + kNametagKeyObject);
     if (found == m_items.end())
     {
         item = createObjectItem(object);
@@ -1274,7 +1141,7 @@ bool NametagManager::addTouchItem(world::IObject* object, int team)
     }
     else
     {
-        item = found->value;
+        item = found->second;
         item->m_dirty = true;
     }
 
@@ -1292,14 +1159,15 @@ bool NametagManager::addTouchItem(world::IObject* object, int team)
 
 // the per-type tables
 
+// Unchecked indexing, as shipped (operator[], not the throwing at()).
 float* NametagManager::getColors(int type)
 {
-    return m_colors.at(type);
+    return m_colors[type];
 }
 
 float* NametagManager::getTransformations(int type)
 {
-    return m_transformations.at(type);
+    return m_transformations[type];
 }
 
 float* NametagManager::getAlphaArray(int type)        // this + 0x38 + type * 0x100
@@ -1314,16 +1182,16 @@ float* NametagManager::getAlphaArray(int type)        // this + 0x38 + type * 0x
 // 0x1012ED40, 117 B: every item re-buffered into its renderer (0x101B2320, full = true).
 void NametagManager::rebufferAll()
 {
-    for (NametagItemMap::node* it = m_items.begin(); it != m_items.end(); it = NametagItemMap::next(it))
-        m_renderers[it->value->m_type].bufferItem(it->value, true);
+    for (NametagItemMap::iterator it = m_items.begin(); it != m_items.end(); ++it)
+        m_renderers[it->second->m_type].bufferItem(it->second, true);
 }
 
 // 0x1012EDC0, 106 B - the renderer's ECCore CEPostLoad arm calls it: mark every item dirty and
 // let update() run.
 void NametagManager::enableBuffering()
 {
-    for (NametagItemMap::node* it = m_items.begin(); it != m_items.end(); it = NametagItemMap::next(it))
-        it->value->m_dirty = true;
+    for (NametagItemMap::iterator it = m_items.begin(); it != m_items.end(); ++it)
+        it->second->m_dirty = true;
     m_bufferingEnabled = true;
 }
 
@@ -1334,7 +1202,7 @@ void NametagManager::clearAll()
     for (int type = TTPlayer; type <= TTObject; ++type)
     {
         for (int slot = 0; slot < maxSlotCount(type); ++slot)
-            m_freeSlots[type].insert(static_cast<unsigned int>(slot));
+            m_freeSlots[type].insert(slot);
         m_slotMaps[type].clear();
     }
 }
@@ -1344,9 +1212,9 @@ void NametagManager::clearAll()
 // The item's type and slot are read before the item is null-tested.
 void NametagManager::removeAllItems()
 {
-    for (NametagItemMap::node* it = m_items.begin(); it != m_items.end(); it = m_items.begin())
+    for (NametagItemMap::iterator it = m_items.begin(); it != m_items.end(); it = m_items.begin())
     {
-        NametagItem* const item = it->value;
+        NametagItem* const item = it->second;
         float* const transformation = getTransformations(item->m_type) + item->m_slot * 4;   // virtual
         transformation[0] = 0.0f;
         transformation[1] = 0.0f;
@@ -1403,7 +1271,7 @@ void NametagManager::removeItem(int type, void* item)
 // Frees the key's slot and removes its item. The type argument selects the transformation table.
 void NametagManager::removeKey(int type, int key)
 {
-    NametagItemMap::node* const found = m_items.find(key);
+    const NametagItemMap::iterator found = m_items.find(key);
     if (found == m_items.end())
         return;
 
@@ -1411,7 +1279,7 @@ void NametagManager::removeKey(int type, int key)
     if (slots.count(key) != 0)                                           // equal_range + _Distance
     {
         slots.erase(key);
-        m_freeSlots[type].insert(static_cast<unsigned int>(found->value->m_slot));
+        m_freeSlots[type].insert(found->second->m_slot);
     }
 
     NametagItem*& entry = m_items[key];
@@ -1484,10 +1352,10 @@ void NametagManager::handleEvent(EventCategory category, unsigned int id, EventN
                 return;
             }
             // The spawned player is dereferenced with no null test; the key is built inline.
-            NametagItemMap::node* const found = m_items.find(spawned->getId() + kNametagKeyPlayer);
+            const NametagItemMap::iterator found = m_items.find(spawned->getId() + kNametagKeyPlayer);
             if (found == m_items.end())
                 return;
-            resetItem(found->value);
+            resetItem(found->second);
             return;
         }
         // any other ECGame id jumps into the ECHud id tests below. Shipped.
@@ -1515,10 +1383,10 @@ void NametagManager::handleEvent(EventCategory category, unsigned int id, EventN
         world::IPlayer* const caller = soldier->getOccupingPlayer();     // +0x34
         if (!caller)
             return;
-        NametagItemMap::node* const found = m_items.find(playerKey(caller));
+        const NametagItemMap::iterator found = m_items.find(playerKey(caller));
         if (found == m_items.end())
             return;
-        NametagItem* const item = found->value;
+        NametagItem* const item = found->second;
         world::IPlayer* const local = localHumanPlayer();
         if (!local)
             return;
@@ -1606,10 +1474,10 @@ void NametagManager::handleEvent(EventCategory category, unsigned int id, EventN
         world::IPlayer* const player = soldier->getOccupingPlayer();
         if (!player)
             return;
-        NametagItemMap::node* const found = m_items.find(player->getId() + kNametagKeyPlayer);
+        const NametagItemMap::iterator found = m_items.find(player->getId() + kNametagKeyPlayer);
         if (found == m_items.end())
             return;
-        NametagItem* const item = found->value;
+        NametagItem* const item = found->second;
         if (item->m_timer <= 0.0f)
             item->m_timer = s_callIconTime;
         item->m_flashColorIndex = (item->m_colorIndex != 4) ? 4 : 0;
@@ -1623,8 +1491,8 @@ void NametagManager::resetAllCalls()
     s_repairCallTimer = 0.0;                   // dbl_1025C228 first, as shipped
     s_medicCallTimer = 0.0;
     s_ammoCallTimer = 0.0;
-    for (NametagItemMap::node* it = m_items.begin(); it != m_items.end(); it = NametagItemMap::next(it))
-        resetItem(it->value);                  // 0x1012CA10, inlined in the shipped loop
+    for (NametagItemMap::iterator it = m_items.begin(); it != m_items.end(); ++it)
+        resetItem(it->second);                 // 0x1012CA10, inlined in the shipped loop
 }
 
 // 0x1012CA10, 74 B, retn 4.
@@ -1994,11 +1862,11 @@ int NametagManager::allocateSlot(int type, int key)
     if (slots.count(key) != 0)                                           // sub_101319E0 + _Distance
         return slots[key];
 
-    if (freeSlots.size == 0)
+    if (freeSlots.size() == 0)
         return -1;
 
-    const int slot = static_cast<int>(freeSlots.begin()->key);
-    slots.insert(key, slot, 0);
+    const int slot = *freeSlots.begin();
+    slots.insert(NametagSlotMap::value_type(key, slot));
     freeSlots.erase(freeSlots.begin());
     return slot;
 }
@@ -2125,7 +1993,7 @@ void NametagManager::createIcon(int itemId)
 // The second call's rect is ignored - the bar is registered with the first texture's rect.
 // Any other index in bar mode just replaces the stored texture.
 
-void NametagManager::setTexture(int count, vc71::string path, int x, int y, int width, int height)
+void NametagManager::setTexture(int count, std::string path, int x, int y, int width, int height)
 {
     if (m_textureMode == 0)
     {

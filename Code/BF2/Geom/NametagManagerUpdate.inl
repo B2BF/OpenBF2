@@ -12,36 +12,18 @@ namespace {
 float settingsFloat(const char* name, float defaultValue)
 {
     const renddx9abi::HostString key(name);
-#if BF2_PLUGIN_ABI_NATIVE
     return settings->floatGet(key, defaultValue);
-#else
-    void* const repository = settings;
-    typedef const float& (__thiscall* FloatGetFn)(void*, const renddx9abi::HostString&,
-                                                  const float&);
-    return reinterpret_cast<FloatGetFn>((*reinterpret_cast<void***>(repository))[0x20 / 4])(
-        repository, key, defaultValue);
-#endif
 }
 
 // Returns the player's kit as its primary IObject face across the host ABI boundary.
 world::IObject* hudPlayerKit(IBase* hud, world::IPlayer* player)
 {
-#if BF2_PLUGIN_ABI_NATIVE
     return reinterpret_cast<hud::BF2HudManager*>(hud)->getPlayerKit(player);
-#else
-    typedef world::IObject* (__thiscall* GetPlayerKitFn)(void*, world::IPlayer*);
-    return reinterpret_cast<GetPlayerKitFn>((*reinterpret_cast<void***>(hud))[0x90 / 4])(hud, player);
-#endif
 }
 
 void hudEnableVOHelpMessage(IBase* hud, int message)
 {
-#if BF2_PLUGIN_ABI_NATIVE
     reinterpret_cast<hud::BF2HudManager*>(hud)->enableVOHelpMessage(message);
-#else
-    typedef void (__thiscall* EnableVOHelpMessageFn)(void*, int);
-    reinterpret_cast<EnableVOHelpMessageFn>((*reinterpret_cast<void***>(hud))[0xF8 / 4])(hud, message);
-#endif
 }
 
 // sub_10103CB0 - the object, then its +0x28 parents, asking each for IID_IPlayerControlObject
@@ -157,10 +139,8 @@ public:
 };
 
 
-// Iterates a by-value copy of the host's seat map in key order.
-// Native builds copy std::map; compatibility builds copy the VC7.1 tree on the engine heap.
+// Iterates a by-value copy of the host's seat map (the std::map getPcos() answers) in key order.
 
-#if BF2_PLUGIN_ABI_NATIVE
 class NametagSeatCopy
 {
 public:
@@ -181,33 +161,6 @@ private:
     SeatMap                 m_seats;
     SeatMap::const_iterator m_it;
 };
-#else
-class NametagSeatCopy
-{
-public:
-    explicit NametagSeatCopy(world::IPlayerControlObject* pco)
-    {
-        m_seats.construct();
-        m_seats.copyFrom(*reinterpret_cast<const SeatLayout*>(pco->getPcos())); // +0x60,
-        m_node = m_seats.begin();
-    }
-    ~NametagSeatCopy()
-    {
-        m_seats.destroy();                                                      // 0x10132280 + free
-    }
-    bool atEnd() const { return m_node == m_seats.end(); }
-    world::IPlayerControlObject* seat() const { return m_node->value; }
-    void next() { m_node = SeatLayout::next(m_node); }
-
-private:
-    NametagSeatCopy(const NametagSeatCopy&);
-    NametagSeatCopy& operator=(const NametagSeatCopy&);
-
-    typedef vc71::int_map_layout<world::IPlayerControlObject*> SeatLayout;
-    SeatLayout        m_seats;
-    SeatLayout::node* m_node;
-};
-#endif
 
 } // anonymous namespace
 
@@ -255,9 +208,9 @@ void NametagManager::update()
     m_frustum.setPerspective(m_frustum.getFov(), m_frustum.m_aspect, 0.0f, 2000.0f,
                              m_frustum.m_transformation);
 
-    for (NametagItemMap::node* it = m_items.begin(); it != m_items.end(); it = NametagItemMap::next(it))
+    for (NametagItemMap::iterator it = m_items.begin(); it != m_items.end(); ++it)
     {
-        NametagItem* const item = it->value;
+        NametagItem* const item = it->second;
 
         tickItemTimer(item);                                                 // 0x1012CB00, inlined
         updateItemPosition(item);                                            // 0x1012E8D0, inlined
@@ -789,11 +742,7 @@ void NametagManager::updateHudTarget(world::IPlayer* local, world::IPlayer* play
 
 IBase* NametagManager::soldierDefaultWeapon(world::IPlayerControlObject* control)
 {
-#if BF2_PLUGIN_ABI_NATIVE
     return static_cast<world::Soldier*>(control)->m_weapon2;
-#else
-    return retailField<IBase*>(control, 0x74);
-#endif
 }
 
 
@@ -859,7 +808,7 @@ void NametagManager::updateItemSelection(NametagItem* item)
 double NametagManager::calcFog(double distance)
 {
     const float* const fogRange = reinterpret_cast<const float*>(
-        static_cast<const unsigned char*>(dx9rend::g_raShaderConstants) + 0xA8);
+        dx9rend::raShaderConstantsAt(0xA8));                                 // FogRange, 4 floats
     const float nearScaled = static_cast<float>(fogRange[0] * distance);    // [ebp+8] as a float
     const float nearTerm = nearScaled + fogRange[2];                         // [ebp-10h]
     const float farTerm = static_cast<float>(distance * fogRange[1] + fogRange[3]);   // [ebp-0Ch]
@@ -1157,7 +1106,7 @@ void NametagManager::rebuildItemText(NametagItem* item)
     case TTPlayer:
     {
         world::IPlayer* const player = static_cast<PlayerNametagItem*>(item)->m_player.get();
-        vc71::string passengers;                                             // [ebp-1Ch]
+        std::string passengers;                                             // [ebp-1Ch]
         const int others = countSeats(owningControlObject(static_cast<world::IObject*>(
                                rootParent(player->getVehicle())))) - 1;
         if (others != 0)
@@ -1171,14 +1120,14 @@ void NametagManager::rebuildItemText(NametagItem* item)
                  && static_cast<double>(item->m_distance) <= s_cullDistances[TTPlayer].y)
         {
             const renddx9abi::HostString& name = fromHostStdString(player->getName());   // PE +0x20
-            vc71::string label(nametagFormatString("[%dm]  %s", item->m_distance, name.c_str()));
+            std::string label(nametagFormatString("[%dm]  %s", item->m_distance, name.c_str()));
             label += passengers;
             item->m_name = label;
         }
         else
         {
             const renddx9abi::HostString& name = fromHostStdString(player->getName());
-            vc71::string label(renddx9abi::toVc71String(name));
+            std::string label(renddx9abi::fromHostString(name));
             label += passengers;
             item->m_name = label;
         }
@@ -1203,7 +1152,7 @@ void NametagManager::rebuildItemText(NametagItem* item)
         world::IObject* const object = static_cast<ObjectNametagItem*>(item)->m_object.get();
         if (item->isUAV())
         {
-            item->m_name = renddx9abi::toVc71String(
+            item->m_name = renddx9abi::fromHostString(
                 fromHostStdString(object->getName()));                       // PE +0x60
         }
         else if (object && !item->m_arrowMode && (item->m_flags & NIF_Bit2))

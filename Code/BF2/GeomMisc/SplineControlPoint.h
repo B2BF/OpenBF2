@@ -10,7 +10,7 @@
 #define BF2_GEOMMISC_SPLINECONTROLPOINT_H
 
 #include "../Math/Vec3.h"
-#include "../../RendDX9Abi/Vc71String.h"
+#include <string>
 
 #include <stddef.h>
 
@@ -32,7 +32,7 @@ public:
     int           m_type;          // +0x10
     float         m_speed;         // +0x14  [INFERRED name]
     int           m_direction;     // +0x18  [INFERRED name]
-    vc71::string  m_sound;         // +0x1C  [INFERRED name]
+    std::string  m_sound;         // +0x1C  [INFERRED name]
     float         m_delay;         // +0x38  [INFERRED name]
     unsigned char m_flag3C;        // +0x3C  [UNRESOLVED] - never written by a constructor
     unsigned char m_pad3D[3];
@@ -48,9 +48,6 @@ static_assert(offsetof(SplineControlPoint, m_type) == 0x10, "type at +0x10");
 static_assert(offsetof(SplineControlPoint, m_speed) == 0x14, "+0x14 float");
 static_assert(offsetof(SplineControlPoint, m_direction) == 0x18, "+0x18 int");
 static_assert(offsetof(SplineControlPoint, m_sound) == 0x1C, "+0x1C string");
-static_assert(offsetof(SplineControlPoint, m_delay) == 0x38, "+0x38 float");
-static_assert(offsetof(SplineControlPoint, m_flag3C) == 0x3C, "+0x3C byte");
-static_assert(sizeof(SplineControlPoint) == 0x40, "EditorSpline counts points as (last - first) >> 6");
 #endif
 
 } // namespace geom

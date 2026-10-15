@@ -1,7 +1,7 @@
 // Win32 host/plugin ABI declarations. File organization [CHOSEN, not recovered].
 // [PLATFORM] MSVC uses one deleting-destructor slot where Itanium uses two; ClassManager has
 // 26 PE slots, so methods after its destructor sit four bytes below their ELF counterparts.
-// Keep this boundary's native VC7.1 containers and declaration order.
+// Keep this boundary's declaration order; its containers are the shared std types (issue #7).
 
 #ifndef RENDDX9ABI_HFEABI_H
 #define RENDDX9ABI_HFEABI_H
@@ -11,66 +11,6 @@
 namespace dice {
 namespace hfe {
 
-#if !BF2_PLUGIN_ABI_NATIVE
-
-class IBase;
-class IClassServer;
-
-// Host registration record: class ID, VC7.1 name string and factory pointer; 36 bytes on Win32.
-// The factory is __fastcall: IID arrives in ECX and outer in EDX. Do not change it to __cdecl.
-// An in-process harness using the same typedef cannot independently establish the calling convention.
-struct ClassRegInfo
-{
-    /*  0 */ unsigned int classId;
-    /*  4 */ vc71::string name;
-    /* 32 */ IBase*     (__fastcall *create)(unsigned int iid, IBase* outer);
-};
-
-// 44-byte VC7.1 singleton registration record. Flag 0x2 creates immediately; 0x4 publishes an
-// existing object with IID/CID zero. Keep host-visible field offsets unchanged.
-struct SingletonRegInfo
-{
-    /*  0 */ vc71::string name;
-    /* 28 */ IBase**      instance;   // address of the global that receives the pointer
-    /* 32 */ unsigned int iid;
-    /* 36 */ unsigned int classId;
-    /* 40 */ int          flags;
-};
-
-// Four-method reference-count interface with no virtual destructor. Lifetime is managed
-// through release; preserve this slot order across the host boundary.
-#ifndef BF2_HFE_IBASE_DEFINED
-#define BF2_HFE_IBASE_DEFINED
-class IBase
-{
-public:
-    virtual void  addRef() = 0;                                  // +0x00
-    virtual int   getRef() = 0;                                  // +0x04
-    virtual int   release() = 0;                                 // +0x08
-    virtual void* queryInterface(unsigned int iid) const = 0;    // +0x0C
-
-protected:
-    ~IBase() {}
-};
-#endif
-
-// IClassServer adds the two list slots. The whole of registerServer's interest in a module is these
-// two calls.
-class IClassServer : public IBase
-{
-public:
-    // the parameter is the host'S std::vector, passed by reference, and it is not OUR std::vector.
-    // It arrives as a pointer to a 16-byte VC7.1 vector object - see Vc71Vector.h. Declared void*
-    // rather than as a typed reference so that no call site can accidentally bind a native
-    // container to it.
-    virtual void getClassList(void* hostVectorOfClassRegInfo) = 0;          // +0x10
-    virtual void getSingletonList(void* hostVectorOfSingletonRegInfo) = 0;  // +0x14
-
-protected:
-    ~IClassServer() {}
-};
-
-#endif // !BF2_PLUGIN_ABI_NATIVE
 
 // Eight-slot module interface. init and close return bool; preserve inherited slot order.
 class IModule : public IClassServer

@@ -8,8 +8,6 @@
 
 #include "../../RendDX9Abi/PluginModules.h"
 #include "../../RendDX9Abi/ModuleCommon.h"
-#include "../../RendDX9Abi/Vc71Vector.h"
-#include "../../RendDX9Abi/Vc71Map.h"
 #include "../../RendDX9Abi/PluginEntry.h"
 #include "../../RendDX9Abi/BfMemory.h"
 #include "../../RendDX9Abi/Frontier.h"
@@ -27,7 +25,6 @@ namespace geom {
 
 extern IBase* g_GeometryTemplateManager;
 
-#if BF2_PLUGIN_ABI_NATIVE
 bool registerLightManagerConsoleObjects();
 bool unregisterLightManagerConsoleObjects();
 bool registerShadowManagerConsoleObjects();
@@ -52,8 +49,7 @@ bool registerObjectGeometryConsoleObjects();   // Geom/ObjectGeometryConsole.cpp
 bool unregisterObjectGeometryConsoleObjects();
 bool registerStaticMeshRendererConsoleObjects();   // Geom/StaticMeshRendererConsole.cpp - the atlas rows
 bool unregisterStaticMeshRendererConsoleObjects();
-#endif
-#if BF2_PLUGIN_ABI_NATIVE && defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+#if defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
 // Geom/LightmapGeneration/LightmapGenerationConsole.cpp - the 2006 editor's `lightmapGeneration`
 // rows, editor flavour only ([CHOSEN, not recovered]: 1.50 publishes none).
 bool registerLightmapGenerationConsoleObjects();
@@ -171,14 +167,14 @@ IBase* g_RainManager            = 0;
 IBase* g_Terrain                = 0;
 
 // Replaces Terrain with the requested registered geometry class. Unknown names publish nothing.
-void registerTerrainSingleton(const vc71::string& className)
+void registerTerrainSingleton(const std::string& className)
 {
     const bool exists =
         classManager->getSingleton(renddx9abi::HostString("Terrain")) != 0;
     if (exists)
         classManager->unregisterSingleton(renddx9abi::HostString("Terrain"));
 
-    vc71::string fullName("dice.hfe.geom.");
+    std::string fullName("dice.hfe.geom.");
     fullName += className;
     unsigned int classId = 0;
     if (classManager->getClassID(renddx9abi::HostString(fullName.c_str()), &classId))
@@ -568,7 +564,6 @@ bool ModuleGeom::init()
     // ConsoleObjects::registerConsoleObjects at 0x1007B570, then registers the category-10 event
     // handler below.  Native mode shares the rebuilt host's STL ABI; retail-compatible mode cannot
     // safely publish current-toolchain ConsoleObject/container layouts to the VC7.1 host.
-#if BF2_PLUGIN_ABI_NATIVE
     registerLightManagerConsoleObjects();
     registerShadowManagerConsoleObjects();
     registerHemiMapManagerConsoleObjects();
@@ -581,8 +576,7 @@ bool ModuleGeom::init()
     registerOverGrowthConsoleObjects();
     registerObjectGeometryConsoleObjects();
     registerStaticMeshRendererConsoleObjects();
-#endif
-#if BF2_PLUGIN_ABI_NATIVE && defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+#if defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
     registerLightmapGenerationConsoleObjects();
 #endif
 
@@ -634,10 +628,9 @@ bool ModuleGeom::close()
             static_cast<EventCategory>(10),
             reinterpret_cast<IEventListener*>(static_cast<ECCoreEventHandler*>(this)));
     }
-#if BF2_PLUGIN_ABI_NATIVE && defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+#if defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
     unregisterLightmapGenerationConsoleObjects();
 #endif
-#if BF2_PLUGIN_ABI_NATIVE
     unregisterStaticMeshRendererConsoleObjects();
     unregisterObjectGeometryConsoleObjects();
     unregisterOverGrowthConsoleObjects();
@@ -650,7 +643,6 @@ bool ModuleGeom::close()
     unregisterHemiMapManagerConsoleObjects();
     unregisterShadowManagerConsoleObjects();
     unregisterLightManagerConsoleObjects();
-#endif
     if (classManager && classManager->getSingleton(renddx9abi::HostString("Terrain")))
         classManager->unregisterSingleton(renddx9abi::HostString("Terrain"));
     return true;

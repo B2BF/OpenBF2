@@ -4,13 +4,13 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 #include "../../RendDX9Abi/PluginAbi.h"
-#if BF2_PLUGIN_ABI_NATIVE
 
 #include "Terrain.h"
+#include "MeshTemplate.h"                     // RaMaterialParameters - the terrain's material block
 
 #include "../../RendDX9Abi/HfeAbi.h"
 #include "../../RendDX9Abi/PluginEntry.h"
-#include "../../RendDX9Abi/Vc71String.h"
+#include <string>
 #include "../Core/ConsoleObjectMacro.h"
 #include "../Core/ConsoleObjects.h"
 #include "../Math/Vec3.h"
@@ -31,7 +31,7 @@ const char kTerrainConsoleTag[] = "geom.terrain";
 // ModuleGeom's registration (0x100B118C).
 void consoleCreateTerrain(const std::string& className)
 {
-    registerTerrainSingleton(vc71::string(className.c_str()));
+    registerTerrainSingleton(std::string(className.c_str()));
 }
 
 // init - ctor 0x100B6868, executor slot +0x14.
@@ -44,7 +44,7 @@ void consoleInitTerrain()
 // std::string.
 void consoleLoadTerrain(const std::string& path)
 {
-    terrain()->load(vc71::string(path.c_str()));
+    terrain()->load(std::string(path.c_str()));
 }
 
 // forceRenderStyle - ctor 0x100B502C, executor get slot +0x24, set slot +0x20.
@@ -75,13 +75,13 @@ void setGIColor(const Vec3& v) { terrain()->setGIColor(v.x, v.y, v.z); }
 // +0x50; the set (0x100B5B72) writes the vec4 (1, intensity, 0.8, 1) over the block's +0x4C.
 float getWaterSunIntensity()
 {
-    return *reinterpret_cast<const float*>(
-        static_cast<const unsigned char*>(terrain()->m_materialParameters) + 0x50);
+    return static_cast<const RaMaterialParameters*>(terrain()->m_materialParameters)->pointColor.value[1];   // +0x50
 }
 void setWaterSunIntensity(float intensity)
 {
     const float record[4] = { 1.0f, intensity, 0.8f, 1.0f };
-    ::memcpy(static_cast<unsigned char*>(terrain()->m_materialParameters) + 0x4C, record, sizeof(record));
+    ::memcpy(static_cast<RaMaterialParameters*>(terrain()->m_materialParameters)->pointColor.value,
+             record, sizeof(record));                                                               // +0x4C
 }
 
 #if defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
@@ -132,5 +132,4 @@ bool unregisterTerrainConsoleObjects()
 } // namespace hfe
 } // namespace dice
 
-#endif // BF2_PLUGIN_ABI_NATIVE
 #endif // BF2_IMAGE_RENDDX9

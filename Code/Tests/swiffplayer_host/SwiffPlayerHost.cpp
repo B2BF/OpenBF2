@@ -15,7 +15,7 @@
 
 #include "../../RendDX9Abi/HfeAbi.h"
 #include "../../RendDX9Abi/Vc71Vector.h"
-#include "../../RendDX9Abi/Vc71String.h"
+#include <string>
 #include "../../RendDX9Abi/BfMemory.h"
 
 using namespace dice::hfe;
@@ -177,18 +177,18 @@ static void __fastcall fh_setActivateReason(void*, void*, int)           { }
 static void __fastcall fh_getFrameLabel(void*, void*, void* out)
 {
     const char* label = getenv("BF2_SWIFFPLAYER_FRAMELABEL");
-    new (out) vc71::string(label ? label : "");
+    new (out) std::string(label ? label : "");
 }
 // Slot +416 assigns an already constructed string; +196 constructs into raw storage.
 // Keeping that distinction catches callers that pass the wrong output storage.
-static void __fastcall fh_getModVersion(void*, void*, vc71::string* out)  { if (out) *out = "1.50"; }
+static void __fastcall fh_getModVersion(void*, void*, std::string* out)  { if (out) *out = "1.50"; }
 // +168 Locale.getString(std::wstring& out, const std::string& id): pre-constructed, the host assigns.
 // The fake answers with the id itself in brackets, widened, so a localised label is recognisable in
 // a log and a long id exercises the heap case of the wide string.
 static int   __fastcall fh_request(void*, void*, void* req)            { (void)req; return 0; }   // leaves the vector empty
 static void* __fastcall fh_getCursor(void*, void*, int)                { return 0; }
 static void  __fastcall fh_cursorRestored(void*, void*)                { }
-static void __fastcall fh_localeGetString(void*, void*, vc71::wstring* out, const vc71::string* id)
+static void __fastcall fh_localeGetString(void*, void*, std::wstring* out, const std::string* id)
 {
     if (!out) return;
     wchar_t w[256]; unsigned n = 0;
@@ -201,14 +201,14 @@ static int  __fastcall fh_getCommandLine(void*, void*)                   { retur
 
 // Returns the stored string for a key, or the supplied default when absent.
 static void __fastcall fh_getStorageString(void*, void*, void* out,
-                                           const vc71::string* a, const vc71::string* b)
+                                           const std::string* a, const std::string* b)
 {
     const char* key = a ? a->c_str() : "";
     for (int i = 0; i < g_kvCount; ++i)
-        if (strcmp(g_kv[i].k, key) == 0) { new (out) vc71::string(g_kv[i].v); return; }
-    new (out) vc71::string(b ? b->c_str() : "");
+        if (strcmp(g_kv[i].k, key) == 0) { new (out) std::string(g_kv[i].v); return; }
+    new (out) std::string(b ? b->c_str() : "");
 }
-static void __fastcall fh_setStorageString(void*, void*, const vc71::string* a, const vc71::string* b)
+static void __fastcall fh_setStorageString(void*, void*, const std::string* a, const std::string* b)
 {
     if (!a || !b) return;
     // The shipped setter takes (arg0, arg1); the harness stores it verbatim so a later
@@ -232,21 +232,21 @@ struct EorMapTypeFixture
 {
     int players;                         // +0x00
     char pad04[28];                      // +0x04
-    vc71::string locId;                  // +0x20
-    vc71::string description;            // +0x3C
+    std::string locId;                  // +0x20
+    std::string description;            // +0x3C
     char tail58[4];                      // +0x58
 };
 struct EorGameModeFixture
 {
-    vc71::string name;                   // +0x00
+    std::string name;                   // +0x00
     vc71::vector_layout mapTypes;        // +0x1C; first/last at +0x20/+0x24
 };
 struct EorMapFixture
 {
-    vc71::string path;                   // +0x00
-    vc71::string name;                   // +0x1C
-    vc71::string briefing;               // +0x38
-    vc71::string briefingLocId;          // +0x54
+    std::string path;                   // +0x00
+    std::string name;                   // +0x1C
+    std::string briefing;               // +0x38
+    std::string briefingLocId;          // +0x54
     char pad70[28];                      // +0x70
     vc71::vector_layout gameModes;       // +0x8C; first/last at +0x90/+0x94
 };
@@ -325,66 +325,66 @@ static void initEorFixtureData()
     g_eorHudPort = 0;
 }
 
-static void* __fastcall eorMod_findMap(void*, void*, const vc71::string* path)
+static void* __fastcall eorMod_findMap(void*, void*, const std::string* path)
 {
     ++g_eorMapFinds;
     return path && g_eorMap && _stricmp(path->c_str(), g_eorMap->path.c_str()) == 0 ? g_eorMap : 0;
 }
-static void* __fastcall eorMod_getGameModeName(void*, void*, void* out, const vc71::string* mode)
+static void* __fastcall eorMod_getGameModeName(void*, void*, void* out, const std::string* mode)
 {
     const char* name = mode && _stricmp(mode->c_str(), "gpm_cq") == 0 ? "Conquest" : "Unknown Mode";
-    return new (out) vc71::string(name);
+    return new (out) std::string(name);
 }
 
 // Exact retail SwiffHost call shapes used by Client, Logic, EndOfRound, Mod, VideoSettings and
 // ServerInfo on the first-load route. Fixed values are fixture policy, not recovered engine state.
 static void* __fastcall fh_getCurrentMapName(void*, void*, void* out)
-{ ++g_eorCurrentMapReads; return new (out) vc71::string("kubra_dam"); }
+{ ++g_eorCurrentMapReads; return new (out) std::string("kubra_dam"); }
 static void* __fastcall fh_getCurrentMapGameMode(void*, void*, void* out)
-{ return new (out) vc71::string("gpm_cq"); }
+{ return new (out) std::string("gpm_cq"); }
 static int __fastcall fh_getCurrentMapMaxPlayers(void*, void*) { return 64; }
 static int __fastcall fh_getCurrentMapSize(void*, void*) { return 64; }
 static float __fastcall fh_getLoadingProgress(void*, void*) { ++g_eorLoadProgressReads; return 1.0f; }
 static int __fastcall fh_getGameStatus(void*, void*) { return 0; }
 static float __fastcall fh_getTimeUntilRestart(void*, void*) { return 0.0f; }
 static void* __fastcall fh_getCurrentLoadFile(void*, void*, void* out)
-{ return new (out) vc71::string("Objects_client.zip"); }
+{ return new (out) std::string("Objects_client.zip"); }
 static unsigned char __fastcall fh_getIsLoading(void*, void*) { return g_eorIsLoading ? 1 : 0; }
 static void __fastcall fh_setIsLoading(void*, void*, char value) { g_eorIsLoading = value != 0; }
 static unsigned char __fastcall fh_getGameStarting(void*, void*) { return 1; }
 static void* __fastcall fh_getModInfo(void*, void*) { return &g_eorModInfo; }
-static const vc71::string* __fastcall fh_getPreviousServerRecord(void*, void*)
-{ static vc71::string previousMap(""); return &previousMap; }
+static const std::string* __fastcall fh_getPreviousServerRecord(void*, void*)
+{ static std::string previousMap(""); return &previousMap; }
 static unsigned char __fastcall fh_isGameLogicServer(void*, void*) { return 1; }
-static void* __fastcall fh_getServerList(void*, void*, const vc71::string*) { return &g_eorServerList; }
-static const vc71::string* __fastcall fh_getJoinAddress(void*, void*)
-{ static vc71::string address("0.0.0.0"); return &address; }
+static void* __fastcall fh_getServerList(void*, void*, const std::string*) { return &g_eorServerList; }
+static const std::string* __fastcall fh_getJoinAddress(void*, void*)
+{ static std::string address("0.0.0.0"); return &address; }
 static int __fastcall fh_getJoinQueryPort(void*, void*) { return 0; }
 static unsigned char __fastcall fh_getForcedLoading(void*, void*) { return 0; }
-static const vc71::string* __fastcall fh_getWelcomeMessage(void*, void*)
-{ static vc71::string welcome("Welcome to the BF2Rebuilt fixture|Have fun!"); return &welcome; }
+static const std::string* __fastcall fh_getWelcomeMessage(void*, void*)
+{ static std::string welcome("Welcome to the BF2Rebuilt fixture|Have fun!"); return &welcome; }
 static unsigned char __fastcall fh_isAbortLoadLevel(void*, void*) { return 0; }
 static unsigned char __fastcall fh_isOptimizingShaders(void*, void*) { return 0; }
 static int __fastcall fh_getRoundsLeft(void*, void*) { return 0; }
 static unsigned char __fastcall fh_isLoadingDemo(void*, void*) { return 0; }
 static void* __fastcall fh_getModName(void*, void*, void* out)
-{ return new (out) vc71::string("bf2"); }
+{ return new (out) std::string("bf2"); }
 static unsigned char __fastcall eorServerList_fillLocalRecord(void*, void*, void* out)
 {
     // The caller constructed its 580-byte RetailServerBrowserRecord before dispatch. Assign only
     // the briefing fields we want to exercise; its own destructor remains responsible for them.
     char* record = static_cast<char*>(out);
     ++g_eorLocalServerFills;
-    *reinterpret_cast<vc71::string*>(record + 4) = "127.0.0.1";             // address
+    *reinterpret_cast<std::string*>(record + 4) = "127.0.0.1";             // address
     *reinterpret_cast<int*>(record + 32) = 29900;                            // queryPort
-    *reinterpret_cast<vc71::string*>(record + 68) = "BF2Rebuilt fixture";   // hostName
-    *reinterpret_cast<vc71::string*>(record + 112) = "gpm_cq";             // gameMode
+    *reinterpret_cast<std::string*>(record + 68) = "BF2Rebuilt fixture";   // hostName
+    *reinterpret_cast<std::string*>(record + 112) = "gpm_cq";             // gameMode
     *reinterpret_cast<int*>(record + 276) = 16677;                           // hostPort; never bind
     record[396] = 1;                                                         // friendlyFire fallback
     *reinterpret_cast<float*>(record + 432) = 15.7f;                         // spawnTime fallback
     *reinterpret_cast<int*>(record + 436) = 1200;                            // timeLimit fallback
     *reinterpret_cast<int*>(record + 440) = 3;                               // roundsPerMap fallback
-    *reinterpret_cast<vc71::string*>(record + 500) = "";                    // communityLogoUrl
+    *reinterpret_cast<std::string*>(record + 500) = "";                    // communityLogoUrl
     record[528] = 1;                                                         // autoBalanced fallback
     *reinterpret_cast<float*>(record + 532) = 1.5f;                          // teamRatio fallback
     *reinterpret_cast<int*>(record + 536) = 100;                             // ticketRatio fallback
@@ -417,7 +417,7 @@ static unsigned char __fastcall fh_getServerInfoGlobalUnlocks(void*, void*)
 struct FakeEorHudInformationLayer { void* vtbl; };
 static void* g_eorHudVtbl[40];
 static void __fastcall eorHud_setServerInfo(FakeEorHudInformationLayer*, void*,
-                                            vc71::string name, vc71::string address, int port)
+                                            std::string name, std::string address, int port)
 {
     ++g_eorHudPublications;
     strncpy_s(g_eorHudName, name.c_str(), _TRUNCATE);
@@ -456,7 +456,7 @@ static void buildFakeGeneralSettingsVtbl()
 // type-1 (error) message - the "disconnected by another login" line retail drive6 showed - until the
 // movie's OK button calls removeLast; off, the host holds none (deterministic 0 instead of whatever
 // fh_generic left in eax). The record is {type, code, std::string text} as the SwiffPlayer reads it.
-struct HostMessageRecord { int type; int code; vc71::string text; };
+struct HostMessageRecord { int type; int code; std::string text; };
 static bool hostMessageScenario() { const char* e = getenv("BF2_SWIFFPLAYER_HOST_MESSAGE"); return e && e[0] == '1'; }
 static int  g_msgCount   = -1;
 static int  g_msgRemoved = 0;
@@ -593,7 +593,7 @@ public:
     virtual void  slot_0x10() { }
     virtual void  slot_0x14() { }
     // +0x18 open(const std::string& name, mode, access, flags) -> IStream* (our FileHandle)
-    virtual void* open(const vc71::string& name, int /*mode*/, int /*access*/, unsigned /*flags*/)
+    virtual void* open(const std::string& name, int /*mode*/, int /*access*/, unsigned /*flags*/)
     {
         const char* p = name.c_str();
         const char* base = p;
@@ -699,7 +699,7 @@ public:
     virtual void  reserved_setDefaultClass()  { fatal("setDefaultClass"); }
     virtual void  reserved_getDefaultClass()  { fatal("getDefaultClass"); }
     virtual void  reserved_getClassName()     { fatal("getClassName"); }
-    virtual bool  getClassID(const vc71::string& name, unsigned int* out)
+    virtual bool  getClassID(const std::string& name, unsigned int* out)
     { for (int i = 0; i < m_classCount; ++i) if (!strcmp(m_classNames[i], name.c_str())) { if (out) *out = m_classIds[i]; return true; } return false; }
     virtual void  reserved_createInstance_cid() { fatal("createInstance(cid)"); }
     virtual IBase* createInstance(unsigned int cid, unsigned int iid, IBase* outer)
@@ -716,9 +716,9 @@ public:
         printf("      singleton %-14s iid=%-8u cid=%-8u flags=%d -> %s\n", info.name.c_str(), info.iid, info.classId, info.flags,
                (info.flags & 2) ? (created ? "created" : "NULL") : "published");
     }
-    virtual void unregisterSingleton(const vc71::string& name)
+    virtual void unregisterSingleton(const std::string& name)
     { for (int i = 0; i < m_singletonCount; ++i) if (!strcmp(m_singletonNames[i], name.c_str())) { m_singletonNames[i][0] = '\0'; return; } }
-    virtual IBase* getSingleton(const vc71::string& name)
+    virtual IBase* getSingleton(const std::string& name)
     { for (int i = 0; i < m_singletonCount; ++i) if (!strcmp(m_singletonNames[i], name.c_str())) return m_singletonSlots[i] ? *m_singletonSlots[i] : 0; return 0; }
     virtual void  reserved_getSingletonAs()               { fatal("getSingletonAs"); }
     virtual void  registerSimpleSingleton(const renddx9abi::HostString&, void*) { fatal("registerSimpleSingleton"); }
@@ -751,11 +751,11 @@ static void testStringAbi(HMODULE p71)
     P71Dtor dtor = (P71Dtor)GetProcAddress(p71, "??1?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAE@XZ");
     if (!ctor || !dtor) { check(false, "MSVCP71 basic_string ctor/dtor resolved"); return; }
     { unsigned char t[28]; memset(t, 0xCD, 28); ctor(t, "SwiffPlayer");
-      vc71::string o("SwiffPlayer"); const unsigned char* ob = (const unsigned char*)&o;
+      std::string o("SwiffPlayer"); const unsigned char* ob = (const unsigned char*)&o;
       check(memcmp(t + 4, ob + 4, 12) == 0, "short \"SwiffPlayer\": chars+terminator match MSVCP71");
       check(memcmp(t + 20, ob + 20, 8) == 0, "short: _Mysize and _Myres match MSVCP71"); dtor(t); }
     { unsigned char t[28]; memset(t, 0xCD, 28); ctor(t, "ObjectTemplateManager");
-      vc71::string o("ObjectTemplateManager"); const unsigned char* ob = (const unsigned char*)&o;
+      std::string o("ObjectTemplateManager"); const unsigned char* ob = (const unsigned char*)&o;
       unsigned tr = *(unsigned*)(t + 24), orr = *(unsigned*)(ob + 24);
       check(*(unsigned*)(t + 20) == 21 && *(unsigned*)(ob + 20) == 21, "long: _Mysize == 21 both sides");
       check(tr == orr && tr >= 16, "long: _Myres matches MSVCP71 rounding, heap"); dtor(t); }
@@ -894,7 +894,7 @@ int main()
 
     printf("\n[TEST 2] event (10,1) -> factory -> \"SwiffPlayer\" singleton\n");
     check(eventManagerObject.fire(10, 1), "posted (10,1)");
-    IBase* player = cm.getSingleton(vc71::string("SwiffPlayer"));
+    IBase* player = cm.getSingleton(std::string("SwiffPlayer"));
     check(player != 0, "SwiffPlayer singleton created");
     if (!player) return 1;
 
@@ -991,7 +991,7 @@ int main()
     // test 6: unpublish + unload (advance() completes cleanly now, so teardown is safe)
     printf("\n[TEST 6] event (10,2) unpublishes; deinitDll + FreeLibrary\n");
     eventManagerObject.fire(10, 2);
-    check(cm.getSingleton(vc71::string("SwiffPlayer")) == 0, "(10,2) cleared the SwiffPlayer singleton");
+    check(cm.getSingleton(std::string("SwiffPlayer")) == 0, "(10,2) cleared the SwiffPlayer singleton");
     deinitDll();
     check(cm.serverCount() == 0, "deinitDll unregistered the module");
     check(FreeLibrary(dll) != 0, "FreeLibrary");

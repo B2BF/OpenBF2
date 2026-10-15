@@ -5,7 +5,7 @@
 #include "../Core/IBase.h"
 #include "../Math/Vec3.h"
 
-namespace vc71 { class string; }
+#include <string>
 
 namespace dice { namespace hfe { namespace geom {
 
@@ -16,10 +16,10 @@ class IGeometryTemplate : public ::dice::hfe::IBase
 {
 public:
     virtual unsigned int getClassId() const = 0;                                    // +0x10
-    virtual void setName(const vc71::string& name) = 0;                             // +0x14
-    virtual const vc71::string& getName() const = 0;                                // +0x18
-    virtual void setPath(const vc71::string& path) = 0;                             // +0x1C
-    virtual const vc71::string& getPath() const = 0;                                // +0x20
+    virtual void setName(const std::string& name) = 0;                             // +0x14
+    virtual const std::string& getName() const = 0;                                // +0x18
+    virtual void setPath(const std::string& path) = 0;                             // +0x1C
+    virtual const std::string& getPath() const = 0;                                // +0x20
     virtual void* createInstance() = 0;                                             // +0x24  base: 0
     virtual bool isLoaded() const = 0;                                              // +0x28
     virtual bool load() = 0;                                                        // +0x2C  base: 0

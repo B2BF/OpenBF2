@@ -47,7 +47,9 @@ protected:
     float m_field034;                                     // +34, constructor 1.0
     float m_positionX, m_positionY;                       // +38/+3C
 };
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2TransformListNode) == 60, "native Bf2TransformListNode storage");
+#endif
 } }
 #endif
 #endif

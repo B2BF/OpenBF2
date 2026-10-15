@@ -12,6 +12,7 @@
 namespace dice {
 namespace hfe {
 class GameLogic;
+class ServerConnection;
 namespace world {
 
 class UAVVehicleManager;
@@ -41,6 +42,7 @@ class RemoteControlledObjectTemplate : public BundleTemplate
 {
 public:
     friend class hfe::GameLogic;              // the RCO registry reads rcType
+    friend class hfe::ServerConnection;       // getSpecialCommanderObjects reads rcType
     friend class UAVVehicleManager;            // UAV spawn/config reads the +0x188..+0x198 block
     friend class UAVVehicle;                   // the live drone reads uavVehicleSpeed each tick
     friend class CommanderToolsManager;        // commander-toy aggregation reads rcType

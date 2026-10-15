@@ -5,13 +5,12 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 #include "../../RendDX9Abi/PluginAbi.h"
-#if BF2_PLUGIN_ABI_NATIVE
 
 #include "StaticMeshRenderer.h"
 
 #include "../../RendDX9Abi/HfeAbi.h"
 #include "../../RendDX9Abi/PluginEntry.h"
-#include "../../RendDX9Abi/Vc71String.h"
+#include <string>
 #include "../Core/ConsoleObjectMacro.h"
 #include "../Core/ConsoleObjects.h"
 
@@ -39,16 +38,16 @@ StaticMeshRenderer* staticMeshRendererSingleton()
 // check of their own.
 bool consoleLoadAllLightMapFiles(const std::string& directory, const std::string& extension)
 {
-    const vc71::string directoryCopy(directory.c_str());
-    const vc71::string extensionCopy(extension.c_str());
+    const std::string directoryCopy(directory.c_str());
+    const std::string extensionCopy(extension.c_str());
     return staticMeshRendererLoadAllLightMapFiles(staticMeshRendererSingleton(), directoryCopy,
                                                   extensionCopy);
 }
 
 bool consoleLoadAllLightMapFilesDll(const std::string& directory, const std::string& extension)
 {
-    const vc71::string directoryCopy(directory.c_str());
-    const vc71::string extensionCopy(extension.c_str());
+    const std::string directoryCopy(directory.c_str());
+    const std::string extensionCopy(extension.c_str());
     return staticMeshRendererLoadAllLightMapFilesDll(staticMeshRendererSingleton(), directoryCopy,
                                                      extensionCopy);
 }
@@ -83,5 +82,4 @@ bool unregisterStaticMeshRendererConsoleObjects()
 } // namespace hfe
 } // namespace dice
 
-#endif // BF2_PLUGIN_ABI_NATIVE
 #endif // BF2_IMAGE_RENDDX9

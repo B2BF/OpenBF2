@@ -49,12 +49,13 @@ namespace Ra {
 
 // dword_1023D954 - Ra/EffectManager.cpp. shaderMacros() reads one byte of it (+0x40).
 extern void* g_effectManager;
+unsigned char effectManagerFlag40();   // Ra/EffectManager.cpp - that +0x40 byte
 
 
 // Generated shader files live in EffectManager's case-insensitive memory store.
 
-bool effectManagerAddMemoryFile(const vc71::string& name, const vc71::string& contents);
-void effectManagerRemoveMemoryFile(const vc71::string& name);
+bool effectManagerAddMemoryFile(const std::string& name, const std::string& contents);
+void effectManagerRemoveMemoryFile(const std::string& name);
 
 namespace {
 
@@ -70,16 +71,15 @@ const int kFileModeWrite   = 0;
 const int kFileAccessWrite = 2;
 
 
-// vc71::string helpers. Every one of these is a body in the shipped image; the PE address is on the
-// line. They exist because vc71::string is an ABI carrier with no relational, search or substring
-// operations of its own (Vc71String.h).
+// std::string helpers. Every one of these is a body in the shipped image; the PE address is on the
+// line. They keep the shipped operation sequences rather than the toolset's own string members.
 
 
 // VC7.1's std::string::operator< - the ordering every inlined comparison in this class lands on.
-int vc71Compare(const vc71::string& a, const vc71::string& b)
+int vc71Compare(const std::string& a, const std::string& b)
 {
-    const unsigned int na = a.size();
-    const unsigned int nb = b.size();
+    const unsigned int na = static_cast<unsigned int>(a.size());   // .mfx names and tokens
+    const unsigned int nb = static_cast<unsigned int>(b.size());
     const unsigned int n  = na < nb ? na : nb;
     if (n)
     {
@@ -92,17 +92,17 @@ int vc71Compare(const vc71::string& a, const vc71::string& b)
     return 0;
 }
 
-bool vc71Equal(const vc71::string& a, const vc71::string& b)
+bool vc71Equal(const std::string& a, const std::string& b)
 {
     return vc71Compare(a, b) == 0;
 }
 
-vc71::string vc71FromStd(const std::string& s)
+std::string vc71FromStd(const std::string& s)
 {
-    return vc71::string(s.c_str(), static_cast<unsigned int>(s.size()));
+    return std::string(s.c_str(), static_cast<unsigned int>(s.size()));
 }
 
-std::string stdFromVc71(const vc71::string& s)
+std::string stdFromVc71(const std::string& s)
 {
     return std::string(s.c_str(), s.size());
 }
@@ -112,7 +112,7 @@ std::string stdFromVc71(const vc71::string& s)
 // is consulted, and the CRT is consulted only when none of them matched. The five pairs are
 // aring/adiaeresis/odiaeresis/udiaeresis/eacute in the latin-1 code page, and they are in the
 // image because dice is Swedish. Reproduced with the shipped byte values.
-vc71::string vc71ToUpper(const vc71::string& s)
+std::string vc71ToUpper(const std::string& s)
 {
     std::string out = stdFromVc71(s);
     for (std::string::size_type i = 0; i < out.size(); ++i)
@@ -128,7 +128,7 @@ vc71::string vc71ToUpper(const vc71::string& s)
     return vc71FromStd(out);
 }
 
-vc71::string vc71ToLower(const vc71::string& s)
+std::string vc71ToLower(const std::string& s)
 {
     std::string out = stdFromVc71(s);
     for (std::string::size_type i = 0; i < out.size(); ++i)
@@ -146,7 +146,7 @@ vc71::string vc71ToLower(const vc71::string& s)
 
 // sub_10075600 (reached through the 12-byte forwarder sub_10075190). rfind both separators, take
 // whichever is later, and keep everything after it; the whole string when neither is present.
-vc71::string vc71BaseName(const vc71::string& s)
+std::string vc71BaseName(const std::string& s)
 {
     const std::string t = stdFromVc71(s);
     const std::string::size_type back  = t.rfind('\\');
@@ -161,7 +161,7 @@ vc71::string vc71BaseName(const vc71::string& s)
 
 // sub_1003C440 - drop every '_' (95) and '|' (124). "_base_|_detail_" -> "basedetail", which is
 // what the .mfx's own comment calls "the permutationname - "_"".
-vc71::string cleanPermutationName(const vc71::string& s)
+std::string cleanPermutationName(const std::string& s)
 {
     std::string out;
     const char* p = s.c_str();
@@ -176,37 +176,37 @@ vc71::string cleanPermutationName(const vc71::string& s)
 // sub_1003C4D0 - split at the first '|'. `rest` is consumed in place; the token is returned. With
 // no '|' left the whole of `rest` is the token and `rest` becomes empty, which is what terminates
 // every caller's loop (they test the token's size).
-vc71::string splitFirstToken(vc71::string& rest)
+std::string splitFirstToken(std::string& rest)
 {
     const std::string t = stdFromVc71(rest);
     const std::string::size_type bar = t.find('|');
     if (bar == std::string::npos)
     {
-        const vc71::string token = rest;
+        const std::string token = rest;
         rest = "";
         return token;
     }
-    const vc71::string token = vc71FromStd(t.substr(0, bar));
+    const std::string token = vc71FromStd(t.substr(0, bar));
     rest = vc71FromStd(t.substr(bar + 1));
     return token;
 }
 
 // sub_10075000 - _stricmp on the two c_str()s. Used only by bitFromName.
-bool vc71EqualNoCase(const vc71::string& a, const vc71::string& b)
+bool vc71EqualNoCase(const std::string& a, const std::string& b)
 {
     return ::_stricmp(a.c_str(), b.c_str()) == 0;
 }
 
 // sub_1003C870, RaShaderPermutator.cpp:713. `bitNames` is a NUL-terminated array of names; the
 // answer is 1 << <index>, or 0 with a diagnostic when the name is not in it.
-int bitFromName(const vc71::string& name, const char* const* bitNames)
+int bitFromName(const std::string& name, const char* const* bitNames)
 {
     int shift = 0;
     if (bitNames && *bitNames)
     {
         for (const char* const* it = bitNames; *it; ++it, ++shift)
         {
-            if (vc71EqualNoCase(name, vc71::string(*it)))
+            if (vc71EqualNoCase(name, std::string(*it)))
                 return 1 << shift;
         }
     }
@@ -230,9 +230,9 @@ unsigned int psMajor()
 // Prefixes unqualified paths with the active mod; a missing renderer selects xpack.
 // Uses shared scratch storage and is not reentrant.
 
-void applyModPrefix(vc71::string& path)
+void applyModPrefix(std::string& path)
 {
-    static vc71::string s_scratch;           // unk_1023D488
+    static std::string s_scratch;           // unk_1023D488
 
     if (::strstr(path.c_str(), "mods/"))
         return;
@@ -257,9 +257,8 @@ void applyModPrefix(vc71::string& path)
 // readers in this file agree: sub_1003EAB0 copies `info[56]`/`info[60]` into the object's +0x48 /
 // +0x4C, and sub_1003D080 compares the same pair against them.
 
-#if BF2_PLUGIN_ABI_NATIVE
 
-bool engineGetFileTime(const vc71::string& path, unsigned int& low, unsigned int& high)
+bool engineGetFileTime(const std::string& path, unsigned int& low, unsigned int& high)
 {
     low = 0;
     high = 0;
@@ -276,53 +275,6 @@ bool engineGetFileTime(const vc71::string& path, unsigned int& low, unsigned int
     return true;
 }
 
-#else
-
-// The retail-flavour record. HostFileAbi.h forward-declares HostFileInfo and deliberately does not
-// define it; this is the PE shape, local to this file so that nothing else can depend on it.
-struct PeFileInfo
-{
-    unsigned char name[28];          // +0   VC7.1 std::string, never read here
-    unsigned int  isDirectory;       // +28
-    unsigned int  size;              // +32
-    unsigned int  pad36;             // +36  MSVC 8-aligns the FILETIMEs
-    unsigned int  creationLow;       // +40
-    unsigned int  creationHigh;      // +44
-    unsigned int  lastAccessLow;     // +48
-    unsigned int  lastAccessHigh;    // +52
-    unsigned int  lastWriteLow;      // +56  <- what both readers in this file take
-    unsigned int  lastWriteHigh;     // +60
-};
-
-bool engineGetFileTime(const vc71::string& path, unsigned int& low, unsigned int& high)
-{
-    low = 0;
-    high = 0;
-    if (!::dice::hfe::fileManager)
-        return false;
-
-    // The record starts with a live VC7.1 std::string that the host constructs into it, so it is
-    // built and destroyed through the carrier rather than as raw bytes.
-    unsigned char storage[64];
-    ::memset(storage, 0, sizeof(storage));
-    new (storage) vc71::string();
-
-    const ::renddx9abi::HostString name = ::renddx9abi::makeHostString(path);
-    const bool ok = ::dice::hfe::fileManager->getFileInfo(
-        name, reinterpret_cast<::renddx9abi::HostFileInfo&>(storage[0]));
-
-    if (ok)
-    {
-        const PeFileInfo* const info = reinterpret_cast<const PeFileInfo*>(storage);
-        low  = info->lastWriteLow;
-        high = info->lastWriteHigh;
-    }
-
-    reinterpret_cast<vc71::string*>(storage)->~string();
-    return ok;
-}
-
-#endif // BF2_PLUGIN_ABI_NATIVE
 
 
 // Effect-compiler reads shared by readStringArrays and readDeprecationList.
@@ -419,7 +371,7 @@ bool nextLine(const char* text, unsigned int size, unsigned int from,
     return true;
 }
 
-std::ostream& operator<<(std::ostream& os, const vc71::string& s)
+std::ostream& operator<<(std::ostream& os, const std::string& s)
 {
     os.write(s.c_str(), static_cast<std::streamsize>(s.size()));
     return os;
@@ -428,9 +380,9 @@ std::ostream& operator<<(std::ostream& os, const vc71::string& s)
 } // anonymous namespace
 
 
-// Vc71Less - the ordering declared in the header.
+// ShippedStringLess - the ordering declared in the header.
 
-bool Vc71Less::operator()(const vc71::string& a, const vc71::string& b) const
+bool ShippedStringLess::operator()(const std::string& a, const std::string& b) const
 {
     return vc71Compare(a, b) < 0;
 }
@@ -439,7 +391,7 @@ bool Vc71Less::operator()(const vc71::string& a, const vc71::string& b) const
 // Initializes an empty MetaFx with its path stem, extension and output mode.
 // Source reading supplies file timestamps; watch registration remains withheld below.
 
-MetaFx::MetaFx(const vc71::string& name, const vc71::string& extension, bool writeGeneratedFiles)
+MetaFx::MetaFx(const std::string& name, const std::string& extension, bool writeGeneratedFiles)
     : m_refCount(1)
     , m_name(name)
     , m_extension(extension)
@@ -452,7 +404,7 @@ MetaFx::MetaFx(const vc71::string& name, const vc71::string& extension, bool wri
     // The watch name the shipped constructor builds, exactly as it builds it: `name + "." +
     // extension`, where "." is asc_101E1AD0 and the second operand is read out of the disassembly
     // (the decompiler prints the operator+= with a hidden argument).
-    vc71::string watchName(m_name);
+    std::string watchName(m_name);
     watchName += ".";
     watchName += m_extension;
 
@@ -578,7 +530,7 @@ bool MetaFx::readSource()
         applyModPrefix(m_name);
     }
 
-    vc71::string fullName(m_name);
+    std::string fullName(m_name);
     fullName += ".";
     fullName += m_extension;
 
@@ -595,7 +547,7 @@ bool MetaFx::readSource()
 
     // The caller compiles even after a load failure; the later compile diagnostic stops it.
     // Build the metadata path separately, preserving the original evaluation order.
-    vc71::string infoName(m_name);
+    std::string infoName(m_name);
     infoName += ".";
     infoName += m_extension;
 
@@ -745,9 +697,9 @@ void MetaFx::collectLiterals()
         std::cmatch m;
         if (std::regex_search(text + begin, text + end, m, pattern))
         {
-            const vc71::string name = vc71FromStd(m[1].str());
+            const std::string name = vc71FromStd(m[1].str());
             m_literalNames.push_back(name);
-            m_defines[vc71ToUpper(name)] = vc71::string("0");
+            m_defines[vc71ToUpper(name)] = std::string("0");
         }
         cursor = next;
     }
@@ -791,8 +743,7 @@ const void* MetaFx::shaderMacros()
     if (!m_macros.empty())
         return &m_macros[0];
 
-    const unsigned char* const em = static_cast<const unsigned char*>(g_effectManager);
-    const bool forceOneFour = (psMajor() < 2) || (em[64] != 0);
+    const bool forceOneFour = (psMajor() < 2) || (effectManagerFlag40() != 0);
 
     m_macros.push_back("_FORCE_1_4_SHADERS_");
     m_macros.push_back(forceOneFour ? "1" : "0");
@@ -823,7 +774,7 @@ bool MetaFx::generate()
 
     if (hr != 0)
     {
-        vc71::string caption("Failed to load Effect: ");
+        std::string caption("Failed to load Effect: ");
         caption += vc71BaseName(m_name);
 
         const char* text = 0;
@@ -851,7 +802,7 @@ bool MetaFx::generate()
     {
         MetaFxStruct generateStructs;
         generateStructs.name = "GenerateStructs";
-        readStringArrays(compiler, generateStructs, vc71::string(""));
+        readStringArrays(compiler, generateStructs, std::string(""));
 
         for (MetaFxStringArray::const_iterator it = generateStructs.values.begin();
              it != generateStructs.values.end(); ++it)
@@ -864,16 +815,16 @@ bool MetaFx::generate()
 
     // <struct>Base, plus every literal's annotation of the same name
     for (std::vector<MetaFxStruct>::iterator it = m_structs.begin(); it != m_structs.end(); ++it)
-        readStringArrays(compiler, *it, vc71::string("Base"));
+        readStringArrays(compiler, *it, std::string("Base"));
 
     // the two generation lists
     MetaFxStruct permutations;
     permutations.name = "GenerateShaderPermutations";
-    readStringArrays(compiler, permutations, vc71::string(""));
+    readStringArrays(compiler, permutations, std::string(""));
 
     MetaFxStruct modifiers;
     modifiers.name = "GenerateShaderModifiers";
-    readStringArrays(compiler, modifiers, vc71::string(""));
+    readStringArrays(compiler, modifiers, std::string(""));
 
     // Without a setting, build every permutation immediately.
     const bool deferred =
@@ -892,7 +843,7 @@ bool MetaFx::generate()
              m != modifiers.values.end(); ++m)
         {
             // unk_101E1AE8 is the one-character string "|".
-            vc71::string combined(*p);
+            std::string combined(*p);
             combined += "|";
             combined += *m;
             m_generatedNames.push_back(combined);
@@ -900,7 +851,7 @@ bool MetaFx::generate()
             if (!deferred)
             {
                 // Rebuild the generated name for this call.
-                vc71::string again(*p);
+                std::string again(*p);
                 again += "|";
                 again += *m;
                 generateShader(again);
@@ -919,11 +870,11 @@ bool MetaFx::generate()
 // Annotation lookup uses the element name even when the literal parameter lookup is null.
 
 void MetaFx::readStringArrays(void* effectCompiler, MetaFxStruct& element,
-                              const vc71::string& suffix)
+                              const std::string& suffix)
 {
     ID3DXEffectCompiler* const fx = static_cast<ID3DXEffectCompiler*>(effectCompiler);
 
-    vc71::string lookup(element.name);
+    std::string lookup(element.name);
     lookup += suffix;
 
     const D3DXHANDLE handle = fxGetParameterByName(fx, 0, lookup.c_str());
@@ -935,7 +886,7 @@ void MetaFx::readStringArrays(void* effectCompiler, MetaFxStruct& element,
             for (unsigned int i = 0; i < elements; ++i)
             {
                 const char* const text = fxGetElementString(fx, handle, i);
-                element.values.push_back(vc71::string(text ? text : ""));
+                element.values.push_back(std::string(text ? text : ""));
             }
         }
     }
@@ -955,7 +906,7 @@ void MetaFx::readStringArrays(void* effectCompiler, MetaFxStruct& element,
         for (unsigned int j = 0; j < elements; ++j)
         {
             const char* const text = fxGetElementString(fx, annotation, j);
-            element.annotations[*it].push_back(vc71::string(text ? text : ""));
+            element.annotations[*it].push_back(std::string(text ? text : ""));
         }
     }
 }
@@ -988,7 +939,7 @@ void MetaFx::readDeprecationList(void* effectCompiler)
         const char* const text = fxGetElementString(fx, handle, i);
         if (text && ::strlen(text))
         {
-            m_deprecation[row].push_back(vc71::string(text));
+            m_deprecation[row].push_back(std::string(text));
         }
         else
         {
@@ -1002,7 +953,7 @@ void MetaFx::readDeprecationList(void* effectCompiler)
 // Clears literal flags and enables the names listed in permutation.
 // Unknown names log an error; map keys come from the registered literal list.
 
-bool MetaFx::setPermutation(const vc71::string& permutation)
+bool MetaFx::setPermutation(const std::string& permutation)
 {
     for (MetaFxStringArray::const_iterator it = m_literalNames.begin();
          it != m_literalNames.end(); ++it)
@@ -1010,10 +961,10 @@ bool MetaFx::setPermutation(const vc71::string& permutation)
         m_literalValues[*it] = 0;
     }
 
-    vc71::string rest(permutation);
+    std::string rest(permutation);
     for (;;)
     {
-        const vc71::string token = splitFirstToken(rest);
+        const std::string token = splitFirstToken(rest);
         if (token.size() == 0)
             break;
 
@@ -1041,12 +992,12 @@ bool MetaFx::setPermutation(const vc71::string& permutation)
 // Keep first-seen member order: it assigns texture-set indices used by the vertex layout.
 // Literal values are visited twice with operator[]; retain insertion of missing zero values.
 // A newer generated file is left untouched when writing to disk.
-bool MetaFx::generateShader(const vc71::string& permutation)
+bool MetaFx::generateShader(const std::string& permutation)
 {
-    vc71::string outName(m_name);
+    std::string outName(m_name);
     outName += cleanPermutationName(permutation);
 
-    vc71::string outFile(outName);
+    std::string outFile(outName);
     outFile += ".fx";
 
     if (m_writeGeneratedFiles)
@@ -1068,7 +1019,7 @@ bool MetaFx::generateShader(const vc71::string& permutation)
 
     out << "//" << std::endl;
     {
-        vc71::string title(m_name);
+        std::string title(m_name);
         title += cleanPermutationName(permutation);
         out << "// AutoGenerated shader file " << title << std::endl;
     }
@@ -1143,7 +1094,7 @@ bool MetaFx::generateShader(const vc71::string& permutation)
             const std::string member = stdFromVc71(*v);
             if (member.find("2D") != std::string::npos && !member.empty() && member[0] == 'T')
             {
-                vc71::string generated("Tex");
+                std::string generated("Tex");
                 generated += vc71FromStd(member.substr(1, member.size() - 3));
                 generated += "Ind";
                 texSets.push_back(generated);
@@ -1160,14 +1111,14 @@ bool MetaFx::generateShader(const vc71::string& permutation)
         out << "#define " << texSets[i] << " " << i << std::endl;
 
     {
-        vc71::string include("shaders/");
+        std::string include("shaders/");
         include += vc71BaseName(m_name);          // sub_10075190 -> sub_10075600
         include += ".fx\"";
         out << std::endl << "#include \"" << include << std::endl;
     }
 
     const std::string   text  = out.str();
-    const vc71::string  body  = vc71FromStd(text);
+    const std::string  body  = vc71FromStd(text);
 
     if (m_writeGeneratedFiles)
     {
@@ -1183,7 +1134,7 @@ bool MetaFx::generateShader(const vc71::string& permutation)
             return false;
         }
 
-        file->write(body.c_str(), body.size());   // IStream +0x14
+        file->write(body.c_str(), static_cast<unsigned int>(body.size()));   // IStream +0x14; one .fx
         file->release();                          // IStream +0x08
     }
     else
@@ -1198,7 +1149,7 @@ bool MetaFx::generateShader(const vc71::string& permutation)
 // Rebuilds bit-mask keys and cleaned names for each generated permutation.
 // Cleans individual literal tokens before bit lookup and the full name before insertion.
 
-bool MetaFx::buildPermutationBits(std::map<unsigned int, vc71::string>& out,
+bool MetaFx::buildPermutationBits(std::map<unsigned int, std::string>& out,
                                   const char* const* bitNames)
 {
     out.clear();
@@ -1208,10 +1159,10 @@ bool MetaFx::buildPermutationBits(std::map<unsigned int, vc71::string>& out,
     {
         int bits = 0;
 
-        vc71::string rest(*g);
+        std::string rest(*g);
         for (;;)
         {
-            const vc71::string token = splitFirstToken(rest);
+            const std::string token = splitFirstToken(rest);
             if (token.size() == 0)
                 break;
             bits |= bitFromName(cleanPermutationName(token), bitNames);
@@ -1236,7 +1187,7 @@ void MetaFx::dropGeneratedFiles()
     for (MetaFxStringArray::const_iterator g = m_generatedNames.begin();
          g != m_generatedNames.end(); ++g)
     {
-        vc71::string path(m_name);
+        std::string path(m_name);
         path += cleanPermutationName(*g);
         path += ".fx";
         effectManagerRemoveMemoryFile(path);
@@ -1251,8 +1202,8 @@ unsigned int metaFxObjectSize()
 }
 
 MetaFx* metaFxConstruct(void* storage,
-                        const vc71::string& name,
-                        const vc71::string& extension,
+                        const std::string& name,
+                        const std::string& extension,
                         bool writeGeneratedFiles)
 {
     return new (storage) MetaFx(name, extension, writeGeneratedFiles);

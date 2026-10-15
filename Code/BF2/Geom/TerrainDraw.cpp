@@ -8,8 +8,7 @@
 #include "../../RendDX9Abi/PluginEntry.h"
 #include "../../RendDX9Abi/BfMemory.h"
 #include "../../RendDX9Abi/Frontier.h"
-#include "../../RendDX9Abi/Vc71String.h"
-#include "../../RendDX9Abi/Vc71Vector.h"
+#include <string>
 #include "Terrain.h"
 #include "QuadPatch.h"
 #include "XpLightManager.h"
@@ -26,6 +25,7 @@
 #include "../RendDX9/Ra/RaShader.h"
 #include "../RendDX9/Ra/RaStreamDataEditable.h"
 #include "../RendMisc/IRenderView.h"
+#include "../RendMisc/IRenderer.h"      // getRenderStats (+0x6C)
 
 #include <cmath>
 #include <cstring>
@@ -40,7 +40,7 @@ extern void* g_rendererBase;       // RendDX9Init.cpp   - dword_1023B970 (the Re
 extern void* g_shaderManager;      // ShaderManager.cpp - dword_1023B97C
 extern void* g_raShaderConstants;  // RenderQueues.cpp  - dword_1023DDBC (the Ra constants block)
 
-bool  effectHasTechnique(void* effect, const vc71::string& name);          // Effect.cpp,  sub_1001DC20
+bool  effectHasTechnique(void* effect, const std::string& name);          // Effect.cpp,  sub_1001DC20
 void  updateShaderDefines(void* shaderManager, void* base);                // ShaderManager.cpp, 0x10023730
 void  renderQueueFlush(unsigned int slotByteOffset, int flushArg);         // RenderQueues.cpp
 void  vertexBufferBindStream(void* wrapper, unsigned int stream);          // BufferManager.cpp, sub_100146C0
@@ -66,17 +66,18 @@ inline dx9rend::ShaderParameter* param(void* handle)
     return static_cast<dx9rend::ShaderParameter*>(handle);
 }
 
-inline unsigned char* constants()
+// The Ra constants block (g_raShaderConstants) words, by their retail x86 byte offsets.
+inline unsigned char* constantAt(unsigned int byteOffset)
 {
-    return static_cast<unsigned char*>(dx9rend::g_raShaderConstants);
+    return dx9rend::raShaderConstantsAt(byteOffset);
 }
 inline float& constantF(unsigned int byteOffset)
 {
-    return *reinterpret_cast<float*>(constants() + byteOffset);
+    return *reinterpret_cast<float*>(constantAt(byteOffset));
 }
 inline void*& constantP(unsigned int byteOffset)
 {
-    return *reinterpret_cast<void**>(constants() + byteOffset);
+    return *reinterpret_cast<void**>(constantAt(byteOffset));
 }
 
 inline ::dice::hfe::world::IHeightmapCluster* heightmapClusterByName()
@@ -91,19 +92,13 @@ inline ::dice::hfe::world::IHeightmapCluster* heightmapClusterByName()
 // +0x514 wins, then the forced-off +0x515, else the first entry of the base's mode vector at +0xC0.
 bool isMultisampleActive()
 {
-    unsigned char* const base = static_cast<unsigned char*>(dx9rend::g_rendererBase);
-    if (base[0x514])
+    const dx9rend::RendDX9Base* const base =
+        static_cast<const dx9rend::RendDX9Base*>(dx9rend::g_rendererBase);
+    if (base->forceMultisample)
         return true;
-    if (base[0x515])
+    if (base->disableMultisample)
         return false;
-    unsigned int* const first = *reinterpret_cast<unsigned int**>(base + 0xC0);
-    unsigned int* const last  = *reinterpret_cast<unsigned int**>(base + 0xC4);
-    return first && ((last - first) >> 1) && *reinterpret_cast<int*>(first) > 0;
-}
-
-inline unsigned char* lightManagerRaw()
-{
-    return reinterpret_cast<unsigned char*>(g_LightManager);
+    return dx9rend::multiSampleListActive(base);
 }
 
 // dword_10259568 bit 0 & co: the once-only stat registrations are not reproduced; the once-only
@@ -137,20 +132,20 @@ IBase* terrainEnvMapManager()
 
 unsigned int& terrainRendererStat(unsigned int byteOffset)
 {
-    // Renderer vslot +0x6C (`return this + 264`), then the counter.
-    return *reinterpret_cast<unsigned int*>(
-        static_cast<unsigned char*>(dx9rend::g_rendererBase) + 264 + byteOffset);
+    // Renderer vslot +0x6C (getRenderStats, retail `return this + 264`), then the counter.
+    unsigned char* const stats = static_cast<unsigned char*>(
+        static_cast<dx9rend::IRenderer*>(dx9rend::g_rendererBase)->getRenderStats());
+    return *reinterpret_cast<unsigned int*>(stats + byteOffset);
 }
 
-vc71::vector_layout& terrainShadowRecords()
+std::vector<LightShadowRecord>& terrainShadowRecords()
 {
-    return *reinterpret_cast<vc71::vector_layout*>(lightManagerRaw() + 0x79C);
+    return lightManagerShadowRecords(g_LightManager);                     // +0x79C
 }
 
 unsigned int terrainShadowRecordCount()
 {
-    const vc71::vector_layout& v = terrainShadowRecords();
-    return v.first ? static_cast<unsigned int>((v.last - v.first) / 1176) : 0u;
+    return static_cast<unsigned int>(terrainShadowRecords().size());
 }
 
 bool terrainFrustumIntersectsBox(const Frustum* frustum, const float* minMax)
@@ -309,14 +304,14 @@ void Terrain::updateWaterConstants()
         op.tail220 = 0;
         if (g_LightManager->getDynamicShadowsEnabled())                   // +0xF0
         {
-            const vc71::vector_layout& records = terrainShadowRecords();
-            if (records.first)
+            const std::vector<LightShadowRecord>& records = terrainShadowRecords();
+            if (!records.empty())
             {
-                const unsigned int count = static_cast<unsigned int>((records.last - records.first) / 1176);
+                const unsigned int count = static_cast<unsigned int>(records.size());
                 if (static_cast<float>(count) != 0.0f)
                 {
-                    ::memcpy(op.shadowProjMat.value, records.first + 760, 64);
-                    ::memcpy(op.shadowTrapMat.value, records.first + 952, 64);
+                    ::memcpy(op.shadowProjMat.value, &records[0].matrices[4], 64);   // +0x2F8
+                    ::memcpy(op.shadowTrapMat.value, &records[0].matrices[7], 64);   // +0x3B8
                 }
             }
         }
@@ -383,11 +378,11 @@ void Terrain::applyFrameConstants()
         single[2] = static_cast<float>(constantF(568) * 0.25);
         param(m_hSinglePointColor1X)->setValue(single, 0);
     }
-    param(m_hDynamicPointColor)->setValue(constants() + 588, 0);
-    param(m_hNightTimeMode)->setValue(constants() + 604, 0);
-    param(m_hNightOccludedSkyIntensity)->setValue(constants() + 612, 0);
-    param(m_hFogRange)->setValue(constants() + 168, 0);
-    param(m_hFogColor)->setValue(constants() + 188, 0);
+    param(m_hDynamicPointColor)->setValue(constantAt(588), 0);
+    param(m_hNightTimeMode)->setValue(constantAt(604), 0);
+    param(m_hNightOccludedSkyIntensity)->setValue(constantAt(612), 0);
+    param(m_hFogRange)->setValue(constantAt(168), 0);
+    param(m_hFogColor)->setValue(constantAt(188), 0);
     {
         float range[4];                                                   // sub_100380E0: +208..+220
         range[0] = constantF(208); range[1] = constantF(212); range[2] = constantF(216); range[3] = constantF(220);
@@ -512,7 +507,7 @@ void Terrain::applyFrameConstants()
             float colorLightTex[2] = { 0.0f, 0.0f };
             colorLightTex[0] = static_cast<float>((w - 1.0) / w);
             colorLightTex[1] = static_cast<float>(1.0 / (w + w));
-            dx9rend::effectGetShaderParameterBorrowedTyped(fx, vc71::string("COLORLIGHTTEX"))->setValue(colorLightTex, 0);
+            dx9rend::effectGetShaderParameterBorrowedTyped(fx, std::string("COLORLIGHTTEX"))->setValue(colorLightTex, 0);
         }
         if (m_patchCount * m_patchCount > 0)
         {
@@ -534,7 +529,7 @@ void Terrain::applyFrameConstants()
                 float detailTex[2] = { 0.0f, 0.0f };
                 detailTex[0] = static_cast<float>((w - 1.0) / w);
                 detailTex[1] = static_cast<float>(1.0 / (w + w));
-                dx9rend::effectGetShaderParameterBorrowedTyped(fx, vc71::string("DETAILTEX"))->setValue(detailTex, 0);
+                dx9rend::effectGetShaderParameterBorrowedTyped(fx, std::string("DETAILTEX"))->setValue(detailTex, 0);
             }
         }
     }
@@ -576,7 +571,7 @@ void Terrain::applyFrameConstants()
             float value[2] = { 0.0f, 0.0f };
             value[0] = static_cast<float>((w - 1.0) / w);
             value[1] = static_cast<float>(1.0 / (w + w));
-            dx9rend::effectGetShaderParameterBorrowedTyped(fx, vc71::string("STCOLORLIGHTTEX"))->setValue(value, 0);
+            dx9rend::effectGetShaderParameterBorrowedTyped(fx, std::string("STCOLORLIGHTTEX"))->setValue(value, 0);
         }
         {
             const double w = static_cast<double>(
@@ -584,7 +579,7 @@ void Terrain::applyFrameConstants()
             float value[2] = { 0.0f, 0.0f };
             value[0] = static_cast<float>((w - 1.0) / w);
             value[1] = static_cast<float>(1.0 / (w + w));
-            dx9rend::effectGetShaderParameterBorrowedTyped(fx, vc71::string("STLOWDETAILTEX"))->setValue(value, 0);
+            dx9rend::effectGetShaderParameterBorrowedTyped(fx, std::string("STLOWDETAILTEX"))->setValue(value, 0);
         }
     }
 }
@@ -653,17 +648,13 @@ void Terrain::lockDynamicIndexBuffer()
 
 void Terrain::drawMain()
 {
-    vc71::vector_layout* const list = m_culler->visiblePatches();
+    std::vector<TerrainCullerNode*>* const list = m_culler->visiblePatches();
     TerrainCullerNode** it = 0;
-    if (m_shadowPatches.first)                                            // sub_100E1C20(0, 0)
-        m_shadowPatches.last = m_shadowPatches.first;
+    m_shadowPatches.clear();                                              // sub_100E1C20(0, 0)
     QuadPatch* previous = 0;
-    if (m_shadowRanges.first)                                             // sub_100E2430(0, ...)
-        m_shadowRanges.last = m_shadowRanges.first;
+    m_shadowRanges.clear();                                               // sub_100E2430(0, ...)
 
-    const vc71::vector_layout& records = terrainShadowRecords();
-    if (records.first
-        && static_cast<unsigned int>((records.last - records.first) / 1176) != 0u
+    if (terrainShadowRecordCount() != 0u                                  // the LightManager's +0x79C records
         && g_LightManager->getShadowUpdatesEnabled()                      // +0x128
         && m_shadowGatherThreshold > 0.1f
         && m_indexBufferCount > 1000u)
@@ -674,8 +665,8 @@ void Terrain::drawMain()
         int cursor = 0;
         m_shadowExtrusionScale = static_cast<float>((v + 1.0) * m_shadowExtrusionScale);
         lockDynamicIndexBuffer();
-        it = reinterpret_cast<TerrainCullerNode**>(list->first);
-        TerrainCullerNode** const end = reinterpret_cast<TerrainCullerNode**>(list->last);
+        it = list->data();
+        TerrainCullerNode** const end = list->data() + list->size();
         while (it != end)
         {
             QuadPatch* const patch = (*it)->patch;
@@ -685,7 +676,7 @@ void Terrain::drawMain()
                     break;
                 previous = patch;
                 if (patch->gatherShadowRanges(&m_indexBufferBits, &cursor))
-                    vc71::vectorPushBackIn(m_shadowPatches, 4u, &patch);
+                    m_shadowPatches.push_back(patch);
             }
             ++it;
         }
@@ -713,7 +704,7 @@ void Terrain::drawMain()
     const char* technique;
     if (!m_lowQuality)
     {
-        if (dx9rend::effectHasTechnique(m_effect, vc71::string("Hi_Terrain")))
+        if (dx9rend::effectHasTechnique(m_effect, std::string("Hi_Terrain")))
             technique = "Hi_Terrain";
         else
         {
@@ -722,7 +713,7 @@ void Terrain::drawMain()
             dx9rend::updateShaderDefines(dx9rend::g_shaderManager, dx9rend::g_rendererBase);
             RD9_FRONTIER("dice::hfe::dx9rend::ShaderManager - sub_10023540 (the cached-effect sweep "
                          "Terrain::drawMain runs when Hi_Terrain does not validate)", 0xB8);
-            if (dx9rend::effectHasTechnique(m_effect, vc71::string("Hi_Terrain")))
+            if (dx9rend::effectHasTechnique(m_effect, std::string("Hi_Terrain")))
                 technique = "Hi_Terrain";
             else
             {
@@ -738,29 +729,26 @@ void Terrain::drawMain()
     }
     else
         technique = "Low_Terrain";
-    dx9rend::effectSetTechniqueByName(m_effect, vc71::string(technique));
+    dx9rend::effectSetTechniqueByName(m_effect, std::string(technique));
     dx9rend::effectBegin(m_effect);
 
     if (g_LightManager->getDynamicShadowsEnabled())                       // +0xF0
     {
-        if (m_shadowRanges.first)
+        const unsigned int count = static_cast<unsigned int>(m_shadowRanges.size());
+        if (count)
         {
-            const unsigned int count = static_cast<unsigned int>((m_shadowRanges.last - m_shadowRanges.first) / 24);
-            if (count)
-            {
-                dx9rend::effectBeginPass(m_effect, 7u);
-                dx9rend::indexBufferBind(m_indexBuffer);
-                param(m_hShadowMap)->setValue(*reinterpret_cast<void**>(lightManagerRaw() + 0x21C), 0);
-                for (QuadPatch** p = reinterpret_cast<QuadPatch**>(m_shadowPatches.first);
-                     p != reinterpret_cast<QuadPatch**>(m_shadowPatches.last); ++p)
-                    (*p)->drawShadow();
-            }
+            dx9rend::effectBeginPass(m_effect, 7u);
+            dx9rend::indexBufferBind(m_indexBuffer);
+            param(m_hShadowMap)->setValue(lightManagerShadowMapTexture(g_LightManager), 0);  // +0x21C
+            for (std::vector<QuadPatch*>::iterator p = m_shadowPatches.begin();
+                 p != m_shadowPatches.end(); ++p)
+                (*p)->drawShadow();
         }
     }
     dx9rend::indexBufferBind(m_lodIndexBuffer);
     dx9rend::effectBeginPass(m_effect, 0u);
-    it = reinterpret_cast<TerrainCullerNode**>(list->first);
-    while (it != reinterpret_cast<TerrainCullerNode**>(list->last))
+    it = list->data();
+    while (it != list->data() + list->size())
     {
         param(m_hTexLayer[0])->setValue((*it)->patch->lightmap, 0);
         (*it)->patch->draw(it);                                           // sub_1018BE20, advances `it`
@@ -777,8 +765,7 @@ void Terrain::drawMain()
     {
         IDirect3DSurface9* const surface = dx9rend::textureGetLevelSurface(
             dx9rend::rendererGetHemiScratchTexture(), 0, 0x7FFFFFFFu);
-        IDirect3DSurface9* const backBuffer = *reinterpret_cast<IDirect3DSurface9**>(
-            static_cast<unsigned char*>(dx9rend::g_rendererBase) + 0x76C);
+        IDirect3DSurface9* const backBuffer = dx9rend::rendererBackBufferSurface();   // Renderer +0x76C
         dx9rend::Ra::raRendererDevice()->StretchRect(backBuffer, 0, surface, 0, D3DTEXF_NONE);   // device +0x88
         surface->Release();
         dx9rend::stateManagerClear(1u, 0u, 0.0f, 0u);
@@ -808,13 +795,12 @@ void Terrain::drawDetailPass()
 
 void Terrain::drawMaskLights()
 {
-    static vc71::vector_layout s_lights = { 0, 0, 0, 0 };                // unk_102592A4 (the once-only seed and atexit)
-    if (s_lights.first)                                                   // sub_100E1C20(0, 0)
-        s_lights.last = s_lights.first;
+    static std::vector<world::LightSource*> s_lights;                     // unk_102592A4 (the once-only seed and atexit)
+    s_lights.clear();                                                     // sub_100E1C20(0, 0)
     g_LightManager->getVisibleLightsByMask(s_lights, 2313u, 0u);          // +0x18
-    for (char* p = s_lights.first; p != s_lights.last; p += 4)            // the end re-read every pass
+    for (std::size_t i = 0; i != s_lights.size(); ++i)                    // the end re-read every pass
     {
-        world::LightSource* const light = *reinterpret_cast<world::LightSource**>(p);
+        world::LightSource* const light = s_lights[i];
         struct PointLightRecord                                           // pointlight, 0x1C bytes
         {
             Vec3  position;                                               // [ebp-0x24]
@@ -835,9 +821,9 @@ void Terrain::drawMaskLights()
         param(m_hPointLight)->setValue(&record, 0);                      // +0x264
         const float radius = light->getVisualBoundingRadius();           // PE +0x90 - asked first
         m_culler->gatherVisibleSphere(&light->getAbsolutePosition().x, radius);
-        vc71::vector_layout* const list = m_culler->gatheredPatches();
-        TerrainCullerNode** it = reinterpret_cast<TerrainCullerNode**>(list->first);
-        while (it != reinterpret_cast<TerrainCullerNode**>(list->last))
+        std::vector<TerrainCullerNode*>* const list = m_culler->gatheredPatches();
+        TerrainCullerNode** it = list->data();
+        while (it != list->data() + list->size())
             (*it)->patch->drawPointLight(it);                            // sub_1018C7F0, advances `it`
     }
 }
@@ -855,16 +841,14 @@ void Terrain::reloadForLowQuality()
     {
         for (int i = 0; i < m_detailTextureCount; ++i)
         {
-            TerrainDetailTexture* const record =
-                reinterpret_cast<TerrainDetailTexture**>(m_detailTextures.first)[i];
+            TerrainDetailTexture* const record = m_detailTextures.data()[i];   // unchecked, as shipped
             if (record)
             {
                 record->~TerrainDetailTexture();                          // vslot 0 with 1: the deleting destructor
                 ::renddx9abi::engineFree(record);
             }
         }
-        if (m_detailTextures.first)                                       // sub_100E1C20(0, 0)
-            m_detailTextures.last = m_detailTextures.first;
+        m_detailTextures.clear();                                         // sub_100E1C20(0, 0)
     }
     else
     {
@@ -886,11 +870,11 @@ void Terrain::reloadForLowQuality()
 
 void Terrain::drawFinal()
 {
-    vc71::vector_layout* const list = m_culler->visiblePatches();
+    std::vector<TerrainCullerNode*>* const list = m_culler->visiblePatches();
     if (m_compactVertices)
         dx9rend::vertexBufferBindStream(m_baseGridVertexBuffer, 0);
     dx9rend::vertexDeclarationBind(m_vertexDeclaration);
-    dx9rend::effectSetTechniqueByName(m_effect, vc71::string(m_lowQuality ? "Low_Terrain" : "Hi_Terrain"));
+    dx9rend::effectSetTechniqueByName(m_effect, std::string(m_lowQuality ? "Low_Terrain" : "Hi_Terrain"));
     dx9rend::effectBegin(m_effect);
     if (m_flag35B)
     {
@@ -901,8 +885,8 @@ void Terrain::drawFinal()
     if (dx9rend::rendererGetHemiRenderMode() == 4)
         dx9rend::stateManagerClear(1u, 0x808080u, 0.0f, 0u);             // sub_100057E0(1, 8421504, ...)
     lightManagerRestoreRendererTarget0();
-    TerrainCullerNode** it = reinterpret_cast<TerrainCullerNode**>(list->first);
-    while (it != reinterpret_cast<TerrainCullerNode**>(list->last))
+    TerrainCullerNode** it = list->data();
+    while (it != list->data() + list->size())
     {
         QuadPatch* const patch = (*it)->patch;
         param(m_hTexLayer[0])->setValue(patch->colormap, 0);
@@ -918,7 +902,7 @@ void Terrain::drawFinal()
 
 void Terrain::drawSurrounding()
 {
-    dx9rend::effectSetTechniqueByName(m_effect, vc71::string("Shared_SurroundingTerrain"));
+    dx9rend::effectSetTechniqueByName(m_effect, std::string("Shared_SurroundingTerrain"));
     dx9rend::effectBegin(m_effect);
     dx9rend::vertexDeclarationBind(m_surroundingFullDeclaration);
     dx9rend::vertexBufferBindStream(m_cornerVertexBuffer, 0);
@@ -961,12 +945,12 @@ dx9rend::Ra::RaShader* Terrain::pickWaterTechnique(const float* box, const float
         return m_waterDistantTechnique2;
     if (!g_LightManager->getDynamicShadowsEnabled())
         return m_waterDistantTechnique;
-    const vc71::vector_layout& records = terrainShadowRecords();
+    const std::vector<LightShadowRecord>& records = terrainShadowRecords();
     if (!terrainShadowRecordCount())
         return m_waterDistantTechnique;
     unsigned int i = 0;
-    for (const char* r = records.first;
-         !terrainFrustumIntersectsBox(reinterpret_cast<const Frustum*>(r + 16), box); r += 1176)
+    for (const LightShadowRecord* r = records.data();
+         !terrainFrustumIntersectsBox(&r->frustum, box); ++r)
     {
         if (++i >= terrainShadowRecordCount())
             return m_waterDistantTechnique;
@@ -991,9 +975,9 @@ void Terrain::drawWaterRa(float seaLevel)
     const float* const cameraRow = view->getViewMatrixPtr()->m + 12;
     const float radius = view->getFrustumPtr()->getFarDist();
     m_culler->gatherSphere(cameraRow, radius);
-    vc71::vector_layout* const list = m_culler->gatheredPatches();
-    TerrainCullerNode** it = reinterpret_cast<TerrainCullerNode**>(list->first);
-    if (it == reinterpret_cast<TerrainCullerNode**>(list->last))
+    std::vector<TerrainCullerNode*>* const list = m_culler->gatheredPatches();
+    TerrainCullerNode** it = list->data();
+    if (it == list->data() + list->size())
         return;
     const float hw = w * 0.5f;
     const float hd = d * 0.5f;
@@ -1008,11 +992,11 @@ void Terrain::drawWaterRa(float seaLevel)
         box.cornerLength = 0.0f; box.radius = 0.0f; box.dirty = 1;
         box.extent.x = 0.0f; box.extent.y = 0.0f; box.extent.z = 0.0f;
         box.centre.x = 0.0f; box.centre.y = 0.0f; box.centre.z = 0.0f;
-        *reinterpret_cast<dx9rend::Ra::RaShader**>(static_cast<unsigned char*>(m_materialParameters) + 332) =
-            pickWaterTechnique(&box.min.x, camera);
+        raMaterialShaderSlot(*static_cast<RaMaterialParameters*>(m_materialParameters)) =
+            pickWaterTechnique(&box.min.x, camera);                       // material +0x14C
         patch->drawWater(it, list, m_materialParameters, m_objectParameters);   // sub_1018D800, advances `it`
     }
-    while (it != reinterpret_cast<TerrainCullerNode**>(list->last));
+    while (it != list->data() + list->size());
 }
 
 // sub_100DCA50 - the grid water: every patch-sized cell of the frustum's xz bounds, tested against
@@ -1073,8 +1057,8 @@ void Terrain::drawWaterGrid(float seaLevel)
             const bool sphereOk = (kWaterCellTests & 1) == 0 || frustum->inside(box.centre, box.radius);
             if (sphereOk && ((kWaterCellTests & 2) == 0 || terrainFrustumIntersectsBox(frustum, &box.min.x)))
             {
-                dx9rend::Ra::RaShader*& technique = *reinterpret_cast<dx9rend::Ra::RaShader**>(
-                    static_cast<unsigned char*>(m_materialParameters) + 332);
+                void*& technique =
+                    raMaterialShaderSlot(*static_cast<RaMaterialParameters*>(m_materialParameters));   // +0x14C
                 technique = pickWaterTechnique(&box.min.x, camera);
                 const int c = m_patchCount / 2 + static_cast<int>(invW * x0);
                 const int r = m_patchCount / 2 + static_cast<int>(invD * z0);
@@ -1110,25 +1094,25 @@ void Terrain::drawWaterCell(float x0, float z0, float x1, float z1, void* lightm
     namespace Ra = dx9rend::Ra;
     if (!m_waterGridGeometry)
     {
-        // sub_1005F340(140292): a count word, then 256 RaObjectParameters.
-        unsigned char* const ring = static_cast<unsigned char*>(::renddx9abi::engineAlloc(140292u));
+        // sub_1005F340(140292): a count word, then 256 RaObjectParameters (retail 548 bytes each).
+        unsigned char* const ring = static_cast<unsigned char*>(::renddx9abi::engineAlloc(
+            static_cast<unsigned int>(kWaterObjectRingHeader + 256 * sizeof(Ra::RaObjectParameters))));
         unsigned char* objects = 0;
         if (ring)
         {
             *reinterpret_cast<int*>(ring) = 256;
-            objects = ring + 4;
+            objects = ring + kWaterObjectRingHeader;
             for (int i = 0; i < 256; ++i)
-                Ra::raObjectParametersConstruct(objects + 548 * i);
+                Ra::raObjectParametersConstruct(objects + sizeof(Ra::RaObjectParameters) * i);
         }
         m_waterObjectRing = objects;
         if (!m_waterGridGeometry)
         {
-            vc71::vector_layout elements = { 0, 0, 0, 0 };
-            const Ra::RaVertexElementDesc* desc;
-            desc = &Ra::g_desc_1023EF04; vc71::vectorPushBackIn(elements, 4u, &desc);   // Position
-            desc = &Ra::g_desc_1023ED4C; vc71::vectorPushBackIn(elements, 4u, &desc);   // TBase2D
-            desc = &Ra::g_desc_1023EF2C; vc71::vectorPushBackIn(elements, 4u, &desc);   // TLightMap2D
-            void* const storage = ::renddx9abi::engineAlloc(0x1A4);
+            std::vector<const Ra::RaVertexElementDesc*> elements;
+            elements.push_back(&Ra::g_desc_1023EF04);                     // Position
+            elements.push_back(&Ra::g_desc_1023ED4C);                     // TBase2D
+            elements.push_back(&Ra::g_desc_1023EF2C);                     // TLightMap2D
+            void* const storage = ::renddx9abi::engineAlloc(sizeof(Ra::RaStreamDataEditable));   // retail 0x1A4
             Ra::RaStreamDataEditable* const grid = storage
                 ? new (storage) Ra::RaStreamDataEditable(4225u, 24576u, 28u, elements, Ra::raRendererDevice())
                 : 0;
@@ -1177,8 +1161,7 @@ void Terrain::drawWaterCell(float x0, float z0, float x1, float z1, void* lightm
             m_waterGridGeometryTemp->unlock();                            // vslot +0x28
             m_waterGridGeometry = m_waterGridGeometryTemp;
             m_waterGridGeometryTemp = 0;
-            if (elements.first)
-                ::renddx9abi::engineFree(elements.first);
+            // The element vector's storage is freed as it leaves scope.
         }
     }
 
@@ -1187,7 +1170,7 @@ void Terrain::drawWaterCell(float x0, float z0, float x1, float z1, void* lightm
     entry->material = m_waterGridGeometry;
     entry->materialParameters = m_materialParameters;                     // stored twice, as shipped
     Ra::RaObjectParameters& op = *reinterpret_cast<Ra::RaObjectParameters*>(
-        m_waterObjectRing + 548 * m_waterObjectRingCursor);
+        m_waterObjectRing + sizeof(Ra::RaObjectParameters) * m_waterObjectRingCursor);
     m_waterObjectRingCursor = m_waterObjectRingCursor + 1;
 
     ::dice::hfe::world::IHeightmapCluster* const cluster = heightmapClusterByName();
@@ -1209,11 +1192,11 @@ void Terrain::drawWaterCell(float x0, float z0, float x1, float z1, void* lightm
     op.tail220 = 0;
     if (g_LightManager->getDynamicShadowsEnabled())
     {
-        const vc71::vector_layout& records = terrainShadowRecords();
-        if (records.first && static_cast<unsigned int>((records.last - records.first) / 1176) != 0u)
+        const std::vector<LightShadowRecord>& records = terrainShadowRecords();
+        if (!records.empty())
         {
-            ::memcpy(op.shadowProjMat.value, records.first + 760, 64);
-            ::memcpy(op.shadowTrapMat.value, records.first + 952, 64);
+            ::memcpy(op.shadowProjMat.value, &records[0].matrices[4], 64);   // +0x2F8
+            ::memcpy(op.shadowTrapMat.value, &records[0].matrices[7], 64);   // +0x3B8
         }
     }
     entry->objectParameters = &op;
@@ -1241,7 +1224,8 @@ void Terrain::drawWaterCell(float x0, float z0, float x1, float z1, void* lightm
             slot = 0;
         }
     }
-    entry->shader = *reinterpret_cast<Ra::RaShader**>(static_cast<unsigned char*>(m_materialParameters) + 332);
+    entry->shader = static_cast<Ra::RaShader*>(
+        raMaterialShaderSlot(*static_cast<RaMaterialParameters*>(m_materialParameters)));   // +0x14C
     if (world::LightSource* const sky = g_LightManager->getSkyLight())    // +0x28
     {
         float* const record = static_cast<float*>(entry->lightArray.lights.value);

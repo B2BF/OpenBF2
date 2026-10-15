@@ -55,8 +55,8 @@ public:
     // record above (0x1000747B `mov esi, [ebp+8]`); every caller pushes that record's address. The
     // old `void* slot_0x3C()` had the wrong arity for a callee-cleanup slot. Builds the adapter's
     // display-mode list whenever it is null or empty (in practice once,
-    // by VideoOptions::initialize) and returns RendDX9's own container (base +0x90: a 16-byte VC7.1
-    // vector of the 40-byte Mode40 record, the same layout in both plugin flavours).
+    // by VideoOptions::initialize) and returns RendDX9's own container (retail base +0x90): a
+    // std::vector<renddx9abi::DisplayModeRecord> BF2.exe reads directly (DisplayModeAbi.h, issue #7).
     virtual void* slot_0x3C(const DisplayModeFilter* filter) = 0;
     virtual void slot_0x40() = 0;
     virtual bool setRenderView(IBase* view) = 0;                              // +0x44

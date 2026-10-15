@@ -180,7 +180,9 @@ namespace {
 TypeDescriptor* const registeredBf2HoverNodeType = Bf2HoverNode::getClassType();
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2HoverNodeTypeDescriptor) == 16, "client BF2 hover metadata");
 static_assert(sizeof(Bf2HoverNode) == 84, "native Bf2HoverNode storage");
+#endif
 } }
 #endif

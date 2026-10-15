@@ -73,7 +73,9 @@ void drawStyledText(System* system, Style* style, const Rect* bounds,
     style->drawText(system, data, elementIndex, bounds, clip, context);
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(BfTextNode) == 24, "native BfTextNode storage");
 static_assert(sizeof(ClassTypeDescriptor<BfTextNode, Node>) == 16, "BfTextNode metadata");
+#endif
 } }
 #endif

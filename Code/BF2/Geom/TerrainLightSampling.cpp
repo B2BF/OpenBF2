@@ -22,11 +22,11 @@
 #include "../../RendDX9Abi/Frontier.h"            // renddx9abi::logf - dice's debug stream
 #include "../../RendDX9Abi/PluginAbi.h"
 #include "../../RendDX9Abi/PluginEntry.h"         // classManager
-#include "../../RendDX9Abi/Vc71String.h"
-#include "../../RendDX9Abi/Vc71Vector.h"
+#include <string>
 
 #include <cstdarg>
 #include <cstdio>
+#include <vector>
 
 namespace dice {
 namespace hfe {
@@ -49,7 +49,7 @@ inline ::dice::hfe::world::IHeightmapCluster* heightmapClusterByName()
 
 // The image's printf-into-a-string helper (TerrainEditable.cpp carries the same body): formats into
 // a 0xFFF-character window and substitutes the shipped warning when the text does not fit.
-void formatString(vc71::string& out, const char* format, ...)
+void formatString(std::string& out, const char* format, ...)
 {
     char buffer[0x1000];
     va_list args;
@@ -98,9 +98,9 @@ inline void clearBlock(TerrainLightBlock& block)
     block.written = 0;
 }
 
-inline TerrainLightBlock* blockAt(vc71::vector_layout& blocks, unsigned int index)
+inline TerrainLightBlock* blockAt(std::vector<TerrainLightBlock>& blocks, unsigned int index)
 {
-    return reinterpret_cast<TerrainLightBlock*>(blocks.first) + index;
+    return blocks.data() + index;                                             // unchecked, as shipped
 }
 
 } // anonymous namespace
@@ -116,20 +116,13 @@ TerrainLightSampler::TerrainLightSampler(TerrainEditable* terrain)
       m_current(0),
       m_terrain(terrain)
 {
-    m_blocks.first = 0;
-    m_blocks.last = 0;
-    m_blocks.end = 0;
 }
 
-// Drops the texture's owner reference (destroyed at zero), then frees the block storage.
+// Drops the texture's owner reference (destroyed at zero); the block storage is freed by
+// m_blocks' own destructor after this body.
 TerrainLightSampler::~TerrainLightSampler()
 {
     terrainReleaseTexture(m_texture);
-    if (m_blocks.first)
-        ::renddx9abi::engineFree(m_blocks.first);
-    m_blocks.first = 0;
-    m_blocks.last = 0;
-    m_blocks.end = 0;
 }
 
 // No block current, the blocks built; always succeeds.
@@ -167,7 +160,7 @@ void* TerrainLightSampler::queryInterface(unsigned int iid) const
 
 unsigned int TerrainLightSampler::getBlockCount()
 {
-    return ::vc71::vectorSizeIn(m_blocks, sizeof(TerrainLightBlock));
+    return static_cast<unsigned int>(m_blocks.size());
 }
 
 // The texel count (height * width) and a copy of the block's box; no triangles.
@@ -327,7 +320,7 @@ void TerrainLightSampler::buildBlocks()
             const int height = static_cast<int>(boxExtent(block.bounds).z * resolution);
             block.width = floorPowerOfTwo(static_cast<unsigned int>(width));
             block.height = floorPowerOfTwo(static_cast<unsigned int>(height));
-            ::vc71::vectorPushBackIn(m_blocks, sizeof(TerrainLightBlock), &block);
+            m_blocks.push_back(block);
         }
     }
     if (m_terrain->m_flag359)                                                // +0x359
@@ -347,7 +340,7 @@ void TerrainLightSampler::buildBlocks()
             const int height = static_cast<int>(boxExtent(block.bounds).z * resolution) / 8;
             block.width = floorPowerOfTwo(static_cast<unsigned int>(width));
             block.height = floorPowerOfTwo(static_cast<unsigned int>(height));
-            ::vc71::vectorPushBackIn(m_blocks, sizeof(TerrainLightBlock), &block);
+            m_blocks.push_back(block);
         }
     }
 }
@@ -394,9 +387,9 @@ void TerrainLightSampler::writeCurrentLightmap()
     const bool dxt1 = g_LightmapGeneration->m_lightmapFormat == 1;           // +0x124
     if (m_current->patchX == -1)
     {
-        vc71::string name;
+        std::string name;
         {
-            const vc71::string base = m_terrain->getEditorLightmapBaseName();       // P+0x104
+            const std::string base = m_terrain->getEditorLightmapBaseName();       // P+0x104
             const TerrainEditableString path = m_terrain->getLevelSavePath();      // E+0x90
             formatString(name, "%s%s_s%i", path.c_str(), base.c_str(), m_current->patchZ);
         }
@@ -417,7 +410,7 @@ void TerrainLightSampler::writeCurrentLightmap()
         return;
     }
 
-    vc71::string name;
+    std::string name;
     {
         TerrainEditableNameResult base = m_terrain->getLightmapBaseName();    // E+0x74
         const TerrainEditableString path = m_terrain->getLevelSavePath();    // E+0x90

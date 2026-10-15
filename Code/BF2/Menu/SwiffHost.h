@@ -48,9 +48,9 @@ public:
     std::string getCurrentMapGameMode() override;
     int  getCurrentMapMaxPlayers() override;
     int  getCurrentMapSize() override;
-    bool setPlayerRenderCapability0(int value) override;
+    bool setPlayerRenderCapability0(intptr_t value) override;
     void* getCursor(int which) override;
-    bool setPlayerRenderCapability1(int value) override;
+    bool setPlayerRenderCapability1(intptr_t value) override;
     void setFlag28(bool value) override;
     bool getFlag28() override;
     ui::IServerBrowser* getServerList(const std::string& name) override;

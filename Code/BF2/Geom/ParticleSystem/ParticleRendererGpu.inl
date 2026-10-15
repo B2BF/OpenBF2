@@ -2,9 +2,18 @@
 // Complete BF2 1.50 RendDX9 instruction streams: 10171F60, 1016F740, 1016FAE0,
 // Dedicated ELF has no rendering counterpart.
 
+// The shader parameters each renderer keeps, by retail offset.
 static dx9rend::ParameterOwner* psmParticleParameter(unsigned char* renderer, unsigned int offset)
 {
-    return psmDrawField<dx9rend::ParameterOwner*>(renderer, offset);
+    return psmSpriteField<dx9rend::ParameterOwner*>(renderer, offset);
+}
+static dx9rend::ParameterOwner* psmNsaParameter(unsigned char* renderer, unsigned int offset)
+{
+    return psmNsaField<dx9rend::ParameterOwner*>(renderer, offset);
+}
+static dx9rend::ParameterOwner* psmTrailParameter(unsigned char* renderer, unsigned int offset)
+{
+    return psmTrailField<dx9rend::ParameterOwner*>(renderer, offset);
 }
 
 // Error-only dependency, matching the existing constructor diagnostic boundary.
@@ -21,8 +30,8 @@ static void psmParticleDrawDebug(unsigned int line, const char* message)
 
 static void* psmParticleDescriptorTexture(unsigned char* descriptor)
 {
-    unsigned char* region = psmDrawField<unsigned char*>(descriptor, 0x260);
-    return region ? psmDrawField<void*>(region, 0x10) : psmDrawField<void*>(descriptor, 0x25C);
+    unsigned char* region = psmDescriptor0<unsigned char*>(descriptor, 0x260);
+    return region ? static_cast<void*>(reinterpret_cast<dx9rend::TextureAtlasEntry*>(region)->page) : psmDescriptor0<void*>(descriptor, 0x25C);
 }
 
 // PE 10172130 copies seven Vec4 values; these are plain descriptor shader parameters.
@@ -66,12 +75,11 @@ static void psmBindParticleParameters(unsigned char* renderer)
         HemiMap* fallback = g_HemiMapManager->getBaseHemiMap();
         psmParticleParameter(renderer, 0x1DE4)->setValue(fallback ? fallback->texture : 0, 0);
     }
-    unsigned char* constants = static_cast<unsigned char*>(dx9rend::g_raShaderConstants);
-    psmParticleParameter(renderer, 0x1DF0)->setValue(constants + 0xA8, 0);
-    psmParticleParameter(renderer, 0x1DF4)->setValue(constants + 0xBC, 0);
-    psmParticleParameter(renderer, 0x1E00)->setValue(constants + 0x10C, 0);
-    psmParticleParameter(renderer, 0x1E04)->setValue(constants + 0xF8, 0);
-    psmParticleParameter(renderer, 0x1E08)->setValue(constants + 0x1D8, 0);
+    psmParticleParameter(renderer, 0x1DF0)->setValue(dx9rend::raShaderConstantsAt(0xA8), 0);
+    psmParticleParameter(renderer, 0x1DF4)->setValue(dx9rend::raShaderConstantsAt(0xBC), 0);
+    psmParticleParameter(renderer, 0x1E00)->setValue(dx9rend::raShaderConstantsAt(0x10C), 0);
+    psmParticleParameter(renderer, 0x1E04)->setValue(dx9rend::raShaderConstantsAt(0xF8), 0);
+    psmParticleParameter(renderer, 0x1E08)->setValue(dx9rend::raShaderConstantsAt(0x1D8), 0);
     psmParticleParameter(renderer, 0x1DF8)->setValue(&g_LightManager->getEffectSunColor(), 0);
     psmParticleParameter(renderer, 0x1DFC)->setValue(&g_LightManager->getEffectShadowColor(), 0);
     ParticleSystemManager* manager = reinterpret_cast<ParticleSystemManager*>(g_ParticleSystemManager);
@@ -81,53 +89,53 @@ static void psmBindParticleParameters(unsigned char* renderer)
         const Vec3 color = { scale, scale, scale };
         psmParticleParameter(renderer, 0x1DF8)->setValue(&color, 0);
     }
-    dx9rend::vertexDeclarationBind(psmDrawField<void*>(renderer, 0x1E0C));
-    dx9rend::vertexBufferBindStream(psmDrawField<void*>(renderer, 0x1DCC), 0);
+    dx9rend::vertexDeclarationBind(psmSpriteField<void*>(renderer, 0x1E0C));
+    dx9rend::vertexBufferBindStream(psmSpriteField<void*>(renderer, 0x1DCC), 0);
 }
 
 // PE 1016FAE0 batches at most ten descriptor IDs. The sorted variant deliberately
 // passes count=0 to setValue; the additive variant below passes the actual count.
 static unsigned int psmBatchSortedParticles(unsigned char* renderer, unsigned int begin, unsigned int end)
 {
-    unsigned char* mapping = psmDrawField<unsigned char*>(renderer, 0x1DC0);
+    unsigned char* mapping = psmSpriteField<unsigned char*>(renderer, 0x1DC0);
     ::memset(mapping, 0xFF, 0x800);
-    unsigned int& count = psmDrawField<unsigned int>(renderer, 0x1DC4);
+    unsigned int& count = psmSpriteField<unsigned int>(renderer, 0x1DC4);
     count = 0;
     unsigned int i = begin;
     for (; i < end; ++i)
     {
-        unsigned char* particle = psmDrawField<unsigned char**>(renderer, 0x18)[psmDrawField<int>(renderer, 4) - i];
+        unsigned char* particle = psmSpriteField<unsigned char**>(renderer, 0x18)[psmSpriteField<int>(renderer, 4) - i];
         unsigned short id = psmDrawField<unsigned short>(particle, 4);
         if (mapping[id] != 0xFF) continue;
         if (count >= 10) break;
         mapping[id] = static_cast<unsigned char>(count);
         // PE 100D4CE0 is map::operator[], including insertion on a missing ID.
         unsigned char* descriptor = reinterpret_cast<unsigned char*>(g_templatesById[id]);
-        psmParticleCopyParameters(psmDrawField<unsigned char*>(renderer, 0x1DC8) + count * 112, descriptor + 0x13C);
+        psmParticleCopyParameters(psmSpriteField<unsigned char*>(renderer, 0x1DC8) + count * 112, descriptor + 0x13C);
         ++count;
     }
-    psmParticleParameter(renderer, 0x1DE8)->setValue(psmDrawField<void*>(renderer, 0x1DC8), 0);
+    psmParticleParameter(renderer, 0x1DE8)->setValue(psmSpriteField<void*>(renderer, 0x1DC8), 0);
     return i;
 }
 
 static unsigned int psmBatchAdditiveParticles(unsigned char* renderer, unsigned int begin,
-    unsigned int end, unsigned char* groups, unsigned int& particles)
+    unsigned int end, PsmDrawGroup* groups, unsigned int& particles)
 {
     particles = 0;
-    unsigned char* mapping = psmDrawField<unsigned char*>(renderer, 0x1DC0);
+    unsigned char* mapping = psmSpriteField<unsigned char*>(renderer, 0x1DC0);
     ::memset(mapping, 0xFF, 0x800);
-    unsigned int& count = psmDrawField<unsigned int>(renderer, 0x1DC4);
+    unsigned int& count = psmSpriteField<unsigned int>(renderer, 0x1DC4);
     count = 0;
-    unsigned char* initial = psmDrawField<unsigned char*>(groups + begin * 12, 0);
-    void* texture = psmParticleDescriptorTexture(psmDrawField<unsigned char*>(initial, 0x2C));
+    unsigned char* initial = groups[begin].instance;
+    void* texture = psmParticleDescriptorTexture(psmInstanceA<unsigned char*>(initial, 0x2C));
     unsigned int i = begin;
     for (; i < end; ++i)
     {
-        unsigned char* group = groups + i * 12;
-        if (!psmDrawField<unsigned int>(group, 8)) continue;
-        unsigned char* instance = psmDrawField<unsigned char*>(group, 0);
-        unsigned char* descriptor = psmDrawField<unsigned char*>(instance, 0x2C);
-        const unsigned short id = psmDrawField<unsigned short>(descriptor, 4);
+        PsmDrawGroup* const group = groups + i;
+        if (!group->count) continue;
+        unsigned char* instance = group->instance;
+        unsigned char* descriptor = psmInstanceA<unsigned char*>(instance, 0x2C);
+        const unsigned short id = psmDescriptor0<unsigned short>(descriptor, 4);
         if (id >= 0x800) psmParticleDrawDebug(404, "Too Many templates");
         if (psmParticleDescriptorTexture(descriptor) != texture) break;
         texture = psmParticleDescriptorTexture(descriptor);
@@ -135,13 +143,13 @@ static unsigned int psmBatchAdditiveParticles(unsigned char* renderer, unsigned 
         {
             if (count >= 10) break;
             mapping[id] = static_cast<unsigned char>(count);
-            psmParticleCopyParameters(psmDrawField<unsigned char*>(renderer, 0x1DC8) + count * 112, descriptor + 0x13C);
+            psmParticleCopyParameters(psmSpriteField<unsigned char*>(renderer, 0x1DC8) + count * 112, descriptor + 0x13C);
             ++count;
         }
-        particles += psmDrawField<unsigned int>(group, 8);
+        particles += group->count;
     }
     if (count)
-        psmParticleParameter(renderer, 0x1DE8)->setValue(psmDrawField<void*>(renderer, 0x1DC8), count);
+        psmParticleParameter(renderer, 0x1DE8)->setValue(psmSpriteField<void*>(renderer, 0x1DC8), count);
     return i;
 }
 
@@ -152,7 +160,7 @@ static void psmWriteParticleVertices(unsigned char* renderer, unsigned char* par
     float minimumSize = psmDrawField<float>(particle, 8);
     if (psmDrawField<float>(particle, 0xC) < minimumSize) minimumSize = psmDrawField<float>(particle, 0xC);
     const unsigned short id = psmDrawField<unsigned short>(particle, 4);
-    const float descriptorIndex = static_cast<float>(static_cast<signed char>(psmDrawField<unsigned char*>(renderer, 0x1DC0)[id]));
+    const float descriptorIndex = static_cast<float>(static_cast<signed char>(psmSpriteField<unsigned char*>(renderer, 0x1DC0)[id]));
     const int corners[6][2] = { {-1,1}, {1,1}, {-1,-1}, {-1,-1}, {1,1}, {1,-1} };
     for (unsigned int i = 0; i < 6; ++i)
     {
@@ -177,61 +185,62 @@ static void psmParticleTechnique(unsigned char* renderer, bool additive)
     static const char* const additiveNames[] = { "ParticleShowFill", "AdditiveLow", "AdditiveHigh", "AdditiveHigh" };
     if (manager->m_shaderQuality <= 3)
     {
-        const vc71::string technique((additive ? additiveNames : sortedNames)[manager->m_shaderQuality]);
-        dx9rend::effectSetTechniqueByName(psmDrawField<void*>(renderer, 0x1DD0), technique);
+        const std::string technique((additive ? additiveNames : sortedNames)[manager->m_shaderQuality]);
+        dx9rend::effectSetTechniqueByName(psmSpriteField<void*>(renderer, 0x1DD0), technique);
     }
 }
 
 static unsigned char* psmLockParticleVertices(unsigned char* renderer, unsigned int count, bool first)
 {
-    unsigned int& offset = psmDrawField<unsigned int>(renderer, 0x5E14);
+    unsigned int& offset = psmSpriteField<unsigned int>(renderer, 0x5E14);
     unsigned int flags = first && !offset ? 10240 : 6144;
-    if (count + offset >= psmDrawField<unsigned int>(renderer, 0x1DB8))
+    if (count + offset >= psmSpriteField<unsigned int>(renderer, 0x1DB8))
     {
         offset = 0;
         flags = 10240;
     }
-    return static_cast<unsigned char*>(dx9rend::vertexBufferLock(psmDrawField<void*>(renderer, 0x1DCC), offset, count, flags));
+    return static_cast<unsigned char*>(dx9rend::vertexBufferLock(psmSpriteField<void*>(renderer, 0x1DCC), offset, count, flags));
 }
 
 static void psmSubmitParticleVertices(unsigned char* renderer, unsigned int vertices)
 {
-    dx9rend::rendererDrawPrimitive(vertices / 3, 4, psmDrawField<unsigned int>(renderer, 0x5E14));
-    psmDrawField<unsigned int>(renderer, 0x5E14) += vertices;
+    dx9rend::rendererDrawPrimitive(vertices / 3, 4, psmSpriteField<unsigned int>(renderer, 0x5E14));
+    psmSpriteField<unsigned int>(renderer, 0x5E14) += vertices;
 }
 
-static void psmCountParticleDraw(unsigned int offset)
+// `counter` indexes the manager's draw counters (retail +0x8C44 + 4 * counter).
+static void psmCountParticleDraw(unsigned int counter)
 {
     // PE reloads the published manager after external buffer/shader calls.
-    ++psmDrawField<unsigned int>(reinterpret_cast<unsigned char*>(g_ParticleSystemManager), offset);
+    ++reinterpret_cast<ParticleSystemManager*>(g_ParticleSystemManager)->m_drawCounters[counter];
 }
 
 // Texture/state switches flush the current vertices. A batch-boundary
 // blend mismatch writes the OLD blend into the particle; this shipped quirk is intentional.
 static bool psmDrawSortedParticles(unsigned char* renderer, float target)
 {
-    unsigned int& remaining = psmDrawField<unsigned int>(renderer, 0x1C38);
+    unsigned int& remaining = psmSpriteField<unsigned int>(renderer, 0x1C38);
     if (!remaining) return false;
-    const int startIndex = psmDrawField<int>(renderer, 4);
-    unsigned char** table = psmDrawField<unsigned char**>(renderer, 0x18);
+    const int startIndex = psmSpriteField<int>(renderer, 4);
+    unsigned char** table = psmSpriteField<unsigned char**>(renderer, 0x18);
     unsigned char* firstParticle = table[startIndex];
     unsigned short blend = psmDrawField<unsigned short>(firstParticle, 0x90);
     bool additive = blend != 0;
     psmParticleBlend(additive);
-    void* texture = psmDrawField<void*>(firstParticle, 0x5C);
+    void* texture = psmRecordPointer<void*>(firstParticle, 0);
     psmParticleParameter(renderer, 0x1DEC)->setValue(texture, 0);
     const unsigned int count = remaining;
     unsigned int batchEnd = psmBatchSortedParticles(renderer, 0, count);
     psmParticleTechnique(renderer, false);
-    void* effect = psmDrawField<void*>(renderer, 0x1DD0);
-    void* buffer = psmDrawField<void*>(renderer, 0x1DCC);
+    void* effect = psmSpriteField<void*>(renderer, 0x1DD0);
+    void* buffer = psmSpriteField<void*>(renderer, 0x1DCC);
     dx9rend::effectBegin(effect);
     dx9rend::effectBeginPass(effect, 0);
     unsigned int vertices = 0;
     unsigned char* output = psmLockParticleVertices(renderer, batchEnd * 6, true);
     if (!output) psmParticleDrawDebug(668, "Failed to lock");
-    unsigned char* manager = reinterpret_cast<unsigned char*>(g_ParticleSystemManager);
-    const bool forceSorted = manager[0x8BA8] != 0;
+    ParticleSystemManager* manager = reinterpret_cast<ParticleSystemManager*>(g_ParticleSystemManager);
+    const bool forceSorted = manager->m_forceSortedParticleType != 0;          // +0x8BA8
     unsigned int done = 0;
     for (; done < count; ++done)
     {
@@ -243,10 +252,10 @@ static bool psmDrawSortedParticles(unsigned char* renderer, float target)
             psmSubmitParticleVertices(renderer, vertices);
             vertices = 0;
             batchEnd = psmBatchSortedParticles(renderer, done, count);
-            if (psmDrawField<void*>(particle, 0x5C) != texture)
+            if (psmRecordPointer<void*>(particle, 0) != texture)
             {
-                psmParticleParameter(renderer, 0x1DEC)->setValue(psmDrawField<void*>(particle, 0x5C), 0);
-                texture = psmDrawField<void*>(particle, 0x5C);
+                psmParticleParameter(renderer, 0x1DEC)->setValue(psmRecordPointer<void*>(particle, 0), 0);
+                texture = psmRecordPointer<void*>(particle, 0);
             }
             if (psmDrawField<unsigned short>(particle, 0x90) != blend)
             {
@@ -255,9 +264,9 @@ static bool psmDrawSortedParticles(unsigned char* renderer, float target)
             }
             output = psmLockParticleVertices(renderer, (batchEnd - done) * 6, false);
             if (!output) psmParticleDrawDebug(724, "Failed to lock vbuffer");
-            psmCountParticleDraw(0x8C44);
+            psmCountParticleDraw(0);   // +0x8C44
         }
-        const bool textureChanged = psmDrawField<void*>(particle, 0x5C) != texture;
+        const bool textureChanged = psmRecordPointer<void*>(particle, 0) != texture;
         const bool blendChanged = forceSorted && psmDrawField<unsigned short>(particle, 0x90) != blend;
         if (textureChanged || blendChanged)
         {
@@ -268,8 +277,8 @@ static bool psmDrawSortedParticles(unsigned char* renderer, float target)
             if (!output) psmParticleDrawDebug(759, "Failed to lock vbuffer");
             if (textureChanged)
             {
-                psmParticleParameter(renderer, 0x1DEC)->setValue(psmDrawField<void*>(particle, 0x5C), 0);
-                texture = psmDrawField<void*>(particle, 0x5C);
+                psmParticleParameter(renderer, 0x1DEC)->setValue(psmRecordPointer<void*>(particle, 0), 0);
+                texture = psmRecordPointer<void*>(particle, 0);
             }
             if (blendChanged)
             {
@@ -277,35 +286,35 @@ static bool psmDrawSortedParticles(unsigned char* renderer, float target)
                 additive = blend != 0;
                 psmParticleBlend(additive);
             }
-            psmCountParticleDraw(0x8C44);
+            psmCountParticleDraw(0);   // +0x8C44
         }
         psmWriteParticleVertices(renderer, particle, output + vertices * 64);
         vertices += 6;
-        ++psmDrawField<unsigned int>(renderer, 0x1C2C);
+        ++psmSpriteField<unsigned int>(renderer, 0x1C2C);
         --remaining;
     }
     dx9rend::vertexBufferUnlock(buffer);
-    psmCountParticleDraw(0x8C44);
+    psmCountParticleDraw(0);   // +0x8C44
     psmSubmitParticleVertices(renderer, vertices);
-    psmDrawField<int>(renderer, 4) = startIndex - done;
+    psmSpriteField<int>(renderer, 4) = startIndex - done;
     dx9rend::effectEnd(effect);
     if (remaining) psmParticleDrawDebug(909, "m_particleSortCount != 0");
     return true;
 }
 
 static bool psmDrawAdditiveParticles(unsigned char* renderer, unsigned int target,
-    unsigned int count, unsigned char* groups)
+    unsigned int count, PsmDrawGroup* groups)
 {
     unsigned int particles;
     unsigned int batchEnd = psmBatchAdditiveParticles(renderer, 0, count, groups, particles);
     if (!particles) return false;
-    unsigned char* instance = psmDrawField<unsigned char*>(groups, 0);
-    void* texture = psmParticleDescriptorTexture(psmDrawField<unsigned char*>(instance, 0x2C));
+    unsigned char* instance = groups[0].instance;
+    void* texture = psmParticleDescriptorTexture(psmInstanceA<unsigned char*>(instance, 0x2C));
     psmParticleParameter(renderer, 0x1DEC)->setValue(texture, 0);
     psmParticleBlend(true);
     psmParticleTechnique(renderer, true);
-    void* effect = psmDrawField<void*>(renderer, 0x1DD0);
-    void* buffer = psmDrawField<void*>(renderer, 0x1DCC);
+    void* effect = psmSpriteField<void*>(renderer, 0x1DD0);
+    void* buffer = psmSpriteField<void*>(renderer, 0x1DCC);
     dx9rend::effectBegin(effect);
     dx9rend::effectBeginPass(effect, 0);
     unsigned int vertices = 0;
@@ -313,16 +322,16 @@ static bool psmDrawAdditiveParticles(unsigned char* renderer, unsigned int targe
     if (!output) psmParticleDrawDebug(973, "Failed to lock surface");
     for (unsigned int i = 0; i < count; ++i)
     {
-        unsigned char* group = groups + i * 12;
+        PsmDrawGroup* const group = groups + i;
         if (i == batchEnd)
         {
             dx9rend::vertexBufferUnlock(buffer);
-            psmCountParticleDraw(0x8C4C);
+            psmCountParticleDraw(2);   // +0x8C4C
             psmSubmitParticleVertices(renderer, vertices);
             vertices = 0;
             batchEnd = psmBatchAdditiveParticles(renderer, i, count, groups, particles);
-            instance = psmDrawField<unsigned char*>(group, 0);
-            unsigned char* descriptor = psmDrawField<unsigned char*>(instance, 0x2C);
+            instance = group->instance;
+            unsigned char* descriptor = psmInstanceA<unsigned char*>(instance, 0x2C);
             if (texture != psmParticleDescriptorTexture(descriptor))
             {
                 texture = psmParticleDescriptorTexture(descriptor);
@@ -331,24 +340,24 @@ static bool psmDrawAdditiveParticles(unsigned char* renderer, unsigned int targe
             output = psmLockParticleVertices(renderer, particles * 6, false);
             if (!output) return false; // Retail has no Debug/effectEnd on this later failure.
         }
-        const int index = psmDrawField<int>(group, 4);
-        const unsigned int available = psmDrawField<unsigned int>(group, 8);
+        const int index = group->last;
+        const unsigned int available = group->count;
         unsigned int done = 0;
         for (; done < available; ++done)
         {
-            unsigned char* particle = psmDrawField<unsigned char**>(renderer, 0x1C)[index - done];
+            unsigned char* particle = psmSpriteField<unsigned char**>(renderer, 0x1C)[index - done];
             if (psmDrawField<unsigned int>(particle, 0x14) < target) break;
             psmWriteParticleVertices(renderer, particle, output + vertices * 64);
             vertices += 6;
-            --psmDrawField<unsigned int>(group, 8);
-            ++psmDrawField<unsigned int>(renderer, 0x1C30);
+            --group->count;
+            ++psmSpriteField<unsigned int>(renderer, 0x1C30);
         }
-        psmDrawField<int>(group, 4) = index - done;
+        group->last = index - static_cast<int>(done);
     }
     dx9rend::vertexBufferUnlock(buffer);
     if (vertices)
     {
-        psmCountParticleDraw(0x8C4C);
+        psmCountParticleDraw(2);   // +0x8C4C
         psmSubmitParticleVertices(renderer, vertices);
     }
     dx9rend::effectEnd(effect);

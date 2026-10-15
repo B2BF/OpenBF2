@@ -57,6 +57,10 @@ struct BINKSUMMARY
 const unsigned int BINK_SURFACE_32BGRA = 3u;
 const unsigned int BINK_COPYALL        = 0x80000000u;
 
+// [CHOSEN, not recovered] Only the x86 image imports binkw32.dll (issue #7). x64 has no Bink library
+// and skips movie playback (Video.cpp), so the imports are not declared there and any reference to
+// them fails to compile.
+#if defined(_M_IX86)
 extern "C" {
 
 // binkw32.dll - the ten imports the shipped image carries (see binkw32.def). __stdcall.
@@ -74,5 +78,6 @@ int          __stdcall BinkSetSoundSystem(void* open, unsigned int param);
 void*        __stdcall BinkOpenDirectSound(unsigned int param);
 
 } // extern "C"
+#endif // _M_IX86
 
 } // namespace renddx9abi

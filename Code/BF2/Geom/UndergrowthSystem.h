@@ -10,14 +10,14 @@
 
 #include "../../RendDX9Abi/HfeAbi.h"
 #include "../../RendDX9Abi/BfMemory.h"
-#include "../../RendDX9Abi/Vc71String.h"
-#include "../../RendDX9Abi/Vc71Vector.h"
+#include <string>
 #include "../Core/IBase.h"
 #include "../Core/Random.h"
 #include "../Math/Vec3.h"
 
 #include <cstddef>
 #include <new>
+#include <vector>
 
 namespace dice {
 namespace hfe {
@@ -36,134 +36,6 @@ namespace geom {
 class Terrain;
 struct MeshBounds;    // MeshTemplate.h - the 60-byte box cellBounds fills
 struct UndergrowthPatch;
-
-
-// Owning engine-heap vector with the 16-byte VC7.1 header. clear frees its storage;
-// growth is at least half the prior capacity, with a temporary copy before insertion.
-// Internal to RendDX9; copy assignment is unsupported.
-// [RETIRE-WHEN: RW-74] Consolidate with shared compatibility containers after layout,
-// allocation and mutation behavior are validated.
-
-template <typename T>
-class Vc71Vec
-{
-public:
-    Vc71Vec() : m_first(0), m_last(0), m_end(0) {}          // the allocator word stays unwritten
-    Vc71Vec(const Vc71Vec& other) : m_first(0), m_last(0), m_end(0)
-    {
-        const unsigned int n = other.size();
-        if (n)
-        {
-            m_first = allocate(n);
-            m_end   = m_first + n;
-            m_last  = m_first;
-            for (const T* p = other.m_first; p != other.m_last; ++p, ++m_last)
-                ::new (static_cast<void*>(m_last)) T(*p);
-        }
-    }
-    ~Vc71Vec() { clear(); }
-
-    unsigned int size() const
-    {
-        return m_first ? static_cast<unsigned int>(m_last - m_first) : 0u;
-    }
-    unsigned int capacity() const
-    {
-        return m_first ? static_cast<unsigned int>(m_end - m_first) : 0u;
-    }
-    bool empty() const { return size() == 0; }
-
-    T*       data()       { return m_first; }               // `&v[0]` - _Myfirst, unguarded
-    const T* data() const { return m_first; }
-    T&       operator[](unsigned int i)       { return m_first[i]; }
-    const T& operator[](unsigned int i) const { return m_first[i]; }
-    T&       back()       { return *(m_last - 1); }         // 0x1014BBA3: `mov edi,[esi+100h]; sub edi,34h`
-
-    void push_back(const T& value)
-    {
-        if (m_first && size() < capacity())
-        {
-            ::new (static_cast<void*>(m_last)) T(value);
-            ++m_last;
-            return;
-        }
-        insertAtEnd(1u, value);
-    }
-
-    // resize(n) - VC7.1's inline resize(n) builds `_Ty()` and calls resize(n, _Ty) BY value.
-    void resize(unsigned int n) { resize(n, T()); }
-    void resize(unsigned int n, const T& value)
-    {
-        const unsigned int current = size();
-        if (current < n)
-            insertAtEnd(n - current, value);
-        else if (n < current)
-        {
-            T* const newLast = m_first + n;                 // erase(begin() + n, end())
-            for (T* p = newLast; p != m_last; ++p)
-                p->~T();
-            m_last = newLast;
-        }
-    }
-
-    void clear()                                             // VC7.1 clear() == _Tidy()
-    {
-        if (m_first)
-        {
-            for (T* p = m_first; p != m_last; ++p)
-                p->~T();
-            ::renddx9abi::engineFree(m_first);
-        }
-        m_first = 0;
-        m_last = 0;
-        m_end = 0;
-    }
-
-private:
-    Vc71Vec& operator=(const Vc71Vec&);                      // not used on any recovered path
-
-    static T* allocate(unsigned int count)
-    {
-        return static_cast<T*>(::renddx9abi::engineAlloc(count * static_cast<unsigned int>(sizeof(T))));
-    }
-
-    // _Insert_n(end(), count, value) - the only insert position the recovered bodies use.
-    void insertAtEnd(unsigned int count, const T& value)
-    {
-        const T copy(value);                                 // `_Ty _Tmp = _Val`
-        const unsigned int oldSize = size();
-        if (capacity() < oldSize + count)
-        {
-            const unsigned int oldCap = capacity();
-            unsigned int newCap = oldCap + oldCap / 2u;
-            if (newCap < oldSize + count)
-                newCap = oldSize + count;
-            T* const block = allocate(newCap);
-            T* dst = block;
-            for (T* p = m_first; p != m_last; ++p, ++dst)
-                ::new (static_cast<void*>(dst)) T(*p);
-            for (unsigned int i = 0; i < count; ++i, ++dst)
-                ::new (static_cast<void*>(dst)) T(copy);
-            if (m_first)
-            {
-                for (T* p = m_first; p != m_last; ++p)
-                    p->~T();
-                ::renddx9abi::engineFree(m_first);
-            }
-            m_first = block;
-            m_last  = dst;
-            m_end   = block + newCap;
-            return;
-        }
-        for (unsigned int i = 0; i < count; ++i, ++m_last)
-            ::new (static_cast<void*>(m_last)) T(copy);
-    }
-
-    void* m_alloc;                                           // +0x00  std::allocator<T>, padded
-    T*    m_first;                                           // +0x04
-    T*    m_last;                                            // +0x08
-    T*    m_end;                                             // +0x0C
-};
 
 
 // 24-byte CPU vertex. Only position is initialized; bytes +0x12..+0x13 are padding.
@@ -202,9 +74,9 @@ struct UndergrowthType
 {
     UndergrowthType();
 
-    vc71::string                   name;                     // +0x00  "Type <name>"
-    vc71::string                   mesh;                     // +0x1C  "Mesh"      ../RawData/Undergrowth/<mesh>.obj
-    vc71::string                   texture;                  // +0x38  "Texture"   ../RawData/Undergrowth/<texture>.dds
+    std::string                   name;                     // +0x00  "Type <name>"
+    std::string                   mesh;                     // +0x1C  "Mesh"      ../RawData/Undergrowth/<mesh>.obj
+    std::string                   texture;                  // +0x38  "Texture"   ../RawData/Undergrowth/<texture>.dds
     Vec2                           size;                     // +0x54  "CrossSize" / "Size" (1, 1); y is the
                                                              //        height factor buildPatch uses
     Vec2                           randomSizeScale;          // +0x5C  "RandomSizeScale" (min, max)  (1, 1)
@@ -218,9 +90,9 @@ struct UndergrowthType
     bool                           skew;                     // +0x7C  "Skew" (int != 0)         false
                                                              // +0x7D..+0x7F padding (0x1014FED0
                                                              //   copies the one byte only)
-    Vc71Vec<UndergrowthVertex>     vertices;                 // +0x80
-    Vc71Vec<unsigned short>        indices;                  // +0x90
-    Vc71Vec<int>                   materials;                // +0xA0  [UNRESOLVED] the cfg's in-Type
+    std::vector<UndergrowthVertex> vertices;                 // +0x80
+    std::vector<unsigned short>    indices;                  // +0x90
+    std::vector<int>               materials;                // +0xA0  [UNRESOLVED] the cfg's in-Type
                                                              // The cfg material-index arm is unreachable.
 };
 
@@ -236,12 +108,12 @@ struct UndergrowthMaterial
 {
     UndergrowthMaterial() : generalHeight(0.0f) {}
 
-    vc71::string                   name;                     // +0x00  "Material <name>"
+    std::string                   name;                     // +0x00  "Material <name>"
     int                            id;                       // +0x1C  "Material <name> <id>" - the
                                                              //        Undergrowth.raw byte it paints, and
                                                              //        the index into typeFractions
     float                          generalHeight;            // +0x20  "GeneralHeight"
-    Vc71Vec<UndergrowthType>       types;                    // +0x24  0xB0-byte records
+    std::vector<UndergrowthType>   types;                    // +0x24  0xB0-byte records
 };
 
 
@@ -376,7 +248,7 @@ public:
     virtual void* queryInterface(unsigned int iid) const;
 
     // own slots, +0x10..+0x74
-    virtual void  load(const vc71::string& levelPath);               // +0x10
+    virtual void  load(const std::string& levelPath);               // +0x10
     virtual bool  isLoaded() const;                                  // +0x14
     virtual void  reload();                                          // +0x18
     virtual void  unload();                                          // +0x1C
@@ -432,11 +304,11 @@ private:
 
     // UndergrowthSystemLoad.cpp
     void initSwayTables();
-    bool loadDat(const vc71::string& levelPath);                     // 0x1014B5B0   826 B  retn 4
-    void saveDat(const vc71::string& savePath,
-                 const vc71::string& levelPath);                     // 0x10146610 1,281 B  retn 8
-    void buildAtlas(const vc71::string& savePath,
-                    const vc71::string& levelPath);                  // 0x10147C00 1,134 B  retn 8
+    bool loadDat(const std::string& levelPath);                     // 0x1014B5B0   826 B  retn 4
+    void saveDat(const std::string& savePath,
+                 const std::string& levelPath);                     // 0x10146610 1,281 B  retn 8
+    void buildAtlas(const std::string& savePath,
+                    const std::string& levelPath);                  // 0x10147C00 1,134 B  retn 8
     bool buildMeshes(bool secondPass);                               // 0x10148FC0 2,238 B  retn 4
     void loadMesh(UndergrowthType& type, const UndergrowthAtlasRect& rect); // 0x10148100 1,857 B retn 8
     void computeCellTypeFractions(UndergrowthCell* cell);            // 0x10146360   686 B  retn 4
@@ -459,7 +331,7 @@ private:
     bool                      m_loadStarted;              // +0x011  load(): if set, clear(); then set
     bool                      m_enabled;                  // +0x012  console `enabled`
     unsigned char             m_pad013;
-    vc71::string              m_levelPath;                // +0x014  load()'s argument, reload()'s
+    std::string              m_levelPath;                // +0x014  load()'s argument, reload()'s
     float                     m_viewDistance;             // +0x030  "ViewDistance"
     float                     m_viewDistanceFadeScale;    // +0x034  "ViewDistanceFadeScale"
     float                     m_viewDistanceHeightScale;  // +0x038  "ViewDistanceHeightScale"
@@ -515,7 +387,7 @@ private:
     UndergrowthCell*          m_cells;                    // +0x0EC
     unsigned int              m_patchCount;               // +0x0F0  (2r + 1)^2 + 4
     UndergrowthPatch*         m_patches;                  // +0x0F4
-    Vc71Vec<UndergrowthMaterial> m_materials;             // +0x0F8
+    std::vector<UndergrowthMaterial> m_materials;         // +0x0F8
     float                     m_alphaRef;                 // +0x108  "AlphaRef"
     float                     m_windSpeed[16];            // +0x10C  initSwayTables; NOT constructed
     float                     m_windAmplitude[16];        // +0x14C  NOT constructed
@@ -525,8 +397,8 @@ private:
     Random                    m_random;                   // +0x2D0  seed 0x759DC150 (OverGrowth +0x18
                                                           //         carries the same); buildPatch
                                                           //         reseeds it per cell
-    vc71::vector_layout       m_visibleCells;             // +0x2D4  UndergrowthCell* - rebuildPatches
-    vc71::vector_layout       m_drawOrder;                // +0x2E4  UndergrowthCellDistance
+    std::vector<UndergrowthCell*> m_visibleCells;         // +0x2D4  rebuildPatches
+    std::vector<UndergrowthCellDistance> m_drawOrder;     // +0x2E4
     Vec3                      m_lastRebuildPosition;      // +0x2F4  the camera at the last rebuild
     // +0x300: the "Undergrowth" profiler stat (sub_10047F20(this+0x300, "Undergrowth") /
     // ~sub_10032E40) - stat-only scaffolding the tree does not reproduce (RenderQueues.cpp's
@@ -550,32 +422,21 @@ private:
     friend struct UndergrowthLayoutCheck;
 };
 
-// Offsets the bodies depend on, pinned where the class is complete (x86 only: the retail layout).
+// Offsets the bodies depend on, pinned where the class is complete. The file and vertex formats
+// hold on every architecture (Undergrowth.dat stores UndergrowthVertex records as one block of
+// count * 24 bytes; the patch vertex buffers take the 16 / 24-byte strides; SwayOffset uploads
+// float4 rows); the rest is the retail x86 layout.
 struct UndergrowthLayoutCheck
 {
-#if defined(_M_IX86)
-    static_assert(sizeof(Vc71Vec<int>) == 0x10, "the VC7.1 vector is 16 bytes");
     static_assert(sizeof(UndergrowthVertex) == 0x18, "0x1014F9C0 / 0x10150340 stride 0x18");
     static_assert(offsetof(UndergrowthVertex, texCoord) == 0x0C, "u/v at +0x0C");
     static_assert(offsetof(UndergrowthVertex, byte10) == 0x10, "+0x10 byte");
     static_assert(offsetof(UndergrowthVertex, colorScale) == 0x11, "+0x11 byte");
     static_assert(offsetof(UndergrowthVertex, sway) == 0x14, "sway at +0x14");
-    static_assert(sizeof(UndergrowthType) == 0xB0, "0x10151380 / 0x10151410 stride 0xB0");
-    static_assert(offsetof(UndergrowthType, mesh) == 0x1C, "+0x1C");
-    static_assert(offsetof(UndergrowthType, texture) == 0x38, "+0x38");
-    static_assert(offsetof(UndergrowthType, size) == 0x54, "+0x54");
-    static_assert(offsetof(UndergrowthType, randomSizeScale) == 0x5C, "+0x5C");
-    static_assert(offsetof(UndergrowthType, slopeRange) == 0x64, "+0x64");
-    static_assert(offsetof(UndergrowthType, density) == 0x6C, "+0x6C");
-    static_assert(offsetof(UndergrowthType, variation) == 0x70, "+0x70");
-    static_assert(offsetof(UndergrowthType, skew) == 0x7C, "+0x7C");
-    static_assert(offsetof(UndergrowthType, vertices) == 0x80, "+0x80");
-    static_assert(offsetof(UndergrowthType, indices) == 0x90, "+0x90");
-    static_assert(offsetof(UndergrowthType, materials) == 0xA0, "+0xA0");
-    static_assert(sizeof(UndergrowthMaterial) == 0x34, "0x10151D70 / 0x10151E00 stride 0x34");
-    static_assert(offsetof(UndergrowthMaterial, id) == 0x1C, "+0x1C");
-    static_assert(offsetof(UndergrowthMaterial, generalHeight) == 0x20, "+0x20");
-    static_assert(offsetof(UndergrowthMaterial, types) == 0x24, "+0x24");
+    static_assert(sizeof(UndergrowthPatchVertex) == 16, "the non-simple vertex stride");
+    static_assert(sizeof(UndergrowthPatchVertexSimple) == 24, "the simple vertex stride");
+    static_assert(sizeof(UndergrowthWindWave) == 16, "the SwayOffset rows are float4");
+#if defined(_M_IX86)
     static_assert(sizeof(UndergrowthCell) == 0x68, "0x1014D78D: 0x68 * n + 4");
     static_assert(offsetof(UndergrowthCell, texScaleU) == 0x0C, "+0x0C");
     static_assert(offsetof(UndergrowthCell, minHeight) == 0x1C, "+0x1C");
@@ -589,53 +450,12 @@ struct UndergrowthLayoutCheck
     static_assert(offsetof(UndergrowthPatch, buildMaterial) == 0x18, "+0x18");
     static_assert(offsetof(UndergrowthPatch, vertexCount) == 0x28, "+0x28");
     static_assert(sizeof(UndergrowthAtlasRect) == 0x10, "four floats");
-    static_assert(sizeof(UndergrowthPatchVertex) == 16, "the non-simple vertex stride");
-    static_assert(sizeof(UndergrowthPatchVertexSimple) == 24, "the simple vertex stride");
     static_assert(sizeof(UndergrowthCellDistance) == 8, "m_drawOrder's size() is `sar 3`");
-    static_assert(sizeof(UndergrowthWindWave) == 16, "the SwayOffset rows are float4");
 
     static_assert(offsetof(UndergrowthSystem, m_test) == 0x008, "+0x08");
     static_assert(offsetof(UndergrowthSystem, m_loaded) == 0x010, "+0x10");
     static_assert(offsetof(UndergrowthSystem, m_loadStarted) == 0x011, "+0x11");
     static_assert(offsetof(UndergrowthSystem, m_levelPath) == 0x014, "+0x14");
-    static_assert(offsetof(UndergrowthSystem, m_viewDistance) == 0x030, "+0x30");
-    static_assert(offsetof(UndergrowthSystem, m_patchSubdivide) == 0x044, "+0x44");
-    static_assert(offsetof(UndergrowthSystem, m_swayScaleDiff) == 0x054, "+0x54");
-    static_assert(offsetof(UndergrowthSystem, m_patchVertexCount) == 0x058, "+0x58");
-    static_assert(offsetof(UndergrowthSystem, m_densityMap) == 0x060, "+0x60");
-    static_assert(offsetof(UndergrowthSystem, m_atlasTexture) == 0x064, "+0x64");
-    static_assert(offsetof(UndergrowthSystem, m_effect) == 0x068, "+0x68");
-    static_assert(offsetof(UndergrowthSystem, m_param078) == 0x078, "+0x78");
-    static_assert(offsetof(UndergrowthSystem, m_paramFogRange) == 0x0A4, "+0xA4");
-    static_assert(offsetof(UndergrowthSystem, m_paramShadowTrapMatrix) == 0x0D4, "+0xD4");
-    static_assert(offsetof(UndergrowthSystem, m_terrain) == 0x0D8, "+0xD8");
-    static_assert(offsetof(UndergrowthSystem, m_lightingScale) == 0x0DC, "+0xDC");
-    static_assert(offsetof(UndergrowthSystem, m_cellsPerSide) == 0x0E0, "+0xE0");
-    static_assert(offsetof(UndergrowthSystem, m_cellSize) == 0x0E8, "+0xE8");
-    static_assert(offsetof(UndergrowthSystem, m_cells) == 0x0EC, "+0xEC");
-    static_assert(offsetof(UndergrowthSystem, m_patches) == 0x0F4, "+0xF4");
-    static_assert(offsetof(UndergrowthSystem, m_materials) == 0x0F8, "+0xF8");
-    static_assert(offsetof(UndergrowthSystem, m_alphaRef) == 0x108, "+0x108");
-    static_assert(offsetof(UndergrowthSystem, m_windSpeed) == 0x10C, "+0x10C");
-    static_assert(offsetof(UndergrowthSystem, m_windAmplitude) == 0x14C, "+0x14C");
-    static_assert(offsetof(UndergrowthSystem, m_windPhase) == 0x18C, "+0x18C");
-    static_assert(offsetof(UndergrowthSystem, m_windWaves) == 0x1CC, "+0x1CC");
-    static_assert(offsetof(UndergrowthSystem, m_atlas) == 0x2CC, "+0x2CC");
-    static_assert(offsetof(UndergrowthSystem, m_random) == 0x2D0, "+0x2D0");
-    static_assert(offsetof(UndergrowthSystem, m_visibleCells) == 0x2D4, "+0x2D4");
-    static_assert(offsetof(UndergrowthSystem, m_drawOrder) == 0x2E4, "+0x2E4");
-    static_assert(offsetof(UndergrowthSystem, m_lastRebuildPosition) == 0x2F4, "+0x2F4");
-    static_assert(offsetof(UndergrowthSystem, m_profilerStat) == 0x300, "+0x300");
-    static_assert(offsetof(UndergrowthSystem, m_heightmap) == 0x568, "+0x568");
-    static_assert(offsetof(UndergrowthSystem, m_invHeightmapScale) == 0x56C, "+0x56C");
-    static_assert(offsetof(UndergrowthSystem, m_densityWidth) == 0x578, "+0x578");
-    static_assert(offsetof(UndergrowthSystem, m_dynamicShadowsEnable) == 0x580, "+0x580");
-    static_assert(offsetof(UndergrowthSystem, m_simpleShaderEnable) == 0x581, "+0x581");
-    static_assert(offsetof(UndergrowthSystem, m_zPassPatchCount) == 0x584, "+0x584");
-    static_assert(offsetof(UndergrowthSystem, m_viewDistanceScale) == 0x588, "+0x588");
-    static_assert(offsetof(UndergrowthSystem, m_viewDistanceFade) == 0x58C, "+0x58C");
-    static_assert(offsetof(UndergrowthSystem, m_editorMode) == 0x590, "+0x590");
-    static_assert(sizeof(UndergrowthSystem) == 0x598, "RefFactory allocates 0x598 (0x100B0B20)");
 #endif
 };
 

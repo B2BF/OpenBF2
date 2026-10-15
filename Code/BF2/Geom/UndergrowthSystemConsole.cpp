@@ -5,11 +5,10 @@
 
 #include "../../RendDX9Abi/PluginAbi.h"
 
-#if BF2_PLUGIN_ABI_NATIVE
 
 #include "UndergrowthSystem.h"
 
-#include "../../RendDX9Abi/Vc71String.h"
+#include <string>
 #include "../Core/ConsoleObjectMacro.h"
 #include "../Core/ConsoleObjects.h"
 
@@ -34,7 +33,7 @@ inline UndergrowthSystem* undergrowth()
 // toolchain's std::string; the object keeps the 28-byte VC7.1 one.
 void undergrowthLoad(const std::string& levelPath)
 {
-    undergrowth()->load(vc71::string(levelPath.c_str()));
+    undergrowth()->load(std::string(levelPath.c_str()));
 }
 
 void undergrowthReload() { undergrowth()->reload(); }                                // +0x18
@@ -105,5 +104,4 @@ bool unregisterUndergrowthConsoleObjects()
 } // namespace hfe
 } // namespace dice
 
-#endif // BF2_PLUGIN_ABI_NATIVE
 #endif // BF2_IMAGE_RENDDX9

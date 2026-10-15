@@ -145,7 +145,9 @@ TypeDescriptor* const registeredBf2ObjectSelectionNodeType =
     Bf2ObjectSelectionNode::getClassType();
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2ObjectSelectionNodeTypeDescriptor) == 16, "client BF2 selection metadata");
 static_assert(sizeof(Bf2ObjectSelectionNode) == 72, "native Bf2ObjectSelectionNode storage");
+#endif
 } }
 #endif

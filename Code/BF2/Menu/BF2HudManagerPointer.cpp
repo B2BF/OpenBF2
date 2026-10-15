@@ -12,6 +12,7 @@ namespace {
 float centerPointer(float center, float dimension)
 {
     const float half=0.5f;
+#if defined(_M_IX86)
     float result;
     __asm {
         fld dimension
@@ -20,18 +21,27 @@ float centerPointer(float center, float dimension)
         fstp result
     }
     return result;
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    return static_cast<float>(center - static_cast<double>(dimension) * half);
+#endif
 }
 float pointerDimension(int dimension) // 751200 fild and two equal float stores
 {
+#if defined(_M_IX86)
     float result;
     __asm {
         fild dimension
         fstp result
     }
     return result;
+#else
+    // The int is exact in double; the single float rounding is the fstp's.
+    return static_cast<float>(static_cast<double>(dimension));
+#endif
 }
 }
-void BF2HudManager::enablePointer(int texture, int mode)
+void BF2HudManager::enablePointer(std::intptr_t texture, int mode)
 {
     menu::Ref2System* initialSystem=ref2System;
     m_field15c=true;

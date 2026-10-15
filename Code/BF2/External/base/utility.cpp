@@ -14,7 +14,11 @@
 int	tu_testbed_assert_break(const char* filename, int linenum, const char* expression)
 {
 	// @@ TODO output print error message
+#if defined(_M_IX86)
 	__asm { int 3 }
+#else
+	__debugbreak();	// [CHOSEN, not recovered] x64 (https://github.com/B2BF/OpenBF2/issues/7): no inline asm
+#endif
 	return 0;
 }
 

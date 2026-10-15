@@ -1,8 +1,8 @@
 // Parses and resolves .tai entries and drives the atlas builder.
-// Compatibility map rebalancing remains covered by RW-74.
 
 #ifdef BF2_IMAGE_RENDDX9
 
+#include "../../../RendDX9Abi/ThunkAbi.h"
 #include "../../../RendDX9Abi/HfeAbi.h"
 #include "../../../RendDX9Abi/ModuleCommon.h"
 #include "../../../RendDX9Abi/BfMemory.h"
@@ -18,6 +18,7 @@
 #include <stdlib.h>
 
 #include <map>
+#include <new>
 #include <string>
 #include <utility>
 
@@ -33,13 +34,13 @@ namespace {
 // Four-slot atlas interface: addRef, getRef, release, and queryInterface.
 
 
-void __fastcall atlas_addRef(void* self, void*) { ++static_cast<TextureAtlas*>(self)->refCount; }
-int  __fastcall atlas_getRef(void* self, void*) { return static_cast<TextureAtlas*>(self)->refCount; }
+void RD9_THUNK atlas_addRef(void* self RD9_THUNK_EDX) { ++static_cast<TextureAtlas*>(self)->refCount; }
+int  RD9_THUNK atlas_getRef(void* self RD9_THUNK_EDX) { return static_cast<TextureAtlas*>(self)->refCount; }
 
 // (34 B), the release: `r = --refCount; if (!r) { sub_10015930(this);
 // sub_1005F360(this); } return r;`. The StaticMeshRenderer's destructor calls it on its ten lightmap
 // atlases (0x10121C10..0x10121C1D).
-int __fastcall atlas_slot08(void* self, void*)
+int RD9_THUNK atlas_slot08(void* self RD9_THUNK_EDX)
 {
     TextureAtlas* const atlas = static_cast<TextureAtlas*>(self);
     const int remaining = --atlas->refCount;
@@ -51,7 +52,7 @@ int __fastcall atlas_slot08(void* self, void*)
     return remaining;
 }
 
-void* __fastcall atlas_queryInterface(void* self, void*, unsigned int iid)
+void* RD9_THUNK atlas_queryInterface(void* self RD9_THUNK_EDX, unsigned int iid)
 {
     return iid == RD9_IID_IBASE ? self : 0;                // 0x10025930, comdat-shared
 }
@@ -86,7 +87,7 @@ struct LineScanner
             ++cur;
     }
 
-    bool readToken(vc71::string& out)
+    bool readToken(std::string& out)
     {
         if (failed) return false;
         skipWs();
@@ -130,23 +131,26 @@ struct LineScanner
 } // anonymous namespace
 
 
-// sub_10015E60 - the constructor. vptr, refcount 1, and the entry map's 0x40-byte head node built
-// by sub_100163E0 (links self-pointing, _Color = 1, _Isnil = 1 at +60/+61).
+// sub_10015E60 - the constructor: vptr, refcount 1 and an empty entry map.
 
 TextureAtlas* textureAtlasCtor(void* storage)
 {
-    TextureAtlas* a = static_cast<TextureAtlas*>(storage);
+    TextureAtlas* a = new (storage) TextureAtlas();
     a->vptr     = const_cast<void**>(kTextureAtlasVtable);
     a->refCount = 1;
-    a->entries.construct(0x40);
     return a;
+}
+
+unsigned int textureAtlasEntryCount(const TextureAtlas* atlas)
+{
+    return static_cast<unsigned int>(atlas->entries.size());
 }
 
 
 // Loads normalized source-name entries and retains one page reference per entry.
 // Lines contain source, page, ignored index and UV rectangle; '#' lines are skipped.
 
-bool textureAtlasLoadTAI(TextureAtlas* atlas, const vc71::string& path)
+bool textureAtlasLoadTAI(TextureAtlas* atlas, const std::string& path)
 {
     // the first call: every entry's page reference released and the map emptied
     // (sub_100157A0), so a reload never stacks a second set of entries. (em_unload
@@ -198,13 +202,13 @@ bool textureAtlasLoadTAI(TextureAtlas* atlas, const vc71::string& path)
 
             LineScanner s(lineStart, lineEnd);
 
-            vc71::string key;
+            std::string key;
             if (!s.readToken(key))
                 continue;
             if (::strcmp(key.c_str(), "#") == 0)           // unk_101DE48C - the comment sentinel
                 continue;
 
-            vc71::string pageFile;
+            std::string pageFile;
             unsigned int index = 0;
             float uOffset = 0.0f, vOffset = 0.0f, width = 0.0f, height = 0.0f;
 
@@ -229,22 +233,18 @@ bool textureAtlasLoadTAI(TextureAtlas* atlas, const vc71::string& path)
 
             pathToLower(key);
             pathReplaceSeparators(key, '/');               // sub_100751C0 -> sub_10075730
-            vc71::string stripped;
+            std::string stripped;
             pathStripExtension(stripped, key);
             key = stripped;
 
-            vc71::map_node* node = vc71::mapInsert(atlas->entries, 0x40, key.c_str());
-            if (node)
-            {
-                TextureAtlasEntry* rec =
-                    reinterpret_cast<TextureAtlasEntry*>(node->value + 28);
-                rec->width   = width;                      // the shipped re-ordering
-                rec->height  = height;
-                rec->uOffset = uOffset;
-                rec->vOffset = vOffset;
-                rec->page    = page;
-                ++entries;
-            }
+            // operator[]: a repeated name overwrites the existing entry.
+            TextureAtlasEntry& rec = atlas->entries[key];
+            rec.width   = width;                           // the shipped re-ordering
+            rec.height  = height;
+            rec.uOffset = uOffset;
+            rec.vOffset = vOffset;
+            rec.page    = page;
+            ++entries;
         }
 
         ::renddx9abi::engineFree(buf);
@@ -255,25 +255,15 @@ bool textureAtlasLoadTAI(TextureAtlas* atlas, const vc71::string& path)
 }
 
 
-// sub_10015930 - the destructor. Restores the vptr, destroys the entry map (the recursive node
-// walk sub_10017070: key strings destroyed, nodes freed), frees the head node and zeroes the
-// header. the page references ARE released
-// first - 0x1001593D, right after the vptr store, calls sub_100157A0 (textureAtlasReleaseAll); an
-// earlier note here said they were not. The entry map is then already empty. The node teardown here reuses
-// mapErase per RW-74 (semantics, not the shipped recursion).
+// sub_10015930 - the destructor. Restores the vptr, releases the page references
+// (sub_100157A0, textureAtlasReleaseAll) and destroys the then-empty entry map. Every caller frees
+// the storage next.
 
 void textureAtlasDtor(TextureAtlas* atlas)
 {
     atlas->vptr = const_cast<void**>(kTextureAtlasVtable);
     textureAtlasReleaseAll(atlas);
-    while (atlas->entries.head && atlas->entries.head->left != atlas->entries.head)
-        vc71::mapErase(atlas->entries, atlas->entries.head->left);
-    if (atlas->entries.head)
-    {
-        ::renddx9abi::engineFree(atlas->entries.head);
-        atlas->entries.head = 0;
-    }
-    atlas->entries.size = 0;
+    atlas->~TextureAtlas();
 }
 
 
@@ -282,12 +272,10 @@ void textureAtlasDtor(TextureAtlas* atlas)
 
 void textureAtlasReleaseAll(TextureAtlas* atlas)
 {
-    for (vc71::map_node* node = vc71::mapFirst(atlas->entries); node;
-         node = vc71::mapNext(atlas->entries, node))
+    for (TextureAtlasEntryMap::iterator it = atlas->entries.begin();
+         it != atlas->entries.end(); ++it)
     {
-        TextureAtlasEntry* const entry =
-            reinterpret_cast<TextureAtlasEntry*>(node->value + 28);            // node+0x28
-        EngineTexture* const page = entry->page;                               // node+0x38
+        EngineTexture* const page = it->second.page;
         if (--page->refCount == 0)                                             // unguarded
         {
             textureDtor(page);
@@ -296,9 +284,7 @@ void textureAtlasReleaseAll(TextureAtlas* atlas)
     }
 
     // sub_10016D80 over the root, then the head relinked to itself and the size zeroed.
-    while (atlas->entries.head && atlas->entries.head->left != atlas->entries.head)
-        vc71::mapErase(atlas->entries, atlas->entries.head->left);
-    atlas->entries.relinkEmpty();
+    atlas->entries.clear();
 }
 
 
@@ -306,11 +292,10 @@ void textureAtlasReleaseAll(TextureAtlas* atlas)
 
 void textureAtlasCollectPages(TextureAtlas* atlas, std::vector<EngineTexture*>& pages)
 {
-    for (vc71::map_node* node = vc71::mapFirst(atlas->entries); node;
-         node = vc71::mapNext(atlas->entries, node))
+    for (TextureAtlasEntryMap::iterator it = atlas->entries.begin();
+         it != atlas->entries.end(); ++it)
     {
-        EngineTexture* const page =
-            reinterpret_cast<TextureAtlasEntry*>(node->value + 28)->page;      // node+0x38
+        EngineTexture* const page = it->second.page;
         unsigned int i = 0;
         while (i < pages.size() && pages[i] != page)
             ++i;
@@ -320,35 +305,34 @@ void textureAtlasCollectPages(TextureAtlas* atlas, std::vector<EngineTexture*>& 
 }
 
 
-// sub_10015DF0 (110 B, `retn 4`), for the vegetation front, read in full: every
-// entry's KEY (node+0x0C - the normalised name loadTAI keyed it by), in map order, push_back'ed through
-// vector<string>::push_back 0x10011220. Callers: UndergrowthSystem's buildMeshes (0x1014963F) and
-// OverGrowth (0x100CBFEC).
+// sub_10015DF0: every entry's key (the normalised name loadTAI keyed it by), in map order,
+// push_back'ed through vector<string>::push_back. Callers: UndergrowthSystem's buildMeshes
+// (0x1014963F) and OverGrowth (0x100CBFEC).
 
-void textureAtlasCollectNames(TextureAtlas* atlas, std::vector<vc71::string>& names)
+void textureAtlasCollectNames(TextureAtlas* atlas, std::vector<std::string>& names)
 {
-    for (vc71::map_node* node = vc71::mapFirst(atlas->entries); node;
-         node = vc71::mapNext(atlas->entries, node))
-        names.push_back(*reinterpret_cast<const vc71::string*>(node->value));   // node+0x0C
+    for (TextureAtlasEntryMap::const_iterator it = atlas->entries.begin();
+         it != atlas->entries.end(); ++it)
+        names.push_back(it->first);
 }
 
 
 // sub_100156F0 - the lookup. Normalises exactly as loadTAI keyed (lowercase, '/'-separators,
-// extension stripped), then lower_bound + the miss check; a hit returns node+40, a miss returns 0.
+// extension stripped), then lower_bound + the miss check; a hit returns the entry, a miss 0.
 
-TextureAtlasEntry* textureAtlasFind(TextureAtlas* atlas, const vc71::string& name)
+TextureAtlasEntry* textureAtlasFind(TextureAtlas* atlas, const std::string& name)
 {
-    vc71::string key(name);
+    std::string key(name);
     pathToLower(key);
     pathReplaceSeparators(key, '/');
-    vc71::string stripped;
+    std::string stripped;
     pathStripExtension(stripped, key);
     key = stripped;
 
-    vc71::map_node* node = vc71::mapFind(atlas->entries, key.c_str());
-    if (!node)
+    TextureAtlasEntryMap::iterator it = atlas->entries.find(key);
+    if (it == atlas->entries.end())
         return 0;
-    return reinterpret_cast<TextureAtlasEntry*>(node->value + 28);
+    return &it->second;
 }
 
 
@@ -359,25 +343,25 @@ namespace {
 
 // std::operator+(const string&, const char* / const string&) - VC7.1 inlines both as `copy the left,
 // then +=` (0x100161A4..0x100161EC).
-vc71::string concat(const vc71::string& left, const char* right)
+std::string concat(const std::string& left, const char* right)
 {
-    vc71::string result(left);
+    std::string result(left);
     result += right;
     return result;
 }
 
-vc71::string concat(const vc71::string& left, const vc71::string& right)
+std::string concat(const std::string& left, const std::string& right)
 {
-    vc71::string result(left);
+    std::string result(left);
     result += right;
     return result;
 }
 
 // the string BY value, every character through MSVCR71's toupper
 // sign-extended (`movsx`), end() re-read on every pass, returned by value through EBX (/GL). The same
-// body as the DLL's own 0x10008360. vc71::string has no mutable access, so the characters are
+// body as the DLL's own 0x10008360. std::string has no mutable access, so the characters are
 // upper-cased in a scratch copy and assigned back - the result is the shipped one.
-vc71::string toUpper(vc71::string s)
+std::string toUpper(std::string s)
 {
     std::string chars(s.c_str(), s.size());
     for (std::string::iterator it = chars.begin(); it != chars.end(); ++it)
@@ -403,7 +387,7 @@ void __fastcall discardAtlasBuilderWarning(const std::string& /*message*/)
 // in the "C" locale, the only one this image runs in.
 struct NameLessNoCase
 {
-    bool operator()(const vc71::string& a, const vc71::string& b) const
+    bool operator()(const std::string& a, const std::string& b) const
     {
         return ::_stricmp(a.c_str(), b.c_str()) < 0;
     }
@@ -417,18 +401,18 @@ struct NameLessNoCase
 // Returns false only for an empty input list; build and save failures are not propagated.
 // dxt5 selects the output compression group. Atlas resources stay owned by the DLL.
 
-bool textureAtlasBuild(TextureAtlas* /*thisAtlas - never read*/, vc71::string outputDirectory,
-                       vc71::string atlasName, vc71::string inputDirectory,
-                       const std::list<vc71::string>& textures, bool dxt5)
+bool textureAtlasBuild(TextureAtlas* /*thisAtlas - never read*/, std::string outputDirectory,
+                       std::string atlasName, std::string inputDirectory,
+                       const std::list<std::string>& textures, bool dxt5)
 {
     if (textures.size() == 0)
         return false;
 
-    std::map<vc71::string, int, NameLessNoCase> uniqueNames;
-    for (std::list<vc71::string>::const_iterator it = textures.begin(); it != textures.end(); ++it)
+    std::map<std::string, int, NameLessNoCase> uniqueNames;
+    for (std::list<std::string>::const_iterator it = textures.begin(); it != textures.end(); ++it)
         uniqueNames.insert(std::make_pair(*it, 0));
 
-    const vc71::string format(dxt5 ? "DXT5" : "");
+    const std::string format(dxt5 ? "DXT5" : "");
 
     if (inputDirectory.size() != 0)
     {
@@ -444,7 +428,7 @@ bool textureAtlasBuild(TextureAtlas* /*thisAtlas - never read*/, vc71::string ou
     }
 
     // name.rfind('.') - the last '.', searched over the whole counted string.
-    const unsigned int nameSize = atlasName.size();
+    const unsigned int nameSize = static_cast<unsigned int>(atlasName.size());
     unsigned int dot = nameSize;
     for (unsigned int i = nameSize; i-- > 0; )
     {
@@ -456,13 +440,13 @@ bool textureAtlasBuild(TextureAtlas* /*thisAtlas - never read*/, vc71::string ou
     }
     if (dot != nameSize)
     {
-        vc71::string suffix;                                                      // name.substr(dot)
+        std::string suffix;                                                      // name.substr(dot)
         pathAssignSubstring(suffix, atlasName.c_str() + dot, nameSize - dot);
-        const vc71::string upper = toUpper(suffix);
+        const std::string upper = toUpper(suffix);
         // std::operator==(const string&, const char*): the whole string against ".TAC".
         if (upper.size() == 4 && ::memcmp(upper.c_str(), ".TAC", 4) == 0)
         {
-            vc71::string stem;                                                    // name.substr(0, dot)
+            std::string stem;                                                    // name.substr(0, dot)
             pathAssignSubstring(stem, atlasName.c_str(), dot);
             atlasName = stem;
         }
@@ -475,7 +459,7 @@ bool textureAtlasBuild(TextureAtlas* /*thisAtlas - never read*/, vc71::string ou
     configuration->setInputPath(inputDirectory.c_str());
     configuration->setOutputPath(outputDirectory.c_str());
     configuration->addGroup(atlasName.c_str(), 0, 0, format.c_str(), 0, 1);
-    for (std::map<vc71::string, int, NameLessNoCase>::const_iterator it = uniqueNames.begin();
+    for (std::map<std::string, int, NameLessNoCase>::const_iterator it = uniqueNames.begin();
          it != uniqueNames.end(); ++it)
         configuration->addTexture(it->first.c_str(), false);
 
@@ -495,17 +479,17 @@ bool textureAtlasBuild(TextureAtlas* /*thisAtlas - never read*/, vc71::string ou
 // (104 B, __thiscall, `retn 5Ch`) - copies its three strings into the builder's by-value
 // slots and forwards; `this` passes through unread.
 
-bool textureAtlasGenerate(TextureAtlas* atlas, vc71::string outputDirectory, vc71::string atlasName,
-                          vc71::string inputDirectory, const std::list<vc71::string>& textures, bool dxt5)
+bool textureAtlasGenerate(TextureAtlas* atlas, std::string outputDirectory, std::string atlasName,
+                          std::string inputDirectory, const std::list<std::string>& textures, bool dxt5)
 {
     return textureAtlasBuild(atlas, outputDirectory, atlasName, inputDirectory, textures, dxt5);
 }
 
 // generate("", name, "", textures, false). No caller in the 1.50 image.
-bool textureAtlasGenerate(TextureAtlas* atlas, const vc71::string& atlasName,
-                          const std::list<vc71::string>& textures)
+bool textureAtlasGenerate(TextureAtlas* atlas, const std::string& atlasName,
+                          const std::list<std::string>& textures)
 {
-    return textureAtlasGenerate(atlas, vc71::string(""), atlasName, vc71::string(""), textures, false);
+    return textureAtlasGenerate(atlas, std::string(""), atlasName, std::string(""), textures, false);
 }
 
 } // namespace dx9rend

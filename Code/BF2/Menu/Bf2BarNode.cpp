@@ -203,7 +203,7 @@ void Bf2BarNode::paintSelf(System* system, const NodeState* state,
         break;
     }
 
-    const int barTexture = m_texture;
+    const TextureHandle barTexture = m_texture;
     m_texture = m_fillTexture; // swapped for the background paint, restored below
     if (m_fillTexture != 0) {
         Bf2PictureNode::paintSelf(system, state, &background, &background, context);
@@ -223,8 +223,10 @@ void Bf2BarNode::paintSelf(System* system, const NodeState* state,
     drawContextTexture(context, system, m_texture, &quad);
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2BarNode) == 144, "native Bf2BarNode storage");
 static_assert(sizeof(ClassTypeDescriptor<Bf2BarNode, Bf2PictureNode>) == 16,
     "Bf2BarNode metadata");
+#endif
 } }
 #endif

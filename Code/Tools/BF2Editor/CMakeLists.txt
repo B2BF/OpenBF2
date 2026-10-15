@@ -1,7 +1,8 @@
 # =================================================================================================
 # BF2Editor - the rebuilt BF2 Editor (AGENTS.md "Editor").
 #
-# Added by the root CMakeLists.txt inside its Windows-x86-only client block. EVERY TARGET HERE IS
+# Added by the root CMakeLists.txt inside its Windows client block (x86 and the native x64 client,
+# https://github.com/B2BF/OpenBF2/issues/7). EVERY TARGET HERE IS
 # EXCLUDE_FROM_ALL: no server, archive, check or client target depends on the editor.
 #
 # The editor links the SAME client object set bf2_client links (bf2_client_objects, DEDICATED=0);
@@ -288,15 +289,14 @@ set(BF2_EDITOR_IMGUI_INCLUDES
     "${BF2_IMGUIZMO_ROOT}"
 )
 
-# The compile contract every editor TU shares. _ITERATOR_DEBUG_LEVEL=0 and BF2_PLUGIN_ABI_NATIVE=1
-# are not optional: the editor passes STL objects to and from the client objects, so it must use
-# their exact STL layout (bf2_client_objects sets the same two).
+# The compile contract every editor TU shares. _ITERATOR_DEBUG_LEVEL=0 is not optional: the editor
+# passes STL objects to and from the client objects and its RendDX9.dll, so it must use their exact
+# STL layout (bf2_client_objects sets the same define).
 function(bf2_editor_configure target)
     bf2_configure_cpp_target("${target}")
     bf2_set_image("${target}" 0)
     target_compile_definitions("${target}" PRIVATE
         BF2_IMAGE_EDITOR=1
-        BF2_PLUGIN_ABI_NATIVE=1
         _ITERATOR_DEBUG_LEVEL=0
         NOMINMAX
         WIN32_LEAN_AND_MEAN
@@ -304,6 +304,7 @@ function(bf2_editor_configure target)
     )
     target_include_directories("${target}" PRIVATE "${BF2_EDITOR_ROOT}" "${BF2_ROOT}" ${BF2_EDITOR_IMGUI_INCLUDES}
         ${BF2_PYTHON_INCLUDE_DIRS} "${BF2_EXTERNAL_ROOT}/zlib-1.2.3" "${BF2_EXTERNAL_ROOT}/zlib-1.2.3/contrib/minizip")
+    target_compile_options("${target}" PRIVATE ${BF2_CLIENT_X64_COMPILE_OPTIONS})
     set_target_properties("${target}" PROPERTIES FOLDER "BF2Editor")
 endfunction()
 
@@ -315,10 +316,10 @@ bf2_configure_cpp_target(bf2_editor_shared_objects)
 bf2_set_image(bf2_editor_shared_objects 0)
 bf2_set_platform_compat(bf2_editor_shared_objects)
 target_compile_definitions(bf2_editor_shared_objects PRIVATE
-    BF2_PLUGIN_ABI_NATIVE=1
     _ITERATOR_DEBUG_LEVEL=0
     BF2_IMAGE_EDITOR=1
 )
+target_compile_options(bf2_editor_shared_objects PRIVATE ${BF2_CLIENT_X64_COMPILE_OPTIONS})
 target_include_directories(bf2_editor_shared_objects PRIVATE
     ${BF2_PYTHON_INCLUDE_DIRS}
     "${BF2_EXTERNAL_ROOT}/zlib-1.2.3"
@@ -350,19 +351,10 @@ function(bf2_editor_output target)
     )
 endfunction()
 
-# The renderer's VC7.1 string, for TerrainLayerRecords' by-value calls into the native RendDX9.dll: under the native
-# plugin ABI it allocates from the CRT heap both /MD images share. Outside the editor's tree, so not in its source group.
-set(bf2_editor_abi_sources
-    "${BF2_EDITOR_ROOT}/../../RendDX9Abi/Vc71String.cpp"
-    "${BF2_EDITOR_ROOT}/../../RendDX9Abi/Msvcr71Heap.cpp"
-)
-set_source_files_properties(${bf2_editor_abi_sources} PROPERTIES COMPILE_DEFINITIONS "BF2_PLUGIN_ABI_NATIVE=1")
-
 add_library(bf2_editor_objects OBJECT EXCLUDE_FROM_ALL
     ${bf2_editor_framework_sources}
     ${bf2_editor_engine_framework_sources}
     ${bf2_editor_app_sources}
-    ${bf2_editor_abi_sources}
 )
 bf2_editor_configure(bf2_editor_objects)
 source_group(TREE "${BF2_EDITOR_ROOT}" PREFIX "BF2Editor" FILES
@@ -398,8 +390,11 @@ function(bf2_editor_link_common target)
         target_link_libraries("${target}" PRIVATE "${BF2_DICE_PY_LIB}")
     endif()
     target_link_libraries("${target}" PRIVATE ${bf2_editor_system_libs})
-    add_dependencies("${target}" bf2_novint_imports)
-    target_link_libraries("${target}" PRIVATE "${BF2_NOVINT_IMPORT_LIB}")
+    # x86 only: the x64 client objects import nothing from the 32-bit NovintHFX.dll.
+    if(TARGET bf2_novint_imports)
+        add_dependencies("${target}" bf2_novint_imports)
+        target_link_libraries("${target}" PRIVATE "${BF2_NOVINT_IMPORT_LIB}")
+    endif()
 endfunction()
 
 # ---- BF2Editor.exe ------------------------------------------------------------------------------
@@ -427,9 +422,9 @@ if(EXISTS "${BF2_DICE_PY_DLL}")
         VERBATIM
     )
 endif()
-# The client objects import NovintHFX.dll; bf2_client stages the original the same way. Reading
+# The x86 client objects import NovintHFX.dll; bf2_client stages the original the same way. Reading
 # the game directory is all this does.
-if(EXISTS "${BF2_GAME_DIR}/NovintHFX.dll")
+if(NOT BF2_BUILD_X64 AND EXISTS "${BF2_GAME_DIR}/NovintHFX.dll")
     add_custom_command(TARGET bf2_editor POST_BUILD
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                 "${BF2_GAME_DIR}/NovintHFX.dll" "${BF2_EDITOR_OUTPUT_DIR}/NovintHFX.dll"
@@ -439,7 +434,8 @@ if(EXISTS "${BF2_GAME_DIR}/NovintHFX.dll")
 endif()
 
 # ---- The editor's own native RendDX9.dll (WP4) ------------------------------------------------------
-# Built by the tree's own script (Code/Build/renddx9.cmd native), REDIRECTED into this build tree
+# Built by the tree's own script (Code/Build/renddx9.cmd native, or x64 in the x64 configuration -
+# BF2_PLUGIN_FLAVOUR from the root CMakeLists.txt), REDIRECTED into this build tree
 # through the script's agent-isolation variables BF2_RENDDX9_OUT / BF2_RENDDX9_BIN, so the shared plugin
 # directories (Code/Build/obj_renddx9_native, bin_renddx9_native) are never rewritten, then staged
 # beside BF2Editor.exe. LoadLibrary searches the exe's directory first; a working directory holding the
@@ -460,14 +456,14 @@ add_custom_target(bf2_editor_renddx9
     COMMAND "${CMAKE_COMMAND}" -E env
             "BF2_RENDDX9_OUT=${BF2_EDITOR_RENDDX9_OUT}" "BF2_RENDDX9_BIN=${BF2_EDITOR_RENDDX9_BIN}"
             "BF2_TEXTUREATLAS_OUT=${BF2_EDITOR_ATLAS_OUT}" "BF2_TEXTUREATLAS_BIN=${BF2_EDITOR_ATLAS_BIN}"
-            cmd.exe /d /c "${BF2_EDITOR_RENDDX9_SCRIPT}"
+            cmd.exe /d /c "${BF2_EDITOR_RENDDX9_SCRIPT}" ${BF2_PLUGIN_FLAVOUR}
     COMMAND "${CMAKE_COMMAND}" -E make_directory "${BF2_EDITOR_OUTPUT_DIR}"
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different
             "${BF2_EDITOR_RENDDX9_DIR}/bin/RendDX9.dll" "${BF2_EDITOR_OUTPUT_DIR}/RendDX9.dll"
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different
             "${BF2_EDITOR_RENDDX9_DIR}/atlas_bin/TextureAtlasBuilder.dll" "${BF2_EDITOR_OUTPUT_DIR}/TextureAtlasBuilder.dll"
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/Code/Build"
-    COMMENT "Building the editor's native RendDX9.dll and TextureAtlasBuilder.dll (into ${BF2_EDITOR_RENDDX9_DIR})"
+    COMMENT "Building the editor's ${BF2_PLUGIN_FLAVOUR} RendDX9.dll and TextureAtlasBuilder.dll (into ${BF2_EDITOR_RENDDX9_DIR})"
     VERBATIM
 )
 set_property(TARGET bf2_editor_renddx9 PROPERTY FOLDER "BF2Editor")

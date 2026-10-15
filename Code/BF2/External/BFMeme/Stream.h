@@ -39,8 +39,8 @@ public:
     virtual bool streamString(char**, const char*); // +40
     virtual bool streamWideString(wchar_t**, const char*); // +44
     virtual bool streamCharacter(wchar_t*, const char*); // +48
-    virtual bool streamTexture(System*, int*, const char*); // +4C 837D20
-    virtual bool streamFont(System*, int*, const char*); // +50
+    virtual bool streamTexture(System*, TextureHandle*, const char*); // +4C 837D20
+    virtual bool streamFont(System*, FontHandle*, const char*); // +50
     virtual bool streamSound(System*, int*, const char*); // +54
     virtual bool streamCollection(System*, ObjectCollection*, const char*); // +58
     virtual bool streamEnum(int*, EnumNext, EnumName, const char*); // +5C 837D30

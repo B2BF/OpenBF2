@@ -171,13 +171,13 @@ unsigned int addr(const void* p)
 void trace(const char* qualifiedName, const void* self, unsigned int slot)
 {
     const unsigned int n = bump(qualifiedName);
-    logf("[trace]    %s  this=0x%08X slot=+0x%02X call#%u", qualifiedName, addr(self), slot, n);
+    logf("[trace]    %s  this=0x%p slot=+0x%02X call#%u", qualifiedName, self, slot, n);
 }
 
 void frontier(const char* qualifiedName, const void* self, unsigned int slot)
 {
     const unsigned int n = bump(qualifiedName);
-    logf("[FRONTIER] %s  this=0x%08X slot=+0x%02X call#%u", qualifiedName, addr(self), slot, n);
+    logf("[FRONTIER] %s  this=0x%p slot=+0x%02X call#%u", qualifiedName, self, slot, n);
 
     if (!frontierTrapEnabled())
         return;

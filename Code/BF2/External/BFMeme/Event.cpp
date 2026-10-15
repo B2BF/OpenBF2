@@ -20,6 +20,8 @@ bool Event::streamProperties(System* system, Stream* stream)
 }
 bool Event::matches(System*, const NodeInputEvent* input) // 83AED0, null input not guarded.
 { return m_inputIndex == 0 || input->index == m_inputIndex; }
+#if defined(_M_IX86)
 static_assert(sizeof(Event) == 8, "BFMeme Event layout");
+#endif
 } }
 #endif

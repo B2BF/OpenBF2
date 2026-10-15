@@ -1,10 +1,9 @@
 // [PLATFORM] Native-only bridge to the host ConsoleObjects registry. Registers before
-// the module event handler and unregisters after handler removal. Reuses the host registry;
-// current STL members must never be interpreted as retail VC7.1 objects.
+// the module event handler and unregisters after handler removal. Reuses the host registry.
 
 #include "PluginAbi.h"
 
-#if defined(BF2_IMAGE_RENDDX9) && BF2_PLUGIN_ABI_NATIVE
+#if defined(BF2_IMAGE_RENDDX9)
 
 #include "../BF2/Core/ConsoleObjects.h"
 
@@ -53,4 +52,4 @@ bool ConsoleObjects::unregisterConsoleObjects(ConsoleObjectList& objects)
 } // namespace hfe
 } // namespace dice
 
-#endif // BF2_IMAGE_RENDDX9 && BF2_PLUGIN_ABI_NATIVE
+#endif // BF2_IMAGE_RENDDX9

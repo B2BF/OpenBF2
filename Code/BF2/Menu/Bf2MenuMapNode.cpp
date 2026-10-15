@@ -215,7 +215,7 @@ void dispatchMapSetSelectionWord(Bf2MenuMapNode* node, int index, unsigned int w
 // +110, 7730B0 (61 B). (D1). [INFERRED] name. A five-way switch on
 // eventId - 46: the constructor's four support textures at +9A8..+9B4 (see the constructor's
 // mini_Ammo / mini_Repair / mini_Revive / mini_Medic loads). 46 and every other id fall to medic.
-int Bf2MenuMapNode::getSupportRequestTexture(int eventId)
+TextureHandle Bf2MenuMapNode::getSupportRequestTexture(int eventId)
 {
     switch (eventId) {
     case 47: return m_field9a8[0];                       // +9A8 mini_Ammo
@@ -599,22 +599,8 @@ void rasterizeCombatArea(hfe::geom::IMemeTexture* texture,
         }
     }
     if (!measureOnly) {
-        // hand over A buffer the callee may free. plotAndFill releases `first` itself, so it
-        // must not be `canvas`'s own storage - that would be freed twice. The span layout is the
-        // shipped sixteen-byte one; see IMemeTexture.h for why a std::vector cannot be used here.
-        hfe::geom::IMemeTexture::CanvasPointSpan span = { 0, 0, 0, 0 };
-        if (!canvas.empty()) {
-            const std::size_t bytes =
-                canvas.size() * sizeof(hfe::geom::IMemeTexture::CanvasPoint);
-            span.first = static_cast<float*>(std::malloc(bytes));   // engineFree's heap (native)
-            if (span.first) {
-                std::memcpy(span.first, &canvas[0], bytes);
-                span.last = reinterpret_cast<float*>(
-                    reinterpret_cast<char*>(span.first) + bytes);
-                span.end = span.last;
-            }
-        }
-        texture->plotAndFill(span, value);
+        // By value: plotAndFill receives its own copy of the points and frees it.
+        texture->plotAndFill(canvas, value);
     }
 }
 }
@@ -1767,14 +1753,13 @@ void Bf2MenuMapNode::updatePaintCenter()
 
 hfe::geom::IMemeTexture* Bf2MenuMapNode::combatAreaTexture() const
 {
-    // System::loadTexture's historical interface spells every renderer handle
-    // `int`; this particular handle is proven to be an IMemeTexture object.
-    return reinterpret_cast<hfe::geom::IMemeTexture*>(
-        static_cast<std::uintptr_t>(static_cast<unsigned int>(m_field93c[2])));
+    // Texture handles are pointer-sized; this particular handle is proven to be an
+    // IMemeTexture object.
+    return reinterpret_cast<hfe::geom::IMemeTexture*>(m_field93c[2]);
 }
 
 // 774A60. [INFERRED] void return; the caller discards the incidental draw result.
-void Bf2MenuMapNode::drawMapTexture(int texture, const Rect* adjusted,
+void Bf2MenuMapNode::drawMapTexture(TextureHandle texture, const Rect* adjusted,
                                     const Rect* bounds, System* system,
                                     RenderContext* context)
 {
@@ -1791,7 +1776,7 @@ void Bf2MenuMapNode::drawMapTexture(int texture, const Rect* adjusted,
 
 // The adjusted Rect argument is genuinely unused: retail constructs
 // the tint Quad with `bounds` as both its geometry and clipping rectangle.
-void Bf2MenuMapNode::drawMapTint(int texture, const Color* color, const Rect*,
+void Bf2MenuMapNode::drawMapTint(TextureHandle texture, const Color* color, const Rect*,
                                  const Rect* bounds, System* system,
                                  RenderContext* context)
 {
@@ -1907,7 +1892,7 @@ bool Bf2MenuMapNode::updateCombatAreaTexture(bool measureOnly)
 }
 
 // 774EB0. [INFERRED] void return.
-void Bf2MenuMapNode::drawCombatAreaTexture(int texture, const Rect* adjusted,
+void Bf2MenuMapNode::drawCombatAreaTexture(TextureHandle texture, const Rect* adjusted,
                                            const Rect* bounds, System* system,
                                            RenderContext* context)
 {
@@ -1978,7 +1963,7 @@ void Bf2MenuMapNode::clearMapIcons()
 
 // 7746E0, virtual +124. [INFERRED] void return/name.
 void Bf2MenuMapNode::paintMapIcon(hfe::Vec2 position, float rotation,
-                                  hfe::Vec2 size, unsigned int texture, System* system,
+                                  hfe::Vec2 size, std::uintptr_t texture, System* system,
                                   const Rect* adjusted, const Rect* bounds,
                                   const Color* color, RenderContext* context)
 {
@@ -2162,7 +2147,7 @@ void Bf2MenuMapNode::loadSupplyLineTextures(System* system)
         const std::string name = hfe::formatString(
             "Levels/%s/HUD/Minimap/supplyline_%02d.tga",                             // ds:92FF5C
             hfe::game->getCurrentMapName().c_str(), stage);                          // client +0xEC
-        const int texture = system->loadTexture(name.c_str(), false);               // +0x8C
+        const TextureHandle texture = system->loadTexture(name.c_str(), false);               // +0x8C
         if (!texture)
             return;
         m_supplyLineTextures[stage] = texture;                                     // +BA8 onwards
@@ -2294,7 +2279,7 @@ void Bf2MenuMapNode::drawSupplyLine(const Rect* adjusted, const Rect* bounds, Sy
 
 // 775110. [INFERRED] void return. The shadow is a full-bounds black quad whose opacity follows the
 // map layer alpha.  Retail does not rotate it or attach the secondary texture.
-void Bf2MenuMapNode::drawMapShadow(int texture, const Rect* bounds,
+void Bf2MenuMapNode::drawMapShadow(TextureHandle texture, const Rect* bounds,
                                    System* system, RenderContext* context)
 {
     const Color color = {0.0f, 0.0f, 0.0f, m_field708[2] * 0.6f};
@@ -2304,7 +2289,7 @@ void Bf2MenuMapNode::drawMapShadow(int texture, const Rect* bounds,
 
 // 775170. [INFERRED] void return. Like the shadow pass this uses the same Rect for geometry and clip,
 // but the frame color is a constant opaque black.
-void Bf2MenuMapNode::drawMapFrame(int texture, const Rect* bounds,
+void Bf2MenuMapNode::drawMapFrame(TextureHandle texture, const Rect* bounds,
                                   System* system, RenderContext* context)
 {
     const Color color = {0.0f, 0.0f, 0.0f, 1.0f};
@@ -2484,7 +2469,7 @@ int __stdcall classifyObjectForMap(hfe::world::IObject* object,
 }
 
 // 7779B0 / 7779E0, virtual +E4/+E8.
-int Bf2MenuMapNode::timedMarkerTexture(unsigned int id)
+TextureHandle Bf2MenuMapNode::timedMarkerTexture(unsigned int id)
 {
     for (std::vector<MapTimedMarker>::const_iterator it = m_timedMarkers.begin();
          it != m_timedMarkers.end(); ++it)
@@ -2618,9 +2603,9 @@ bool Bf2MenuMapNode::populateNetworkIcon(int id, MapIconRecord* icon,
 }
 
 // 772ED0, virtual +FC.
-int Bf2MenuMapNode::getSmallSquadIcon(int squadId)
+TextureHandle Bf2MenuMapNode::getSmallSquadIcon(int squadId)
 {
-    int& texture = m_field7fc[squadId];
+    TextureHandle& texture = m_field7fc[squadId];
     if (!texture) {
         const std::string path = hfe::formatString(
             "Ingame/Player/Icons/Minimap/mini_Squad_%d_small.tga", squadId);
@@ -2631,9 +2616,9 @@ int Bf2MenuMapNode::getSmallSquadIcon(int squadId)
 
 // 772FB0, virtual +140. Retail deliberately indexes size + 2*squad, so the
 // cache rows overlap; preserve that quirk.
-int Bf2MenuMapNode::getLeaderMapIcon(int squadId, int sizeIndex)
+TextureHandle Bf2MenuMapNode::getLeaderMapIcon(int squadId, int sizeIndex)
 {
-    int& texture = m_field84c[sizeIndex + 2 * squadId];
+    TextureHandle& texture = m_field84c[sizeIndex + 2 * squadId];
     if (!texture) {
         std::string size("Medium");
         if (sizeIndex == 0) size = "Small";
@@ -2664,7 +2649,7 @@ void Bf2MenuMapNode::projectObject(hfe::world::IObject* object,
 }
 
 
-unsigned int Bf2MenuMapNode::remapMapIconType(unsigned int type, int texture,
+unsigned int Bf2MenuMapNode::remapMapIconType(unsigned int type, TextureHandle texture,
                                                bool timed, float* rotation)
 {
     if (type == 37 || type == 36 || type == 25 || type == 24) return type;
@@ -2931,7 +2916,7 @@ void Bf2MenuMapNode::colorMapIcon(hfe::world::IPlayer* player,
 
 
 void Bf2MenuMapNode::updateSatelliteTarget(hfe::world::IObject* object,
-                                            int networkId, int texture)
+                                            int networkId, TextureHandle texture)
 {
     if (!object) return;
     const float objectX = object->getAbsoluteTransformation().m[12];
@@ -2960,7 +2945,7 @@ void Bf2MenuMapNode::updateSatelliteTarget(hfe::world::IObject* object,
 // Source position and radius deliberately live across iterations:
 // malformed/null UAV entries reuse the last values observed by retail.
 void Bf2MenuMapNode::updateUavTarget(hfe::world::IObject* object,
-                                      int networkId, int texture)
+                                      int networkId, TextureHandle texture)
 {
     if (!object) return;
 
@@ -3586,7 +3571,7 @@ void Bf2MenuMapNode::completeLineRecord(float scale, MapLineRecord* line)
 }
 
 // +100, 772F40. Loaded on first use through the System, then cached. No bound on `squad`.
-int Bf2MenuMapNode::getSquadNumberIcon(int squad)
+TextureHandle Bf2MenuMapNode::getSquadNumberIcon(int squad)
 {
     if (m_squadNumberIcons[squad] == 0)
         m_squadNumberIcons[squad] = m_system->loadTexture(
@@ -4342,7 +4327,7 @@ void Bf2MenuMapNode::collectIconFamily77E500()
                 continue;
         }
 
-        const int texture = holder->getNrDestroyedObjects() > 0
+        const TextureHandle texture = holder->getNrDestroyedObjects() > 0
             ? strategicComponent->getDestroyedIconPtr()
             : strategicComponent->getIntactIconPtr();
         if (texture <= 0)
@@ -4494,7 +4479,7 @@ void Bf2MenuMapNode::collectIconFamily77FC30()
         hfe::Vec3 position;
         int radius = 0;
         float rotation = 0.0f;
-        int texture = 0;
+        TextureHandle texture = 0;
         bool emit = false;
         bool emitCentre = false;
 
@@ -4735,7 +4720,7 @@ void Bf2MenuMapNode::drawControlPointLabels(System* system, const NodeState* sta
 
     Bf2TextNode textNode(nullptr);
     Bf2TransformNode transform(nullptr, 0, 0, 0, 0);
-    Bf2CenterAlignedStyle style(nullptr, static_cast<int>(m_fieldc64));
+    Bf2CenterAlignedStyle style(nullptr, static_cast<FontHandle>(m_fieldc64));
 
     void* stringAllocation = ::operator new(sizeof(WstringData));
     WstringData* stringData = nullptr;
@@ -5317,7 +5302,9 @@ bool Bf2MenuMapNode::onEvent1(System* system, const Rect*, const NodeState*,
     }
     return false;
 }
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2MenuMapNodeTypeDescriptor) == 16, "client BF2 map metadata");
+#endif
 
 // Stores the minimap position, requests recentering and returns true.
 bool Bf2MenuMapNode::setMiniPosForHud(float x, float y)
@@ -5353,7 +5340,7 @@ bool Bf2MenuMapNode::setZoomIconsForHud(bool enabled)          // row 39, +7F9
 // row reports nothing either way, and its console return type is void.
 void Bf2MenuMapNode::setControlPointFontForHud(std::string font)
 {
-    if (m_system) m_fieldc64 = static_cast<std::uint32_t>(m_system->loadFont(font.c_str()));
+    if (m_system) m_fieldc64 = static_cast<std::uintptr_t>(m_system->loadFont(font.c_str()));
 }
 
 // Inlined at 75FC39, row 41: four floats copied straight into +C68.

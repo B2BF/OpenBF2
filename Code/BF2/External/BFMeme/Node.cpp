@@ -37,7 +37,9 @@ private:
     static int instanceCount;
 };
 int NodeTypeDescriptor::instanceCount = 0;
+#if defined(_M_IX86)
 static_assert(sizeof(NodeTypeDescriptor) == 16, "Node metadata stores its counter separately");
+#endif
 }
 
 TypeDescriptor* Node::getClassType() // 82C190, shared by the virtual getter
@@ -274,10 +276,14 @@ void resetNodeSelf(Node*)
 {
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(Node) == 8, "client BFMeme Node");
+#endif
 static_assert(sizeof(NodeState) == 8, "client BFMeme interaction state");
 static_assert(sizeof(NodeInputEvent) == 20, "client BFMeme input payload");
+#if defined(_M_IX86)
 static_assert(sizeof(RenderContext) == 28, "client BFMeme effect chain context");
 static_assert(sizeof(NodeVisitor) == 8, "client BFMeme three-slot visitor");
+#endif
 } }
 #endif

@@ -78,7 +78,7 @@ unsigned int freeCount(void* head)
 unsigned int countType(ParticleSystemManager& m, int type)
 {
     unsigned int n=0;
-    for (unsigned int i=0;i<m.m_instances.size();++i) if (m.m_instances.first[i]->reserved01()==type) ++n;
+    for (unsigned int i=0;i<m.m_instances.size();++i) if (m.m_instances[i]->reserved01()==type) ++n;
     return n;
 }
 
@@ -97,7 +97,6 @@ int main(int argc, char** argv)
     manager.m_poolsInitialized=1; manager.m_qualityLevel=2; manager.m_effectiveViewDistance=1000;
     manager.m_value8C08=0.75f;
     manager.m_tierThresholds[0]=0.4f; manager.m_tierThresholds[1]=0.55f; manager.m_tierThresholds[2]=0.7f;
-    psmReclassification(&manager).construct();
     manager.m_type3PoolCount=16;
     psmAllocatePool(manager.m_type3PoolBacking,manager.m_type3FreeList,manager.m_type3PoolCount,176,3);
     manager.m_type0PoolCount=512;
@@ -184,7 +183,7 @@ int main(int argc, char** argv)
     for (int i=0;i<180;++i) frame(manager);
     CHECK(e->reserved39()==0 && countType(manager,0)==0 && manager.m_instances.size()==1);
     CHECK(freeCount(manager.m_type3FreeList)==16);
-    CHECK(psmRuntimeField<int>(&manager,0x5F28)==0 && freeCount(manager.m_type0FreeList)==512);
+    CHECK(manager.m_type0LiveCount==0 && freeCount(manager.m_type0FreeList)==512);
     CHECK(manager.m_renderBuckets[1].size()==0 && at<unsigned char>(e,4)==0);   // queued inactive
 
     // Restart, then clear while particles (and children) are alive: every child is released.
@@ -198,7 +197,7 @@ int main(int argc, char** argv)
     bool allReleased=true;
     for (unsigned int i=0;i<manager.m_instances.size();++i)
     {
-        IParticleSystemInstance* const other=manager.m_instances.first[i];
+        IParticleSystemInstance* const other=manager.m_instances[i];
         if (other!=e && at<unsigned char>(other,5)!=0) allReleased=false;
     }
     CHECK(allReleased);
@@ -218,7 +217,6 @@ int main(int argc, char** argv)
 
     freeList(manager.m_instances); freeList(manager.m_pendingDestroy); freeList(manager.m_pendingClassification);
     for (int i=0;i<10;++i) freeList(manager.m_renderBuckets[i]);
-    psmReclassification(&manager).destroy();
     typedef ::renddx9abi::HostString FixtureHostString;   // a pseudo-destructor needs an unqualified name
     reinterpret_cast<FixtureHostString*>(g1Emitter+0x6C)->~FixtureHostString();
     reinterpret_cast<FixtureHostString*>(g1Emitter+0x16C)->~FixtureHostString();

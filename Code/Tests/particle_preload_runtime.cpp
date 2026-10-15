@@ -145,8 +145,6 @@ void* engineAlloc(unsigned int size)
     return p;
 }
 void engineFree(void*) { CHECK(false); }
-void* crtMalloc(size_t size) { return std::malloc(size); }
-void crtFree(void* p) { std::free(p); }
 void logf(const char*, ...) { }
 void frontier(const char* name, const void*, unsigned int)
 { std::printf("UNEXPECTED FRONTIER %s\n", name); std::abort(); }
@@ -173,7 +171,8 @@ int readIntSetting(const char*,int) { std::abort(); }
 IRenderView* rendererGetRenderViewDup() { std::abort(); }
 IVideoOptions* rendererGetVideoOptions() { std::abort(); }
 TextureAtlas* textureAtlasCtor(void*) { std::abort(); }
-TextureAtlasEntry* textureAtlasFind(TextureAtlas*, const vc71::string&) { std::abort(); }
+TextureAtlasEntry* textureAtlasFind(TextureAtlas*, const std::string&) { std::abort(); }
+unsigned int textureAtlasEntryCount(const TextureAtlas*) { std::abort(); }
 int resourceManagerSwapDefaultPriority(int value)
 { const int old = priority; priority = value; events.push_back("priority"); return old; }
 int bufferManagerSwapPool(int value)
@@ -199,7 +198,7 @@ void* indexBufferLock(void* raw, unsigned int offset, unsigned int count, unsign
 bool indexBufferUnlock(void*) { events.push_back("unlock"); return true; }
 bool readBoolSetting(const char* name, bool fallback)
 { CHECK(std::strcmp(name,"GSUseEffectTextureAtlas") == 0 && !fallback); return useAtlas; }
-bool textureAtlasLoadTAI(TextureAtlas* atlas, const vc71::string& path)
+bool textureAtlasLoadTAI(TextureAtlas* atlas, const std::string& path)
 {
     CHECK(atlas == atlasSentinel && priority == 5 && currentManager->m_poolsInitialized == 0);
     CHECK(std::strcmp(path.c_str(), "Objects/Effects/Textures/Atlas/ParticleAtlas.tai") == 0);

@@ -8,7 +8,7 @@
 #include <sstream>
 #include <cstring>
 #if defined(_MSC_VER) && defined(_M_IX86)
-#include "../../../RendDX9Abi/Vc71String.h"
+#include <string>
 #endif
 #include "Game/DynamicBundle.h"
 #include "Game/AreaObject.h"
@@ -334,8 +334,8 @@ IObject* EnvMapTemplate::createObject() const { return 0; }
 bool EnvMapTemplate::writeBinary(io::IStream*) const { return false; }
 bool EnvMapTemplate::readBinary(io::IStream*)        { return false; }
 
-// ELF8201CC0 / clientPE64E4D0, complete reads. Renderer +1C is getTemplate(name);
-// the Windows renderer retains VC7.1 strings even when both images use the native ABI.
+// ELF8201CC0 / clientPE64E4D0, complete reads. Renderer +1C is getTemplate(name); the renderer
+// takes the key as the shared std::string (issue #7: one STL across the image boundary).
 void EnvMapTemplate::templateInitialize()
 {
     updateFlags(1, 0);
@@ -343,38 +343,15 @@ void EnvMapTemplate::templateInitialize()
     if (manager)
     {
         const std::string& name=getName();
-#if defined(_MSC_VER) && defined(_M_IX86)
-        // [CHOSEN, not recovered] Borrowed, read-only VC7.1 argument carrier. The
-        // recovered getTemplate copies its key; it neither retains nor mutates this
-        // carrier, so no renderer heap/string destructor crosses the image boundary.
-        struct BorrowedName
-        {
-            unsigned int allocator;
-            union { char buffer[16]; const char* pointer; } storage;
-            unsigned int length,capacity;
-        } argument={};
-        static_assert(sizeof(BorrowedName)==sizeof(vc71::string),"VC7.1 argument carrier");
-        argument.length=static_cast<unsigned int>(name.size());
-        if(name.size()<16)
-        {
-            std::memcpy(argument.storage.buffer,name.c_str(),name.size()+1);
-            argument.capacity=15;
-        }
-        else
-        {
-            argument.storage.pointer=name.c_str();
-            argument.capacity=argument.length;
-        }
-        typedef void* (__thiscall* GetTemplate)(void*,const vc71::string&);
-        m_envMap=reinterpret_cast<GetTemplate>((*reinterpret_cast<void***>(manager))[0x1C/4])(
-            manager,*reinterpret_cast<const vc71::string*>(&argument));
+#if defined(_MSC_VER)
+        typedef void* (__thiscall* GetTemplate)(void*,const std::string&);
 #else
         typedef void* (*GetTemplate)(void*,const std::string&);
+#endif
         // ELF8201D3D / clientPE64E51C: +0x1C is logical slot 7 in both 32-bit
         // tables. Preserve the ordinal when native pointer width changes.
         m_envMap=reinterpret_cast<GetTemplate>((*reinterpret_cast<void***>(manager))[7])(
             manager,name);
-#endif
     }
 }
 

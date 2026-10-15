@@ -37,6 +37,8 @@ bool Bf2ActionListAction::addAction(System* system, Action* action)
     if (actions->size() > 0) position = actions->last();
     return actions->insert(system, position, action);
 }
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2ActionListAction) == 24, "client Bf2ActionListAction");
+#endif
 } }
 #endif

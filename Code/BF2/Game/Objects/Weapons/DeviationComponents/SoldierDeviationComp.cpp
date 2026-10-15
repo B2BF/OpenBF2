@@ -6,6 +6,7 @@
 #include "SoldierDeviationComp.h"
 
 #include <cmath>
+#include <cstddef>
 #include <sstream>
 #include <string>
 
@@ -18,6 +19,8 @@
 #include "../../../../Core/Ids.h"
 #include "../../../../IO/Input/PlayerInput.h"
 #include "../../../../IO/Stream/IStream.h"
+#include "../../../../Physics/IResponsePhysics.h"
+#include "../../../../Physics/SoldierResponse.h"     // m_byteFA (+0xFA), a friend
 #include "../../../../Scene/Object/ObjectUtil.h"
 
 namespace dice {
@@ -174,10 +177,15 @@ void SoldierDeviationComp::updateDeviation(io::PlayerInput input,
         if (!soldierObject->getParent())
         {
             // Retail has no null guard here.  A Soldier is expected to carry response physics;
-            // preserve the raw +0xFA ground-contact read instead of inventing a fallback.
-            unsigned char* const response = static_cast<unsigned char*>(
-                object_detail::LayoutAccess::responsePhysics(soldierObject));
-            if (!response[0xFA])
+            // preserve the +0xFA ground-contact read instead of inventing a fallback.
+#if defined(_M_IX86)
+            static_assert(offsetof(SoldierResponsePhysics, m_byteFA) == 0xFA,
+                          "retail soldier ground-contact byte");
+#endif
+            const SoldierResponsePhysics* const response =
+                static_cast<const SoldierResponsePhysics*>(static_cast<IResponsePhysics*>(
+                    object_detail::LayoutAccess::responsePhysics(soldierObject)));
+            if (!response->m_byteFA)
                 pose = SoldierPose_Stand;
         }
 

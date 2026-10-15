@@ -17,6 +17,8 @@ int FileOStream::write(const void* buffer, int bytes)
 int FileOStream::getPosition() { return m_file->getPosition(); }
 bool FileOStream::setPosition(int position)
 { return static_cast<unsigned char>(m_file->seek(hfe::io::SEEKORIGIN_BEGIN, position)) != 0; }
+#if defined(_M_IX86)
 static_assert(sizeof(FileOStream) == 8, "client file-output stream layout");
+#endif
 } }
 #endif

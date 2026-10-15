@@ -6,6 +6,7 @@
 // See Code/BF2/RendDX9/BF2Render.cpp for the BF2_IMAGE_RENDDX9 guard and why it is here.
 #ifdef BF2_IMAGE_RENDDX9
 
+#include "../../RendDX9Abi/ThunkAbi.h"
 #include "../../RendDX9Abi/HfeAbi.h"
 #include "../../RendDX9Abi/ModuleCommon.h"
 #include "../../RendDX9Abi/BfMemory.h"
@@ -14,6 +15,7 @@
 
 #include <cstring>
 #include <stddef.h>
+#include <stdint.h>
 
 namespace dice {
 namespace hfe {
@@ -40,11 +42,19 @@ unsigned char g_transparencyAAOff[4] = { 0, 0, 0, 0 };
 
 // Cached state value and dirty tracking, with fixed-size mirror blocks per state category.
 
+// One mirrored value. The texture block's cells carry the raw IDirect3DBaseTexture9* the setter is
+// handed, so the value is pointer-sized: uintptr_t is unsigned int on x86 (the retail 4-byte cell
+// word) and 64 bits on x64, where the render-state, sampler and TTF cells hold their 32-bit D3D
+// values zero-extended. [CHOSEN, not recovered] x64 cell width (issue #7).
+typedef uintptr_t StateValue;
+
+static_assert(sizeof(StateValue) == sizeof(void*), "a cell value holds a texture pointer");
+
 struct StateCell
 {
-    unsigned int  f0Device;    // what the device has been told         (issue walk writes)
-    unsigned int  f1Base;      // what pop restores to                  (reset seeds; D3D defaults)
-    unsigned int  f2Wanted;    // what the next draw will issue         (setters write)
+    StateValue    f0Device;    // what the device has been told         (issue walk writes)
+    StateValue    f1Base;      // what pop restores to                  (reset seeds; D3D defaults)
+    StateValue    f2Wanted;    // what the next draw will issue         (setters write)
     unsigned char flags;       // bit0 touched-list, bit1 pending-list, bit2 base-seeded
     unsigned char pad[3];
 };
@@ -54,10 +64,10 @@ struct StateCell
 // call-compatible with the shipped __thiscall sites.
 //     slot 0 = issue(index, value)  - the one D3D call this block family makes
 //     slot 1 = copy(dst, src)       - *dst = *src; the texture block overrides it refcounted
-typedef void (__fastcall* BlockIssueFn)(void* self, void* edx, unsigned int index,
-                                        unsigned int value);
-typedef void (__fastcall* BlockCopyFn)(void* self, void* edx, unsigned int* dst,
-                                       unsigned int* src);
+typedef void (__thiscall* BlockIssueFn)(void* self, unsigned int index,
+                                        StateValue value);
+typedef void (__thiscall* BlockCopyFn)(void* self, StateValue* dst,
+                                       StateValue* src);
 
 template <unsigned int N>
 struct StateMirrorBlock
@@ -79,6 +89,8 @@ struct TtfBlock     : StateMirrorBlock<1>  { unsigned int stage; };
 typedef StateMirrorBlock<255> RenderStateBlock;
 typedef StateMirrorBlock<16>  TextureBlock;
 
+// The retail x86 layout. x64 cells and blocks are native; nothing reads them by byte offset.
+#if defined(_M_IX86)
 static_assert(sizeof(StateCell)        == 16,   "the mirror cell is 16 bytes");
 static_assert(sizeof(RenderStateBlock) == 4596, "render-state block: this+0x10..+0x1203");
 static_assert(sizeof(TextureBlock)     == 296,  "texture block: this+0x1204..+0x132B");
@@ -90,6 +102,7 @@ static_assert(offsetof(RenderStateBlock, listPending) == 4340, "pending list at 
 static_assert(offsetof(RenderStateBlock, countPending) == 4595, "pending count at block+4595");
 static_assert(offsetof(SamplerBlock, stage) == 296, "sampler stage index at block+296");
 static_assert(offsetof(TtfBlock, stage)     == 24,  "TTF stage index at block+24");
+#endif
 
 
 // The StateManager object - 16032 (0x3EA0) bytes, every field placed by the constructor
@@ -149,6 +162,10 @@ struct StateManager
     void setTransparencyAA(bool enabled);
 };
 
+// The retail x86 layout. createStateManager allocates sizeof(StateManager); every other TU reaches
+// the object through the seams below (the listener and RT0 accessors included), so the x64 object is
+// native.
+#if defined(_M_IX86)
 static_assert(sizeof(StateManager) == 16032,
               "RendDX9Init.cpp:232 allocates 0x3EA0 for the StateManager");
 static_assert(offsetof(StateManager, renderStates)      == 0x0010, "RS block at +0x10");
@@ -164,6 +181,9 @@ static_assert(offsetof(StateManager, vsConst)           == 0x1EA8, "VS constants
 static_assert(offsetof(StateManager, vsConstMin)        == 0x2FA8, "VS min at +0x2FA8");
 static_assert(offsetof(StateManager, psConst)           == 0x2FB4, "PS constants at +0x2FB4");
 static_assert(offsetof(StateManager, psConstIssueFn)    == 0x3E9C, "the object ends at +0x3EA0");
+static_assert(offsetof(StateManager, listenerVptr)      == 0x0004, "listener subobject at +0x04");
+static_assert(offsetof(StateManager, renderTargetDirty) == 0x1E94, "RT dirty byte at +0x1E94");
+#endif
 
 // The two vtable arrays, defined below the slot bodies; smRelease restores them at destruction.
 extern void* const kStateManagerVtable[26];
@@ -173,8 +193,7 @@ namespace {
 
 inline IDirect3DDevice9* rendererDevice()
 {
-    return *reinterpret_cast<IDirect3DDevice9**>(
-        static_cast<unsigned char*>(g_rendererBase) + 0x0C);
+    return static_cast<RendDX9Base*>(g_rendererBase)->device;
 }
 
 inline StateManager* sm() { return static_cast<StateManager*>(g_stateManager); }
@@ -184,7 +203,7 @@ inline StateManager* sm() { return static_cast<StateManager*>(g_stateManager); }
 
 
 // Shared copy, 0x10027350 (comdat-folded into every non-texture vtable): *dst = *src.
-void __fastcall blockCopyPlain(void*, void*, unsigned int* dst, unsigned int* src)
+void RD9_THUNK blockCopyPlain(void* RD9_THUNK_EDX, StateValue* dst, StateValue* src)
 {
     *dst = *src;
 }
@@ -193,7 +212,7 @@ void __fastcall blockCopyPlain(void*, void*, unsigned int* dst, unsigned int* sr
 // The shipped body calls vtable +0x08 to release and +0x04 to add - IUnknown's Release/AddRef
 // slots, __stdcall with the object pushed - because what travels through these cells is the RAW
 // IDirect3DBaseTexture9 the setter was handed (see smSetTexture).
-void __fastcall blockCopyTextureRef(void*, void*, unsigned int* dst, unsigned int* src)
+void RD9_THUNK blockCopyTextureRef(void* RD9_THUNK_EDX, StateValue* dst, StateValue* src)
 {
     if (*dst)
         reinterpret_cast<IUnknown*>(*dst)->Release();
@@ -204,14 +223,14 @@ void __fastcall blockCopyTextureRef(void*, void*, unsigned int* dst, unsigned in
 
 // Applies render state with vendor-specific transparency AA codes.
 // Any nonzero unsigned request enables it when multisample AA is active.
-void __fastcall rsIssue(void* self, void*, unsigned int state, unsigned int value)
+void RD9_THUNK rsIssue(void* self RD9_THUNK_EDX, unsigned int state, StateValue value)
 {
     RenderStateBlock* block = static_cast<RenderStateBlock*>(self);
     IDirect3DDevice9* dev = rendererDevice();
 
     if (state != g_transparencyAAState)
     {
-        dev->SetRenderState(static_cast<D3DRENDERSTATETYPE>(state), value);
+        dev->SetRenderState(static_cast<D3DRENDERSTATETYPE>(state), static_cast<DWORD>(value));
         return;
     }
 
@@ -223,7 +242,7 @@ void __fastcall rsIssue(void* self, void*, unsigned int state, unsigned int valu
     ::memcpy(&onCode, g_transparencyAAOn, 4);
     ::memcpy(&offCode, g_transparencyAAOff, 4);
 
-    unsigned int snapped = value;
+    unsigned int snapped = static_cast<unsigned int>(value);   // a render-state value is 32-bit
     if (value != onCode && value != offCode)
         snapped = (static_cast<double>(value) >= 0.5) ? onCode : offCode;
     dev->SetRenderState(static_cast<D3DRENDERSTATETYPE>(state), snapped);
@@ -238,29 +257,31 @@ void __fastcall rsIssue(void* self, void*, unsigned int state, unsigned int valu
 // unwrapped by its callers. What travels through the texture cells is therefore the RAW
 // IDirect3DBaseTexture9 on the issue side and the refcounted wrapper never reaches the device.
 // See smSetTexture below - D3DX calls it with the raw pointer it got from FXParameter's unwrap.
-void __fastcall texIssue(void*, void*, unsigned int stage, unsigned int value)
+void RD9_THUNK texIssue(void* RD9_THUNK_EDX, unsigned int stage, StateValue value)
 {
     rendererDevice()->SetTexture(stage, reinterpret_cast<IDirect3DBaseTexture9*>(value));
 }
 
 // Sampler issue, the stage rides in the block's own tail dword.
-void __fastcall samplerIssue(void* self, void*, unsigned int type, unsigned int value)
+void RD9_THUNK samplerIssue(void* self RD9_THUNK_EDX, unsigned int type, StateValue value)
 {
     rendererDevice()->SetSamplerState(static_cast<SamplerBlock*>(self)->stage,
-                                      static_cast<D3DSAMPLERSTATETYPE>(type), value);
+                                      static_cast<D3DSAMPLERSTATETYPE>(type),
+                                      static_cast<DWORD>(value));
 }
 
 // Texture-transform issue, always D3DTSS 24 (texturetransformflags), index ignored.
-void __fastcall ttfIssue(void* self, void*, unsigned int, unsigned int value)
+void RD9_THUNK ttfIssue(void* self RD9_THUNK_EDX, unsigned int, StateValue value)
 {
     rendererDevice()->SetTextureStageState(static_cast<TtfBlock*>(self)->stage,
-                                           D3DTSS_TEXTURETRANSFORMFLAGS, value);
+                                           D3DTSS_TEXTURETRANSFORMFLAGS,
+                                           static_cast<DWORD>(value));
 }
 
 // The five block vtables, mirroring off_101DFF10..off_101DFF30. The abstract base's issue slot is
 // pure (0x101C450E is _purecall); nothing here ever dispatches through the base vtable because the
 // constructor immediately overwrites it, so the base slot aborts if it is ever reached.
-void __fastcall blockIssuePure(void* self, void*, unsigned int, unsigned int)
+void RD9_THUNK blockIssuePure(void* self RD9_THUNK_EDX, unsigned int, StateValue)
 {
     RD9_FRONTIER_AT("dice::hfe::dx9rend::StateManager - _purecall on a mirror block "
                     "(the base vtable at off_101DFF10 was left installed)", self, 0x00);
@@ -312,7 +333,7 @@ void blockConstruct(StateMirrorBlock<N>* b, void* const* vtbl)
 // (0x10026500 / 0x10026580 / 0x10026600 / 0x10026690): redundant-set filter against the device
 // value, wanted <- value through the copy slot, file on both lists.
 template <unsigned int N>
-void blockSet(StateMirrorBlock<N>* b, unsigned int index, unsigned int value)
+void blockSet(StateMirrorBlock<N>* b, unsigned int index, StateValue value)
 {
     StateCell& cell = b->cells[index];
     if ((cell.flags & 2u) == 0)
@@ -322,7 +343,7 @@ void blockSet(StateMirrorBlock<N>* b, unsigned int index, unsigned int value)
         b->listPending[b->countPending++] = static_cast<unsigned char>(index);
         cell.flags |= 2u;
     }
-    blockCopySlot(b)(b, 0, &cell.f2Wanted, &value);
+    blockCopySlot(b)(b, &cell.f2Wanted, &value);
     if ((cell.flags & 1u) == 0)
     {
         b->listTouched[b->countTouched++] = static_cast<unsigned char>(index);
@@ -347,8 +368,8 @@ int blockIssuePending(StateMirrorBlock<N>* b)
         cell.flags &= ~2u;
         if (cell.f2Wanted != cell.f0Device)
         {
-            blockCopySlot(b)(b, 0, &cell.f0Device, &cell.f2Wanted);
-            blockIssueSlot(b)(b, 0, index, cell.f0Device);
+            blockCopySlot(b)(b, &cell.f0Device, &cell.f2Wanted);
+            blockIssueSlot(b)(b, index, cell.f0Device);
             ++issued;
         }
     }
@@ -398,7 +419,7 @@ void blockScheduleRestore(StateMirrorBlock<N>* b)
             {
                 b->listPending[b->countPending++] = index;
                 cell.flags |= 2u;
-                blockCopySlot(b)(b, 0, &cell.f2Wanted, &cell.f1Base);
+                blockCopySlot(b)(b, &cell.f2Wanted, &cell.f1Base);
             }
         }
     }
@@ -423,9 +444,9 @@ void blockReissueSeeded(StateMirrorBlock<N>* b)
         StateCell& cell = b->cells[i];
         if (cell.flags & 4u)
         {
-            blockCopySlot(b)(b, 0, &cell.f0Device, &cell.f1Base);
+            blockCopySlot(b)(b, &cell.f0Device, &cell.f1Base);
             cell.flags &= 0xFCu;
-            blockIssueSlot(b)(b, 0, i, cell.f0Device);
+            blockIssueSlot(b)(b, i, cell.f0Device);
         }
     }
     b->countPending = 0;
@@ -434,7 +455,7 @@ void blockReissueSeeded(StateMirrorBlock<N>* b)
 
 // Seed one cell's base value and mark it held - the reset's `|= 4; f1 = value` store pair.
 template <unsigned int N>
-inline void blockSeedBase(StateMirrorBlock<N>* b, unsigned int index, unsigned int value)
+inline void blockSeedBase(StateMirrorBlock<N>* b, unsigned int index, StateValue value)
 {
     b->cells[index].flags |= 4u;
     b->cells[index].f1Base = value;
@@ -529,10 +550,10 @@ void resetToDefaults(StateManager* self)
         StateCell& cell = tb.cells[0];
         cell.flags |= 4u;
         cell.f1Base = 0;
-        blockCopySlot(&tb)(&tb, 0, &cell.f0Device, &cell.f1Base);
-        const unsigned int value = cell.f0Device;
+        blockCopySlot(&tb)(&tb, &cell.f0Device, &cell.f1Base);
+        const StateValue value = cell.f0Device;
         cell.flags &= 0xFCu;
-        blockIssueSlot(&tb)(&tb, 0, 0, value);
+        blockIssueSlot(&tb)(&tb, 0, value);
         tb.countTouched = 0;
         tb.countPending = 0;
     }
@@ -661,7 +682,7 @@ int __stdcall smSetRenderState(StateManager* self, unsigned int state, unsigned 
 // AddRef/Releases D3D objects here - their IUnknown slots 1/2 line up with the wrapper convention.
 int __stdcall smSetTexture(StateManager* self, unsigned int stage, void* texture)
 {
-    blockSet(&self->textures, stage, reinterpret_cast<unsigned int>(texture));
+    blockSet(&self->textures, stage, reinterpret_cast<StateValue>(texture));
     return 0;
 }
 
@@ -794,13 +815,16 @@ int __stdcall smSetVertexDeclaration(StateManager* self, void* decl)
 }
 
 // Maintains a refcounted render-target mirror. Only index 0 has valid storage;
-// higher indices overlap the dirty bytes.
+// higher indices overlap the dirty bytes. The shipped body addresses `this + 0x1E90 + 4 * index`
+// and `this + 0x1E94 + index`; measuring from the named members keeps that aliasing on x64.
 int __stdcall smSetRenderTarget(StateManager* self, unsigned int index, IDirect3DSurface9* surface)
 {
     IDirect3DSurface9** value =
         reinterpret_cast<IDirect3DSurface9**>(reinterpret_cast<unsigned char*>(self)
-                                              + 0x1E90 + 4u * index);
-    unsigned char* dirtyByte = reinterpret_cast<unsigned char*>(self) + 0x1E94 + index;
+                                              + offsetof(StateManager, renderTarget)
+                                              + sizeof(IDirect3DSurface9*) * index);
+    unsigned char* dirtyByte = reinterpret_cast<unsigned char*>(self)
+                             + offsetof(StateManager, renderTargetDirty) + index;
     if (*value != surface)
     {
         if (*value)
@@ -982,7 +1006,8 @@ void popBracket(StateManager* self)
 
 inline StateManager* fromListener(void* listener)
 {
-    return reinterpret_cast<StateManager*>(static_cast<unsigned char*>(listener) - 4);
+    return reinterpret_cast<StateManager*>(static_cast<unsigned char*>(listener)
+                                           - offsetof(StateManager, listenerVptr));
 }
 
 // sub_10025980 - release all three references of all 16 texture cells.
@@ -1000,7 +1025,7 @@ void dropTextureBlockRefs(TextureBlock* block)
     }
 }
 
-void __fastcall listenerOnDeviceLost(void* listener, void*)
+void RD9_THUNK listenerOnDeviceLost(void* listener RD9_THUNK_EDX)
 {
     StateManager* self = fromListener(listener);
     dropTextureBlockRefs(&self->textures);
@@ -1023,7 +1048,7 @@ void __fastcall listenerOnDeviceLost(void* listener, void*)
     self->pixelShader  = 0;  self->pixelShaderDirty  = 0;
 }
 
-void __fastcall listenerOnDeviceReset(void* listener, void*)
+void RD9_THUNK listenerOnDeviceReset(void* listener RD9_THUNK_EDX)
 {
     StateManager* self = fromListener(listener);
     blockReissueSeeded(&self->renderStates);
@@ -1035,19 +1060,19 @@ void __fastcall listenerOnDeviceReset(void* listener, void*)
         StateCell& cell = tb.cells[0];
         if (cell.flags & 4u)
         {
-            blockCopySlot(&tb)(&tb, 0, &cell.f0Device, &cell.f1Base);
-            const unsigned int value = cell.f0Device;
+            blockCopySlot(&tb)(&tb, &cell.f0Device, &cell.f1Base);
+            const StateValue value = cell.f0Device;
             cell.flags &= 0xFCu;
-            blockIssueSlot(&tb)(&tb, 0, 0, value);
+            blockIssueSlot(&tb)(&tb, 0, value);
         }
         tb.countPending = 0;
         tb.countTouched = 0;
     }
 }
 
-void __fastcall listenerOnDeviceDestroy(void* listener, void* edx)
+void RD9_THUNK listenerOnDeviceDestroy(void* listener RD9_THUNK_EDX)
 {
-    listenerOnDeviceLost(listener, edx);
+    listenerOnDeviceLost(listener RD9_THUNK_ARG);
 }
 
 } // anonymous namespace
@@ -1151,10 +1176,16 @@ bool createStateManager(void* device)
     // references its mirrors still hold are the last to drop) and its reset re-issue before them.
     registerDeviceLostResetListener(static_cast<void*>(&self->listenerVptr), 2);
 
+#if defined(_M_IX86)
     ::renddx9abi::logf("StateManager: up at 0x%08X (16032 bytes, RendDX9Init.cpp:232) - device "
                        "0x%08X, defaults seeded and reissued",
                        reinterpret_cast<unsigned int>(self),
                        reinterpret_cast<unsigned int>(device));
+#else
+    ::renddx9abi::logf("StateManager: up at 0x%p (%u bytes, RendDX9Init.cpp:232) - device "
+                       "0x%p, defaults seeded and reissued", static_cast<void*>(self),
+                       static_cast<unsigned int>(sizeof(StateManager)), device);
+#endif
     return true;
 }
 
@@ -1197,6 +1228,20 @@ void stateManagerSetDepthStencilSurface(IDirect3DSurface9* surface)
     smSetDepthStencilSurface(sm(), surface);
 }
 
+// sub_10025A70(0) - the desired render-target-0 mirror, without an AddRef. [CHOSEN, not recovered]
+// as a free seam (issue #7): its callers read the member instead of `g_stateManager + 0x1E90`.
+IDirect3DSurface9* stateManagerRenderTarget0()
+{
+    return static_cast<StateManager*>(g_stateManager)->renderTarget;
+}
+
+// The DeviceLostResetListener subobject (`dword_1023B984 + 4`) that Renderer slot +0xB8 drives
+// directly. [CHOSEN, not recovered] seam (issue #7): the subobject's native offset differs on x64.
+DeviceLostResetListener* stateManagerDeviceLostListener()
+{
+    return reinterpret_cast<DeviceLostResetListener*>(&sm()->listenerVptr);
+}
+
 // The helper first commits deferred render-target/depth state, then calls the D3D
 // device Clear with no rectangles.  Its argument order is normalized here; every value still
 // reaches the same D3D parameter.
@@ -1235,7 +1280,7 @@ void StateManager::setRenderStatePersistent(unsigned int state, unsigned int val
     cell.flags |= 4u;
     cell.f0Device = value;
     cell.f1Base   = value;
-    rsIssue(&renderStates, 0, state, value);
+    rsIssue(&renderStates RD9_THUNK_ARG, state, value);
 }
 
 void stateManagerSetRenderStatePersistent(unsigned int state, unsigned int value)
@@ -1322,7 +1367,7 @@ void rendererDrawPrimitive(unsigned int primCount, unsigned int type, unsigned i
         return;
     preDrawApply(sm());
     rendererDevice()->DrawPrimitive(static_cast<D3DPRIMITIVETYPE>(type), startVertex, primCount);
-    unsigned char* stats = static_cast<unsigned char*>(g_rendererBase) + 0x108;
+    unsigned char* stats = static_cast<RendDX9Base*>(g_rendererBase)->renderStats;
     if (stats[644])
     {
         ++*reinterpret_cast<unsigned int*>(stats + 460);
@@ -1342,7 +1387,7 @@ void rendererDrawIndexedPrimitive(unsigned int primCount, unsigned int type, int
     preDrawApply(sm());
     rendererDevice()->DrawIndexedPrimitive(static_cast<D3DPRIMITIVETYPE>(type), baseVertex,
                                            minIndex, numVertices, startIndex, primCount);
-    unsigned char* stats = static_cast<unsigned char*>(g_rendererBase) + 0x108;
+    unsigned char* stats = static_cast<RendDX9Base*>(g_rendererBase)->renderStats;
     if (stats[644])
     {
         ++*reinterpret_cast<unsigned int*>(stats + 452);
@@ -1364,7 +1409,7 @@ void rendererDrawPrimitiveUP(unsigned int primCount, const void* data,
     preDrawApply(sm());
     rendererDevice()->DrawPrimitiveUP(static_cast<D3DPRIMITIVETYPE>(type), primCount, data,
                                       stride);
-    unsigned char* stats = static_cast<unsigned char*>(g_rendererBase) + 0x108;
+    unsigned char* stats = static_cast<RendDX9Base*>(g_rendererBase)->renderStats;
     if (stats[644])
     {
         ++*reinterpret_cast<unsigned int*>(stats + 468);

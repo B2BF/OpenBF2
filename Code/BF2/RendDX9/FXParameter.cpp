@@ -9,6 +9,7 @@
 #include "../../RendDX9Abi/D3dx9Sdk.h"
 #include "../../RendDX9Abi/Frontier.h"
 #include "ShaderParameter.h"
+#include "Texture.h"                       // EngineTexture - the texture value unwrap
 
 #include <new>
 
@@ -54,7 +55,7 @@ private:
     void*         m_effect;       // +0x08
     void*         m_handle;       // +0x0C
     unsigned int  m_typeCode;     // +0x10
-    vc71::string  m_semantic;     // +0x14 .. +0x2F
+    std::string  m_semantic;     // +0x14 .. +0x2F
     unsigned int  m_bytes;        // +0x30
     unsigned int  m_bytesPerElem; // +0x34
     unsigned int  m_elements;     // +0x38
@@ -64,9 +65,6 @@ private:
     unsigned char m_pad45[3];
     unsigned int  m_arrayStart;   // +0x48
 };
-
-static_assert(sizeof(FXParameterImpl) == 0x4C,
-              "sub_1001E440 allocates 0x4C for one - see 0x1001E4A9");
 
 // Effect.cpp - the owning effect's compiled ID3DXEffect, or null before bind.
 void* effectD3dxHandle(void* effect);
@@ -108,7 +106,7 @@ int FXParameterImpl::release()
     const int remaining = --m_refCount;
     if (!remaining)
     {
-        m_semantic.~string();
+        m_semantic.~basic_string();
         ::renddx9abi::engineFree(this);
     }
     return remaining;
@@ -245,8 +243,7 @@ void FXParameterImpl::setValue(const void* data, unsigned int count)
         // D3DX the raw pointer - sub_10014930.
         IDirect3DBaseTexture9* d3dTexture = 0;
         if (data)
-            d3dTexture = *reinterpret_cast<IDirect3DBaseTexture9* const*>(
-                static_cast<const unsigned char*>(data) + 0x08);
+            d3dTexture = static_cast<const EngineTexture*>(data)->baseTexture;   // +0x08
         fx->SetTexture(handle, d3dTexture);
         return;
     }

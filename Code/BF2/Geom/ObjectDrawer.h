@@ -7,9 +7,10 @@
 #ifndef BF2_GEOM_OBJECTDRAWER_H
 #define BF2_GEOM_OBJECTDRAWER_H
 
-#include "../../RendDX9Abi/Vc71Vector.h"
 #include "../Core/IBase.h"
+#include "../Math/Plane3.h"
 
+#include <map>
 #include <vector>
 
 namespace dice {
@@ -22,24 +23,20 @@ struct LocalBoundingBox;   // isBoundsOccluded's argument (Math/LocalBoundingBox
 namespace geom {
 
 
-// Compatibility tree header; opaque comparator and sentinel retain the 12-byte shape.
-
-struct ObjectDrawerTreeHeader
+// The two trees at +0x10 / +0x1C. Retail nodes are 0x20 bytes with a 12-byte value; nothing
+// recovered inserts, finds or reads, so the key/value split is [UNRESOLVED] and the drawer only
+// constructs and destroys them.
+struct ObjectDrawerTreeValue
 {
-    void*        comp;      // +0x00  never written by the constructor
-    void*        head;      // +0x04  the sentinel; all three of ITS links point at itself
-    unsigned int size;      // +0x08  0
+    unsigned int words[2];
 };
+typedef std::map<unsigned int, ObjectDrawerTreeValue> ObjectDrawerTree;
 
 
 // ObjectManager fills these vectors by reference; their layout must match the host STL.
 // Compatibility builds use the VC7.1 allocator-prefixed layout.
 
-#if BF2_PLUGIN_ABI_NATIVE
 typedef std::vector< ::dice::hfe::world::IObject*> ObjectDrawerSet;
-#else
-typedef vc71::vector_layout ObjectDrawerSet;
-#endif
 
 class ObjectDrawer
 {
@@ -95,16 +92,15 @@ public:
     unsigned char          m_updateVisibleHasRun;   // +0x0D  ctor 0; updateVisible sets it
     unsigned char          m_byte0E;                // +0x0E  ctor 0
     unsigned char          m_pad0F;
-    ObjectDrawerTreeHeader m_tree10;                // +0x10
-    ObjectDrawerTreeHeader m_tree1C;                // +0x1C
+    ObjectDrawerTree       m_tree10;                // +0x10
+    ObjectDrawerTree       m_tree1C;                // +0x1C
     void*                  m_renderView;            // +0x28  ctor 0; slot +0x28 writes it
     IBase*                 m_occluder;              // +0x2C  ctor 0; refcounted, slot +0x30
     ObjectDrawerSet        m_visibleSet;            // +0x30  getObjectVector(0)
     ObjectDrawerSet        m_drawSet;               // +0x40  getObjectVector(non-zero)
-    // +0x50 - owned occlusion volumes: fixed-layout vectors of Plane3, rebuilt each enabled
-    // visibility update and read by object, geometry and bounds tests. Unlike the two object
-    // sets above it is never handed to the host, so it retains the fixed layout internally.
-    vc71::vector_layout    m_vector50;              // +0x50
+    // +0x50 - owned occlusion volumes: one plane list per occluder, rebuilt each enabled
+    // visibility update and read by object, geometry and bounds tests. Never handed to the host.
+    std::vector<std::vector<Plane3> > m_vector50;   // +0x50
     unsigned char          m_byte60;                // +0x60  ctor 1
     unsigned char          m_pad61[3];
     float                  m_float64;               // +0x64  ctor 60.0f (0x42700000)
@@ -126,10 +122,6 @@ public:
 // native flavour the two object sets are the host's own twelve-byte std::vector and the object is
 // correspondingly smaller, which is correct rather than a drift: nothing outside this DLL indexes
 // an ObjectDrawer by offset.  Its own factory allocates sizeof(ObjectDrawer).
-#if defined(_M_IX86) && !BF2_PLUGIN_ABI_NATIVE
-static_assert(sizeof(ObjectDrawer) == 0x8C,
-              "the factory at 0x100B0ADE allocates 0x8C for dice.hfe.geom.ObjectDrawer");
-#endif
 
 // RefFactory_geom_ObjectDrawer, 0x100B0ADE.  registered in ModuleGeom - see the header note.
 IBase* __fastcall createObjectDrawer(unsigned int iid, IBase* outer);

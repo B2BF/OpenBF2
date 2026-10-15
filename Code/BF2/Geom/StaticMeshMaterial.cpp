@@ -6,12 +6,12 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
+#include "../../RendDX9Abi/ThunkAbi.h"
 #include "../../RendDX9Abi/ModuleCommon.h"
 #include "../../RendDX9Abi/BfMemory.h"
 #include "../../RendDX9Abi/Frontier.h"
 #include "../../RendDX9Abi/HostFileAbi.h"
-#include "../../RendDX9Abi/Vc71String.h"
-#include "../../RendDX9Abi/Vc71Vector.h"
+#include <string>
 #include "../RendDX9/Texture.h"
 #include "../RendDX9/Ra/RaShader.h"   // the twenty vertex-element descriptors
 #include "StaticMeshTemplate.h"
@@ -33,7 +33,7 @@ namespace dx9rend {
 // BufferManager.cpp - declared here the way MeshTemplate.cpp declares the same three entry points.
 extern void* g_bufferManager;                                              // dword_1023B978
 void* createVertexBuffer(void* bufferManager, unsigned int count, unsigned int stride,
-                         const vc71::string& name, unsigned int usage);
+                         const std::string& name, unsigned int usage);
 void* vertexBufferLock(void* wrapper, unsigned int offsetVerts, unsigned int countVerts,
                        unsigned int flags);
 bool  vertexBufferUnlock(void* wrapper);
@@ -52,6 +52,9 @@ bool rendererIsExpansionPack();
 // index buffer (+0x54).
 void vertexBufferBindStream(void* wrapper, unsigned int stream);
 void indexBufferBind(void* wrapper);
+// BufferManager.cpp - the wrapper fields (+0x08 D3D declaration, +0x20 desc.Size).
+unsigned int vertexBufferByteSize(void* wrapper);
+IDirect3DVertexDeclaration9* vertexDeclarationD3D(void* wrapper);
 } // namespace dx9rend
 
 namespace geom {
@@ -71,14 +74,14 @@ unsigned int g_staticMeshMergedCount[5] = { 0, 0, 0, 0, 0 };   // dword_1025B594
 } // anonymous namespace
 
 
-// Material parameter storage has a fixed 0x150-byte layout.
+// Material parameter storage has the retail 0x150-byte layout on x86 (RaMaterialParameters).
 // Holder data is available, but dispatch through the unpublished holder classes aborts.
 // [RETIRE-WHEN: the Ra material/parameter translation unit is recovered.]
 // Replace the diagnostic tables after holder signatures and behavior are implemented and validated.
 
 namespace {
 
-void __fastcall raParameterHolderFrontier(void* self, void*)
+void RD9_THUNK raParameterHolderFrontier(void* self RD9_THUNK_EDX)
 {
     RD9_FRONTIER_AT("dice::hfe::dx9rend::Ra parameter holder "
                     "(off_101E1480 / 148C / 149C / 14A8 / 14BC / 1E78 / 1E80 / 2210 - "
@@ -103,136 +106,91 @@ void* const kRaParameterHolderVtable[8] =
 
 void* const* raHolderVtable() { return kRaParameterHolderVtable; }
 
-struct RaParamBool    { void* vptr; unsigned char value; unsigned char pad[3]; };
-struct RaParamFloat   { void* vptr; float value; };
-struct RaParamGloss   { void* vptr; float value; };
-struct RaParamInt     { void* vptr; int   value; };
-struct RaParamTexture { void* vptr; void* value; };
-struct RaParamVec4    { void* vptr; float value[4]; };
-struct RaParamVec3    { void* vptr; float value[3]; };
-
-// Parameter IDs are the byte offsets recorded on each member.
-struct RaMaterialParameters
-{
-    void*         vptr;                    // +0x000  off_101E2210
-    const void*   descriptor;              // +0x004  &unk_1023E7B0  [UNRESOLVED] - a .data? record
-    RaParamBool   alphaBlendEnable;        // +0x008  "AlphaBlendEnable"        8
-    RaParamBool   depthWrite;              // +0x010  "DepthWrite"             16
-    RaParamBool   alphaTest;               // +0x018  "AlphaTest"              24
-    RaParamVec4   diffuseColor;            // +0x020  "DiffuseColor"           32
-    RaParamVec4   ambient;                 // +0x034  "Ambient"                52
-    RaParamVec4   pointColor;              // +0x048  "PointColor"             72
-    RaParamInt    pointSun;                // +0x05C  "PointSun"               92
-    RaParamFloat  disableLightmapShadows;  // +0x064  "DisableLightmapShadows" 100
-    RaParamVec4   specularColor;           // +0x06C  "SpecularColor"          108
-    RaParamFloat  specularPower;           // +0x080  "SpecularPower"          128
-    RaParamFloat  opacity;                 // +0x088  "Opacity"                136
-    RaParamFloat  reflectivity;            // +0x090  "Reflectivity"           144
-    RaParamInt    cullMode;                // +0x098  "CullMode"               152
-    RaParamInt    alphaTestRef;            // +0x0A0  "AlphaTestRef"           160
-    RaParamInt    srcBlend;                // +0x0A8  "SrcBlend"               168
-    RaParamInt    destBlend;               // +0x0B0  "DestBlend"              176
-    RaParamTexture diffuseMap;             // +0x0B8  "DiffuseMap"             184
-    RaParamTexture detailMap;              // +0x0C0  "DetailMap"              192
-    RaParamTexture dirtMap;                // +0x0C8  "DirtMap"                200
-    RaParamTexture crackMap;               // +0x0D0  "CrackMap"               208
-    RaParamTexture normalMap;              // +0x0D8  "NormalMap"              216
-    RaParamTexture crackNormalMap;         // +0x0E0  "CrackNormalMap"         224
-    RaParamTexture giMap;                  // +0x0E8  "GIMap"                  232
-    RaParamGloss  staticGloss;             // +0x0F0  "StaticGloss"            240
-    RaParamFloat  objRadius;               // +0x0F8  "ObjRadius"              248
-    RaParamFloat  invHemiHeightScale;      // +0x100  "InvHemiHeightScale"     256
-    RaParamVec4   parallaxScaleBias;       // +0x108  "ParallaxScaleBias"      264
-    RaParamTexture cubeMap;                // +0x11C  "CubeMap"                284
-    RaParamVec4   posUnpack;               // +0x124  "PosUnpack"              292
-    RaParamFloat  texUnpack;               // +0x138  "TexUnpack"              312
-    RaParamVec3   normalUnpack;            // +0x140  "NormalUnpack"           320
-};
-
-#if defined(_M_IX86)
-static_assert(sizeof(RaMaterialParameters) == 0x150,
-              "the block spans StaticMeshMaterial +0x2C .. +0x17B; the constructor's last store is "
-              "index 83 (+0x14C)");
-#endif
+// The block itself is RaMaterialParameters (MeshTemplate.h); this file assigns its texture holders.
+typedef RaMaterialParameters::Texture RaParamTexture;
 
 // Each parameter block stores its own offset-vector address as its descriptor.
 // Apply resolves registry indices through this table before accessing holder data.
-extern vc71::vector_layout g_raParameterOffsets;               // defined a few lines below
+extern std::vector<int> g_raParameterOffsets;                  // defined a few lines below
 const void* const kRaMaterialDescriptor = &g_raParameterOffsets;
 
 
 // Process-wide parameter names and matching offsets, initialized while the offset vector is empty.
 
-vc71::vector_layout g_raParameterNames   = { 0, 0, 0, 0 };   // dword_1023E7C0
-vc71::vector_layout g_raParameterOffsets = { 0, 0, 0, 0 };   // dword_1023E7B4..BC
+std::vector<std::string> g_raParameterNames;                  // dword_1023E7C0
+std::vector<int>          g_raParameterOffsets;                // dword_1023E7B4..BC
 
 struct RaParameterName { const char* name; int offset; };
 
+// Each entry is its holder's offset in the native block; the x86 values are the shipped ones.
+#define RA_MATERIAL_OFFSET(member) static_cast<int>(offsetof(RaMaterialParameters, member))
 const RaParameterName kRaParameterNames[31] =
 {
-    { "AlphaBlendEnable",        8 }, { "SrcBlend",             168 },
-    { "DestBlend",             176 }, { "DepthWrite",            16 },
-    { "CullMode",              152 }, { "AlphaTest",             24 },
-    { "AlphaTestRef",          160 }, { "DiffuseColor",          32 },
-    { "Ambient",                52 }, { "PointColor",            72 },
-    { "PointSun",               92 }, { "DisableLightmapShadows", 100 },
-    { "SpecularColor",         108 }, { "SpecularPower",        128 },
-    { "Opacity",               136 }, { "Reflectivity",         144 },
-    { "DiffuseMap",            184 }, { "DetailMap",            192 },
-    { "NormalMap",             216 }, { "CubeMap",              284 },
-    { "DirtMap",               200 }, { "CrackMap",             208 },
-    { "CrackNormalMap",        224 }, { "ParallaxScaleBias",    264 },
-    { "GIMap",                 232 }, { "StaticGloss",          240 },
-    { "ObjRadius",             248 }, { "InvHemiHeightScale",   256 },
-    { "PosUnpack",             292 }, { "TexUnpack",            312 },
-    { "NormalUnpack",          320 }
+    { "AlphaBlendEnable",       RA_MATERIAL_OFFSET(alphaBlendEnable)       },
+    { "SrcBlend",               RA_MATERIAL_OFFSET(srcBlend)               },
+    { "DestBlend",              RA_MATERIAL_OFFSET(destBlend)              },
+    { "DepthWrite",             RA_MATERIAL_OFFSET(depthWrite)             },
+    { "CullMode",               RA_MATERIAL_OFFSET(cullMode)               },
+    { "AlphaTest",              RA_MATERIAL_OFFSET(alphaTest)              },
+    { "AlphaTestRef",           RA_MATERIAL_OFFSET(alphaTestRef)           },
+    { "DiffuseColor",           RA_MATERIAL_OFFSET(diffuseColor)           },
+    { "Ambient",                RA_MATERIAL_OFFSET(ambient)                },
+    { "PointColor",             RA_MATERIAL_OFFSET(pointColor)             },
+    { "PointSun",               RA_MATERIAL_OFFSET(pointSun)               },
+    { "DisableLightmapShadows", RA_MATERIAL_OFFSET(disableLightmapShadows) },
+    { "SpecularColor",          RA_MATERIAL_OFFSET(specularColor)          },
+    { "SpecularPower",          RA_MATERIAL_OFFSET(specularPower)          },
+    { "Opacity",                RA_MATERIAL_OFFSET(opacity)                },
+    { "Reflectivity",           RA_MATERIAL_OFFSET(reflectivity)           },
+    { "DiffuseMap",             RA_MATERIAL_OFFSET(diffuseMap)             },
+    { "DetailMap",              RA_MATERIAL_OFFSET(detailMap)              },
+    { "NormalMap",              RA_MATERIAL_OFFSET(normalMap)              },
+    { "CubeMap",                RA_MATERIAL_OFFSET(cubeMap)                },
+    { "DirtMap",                RA_MATERIAL_OFFSET(dirtMap)                },
+    { "CrackMap",               RA_MATERIAL_OFFSET(crackMap)               },
+    { "CrackNormalMap",         RA_MATERIAL_OFFSET(crackNormalMap)         },
+    { "ParallaxScaleBias",      RA_MATERIAL_OFFSET(parallaxScaleBias)      },
+    { "GIMap",                  RA_MATERIAL_OFFSET(giMap)                  },
+    { "StaticGloss",            RA_MATERIAL_OFFSET(staticGloss)            },
+    { "ObjRadius",              RA_MATERIAL_OFFSET(objRadius)              },
+    { "InvHemiHeightScale",     RA_MATERIAL_OFFSET(invHemiHeightScale)     },
+    { "PosUnpack",              RA_MATERIAL_OFFSET(posUnpack)              },
+    { "TexUnpack",              RA_MATERIAL_OFFSET(texUnpack)              },
+    { "NormalUnpack",           RA_MATERIAL_OFFSET(normalUnpack)           }
 };
 
-void raRegistryPush(vc71::vector_layout& v, const void* element, unsigned int stride,
-                    void (*copyConstruct)(void* dst, const void* src))
-{
-    const unsigned int size  = v.first ? static_cast<unsigned int>((v.last - v.first) / stride) : 0u;
-    const unsigned int capac = v.first ? static_cast<unsigned int>((v.end  - v.first) / stride) : 0u;
-    if (!v.first || size >= capac)
-    {
-        unsigned int grown = capac + (capac >> 1);
-        if (grown < size + 1u)
-            grown = size + 1u;
-        char* const buffer = static_cast<char*>(::renddx9abi::engineAlloc(grown * stride));
-        if (size)
-            ::memcpy(buffer, v.first, size * stride);
-        if (v.first)
-            ::renddx9abi::engineFree(v.first);
-        v.first = buffer;
-        v.last  = buffer + size * stride;
-        v.end   = buffer + grown * stride;
-    }
-    copyConstruct(v.last, element);
-    v.last += stride;
-}
-
-void raCopyString(void* dst, const void* src)
-{
-    new (dst) vc71::string(*static_cast<const vc71::string*>(src));
-}
-
-void raCopyInt(void* dst, const void* src)
-{
-    *static_cast<int*>(dst) = *static_cast<const int*>(src);
-}
+#if defined(_M_IX86)
+static_assert(RA_MATERIAL_OFFSET(alphaBlendEnable) == 8 && RA_MATERIAL_OFFSET(srcBlend) == 168 &&
+              RA_MATERIAL_OFFSET(destBlend) == 176 && RA_MATERIAL_OFFSET(depthWrite) == 16 &&
+              RA_MATERIAL_OFFSET(cullMode) == 152 && RA_MATERIAL_OFFSET(alphaTest) == 24 &&
+              RA_MATERIAL_OFFSET(alphaTestRef) == 160 && RA_MATERIAL_OFFSET(diffuseColor) == 32 &&
+              RA_MATERIAL_OFFSET(ambient) == 52 && RA_MATERIAL_OFFSET(pointColor) == 72 &&
+              RA_MATERIAL_OFFSET(pointSun) == 92 && RA_MATERIAL_OFFSET(disableLightmapShadows) == 100 &&
+              RA_MATERIAL_OFFSET(specularColor) == 108 && RA_MATERIAL_OFFSET(specularPower) == 128 &&
+              RA_MATERIAL_OFFSET(opacity) == 136 && RA_MATERIAL_OFFSET(reflectivity) == 144 &&
+              RA_MATERIAL_OFFSET(diffuseMap) == 184 && RA_MATERIAL_OFFSET(detailMap) == 192 &&
+              RA_MATERIAL_OFFSET(normalMap) == 216 && RA_MATERIAL_OFFSET(cubeMap) == 284 &&
+              RA_MATERIAL_OFFSET(dirtMap) == 200 && RA_MATERIAL_OFFSET(crackMap) == 208 &&
+              RA_MATERIAL_OFFSET(crackNormalMap) == 224 && RA_MATERIAL_OFFSET(parallaxScaleBias) == 264 &&
+              RA_MATERIAL_OFFSET(giMap) == 232 && RA_MATERIAL_OFFSET(staticGloss) == 240 &&
+              RA_MATERIAL_OFFSET(objRadius) == 248 && RA_MATERIAL_OFFSET(invHemiHeightScale) == 256 &&
+              RA_MATERIAL_OFFSET(posUnpack) == 292 && RA_MATERIAL_OFFSET(texUnpack) == 312 &&
+              RA_MATERIAL_OFFSET(normalUnpack) == 320,
+              "the shipped material registry offsets (sub_10044270)");
+#endif
+#undef RA_MATERIAL_OFFSET
 
 // sub_10044270's one-time tail.
 void raRegisterParameterNames()
 {
-    if (g_raParameterOffsets.first &&
-        ((g_raParameterOffsets.last - g_raParameterOffsets.first) >> 2) != 0)
+    if (!g_raParameterOffsets.empty())
         return;
 
     for (int i = 0; i < 31; ++i)
     {
-        vc71::string name(kRaParameterNames[i].name);
-        raRegistryPush(g_raParameterNames, &name, sizeof(vc71::string), &raCopyString);
-        raRegistryPush(g_raParameterOffsets, &kRaParameterNames[i].offset, 4, &raCopyInt);
+        std::string name(kRaParameterNames[i].name);
+        g_raParameterNames.push_back(name);
+        g_raParameterOffsets.push_back(kRaParameterNames[i].offset);
     }
 }
 
@@ -308,6 +266,9 @@ void raParametersConstruct(void* storage)
     p->normalUnpack.value[0] = 0.0f;
     p->normalUnpack.value[1] = 0.0f;
     p->normalUnpack.value[2] = 0.0f;
+#if !defined(_M_IX86)
+    p->shader = 0;                       // x86 clears it with value[2] above
+#endif
 
     raRegisterParameterNames();
 }
@@ -432,6 +393,9 @@ void raParametersCopyConstruct(void* storage, const void* source)
     p->normalUnpack.value[0] = s->normalUnpack.value[0];
     p->normalUnpack.value[1] = s->normalUnpack.value[1];
     p->normalUnpack.value[2] = s->normalUnpack.value[2];
+#if !defined(_M_IX86)
+    p->shader = s->shader;               // x86 copies it with value[2] above
+#endif
 }
 
 // sub_10110F70 - the counted texture-holder assignment: release the old, take the new, addRef.
@@ -503,6 +467,9 @@ void raParametersAssign(void* storage, const void* source)
     p->normalUnpack.value[0] = s->normalUnpack.value[0];
     p->normalUnpack.value[1] = s->normalUnpack.value[1];
     p->normalUnpack.value[2] = s->normalUnpack.value[2];
+#if !defined(_M_IX86)
+    p->shader = s->shader;               // x86 copies it with value[2] above
+#endif
 }
 
 inline RaMaterialParameters& params(StaticMeshMaterial* m)
@@ -534,7 +501,7 @@ void raMaterialParametersAssign   (void* storage, const void* source)
 
 // Returns material parameter names populated by the block's one-time constructor tail.
 // Initialization must precede shader binding; an empty registry silently misbinds offsets.
-const vc71::vector_layout& raMaterialParameterNames()
+const std::vector<std::string>& raMaterialParameterNames()
 {
     return ::dice::hfe::geom::g_raParameterNames;
 }
@@ -545,90 +512,13 @@ const vc71::vector_layout& raMaterialParameterNames()
 namespace geom {
 
 
-// Material cache nodes are 0x28 bytes, with an 8-byte key and 16-byte vector value.
-// Use size-relative color/nil offsets; the generic 0x30-byte map node is incompatible.
-
-namespace {
-
-const unsigned int kMaterialMapNodeSize = 0x28;
-
-inline void*& mapNodeLeft  (void* n) { return reinterpret_cast<void**>(n)[0]; }
-inline void*& mapNodeParent(void* n) { return reinterpret_cast<void**>(n)[1]; }
-inline void*& mapNodeRight (void* n) { return reinterpret_cast<void**>(n)[2]; }
-inline unsigned char& mapNodeColor(void* n)
-{ return reinterpret_cast<unsigned char*>(n)[kMaterialMapNodeSize - 4]; }
-inline unsigned char& mapNodeIsNil(void* n)
-{ return reinterpret_cast<unsigned char*>(n)[kMaterialMapNodeSize - 3]; }
-inline vc71::vector_layout& mapNodeVector(void* n)
-{ return *reinterpret_cast<vc71::vector_layout*>(static_cast<char*>(n) + 20); }
-
-// sub_1011B560 plus the four stores its caller makes. Note the `comp` word of the map head is NOT
-// written by either, so it keeps whatever the allocation held - shipped.
-void materialMapConstruct(vc71::map_layout& map)
-{
-    void* const node = ::renddx9abi::engineAlloc(kMaterialMapNodeSize);
-    if (node)
-    {
-        mapNodeLeft(node)   = 0;
-        mapNodeParent(node) = 0;
-        mapNodeRight(node)  = 0;
-        mapNodeColor(node)  = 1;
-        mapNodeIsNil(node)  = 0;
-    }
-    map.head = static_cast<vc71::map_node*>(node);
-    mapNodeIsNil(node)  = 1;
-    mapNodeParent(node) = node;
-    mapNodeLeft(node)   = node;
-    mapNodeRight(node)  = node;
-    map.size = 0;
-}
-
-// sub_1011D9B0 - the recursive subtree destroy: right subtree first, then this node's vector
-// buffer, then the node, then continue down the left link.
-void materialMapDestroySubtree(void* node)
-{
-    while (node && !mapNodeIsNil(node))
-    {
-        materialMapDestroySubtree(mapNodeRight(node));
-        void* const left = mapNodeLeft(node);
-        vc71::vector_layout& v = mapNodeVector(node);
-        if (v.first)
-            ::renddx9abi::engineFree(v.first);
-        v.first = 0;
-        v.last  = 0;
-        v.end   = 0;
-        ::renddx9abi::engineFree(node);
-        node = left;
-    }
-}
-
-// sub_1011E470's erase(begin, end) fast path, which is the only one the destructor takes.
-void materialMapClear(vc71::map_layout& map)
-{
-    if (!map.head)
-        return;
-    materialMapDestroySubtree(mapNodeParent(map.head));
-    mapNodeParent(map.head) = map.head;
-    mapNodeLeft(map.head)   = map.head;
-    mapNodeRight(map.head)  = map.head;
-    map.size = 0;
-}
-
-} // anonymous namespace
-
-
 // StaticMeshMaterial
 
 
-// The vptr is published by the compiler; everything else is the shipped store order.
+// The vptr is published by the compiler, the two vectors (+0x04, +0x14) and the declaration map
+// (+0x1F8, sub_1011B560) are default-constructed empty; everything else is the shipped store order.
 StaticMeshMaterial::StaticMeshMaterial()
 {
-    m_vector04.first = 0;
-    m_vector04.last  = 0;
-    m_vector04.end   = 0;
-    m_vector14.first = 0;
-    m_vector14.last  = 0;
-    m_vector14.end   = 0;
     m_flags24        = 0;
     m_shaderMaterial = 0;
 
@@ -657,20 +547,21 @@ StaticMeshMaterial::StaticMeshMaterial()
     m_vegetationNonTiled    = 0;
     m_dword1F0 = 0;
     m_template = 0;
+}
 
-    materialMapConstruct(m_map1F8);
+StaticMeshMaterial::~StaticMeshMaterial()
+{
+    destroyMembers();
 }
 
 // the destructor body. Order is shipped: the map, then the two vegetation buffers,
-// then the parameter block, then the 4-byte vector, then the vector-of-vectors.
+// then the parameter block, then the 4-byte vector, then the vector-of-vectors. The containers
+// are emptied at their shipped points; their storage goes with their own destructors afterwards.
 
 // The shipped tail (`*(_DWORD *)this = &off_101E2428`) is NOT reproduced - see the file header.
 void StaticMeshMaterial::destroyMembers()
 {
-    materialMapClear(m_map1F8);
-    ::renddx9abi::engineFree(m_map1F8.head);
-    m_map1F8.head = 0;
-    m_map1F8.size = 0;
+    m_map1F8.clear();                                  // sub_1011E470's erase(begin, end)
 
     ::renddx9abi::engineFree(m_vegetationIndices);
     ::renddx9abi::engineFree(m_vegetationVertices);
@@ -681,85 +572,19 @@ void StaticMeshMaterial::destroyMembers()
 
     raParametersDestroy(m_parameters);
 
-    if (m_vector14.first)
-        ::renddx9abi::engineFree(m_vector14.first);
-    m_vector14.first = 0;
-    m_vector14.last  = 0;
-    m_vector14.end   = 0;
-
-    if (m_vector04.first)
-    {
-        // sub_100ED1C0 - free each inner vector's buffer and zero it. The elements are 4-byte PODs,
-        // so there is nothing else to destroy.
-        for (char* cursor = m_vector04.first; cursor != m_vector04.last; cursor += 16)
-        {
-            vc71::vector_layout& inner = *reinterpret_cast<vc71::vector_layout*>(cursor);
-            if (inner.first)
-                ::renddx9abi::engineFree(inner.first);
-            inner.first = 0;
-            inner.last  = 0;
-            inner.end   = 0;
-        }
-        ::renddx9abi::engineFree(m_vector04.first);
-    }
-    m_vector04.first = 0;
-    m_vector04.last  = 0;
-    m_vector04.end   = 0;
+    m_vector14.clear();
+    m_vector04.clear();                                // sub_100ED1C0 on each inner list
 }
-
-namespace {
-
-// sub_1011DAA0/sub_1011C4E0 - the two "copy a POD range into a fresh buffer" helpers behind the
-// vector copy constructors, rendered as one source-level operation.
-void copyPodVector(vc71::vector_layout& dst, const vc71::vector_layout& src, unsigned int stride)
-{
-    const unsigned int bytes = static_cast<unsigned int>(src.last - src.first);
-    dst.first = 0;
-    dst.last  = 0;
-    dst.end   = 0;
-    if (!bytes)
-        return;
-    char* const buffer = static_cast<char*>(::renddx9abi::engineAlloc(bytes));
-    ::memcpy(buffer, src.first, bytes);
-    dst.first = buffer;
-    dst.last  = buffer + bytes;
-    dst.end   = buffer + bytes;
-    (void)stride;
-}
-
-// sub_1011E740 - vector<vector<uint>>'s copy constructor: the outer buffer is raw, but each inner
-// vector is deep-copied.
-void copyVectorOfVectors(vc71::vector_layout& dst, const vc71::vector_layout& src)
-{
-    const unsigned int count =
-        src.first ? static_cast<unsigned int>((src.last - src.first) >> 4) : 0u;
-    dst.first = 0;
-    dst.last  = 0;
-    dst.end   = 0;
-    if (!count)
-        return;
-    char* const buffer = static_cast<char*>(::renddx9abi::engineAlloc(count * 16u));
-    for (unsigned int i = 0; i < count; ++i)
-    {
-        copyPodVector(*reinterpret_cast<vc71::vector_layout*>(buffer + i * 16u),
-                      *reinterpret_cast<const vc71::vector_layout*>(src.first + i * 16u), 4u);
-    }
-    dst.first = buffer;
-    dst.last  = buffer + count * 16u;
-    dst.end   = buffer + count * 16u;
-}
-
-} // anonymous namespace
 
 // the copy constructor.
 
 // Copies shader and vegetation pointers without retaining or duplicating their resources.
 // Copies the two trailing words even though the default constructor leaves them uninitialized.
+// The two vectors are deep copies (sub_1011E740 / sub_1011C4E0).
 StaticMeshMaterial::StaticMeshMaterial(const StaticMeshMaterial& other)
+    : m_vector04(other.m_vector04)
+    , m_vector14(other.m_vector14)
 {
-    copyVectorOfVectors(m_vector04, other.m_vector04);
-    copyPodVector(m_vector14, other.m_vector14, 4u);
-
     m_flags24        = other.m_flags24;
     m_shaderMaterial = other.m_shaderMaterial;
 
@@ -785,12 +610,12 @@ StaticMeshMaterial::StaticMeshMaterial(const StaticMeshMaterial& other)
     m_dword1F0              = other.m_dword1F0;
     m_template              = other.m_template;
 
-    // sub_1011ECC0 - a fresh head node, then the source's nodes are re-inserted. The re-insertion
-    // (sub_1011E320) walks the source in order and copies each {key, vector} pair.
-    materialMapConstruct(m_map1F8);
+    // sub_1011ECC0 - a fresh head node (the default-constructed m_map1F8), then the source's nodes
+    // are re-inserted. The re-insertion (sub_1011E320) walks the source in order and copies each
+    // {key, vector} pair.
     // [FRONTIER] the ordered copy-insert itself. The node's 8-byte key is not identified by any
     // recovered reader in this tranche, so inserting one would mean inventing a comparator.
-    if (other.m_map1F8.head && other.m_map1F8.size != 0)
+    if (!other.m_map1F8.empty())
     {
         RD9_FRONTIER("dice::hfe::geom::StaticMeshMaterial::copyMap "
                      "(sub_1011ECC0 -> sub_1011E320, the 0x28-byte +0x1F8 map's copy-insert)",
@@ -826,39 +651,12 @@ StaticMeshMaterial& StaticMeshMaterial::operator=(const StaticMeshMaterial& othe
 
     raParametersAssign(m_parameters, other.m_parameters);
 
-    for (const char* cursor = other.m_vector04.first;
-         cursor != other.m_vector04.last;
-         cursor += 16)
+    for (std::vector<ElementList>::const_iterator it = other.m_vector04.begin();
+         it != other.m_vector04.end(); ++it)
     {
-        vc71::vector_layout scratch = { 0, 0, 0, 0 };
-        copyPodVector(scratch, *reinterpret_cast<const vc71::vector_layout*>(cursor), 4u);
-
-        // push_back(scratch) - a deep copy of the temporary, then the temporary's buffer is freed.
-        const unsigned int size =
-            m_vector04.first ? static_cast<unsigned int>((m_vector04.last - m_vector04.first) >> 4)
-                             : 0u;
-        const unsigned int capacity =
-            m_vector04.first ? static_cast<unsigned int>((m_vector04.end - m_vector04.first) >> 4)
-                             : 0u;
-        if (!m_vector04.first || size >= capacity)
-        {
-            unsigned int grown = capacity + (capacity >> 1);
-            if (grown < size + 1u)
-                grown = size + 1u;
-            char* const buffer = static_cast<char*>(::renddx9abi::engineAlloc(grown * 16u));
-            if (size)
-                ::memcpy(buffer, m_vector04.first, size * 16u);
-            if (m_vector04.first)
-                ::renddx9abi::engineFree(m_vector04.first);
-            m_vector04.first = buffer;
-            m_vector04.last  = buffer + size * 16u;
-            m_vector04.end   = buffer + grown * 16u;
-        }
-        copyPodVector(*reinterpret_cast<vc71::vector_layout*>(m_vector04.last), scratch, 4u);
-        m_vector04.last += 16;
-
-        if (scratch.first)
-            ::renddx9abi::engineFree(scratch.first);
+        // push_back(scratch) - a deep copy of the temporary, then the temporary is destroyed.
+        const ElementList scratch(*it);
+        m_vector04.push_back(scratch);
     }
     return *this;
 }
@@ -867,7 +665,7 @@ StaticMeshMaterial& StaticMeshMaterial::operator=(const StaticMeshMaterial& othe
 // +0x00  the deleting destructor.
 void* StaticMeshMaterial::destroy(unsigned char flags)
 {
-    destroyMembers();
+    this->~StaticMeshMaterial();
     if ((flags & 1) != 0)
         ::renddx9abi::engineFree(this);
     return this;
@@ -875,51 +673,6 @@ void* StaticMeshMaterial::destroy(unsigned char flags)
 
 // Applies material streams and a cached declaration for the shader's build serial.
 // Missing required streams report the material/shader mismatch.
-namespace {
-
-// The +0x1F8 map's value - what sub_1011EC20 zeroes into a fresh node and applyStreams fills:
-// the declaration the streams need, and which of the material's streams (indices into m_vector04
-// and m_vector14, in the order they were bound) the shader takes.
-struct StreamDeclarationRecord
-{
-    IDirect3DVertexDeclaration9* declaration;   // node +0x10
-    vc71::vector_layout          streams;       // node +0x14  vector<unsigned int>
-};
-
-static_assert(sizeof(StreamDeclarationRecord) == 20, "the 0x28 node carries a 20-byte value");
-
-inline StreamDeclarationRecord& streamRecord(vc71::map_node_u32* node)
-{
-    return *reinterpret_cast<StreamDeclarationRecord*>(node->value);
-}
-
-// sub_100EC310 - vector<unsigned int>::operator= onto the node's vector: an empty source frees,
-// a source that fits is copied over, a larger one reallocates to its exact size.
-void assignUnsignedVector(vc71::vector_layout& dst, const vc71::vector_layout& src)
-{
-    const unsigned int count = src.first ? static_cast<unsigned int>(src.last - src.first) >> 2 : 0u;
-    if (!count)
-    {
-        if (dst.first)
-            ::renddx9abi::engineFree(dst.first);
-        dst.first = 0;
-        dst.last  = 0;
-        dst.end   = 0;
-        return;
-    }
-    const unsigned int capacity = dst.first ? static_cast<unsigned int>(dst.end - dst.first) >> 2 : 0u;
-    if (count > capacity)
-    {
-        if (dst.first)
-            ::renddx9abi::engineFree(dst.first);
-        dst.first = static_cast<char*>(::renddx9abi::engineAlloc(count * 4u));
-        dst.end   = dst.first + count * 4u;
-    }
-    ::memcpy(dst.first, src.first, count * 4u);
-    dst.last = dst.first + count * 4u;
-}
-
-} // anonymous namespace
 
 // Binds the declaration, material streams, and template index buffer for the shader.
 // Caches bindings by shader build serial. A cache miss with missing elements returns
@@ -930,24 +683,22 @@ bool StaticMeshMaterial::applyStreams(void* shaderState)
     Ra::RaShader* const shader = static_cast<Ra::RaShader*>(shaderState);
     const unsigned int key = static_cast<unsigned int>(shader->m_buildSerial);        // +0x174
 
-    vc71::map_node_u32* node = vc71::mapFindU32(m_map1F8, key);
-    if (!node)
+    StreamDeclarationMap::iterator node = m_map1F8.find(key);
+    if (node == m_map1F8.end())
     {
         Ra::RaStreamRequirements* const required =
             Ra::raStreamRequirementsCreate(shader->m_requiredVertexElements);         // sub_10049330 + sub_1004A0F0
         Ra::RaDeclarationBuilder builder;
         Ra::raDeclarationBuilderConstruct(builder);
-        vc71::vector_layout streamIndices = { 0, 0, 0, 0 };
+        std::vector<unsigned int> streamIndices;
 
-        const unsigned int streamCount =
-            m_vector04.first ? static_cast<unsigned int>(m_vector04.last - m_vector04.first) >> 4 : 0u;
+        const unsigned int streamCount = static_cast<unsigned int>(m_vector04.size());
         for (unsigned int i = 0; i < streamCount; ++i)
         {
-            const vc71::vector_layout& descriptors =
-                reinterpret_cast<const vc71::vector_layout*>(m_vector04.first)[i];
+            const ElementList& descriptors = m_vector04[i];
             if (Ra::raStreamRequirementsConsume(required, descriptors))
             {
-                vc71::vectorPushBackIn(streamIndices, sizeof(unsigned int), &i);
+                streamIndices.push_back(i);
                 Ra::raDeclarationBuilderAddStream(builder, descriptors);
             }
         }
@@ -956,10 +707,12 @@ bool StaticMeshMaterial::applyStreams(void* shaderState)
         IDirect3DVertexDeclaration9* const declaration = Ra::raVertexDeclarationCached(
             Ra::raDeclarationBuilderFinish(builder), device);
 
-        vc71::map_node_u32* const inserted = vc71::mapInsertU32(m_map1F8, key);
-        streamRecord(inserted).declaration = declaration;
-        assignUnsignedVector(streamRecord(inserted).streams, streamIndices);
-        node = vc71::mapFindU32(m_map1F8, key);
+        // operator[] (a zeroed value on a fresh node, sub_1011EC20), then the vector assignment
+        // (sub_100EC310), then the find again.
+        StaticMeshStreamDeclaration& inserted = m_map1F8[key];
+        inserted.declaration = declaration;
+        inserted.streams = streamIndices;
+        node = m_map1F8.find(key);
 
         const bool starving = Ra::raStreamRequirementsStarving(required);
         if (starving)
@@ -969,22 +722,18 @@ bool StaticMeshMaterial::applyStreams(void* shaderState)
             ::renddx9abi::logf("StaticMeshTemplate.cpp:202 Starving streams in the shader %s, %s",
                                shader->m_name.c_str(), missing);
         }
-        if (streamIndices.first)
-            ::renddx9abi::engineFree(streamIndices.first);
         Ra::raDeclarationBuilderDestroy(builder);
         Ra::raStreamRequirementsDestroy(required);
         if (starving)
             return false;
     }
 
-    StreamDeclarationRecord& record = streamRecord(node);
+    const StaticMeshStreamDeclaration& record = node->second;
     ::dice::hfe::dx9rend::stateManagerSetVertexDeclaration(record.declaration);      // +0x5C
-    const unsigned int* const indices = reinterpret_cast<const unsigned int*>(record.streams.first);
-    const unsigned int count =
-        record.streams.first ? static_cast<unsigned int>(record.streams.last - record.streams.first) >> 2 : 0u;
+    const unsigned int count = static_cast<unsigned int>(record.streams.size());
     for (unsigned int i = 0; i < count; ++i)
     {
-        void* const wrapper = reinterpret_cast<void**>(m_vector14.first)[indices[i]];
+        void* const wrapper = m_vector14[record.streams[i]];
         ::dice::hfe::dx9rend::vertexBufferBindStream(wrapper, i);                    // +0x58
     }
     ::dice::hfe::dx9rend::indexBufferBind(m_template->m_indexBuffer);                // +0x54
@@ -1000,203 +749,35 @@ int StaticMeshMaterial::slot_0x1C() const         { return 0; }
 int StaticMeshMaterial::getIndexStart() const     { return static_cast<int>(m_indexStart); }
 
 
-// Resizes nested material storage on the engine heap.
-// Default fill values are constructed locally; callers supply only the requested count.
-
-void staticMeshMaterialsResize(vc71::vector_layout& materials, unsigned int count)
-{
-    const unsigned int size =
-        materials.first ? static_cast<unsigned int>((materials.last - materials.first) / 516) : 0u;
-
-    if (size >= count)
-    {
-        // Shrink: destroy the tail through slot 0 with flags 0, then retract `last`.
-        if (materials.first && count < size)
-        {
-            for (char* cursor = materials.first + 516 * count;
-                 cursor != materials.last;
-                 cursor += 516)
-            {
-                reinterpret_cast<StaticMeshMaterial*>(cursor)->destroy(0);
-            }
-            materials.last = materials.first + 516 * count;
-        }
-        return;
-    }
-
-    const unsigned int wanted = count - size;
-    const unsigned int capacity =
-        materials.first ? static_cast<unsigned int>((materials.end - materials.first) / 516) : 0u;
-
-    if (capacity < size + wanted)
-    {
-        unsigned int grown = capacity + (capacity >> 1);
-        if (grown < size + wanted)
-            grown = size + wanted;
-        char* const buffer = static_cast<char*>(::renddx9abi::engineAlloc(grown * 516u));
-        for (unsigned int i = 0; i < size; ++i)
-        {
-            new (buffer + i * 516u)
-                StaticMeshMaterial(*reinterpret_cast<StaticMeshMaterial*>(materials.first + i * 516u));
-            reinterpret_cast<StaticMeshMaterial*>(materials.first + i * 516u)->destroy(0);
-        }
-        if (materials.first)
-            ::renddx9abi::engineFree(materials.first);
-        materials.first = buffer;
-        materials.last  = buffer + size * 516u;
-        materials.end   = buffer + grown * 516u;
-    }
-
-    for (unsigned int i = 0; i < wanted; ++i)
-    {
-        new (materials.last) StaticMeshMaterial();
-        materials.last += 516;
-    }
-}
-
-namespace {
-
-// Resizes a vector of 16-byte vector headers; destroyElement releases removed contents.
-// [CHOSEN, not recovered] Growth transfers inner ownership rather than deep-copying it.
-// Current callers size from empty, where that allocation difference is unobservable.
-void resizeVectorOfVectors(vc71::vector_layout& v, unsigned int count,
-                           void (*destroyElement)(vc71::vector_layout&))
-{
-    const unsigned int size = v.first ? static_cast<unsigned int>((v.last - v.first) >> 4) : 0u;
-
-    if (size >= count)
-    {
-        if (v.first && count < size)
-        {
-            for (char* cursor = v.first + 16u * count; cursor != v.last; cursor += 16)
-                destroyElement(*reinterpret_cast<vc71::vector_layout*>(cursor));
-            v.last = v.first + 16u * count;
-        }
-        return;
-    }
-
-    const unsigned int wanted   = count - size;
-    const unsigned int capacity = v.first ? static_cast<unsigned int>((v.end - v.first) >> 4) : 0u;
-
-    if (capacity < size + wanted)
-    {
-        unsigned int grown = capacity + (capacity >> 1);
-        if (grown < size + wanted)
-            grown = size + wanted;
-        char* const buffer = static_cast<char*>(::renddx9abi::engineAlloc(grown * 16u));
-        if (size)
-            ::memcpy(buffer, v.first, size * 16u);     // the moved-from heads are not destroyed
-        if (v.first)
-            ::renddx9abi::engineFree(v.first);
-        v.first = buffer;
-        v.last  = buffer + size * 16u;
-        v.end   = buffer + grown * 16u;
-    }
-
-    for (unsigned int i = 0; i < wanted; ++i)
-    {
-        vc71::vector_layout* const fresh = reinterpret_cast<vc71::vector_layout*>(v.last);
-        fresh->alloc = 0;
-        fresh->first = 0;
-        fresh->last  = 0;
-        fresh->end   = 0;
-        v.last += 16;
-    }
-}
-
-void destroyMaterialVector(vc71::vector_layout& materials)
-{
-    if (materials.first)
-    {
-        for (char* cursor = materials.first; cursor != materials.last; cursor += 516)
-            reinterpret_cast<StaticMeshMaterial*>(cursor)->destroy(0);
-        ::renddx9abi::engineFree(materials.first);
-    }
-    materials.first = 0;
-    materials.last  = 0;
-    materials.end   = 0;
-}
-
-void destroyLodVector(vc71::vector_layout& lods)
-{
-    if (lods.first)
-    {
-        staticMeshMaterialsDestroyLods(reinterpret_cast<unsigned char*>(lods.first),
-                                       reinterpret_cast<unsigned char*>(lods.last));
-        ::renddx9abi::engineFree(lods.first);
-    }
-    lods.first = 0;
-    lods.last  = 0;
-    lods.end   = 0;
-}
-
-} // anonymous namespace
-
-void staticMeshMaterialsResizeLods(vc71::vector_layout& lods, unsigned int count)
-{
-    resizeVectorOfVectors(lods, count, &destroyMaterialVector);
-}
-
-void staticMeshMaterialsResizeGeoms(vc71::vector_layout& geoms, unsigned int count)
-{
-    resizeVectorOfVectors(geoms, count, &destroyLodVector);
-}
-
-// for every vector<StaticMeshMaterial> in [first, last): destroy each element through
-// slot 0 with flags 0, free the buffer, and zero the three words.
-void staticMeshMaterialsDestroyLods(unsigned char* first, unsigned char* last)
-{
-    for (unsigned char* cursor = first; cursor != last; cursor += 16)
-        destroyMaterialVector(*reinterpret_cast<vc71::vector_layout*>(cursor));
-}
-
-// the same, one level up.
-void staticMeshMaterialsDestroyGeoms(unsigned char* first, unsigned char* last)
-{
-    for (unsigned char* cursor = first; cursor != last; cursor += 16)
-        destroyLodVector(*reinterpret_cast<vc71::vector_layout*>(cursor));
-}
-
-
 // The material-container walk every StaticMeshTemplate body below performs:
-//     m_materials.first   -> vector_layout[geom]
-//     [geom].first        -> vector_layout[lod]
-//     [lod].first         -> StaticMeshMaterial[material], 516 bytes each
+//     m_materials[geom][lod][material], unguarded, as shipped.
 
 namespace {
 
-inline vc71::vector_layout* lodVectors(StaticMeshTemplate* t, unsigned int geom)
+inline StaticMeshMaterialList& materialVector(StaticMeshTemplate* t, unsigned int geom,
+                                              unsigned int lod)
 {
-    return reinterpret_cast<vc71::vector_layout*>(
-        reinterpret_cast<vc71::vector_layout*>(t->m_materials.first)[geom].first);
+    return t->m_materials.data()[geom].data()[lod];
 }
 
-inline vc71::vector_layout& materialVector(StaticMeshTemplate* t, unsigned int geom,
-                                           unsigned int lod)
+inline unsigned int materialCount(const StaticMeshMaterialList& v)
 {
-    return lodVectors(t, geom)[lod];
+    return static_cast<unsigned int>(v.size());
 }
 
-inline unsigned int materialCount(const vc71::vector_layout& v)
+inline StaticMeshMaterial* materialAt(const StaticMeshMaterialList& v, unsigned int i)
 {
-    return v.first ? static_cast<unsigned int>((v.last - v.first) / 516) : 0u;
-}
-
-inline StaticMeshMaterial* materialAt(const vc71::vector_layout& v, unsigned int i)
-{
-    return reinterpret_cast<StaticMeshMaterial*>(v.first + 516u * i);
+    return const_cast<StaticMeshMaterial*>(v.data()) + i;
 }
 
 inline unsigned int geomCount(StaticMeshTemplate* t)
 {
-    return t->m_lodCounts.first
-               ? static_cast<unsigned int>((t->m_lodCounts.last - t->m_lodCounts.first) >> 2)
-               : 0u;
+    return static_cast<unsigned int>(t->m_lodCounts.size());
 }
 
 inline unsigned int lodCount(StaticMeshTemplate* t, unsigned int geom)
 {
-    return reinterpret_cast<const unsigned int*>(t->m_lodCounts.first)[geom];
+    return static_cast<unsigned int>(t->m_lodCounts.data()[geom]);
 }
 
 } // anonymous namespace
@@ -1206,7 +787,7 @@ inline unsigned int lodCount(StaticMeshTemplate* t, unsigned int geom)
 
 int StaticMeshTemplate::getPrimitiveCount(int geom, int lod, int material)
 {
-    const vc71::vector_layout& materials =
+    const StaticMeshMaterialList& materials =
         materialVector(this, static_cast<unsigned int>(geom), static_cast<unsigned int>(lod));
     if (material != -1)
         return materialAt(materials, static_cast<unsigned int>(material))->getPrimitiveCount();
@@ -1236,7 +817,7 @@ int StaticMeshTemplate::getVertexCount(int geom, int lod, int material)
         return total;
     }
 
-    const vc71::vector_layout& materials =
+    const StaticMeshMaterialList& materials =
         materialVector(this, static_cast<unsigned int>(geom), static_cast<unsigned int>(lod));
     if (material != -1)
         return materialAt(materials, static_cast<unsigned int>(material))->getVertexCount();
@@ -1265,8 +846,7 @@ unsigned int StaticMeshTemplate::getMemoryUsage(int mask)
 
     if ((mask & 1) != 0)
     {
-        // +0x20 of the wrapper is D3DVERTEXBUFFER_DESC::Size - the desc occupies +0x10..+0x27 in
-        // BufferManager.cpp's VertexBuffer record, so Size is its fifth dword.
+        // The wrapper's D3DVERTEXBUFFER_DESC::Size (retail wrapper +0x20).
         void* const streams[7] =
         {
             m_vertexStream, m_tangentStream,
@@ -1275,8 +855,7 @@ unsigned int StaticMeshTemplate::getMemoryUsage(int mask)
         for (int i = 0; i < 7; ++i)
         {
             if (streams[i])
-                total += *reinterpret_cast<const unsigned int*>(
-                    static_cast<const unsigned char*>(streams[i]) + 32);
+                total += ::dice::hfe::dx9rend::vertexBufferByteSize(streams[i]);
         }
     }
 
@@ -1289,19 +868,16 @@ unsigned int StaticMeshTemplate::getMemoryUsage(int mask)
     if ((mask & 4) != 0)
     {
         std::set<const void*> unique;
-        const unsigned int geoms =
-            m_geoms.first ? static_cast<unsigned int>((m_geoms.last - m_geoms.first) >> 5) : 0u;
+        const unsigned int geoms = static_cast<unsigned int>(m_geoms.size());
         for (unsigned int g = 0; g < geoms; ++g)
         {
-            const StaticMeshGeom& geomRecord =
-                reinterpret_cast<const StaticMeshGeom*>(m_geoms.first)[g];
-            if (!geomRecord.lods.first)
+            const StaticMeshGeom& geomRecord = m_geoms[g];
+            if (geomRecord.lods.empty())
                 continue;
-            const unsigned int lods =
-                static_cast<unsigned int>(geomRecord.lods.last - geomRecord.lods.first) / 104u;
+            const unsigned int lods = static_cast<unsigned int>(geomRecord.lods.size());
             for (unsigned int l = 0; l < lods; ++l)
             {
-                const vc71::vector_layout& materials = materialVector(this, g, l);
+                const StaticMeshMaterialList& materials = materialVector(this, g, l);
                 const unsigned int count = materialCount(materials);
                 for (unsigned int m = 0; m < count; ++m)
                 {
@@ -1349,7 +925,7 @@ void mergeShiftStarts(StaticMeshTemplate* t, unsigned int fromGeom, unsigned int
         unsigned int l = (g != fromGeom) ? 0u : fromLod;
         for (; l < lods; ++l)
         {
-            const vc71::vector_layout& materials = materialVector(t, g, l);
+            const StaticMeshMaterialList& materials = materialVector(t, g, l);
             const unsigned int count = materialCount(materials);
             const unsigned int firstMaterial =
                 (g == fromGeom && l == fromLod) ? fromMaterial : 0u;
@@ -1369,7 +945,7 @@ void mergeShiftStarts(StaticMeshTemplate* t, unsigned int fromGeom, unsigned int
 void mergeRotateGeometry(StaticMeshTemplate* t, unsigned int geom, unsigned int lod,
                          unsigned int to, unsigned int from)
 {
-    const vc71::vector_layout& materials = materialVector(t, geom, lod);
+    const StaticMeshMaterialList& materials = materialVector(t, geom, lod);
     const StaticMeshMaterial* const src = materialAt(materials, from);
     const StaticMeshMaterial* const dst = materialAt(materials, to);
 
@@ -1419,13 +995,13 @@ void mergeRotateGeometry(StaticMeshTemplate* t, unsigned int geom, unsigned int 
 }
 
 // sub_10119950 - move material `from` to slot `to` in the record vector, re-basing every start on
-// the way. The shipped body keeps a full 516-byte copy of the moved material on its own stack and
+// the way. The shipped body keeps a full copy of the moved material on its own stack and
 // re-bases that copy's two start fields before re-inserting it - `v10`/`v11` in the decompiler's
 // frame are the scratch material's +0x180 / +0x184, not arguments to the shift.
 void mergeMoveMaterial(StaticMeshTemplate* t, unsigned int geom, unsigned int lod,
                        unsigned int to, unsigned int from)
 {
-    vc71::vector_layout& materials = materialVector(t, geom, lod);
+    StaticMeshMaterialList& materials = materialVector(t, geom, lod);
 
     StaticMeshMaterial scratch(*materialAt(materials, from));
     const StaticMeshMaterial* const previous = materialAt(materials, to - 1);
@@ -1436,57 +1012,22 @@ void mergeMoveMaterial(StaticMeshTemplate* t, unsigned int geom, unsigned int lo
                      -static_cast<int>(scratch.m_vertexCount));
 
     // sub_1011F810 - erase(first + from): assign the tail down one slot, destroy the duplicate at
-    // the end, retract `last`.
-    for (char* k = materials.first + 516u * from + 516; k != materials.last; k += 516)
-        *reinterpret_cast<StaticMeshMaterial*>(k - 516) =
-            *reinterpret_cast<const StaticMeshMaterial*>(k);
-    reinterpret_cast<StaticMeshMaterial*>(materials.last - 516)->destroy(0);
-    materials.last -= 516;
+    // the end. Storage is kept, so `previous` stays valid.
+    materials.erase(materials.begin() + from);
 
     // The moved copy takes the slot immediately after `to - 1`.
     scratch.m_vertexStart = previous->m_vertexStart + previous->m_vertexCount;
     scratch.m_indexStart  = previous->m_indexStart + 3u * previous->m_primitiveCount;
 
     // sub_101207D0 -> sub_10120360 - insert(first + to, scratch).
-    {
-        const unsigned int size =
-            static_cast<unsigned int>((materials.last - materials.first) / 516);
-        const unsigned int capacity =
-            materials.first
-                ? static_cast<unsigned int>((materials.end - materials.first) / 516)
-                : 0u;
-        if (capacity < size + 1u)
-        {
-            unsigned int grown = capacity + (capacity >> 1);
-            if (grown < size + 1u)
-                grown = size + 1u;
-            char* const buffer = static_cast<char*>(::renddx9abi::engineAlloc(grown * 516u));
-            for (unsigned int k = 0; k < size; ++k)
-            {
-                new (buffer + k * 516u) StaticMeshMaterial(
-                    *reinterpret_cast<StaticMeshMaterial*>(materials.first + k * 516u));
-                reinterpret_cast<StaticMeshMaterial*>(materials.first + k * 516u)->destroy(0);
-            }
-            if (materials.first)
-                ::renddx9abi::engineFree(materials.first);
-            materials.first = buffer;
-            materials.last  = buffer + size * 516u;
-            materials.end   = buffer + grown * 516u;
-        }
-        new (materials.last) StaticMeshMaterial();
-        materials.last += 516;
-        for (char* k = materials.last - 516; k != materials.first + 516u * to; k -= 516)
-            *reinterpret_cast<StaticMeshMaterial*>(k) =
-                *reinterpret_cast<const StaticMeshMaterial*>(k - 516);
-        *reinterpret_cast<StaticMeshMaterial*>(materials.first + 516u * to) = scratch;
-    }
+    materials.insert(materials.begin() + to, scratch);
 
     // ... and everything after it slides forward again by the same run.
     mergeShiftStarts(t, geom, lod, to + 1u,
                      static_cast<int>(scratch.m_primitiveCount),
                      static_cast<int>(scratch.m_vertexCount));
 
-    scratch.destroy(0);
+    // The scratch copy is destroyed as the function returns.
 }
 
 // sub_10119A80 - fold material `*j` into material `i`.
@@ -1500,7 +1041,7 @@ bool mergeFold(StaticMeshTemplate* t, unsigned int geom, unsigned int lod,
         *j = i + 1u;
     }
 
-    const vc71::vector_layout& materials = materialVector(t, geom, lod);
+    const StaticMeshMaterialList& materials = materialVector(t, geom, lod);
     StaticMeshMaterial* const dst = materialAt(materials, i);
     StaticMeshMaterial* const src = materialAt(materials, *j);
 
@@ -1526,19 +1067,20 @@ void StaticMeshTemplate::mergeMaterials()
         const unsigned int lods = lodCount(this, geom);
         for (unsigned int lod = 0; lod < lods; ++lod)
         {
-            vc71::vector_layout& materials = materialVector(this, geom, lod);
+            StaticMeshMaterialList& materials = materialVector(this, geom, lod);
             const unsigned int mask = staticMeshQualityMask();
 
+            // The end is re-read on every step: folding erases from the vector, never growing it,
+            // so the cursors stay valid.
             unsigned int i = 0;
-            for (char* a = materials.first; a != materials.last; a += 516, ++i)
+            for (StaticMeshMaterial* a = materials.data();
+                 a != materials.data() + materials.size(); ++a, ++i)
             {
                 unsigned int j = i + 1;
-                for (char* b = a + 516; b != materials.last; b += 516, ++j)
+                for (StaticMeshMaterial* b = a + 1; b != materials.data() + materials.size(); ++b, ++j)
                 {
-                    const StaticMeshMaterial* const left  =
-                        reinterpret_cast<const StaticMeshMaterial*>(a);
-                    const StaticMeshMaterial* const right =
-                        reinterpret_cast<const StaticMeshMaterial*>(b);
+                    const StaticMeshMaterial* const left  = a;
+                    const StaticMeshMaterial* const right = b;
                     const ShaderMaterial* const ls = left->m_shaderMaterial;
                     const ShaderMaterial* const rs = right->m_shaderMaterial;
 
@@ -1559,11 +1101,7 @@ void StaticMeshTemplate::mergeMaterials()
                         StaticMeshMaterial* const dead = materialAt(materials, j);
                         if (dead->m_shaderMaterial)
                             shaderMaterialRelease(dead->m_shaderMaterial);
-                        for (char* k = materials.first + 516u * j + 516; k != materials.last; k += 516)
-                            *reinterpret_cast<StaticMeshMaterial*>(k - 516) =
-                                *reinterpret_cast<const StaticMeshMaterial*>(k);
-                        reinterpret_cast<StaticMeshMaterial*>(materials.last - 516)->destroy(0);
-                        materials.last -= 516;
+                        materials.erase(materials.begin() + j);
 
                         // Shipped: the inner cursor goes back to `i`, and the ++ below moves it to
                         // the slot the erase just filled.
@@ -1636,14 +1174,12 @@ const float kMinCompressExtent = 0.00000011920929f;
 
 void StaticMeshTemplate::buildVertexBuffers()
 {
-    // the declaration wrapper's D3D object sits at wrapper+8, and GetDeclaration is
-    // slot +0x10 of IDirect3DVertexDeclaration9. BufferManager.cpp keeps its wrapper private, so
-    // the field is reached by documented raw offset.
+    // the declaration wrapper's D3D object (retail wrapper +0x08), and GetDeclaration is
+    // slot +0x10 of IDirect3DVertexDeclaration9.
     D3DVERTEXELEMENT9 elements[256];
     {
         IDirect3DVertexDeclaration9* const decl =
-            *reinterpret_cast<IDirect3DVertexDeclaration9* const*>(
-                static_cast<const unsigned char*>(m_vertexDeclaration) + 8);
+            ::dice::hfe::dx9rend::vertexDeclarationD3D(m_vertexDeclaration);
         decl->GetDeclaration(elements, &m_declElementCount);
     }
 
@@ -1719,7 +1255,7 @@ void StaticMeshTemplate::buildVertexBuffers()
 
     // create the buffers
     {
-        vc71::string name("StaticMesh : ");
+        std::string name("StaticMesh : ");
         name += m_name;
         m_vertexStream = ::dice::hfe::dx9rend::createVertexBuffer(
             ::dice::hfe::dx9rend::g_bufferManager, m_vertexCount, stream0Stride, name, 8);
@@ -1738,7 +1274,7 @@ void StaticMeshTemplate::buildVertexBuffers()
             if (i >= gated ||
                 (kUvGateMasks[i] & m_shaderFlagsAll) == (kUvGateMasks[i] & m_shaderFlagsUsed))
             {
-                vc71::string name("StaticMesh : ");
+                std::string name("StaticMesh : ");
                 name += m_name;
                 m_uvStreams[i] = ::dice::hfe::dx9rend::createVertexBuffer(
                     ::dice::hfe::dx9rend::g_bufferManager, m_vertexCount,
@@ -1748,7 +1284,7 @@ void StaticMeshTemplate::buildVertexBuffers()
     }
 
     {
-        vc71::string name("StaticMesh : ");
+        std::string name("StaticMesh : ");
         name += m_name;
         m_tangentStream = ::dice::hfe::dx9rend::createVertexBuffer(
             ::dice::hfe::dx9rend::g_bufferManager, m_vertexCount,
@@ -1775,14 +1311,11 @@ void StaticMeshTemplate::buildVertexBuffers()
         // Vegetation processing visits only geometry 0.
         if (m_isVegetation)
         {
-            const vc71::vector_layout& geom0 =
-                *reinterpret_cast<const vc71::vector_layout*>(m_materials.first);
-            const unsigned int lods =
-                geom0.first ? static_cast<unsigned int>((geom0.last - geom0.first) >> 4) : 0u;
+            const StaticMeshLodMaterialLists& geom0 = *m_materials.data();   // unguarded, as shipped
+            const unsigned int lods = static_cast<unsigned int>(geom0.size());
             for (unsigned int l = 0; l < lods; ++l)
             {
-                const vc71::vector_layout& materials =
-                    reinterpret_cast<const vc71::vector_layout*>(geom0.first)[l];
+                const StaticMeshMaterialList& materials = geom0.data()[l];
                 const unsigned int count = materialCount(materials);
                 for (unsigned int m = 0; m < count; ++m)
                 {
@@ -1836,12 +1369,10 @@ void StaticMeshTemplate::buildVertexBuffers()
             // guard; kept.
             if (m_isVegetation)
             {
-                const unsigned int lods2 =
-                    geom0.first ? static_cast<unsigned int>((geom0.last - geom0.first) >> 4) : 0u;
+                const unsigned int lods2 = static_cast<unsigned int>(geom0.size());
                 for (unsigned int l = 0; l < lods2; ++l)
                 {
-                    const vc71::vector_layout& materials =
-                        reinterpret_cast<const vc71::vector_layout*>(geom0.first)[l];
+                    const StaticMeshMaterialList& materials = geom0.data()[l];
                     const unsigned int count = materialCount(materials);
                     for (unsigned int m = 0; m < count; ++m)
                     {
@@ -1997,15 +1528,12 @@ void StaticMeshTemplate::buildIndexBuffer()
 {
     if (m_isVegetation)
     {
-        const vc71::vector_layout& geom0 =
-            *reinterpret_cast<const vc71::vector_layout*>(m_materials.first);
+        const StaticMeshLodMaterialLists& geom0 = *m_materials.data();   // unguarded, as shipped
         int indexCount = 0;      // var_10: the shipped slot is NOT initialised - see the note above
         unsigned int lod = 0;
-        while (geom0.first &&
-               lod < static_cast<unsigned int>((geom0.last - geom0.first) >> 4))
+        while (lod < static_cast<unsigned int>(geom0.size()))
         {
-            const vc71::vector_layout& materials =
-                reinterpret_cast<const vc71::vector_layout*>(geom0.first)[lod];
+            const StaticMeshMaterialList& materials = geom0.data()[lod];
             const unsigned int count = materialCount(materials);
             for (unsigned int i = 0; i < count; ++i)
             {
@@ -2058,83 +1586,9 @@ void raNormalUnpackConstants(float out[4])
 }
 
 
-// The two push_backs setupTechnique uses.  Both are the ordinary MSVC vector growth this file
-// already reproduces five times over (see the block above resizeMaterialVector): grow to 1.5x, or
-// to exactly what is needed when that is larger, with sub_1005F320 / sub_1005F360 as the allocator.
-
-// sub_1004D3E0 (Ra) and sub_1008A9B0 (here) are the same one-dword push written twice in two
-// translation units; sub_1004CD70 is the same thing again with its capacity test inlined at the
-// call site.  One body serves all three.
-
-void pointerVectorPush(vc71::vector_layout& v, const void* value)
-{
-    const unsigned int size =
-        v.first ? static_cast<unsigned int>((v.last - v.first) >> 2) : 0u;
-    const unsigned int capacity =
-        v.first ? static_cast<unsigned int>((v.end - v.first) >> 2) : 0u;
-
-    if (size == capacity)
-    {
-        unsigned int grown = capacity + (capacity >> 1);
-        if (grown < size + 1u)
-            grown = size + 1u;
-        char* const buffer = static_cast<char*>(::renddx9abi::engineAlloc(grown * 4u));
-        if (size)
-            ::memcpy(buffer, v.first, size * 4u);
-        if (v.first)
-            ::renddx9abi::engineFree(v.first);
-        v.first = buffer;
-        v.last  = buffer + size * 4u;
-        v.end   = buffer + grown * 4u;
-    }
-
-    *reinterpret_cast<const void**>(v.last) = value;
-    v.last += 4;
-}
-
-// sub_1011E7E0 - push_back on the vector OF vectors at material+0x04.  The element is
-// copy-constructed (sub_1011D490), which is why every caller below still owns, and frees, the local
-// it passed.
-void elementListPush(vc71::vector_layout& v, const vc71::vector_layout& list)
-{
-    const unsigned int size =
-        v.first ? static_cast<unsigned int>((v.last - v.first) >> 4) : 0u;
-    const unsigned int capacity =
-        v.first ? static_cast<unsigned int>((v.end - v.first) >> 4) : 0u;
-
-    if (size == capacity)
-    {
-        unsigned int grown = capacity + (capacity >> 1);
-        if (grown < size + 1u)
-            grown = size + 1u;
-        char* const buffer = static_cast<char*>(::renddx9abi::engineAlloc(grown * 16u));
-        if (size)
-            ::memcpy(buffer, v.first, size * 16u);
-        if (v.first)
-            ::renddx9abi::engineFree(v.first);
-        v.first = buffer;
-        v.last  = buffer + size * 16u;
-        v.end   = buffer + grown * 16u;
-    }
-
-    vc71::vector_layout* const fresh = reinterpret_cast<vc71::vector_layout*>(v.last);
-    fresh->alloc = 0;
-    fresh->first = 0;
-    fresh->last  = 0;
-    fresh->end   = 0;
-
-    const unsigned int bytes = static_cast<unsigned int>(list.last - list.first);
-    if (bytes)
-    {
-        char* const copy = static_cast<char*>(::renddx9abi::engineAlloc(bytes));
-        ::memcpy(copy, list.first, bytes);
-        fresh->first = copy;
-        fresh->last  = copy + bytes;
-        fresh->end   = copy + bytes;
-    }
-
-    v.last += 16;
-}
+// The pushes setupTechnique makes: sub_1004D3E0 (Ra) / sub_1008A9B0 (here) / sub_1004CD70 for one
+// pointer, and sub_1011E7E0 for one element list on the vector OF lists at material +0x04. That
+// element is copy-constructed (sub_1011D490), which is why every local list below outlives its push.
 
 // Builds parallel vertex-element lists and vertex-buffer references for a material.
 // Each element list is copied; buffer entries hold wrapper values, not addresses of slots.
@@ -2155,63 +1609,57 @@ void staticMeshMaterialSetupTechnique(StaticMeshMaterial* material)
     const bool compressed = tmpl->getCompressVertexData();
 
     // the base stream: position, normal, base uv.  Always.
-    vc71::vector_layout baseElements = { 0, 0, 0, 0 };
+    StaticMeshMaterial::ElementList baseElements;
     if (compressed)
     {
-        pointerVectorPush(baseElements, &Ra::g_desc_1023ED9C);      // Vtx_PositionPacked
-        pointerVectorPush(baseElements, &Ra::g_desc_1023EE14);      // Vtx_NormalPacked8
-        pointerVectorPush(baseElements, &Ra::g_desc_1023EDEC);      // Vtx_TBasePacked
+        baseElements.push_back(&Ra::g_desc_1023ED9C);      // Vtx_PositionPacked
+        baseElements.push_back(&Ra::g_desc_1023EE14);      // Vtx_NormalPacked8
+        baseElements.push_back(&Ra::g_desc_1023EDEC);      // Vtx_TBasePacked
     }
     else
     {
-        pointerVectorPush(baseElements, &Ra::g_desc_1023EF04);      // Vtx_Position
-        pointerVectorPush(baseElements, &Ra::g_desc_1023EF7C);      // Vtx_Normal
-        pointerVectorPush(baseElements, &Ra::g_desc_1023ED4C);      // Vtx_TBase
+        baseElements.push_back(&Ra::g_desc_1023EF04);      // Vtx_Position
+        baseElements.push_back(&Ra::g_desc_1023EF7C);      // Vtx_Normal
+        baseElements.push_back(&Ra::g_desc_1023ED4C);      // Vtx_TBase
     }
-    elementListPush(material->m_vector04, baseElements);
-    pointerVectorPush(material->m_vector14, tmpl->m_vertexStream);         // +0x154
+    material->m_vector04.push_back(baseElements);
+    material->m_vector14.push_back(tmpl->m_vertexStream);                 // +0x154
 
     // the detail uv set, on quality bit 2
     if ((quality & 0x004u) != 0)
     {
-        vc71::vector_layout detail = { 0, 0, 0, 0 };
-        pointerVectorPush(detail, compressed ? &Ra::g_desc_1023EE8C     // Vtx_TDetailPacked
-                                             : &Ra::g_desc_1023F01C);   // Vtx_TDetail
-        elementListPush(material->m_vector04, detail);
-        pointerVectorPush(material->m_vector14, tmpl->m_uvStreams[tmpl->m_streamIndexA]);
-        if (detail.first)
-            ::renddx9abi::engineFree(detail.first);
+        StaticMeshMaterial::ElementList detail;
+        detail.push_back(compressed ? &Ra::g_desc_1023EE8C     // Vtx_TDetailPacked
+                                    : &Ra::g_desc_1023F01C);   // Vtx_TDetail
+        material->m_vector04.push_back(detail);
+        material->m_vector14.push_back(tmpl->m_uvStreams[tmpl->m_streamIndexA]);
     }
 
     // the tangent stream.  Always.
-    vc71::vector_layout tangentElements = { 0, 0, 0, 0 };
-    pointerVectorPush(tangentElements, compressed ? &Ra::g_desc_1023EEB4   // Vtx_TangentSpacePacked8
-                                                  : &Ra::g_desc_1023EFF4); // Vtx_TangentSpace
-    elementListPush(material->m_vector04, tangentElements);
-    pointerVectorPush(material->m_vector14, tmpl->m_tangentStream);       // +0x16C
+    StaticMeshMaterial::ElementList tangentElements;
+    tangentElements.push_back(compressed ? &Ra::g_desc_1023EEB4   // Vtx_TangentSpacePacked8
+                                         : &Ra::g_desc_1023EFF4); // Vtx_TangentSpace
+    material->m_vector04.push_back(tangentElements);
+    material->m_vector14.push_back(tmpl->m_tangentStream);               // +0x16C
 
     // the dirt uv set, on quality bit 3
     if ((quality & 0x008u) != 0)
     {
-        vc71::vector_layout dirt = { 0, 0, 0, 0 };
-        pointerVectorPush(dirt, compressed ? &Ra::g_desc_1023EFA4       // Vtx_TDirtPacked
-                                           : &Ra::g_desc_1023EFCC);     // Vtx_TDirt
-        elementListPush(material->m_vector04, dirt);
-        pointerVectorPush(material->m_vector14, tmpl->m_uvStreams[tmpl->m_streamIndexB]);
-        if (dirt.first)
-            ::renddx9abi::engineFree(dirt.first);
+        StaticMeshMaterial::ElementList dirt;
+        dirt.push_back(compressed ? &Ra::g_desc_1023EFA4       // Vtx_TDirtPacked
+                                  : &Ra::g_desc_1023EFCC);     // Vtx_TDirt
+        material->m_vector04.push_back(dirt);
+        material->m_vector14.push_back(tmpl->m_uvStreams[tmpl->m_streamIndexB]);
     }
 
     // the crack uv set, on quality bit 4
     if ((quality & 0x010u) != 0)
     {
-        vc71::vector_layout crack = { 0, 0, 0, 0 };
-        pointerVectorPush(crack, compressed ? &Ra::g_desc_1023EE3C      // Vtx_TCrackPacked
-                                            : &Ra::g_desc_1023F044);    // Vtx_TCrack
-        elementListPush(material->m_vector04, crack);
-        pointerVectorPush(material->m_vector14, tmpl->m_uvStreams[tmpl->m_streamIndexC]);
-        if (crack.first)
-            ::renddx9abi::engineFree(crack.first);
+        StaticMeshMaterial::ElementList crack;
+        crack.push_back(compressed ? &Ra::g_desc_1023EE3C      // Vtx_TCrackPacked
+                                   : &Ra::g_desc_1023F044);    // Vtx_TCrack
+        material->m_vector04.push_back(crack);
+        material->m_vector14.push_back(tmpl->m_uvStreams[tmpl->m_streamIndexC]);
     }
 
     // Lightmap UVs require finished materials, the lighting/water/expansion gate,
@@ -2226,26 +1674,18 @@ void staticMeshMaterialSetupTechnique(StaticMeshMaterial* material)
         {
             if (!tmpl->m_isRoad)
             {
-                vc71::vector_layout lightmap = { 0, 0, 0, 0 };
-                pointerVectorPush(lightmap, compressed ? &Ra::g_desc_1023EE64   // Vtx_TLightMapPacked
-                                                       : &Ra::g_desc_1023EF2C); // Vtx_TLightMap
-                elementListPush(material->m_vector04, lightmap);
+                StaticMeshMaterial::ElementList lightmap;
+                lightmap.push_back(compressed ? &Ra::g_desc_1023EE64   // Vtx_TLightMapPacked
+                                              : &Ra::g_desc_1023EF2C); // Vtx_TLightMap
+                material->m_vector04.push_back(lightmap);
 
                 // `&template->dword[extraUvCount + 85]`, which is &m_uvStreams[extraUvCount - 1]
                 // because m_uvStreams starts one dword after m_vertexStream.  The off-by-one is the
                 // shipped arithmetic, not a correction of it.
-                pointerVectorPush(material->m_vector14,
-                                  tmpl->m_uvStreams[tmpl->m_extraUvCount - 1]);
-                if (lightmap.first)
-                    ::renddx9abi::engineFree(lightmap.first);
+                material->m_vector14.push_back(tmpl->m_uvStreams[tmpl->m_extraUvCount - 1]);
             }
         }
     }
-
-    if (tangentElements.first)
-        ::renddx9abi::engineFree(tangentElements.first);
-    if (baseElements.first)
-        ::renddx9abi::engineFree(baseElements.first);
 }
 
 // sub_101158B0 - bind the shader record's textures into the parameter block, set AlphaTest, fill
@@ -2344,7 +1784,7 @@ void StaticMeshTemplate::finalizeMaterials()
         const unsigned int lods = lodCount(this, geom);
         for (unsigned int lod = 0; lod < lods; ++lod)
         {
-            const vc71::vector_layout& materials = materialVector(this, geom, lod);
+            const StaticMeshMaterialList& materials = materialVector(this, geom, lod);
             for (unsigned int i = 0; i < materialCount(materials); ++i)
             {
                 StaticMeshMaterial* const material = materialAt(materials, i);
@@ -2399,7 +1839,7 @@ void StaticMeshTemplate::finalizeMaterials()
             continue;
         for (unsigned int lod = 0; lod < lods; ++lod)
         {
-            const vc71::vector_layout& materials = materialVector(this, geom, lod);
+            const StaticMeshMaterialList& materials = materialVector(this, geom, lod);
             const unsigned int count = materialCount(materials);
             for (unsigned int i = 0; i < count; ++i)
             {

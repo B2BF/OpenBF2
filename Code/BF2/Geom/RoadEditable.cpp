@@ -25,11 +25,9 @@
 #include "../../RendDX9Abi/ModuleCommon.h"
 #include "../../RendDX9Abi/PluginAbi.h"
 #include "../../RendDX9Abi/PluginEntry.h"     // classManager, fileManager, eventManager
-#include "../../RendDX9Abi/Vc71String.h"
+#include <string>
 
-#if BF2_PLUGIN_ABI_NATIVE
 #include "HeightmapEventNode.h"               // the native host's EventNode shape
-#endif
 
 #include <cfloat>
 #include <cmath>
@@ -52,7 +50,7 @@ extern void* g_raShaderConstants;   // dword_1023DDBC - RenderQueues.cpp
 
 // BufferManager.cpp / StateManager.cpp, declared per TU as every other client does.
 void* createVertexBuffer(void* bufferManager, unsigned int count, unsigned int stride,
-                         const vc71::string& name, unsigned int usage);
+                         const std::string& name, unsigned int usage);
 void* vertexBufferLock(void* wrapper, unsigned int offsetVerts, unsigned int countVerts,
                        unsigned int flags);
 bool  vertexBufferUnlock(void* wrapper);
@@ -114,9 +112,10 @@ const unsigned int kEventBuildFinalRoad        = 304;
 const unsigned int kEventBuildGhostRoad        = 305;
 const unsigned int kEventHeightmapModified     = 100;
 
-unsigned char* raConstants()
+// The Ra constants block (g_raShaderConstants) word at a retail x86 byte offset.
+unsigned char* raConstantAt(unsigned int byteOffset)
 {
-    return static_cast<unsigned char*>(dx9rend::g_raShaderConstants);
+    return dx9rend::raShaderConstantsAt(byteOffset);
 }
 
 dx9rend::RendDX9Base* rendererBase()
@@ -161,75 +160,9 @@ void* classManagerGetSingletonAs(const ::renddx9abi::HostString& name, unsigned 
         manager, name, iid);
 }
 
-#if !BF2_PLUGIN_ABI_NATIVE
-
-// Compatibility event node with the retail host's 0x40-byte layout and affected-area payload.
-// [CHOSEN] Host-owned fields remain opaque; native builds use geom::HeightmapEventNode.
-// RW-275: remove this copy when EventNode matches the retail host layout.
-
-class RetailHeightmapEventNode
-{
-public:
-    explicit RetailHeightmapEventNode(unsigned int eventType)
-        : next(0)
-        , pad24(0)
-        , type(eventType)
-        , pad2C(0)
-    {
-        std::memset(hostOwned, 0, sizeof(hostOwned));
-        area.x = 0.0f;
-        area.y = 0.0f;
-        area.z = 0.0f;
-        area.w = 0.0f;
-    }
-    virtual ~RetailHeightmapEventNode() {}
-    virtual void release() { delete this; }
-    virtual int  getType() const { return static_cast<int>(type); }
-
-    void setAffectedArea(const Vec4& value) { area = value; }
-
-    unsigned char hostOwned[0x1C];   // +0x04
-    void*         next;              // +0x20
-    unsigned int  pad24;             // +0x24
-    unsigned int  type;              // +0x28
-    unsigned int  pad2C;             // +0x2C
-    Vec4          area;              // +0x30
-};
-
-static_assert(sizeof(RetailHeightmapEventNode) == 0x40, "0x10140633 allocates 0x40");
-#endif
 
 } // anonymous namespace
 
-#if !BF2_PLUGIN_ABI_NATIVE
-
-// RoadTemplateNameSet's destructor - the callee-side destruction of +0x84's by-value set
-// (0x1013D0D0): erase(begin(), end()) (the whole range, so _Erase from the root,
-// right subtree first, then the node's string, the node, and on to the left), then the
-// head freed (`push [ebp+arg_8]; call sub_1005F360`).
-
-namespace {
-void eraseNameSubtree(RoadTemplateNameSetNode* node)
-{
-    while (!node->isNil)
-    {
-        eraseNameSubtree(node->right);
-        RoadTemplateNameSetNode* const left = node->left;
-        reinterpret_cast<vc71::string*>(static_cast<void*>(node->value))->~string();
-        ::renddx9abi::engineFree(node);
-        node = left;
-    }
-}
-} // anonymous namespace
-
-RoadTemplateNameSet::~RoadTemplateNameSet()
-{
-    if (!head)
-        return;
-    eraseNameSubtree(head->parent);
-    ::renddx9abi::engineFree(head);
-}
-#endif
 
 
 // Initializes a ghost road, registers its terrain-event handler, and acquires effect handles.
@@ -272,14 +205,14 @@ RoadEditable::RoadEditable()
     m_effect = static_cast<dx9rend::Effect*>(
         dx9rend::shaderManagerGetEffect(dx9rend::g_shaderManager, "Shaders/Road"));
     m_paramWorldViewProjection =
-        dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("WorldViewProjection"));
-    m_paramViewPos = dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("ViewPos"));
-    m_paramTexLayer0 = dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("TEXLAYER0"));
-    m_paramTexLayer1 = dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("TEXLAYER1"));
-    m_paramBlendFactor = dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("BlendFactor"));
-    m_paramMaterial = dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("Material"));
-    m_paramFogRange = dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("fogRange"));
-    m_paramFogColor = dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("fogColor"));
+        dx9rend::effectGetShaderParameterTyped(m_effect, std::string("WorldViewProjection"));
+    m_paramViewPos = dx9rend::effectGetShaderParameterTyped(m_effect, std::string("ViewPos"));
+    m_paramTexLayer0 = dx9rend::effectGetShaderParameterTyped(m_effect, std::string("TEXLAYER0"));
+    m_paramTexLayer1 = dx9rend::effectGetShaderParameterTyped(m_effect, std::string("TEXLAYER1"));
+    m_paramBlendFactor = dx9rend::effectGetShaderParameterTyped(m_effect, std::string("BlendFactor"));
+    m_paramMaterial = dx9rend::effectGetShaderParameterTyped(m_effect, std::string("Material"));
+    m_paramFogRange = dx9rend::effectGetShaderParameterTyped(m_effect, std::string("fogRange"));
+    m_paramFogColor = dx9rend::effectGetShaderParameterTyped(m_effect, std::string("fogColor"));
 
     Vec2 zero;
     zero.x = 0.0f;
@@ -402,10 +335,10 @@ void RoadEditable::draw()
     m_paramBlendFactor->setFloat(m_template->getBlendFactor());              // +0x24 / +0x3C
     m_paramMaterial->setFloat(static_cast<float>(m_template->getMaterial())
                               * 0.0039215689f);                              // flt_101E2B98 (1/255)
-    m_paramFogRange->setValue(raConstants() + kRaFogRange, 0);
-    m_paramFogColor->setValue(raConstants() + kRaFogColor, 0);
+    m_paramFogRange->setValue(raConstantAt(kRaFogRange), 0);
+    m_paramFogColor->setValue(raConstantAt(kRaFogColor), 0);
 
-    dx9rend::effectSetTechniqueByName(m_effect, vc71::string("roadeditable"));
+    dx9rend::effectSetTechniqueByName(m_effect, std::string("roadeditable"));
     dx9rend::effectBegin(m_effect);
     dx9rend::effectBeginPass(m_effect, static_cast<unsigned int>(queue->m_mode));
     dx9rend::vertexBufferBindStream(m_vertexBuffer, 0);
@@ -449,9 +382,9 @@ void RoadEditable::setTemplate(IRoadTemplate* roadTemplate)
         dx9rend::textureReleaseRef(m_texture0);
         dx9rend::textureReleaseRef(m_texture1);
         m_texture0 = static_cast<dx9rend::EngineTexture*>(dx9rend::textureManagerGetTexture(
-            ::renddx9abi::toVc71String(roadTemplate->getTextureFile(0))));   // +0x14
+            ::renddx9abi::fromHostString(roadTemplate->getTextureFile(0))));   // +0x14
         m_texture1 = static_cast<dx9rend::EngineTexture*>(dx9rend::textureManagerGetTexture(
-            ::renddx9abi::toVc71String(roadTemplate->getTextureFile(1))));
+            ::renddx9abi::fromHostString(roadTemplate->getTextureFile(1))));
     }
     invalidate();
 }
@@ -647,7 +580,7 @@ void RoadEditable::buildGeometry(float /*width - not read*/, float /*maxError - 
     }
     m_vertexBuffer = dx9rend::createVertexBuffer(dx9rend::g_bufferManager,
                                                  static_cast<unsigned int>(m_vertexCount), 32u,
-                                                 vc71::string("RoadEditable"), 0u);
+                                                 std::string("RoadEditable"), 0u);
     float* destination = static_cast<float*>(dx9rend::vertexBufferLock(m_vertexBuffer, 0u, 0u, 0u));
     for (int i = 0; i < m_vertexCount; ++i)
     {
@@ -686,13 +619,13 @@ void RoadEditable::buildGeometry(float /*width - not read*/, float /*maxError - 
     minimum.x = minimum.y = minimum.z = 0.0f;
     maximum.x = maximum.y = maximum.z = 0.0f;
     D3DXComputeBoundingBox(reinterpret_cast<const D3DXVECTOR3*>(&vertices[0].position),
-                           static_cast<DWORD>(vertices.size()), 64u,
+                           static_cast<DWORD>(vertices.size()), static_cast<DWORD>(sizeof(vertices[0])),   // 64
                            reinterpret_cast<D3DXVECTOR3*>(&minimum), reinterpret_cast<D3DXVECTOR3*>(&maximum));
     m_bounds.min = minimum;
     m_bounds.max = maximum;
     m_bounds.dirty = 1;
     D3DXComputeBoundingSphere(reinterpret_cast<const D3DXVECTOR3*>(&vertices[0].position),
-                              static_cast<DWORD>(vertices.size()), 64u,
+                              static_cast<DWORD>(vertices.size()), static_cast<DWORD>(sizeof(vertices[0])),   // 64
                               reinterpret_cast<D3DXVECTOR3*>(&m_centre), &m_radius);
     dx9rend::bufferManagerSwapPool(savedPool);
 }
@@ -715,7 +648,7 @@ bool RoadEditable::compile(const ::renddx9abi::HostString& levelPath)
         buildGeometry(width, maxError, false);
     }
 
-    vc71::string savePath;
+    std::string savePath;
     dx9rend::readStringSettingDefault("Editor_LevelSavePath", " ERROR ", savePath);   // settings +0x40
     ::renddx9abi::HostString conPath = ::renddx9abi::makeHostString(savePath);
     conPath += "\\";
@@ -858,7 +791,7 @@ void RoadEditable::projectToTerrain()
     dx9rend::stateManagerPush();
     void* const positions = dx9rend::createVertexBuffer(dx9rend::g_bufferManager,
                                                         static_cast<unsigned int>(vertexCount), 12u,
-                                                        vc71::string("RoadEditable"), 8u);
+                                                        std::string("RoadEditable"), 8u);
     float* out = static_cast<float*>(dx9rend::vertexBufferLock(positions, 0u, 0u, 0u));
     for (int i = 0; i < vertexCount; ++i)
     {
@@ -966,7 +899,7 @@ void RoadEditable::projectToTerrain()
         const float spanY = maximum.y - minimum.y;
         constant2[1] = 1.0f / spanY;
 
-        dx9rend::effectSetTechniqueByName(m_effect, vc71::string("projectroad"));
+        dx9rend::effectSetTechniqueByName(m_effect, std::string("projectroad"));
         dx9rend::effectBegin(m_effect);
         dx9rend::effectBeginPass(m_effect, 0);
         device->SetVertexShaderConstantF(0, constant0, 1);                   // +0x178
@@ -1065,15 +998,9 @@ void RoadEditable::projectToTerrain()
         area.y = static_cast<float>(z0);
         area.z = static_cast<float>(x1);
         area.w = static_cast<float>(z1);
-#if BF2_PLUGIN_ABI_NATIVE
         HeightmapEventNode* const node = new HeightmapEventNode(kEventHeightmapModified);
         node->setAffectedArea(area);
         ::dice::hfe::eventManager->postEvent(ECEditor, node, 0.0f);          // +0x14
-#else
-        RetailHeightmapEventNode* const node = new RetailHeightmapEventNode(kEventHeightmapModified);
-        node->setAffectedArea(area);
-        ::dice::hfe::eventManager->postEvent(ECEditor, reinterpret_cast<EventNode*>(node), 0.0f);
-#endif
 #if defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
         projected = true;
 #endif
@@ -1154,17 +1081,15 @@ void RoadEditable::handleEvent(EventCategory, unsigned int id, EventNode*, void*
 }
 
 
-// RefFactory refuse aggregation, 0x118 bytes, construct, QI with NO null test on the
-// object (shipped), release on refusal. (The native flavour's object is smaller - its HostString is
-// the host's std::string - and still fits the shipped block.)
+// RefFactory refuse aggregation, the object (retail 0x118 bytes), construct, QI with NO null test
+// on the object (shipped), release on refusal.
 
 IBase* __fastcall createRoadEditable(unsigned int iid, IBase* outer)
 {
     if (outer)
         return 0;
 
-    static_assert(sizeof(RoadEditable) <= 0x118, "the shipped 0x118-byte block must hold the object");
-    void* const storage = ::renddx9abi::engineAlloc(0x118);
+    void* const storage = ::renddx9abi::engineAlloc(sizeof(RoadEditable));
     RoadEditable* self = 0;
     if (storage)
         self = new (storage) RoadEditable();

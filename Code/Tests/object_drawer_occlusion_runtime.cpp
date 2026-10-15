@@ -37,13 +37,8 @@ template<size_t N> void poison(void* (&table)[N])
 {
     for (size_t i = 0; i != N; ++i) table[i] = reinterpret_cast<void*>(&unexpectedSlot);
 }
-template<class T> vc71::vector_layout view(T* first, unsigned int count)
-{
-    vc71::vector_layout result = {};
-    result.first = reinterpret_cast<char*>(first);
-    result.last = result.end = result.first ? result.first + count * sizeof(T) : 0;
-    return result;
-}
+template<class T> std::vector<T> view(const T* first, unsigned int count)
+{ return std::vector<T>(first, first + count); }
 struct EventsFixture
 {
     void** vptr;
@@ -148,14 +143,9 @@ typedef ObjectDrawer DrawerFixture;
 struct BorrowedVolumes
 {
     ObjectDrawer& drawer;
-    vc71::vector_layout records[4];
-    BorrowedVolumes(ObjectDrawer& d, std::initializer_list<vc71::vector_layout> volumes) : drawer(d)
-    {
-        unsigned int count = 0;
-        for (const auto& volume : volumes) records[count++] = volume;
-        drawer.m_vector50 = view(records, count);
-    }
-    ~BorrowedVolumes() { drawer.m_vector50 = vc71::vector_layout{}; }
+    BorrowedVolumes(ObjectDrawer& d, std::initializer_list<std::vector<Plane3> > volumes) : drawer(d)
+    { drawer.m_vector50.assign(volumes.begin(), volumes.end()); }
+    ~BorrowedVolumes() { std::vector<std::vector<Plane3> >().swap(drawer.m_vector50); }
 };
 struct ViewFixture
 {
@@ -200,44 +190,45 @@ struct GridFixture
         void* predicate, int mode, float zero, float time)
     { query(self, frustum, output, predicate, mode, zero, time, false); }
 };
+// One world-space quad occluder in StaticMesh's record shape: two opposed faces over four points,
+// each face referencing all four edges (edge index in the low byte, created-here flag in the high).
+// The record points at members, so a fixture is used where it is constructed and never copied.
 struct OccluderFixture
 {
-    struct Edge { unsigned char a, b, sideA, sideB; } edges[4];
-    struct Reference { unsigned char edge, side; } references[2][4];
-    ObjectDrawerOccluderRecord record;
-    ObjectDrawerOccluderFace faces[2];
-    vc71::vector_layout edgeVector, referenceVectors[2];
-    Vec3 points[4];
+    std::vector<StaticMeshOccluderEdge> edges;
+    std::vector<unsigned short> references[2];       // the faces' original reference lists
+    std::vector<unsigned short> referenceVectors[2];  // the lists the faces point at
+    StaticMeshOccluderRecord record;
     OccluderFixture(float x = 0, float z = 5, bool reverse = false)
     {
-        points[0] = Vec3{ x - 1, -1, z }; points[1] = Vec3{ x + 1, -1, z };
-        points[2] = Vec3{ x + 1, 1, z }; points[3] = Vec3{ x - 1, 1, z };
+        record.points.push_back(Vec3{ x - 1, -1, z }); record.points.push_back(Vec3{ x + 1, -1, z });
+        record.points.push_back(Vec3{ x + 1, 1, z }); record.points.push_back(Vec3{ x - 1, 1, z });
         for (unsigned char i = 0; i != 4; ++i)
         {
             const unsigned char next = (i + 1) % 4;
-            edges[i] = Edge{ reverse ? next : i, reverse ? i : next, 0, 0 };
-            references[0][i] = Reference{ i, static_cast<unsigned char>(reverse ? 0 : 1) };
-            references[1][i] = Reference{ i, static_cast<unsigned char>(reverse ? 1 : 0) };
+            const StaticMeshOccluderEdge edge = { { reverse ? next : i, reverse ? i : next }, { 0, 0 } };
+            edges.push_back(edge);
+            references[0].push_back(static_cast<unsigned short>(i | (reverse ? 0 : 1) << 8));
+            references[1].push_back(static_cast<unsigned short>(i | (reverse ? 1 : 0) << 8));
         }
-        referenceVectors[0] = view(references[0], 4);
-        referenceVectors[1] = view(references[1], 4);
-        faces[0] = ObjectDrawerOccluderFace{ Plane3{ Vec3{ 0, 0, -1 }, z }, &referenceVectors[0] };
-        faces[1] = ObjectDrawerOccluderFace{ Plane3{ Vec3{ 0, 0, 1 }, -z }, &referenceVectors[1] };
-        edgeVector = view(edges, 4);
-        record.faces = view(faces, 2); record.points = view(points, 4); record.edges = &edgeVector;
+        referenceVectors[0] = references[0];
+        referenceVectors[1] = references[1];
+        const StaticMeshOccluderFace front = { Plane3{ Vec3{ 0, 0, -1 }, z }, &referenceVectors[0] };
+        const StaticMeshOccluderFace back = { Plane3{ Vec3{ 0, 0, 1 }, -z }, &referenceVectors[1] };
+        record.faces.push_back(front); record.faces.push_back(back);
+        record.edges = &edges;
     }
 };
 unsigned int volumeCount(const ObjectDrawer& drawer)
-{ return vc71::vectorSizeIn(drawer.m_vector50, sizeof(vc71::vector_layout)); }
-vc71::vector_layout& volume(ObjectDrawer& drawer, unsigned int index)
-{ return reinterpret_cast<vc71::vector_layout*>(drawer.m_vector50.first)[index]; }
+{ return static_cast<unsigned int>(drawer.m_vector50.size()); }
+std::vector<Plane3>& volume(ObjectDrawer& drawer, unsigned int index)
+{ return drawer.m_vector50[index]; }
 float signedDistance(const Plane3& plane, const Vec3& point)
 { return plane.normal.x * point.x + plane.normal.y * point.y + plane.normal.z * point.z + plane.d; }
 void releaseBuiltVolumes(ObjectDrawer& drawer)
 {
     objectDrawerClearOccluders(&drawer);
-    renddx9abi::engineFree(drawer.m_vector50.first);
-    drawer.m_vector50 = vc71::vector_layout{};
+    std::vector<std::vector<Plane3> >().swap(drawer.m_vector50);
 }
 bool culled(ObjectDrawer& drawer, ObjectFixture& object)
 {
@@ -323,8 +314,8 @@ void builderCases()
     check(camera.reads == 2, "builder reads camera and forward through actual view slot");
     check(volumeCount(drawer) == 1, "facing near occluder produces one volume");
     check(geometry.groupReads == 1 && owner.positionReads == 1, "builder uses record slots and object distance");
-    check(vc71::vectorSizeIn(volume(drawer, 0), sizeof(Plane3)) == 5, "quad yields source face plus four silhouette planes");
-    Plane3* planes = reinterpret_cast<Plane3*>(volume(drawer, 0).first);
+    check(volume(drawer, 0).size() == 5, "quad yields source face plus four silhouette planes");
+    Plane3* planes = volume(drawer, 0).data();
     check(planes[0].normal.z == -1 && planes[0].d == 5, "builder copies selected world face unchanged");
     for (int i = 1; i != 5; ++i)
     {
@@ -341,13 +332,14 @@ void builderCases()
     check(!culled(drawer, front), "built volume retains object in front of quad");
     check(!culled(drawer, outside), "built volume retains object outside silhouette");
     check(!culled(drawer, exposed), "built volume retains partly exposed geometry");
-    occluder.referenceVectors[1].last = occluder.referenceVectors[1].first + 4;
-    occluder.edges[2].sideB = occluder.edges[3].sideB = 1;
+    // The second face keeps two references; its storage still holds all four.
+    occluder.referenceVectors[1].resize(2);
+    occluder.edges[2].marks[1] = occluder.edges[3].marks[1] = 1;
     objectDrawerBuildOccluders(&drawer, set);
-    check(vc71::vectorSizeIn(volume(drawer, 0), sizeof(Plane3)) == 5
-        && occluder.edges[2].sideB == 0 && occluder.edges[3].sideB == 0,
+    check(volume(drawer, 0).size() == 5
+        && occluder.edges[2].marks[1] == 0 && occluder.edges[3].marks[1] == 0,
         "every face uses first-face reference count with current-face reference storage");
-    occluder.referenceVectors[1] = view(occluder.references[1], 4);
+    occluder.referenceVectors[1] = occluder.references[1];
     OccluderFixture second(3); geometry.groupCount = 2; geometry.groups[1] = &second.record;
     objectDrawerBuildOccluders(&drawer, set);
     check(volumeCount(drawer) == 2, "all geometry occluder records produce separate volumes");
@@ -356,14 +348,15 @@ void builderCases()
     geometry.groupCount = 1;
     OccluderFixture reversed(0, 5, true); geometry.groups[0] = &reversed.record;
     objectDrawerBuildOccluders(&drawer, set);
-    check(volumeCount(drawer) == 1 && vc71::vectorSizeIn(volume(drawer, 0), sizeof(Plane3)) == 5,
+    check(volumeCount(drawer) == 1 && volume(drawer, 0).size() == 5,
         "reverse edge order and opposite selector preserve plane count");
     check(culled(drawer, hidden) && !culled(drawer, exposed), "opposite edge selector preserves visibility");
-    char* const capacity = drawer.m_vector50.first;
+    const std::vector<Plane3>* const storage = drawer.m_vector50.data();
     drawer.m_float64 = 4.999f;
     objectDrawerBuildOccluders(&drawer, set);
     check(volumeCount(drawer) == 0, "distance beyond threshold rejects occluder");
-    check(drawer.m_vector50.first == capacity, "frame clear retains outer vector capacity");
+    check(drawer.m_vector50.data() == storage && drawer.m_vector50.capacity() != 0,
+          "frame clear retains outer vector capacity");
     check(!culled(drawer, hidden), "previous frame occluders no longer hide anything");
     drawer.m_float64 = 5;
     objectDrawerBuildOccluders(&drawer, set);
@@ -396,30 +389,6 @@ void builderCases()
     check(volumeCount(drawer) == 0, "empty frame remains clear");
     releaseBuiltVolumes(drawer);
 }
-void planeOwnershipCases()
-{
-    DrawerFixture drawer;
-    char* temporary = 0;
-    {
-        ObjectDrawerPlaneList planes;
-        Plane3 plane = { Vec3{ 0, 0, -1 }, 5 };
-        planes.append(plane); temporary = planes.planes.first;
-        planes.appendCopyTo(drawer.m_vector50);
-        check(volume(drawer, 0).first != temporary, "stored plane list owns a distinct deep copy");
-    }
-    check(volumeCount(drawer) == 1 && reinterpret_cast<Plane3*>(volume(drawer, 0).first)->d == 5,
-        "stored planes survive destruction of temporary list");
-    check(std::find(liveAllocations.begin(), liveAllocations.end(), temporary) == liveAllocations.end(),
-        "temporary plane allocation is released after append");
-}
-void* treeNode(void* sentinel)
-{
-    unsigned char* node = static_cast<unsigned char*>(renddx9abi::engineAlloc(0x20));
-    std::memset(node, 0, 0x20);
-    void** links = reinterpret_cast<void**>(node);
-    links[0] = links[1] = links[2] = sentinel;
-    return node;
-}
 struct OccluderOwner : IBase
 {
     ObjectDrawer* drawer;
@@ -432,9 +401,9 @@ struct OccluderOwner : IBase
     {
         ++releases;
         check(events->listeners.empty(), "event listener detached before retained occluder release");
-        check(!drawer->m_vector50.first && drawer->m_visibleSet.empty() && drawer->m_drawSet.empty(),
+        check(drawer->m_vector50.capacity() == 0 && drawer->m_visibleSet.empty() && drawer->m_drawSet.empty(),
             "plane and object vectors cleared before retained occluder release");
-        check(drawer->m_tree10.head && drawer->m_tree1C.head, "retained occluder released before trees");
+        check(drawer->m_tree1C.size() == 3, "retained occluder released before trees");
         return --refs;
     }
     void* queryInterface(unsigned int) const override { unexpected("occluder queryInterface"); }
@@ -443,8 +412,6 @@ void teardownCases(EventsFixture& events)
 {
     const size_t allocationStart = liveAllocations.size();
     OccluderOwner owner(events);
-    void *head10, *head1C, *root, *left, *right;
-    size_t freeStart;
     {
         DrawerFixture drawer; owner.drawer = &drawer; drawer.setOccluder(&owner);
         check(owner.refs == 2, "setOccluder retains its owner");
@@ -455,21 +422,12 @@ void teardownCases(EventsFixture& events)
         drawer.m_visibleSet.push_back(object.get()); drawer.m_drawSet.push_back(object.get());
         objectDrawerBuildOccluders(&drawer, drawer.m_visibleSet);
         check(volumeCount(drawer) == 1, "destructor owns a populated nested plane vector");
-        head10 = drawer.m_tree10.head; head1C = drawer.m_tree1C.head;
-        root = treeNode(head1C); left = treeNode(head1C); right = treeNode(head1C);
-        static_cast<void**>(root)[0] = left; static_cast<void**>(root)[2] = right;
-        static_cast<void**>(head1C)[0] = left; static_cast<void**>(head1C)[1] = root;
-        static_cast<void**>(head1C)[2] = right; drawer.m_tree1C.size = 3;
-        freeStart = freedAllocations.size();
+        // Three [UNRESOLVED]-valued entries the destructor must still hold at the occluder release.
+        const ObjectDrawerTreeValue value = { { 0, 0 } };
+        drawer.m_tree1C[1] = value; drawer.m_tree1C[2] = value; drawer.m_tree1C[3] = value;
     }
     check(owner.refs == 1 && owner.releases == 1, "destructor releases retained occluder exactly once");
-    check(liveAllocations.size() == allocationStart, "destructor frees nested planes, outer storage, nodes and sentinels");
-    std::vector<void*> treeFrees;
-    for (size_t i = freeStart; i != freedAllocations.size(); ++i)
-        if (freedAllocations[i] == head10 || freedAllocations[i] == head1C || freedAllocations[i] == root
-            || freedAllocations[i] == left || freedAllocations[i] == right) treeFrees.push_back(freedAllocations[i]);
-    check(treeFrees.size() == 5 && treeFrees[0] == right && treeFrees[1] == root && treeFrees[2] == left
-        && treeFrees[3] == head1C && treeFrees[4] == head10, "tree teardown preserves right/root/left and second/first tree order");
+    check(liveAllocations.size() == allocationStart, "destructor leaves no engine-heap allocation behind");
 }
 void publicPassCases()
 {
@@ -495,10 +453,6 @@ void publicPassCases()
         "actual draw culls noncollision candidates against same frame volumes");
     check(drawer.m_dword78 == 1 && drawer.m_dword7C == 2, "draw publishes noncollision removal counters");
     check(!drawer.isCullingDebugEnabled(), "real culling leaves debug overlay disabled");
-    // Reproduce the stale retail byte read only as regression evidence. Production
-    // uses the member accessor so native container layout cannot select a counter.
-    check(reinterpret_cast<const unsigned char*>(&drawer)[0x70] != 0,
-        "native culled count reproduces the stale retail debug-byte trigger");
     const unsigned int savedCount = drawer.m_dword78;
     for (unsigned int count : { 0u, 1u, 255u, 256u, 257u })
     {
@@ -550,7 +504,7 @@ void meshBoundsFinalize(MeshBounds&) { unexpected("meshBoundsFinalize: fixture b
 int main()
 {
     EventsFixture events; eventManager = reinterpret_cast<EventManager*>(&events);
-    cullCases(); orderingCases(); comparisonPrecisionCases(); builderCases(); planeOwnershipCases(); teardownCases(events);
+    cullCases(); orderingCases(); comparisonPrecisionCases(); builderCases(); teardownCases(events);
     publicPassCases();
     check(events.listeners.empty() && events.registrations == events.unregistrations, "all drawer listeners detached");
     check(liveAllocations.empty(), "all engine allocations released");

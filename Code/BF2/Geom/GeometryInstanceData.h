@@ -1,13 +1,13 @@
 // Shared geometry-instance data prefix; this does not define the complete interface.
-// [PLATFORM] x86 rendering retains the VC7.1 string layout, including in native-host builds.
-// [CHOSEN, not recovered] The 64-bit port uses native string and pointer sizes;
-// future native geometry owners must use this prefix. No x64 renderer is supplied here.
+// [CHOSEN, not recovered] The name is the toolset's std::string on every target (issue #7), so
+// the prefix uses native string and pointer sizes; geometry owners must use this prefix.
+// The retail x86 prefix was 0x30 bytes, with the two opacity factors at +0x28 and +0x2C.
 #ifndef BF2_GEOM_GEOMETRYINSTANCEDATA_H
 #define BF2_GEOM_GEOMETRYINSTANCEDATA_H
 
 #include <cstddef>
 #if defined(_MSC_VER) && !defined(_WIN64)
-#include "../../RendDX9Abi/Vc71String.h"
+#include <string>
 #else
 #include <string>
 #endif
@@ -21,7 +21,7 @@ struct GeometryInstanceData
 
     void* const* m_vptr;
 #if defined(_MSC_VER) && !defined(_WIN64)
-    vc71::string m_name;
+    std::string m_name;
 #else
     std::string m_name;
 #endif
@@ -45,14 +45,8 @@ struct GeometryInstanceData
     }
 };
 
-#if defined(_MSC_VER) && !defined(_WIN64)
-static_assert(offsetof(GeometryInstanceData, m_float28) == 0x28, "retail geometry opacity");
-static_assert(offsetof(GeometryInstanceData, m_float2C) == 0x2C, "retail geometry cull fade");
-static_assert(sizeof(GeometryInstanceData) == 0x30, "retail geometry data prefix");
-#else
 static_assert(offsetof(GeometryInstanceData, m_float28) ==
     sizeof(void*) + sizeof(std::string) + 2 * sizeof(unsigned int), "native geometry data prefix");
-#endif
 
 } } }
 #endif

@@ -16,7 +16,7 @@
 #include "../RendDX9Base.h"
 #include "../../../RendDX9Abi/BfMemory.h"
 #include "../../../RendDX9Abi/Frontier.h"
-#include "../../../RendDX9Abi/Vc71String.h"
+#include <string>
 
 #include <cstring>
 
@@ -27,37 +27,21 @@ namespace Ra {
 
 namespace {
 
-// The cached declaration lives in the node's value bytes (+0x10 of the shipped 0x18-byte node).
-inline IDirect3DVertexDeclaration9*& declarationOf(vc71::map_node_u32* node)
-{
-    return *reinterpret_cast<IDirect3DVertexDeclaration9**>(node->value);
-}
-
-// The recursive node free the destructor runs over the cache (sub_10049900), then the head.
-void destroyDeclarationNodes(vc71::map_node_u32* head, vc71::map_node_u32* node)
-{
-    while (node && node != head && !node->isNil)
-    {
-        destroyDeclarationNodes(head, node->right);
-        vc71::map_node_u32* const left = node->left;
-        ::renddx9abi::engineFree(node);
-        node = left;
-    }
-}
+typedef std::vector<const RaVertexElementDesc*>               RaElementList;
+typedef std::map<unsigned int, IDirect3DVertexDeclaration9*> RaDeclarationCache;
 
 } // anonymous namespace
 
-// sub_10048FF0 + sub_10048C70.
+// sub_10048FF0 + sub_10048C70.  The element vector and the declaration cache (sub_100493C0's head
+// node) are constructed empty before the body.
 RaStreamDataEditable::RaStreamDataEditable(unsigned int vertexCapacity, unsigned int indexCapacity,
-                                           unsigned int stride, const vc71::vector_layout& elements,
+                                           unsigned int stride,
+                                           const std::vector<const RaVertexElementDesc*>& elements,
                                            IDirect3DDevice9* device)
 {
     m_vertexBuffer = 0;
     m_indexBuffer = 0;
     raMaterialParametersConstruct(m_materialParameters);
-    m_elements.first = 0;
-    m_elements.last = 0;
-    m_elements.end = 0;
     m_device = device;
     m_stride = stride;
     m_unresolved16C = 0;
@@ -69,10 +53,8 @@ RaStreamDataEditable::RaStreamDataEditable(unsigned int vertexCapacity, unsigned
     m_vertexCount = 0;
     m_vertexCapacity = vertexCapacity;
     m_indexCapacity = indexCapacity;
-    m_declarations.construct(sizeof(vc71::map_node_u32));                // sub_100493C0's head node
     // sub_10049B80 - m_elements.insert(end, elements.begin(), elements.end()).
-    for (const char* p = elements.first; p != elements.last; p += 4)
-        vc71::vectorPushBackIn(m_elements, 4u, p);
+    m_elements.insert(m_elements.end(), elements.begin(), elements.end());
     // sub_10048C70 - the two buffers, when a device exists.
     if (m_device)
     {
@@ -86,7 +68,8 @@ RaStreamDataEditable::RaStreamDataEditable(unsigned int vertexCapacity, unsigned
 }
 
 // sub_10048F00 - unlock if locked, release both buffers, drop the cache and the elements, destroy
-// the material block.
+// the material block.  Every teardown path (destroy, OverGrowthCellMesh::destroy) runs this and then
+// frees the storage without a C++ destructor, so this ends the two containers' lifetimes itself.
 void RaStreamDataEditable::destroyMembers()
 {
     if (m_locked)
@@ -110,21 +93,8 @@ void RaStreamDataEditable::destroyMembers()
         // sub_10047EE0(2, ib) - the resource tracker, not reproduced.
         m_indexBuffer->Release();
     }
-    {
-        vc71::map_node_u32* const head = reinterpret_cast<vc71::map_node_u32*>(m_declarations.head);
-        if (head)
-        {
-            destroyDeclarationNodes(head, head->parent);
-            ::renddx9abi::engineFree(head);
-        }
-        m_declarations.head = 0;
-        m_declarations.size = 0;
-    }
-    if (m_elements.first)
-        ::renddx9abi::engineFree(m_elements.first);
-    m_elements.first = 0;
-    m_elements.last = 0;
-    m_elements.end = 0;
+    m_declarations.~RaDeclarationCache();      // sub_10049900 over the nodes, then the head
+    m_elements.~RaElementList();
     raMaterialParametersDestroy(m_materialParameters);
 }
 
@@ -143,8 +113,8 @@ bool RaStreamDataEditable::applyStreams(void* shaderState)
 {
     RaShader* const shader = static_cast<RaShader*>(shaderState);
     const unsigned int key = static_cast<unsigned int>(shader->m_buildSerial);        // +0x174
-    vc71::map_node_u32* node = vc71::mapFindU32(m_declarations, key);
-    if (!node)
+    RaDeclarationCache::iterator node = m_declarations.find(key);
+    if (node == m_declarations.end())
     {
         RaStreamRequirements* const required =
             raStreamRequirementsCreate(shader->m_requiredVertexElements);              // sub_10049330 + sub_1004A0F0
@@ -163,14 +133,14 @@ bool RaStreamDataEditable::applyStreams(void* shaderState)
             return false;
         }
         IDirect3DDevice9* const device = raRendererDevice();                           // renderer +0x0C
-        vc71::map_node_u32* const inserted = vc71::mapInsertU32(m_declarations, key);
-        declarationOf(inserted) = raVertexDeclarationCached(raDeclarationBuilderFinish(builder), device);
-        node = vc71::mapFindU32(m_declarations, key);
+        IDirect3DVertexDeclaration9*& inserted = m_declarations[key];
+        inserted = raVertexDeclarationCached(raDeclarationBuilderFinish(builder), device);
+        node = m_declarations.find(key);
         raDeclarationBuilderDestroy(builder);
         raStreamRequirementsDestroy(required);
     }
     stateManagerSetStreamSource(0, m_vertexBuffer, 0, m_stride);                       // +0x58
-    stateManagerSetVertexDeclaration(declarationOf(node));                              // +0x5C
+    stateManagerSetVertexDeclaration(node->second);                                     // +0x5C
     stateManagerSetIndices(m_indexBuffer);                                             // +0x54
     return true;
 }

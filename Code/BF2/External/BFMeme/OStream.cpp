@@ -56,9 +56,9 @@ bool OStream::streamCharacter(wchar_t* value, const char* label) // 838170 uses3
     int temporary = *value;
     return streamInt(&temporary, label);
 }
-bool OStream::streamTexture(System* system, int* texture, const char*)
+bool OStream::streamTexture(System* system, TextureHandle* texture, const char*)
 { return writeResourceName(this, system->getTextureName(*texture)); }
-bool OStream::streamFont(System* system, int* font, const char*)
+bool OStream::streamFont(System* system, FontHandle* font, const char*)
 { return writeResourceName(this, system->getFontName(*font)); }
 bool OStream::streamSound(System* system, int* sound, const char*)
 { return writeResourceName(this, system->getSoundName(*sound)); }
@@ -110,6 +110,8 @@ bool writeObject(System* system, Object*& value, OStream* output)
     return true;
 }
 // Descriptor is intentionally unpublished while deeper dependencies stay open.
+#if defined(_M_IX86)
 static_assert(sizeof(OStream) == 4, "BFMeme output stream layout");
+#endif
 } }
 #endif

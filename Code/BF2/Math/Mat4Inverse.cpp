@@ -4,6 +4,7 @@
 #if !DEDICATED || (defined(BF2_IMAGE_AIDLL) && defined(_MSC_VER) && defined(_M_IX86))
 namespace dice { namespace hfe {
 namespace {
+#if defined(_M_IX86)
 // Explicit x87 arithmetic keeps the caller's precision/rounding control and
 // the shipped float stores. A product of two input floats fits in a double;
 // the second group's pair10 deliberately has no intermediate float store.
@@ -85,6 +86,44 @@ void divideByDeterminant(const float* input, float* output)
         fstp st
     }
 }
+#else
+// [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates, under the caller's precision
+// control). Each helper keeps the x87 body's operation order and its float/double store widths
+// (issue #7).
+float roundedPairProduct(float left, float right)
+{
+    // fld; fmul; fstp dword - one rounding of the exact product to float.
+    return static_cast<float>(static_cast<double>(left) * static_cast<double>(right));
+}
+double pairProduct(float left, float right)
+{
+    // fld; fmul; fstp qword - the exact product, no float rounding.
+    return static_cast<double>(left) * static_cast<double>(right);
+}
+void cofactor(float& output, double a0, double b0, double a1, double b1,
+              double a2, double b2, double a3, double b3, double a4, double b4,
+              double a5, double b5)
+{
+    // (a0*b0 + a1*b1) + a2*b2 is stored as a float first; the second sum is then subtracted from
+    // that stored float (fsubr dword) and the difference stored as a float again.
+    output = static_cast<float>(a0 * b0 + a1 * b1 + a2 * b2);
+    const double second = a3 * b3 + a4 * b4 + a5 * b5;
+    output = static_cast<float>(static_cast<double>(output) - second);
+}
+void divideByDeterminant(const float* input, float* output)
+{
+    // ((in4*out1 + in0*out0) + in8*out2) + in12*out3, then 1/det kept unrounded across all sixteen
+    // scaled float stores. No zero/NaN/infinity test exists in either shipped image.
+    const double determinant =
+        static_cast<double>(input[4]) * static_cast<double>(output[1])
+        + static_cast<double>(input[0]) * static_cast<double>(output[0])
+        + static_cast<double>(input[8]) * static_cast<double>(output[2])
+        + static_cast<double>(input[12]) * static_cast<double>(output[3]);
+    const double reciprocal = static_cast<double>(1.0f) / determinant;
+    for (int i = 0; i < 16; ++i)
+        output[i] = static_cast<float>(reciprocal * static_cast<double>(output[i]));
+}
+#endif
 }
 void fullInvert(const Mat4& source, Mat4& destination)
 {

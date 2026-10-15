@@ -39,26 +39,24 @@ struct Bytes : renddx9abi::HostNonlinearStream
 };
 BundledMeshState* read(Bytes& bytes,bool skip=false,bool arg4=false)
 {
-    BundledMeshState* result=g_bundledMeshStateManager->read(reinterpret_cast<void*>(0xBAD),vc71::string("Weapons/Rifle/"),&bytes,arg4,skip);
+    BundledMeshState* result=g_bundledMeshStateManager->read(reinterpret_cast<void*>(0xBAD),std::string("Weapons/Rifle/"),&bytes,arg4,skip);
     CHECK(bytes.cursor==bytes.data.size());return result;
 }
-unsigned int count(const vc71::vector_layout& v){return vc71::vectorSizeIn(v,4);}
-dx9rend::EngineTexture* tex(BundledMeshState* s,unsigned int i)
-{return reinterpret_cast<dx9rend::EngineTexture**>(s->m_textures.first)[i];}
+template<class T> unsigned int count(const std::vector<T>& v){return static_cast<unsigned int>(v.size());}
+dx9rend::EngineTexture* tex(BundledMeshState* s,unsigned int i){return s->m_textures[i];}
 }
 namespace renddx9abi {
 void* engineAlloc(unsigned int size){return std::malloc(size);}void engineFree(void* p){std::free(p);}
-void* crtMalloc(size_t size){return std::malloc(size);}void crtFree(void* p){std::free(p);}
 void logf(const char* format,...){CHECK(std::strstr(format,"obsolete")!=0);++obsoleteLogs;}
 }
 namespace dice { namespace hfe { namespace dx9rend {
 IBase* g_Renderer=reinterpret_cast<IBase*>(rendererBytes);
-void pathToLower(vc71::string& value)
+void pathToLower(std::string& value)
 {
     std::string lower(value.c_str());for(char& c:lower)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     value=lower.c_str();
 }
-void* textureManagerGetTexture(const vc71::string& name)
+void* textureManagerGetTexture(const std::string& name)
 {
     const std::string key(name.c_str());loads.push_back(key);
     if(key.find("missing")!=std::string::npos)return 0;
@@ -137,7 +135,7 @@ int main()
     Bytes noMaps("EnvMap",{});BundledMeshState* n=read(noMaps);
     CHECK(count(n->m_textures)==0 && n->m_feature39 && n->m_envMap);n->release();
 
-    vc71::vectorRef<BundledMeshState*>(&manager->m_cache).push_back(first);
+    manager->m_cache.push_back(first);
     CHECK(count(manager->m_cache)==2);CHECK(first->release()==0 && count(manager->m_cache)==0);
     for(const auto& item:textures)CHECK(item.second->refCount==1);
     CHECK(destroyed==0);bundledMeshStateManagerRelease();CHECK(!g_bundledMeshStateManager);
@@ -149,3 +147,4 @@ int main()
     textures.clear();
     std::printf("BundledMesh state: %d checks passed (strict x86 fixture).\n",checks);
 }
+#include "renderer_accessor_fixture_support.h"   // RendDX9Base.h Renderer accessors (x86 identity)

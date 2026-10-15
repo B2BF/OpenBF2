@@ -4,12 +4,11 @@
 // the multimap resolves its first active entry. Compatibility builds publish no console rows.
 #ifdef BF2_IMAGE_RENDDX9
 #include "../../../RendDX9Abi/PluginAbi.h"
-#if BF2_PLUGIN_ABI_NATIVE
 
 #include "OverGrowth.h"
 
 #include "../../../RendDX9Abi/PluginEntry.h"
-#include "../../../RendDX9Abi/Vc71String.h"
+#include <string>
 #include "../../Core/ConsoleObjectMacro.h"
 #include "../../Core/ConsoleObjects.h"
 #include "../../Math/Vec3.h"
@@ -44,16 +43,15 @@ inline bool overGrowthActive()
     return dx9rend::g_OverGrowth != 0;
 }
 
-// The console boundary is the only place a string changes representation: the host console speaks
-// this toolchain's std::string, the owner keeps the 28-byte VC7.1 one.
-inline std::string toConsole(const vc71::string& value)
+// The console boundary copies the owner's string for the host console (both are std::string).
+inline std::string toConsole(const std::string& value)
 {
     return ::renddx9abi::toHostString(value);
 }
 
-inline vc71::string toRetail(const std::string& value)
+inline std::string toRetail(const std::string& value)
 {
-    return ::renddx9abi::toVc71String(value);
+    return ::renddx9abi::fromHostString(value);
 }
 
 // Overgrowth
@@ -301,5 +299,4 @@ bool unregisterOverGrowthConsoleObjects()
 } // namespace hfe
 } // namespace dice
 
-#endif // BF2_PLUGIN_ABI_NATIVE
 #endif // BF2_IMAGE_RENDDX9

@@ -27,7 +27,6 @@ int main()
     ParticleSystemManager manager={}; manager.m_vptr=const_cast<const void**>(kVtable);
     manager.m_poolsInitialized=1; manager.m_qualityLevel=2; manager.m_effectiveViewDistance=1000;
     manager.m_type4PoolCount=8;
-    psmReclassification(&manager).construct();
     psmAllocatePool(manager.m_type4PoolBacking,manager.m_type4FreeList,manager.m_type4PoolCount,200,4);
     g_ParticleSystemManager=reinterpret_cast<IBase*>(&manager);
     unsigned char descriptorBytes[0x264]={};
@@ -70,7 +69,7 @@ int main()
         && psmRuntimeField<unsigned int>(instance,0x124)==100 && farPlane==321);
     cameraMatrix=Mat4::getIdentity();
     float* particle=psmType4NewParticle(instance);
-    CHECK(particle && instance->reserved39()==1 && psmRuntimeField<int>(&manager,0x8BA0)==1);
+    CHECK(particle && instance->reserved39()==1 && manager.m_type4LiveCount==1);
     particle[1]=particle[2]=particle[3]=0; particle[23]=4; particle[24]=particle[25]=0;
     particle[29]=0; particle[30]=1; particle[31]=1; particle[9]=0;
     CHECK(psmType4AdvanceParticle(instance,particle,0,0.1f,1)==1);
@@ -128,14 +127,14 @@ int main()
     particle[29]=0.9f;
     CHECK(psmType4AdvanceParticle(instance,particle,0,0.2f,1)==0);
     CHECK(instance->reserved39()==0 && psmRuntimeField<float**>(instance,0x24)[0]==0);
-    CHECK(manager.m_type4FreeList==particle && psmRuntimeField<int>(&manager,0x8BA0)==0);
+    CHECK(manager.m_type4FreeList==particle && manager.m_type4LiveCount==0);
     instance->reserved41(0.1f); CHECK(manager.m_pendingClassification.size()==1);
     psmRemoveActive(&manager,false); CHECK(controller.stops==1 && manager.m_renderBuckets[8].size()==0);
     psm_removeInstance(&manager,0,instance); psmDrainDestroy(&manager);
     CHECK(manager.m_instances.size()==0);
     freeList(manager.m_instances); freeList(manager.m_pendingDestroy); freeList(manager.m_pendingClassification);
     for(int i=0;i<10;++i) freeList(manager.m_renderBuckets[i]);
-    psmReclassification(&manager).destroy(); cleanup();
+    cleanup();
     std::printf("NSA particle lifecycle/integration: %d/%d checks passed\n",checks-failures,checks);
     return failures?1:0;
 }

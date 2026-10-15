@@ -61,6 +61,8 @@ bool TypeDescriptor::isDerivedFrom(TypeDescriptor* base)
     }
     return true;
 }
+#if defined(_M_IX86)
 static_assert(sizeof(TypeDescriptor) == 16, "BFMeme descriptor layout");
+#endif
 } }
 #endif

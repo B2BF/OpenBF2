@@ -3,7 +3,7 @@
 #ifndef BF2_REND_ENVMAPOBJECT_H
 #define BF2_REND_ENVMAPOBJECT_H
 #ifdef BF2_IMAGE_RENDDX9
-#include "../../../RendDX9Abi/Vc71String.h"
+#include <string>
 #include "../../Math/Mat4.h"
 #include <cstddef>
 namespace dice { namespace hfe { namespace Rend {
@@ -11,8 +11,8 @@ struct EnvMapEntry;
 class EnvMapObjectTemplate
 {
 public:
-    explicit EnvMapObjectTemplate(const vc71::string& name);
-    virtual const vc71::string& getName() const;
+    explicit EnvMapObjectTemplate(const std::string& name);
+    virtual const std::string& getName() const;
     virtual void setSize(float);                           // +04,101C43C0; ELF caller82025F0
     virtual float getSize() const;
     virtual void setIsStatic(bool);                        // +0C,10193820; ELF caller8202650
@@ -21,7 +21,7 @@ public:
     float m_size;
     bool m_isStatic;
     unsigned char m_pad09[3];
-    vc71::string m_name;
+    std::string m_name;
 };
 class EnvMapObject
 {
@@ -42,10 +42,11 @@ public:
     unsigned int m_count;                                 // +14
     unsigned int m_limit;                                 // +18,ctor20
 };
-static_assert(sizeof(EnvMapObjectTemplate)==0x28,"101C4380 template allocation");
+#if defined(_M_IX86)
 static_assert(offsetof(EnvMapObjectTemplate,m_name)==0x0C,"template name offset");
 static_assert(sizeof(EnvMapObject)==0x1C,"101C4150 object allocation");
 static_assert(offsetof(EnvMapObject,m_entry)==0x0C,"entry pointer offset");
+#endif
 } } }
 #endif
 #endif

@@ -9,7 +9,7 @@
 #ifdef BF2_IMAGE_RENDDX9
 
 #include "../../RendDX9Abi/Frontier.h"        // renddx9abi::logf - the two "removed" arms
-#include "../../RendDX9Abi/Vc71String.h"
+#include <string>
 #include "../Math/Mat4.h"
 #include "../RendDX9/RendDX9Base.h"           // the effect seams, rendererGetRenderView
 #include "../RendMisc/IRenderView.h"
@@ -37,10 +37,10 @@ namespace geom {
 namespace {
 
 // `push name; lea ecx, local; call string-ctor; ...; call sub_1001E3A0` - the shipped body builds
-// a temporary vc71::string for every parameter lookup.  A formatting helper, not a recovered one.
+// a temporary std::string for every parameter lookup.  A formatting helper, not a recovered one.
 dx9rend::ShaderParameter* staticMeshShadowParameter(dx9rend::Effect* effect, const char* name)
 {
-    return dx9rend::effectGetShaderParameterTyped(effect, vc71::string(name));
+    return dx9rend::effectGetShaderParameterTyped(effect, std::string(name));
 }
 
 } // anonymous namespace
@@ -87,11 +87,11 @@ void StaticMesh::drawSilhouette(void* unused, int legacyArm)
     dx9rend::indexBufferBind(t->m_indexBuffer);
     smr->m_worldViewProj->setValue(&worldViewProjection, 0);              // +0x48, slot +0x18
 
-    dx9rend::effectSetTechniqueByName(smr->m_shadowEffect, vc71::string("lightmapGeneration"));
+    dx9rend::effectSetTechniqueByName(smr->m_shadowEffect, std::string("lightmapGeneration"));
     dx9rend::effectBegin(smr->m_shadowEffect);
     dx9rend::effectBeginPass(smr->m_shadowEffect, 0);
 
-    const StaticMeshLod* const lodRecord = reinterpret_cast<const StaticMeshLod*>(m_dword30C);
+    const StaticMeshLod* const lodRecord = m_dword30C;
     dx9rend::rendererDrawIndexedPrimitive(
         lodRecord->mergedPrimitiveCount, t->m_primitiveType,
         static_cast<int>(lodRecord->vertexStart), 0, lodRecord->mergedVertexCount, 0);
@@ -146,25 +146,24 @@ void StaticMesh::drawSilhouetteSlow(void* unused, int legacyArm)
         const unsigned int materialCount = static_cast<unsigned int>(getMaterialCount());
         for (unsigned int i = 0; i < materialCount; ++i)
         {
-            unsigned char* const material =
-                *reinterpret_cast<unsigned char**>(m_dword310 + 4) + 516u * i;
-            const ShaderMaterial* const shaderMaterial =
-                *reinterpret_cast<const ShaderMaterial* const*>(material + 0x28);
+            StaticMeshMaterial* const material =
+                m_dword310->data() + i;
+            const ShaderMaterial* const shaderMaterial = material->m_shaderMaterial;   // +0x28
             if (!materialVisible(material, 0))
                 continue;
 
-            StaticMeshMaterial* const typed = reinterpret_cast<StaticMeshMaterial*>(material);
+            StaticMeshMaterial* const typed = material;
             const bool alphaTested = typed->m_alphaMode == 2u;
             if (alphaTested)
             {
                 staticMeshShadowParameter(effect, "AlphaTest")->setBool(1);     // slot +0x1C
-                dx9rend::effectSetTechniqueByName(effect, vc71::string("lightmapGenerationAlphaTest"));
+                dx9rend::effectSetTechniqueByName(effect, std::string("lightmapGenerationAlphaTest"));
                 staticMeshShadowParameter(effect, "TEXLAYER0")->setValue(
                     shaderMaterial->textures[1], 0);
             }
             else
             {
-                dx9rend::effectSetTechniqueByName(effect, vc71::string("lightmapGeneration"));
+                dx9rend::effectSetTechniqueByName(effect, std::string("lightmapGeneration"));
             }
             dx9rend::effectBegin(effect);
             dx9rend::effectBeginPass(effect, 0);

@@ -5,7 +5,7 @@
 #ifndef RENDDX9ABI_ENGINEFILE_H
 #define RENDDX9ABI_ENGINEFILE_H
 
-#include "Vc71String.h"
+#include <string>
 #include "HostFileAbi.h"
 
 namespace renddx9abi {
@@ -38,9 +38,9 @@ void freeEngineFile(EngineFileData& file);
 // HemiMapManager's resource/output helpers. These preserve the FileManager calls the retail body
 // makes through HostFileAbi's typed IFileManager: +0x1C fileExists, +0x18 open with the editor
 // write pair (3,2,0), and +0xA4 getWritePath.
-bool engineFileExists(const vc71::string& path);
-void engineFilePrepareWrite(const vc71::string& path);
-void engineFileGetWritePath(const vc71::string& path, vc71::string& out);
+bool engineFileExists(const std::string& path);
+void engineFilePrepareWrite(const std::string& path);
+void engineFileGetWritePath(const std::string& path, std::string& out);
 
 // Owned engine stream for incremental reads and absolute/relative seeks, used by texture mip loading.
 // Destruction closes the stream.
@@ -51,7 +51,7 @@ public:
     ~EngineStream() { close(); }
 
     // FileManager +0x18, open(path, 2, 0, 0) - the same mode/access pair every recovered call uses.
-    bool open(const vc71::string& path);
+    bool open(const std::string& path);
     void close();                                        // stream +0x08 release
     bool isOpen() const { return m_stream != 0; }
 

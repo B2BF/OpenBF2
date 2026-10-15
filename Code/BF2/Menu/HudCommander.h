@@ -7,6 +7,7 @@
 #include "../Game/IEventListener.h"
 #include "../Game/IGame.h"
 #include <bitset>
+#include <cstdint>
 #include <list>
 #include <string>
 namespace dice { namespace meme { class System; class BfListBoxData; class Bf2MenuMapNode; } }
@@ -102,7 +103,7 @@ private:
     // them.
     float m_field0b4, m_field0b8, m_field0bc, m_field0c0; // +B4..C0
     int m_columnPositions[11]; // +C4..EC, initialized after event registration
-    int m_textures[14]; // +F0..124, initialized after event registration
+    std::intptr_t m_textures[14]; // +F0..124, meme texture handles; initialized after event registration
     float m_colors[8]; // +128..144
     meme::BfListBoxData* m_data; // +148 untouched by constructor
     std::list<int> m_mutedPlayers; // +14C; event59 stores signed player ids

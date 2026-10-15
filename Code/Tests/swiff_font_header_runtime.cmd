@@ -13,20 +13,13 @@ set "TASK_FLAGS=/nologo /c /MD /std:c++14 /permissive /EHsc /Od /Z7 /Gy /Gw /Zc:
 cl %TASK_FLAGS% "%~dp0swiff_font_header_runtime.cpp" /Fo"%BF2_BUILD_OUT%\fixture.obj" /Fd"%BF2_BUILD_OUT%\compile.pdb" >"%BF2_BUILD_OUT%\compile_fixture.log" 2>&1
 if errorlevel 1 (type "%BF2_BUILD_OUT%\compile_fixture.log" & exit /b 1)
 
-cl %TASK_FLAGS% "%TASK_CODE%\RendDX9Abi\Vc71String.cpp" /Fo"%BF2_BUILD_OUT%\Vc71String.obj" /Fd"%BF2_BUILD_OUT%\compile.pdb" >"%BF2_BUILD_OUT%\compile_vc71.log" 2>&1
-if errorlevel 1 (type "%BF2_BUILD_OUT%\compile_vc71.log" & exit /b 1)
-
-cl %TASK_FLAGS% "%TASK_CODE%\RendDX9Abi\Msvcr71Heap.cpp" /Fo"%BF2_BUILD_OUT%\Msvcr71Heap.obj" /Fd"%BF2_BUILD_OUT%\compile.pdb" >"%BF2_BUILD_OUT%\compile_heap.log" 2>&1
-if errorlevel 1 (type "%BF2_BUILD_OUT%\compile_heap.log" & exit /b 1)
-
 cl %TASK_FLAGS% "%TASK_CODE%\RendDX9Abi\BfMemory.cpp" /Fo"%BF2_BUILD_OUT%\BfMemory.obj" /Fd"%BF2_BUILD_OUT%\compile.pdb" >"%BF2_BUILD_OUT%\compile_memory.log" 2>&1
 if errorlevel 1 (type "%BF2_BUILD_OUT%\compile_memory.log" & exit /b 1)
 
 link /nologo /MACHINE:X86 /DEBUG /OPT:REF /INCREMENTAL:NO /SUBSYSTEM:CONSOLE ^
   /OUT:"%BF2_BUILD_OUT%\swiff_font_header_runtime.exe" ^
   /PDB:"%BF2_BUILD_OUT%\swiff_font_header_runtime.pdb" ^
-  "%BF2_BUILD_OUT%\fixture.obj" "%BF2_BUILD_OUT%\Vc71String.obj" ^
-  "%BF2_BUILD_OUT%\Msvcr71Heap.obj" "%BF2_BUILD_OUT%\BfMemory.obj" ^
+  "%BF2_BUILD_OUT%\fixture.obj" "%BF2_BUILD_OUT%\BfMemory.obj" ^
   >"%BF2_BUILD_OUT%\link.log" 2>&1
 set "TASK_LINK_RESULT=%errorlevel%"
 if not "%TASK_LINK_RESULT%"=="0" (type "%BF2_BUILD_OUT%\link.log" & exit /b %TASK_LINK_RESULT%)

@@ -12,18 +12,11 @@
 // The host (BF2.exe) interfaces add dispatches into, typed in both flavours (RW-266): each virtual
 // used below sits at its retail PE slot in this tree's MSVC table; no STL type crosses
 // those calls. IObject's +0x28 / +0x38
-// are its retail-aligned prefix (ObjectLayoutAccess). The retail-ABI flavour blocks Core/ClassManager.h
-// exactly as SkinnedMesh.cpp does.
-#if !BF2_PLUGIN_ABI_NATIVE
-#define CORE_CLASSMANAGER_H
-#endif
+// are its retail-aligned prefix (ObjectLayoutAccess).
 #include "../../Game/Objects/ObjectLayoutAccess.h"      // world::IObject + its retail-aligned prefix
 #include "../../Physics/ICollisionMesh.h"               // hasLod / getVertexVector / getFaceCount /
                                                          // getFaceVector
 #include "../../Physics/HeightmapCluster.h"             // getPrimaryScale / getSquareInWorldCoords
-#if !BF2_PLUGIN_ABI_NATIVE
-#undef CORE_CLASSMANAGER_H
-#endif
 
 #include <cfloat>
 #include <cmath>
@@ -37,6 +30,9 @@ namespace geom {
 
 extern IBase* g_DecalManager;               // ModuleGeom.cpp, dword_1024B908
 extern IBase* g_ParticleSystemManager;      // ModuleGeom.cpp, dword_1024B900
+// ParticleSystemManager.cpp (published in ParticleSystemManager.h): the manager's HeightmapCluster
+// pointer (retail +0x8C14), read without a null test on the manager.
+IBase* particleSystemManagerHeightmapCluster(IBase* manager);
 
 // the per-face clip planes, a VC7.1 std::vector<Plane> file static (constructed empty,
 // destroyed by the atexit thunk 0x101D9F90). File-private: nothing outside this file reads its
@@ -120,12 +116,11 @@ IDecalManager* decalManager()
 }
 
 // ParticleSystemManager +0x8C14 - m_heightmapCluster, the "HeightmapCluster" singleton the particle
-// system caches (0x100D2FD0). The struct is TU-local to ParticleSystemManager.cpp, which pins the
-// offset (static_assert, line 219); this RendDX9-own field is read at that offset in both flavours.
+// system caches (0x100D2FD0). The struct is TU-local to ParticleSystemManager.cpp, which publishes
+// the read; retail loads the field directly.
 IBase* particleHeightmapCluster()
 {
-    return *reinterpret_cast<IBase* const*>(
-        reinterpret_cast<const unsigned char*>(g_ParticleSystemManager) + 0x8C14);
+    return particleSystemManagerHeightmapCluster(g_ParticleSystemManager);
 }
 
 

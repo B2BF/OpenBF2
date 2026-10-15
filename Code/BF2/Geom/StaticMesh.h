@@ -1,5 +1,5 @@
-// Static geometry instance with an ILightSampleable secondary interface at +0x30.
-// The opaque 0x224-byte block at +0x38 stores per-object shader parameters.
+// Static geometry instance with an ILightSampleable secondary interface (retail +0x30).
+// The opaque 0x224-byte block (retail +0x38) stores per-object shader parameters.
 
 
 #ifdef BF2_IMAGE_RENDDX9
@@ -7,31 +7,53 @@
 #ifndef BF2_GEOM_STATICMESH_H
 #define BF2_GEOM_STATICMESH_H
 
-#include <stddef.h>   // offsetof - the layout assertions below
-#include "../../RendDX9Abi/Vc71Map.h"
-#include "../../RendDX9Abi/Vc71Vector.h"
-#include "../../RendDX9Abi/Vc71String.h"
+#include <stddef.h>   // offsetof - the ILightSampleable subobject's owner adjustment
+#include <string>
 #include "../Core/IBase.h"
 #include "GeometryInstanceData.h"
 #include "../Math/Mat4.h"
+#include "../Math/Plane3.h"
+#include "../Math/Vec3.h"
 #include "../RendDX9/Ra/RaShader.h"    // RaObjectParameters - the block embedded at +0x38
 
+#include <map>
+#include <vector>
+
 namespace dice { namespace hfe { class Frustum; } }
+namespace dice { namespace hfe { namespace dx9rend { struct EngineTexture; } } }
+namespace dice { namespace hfe { namespace world { class LightSource; } } }
 
 namespace dice {
 namespace hfe {
 namespace geom {
 
-// The VC7.1 std::map header the constructor builds at +0x260: an allocator word, the sentinel, and
-// the size. Same shape ObjectDrawer carries for its two trees, and for the same reason - nothing
-// recovered so far reads through it, so it stays an opaque header rather than an invented map.
-// Its node is forty bytes (sub_100FFB50 allocates 0x28): left/parent/right, a 24-byte value,
-// then the colour byte at +0x24 and the nil flag at +0x25.
-struct StaticMeshMapHeader
+struct StaticMeshOccluderEdge;   // StaticMeshTemplate.h
+struct StaticMeshLod;            // StaticMeshTemplate.h
+class StaticMeshMaterial;        // StaticMeshTemplate.h
+
+// One (geom, lod) entry of the lightmap cache (retail +0x260, 0x28-byte nodes from sub_100FFB50,
+// value at node +0x10): the texture and the four LightMapOffset words. A fresh entry is all zero.
+struct StaticMeshLightmapEntry
 {
-    void*        alloc;     // +0x00  never written by the constructor
-    void*        head;      // +0x04  the sentinel; all three of ITS links point at itself
-    unsigned int size;      // +0x08  0
+    dx9rend::EngineTexture* texture;   // +0x00
+    float                   offset[4]; // +0x04  the atlas entry's width, height, u and v offsets
+};
+
+// One world-space occluder face (retail 20 bytes): the template plane, transformed, and the
+// template plane's edge references.
+struct StaticMeshOccluderFace
+{
+    Plane3                             plane;            // +0x00
+    const std::vector<unsigned short>* edgeReferences;   // +0x10
+};
+
+// One world-space occluder record (retail 36 bytes), built per template occluder group by
+// setGeometryTransformation and read by ObjectDrawer through slot +0xEC.
+struct StaticMeshOccluderRecord
+{
+    std::vector<StaticMeshOccluderFace>  faces;    // +0x00
+    std::vector<Vec3>                    points;   // +0x10
+    std::vector<StaticMeshOccluderEdge>* edges;    // +0x20  the template group's edges
 };
 
 class StaticMesh : public GeometryInstanceData
@@ -71,6 +93,8 @@ public:
     // Caches and returns the owner's root parent.
     void* refreshRootObject();
 
+    typedef std::map<unsigned int, StaticMeshLightmapEntry> LightmapCache;
+
     // the read accessors
     // Eight one-line slots, each read from its own instructions so the arity is certain - which is
     // the only thing that makes them safe to write rather than stop (see the .cpp's callee-cleanup
@@ -100,9 +124,9 @@ public:
     void  setFloat308(float value);
 
     // +0x24 / +0x28, the setter and getter for +0x34C. [INFERRED]
-    // names; nothing recovered so far reads the field.
-    void  setDword34C(unsigned int value);
-    unsigned int getDword34C() const;
+    // names. The value is the LightManager shadow record pointer (see m_dword34C).
+    void  setDword34C(uintptr_t value);
+    uintptr_t getDword34C() const;
 
     // +0x2C, 0x10103BC0 - `mov eax, 3; retn`. A per-class constant.
     // [INFERRED] as a kind discriminator: XpLightManager's three reflection-type constants are
@@ -204,7 +228,7 @@ public:
     // dynamic parts..." at StaticMesh.cpp:2238 (dice's own __FILE__ and __LINE__).
     void  setDynamicPartTransformation(unsigned int part, const Mat4* transform);
     // +0x68, 0x10082D30 - `m_name = value` through MSVCP71's string operator=.
-    void  setName(const vc71::string& value);
+    void  setName(const std::string& value);
     // +0x84, select ONE material for drawing (+0x356 up, +0x31C = index); -1
     // clears both.  With the flag up the draw submits nothing at all.  [INFERRED] name.
     void  setMaterialOverride(int index);
@@ -212,7 +236,7 @@ public:
     int   getMaterialCount() const;
     // +0xE8, the number of world-space occluder records (+0x338, 36 B each).
     int   getOccluderRecordCount() const;
-    // +0xEC, the i-th occluder record, or null past the end.
+    // +0xEC, the i-th StaticMeshOccluderRecord, or null past the end.
     const void* getOccluderRecord(unsigned int index) const;
 
     // The ILightSampleable subobject at +0x30: +0x10 0x10197EF0 `mov al,1; retn`.
@@ -230,17 +254,19 @@ public:
         return *reinterpret_cast< ::dice::hfe::dx9rend::Ra::RaObjectParameters*>(m_objectParameters);
     }
 
-    // layout, every offset from the constructor's own stores
-    // +0x000..+0x02F: inherited GeometryInstanceData; the assertions below retain the ABI.
+    // layout, every retail offset from the constructor's own stores
+    // +0x000..+0x02F: inherited GeometryInstanceData.
     void* const*        m_lightSampleableVptr;  // +0x030  secondary, 7 slots
     int                 m_refCount;             // +0x034  ctor 1
 
     // +0x038 .. +0x25B - raObjectParametersConstruct. See the header note.
-    unsigned char       m_objectParameters[0x224];
+    alignas(::dice::hfe::dx9rend::Ra::RaObjectParameters)
+    unsigned char       m_objectParameters[sizeof(::dice::hfe::dx9rend::Ra::RaObjectParameters)];
 
     float               m_float25C;             // +0x25C  ctor 1.0f
-    vc71::map_layout    m_map260;               // +0x260  the lightmap cache; 0x28 nodes
-    unsigned int        m_dword26C;             // +0x26C  ctor 0
+    LightmapCache       m_map260;               // +0x260  the lightmap cache, keyed per (geom, lod)
+    // +0x26C: the current (geom, lod) lightmap EngineTexture*, held as an integer.
+    uintptr_t           m_dword26C;             // +0x26C  ctor 0
     float               m_float270;             // +0x270  ctor 1.0f
     float               m_float274;             // +0x274  ctor 1.0f
     unsigned int        m_dword278;             // +0x278  ctor 0
@@ -253,15 +279,19 @@ public:
     Mat4                m_matrix290;            // +0x290  ctor identity
     // Per-draw light pointers, 0x44-byte object-space light records, and 28-byte
     // per-LOD light lists. The final word holds the per-vertex light-index buffer.
-    vc71::vector_layout m_vector2D0;            // +0x2D0  freed by the destructor
-    vc71::vector_layout m_vector2E0;            // +0x2E0  freed by the destructor
-    vc71::vector_layout m_vector2F0;            // +0x2F0  freed by the destructor
-    unsigned int        m_dword300;             // +0x300  ctor 0
+    std::vector<world::LightSource*> m_vector2D0;   // +0x2D0  freed by the destructor
+    std::vector<dx9rend::Ra::RaLightRecord> m_vector2E0;   // +0x2E0
+    // [UNRESOLVED] the ".lights" records: 12 + 12 + 4 bytes, copied from the file and never read.
+    struct VertexLightRecord { unsigned char bytes[28]; };
+    std::vector<VertexLightRecord> m_vector2F0; // +0x2F0
+    // +0x300: the per-vertex light-index VertexBuffer wrapper, held as an integer.
+    uintptr_t           m_dword300;             // +0x300  ctor 0
     // +0x304 receives MeshBounds::radius (a float bit pattern) from the selected lod record.
     unsigned int        m_dword304;             // +0x304  ctor 0
     float               m_float308;             // +0x308  ctor -1.0f  (0xBF800000)
-    unsigned char*      m_dword30C;             // +0x30C  ctor 0; the selected 104-byte lod record
-    unsigned char*      m_dword310;             // +0x310  ctor 0; its 16-byte companion
+    StaticMeshLod*      m_dword30C;             // +0x30C  ctor 0; the selected lod record
+    // +0x310: the selected lod's material vector inside the template's material tree.
+    std::vector<StaticMeshMaterial>* m_dword310; // +0x310  ctor 0
     unsigned int        m_dword314;             // +0x314  ctor 0; the geom index
     unsigned int        m_dword318;             // +0x318  ctor 0; the lod index
     unsigned int        m_dword31C;             // +0x31C  ctor 0; the material the draw is on
@@ -274,9 +304,9 @@ public:
     unsigned int        m_dword32C;             // +0x32C  ctor 0; the flags (+0xC0 / +0xC4)
     void*               m_dword330;             // +0x330  ctor 0; the owning object (+0x9C)
     void*               m_dword334;             // +0x334  ctor 0; its cached root (+0xF8)
-    // A fourth, and the only one whose elements get individually destroyed first: the
-    // destructor calls sub_10103160 on it before freeing the block.
-    vc71::vector_layout m_vector338;            // +0x338  freed by the destructor
+    // The world-space occluder records; the destructor destroys each record's two vectors
+    // (sub_10103160) before freeing the block.
+    std::vector<StaticMeshOccluderRecord> m_vector338;   // +0x338
 
     // +0x348 gates the one-shot inside setGeometryTransformation; the constructor sets it.
     unsigned char       m_byte348;              // +0x348  ctor 1
@@ -285,7 +315,7 @@ public:
     // at +0x2F8 and +0x3B8 feed ShadowProjMat / ShadowTrapMat) and the frame ordinal of that
     // registration; the parameter refresh treats the pair as live only when the ordinal is the
     // current frame's.  Slots +0x24/+0x28 and +0xAC/+0xB0.  [INFERRED] roles.
-    unsigned int        m_dword34C;             // +0x34C  ctor 0
+    uintptr_t           m_dword34C;             // +0x34C  ctor 0; a LightShadowRecord pointer
     void*               m_dword350;             // +0x350  ctor 0; slots +0xAC / +0xB0
     unsigned char       m_byte354;              // +0x354  ctor 0; the draw: "point lights gathered"
     // sub_100FBCB0 (the parameter refresh) writes +0x355 on every draw,
@@ -299,8 +329,8 @@ public:
     unsigned char       m_byte35A;              // +0x35A  ctor 0; "no lightmap for this instance"
     unsigned char       m_pad35B;
     // Parallel per-geometry bounds radii and LOD-distance counts.
-    vc71::vector_layout m_geomRadii;            // +0x35C
-    vc71::vector_layout m_geomLodDistanceCounts;// +0x36C - its +0x378 is the last ctor store
+    std::vector<float>        m_geomRadii;              // +0x35C
+    std::vector<unsigned int> m_geomLodDistanceCounts;  // +0x36C - its +0x378 is the last ctor store
 };
 
 // Two helpers StaticMesh.cpp defines and StaticMeshLightmapGeneration.cpp (the attested TU of
@@ -312,67 +342,7 @@ const float* staticMeshPackVec4(const float v[3], float w);
 // the light manager's shadow-caster predicate walks it too.
 void* staticMeshRootParent(void* object);
 
-#if defined(_M_IX86)
-
-// Assert interior offsets as well as total size: callers access this compatibility layout directly.
-
-static_assert(offsetof(StaticMesh, m_vptr) == 0x000, "m_vptr");
-static_assert(offsetof(StaticMesh, m_name) == 0x004, "m_name");
-static_assert(offsetof(StaticMesh, m_dword20) == 0x020, "m_dword20");
-static_assert(offsetof(StaticMesh, m_dword24) == 0x024, "m_dword24");
-static_assert(offsetof(StaticMesh, m_float28) == 0x028, "m_float28");
-static_assert(offsetof(StaticMesh, m_float2C) == 0x02C, "m_float2C");
-static_assert(offsetof(StaticMesh, m_lightSampleableVptr) == 0x030, "m_lightSampleableVptr");
-static_assert(offsetof(StaticMesh, m_refCount) == 0x034, "m_refCount");
-static_assert(offsetof(StaticMesh, m_float25C) == 0x25C, "m_float25C");
-static_assert(offsetof(StaticMesh, m_map260) == 0x260, "m_map260");
-static_assert(offsetof(StaticMesh, m_dword26C) == 0x26C, "m_dword26C");
-static_assert(offsetof(StaticMesh, m_float270) == 0x270, "m_float270");
-static_assert(offsetof(StaticMesh, m_float274) == 0x274, "m_float274");
-static_assert(offsetof(StaticMesh, m_dword278) == 0x278, "m_dword278");
-static_assert(offsetof(StaticMesh, m_dword27C) == 0x27C, "m_dword27C");
-static_assert(offsetof(StaticMesh, m_template) == 0x280, "m_template");
-static_assert(offsetof(StaticMesh, m_transform) == 0x284, "m_transform");
-static_assert(offsetof(StaticMesh, m_dword288) == 0x288, "m_dword288");
-static_assert(offsetof(StaticMesh, m_dword28C) == 0x28C, "m_dword28C");
-static_assert(offsetof(StaticMesh, m_matrix290) == 0x290, "m_matrix290");
-static_assert(offsetof(StaticMesh, m_vector2D0) == 0x2D0, "m_vector2D0");
-static_assert(offsetof(StaticMesh, m_vector2E0) == 0x2E0, "m_vector2E0");
-static_assert(offsetof(StaticMesh, m_vector2F0) == 0x2F0, "m_vector2F0");
-static_assert(offsetof(StaticMesh, m_dword300) == 0x300, "m_dword300");
-static_assert(offsetof(StaticMesh, m_dword304) == 0x304, "m_dword304");
-static_assert(offsetof(StaticMesh, m_float308) == 0x308, "m_float308");
-static_assert(offsetof(StaticMesh, m_dword30C) == 0x30C, "m_dword30C");
-static_assert(offsetof(StaticMesh, m_dword310) == 0x310, "m_dword310");
-static_assert(offsetof(StaticMesh, m_dword314) == 0x314, "m_dword314");
-static_assert(offsetof(StaticMesh, m_dword318) == 0x318, "m_dword318");
-static_assert(offsetof(StaticMesh, m_dword31C) == 0x31C, "m_dword31C");
-static_assert(offsetof(StaticMesh, m_dword320) == 0x320, "m_dword320");
-static_assert(offsetof(StaticMesh, m_dword324) == 0x324, "m_dword324");
-static_assert(offsetof(StaticMesh, m_dword328) == 0x328, "m_dword328");
-static_assert(offsetof(StaticMesh, m_dword32C) == 0x32C, "m_dword32C");
-static_assert(offsetof(StaticMesh, m_dword330) == 0x330, "m_dword330");
-static_assert(offsetof(StaticMesh, m_dword334) == 0x334, "m_dword334");
-static_assert(offsetof(StaticMesh, m_vector338) == 0x338, "m_vector338");
-static_assert(offsetof(StaticMesh, m_byte348) == 0x348, "m_byte348");
-static_assert(offsetof(StaticMesh, m_dword34C) == 0x34C, "m_dword34C");
-static_assert(offsetof(StaticMesh, m_dword350) == 0x350, "m_dword350");
-static_assert(offsetof(StaticMesh, m_byte354) == 0x354, "m_byte354");
-static_assert(offsetof(StaticMesh, m_byte355) == 0x355, "m_byte355");
-static_assert(offsetof(StaticMesh, m_byte356) == 0x356, "m_byte356");
-static_assert(offsetof(StaticMesh, m_byte357) == 0x357, "m_byte357");
-static_assert(offsetof(StaticMesh, m_byte358) == 0x358, "m_byte358");
-static_assert(offsetof(StaticMesh, m_byte359) == 0x359, "m_byte359");
-static_assert(offsetof(StaticMesh, m_byte35A) == 0x35A, "m_byte35A");
-static_assert(offsetof(StaticMesh, m_geomRadii) == 0x35C, "m_geomRadii");
-static_assert(offsetof(StaticMesh, m_geomLodDistanceCounts) == 0x36C, "m_geomLodDistanceCounts");
-
-// 0x378 + 4 = 0x37C, and StaticMeshTemplate::createInstance allocates exactly that.
-static_assert(sizeof(StaticMesh) == 0x37C,
-              "StaticMeshTemplate::createInstance (0x10116E00) allocates 0x37C");
-#endif
-
-// 0x100FDC20, called on storage the template already allocated.
+// 0x100FDC20, called on storage the template already allocated (retail 0x37C bytes).
 StaticMesh* staticMeshConstruct(void* storage, void* objectTemplate);
 
 } // namespace geom

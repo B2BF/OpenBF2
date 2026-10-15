@@ -34,7 +34,7 @@ bool VariableColorEffect::streamProperties(System* system, Stream* stream)
         && stream->streamData(system, m_alpha, "Alpha", nullptr);
 }
 
-bool VariableColorEffect::drawCharacter(System* system, int character, int font,
+bool VariableColorEffect::drawCharacter(System* system, int character, FontHandle font,
                                         int elementIndex, Quad* quad, RenderContext* context)
 {
     // read each current field only after the preceding callback. Each
@@ -48,7 +48,7 @@ bool VariableColorEffect::drawCharacter(System* system, int character, int font,
     return Effect::drawCharacter(system, character, font, elementIndex, quad, context);
 }
 
-bool VariableColorEffect::drawTexture(System* system, int texture, Quad* quad,
+bool VariableColorEffect::drawTexture(System* system, TextureHandle texture, Quad* quad,
                                       RenderContext* context)
 {
     // 7CAC40 has the same ordered sampling, including independent null defaults.
@@ -61,7 +61,9 @@ bool VariableColorEffect::drawTexture(System* system, int texture, Quad* quad,
     return Effect::drawTexture(system, texture, quad, context);
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(ClassTypeDescriptor<VariableColorEffect, Effect>) == 16,
               "VariableColorEffect metadata storage");
+#endif
 } }
 #endif

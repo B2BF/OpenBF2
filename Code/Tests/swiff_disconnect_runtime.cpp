@@ -57,7 +57,7 @@ struct RegistryFixture : dice::hfe::IClassManager
     SWIFF_TEST_UNEXPECTED(void, registerSingleton, (const dice::hfe::SingletonRegInfo&), )
     SWIFF_TEST_UNEXPECTED(void, unregisterSingleton, (const renddx9abi::HostString&), )
     SWIFF_TEST_UNEXPECTED(void, reserved_getSingletonAs, (), )
-    SWIFF_TEST_UNEXPECTED(void, reserved_registerSimpleSingleton, (), )
+    SWIFF_TEST_UNEXPECTED(void, registerSimpleSingleton, (const renddx9abi::HostString&, void*), )
     SWIFF_TEST_UNEXPECTED(void, reserved_unregisterSimpleSingleton, (), )
     SWIFF_TEST_UNEXPECTED(void, reserved_getSimpleSingleton, (), )
     SWIFF_TEST_UNEXPECTED(void, reserved_getPrintableSingletonList, (), )
@@ -114,8 +114,6 @@ IBase* fileManager = nullptr;
 namespace renddx9abi {
 void* engineAlloc(unsigned int size) { return std::malloc(size); }
 void engineFree(void* value) { std::free(value); }
-void* crtMalloc(size_t size) { return std::malloc(size); }
-void crtFree(void* value) { std::free(value); }
 void logf(const char* format, ...)
 {
     va_list args; va_start(args, format); std::vfprintf(stderr, format, args); va_end(args);

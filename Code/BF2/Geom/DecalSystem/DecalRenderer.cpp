@@ -18,7 +18,7 @@
 #include "../../RendDX9/ShaderParameter.h"
 #include "../../RendMisc/IRenderView.h"
 #include "../../RendMisc/IRenderer.h"
-#include "../../../RendDX9Abi/Vc71String.h"
+#include <string>
 
 #include <algorithm>
 #include <stddef.h>
@@ -34,7 +34,7 @@ extern void* g_bufferManager;                                              // dw
 extern void* g_rendererBase;                                               // dword_1023B970
 extern void* g_raShaderConstants;                                          // dword_1023DDBC
 void* createVertexBuffer(void* bufferManager, unsigned int count, unsigned int stride,
-                         const vc71::string& name, unsigned int usage);
+                         const std::string& name, unsigned int usage);
 int   bufferManagerSwapPool(int value);
 void* vertexBufferLock(void* wrapper, unsigned int offsetVerts, unsigned int countVerts,
                        unsigned int flags);
@@ -93,9 +93,10 @@ dx9rend::IRenderer* renderer()
     return static_cast<dx9rend::IRenderer*>(dx9rend::g_rendererBase);
 }
 
-unsigned char* raConstants()
+// The Ra constants block (g_raShaderConstants) word at a retail x86 byte offset.
+unsigned char* raConstantAt(unsigned int byteOffset)
 {
-    return static_cast<unsigned char*>(dx9rend::g_raShaderConstants);
+    return dx9rend::raShaderConstantsAt(byteOffset);
 }
 
 // sub_1000ED40 (34 B, __stdcall, `retn 0Ch`): fld low; fld high; fld value; fcomi st,st1; fcmovnb;
@@ -134,35 +135,31 @@ unsigned int geometryDrawnFrame(void* geometry)
     return reinterpret_cast<Fn>((*static_cast<void***>(geometry))[0xB0 / 4])(geometry);
 }
 
-// XpLightManager.cpp's XpRenderRecordLayout (0x498 bytes): matrices[4] at +0x2F8, matrices[7] at
-// +0x3B8, atlasBounds at +0x438, and the first tail byte +0x494.
+// XpLightManager.h's LightShadowRecord (0x498 bytes in the PE): matrices[4] at +0x2F8, matrices[7]
+// at +0x3B8, atlasBounds at +0x438, and the first tail byte +0x494.
 const Mat4* lightRecordShadowMatrix(void* record)
 {
-    return reinterpret_cast<const Mat4*>(static_cast<unsigned char*>(record) + 0x2F8);
+    return &static_cast<LightShadowRecord*>(record)->matrices[4];
 }
 
 const Mat4* lightRecordTrapezoidMatrix(void* record)
 {
-    return reinterpret_cast<const Mat4*>(static_cast<unsigned char*>(record) + 0x3B8);
+    return &static_cast<LightShadowRecord*>(record)->matrices[7];
 }
 
 const float* lightRecordViewPort(void* record)
 {
-    return reinterpret_cast<const float*>(static_cast<unsigned char*>(record) + 0x438);
+    return static_cast<LightShadowRecord*>(record)->atlasBounds;
 }
 
 bool lightRecordUsesSecondShadowMap(void* record)
 {
-    return static_cast<unsigned char*>(record)[0x494] != 0;
+    return static_cast<LightShadowRecord*>(record)->tail494[0] != 0;
 }
 
-// The LightManager's two shadow-map textures (+0x21C and +0x230, EngineTexture* - XpLightManager.cpp
-// creates and releases them at 0x100F0xxx through its lmField accessor).
-dx9rend::EngineTexture* lightManagerShadowMap(unsigned int byteOffset)
-{
-    return *reinterpret_cast<dx9rend::EngineTexture**>(
-        reinterpret_cast<unsigned char*>(g_LightManager) + byteOffset);
-}
+// The LightManager's two shadow-map textures (+0x21C the directional map, +0x230 the point/spot
+// atlas) are read through XpLightManager.h's lightManagerShadowMapTexture /
+// lightManagerPointShadowMapTexture.
 
 // the sort predicate _Sort receives in edx (0x101AA75C):
 //     key = (((texture & 0xFFFFC000) | (kind << 26)) << 4) | (shadowMap >> 14)
@@ -224,45 +221,45 @@ DecalRenderer::DecalRenderer()
 
     const int previousPool = dx9rend::bufferManagerSwapPool(0);
     m_vertexBuffer = dx9rend::createVertexBuffer(dx9rend::g_bufferManager, kVertexCapacity,
-                                                 kVertexStride, vc71::string("DecalRenderer"),
+                                                 kVertexStride, std::string("DecalRenderer"),
                                                  0x208u);
     dx9rend::bufferManagerSwapPool(previousPool);
 
     // sub_1001E420 each - the counted lookup; it guards neither the effect nor the answer.
     m_paramFadeDistanceAndInterval = dx9rend::effectGetShaderParameterTyped(
-        m_effect, vc71::string("DecalFadeDistanceAndInterval"));          // +0x1B8
+        m_effect, std::string("DecalFadeDistanceAndInterval"));          // +0x1B8
     m_paramInstanceTransformations = dx9rend::effectGetShaderParameterTyped(
-        m_effect, vc71::string("InstanceTransformations"));               // +0x1BC
+        m_effect, std::string("InstanceTransformations"));               // +0x1BC
     m_paramShadowTransformations = dx9rend::effectGetShaderParameterTyped(
-        m_effect, vc71::string("ShadowTransformations"));                 // +0x1C0
+        m_effect, std::string("ShadowTransformations"));                 // +0x1C0
     m_paramShadowTrapezoidMats = dx9rend::effectGetShaderParameterTyped(
-        m_effect, vc71::string("ShadowTrapezoidMats"));                   // +0x1C4
+        m_effect, std::string("ShadowTrapezoidMats"));                   // +0x1C4
     m_paramShadowViewPortMaps = dx9rend::effectGetShaderParameterTyped(
-        m_effect, vc71::string("ShadowViewPortMaps"));                    // +0x1C8
+        m_effect, std::string("ShadowViewPortMaps"));                    // +0x1C8
     m_paramAmbientColor = dx9rend::effectGetShaderParameterTyped(
-        m_effect, vc71::string("AmbientColor"));                          // +0x1CC
+        m_effect, std::string("AmbientColor"));                          // +0x1CC
     m_paramSunColor = dx9rend::effectGetShaderParameterTyped(
-        m_effect, vc71::string("SunColor"));                              // +0x1D0
+        m_effect, std::string("SunColor"));                              // +0x1D0
     m_paramSunDirection = dx9rend::effectGetShaderParameterTyped(
-        m_effect, vc71::string("SunDirection"));                          // +0x1D4
+        m_effect, std::string("SunDirection"));                          // +0x1D4
     m_paramWorldViewProjection = dx9rend::effectGetShaderParameterTyped(
-        m_effect, vc71::string("WorldViewProjection"));                   // +0x1D8
+        m_effect, std::string("WorldViewProjection"));                   // +0x1D8
     m_paramTexLayer0 = dx9rend::effectGetShaderParameterTyped(
-        m_effect, vc71::string("TEXLAYER0"));                             // +0x1DC
+        m_effect, std::string("TEXLAYER0"));                             // +0x1DC
     m_paramShadowMapTex = dx9rend::effectGetShaderParameterTyped(
-        m_effect, vc71::string("ShadowMapTex"));                          // +0x1E0
+        m_effect, std::string("ShadowMapTex"));                          // +0x1E0
     m_paramFogRange = dx9rend::effectGetShaderParameterTyped(
-        m_effect, vc71::string("fogRange"));                              // +0x1E4
+        m_effect, std::string("fogRange"));                              // +0x1E4
     m_paramFogColor = dx9rend::effectGetShaderParameterTyped(
-        m_effect, vc71::string("fogColor"));                              // +0x1E8
+        m_effect, std::string("fogColor"));                              // +0x1E8
     m_paramWaterFogColor = dx9rend::effectGetShaderParameterTyped(
-        m_effect, vc71::string("WaterFogColor"));                         // +0x1EC
+        m_effect, std::string("WaterFogColor"));                         // +0x1EC
     m_paramWaterFogRange = dx9rend::effectGetShaderParameterTyped(
-        m_effect, vc71::string("WaterFogRange"));                         // +0x1F0
+        m_effect, std::string("WaterFogRange"));                         // +0x1F0
     m_paramCameraToWater = dx9rend::effectGetShaderParameterTyped(
-        m_effect, vc71::string("CameraToWater"));                         // +0x1F4
+        m_effect, std::string("CameraToWater"));                         // +0x1F4
     m_paramWorldSpaceCamPos = dx9rend::effectGetShaderParameterTyped(
-        m_effect, vc71::string("WorldSpaceCamPos"));                      // +0x1F8
+        m_effect, std::string("WorldSpaceCamPos"));                      // +0x1F8
 }
 
 
@@ -327,11 +324,10 @@ void DecalRenderer::collect(dx9rend::IRenderView& view, DecalObjectMap& instance
     if (!m_enabled || instances.size() == 0)
         return;
 
-    decalvc71::Vector<DecalObject*> buckets[3];                              // [ebp-6Ch..-3Ch]
-    for (DecalObjectMap::Node* it = instances.begin(); it != instances.end();
-         it = DecalObjectMap::next(it))
+    std::vector<DecalObject*> buckets[3];                                  // [ebp-6Ch..-3Ch]
+    for (DecalObjectMap::iterator it = instances.begin(); it != instances.end(); ++it)
     {
-        DecalObject* const object = it->value;
+        DecalObject* const object = it->second;
         const unsigned char changed = object->renderFlag();
         object->renderFlag() = false;
         if (changed && object->getNumDecals() != 0)      // slot +0x20
@@ -351,11 +347,11 @@ void DecalRenderer::collect(dx9rend::IRenderView& view, DecalObjectMap& instance
         m_boundShadowMap = 0;                                              // +0x1C
         batch.reset(kind);
 
-        decalvc71::Vector<DecalObject*>& bucket = buckets[kind];
-        for (unsigned int i = 0; bucket.data() && i < bucket.size(); ++i)
+        std::vector<DecalObject*>& bucket = buckets[kind];
+        for (unsigned int i = 0; i < bucket.size(); ++i)
         {
             addObject(view, bucket[i], batch);
-            if (batch.objects.data() && batch.objects.size() == 10)
+            if (batch.objects.size() == 10)
             {
                 pushBatch(batch);
                 batch.vertexCount = 0;
@@ -365,7 +361,7 @@ void DecalRenderer::collect(dx9rend::IRenderView& view, DecalObjectMap& instance
                 batch.records.clear();
             }
         }
-        if (batch.objects.data() && batch.objects.size() != 0)
+        if (batch.objects.size() != 0)
             pushBatch(batch);
     }
 }
@@ -377,7 +373,7 @@ void DecalRenderer::collect(dx9rend::IRenderView& view, DecalObjectMap& instance
 
 void DecalRenderer::addObject(dx9rend::IRenderView& view, DecalObject* object, DecalBatch& batch)
 {
-    int objectIndex = batch.objects.data() ? static_cast<int>(batch.objects.size()) : 0;   // [ebp-4]
+    int objectIndex = static_cast<int>(batch.objects.size());              // [ebp-4]
 
     for (unsigned int i = 0; i < object->staticCount(); ++i)
     {
@@ -397,7 +393,7 @@ void DecalRenderer::addObject(dx9rend::IRenderView& view, DecalObject* object, D
         addRecord(batch, record, object, &objectIndex);
     }
 
-    if (batch.records.data() && batch.records.size() != 0)
+    if (batch.records.size() != 0)
         batch.objects.push_back(object);                                   // 0x10126F30 on growth
 }
 
@@ -420,15 +416,15 @@ void DecalRenderer::addRecord(DecalBatch& batch, DecalRecord* record, DecalObjec
         if (geometry && geometryLightRecord(geometry))                     // geometry +0x28
         {
             if (lightRecordUsesSecondShadowMap(geometryLightRecord(geometry)))   // +0x28 again
-                shadowMap = lightManagerShadowMap(0x230);
+                shadowMap = lightManagerPointShadowMapTexture(g_LightManager);   // +0x230
             else
-                shadowMap = lightManagerShadowMap(0x21C);
+                shadowMap = lightManagerShadowMapTexture(g_LightManager);        // +0x21C
             haveShadowMap = true;
         }
     }
     else if (batch.kind == 2)
     {
-        shadowMap = lightManagerShadowMap(0x21C);
+        shadowMap = lightManagerShadowMapTexture(g_LightManager);              // +0x21C
         haveShadowMap = true;
     }
     if (haveShadowMap && shadowMap != m_boundShadowMap)
@@ -444,7 +440,7 @@ void DecalRenderer::addRecord(DecalBatch& batch, DecalRecord* record, DecalObjec
     }
 
     if ((batch.vertexCount + record->vertexCount >= kVertexCapacity || changed) &&
-        batch.records.data() && batch.records.size() != 0)
+        batch.records.size() != 0)
     {
         batch.objects.push_back(object);
         pushBatch(batch);
@@ -472,7 +468,7 @@ void DecalRenderer::pushBatch(const DecalBatch& batch)
 
 bool DecalRenderer::render(dx9rend::IRenderView* view)
 {
-    if (!m_enabled || !m_batches.data() || m_batches.size() == 0)
+    if (!m_enabled || m_batches.size() == 0)
         return false;
 
     const Mat4* const projection  = view->getProjectionMatrixPtr();        // +0x6C
@@ -492,7 +488,7 @@ bool DecalRenderer::render(dx9rend::IRenderView* view)
     std::sort(m_batches.begin(), m_batches.end(), batchLess);
 
     int pass = 3;                                                          // [ebp-8]
-    for (unsigned int i = 0; m_batches.data() && i < m_batches.size(); ++i)
+    for (unsigned int i = 0; i < m_batches.size(); ++i)
     {
         const DecalBatch& batch = m_batches[i];
         if (batch.kind != pass)
@@ -507,7 +503,7 @@ bool DecalRenderer::render(dx9rend::IRenderView* view)
     if (pass != 3)
         dx9rend::effectEnd(m_effect);
 
-    m_batches.clear();                                                     // 0x101ABC60 + free
+    m_batches.clear();                         // 0x101ABC60; retail's VC7.1 clear also freed storage
     dx9rend::stateManagerPop();
     return true;
 }
@@ -553,11 +549,11 @@ void DecalRenderer::beginPass(int kind)
     const Mat4* const cameraView = renderer()->getRenderViewDup()->getViewMatrixPtr();  // +0x50, +0x64
     m_paramWorldSpaceCamPos->setValue(&cameraView->m[12], 0);              // +0x1F8, view + 0x30
 
-    m_paramFogRange->setValue(raConstants() + 0xA8, 0);                    // +0x1E4
-    m_paramFogColor->setValue(raConstants() + 0xBC, 0);                    // +0x1E8
-    m_paramWaterFogColor->setValue(raConstants() + 0x10C, 0);              // +0x1EC, sub_10037EB0
-    m_paramWaterFogRange->setValue(raConstants() + 0xF8, 0);               // +0x1F0, sub_10037EA0
-    m_paramCameraToWater->setValue(raConstants() + 0x1D8, 0);              // +0x1F4
+    m_paramFogRange->setValue(raConstantAt(0xA8), 0);                    // +0x1E4
+    m_paramFogColor->setValue(raConstantAt(0xBC), 0);                    // +0x1E8
+    m_paramWaterFogColor->setValue(raConstantAt(0x10C), 0);              // +0x1EC, sub_10037EB0
+    m_paramWaterFogRange->setValue(raConstantAt(0xF8), 0);               // +0x1F0, sub_10037EA0
+    m_paramCameraToWater->setValue(raConstantAt(0x1D8), 0);              // +0x1F4
 
     dx9rend::vertexBufferBindStream(m_vertexBuffer, 0);
     dx9rend::effectBegin(m_effect);
@@ -570,7 +566,7 @@ void DecalRenderer::beginPass(int kind)
 
 bool DecalRenderer::drawBatch(dx9rend::IRenderView* view, const DecalBatch& batch)
 {
-    if (!batch.records.data() || batch.records.size() == 0)
+    if (batch.records.size() == 0)
         return true;
 
     setInstanceTransforms(batch);
@@ -616,7 +612,7 @@ bool DecalRenderer::drawBatch(dx9rend::IRenderView* view, const DecalBatch& batc
     if (!locked)
         return false;
 
-    for (unsigned int r = 0; batch.records.data() && r < batch.records.size(); ++r)
+    for (unsigned int r = 0; r < batch.records.size(); ++r)
     {
         const DecalRecord* const record = batch.records[r];
         const DecalVertex* const source = record->vertices;
@@ -654,7 +650,7 @@ bool DecalRenderer::drawBatch(dx9rend::IRenderView* view, const DecalBatch& batc
 
 void DecalRenderer::setInstanceTransforms(const DecalBatch& batch)
 {
-    for (unsigned int i = 0; batch.objects.data() && i < batch.objects.size(); ++i)
+    for (unsigned int i = 0; i < batch.objects.size(); ++i)
     {
         world::IObject* const owner =
             static_cast<world::IObject*>(batch.objects[i]->ownerObject());
@@ -663,7 +659,7 @@ void DecalRenderer::setInstanceTransforms(const DecalBatch& batch)
         else
             m_instanceTransforms[i] = &Mat4::getIdentity();
     }
-    const unsigned int count = batch.objects.data() ? batch.objects.size() : 0u;
+    const unsigned int count = static_cast<unsigned int>(batch.objects.size());
     m_paramInstanceTransformations->setMatrixPointerArray(
         reinterpret_cast<const void* const*>(m_instanceTransforms), count);      // +0x28
 }
@@ -676,7 +672,7 @@ void DecalRenderer::setInstanceTransforms(const DecalBatch& batch)
 
 void DecalRenderer::setDynamicShadowParameters(const DecalBatch& batch)
 {
-    for (unsigned int i = 0; batch.objects.data() && i < batch.objects.size(); ++i)
+    for (unsigned int i = 0; i < batch.objects.size(); ++i)
     {
         void* const geometry = batch.objects[i]->ownerGeometry();
         if (geometry && geometryLightRecord(geometry))
@@ -697,7 +693,7 @@ void DecalRenderer::setDynamicShadowParameters(const DecalBatch& batch)
             m_shadowViewPorts[i].x = 0.0f;
         }
     }
-    const unsigned int count = batch.objects.data() ? batch.objects.size() : 0u;
+    const unsigned int count = static_cast<unsigned int>(batch.objects.size());
     m_paramShadowTransformations->setMatrixPointerArray(
         reinterpret_cast<const void* const*>(m_shadowTransforms), count);  // +0x1C0, +0x28
     m_paramShadowViewPortMaps->setValue(m_shadowViewPorts, count);         // +0x1C8, +0x18
@@ -711,7 +707,7 @@ void DecalRenderer::setDynamicShadowParameters(const DecalBatch& batch)
 
 void DecalRenderer::setStaticShadowParameters(const DecalBatch& batch)
 {
-    for (unsigned int i = 0; batch.objects.data() && i < batch.objects.size(); ++i)
+    for (unsigned int i = 0; i < batch.objects.size(); ++i)
     {
         void* const record = batch.objects[i]->getShadowRecord();   // slot +0x08
         if (record)
@@ -734,13 +730,13 @@ void DecalRenderer::setStaticShadowParameters(const DecalBatch& batch)
             m_shadowViewPorts[i].x = 0.0f;
         }
     }
-    unsigned int count = batch.objects.data() ? batch.objects.size() : 0u;
+    unsigned int count = static_cast<unsigned int>(batch.objects.size());
     m_paramShadowTransformations->setMatrixPointerArray(
         reinterpret_cast<const void* const*>(m_shadowTransforms), count);  // +0x1C0
-    count = batch.objects.data() ? batch.objects.size() : 0u;
+    count = static_cast<unsigned int>(batch.objects.size());
     m_paramShadowTrapezoidMats->setMatrixPointerArray(
         reinterpret_cast<const void* const*>(m_shadowTrapezoidMats), count);   // +0x1C4
-    count = batch.objects.data() ? batch.objects.size() : 0u;
+    count = static_cast<unsigned int>(batch.objects.size());
     m_paramShadowViewPortMaps->setValue(m_shadowViewPorts, count);         // +0x1C8
 }
 

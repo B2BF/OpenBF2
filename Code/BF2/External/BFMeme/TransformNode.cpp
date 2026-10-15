@@ -37,6 +37,7 @@ bool streamPair(hfe::Vec2& value, Stream* stream, const char* first, const char*
 }
 float decodedState(float value) // float stores in838F40 and82D340
 {
+#if defined(_M_IX86)
     float result;
     __asm {
         fld value
@@ -51,6 +52,13 @@ float decodedState(float value) // float stores in838F40 and82D340
         fstp result
     }
     return result;
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    // Only an ordered negative value is decoded; zero, positive and NaN pass through the
+    // double round trip, which quiets a signalling NaN as fld/fstp does.
+    const double loaded = value;
+    return static_cast<float>(value < 0.0f ? -(loaded + 1.0) : loaded);
+#endif
 }
 float stateRate(const NodeState& state) // 838F40 ->82BD30; System/Node receivers unused
 {
@@ -62,6 +70,7 @@ float stateRate(const NodeState& state) // 838F40 ->82BD30; System/Node receiver
 }
 bool sumNotLess(float first, float second, float limit) // 82D49E..4BB, unordered passes
 {
+#if defined(_M_IX86)
     bool result;
     __asm {
         fld first
@@ -72,6 +81,12 @@ bool sumNotLess(float first, float second, float limit) // 82D49E..4BB, unordere
         setp result
     }
     return result;
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    // setp after test ah,5: false only for an ordered sum below the limit.
+    const double sum = static_cast<double>(first) + second;
+    return !(sum < limit);
+#endif
 }
 }
 
@@ -154,7 +169,9 @@ void TransformNode::reset() // 82D560; Node's real+C4 dispatch remains a named f
     if (m_child) m_child->reset();
     Node::reset();
 }
+#if defined(_M_IX86)
 static_assert(sizeof(TransformNode) == 36, "native x86 TransformNode storage");
 static_assert(sizeof(TransformNodeTypeDescriptor) == 16, "native TransformNode metadata");
+#endif
 } }
 #endif

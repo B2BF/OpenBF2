@@ -10,9 +10,9 @@
 #ifdef BF2_IMAGE_RENDDX9
 
 #include "../../MeshTemplate.h"
-#include "../../../../RendDX9Abi/Vc71Vector.h"
-#include "../../../../RendDX9Abi/Vc71Map.h"
 #include <cstddef>
+#include <set>
+#include <vector>
 
 namespace dice {
 namespace hfe {
@@ -58,7 +58,11 @@ struct MeshParticleMeshMaterial
 static_assert(sizeof(MeshParticleMeshLod) == 72, "readLods / the instance stride by 72 (0x38E38E39 >> 4)");
 static_assert(offsetof(MeshParticleMeshLod, renderKind) == 0x40, "readMaterials writes lod +0x40");
 static_assert(offsetof(MeshParticleMeshLod, hasAlphaTest) == 0x44, "readMaterials writes lod +0x44");
+// The rebuild keeps the records in std::vectors and indexes them by type; nothing here divides by a
+// literal size, so the retail size is x86 evidence only (issue #7).
+#if defined(_M_IX86)
 static_assert(sizeof(MeshParticleMeshMaterial) == 24, "the destructor and the draw divide by 24");
+#endif
 
 
 // Shared mesh-particle effect state, initialized on demand by material loading.
@@ -96,7 +100,14 @@ extern MeshParticleMeshEffectState g_meshParticleMeshEffectState;
 class MeshParticleMeshTemplate : public MeshTemplate
 {
 public:
+    typedef std::vector<MeshParticleMeshMaterial>           LodMaterials;   // one lod's materials
+    typedef std::vector<std::vector<LodMaterials> >          MaterialTable;  // geom -> lod -> material
+    typedef std::vector<std::vector<MeshParticleMeshLod> >   LodTable;       // geom -> lod
+    typedef std::set<MeshParticleMesh*>                      InstanceSet;
+
     MeshParticleMeshTemplate();
+    // The destructor body: the deleting slot frees the storage afterwards without running a C++
+    // destructor, so this destroys this class's members itself, in the shipped order.
     void destroyMembers();                                          // (the dtor body)
 
     // The overridden IBase trio counts at +0xC8 - the same three bodies StaticMeshTemplate,
@@ -107,7 +118,7 @@ public:
     virtual void* queryInterface(unsigned int iid) const;           // +0x0C
 
     virtual unsigned int getClassId() const;                        // +0x10
-    virtual void  setName(const vc71::string& name);                // +0x14
+    virtual void  setName(const std::string& name);                // +0x14
     virtual void* createInstance();                                 // +0x24
     virtual bool  load();                                           // +0x2C
     virtual void* destroy(unsigned char flags);                     // +0xB0
@@ -120,25 +131,15 @@ public:
     // [UNRESOLVED] name and value type: the body is an untyped dword store. No recovered caller.
     virtual void  setDwordF8(int index, unsigned int value);        // +0xF0
 
-    // data, in shipped order
+    // data, in shipped order; the `+0xNN` comments are the retail offsets
     int                 m_refCount;          // +0x0C8
-    vc71::vector_layout m_materials;         // +0x0CC  geom -> lod -> MeshParticleMeshMaterial
-    vc71::set_layout    m_instances;         // +0x0DC  MeshParticleMesh*
-    vc71::vector_layout m_geoms;             // +0x0E8  geom -> MeshParticleMeshLod
+    MaterialTable       m_materials;         // +0x0CC  geom -> lod -> MeshParticleMeshMaterial
+    InstanceSet         m_instances;         // +0x0DC  MeshParticleMesh*
+    LodTable            m_geoms;             // +0x0E8  geom -> MeshParticleMeshLod
     unsigned int        m_dwordF8[26];       // +0x0F8  [UNRESOLVED], constructor-untouched
     unsigned char       m_isDecal;           // +0x160  [INFERRED] name
     unsigned char       m_pad161[3];         // +0x161
 };
-
-#if defined(_M_IX86)
-static_assert(offsetof(MeshParticleMeshTemplate, m_refCount) == 0xC8, "refcount +0xC8 (0x100EEA10)");
-static_assert(offsetof(MeshParticleMeshTemplate, m_materials) == 0xCC, "material tree +0xCC");
-static_assert(offsetof(MeshParticleMeshTemplate, m_instances) == 0xDC, "instance set +0xDC");
-static_assert(offsetof(MeshParticleMeshTemplate, m_geoms) == 0xE8, "lod tree +0xE8");
-static_assert(offsetof(MeshParticleMeshTemplate, m_dwordF8) == 0xF8, "slot +0xF0's array at +0xF8");
-static_assert(offsetof(MeshParticleMeshTemplate, m_isDecal) == 0x160, "setName's byte +0x160");
-static_assert(sizeof(MeshParticleMeshTemplate) == 0x164, "RefFactory 0x100B07D2 allocates 0x164");
-#endif
 
 // the factory registered under "dice.hfe.geom.GeometryTemplate.MeshParticleMesh".
 IBase* __fastcall createMeshParticleMeshTemplate(unsigned int iid, IBase* outer);

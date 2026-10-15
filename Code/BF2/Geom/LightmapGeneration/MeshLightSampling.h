@@ -14,11 +14,11 @@
 #define BF2_GEOM_LIGHTMAPGENERATION_MESHLIGHTSAMPLING_H
 
 #include "ILightSampling.h"
-#include "../UndergrowthSystem.h"         // Vc71Vec - the renderer's owning VC7.1-layout vector
 #include "../../Math/Vec3.h"
-#include "../../../RendDX9Abi/Vc71String.h"
+#include <string>
 
 #include <stddef.h>
+#include <vector>
 
 namespace dice {
 namespace hfe {
@@ -93,7 +93,7 @@ public:
     // wider than the size cap and while the resolution modifier is below 1 (doubling it each time),
     // NaN positions are zeroed, and an A8R8G8B8 texture of the final size is created, locked and
     // cleared. False only when the file cannot be opened.
-    bool load(const vc71::string& path, const vc71::string& outputName);
+    bool load(const std::string& path, const std::string& outputName);
 
     // IBase
     virtual void  addRef();
@@ -115,10 +115,10 @@ public:
 
     // data, in shipped order (the vptr is +0x00)
     int                          m_refCount;            // +0x04  1
-    Vc71Vec<MeshSampleRecord>    m_samples;             // +0x08  (first at +0x0C) the sample grid
+    std::vector<MeshSampleRecord>   m_samples;          // +0x08  (first at +0x0C) the sample grid
     // +0x18 - the triangle list; LightSampleBlock::triangles points at this vector itself.
-    Vc71Vec<MeshSampleTriangle>  m_triangles;
-    Vc71Vec<MeshSampleLight>     m_lights;              // +0x28  (first at +0x2C)
+    std::vector<MeshSampleTriangle> m_triangles;
+    std::vector<MeshSampleLight>    m_lights;           // +0x28  (first at +0x2C)
     float                        m_resolutionModifier;  // +0x38  createLightSampler's argument
     unsigned int                 m_textureSizeX;        // +0x3C  the grid (and lightmap) width
     unsigned int                 m_textureSizeY;        // +0x40  its height
@@ -129,7 +129,7 @@ public:
     unsigned int                 m_batchStart;          // +0x54  where the last batch started
     unsigned int                 m_batchCount;          // +0x58  samples in the last batch
     LightSample*                 m_batch;               // +0x5C  the caller's buffer of the last batch
-    vc71::string                 m_outputName;          // +0x60  the lightmap name, without ".dds"
+    std::string                 m_outputName;          // +0x60  the lightmap name, without ".dds"
     unsigned int                 m_usedWidth;           // +0x7C  the largest column holding a valid triangle
     unsigned int                 m_usedHeight;          // +0x80  the last row holding a valid triangle
     // +0x84 - -1 (none); the template's lightmap size for this (geom, lod) when it overrides lightmaps.
@@ -140,24 +140,14 @@ private:
     MeshLightSampler& operator=(const MeshLightSampler&);
 };
 
-#if defined(_M_IX86)
+// The .samples file record load() reads as one block (28 bytes per sample): every architecture.
 static_assert(sizeof(MeshSampleRecord) == 28, "a sample is 28 bytes - see the /28 at 0x101BD3F0");
+#if defined(_M_IX86)
 static_assert(sizeof(MeshSampleTriangle) == 92, "a triangle is 92 bytes - see 0x101BDF50");
 static_assert(offsetof(MeshSampleTriangle, normal) == 0x24, "triangle normals at +0x24");
 static_assert(offsetof(MeshSampleTriangle, unresolved54) == 0x54, "the loader's -1 at +0x54");
 static_assert(sizeof(MeshSampleLight) == 28, "a light record is 28 bytes - see 0x101BDBE7");
 static_assert(offsetof(MeshLightSampler, m_samples) == 0x08, "samples at +0x08");
-static_assert(offsetof(MeshLightSampler, m_triangles) == 0x18, "triangles at +0x18 - see 0x101BD32D");
-static_assert(offsetof(MeshLightSampler, m_lights) == 0x28, "lights at +0x28 - see 0x101BECE0");
-static_assert(offsetof(MeshLightSampler, m_resolutionModifier) == 0x38, "resolution at +0x38");
-static_assert(offsetof(MeshLightSampler, m_textureSizeX) == 0x3C, "width at +0x3C");
-static_assert(offsetof(MeshLightSampler, m_realSampleCount) == 0x44, "real samples at +0x44");
-static_assert(offsetof(MeshLightSampler, m_texture) == 0x48, "texture at +0x48");
-static_assert(offsetof(MeshLightSampler, m_batch) == 0x5C, "batch at +0x5C");
-static_assert(offsetof(MeshLightSampler, m_outputName) == 0x60, "output name at +0x60");
-static_assert(offsetof(MeshLightSampler, m_usedWidth) == 0x7C, "used width at +0x7C");
-static_assert(offsetof(MeshLightSampler, m_sizeCap) == 0x84, "size cap at +0x84");
-static_assert(sizeof(MeshLightSampler) == 0x88, "createLightSampler allocates 0x88 - see 0x1019868C");
 #endif
 
 } // namespace geom

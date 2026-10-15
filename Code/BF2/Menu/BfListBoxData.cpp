@@ -10,6 +10,9 @@
 #include "../External/BFMeme/System.h"
 #include <cmath>
 #include <new>
+#if !defined(_M_IX86)
+#include <emmintrin.h>
+#endif
 namespace dice { namespace meme {
 // [FRONTIER] Releases a cell resource through an unidentified interface. [INFERRED] Name and void return.
 // Keep declaration-only until the full typed interface prefix is established.
@@ -19,6 +22,7 @@ namespace {
 // expression helper is not a separately attested retail function.
 int truncateListWidth(double value)
 {
+#if defined(_M_IX86)
     unsigned short original, truncating;
     int result;
     __asm {
@@ -32,6 +36,10 @@ int truncateListWidth(double value)
         fldcw original
     }
     return result;
+#else
+    // cvttsd2si truncates like the chopped fistp, including the 0x80000000 indefinite result.
+    return _mm_cvttsd_si32(_mm_set_sd(value));
+#endif
 }
 }
 ListBoxData::ListBoxData(const char* name) : Data(name), m_row(0) {}
@@ -123,7 +131,7 @@ ListBoxCell::ListBoxCell(std::wstring text, float x, float y, float r, float g, 
 ListBoxColumn::ListBoxColumn(int number, int size, bool flag, bool flag2)
     : index(number), cells(), width(size), enabled(true), field019(flag),
       field01a(flag2), field01c(0), field020(-1) {}
-ListBoxCell::ListBoxCell(int image, float width, float height, float x, float y,
+ListBoxCell::ListBoxCell(TextureHandle image, float width, float height, float x, float y,
     float r, float g, float b, float a) : narrow(), wide()
 {
     texture = image;
@@ -258,7 +266,7 @@ bool BfListBoxData::appendCell(int index, std::string text, float r, float g, fl
 bool BfListBoxData::appendCell0x7c81c0(int index, std::string text,
     float r, float g, float b, float a, int value)
 { return appendCell(index, text, r, g, b, a, value); }
-bool BfListBoxData::appendImageCell0x7c8300(int index, int texture, float width, float height,
+bool BfListBoxData::appendImageCell0x7c8300(int index, TextureHandle texture, float width, float height,
     float x, float y, float r, float g, float b, float a)
 { return appendImageCell(index, texture, width, height, x, y, r, g, b, a); }
 // 7C8120 / 7C83D0 and their forwarders. See BfListBoxData.h for the shape and the two inherited
@@ -338,7 +346,7 @@ std::wstring BfListBoxData::getWideCell(int index, int row)
     }
     return L"";
 }
-bool BfListBoxData::appendImageCell(int index, int texture, float width, float height,
+bool BfListBoxData::appendImageCell(int index, TextureHandle texture, float width, float height,
     float x, float y, float r, float g, float b, float a)
 {
     if (static_cast<unsigned int>(index) < m_columns.size()) {
@@ -351,7 +359,7 @@ bool BfListBoxData::appendImageCell(int index, int texture, float width, float h
     }
     return true;
 }
-bool BfListBoxData::setImageCell(int index, int row, int texture, float width, float height,
+bool BfListBoxData::setImageCell(int index, int row, TextureHandle texture, float width, float height,
     float x, float y, float r, float g, float b, float a, int extra)
 {
     if (static_cast<unsigned int>(index) < m_columns.size()) {
@@ -684,6 +692,7 @@ int BfListBoxData::measureText(System* system, std::wstring text, int column, in
             system->getGlyphMetrics(character, m_node->m_fonts[mode], &metrics);
             ++index;
             // Keep all three additions on x87 until the single float store.
+#if defined(_M_IX86)
             __asm {
                 lea eax, metrics
                 fld dword ptr [eax+8]
@@ -692,6 +701,12 @@ int BfListBoxData::measureText(System* system, std::wstring text, int column, in
                 fadd width
                 fstp width
             }
+#else
+            // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+            // +8 rightBearing, +4 width, +0 leftBearing.
+            width = static_cast<float>(static_cast<double>(metrics.rightBearing) + metrics.width
+                                       + metrics.leftBearing + width);
+#endif
         }
         if (index >= 250) break;
         float imageX = 0;

@@ -16,7 +16,9 @@ struct ObjectList::Link
     ~Link() { delete next; }                             // 839750, reverse free order, no payload deletion
     static Link* allocate(Object* object)
     {
+#if defined(_M_IX86)
         static_assert(sizeof(Link) == 12, "client ObjectList link");
+#endif
         void* memory = ::operator new(sizeof(Link));
         return memory ? new(memory) Link(object) : nullptr;
     }
@@ -123,6 +125,8 @@ bool ObjectList::readObjects(System* system, IStream* stream)
     m_cursor = m_first;
     return true;
 }
+#if defined(_M_IX86)
 static_assert(sizeof(ObjectList) == 20, "client concrete ObjectList");
+#endif
 } }
 #endif

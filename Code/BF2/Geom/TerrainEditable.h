@@ -15,7 +15,7 @@
 #include "../Game/IEventListener.h"
 #include "../IO/Console/IConsoleSaveable.h"
 #include "../../RendDX9Abi/PluginAbi.h"
-#include "../../RendDX9Abi/Vc71String.h"
+#include <string>
 
 #include <stddef.h>
 
@@ -44,10 +44,10 @@ class TerrainDetailTextureEditable : public TerrainDetailTexture
 public:
     TerrainDetailTextureEditable();
     virtual ~TerrainDetailTextureEditable();                                // +0x00 (deleting)
-    virtual void          setName(vc71::string name);                       // +0x04
-    virtual vc71::string  getName();                                        // +0x08
-    virtual void          setColorTextureName(vc71::string name);           // +0x0C
-    virtual vc71::string  getColorTextureName();                            // +0x10
+    virtual void          setName(std::string name);                       // +0x04
+    virtual std::string  getName();                                        // +0x08
+    virtual void          setColorTextureName(std::string name);           // +0x0C
+    virtual std::string  getColorTextureName();                            // +0x10
     virtual void          setEditableInt68(int value);                      // +0x14
     virtual int           getEditableInt68();                               // +0x18
     virtual void          setColorTextureTiling(Vec2 tiling);               // +0x44
@@ -55,8 +55,8 @@ public:
     virtual void          setLowDetailType(int type);                       // +0x4C
     virtual int           getLowDetailType();                               // +0x50
 
-    vc71::string            name;                // +0x2C
-    vc71::string            colorTextureName;    // +0x48
+    std::string            name;                // +0x2C
+    std::string            colorTextureName;    // +0x48
     dx9rend::EngineTexture* colorTexture;        // +0x64  the paint-from-texture source
     int                     editableInt68;       // +0x68  [UNRESOLVED]
     Vec2                    colorTextureTiling;  // +0x6C  (1, 1)
@@ -105,16 +105,16 @@ public:
     // the primary slots TerrainEditable adds (+0xE4..+0x114; E06 names where a binding exists) --
     virtual void  burnRoadsInUndergrowth();                                // P+0xE4  0x101087B0  binding (R2, written)
     virtual void  burnRoadsInUndergrowthNeerest();                         // P+0xE8  0x10109CA0  binding (R2, written; shipped spelling)
-    virtual vc71::string getColormapDirectory();                           // P+0xEC  0x101A6080  [INFERRED]
-    virtual vc71::string getDetailmapDirectory();                          // P+0xF0  0x101A61F0
-    virtual vc71::string getEditorDetailmapBaseName();                     // P+0xF4  0x101A63A0
-    virtual vc71::string getEditorDetailmapDirectory();                    // P+0xF8  0x101A6410
-    virtual vc71::string getEditorColormapBaseName();                      // P+0xFC  0x101A6480
-    virtual vc71::string getEditorColormapDirectory();                     // P+0x100 0x101A64F0
-    virtual vc71::string getEditorLightmapBaseName();                      // P+0x104 0x101A6160
-    virtual vc71::string getEditorLightmapDirectory();                     // P+0x108 0x101A60F0
-    virtual vc71::string getEditorLowDetailmapBaseName();                  // P+0x10C 0x101A62C0
-    virtual vc71::string getEditorLowDetailmapDirectory();                 // P+0x110 0x101A6330
+    virtual std::string getColormapDirectory();                           // P+0xEC  0x101A6080  [INFERRED]
+    virtual std::string getDetailmapDirectory();                          // P+0xF0  0x101A61F0
+    virtual std::string getEditorDetailmapBaseName();                     // P+0xF4  0x101A63A0
+    virtual std::string getEditorDetailmapDirectory();                    // P+0xF8  0x101A6410
+    virtual std::string getEditorColormapBaseName();                      // P+0xFC  0x101A6480
+    virtual std::string getEditorColormapDirectory();                     // P+0x100 0x101A64F0
+    virtual std::string getEditorLightmapBaseName();                      // P+0x104 0x101A6160
+    virtual std::string getEditorLightmapDirectory();                     // P+0x108 0x101A60F0
+    virtual std::string getEditorLowDetailmapBaseName();                  // P+0x10C 0x101A62C0
+    virtual std::string getEditorLowDetailmapDirectory();                 // P+0x110 0x101A6330
     // P+0x114 0x101076E0 (R2, written): the per-patch brush it reaches (0x1019B780) is empty in 1.50.
     // [UNRESOLVED] the fourth argument's type - it is forwarded as a raw dword and never read.
     virtual void  brushHeightmapPatches(float x, float z, float radius, float strength);
@@ -230,7 +230,7 @@ public:
     void rebuildPatchesInRect(const float* rect);                          // 0x10109B40  world rect -> bounds + VBs
     void rebuildSurroundingInRect(const float* rect);
     void boundsAfterPrimaryScale();                                        // 0x101084B0  every patch's bounds
-    vc71::string getLowDetailmapDirectory();                               // (GetSets; R3's compiles call it)
+    std::string getLowDetailmapDirectory();                               // (GetSets; R3's compiles call it)
     // The technique helpers setShaderTechnique runs (0x10107F30 .. 0x10108160): each walks the patch
     // grid (z outer, x inner, patches[z * n + x]) and calls one QuadPatchEditable overlay body.
     void createUndergrowthOverlays();
@@ -243,12 +243,12 @@ public:
     void releaseMaterialOverlays();
     // R2: the external-tool launchers and the road-mask pass, non-virtual primary bodies.
     // The strings are by value (`retn 38h`), as shipped.
-    void runTool(vc71::string executable, vc71::string arguments);          // 0x10109F10  CreateProcessA + wait (Esc aborts)
-    void tgasplit(vc71::string tga, vc71::string outputDirectory);          // 0x1010A0B0  "tgasplit" 512 x 512 tiles
+    void runTool(std::string executable, std::string arguments);          // 0x10109F10  CreateProcessA + wait (Esc aborts)
+    void tgasplit(std::string tga, std::string outputDirectory);          // 0x1010A0B0  "tgasplit" 512 x 512 tiles
     void renderRoadMasks(int size);                                        // 0x10108760  every patch's 0x101A0680
     // R3: save()'s writers. Strings by reference (`retn 4` / `retn 8`). [INFERRED] names.
-    void saveEditorMaps(const vc71::string& unused);                       // 0x101075E0  flag 2 (the argument is not read)
-    void writeTerrainData(const vc71::string& folder, int flags);          // 0x1010C790  flag 4: terraindata.raw (+ 0x10 burns)
+    void saveEditorMaps(const std::string& unused);                       // 0x101075E0  flag 2 (the argument is not read)
+    void writeTerrainData(const std::string& folder, int flags);          // 0x1010C790  flag 4: terraindata.raw (+ 0x10 burns)
     void writePatchHeights(TerrainRawReader& raw, QuadPatchEditable* patch);           // 0x10108DB0  heights + morph deltas
     void writePatchLayersAndCompile(TerrainRawReader& raw, QuadPatchEditable* patch);  // 0x1010B4C0  index lists, DDS compiles
 
@@ -282,33 +282,10 @@ private:
 };
 
 #if defined(_M_IX86)
-static_assert(sizeof(TerrainDetailTextureEditable) == 0x78, "init allocates 0x78 per editable record - see 0x1010ADB2");
 static_assert(offsetof(TerrainDetailTextureEditable, name) == 0x2C, "record name at +0x2C - see 0x1010DB47");
-static_assert(offsetof(TerrainDetailTextureEditable, colorTextureName) == 0x48, "colour texture name at +0x48");
-static_assert(offsetof(TerrainDetailTextureEditable, colorTexture) == 0x64, "colour texture at +0x64");
-static_assert(offsetof(TerrainDetailTextureEditable, colorTextureTiling) == 0x6C, "colour tiling at +0x6C");
-static_assert(offsetof(TerrainDetailTextureEditable, lowDetailType) == 0x74, "low-detail type at +0x74");
-static_assert(offsetof(TerrainEditable, m_gridTexture) == 0x778, "grid texture at +0x778 - see 0x10108BA8");
-static_assert(offsetof(TerrainEditable, m_shaderTechnique) == 0x780, "technique at +0x780");
-static_assert(offsetof(TerrainEditable, m_editablePatches) == 0x784, "patch array at +0x784");
-static_assert(offsetof(TerrainEditable, m_editableSurrounding) == 0x788, "surrounding patches at +0x788");
-static_assert(offsetof(TerrainEditable, m_lodSwitchDistance) == 0x7AC, "lodSwitchDistance at +0x7AC");
-static_assert(offsetof(TerrainEditable, m_drawDetailLayerAsColor) == 0x7B8, "drawDetailLayerAsColor at +0x7B8");
-static_assert(offsetof(TerrainEditable, m_surroundingTerrainEngineMode) == 0x7BC, "engine mode at +0x7BC");
-static_assert(offsetof(TerrainEditable, m_useCompDetailMaps) == 0x7BD, "useCompDetailMaps at +0x7BD");
-static_assert(offsetof(TerrainEditable, m_roadSamplingSize) == 0x7C0, "road sampling size at +0x7C0");
-static_assert(offsetof(TerrainEditable, m_colormapSettings) == 0x7C8, "first settings string at +0x7C8");
 #endif
-// The retail flavour's layout is the shipped one. In the native flavour HostString is the host's
-// std::string, so the five settings strings take that type's size instead (the object then fits the
-// shipped 0x854-byte block with room to spare); the object never crosses the boundary by layout.
-#if defined(_M_IX86) && !BF2_PLUGIN_ABI_NATIVE
-static_assert(offsetof(TerrainEditable, m_lowDetailmapSettings) == 0x7E4, "+0x7E4");
-static_assert(offsetof(TerrainEditable, m_detailmapSettings) == 0x800, "+0x800");
-static_assert(offsetof(TerrainEditable, m_surroundingColormapSettings) == 0x81C, "+0x81C");
-static_assert(offsetof(TerrainEditable, m_surroundingLowDetailmapSettings) == 0x838, "+0x838");
-static_assert(sizeof(TerrainEditable) == 0x854, "RefFactory_geom_TerrainEditable allocates 0x854 - see 0x100B0586");
-#endif
+// The five settings strings are the host's std::string; the object never crosses the boundary by
+// layout.
 
 // RefFactory published by ModuleGeom::getClassList (class-list row 821005, the id
 // dword_1021AEB0 that the reflection getter 0x101A5FB0 also reads).

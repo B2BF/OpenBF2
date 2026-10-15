@@ -66,7 +66,9 @@ void emitStateEvent(int type, System* system, Node*& eventRoot, const Rect* rect
     StateEventVisitor visitor(event);
     visitor.traverse(system, eventRoot, rect, state);
 }
+#if defined(_M_IX86)
 static_assert(sizeof(StateEventVisitor) == 32, "client state event visitor");
+#endif
 }
 void updateNodeState(NodeState* state, System* system, Node* transitionSource,
                      Node* eventRoot, const Rect* rect, float delta, bool pointerInside, bool enabled)

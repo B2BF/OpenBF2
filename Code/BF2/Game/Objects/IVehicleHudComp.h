@@ -3,6 +3,7 @@
 #ifndef GAME_OBJECTS_IVEHICLEHUDCOMP_H        // [INFERRED] guard style
 #define GAME_OBJECTS_IVEHICLEHUDCOMP_H
 
+#include <cstdint>
 #include <string>
 #include "IObjectComponent.h"
 #include "VehicleHudCompTemplate.h"          // VehicleHudInfo / VehicleHudIcons
@@ -21,9 +22,10 @@ public:
     // HUD78B1E0 dispatches its getInfo slot. This was incorrectly chosen bool.
     virtual IPostProcessComp* getEnablePostProcessing(int) = 0; // +0x3C
     virtual std::string getVehicleIcon(int) = 0;           // +0x40 hidden sret
-    virtual int  getVehicleIconPtr(int) = 0;               // +0x44 vector<int>
+    // Texture handles: std::intptr_t is int on x86 (unchanged mangling), pointer-wide on x64.
+    virtual std::intptr_t getVehicleIconPtr(int) = 0;      // +0x44 vector<int>
     virtual std::string getAbilityIcon(int) = 0;           // +0x48 hidden sret
-    virtual int  getAbilityIconPtr(int) = 0;               // +0x4C vector<int>
+    virtual std::intptr_t getAbilityIconPtr(int) = 0;      // +0x4C vector<int>
     virtual bool getShowOnCamMode(int) = 0;                // +0x50 movzx eax,al
     virtual void playingPantingSound(bool) = 0;             // +0x54
     virtual bool getIsPlayingPantingSound() = 0;            // +0x58 [CHOSEN ret]

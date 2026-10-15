@@ -14,8 +14,7 @@
 #include "../../RendDX9/Ra/RaStreamDataEditable.h"
 #include "../../RendDX9/Texture.h"                // EngineTexture::name (+0x58)
 #include "../../RendDX9/TextureAtlas/TextureAtlas.h"  // textureAtlasFind - sub_100156F0
-#include "../../../RendDX9Abi/Vc71String.h"
-#include "../../../RendDX9Abi/Vc71Vector.h"
+#include <string>
 #include "../../../RendDX9Abi/D3dx9Sdk.h"
 #include "OverGrowthCell.h"
 
@@ -39,11 +38,6 @@ extern LightManager* g_LightManager;   // ModuleGeom.cpp - dword_1024B914
 
 namespace {
 
-template<class T> T& field(void* object, unsigned int offset)
-{ return *reinterpret_cast<T*>(static_cast<unsigned char*>(object) + offset); }
-template<class T> const T& field(const void* object, unsigned int offset)
-{ return *reinterpret_cast<const T*>(static_cast<const unsigned char*>(object) + offset); }
-
 // flt_10219554 (0x42DA7259) = 109.22334 = 32767/300 - a cell-relative position to SHORT4; its inverse,
 // the immediate 0x3C16012C = 0.009155553, is the draw's decode scale. flt_10219558 (0x46FFFE00) = 32767
 // and flt_10219550 (0x42FF0000) = 127.5. Each literal below is the float's exact value.
@@ -52,17 +46,14 @@ const float kPositionDecode = 0.009155552834272385f;
 const float kShortScale     = 32767.0f;
 const float kNormalScale    = 127.5f;
 
-// StaticMeshMaterial / cell offsets the two bodies read (the typed members are used where they exist).
-const unsigned int kCellCorner      = 0x08;    // Vec3 - the cell's corner (base constructor 1015E6D0)
-const unsigned int kCellSize        = 0x14;    // float - the cell edge
-const unsigned int kCellLeafStream  = 0x2A4;   // OverGrowthCellMesh* - the non-"tile_" materials
-const unsigned int kCellTrunkStream = 0x2A8;   // OverGrowthCellMesh* - the "tile_" materials
 // The material block (RaStreamDataEditable +0x0C) holders the draw writes: PosUnpack's value at
-// block +0x128 (holder +0x124, StaticMeshMaterial.cpp's RaMaterialParameters), and the Ra shader
-// the block keeps at +0x14C (rebuildCells stores "LeafOG" / "TrunkOG" there; the StaticMesh draw's
-// staticMeshMaterialShader and TerrainDraw's water read the same word).
-const unsigned int kBlockPosUnpackValue = 0x128;
-const unsigned int kBlockShader         = 0x14C;
+// block +0x128 (holder +0x124), and the Ra shader the block keeps at +0x14C (rebuildCells stores
+// "LeafOG" / "TrunkOG" there; the StaticMesh draw's staticMeshMaterialShader and TerrainDraw's
+// water read the same word - raMaterialShaderSlot).
+inline RaMaterialParameters& streamMaterial(OverGrowthCellMesh* stream)
+{
+    return *reinterpret_cast<RaMaterialParameters*>(stream->m_materialParameters);
+}
 
 // One vertex of the cell streams - 16 bytes, the stride appendGeometry hands append (`push 10h`) and the
 // cell constructor gives both streams. Element descriptors (OverGrowthCells.cpp, 100D0C90): position SHORT4,
@@ -75,12 +66,11 @@ struct OverGrowthCellVertex
     short         texCoord[2];     // +0x0C u, v = (clamp(t, -1, 1) * atlas scale + atlas offset) * 32767
 };
 
-#if defined(_M_IX86)
+// The vertex format: every architecture (append and the stream constructor pass the 16 literally).
 static_assert(sizeof(OverGrowthCellVertex) == 16, "the cell streams are built with stride 16");
+#if defined(_M_IX86)
 static_assert(offsetof(dx9rend::Ra::RaStreamDataEditable, m_materialParameters) == 0x0C,
               "the material block sits at stream +0x0C");
-static_assert(offsetof(OverGrowthCellMesh, m_objectParameters) == 0x1A4,
-              "the object block sits at stream +0x1A4 (entry +0x118 points at it)");
 static_assert(offsetof(dx9rend::Ra::RaObjectParameters, worldViewProjection) == 0x090,
               "stream +0x234 is the WorldViewProjection holder (its value at +0x238)");
 static_assert(offsetof(dx9rend::Ra::RaObjectParameters, objectSpaceCamPos) == 0x1B4,
@@ -167,7 +157,7 @@ int normalizeInPlace(Vec3& v)
 }
 
 // std::string::find(s, 0, count) != npos, over the counted characters (MSVCP71's find, 0x100D1F6E).
-bool containsCounted(const vc71::string& text, const char* needle, unsigned int count)
+bool containsCounted(const std::string& text, const char* needle, unsigned int count)
 {
     const char* const data = text.c_str();
     const unsigned int size = text.size();
@@ -181,24 +171,16 @@ bool containsCounted(const vc71::string& text, const char* needle, unsigned int 
 
 // The cell centre both bodies derive: (corner.x + half, corner.y, corner.z + half), half = edge * 0.5
 // (100D1D46..100D1D88 and 100D1057..100D1089, the same association: half + corner).
-Vec3 cellCentre(const void* cell)
+Vec3 cellCentre(const OverGrowthCell* cell)
 {
-    const float half = field<float>(cell, kCellSize) * 0.5f;
+    const float half = cell->size * 0.5f;
     Vec3 centre;
-    centre.y = field<float>(cell, kCellCorner + 4);
-    centre.x = half + field<float>(cell, kCellCorner);
-    centre.z = half + field<float>(cell, kCellCorner + 8);
+    centre.y = cell->corner.y;
+    centre.x = half + cell->corner.x;
+    centre.z = half + cell->corner.z;
     return centre;
 }
 
-// The geom-0 / lod-0 material vector of a StaticMeshTemplate: +0xD0 (m_materials.first) -> [0].first ->
-// [0] - the same three loads as staticMeshFirstMaterial (StaticMeshTemplate.h), read at 0x100D1BE2..
-// 0x100D1BEB and again per material (0x100D1C4D..0x100D1C59, 0x100D1D49..0x100D1D60).
-const vc71::vector_layout& firstLodMaterials(const StaticMeshTemplate* t)
-{
-    const vc71::vector_layout* const geom = reinterpret_cast<const vc71::vector_layout*>(t->m_materials.first);
-    return *reinterpret_cast<const vc71::vector_layout*>(geom->first);
-}
 
 // One of draw's two submissions (0x100D1111..0x100D126C for the leaf stream, 0x100D126F..0x100D13CB for
 // the trunk stream - the second a copy of the first with the two LightManager colour slots swapped).
@@ -221,7 +203,7 @@ void submitCellStream(OverGrowthCellMesh* stream, const Mat4& world, const Vec3&
     op.objectSpaceCamPos.value[1] = cameraLocal.y;                              //   (w keeps the block's 1)
     op.objectSpaceCamPos.value[2] = cameraLocal.z;
     {
-        float* const posUnpack = reinterpret_cast<float*>(stream->m_materialParameters + kBlockPosUnpackValue);
+        float* const posUnpack = streamMaterial(stream).posUnpack.value;        // block +0x128
         posUnpack[0] = kPositionDecode;                                          // 0x10031150 with the
         posUnpack[1] = kPositionDecode;                                          // stack Vec4 (s, s, s, 1)
         posUnpack[2] = kPositionDecode;
@@ -254,8 +236,8 @@ void submitCellStream(OverGrowthCellMesh* stream, const Mat4& world, const Vec3&
     entry->material = stream;                                                    // entry +0x000
     entry->materialParameters = stream->m_materialParameters;                    // entry +0x004 = stream + 0x0C
     entry->objectParameters = stream->m_objectParameters;                        // entry +0x118 = stream + 0x1A4
-    entry->shader = *reinterpret_cast<dx9rend::Ra::RaShader**>(
-        stream->m_materialParameters + kBlockShader);                            // entry +0x138 = [stream + 0x158]
+    entry->shader = static_cast<dx9rend::Ra::RaShader*>(
+        raMaterialShaderSlot(streamMaterial(stream)));                           // entry +0x138 = [stream + 0x158]
     // The PE inlines index 0 of sub_10041A70: the shader's own queue (+0x04) through its add slot (+0x04).
     dx9rend::renderQueueEnqueue(entry, false, false, false);
 }
@@ -291,32 +273,28 @@ bool OverGrowthCell::appendGeometry(void* geometryTemplate, const Mat4* transfor
                               reinterpret_cast<const D3DXMATRIX*>(&inverse));
     }
 
+    // The geom-0 / lod-0 materials (StaticMeshTemplate.h's first-lod accessors: m_materials.first ->
+    // [0].first -> [0]), read at 0x100D1BE2..0x100D1BEB and again per material (0x100D1C4D..0x100D1C59,
+    // 0x100D1D49..0x100D1D60).
     const StaticMeshTemplate* const t = static_cast<const StaticMeshTemplate*>(geometryTemplate);
-    unsigned int remaining;
-    {
-        const vc71::vector_layout& materials = firstLodMaterials(t);
-        remaining = materials.first
-            ? static_cast<unsigned int>((materials.last - materials.first) / static_cast<int>(sizeof(StaticMeshMaterial)))
-            : 0u;
-    }
+    unsigned int remaining = staticMeshFirstLodMaterialCount(t);
     if (!remaining)                                                              // `test ebx, ebx; jbe`
         return true;
 
     const short shadowWord = static_cast<short>(ftol2(shadow * kShortScale));
     OverGrowthCellVertex vertex;                                                 // [esp+0x50] - one slot
-    for (unsigned int offset = 0; remaining != 0; offset += sizeof(StaticMeshMaterial), --remaining)
+    for (unsigned int materialIndex = 0; remaining != 0; ++materialIndex, --remaining)
     {
-        const vc71::string unusedName;                                           // var_9C
-        const StaticMeshMaterial* material = reinterpret_cast<const StaticMeshMaterial*>(
-            firstLodMaterials(t).first + offset);
-        const vc71::string& textureName =
+        const std::string unusedName;                                           // var_9C
+        const StaticMeshMaterial* material = staticMeshFirstLodMaterial(t, materialIndex);
+        const std::string& textureName =
             static_cast<const dx9rend::EngineTexture*>(material->m_shaderMaterial->textures[1])->name;
 
-        vc71::string ddsName;                                                    // var_130
+        std::string ddsName;                                                    // var_130
         {
-            vc71::string stem;                                                   // var_D4
+            std::string stem;                                                   // var_D4
             dx9rend::pathStripExtension(stem, textureName);
-            vc71::string suffixed(stem);                                         // var_B8
+            std::string suffixed(stem);                                         // var_B8
             suffixed += ".dds";
             ddsName = suffixed;
         }
@@ -324,7 +302,7 @@ bool OverGrowthCell::appendGeometry(void* geometryTemplate, const Mat4* transfor
         s_indices.resize(0);                                                     // (0, 0)
 
         dx9rend::TextureAtlas* const atlas =
-            field<dx9rend::TextureAtlas*>(dx9rend::g_OverGrowth, 0xFC);          // the global, +0xFC
+            static_cast<OverGrowth*>(dx9rend::g_OverGrowth)->m_atlas;            // the global, +0xFC
         const dx9rend::TextureAtlasEntry* const found =
             atlas ? dx9rend::textureAtlasFind(atlas, ddsName) : 0;
         float scaleU = 1.0f;
@@ -340,7 +318,7 @@ bool OverGrowthCell::appendGeometry(void* geometryTemplate, const Mat4* transfor
         }
 
         const Vec3 centre = cellCentre(this);
-        material = reinterpret_cast<const StaticMeshMaterial*>(firstLodMaterials(t).first + offset);
+        material = staticMeshFirstLodMaterial(t, materialIndex);
         for (int index = 0; index < static_cast<int>(material->m_vegetationVertexCount); ++index)
         {
             const float* const source = reinterpret_cast<const float*>(
@@ -379,13 +357,12 @@ bool OverGrowthCell::appendGeometry(void* geometryTemplate, const Mat4* transfor
             s_vertices.push_back(vertex);
         }
 
-        vc71::string lowered(textureName);                                       // a copy,
+        std::string lowered(textureName);                                       // a copy,
         dx9rend::pathToLower(lowered);                                           //   lowered (0x10074D10)
         const bool tiled = containsCounted(lowered, "tile_", 5);
         const unsigned int vertexCount = static_cast<unsigned int>(s_vertices.size());
         const void* const vertices = s_vertices.data();                          // &*(begin() + 0), 0x100D2020
-        OverGrowthCellMesh* const stream =
-            field<OverGrowthCellMesh*>(this, tiled ? kCellTrunkStream : kCellLeafStream);
+        OverGrowthCellMesh* const stream = tiled ? trunk : leaf;
         stream->append(vertices, 16, static_cast<int>(vertexCount), material->m_vegetationIndices,
                        static_cast<int>(material->m_vegetationIndexCount));      // +0x2C, answer dropped
     }
@@ -420,8 +397,8 @@ void OverGrowthCell::draw(IRenderView* view, const Vec3* position, float fade)
     }
     world::LightSource* const sky = g_LightManager->getSkyLight();              // +0x28
 
-    submitCellStream(field<OverGrowthCellMesh*>(this, kCellLeafStream), s_world, cameraLocal, sky, false);
-    submitCellStream(field<OverGrowthCellMesh*>(this, kCellTrunkStream), s_world, cameraLocal, sky, true);
+    submitCellStream(leaf, s_world, cameraLocal, sky, false);
+    submitCellStream(trunk, s_world, cameraLocal, sky, true);
 }
 
 } } }

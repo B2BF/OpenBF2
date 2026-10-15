@@ -3,11 +3,10 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
+#include "../../RendDX9Abi/ThunkAbi.h"
 #include "../../RendDX9Abi/HfeAbi.h"
 #include "../../RendDX9Abi/ModuleCommon.h"
 #include "../../RendDX9Abi/BfMemory.h"
-#include "../../RendDX9Abi/Vc71Map.h"
-#include "../../RendDX9Abi/Vc71Vector.h"
 #include "../../RendDX9Abi/Frontier.h"
 #include "../../RendDX9Abi/D3dx9Sdk.h"
 #include "../../RendDX9Abi/EngineFile.h"
@@ -31,6 +30,7 @@ namespace dx9rend {
 extern void* g_shaderManager;   // ShaderManager.cpp
 extern void* g_stateManager;    // StateManager.cpp - dword_1023B984
 void shaderManagerSetCurrentEffect(void* effect);
+unsigned char shaderManagerStateManagerDisabled(void* shaderManager);   // its +0xA4 byte
 void vertexDeclarationBind(void* wrapper);          // BufferManager.cpp - sub_100147C0
 void* vertexDeclarationCreate(const void* elements);
 void vertexDeclarationRelease(void* wrapper);        // inline decrement + 10014790
@@ -171,6 +171,14 @@ void ShaderParameter::setMatrixPointerArray(const void* const* matrices, unsigne
 }
 unsigned int ShaderParameter::getTypeCode() const { return m_owner->getTypeCode(); }
 
+// One queued value of the write queue at Effect +0x60. The image's 0x830-byte node carries the
+// 28-byte name key and 0x804 value bytes whose layout is [UNRESOLVED]: nothing in this tree queues
+// a value yet (flushPendingValues stops on a non-empty queue).
+struct EffectPendingValue
+{
+    unsigned char unresolved[0x804];
+};
+
 // Reference-counted effect wrapper with a four-slot IBase interface.
 // Caches validated techniques and named parameters. Values set before binding are copied
 // into a pending queue, then applied and removed when the effect is bound.
@@ -186,7 +194,7 @@ public:
     void* queryInterface(unsigned int iid) const;
 
     // sub_1001E3A0, read in full. See the body.
-    void* getShaderParameter(const vc71::string& name);
+    void* getShaderParameter(const std::string& name);
 
     bool         bind(ID3DXEffect* d3dxEffect);
     unsigned int populateParameters();
@@ -197,13 +205,14 @@ public:
     bool         readDeclaration(D3DXHANDLE technique, void** out);
     bool         isParameterUsed(void* handle) const;
 
-    bool         setTechniqueByName(const vc71::string& name);
+    bool         setTechniqueByName(const std::string& name);
     void         setTechniqueRecord(unsigned char* record);
     unsigned int begin();
     void         beginPass(unsigned int index);
     void         end();
 
     ID3DXEffect* d3dxEffect() const { return m_d3dxEffect; }
+    const std::string& name() const { return m_string0C; }
     typedef std::map<std::string, EffectTechnique> TechniqueMap;
     TechniqueMap& techniqueMap() { return m_techniques; }
     unsigned int currentTechniquePassCount() const
@@ -232,14 +241,15 @@ private:
     void*            m_vptr;          // +0x00
     int              m_refCount;      // +0x04
     ID3DXEffect*     m_d3dxEffect;    // +0x08
-    vc71::string     m_string0C;      // +0x0C  the effect's name
+    std::string     m_string0C;      // +0x0C  the effect's name
     // Native private state from here on: subsequent comments denote retail offsets only.
     // No external reader uses these offsets; opaque technique pointers round-trip here.
     TechniqueMap    m_techniques;    // retail +0x28
     EffectTechnique* m_currentTechnique;   // retail +0x34
-    vc71::string     m_string38;      // +0x38  the current technique's name, copied on selection
-    vc71::map_layout m_parameters;    // +0x54  node 48
-    vc71::map_layout m_pendingValues; // +0x60  node 2096 - the write queue
+    std::string     m_string38;      // +0x38  the current technique's name, copied on selection
+    // +0x54: semantic -> its ShaderParameter handle (strcmp order; null caches a failed allocation).
+    std::map<std::string, ShaderParameter*>   m_parameters;
+    std::map<std::string, EffectPendingValue> m_pendingValues;   // +0x60  the write queue
     unsigned char    m_byte6C;        // +0x6C
     unsigned char    m_pad6D[3];
     unsigned int     m_dword70;       // +0x70
@@ -263,10 +273,7 @@ Effect::Effect()
     m_pad6D[0] = 0; m_pad6D[1] = 0; m_pad6D[2] = 0;
     m_pad75[0] = 0; m_pad75[1] = 0; m_pad75[2] = 0;
 
-    // The remaining two legacy private maps are tracked separately; this change
-    // does not claim their raw nodes are recovered source-level containers.
-    m_parameters.construct(0x30);
-    m_pendingValues.construct(0x830);
+    // The parameter map and the write queue are constructed empty with the members.
 
     // The shared owner. First Effect creates it; the rest AddRef it.
     if (g_parameterOwner)
@@ -302,22 +309,18 @@ void* Effect::queryInterface(unsigned int iid) const
 // Returns a borrowed semantic handle, creating and caching it on a miss.
 // Allocation failure is cached as null, so later lookups do not retry.
 
-void* Effect::getShaderParameter(const vc71::string& name)
+void* Effect::getShaderParameter(const std::string& name)
 {
-    // The find, and then the create-and-cache. Both go through the shared helpers in Vc71Map.h,
-    // which build a real BST with VC7.1's header convention - see the warning there about why the
-    // shape matters to bind's traversals rather than to these lookups.
-    vc71::map_node* node = vc71::mapFind(m_parameters, name.c_str());
-    if (node)
-        return vc71::mapNodeValueRef(node);
+    // The find, and then the create-and-cache.
+    const std::map<std::string, ShaderParameter*>::const_iterator node = m_parameters.find(name);
+    if (node != m_parameters.end())
+        return node->second;
 
     void* const storage = ::renddx9abi::engineAlloc(sizeof(ShaderParameter));
     ShaderParameter* const p = storage ? new (storage) ShaderParameter(g_parameterOwner) : 0;
 
     // Cache allocation failures as null entries; later lookups do not retry.
-    node = vc71::mapInsert(m_parameters, 0x30, name.c_str());
-    if (node)
-        vc71::mapNodeValueRef(node) = p;
+    m_parameters.insert(std::make_pair(name, p));
 
     return p;
 }
@@ -364,13 +367,13 @@ bool Effect::bind(ID3DXEffect* d3dxEffect)
     // through ID3DXEffect::SetStateManager (fx vtbl +0x11C). From here on, every state a pass sets
     // routes through dword_1023B984 instead of the device.
     if (g_shaderManager
-        && !*(static_cast<unsigned char*>(g_shaderManager) + 0xA4)
+        && !shaderManagerStateManagerDisabled(g_shaderManager)
         && g_stateManager)
     {
         d3dxEffect->SetStateManager(static_cast<ID3DXEffectStateManager*>(g_stateManager));
     }
 
-    const unsigned int populated = m_parameters.size ? 0u : populateParameters();
+    const unsigned int populated = !m_parameters.empty() ? 0u : populateParameters();
 
     flushPendingValues();
 
@@ -405,11 +408,11 @@ unsigned int Effect::populateParameters()
         if (!desc.Semantic)
             continue;                       // no semantic - not registered at all
 
-        vc71::map_node* node = vc71::mapFind(m_parameters, desc.Semantic);
-        if (node)
+        const std::map<std::string, ShaderParameter*>::const_iterator node =
+            m_parameters.find(desc.Semantic);
+        if (node != m_parameters.end())
         {
-            ShaderParameter* const existing =
-                static_cast<ShaderParameter*>(vc71::mapNodeValueRef(node));
+            ShaderParameter* const existing = node->second;
             if (existing)
                 existing->setD3DXParam(::renddx9abi::d3dxHandleValue(h));
             continue;
@@ -423,9 +426,7 @@ unsigned int Effect::populateParameters()
         // own reference when allocation succeeded, leaving that handle as the sole owner.
         owner->release();
 
-        node = vc71::mapInsert(m_parameters, 0x30, desc.Semantic);
-        if (node)
-            vc71::mapNodeValueRef(node) = handle;
+        m_parameters.insert(std::make_pair(std::string(desc.Semantic), handle));
         ++added;
     }
 
@@ -446,13 +447,7 @@ void Effect::flushPendingValues()
     }
 
     // The tail runs unconditionally: relink the sentinel and zero the count.
-    if (m_pendingValues.head)
-    {
-        m_pendingValues.head->parent = m_pendingValues.head;
-        m_pendingValues.head->left   = m_pendingValues.head;
-        m_pendingValues.head->right  = m_pendingValues.head;
-    }
-    m_pendingValues.size = 0;
+    m_pendingValues.clear();
 }
 
 
@@ -596,6 +591,12 @@ void* effectD3dxHandle(void* effect)
     return effect ? static_cast<Effect*>(effect)->d3dxEffect() : 0;
 }
 
+// The effect's +0x0C name, for ShaderManager's nesting diagnostic. No null test.
+const std::string& effectName(void* effect)
+{
+    return static_cast<Effect*>(effect)->name();
+}
+
 // With no selected technique every parameter is considered used. Otherwise the
 // compiled effect answers ID3DXEffect::IsParameterUsed(handle, currentTechnique->handle).
 bool Effect::isParameterUsed(void* handle) const
@@ -620,14 +621,14 @@ bool effectIsParameterUsed(void* effect, void* parameter)
 
 // Technique records are native values; every reader uses their typed members.
 
-bool effectSetTechniqueByName(void* effect, const vc71::string& name)
+bool effectSetTechniqueByName(void* effect, const std::string& name)
 {
     return effect ? static_cast<Effect*>(effect)->setTechniqueByName(name) : false;
 }
 
 // sub_1001DC20 - the constructor-side probe FSQuadDrawer uses before selecting "Blit" or its
 // "Blit_1_4" fallback.  A cached record is usable only when its D3DX technique handle is non-null.
-bool effectHasTechnique(void* effect, const vc71::string& name)
+bool effectHasTechnique(void* effect, const std::string& name)
 {
     Effect* self = static_cast<Effect*>(effect);
     Effect::TechniqueMap::iterator node = self->techniqueMap().find(name.c_str());
@@ -673,7 +674,7 @@ unsigned int effectCurrentPassCount(void* effect)
     return self->currentTechniquePassCount();
 }
 
-bool Effect::setTechniqueByName(const vc71::string& name)
+bool Effect::setTechniqueByName(const std::string& name)
 {
     TechniqueMap::iterator node = m_techniques.find(name.c_str());
     if (node == m_techniques.end())
@@ -698,7 +699,7 @@ unsigned int Effect::begin()
 {
     unsigned int passes = 0;
     const bool smDisabled =
-        g_shaderManager && *(static_cast<unsigned char*>(g_shaderManager) + 0xA4) != 0;
+        g_shaderManager && shaderManagerStateManagerDisabled(g_shaderManager) != 0;
     m_d3dxEffect->Begin(&passes, smDisabled ? 0u : 7u);
 
     if (m_currentTechnique)
@@ -818,14 +819,14 @@ void effectEndTechniqueStateRecord(void* effect, unsigned char* record)
     fx = self->d3dxEffect();
     fx->SetTechnique(::renddx9abi::d3dxHandle(technique->handle));
 }
-void effectBeginTechniqueStates(void* effect, const vc71::string& name)
+void effectBeginTechniqueStates(void* effect, const std::string& name)
 {
     Effect* self = static_cast<Effect*>(effect); // no null-this guard in retail
     Effect::TechniqueMap::iterator found = self->techniqueMap().find(name.c_str());
     if (found != self->techniqueMap().end())
         effectBeginTechniqueStateRecord(self, reinterpret_cast<unsigned char*>(&found->second));
 }
-void effectEndTechniqueStates(void* effect, const vc71::string& name)
+void effectEndTechniqueStates(void* effect, const std::string& name)
 {
     Effect* self = static_cast<Effect*>(effect);
     Effect::TechniqueMap::iterator found = self->techniqueMap().find(name.c_str());
@@ -863,10 +864,10 @@ namespace {
 
 // Effect's reference slots are addRef then getRef, opposite to ParameterOwner/ShaderParameter.
 
-void __fastcall effect_addRef(void* s, void*) { static_cast<Effect*>(s)->addRef(); }
-int  __fastcall effect_getRef(void* s, void*) { return static_cast<Effect*>(s)->getRef(); }
-int  __fastcall effect_release(void* s, void*) { return static_cast<Effect*>(s)->release(); }
-void* __fastcall effect_queryInterface(void* s, void*, unsigned int iid)
+void RD9_THUNK effect_addRef(void* s RD9_THUNK_EDX) { static_cast<Effect*>(s)->addRef(); }
+int  RD9_THUNK effect_getRef(void* s RD9_THUNK_EDX) { return static_cast<Effect*>(s)->getRef(); }
+int  RD9_THUNK effect_release(void* s RD9_THUNK_EDX) { return static_cast<Effect*>(s)->release(); }
+void* RD9_THUNK effect_queryInterface(void* s RD9_THUNK_EDX, unsigned int iid)
 {
     return static_cast<Effect*>(s)->queryInterface(iid);
 }
@@ -895,14 +896,14 @@ Effect* createEffectObject()
 // Returns an owned parameter reference; the caller must release it.
 // Requires a valid effect and an existing semantic. Neither pointer is null-checked.
 
-ShaderParameter* effectGetShaderParameterTyped(Effect* self, const vc71::string& name)
+ShaderParameter* effectGetShaderParameterTyped(Effect* self, const std::string& name)
 {
     ShaderParameter* const handle = static_cast<ShaderParameter*>(self->getShaderParameter(name));
     handle->addRef();
     return handle;
 }
 
-void* effectGetShaderParameter(Effect* self, const vc71::string& name)
+void* effectGetShaderParameter(Effect* self, const std::string& name)
 {
     return effectGetShaderParameterTyped(self, name);
 }
@@ -911,7 +912,7 @@ void* effectGetShaderParameter(Effect* self, const vc71::string& name)
 // deliberately retains the Effect map's existing reference rather than taking the caller-facing
 // extra reference sub_1001E420 adds for every other semantic.
 ShaderParameter* effectGetShaderParameterBorrowedTyped(Effect* self,
-                                                       const vc71::string& name)
+                                                       const std::string& name)
 {
     return static_cast<ShaderParameter*>(self->getShaderParameter(name));
 }
@@ -932,14 +933,13 @@ int effectRelease(Effect* effect)
 
 void Effect::clearTextureParameters()
 {
-    for (vc71::map_node* node = vc71::mapFirst(m_parameters); node;
-         node = vc71::mapNext(m_parameters, node))
+    for (std::map<std::string, ShaderParameter*>::const_iterator node = m_parameters.begin();
+         node != m_parameters.end(); ++node)
     {
-        ShaderParameter* const parameter = static_cast<ShaderParameter*>(vc71::mapNodeValue(node));
+        ShaderParameter* const parameter = node->second;
         if (parameter->getTypeCode() & 0x800u)                                    // vtbl +0x2C
         {
-            void* const handle =
-                static_cast<ShaderParameter*>(vc71::mapNodeValue(node))->getD3DXParam();  // +0x0C
+            void* const handle = node->second->getD3DXParam();                    // +0x0C
             m_d3dxEffect->SetTexture(::renddx9abi::d3dxHandle(handle), 0);
         }
     }

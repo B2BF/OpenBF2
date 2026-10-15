@@ -4,6 +4,7 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
+#include "../../RendDX9Abi/ThunkAbi.h"
 #include "RoadCompiled.h"
 #include "RoadCompiledTemplate.h"
 #include "QuadPatch.h"                    // TerrainCuller (Terrain::m_culler's type)
@@ -18,9 +19,10 @@
 #include "../../RendDX9Abi/ModuleCommon.h"         // RD9_IID_IBASE
 #include "../../RendDX9Abi/PluginAbi.h"
 #include "../../RendDX9Abi/PluginEntry.h"
-#include "../../RendDX9Abi/Vc71String.h"
+#include <string>
 
 #include <cmath>
+#include <cstdint>
 #include <new>
 
 namespace dice {
@@ -34,7 +36,7 @@ extern IBase* g_Renderer;        // dword_1023D098 - BF2Render.cpp (the Renderer
 
 // BufferManager.cpp / StateManager.cpp, declared per TU as every other client does.
 void* createVertexBuffer(void* bufferManager, unsigned int count, unsigned int stride,
-                         const vc71::string& name, unsigned int usage);
+                         const std::string& name, unsigned int usage);
 void* bufferManagerCreateIndexBuffer(unsigned int count, unsigned int usage,
                                      unsigned int format);
 void* vertexBufferLock(void* wrapper, unsigned int offsetVerts, unsigned int countVerts,
@@ -77,53 +79,54 @@ static_assert(sizeof(RoadCompiledVertex) == 32, "loadMesh creates the buffer wit
 
 // Renderer +0x6A4, `drawRoads` - VideoOptions::apply's terrain-quality arm writes it (0 at quality 1,
 // 1 at 2 and 3) and renderFrame's road block tests it. addToRenderQueue reads it through g_Renderer
-// (`mov eax, g_Renderer; cmp byte ptr [eax+6A4h], 0`), unguarded. A RendDX9-internal field of the
-// same image, read at its shipped offset (the XpLightManager.cpp precedent for renderer fields).
+// (`mov eax, g_Renderer; cmp byte ptr [eax+6A4h], 0`), unguarded. Read through BF2Render.cpp's
+// render-switch accessor, keyed by that retail offset.
 bool rendererDrawRoads()
 {
-    return static_cast<unsigned char*>(static_cast<void*>(dx9rend::g_Renderer))[0x6A4] != 0;
+    return dx9rend::rendererRenderSwitch(0x6A4) != 0;
 }
 
 RoadCompiled* fromGeometry(void* subobject)
 {
-    return reinterpret_cast<RoadCompiled*>(static_cast<unsigned char*>(subobject) - 4);
+    return reinterpret_cast<RoadCompiled*>(static_cast<unsigned char*>(subobject)
+                                           - offsetof(RoadCompiled, m_geometry));   // retail +4
 }
 
 
 // THE IRoad table, seven slots. MSVC will not make a free function __thiscall; a
 // __fastcall with an unused EDX is the same convention for these slots.
 
-int __fastcall rc_addRef(void* self, void*)
+int RD9_THUNK rc_addRef(void* self RD9_THUNK_EDX)
 {
     return static_cast<RoadCompiled*>(self)->addRef();
 }
 
-int __fastcall rc_getRef(void* self, void*)
+int RD9_THUNK rc_getRef(void* self RD9_THUNK_EDX)
 {
     return static_cast<RoadCompiled*>(self)->getRef();
 }
 
-int __fastcall rc_release(void* self, void*)
+int RD9_THUNK rc_release(void* self RD9_THUNK_EDX)
 {
     return static_cast<RoadCompiled*>(self)->release();
 }
 
-void* __fastcall rc_queryInterface(void* self, void*, unsigned int iid)
+void* RD9_THUNK rc_queryInterface(void* self RD9_THUNK_EDX, unsigned int iid)
 {
     return static_cast<RoadCompiled*>(self)->queryInterface(iid);
 }
 
 // +0x10, 0x1015AD30 - `ret`. [UNRESOLVED] role; nothing recovered calls it.
-void __fastcall rc_slot10(void*, void*)
+void RD9_THUNK rc_slot10(void* RD9_THUNK_EDX)
 {
 }
 
-void __fastcall rc_updateChunkVisibility(void* self, void*, const Frustum* frustum)
+void RD9_THUNK rc_updateChunkVisibility(void* self RD9_THUNK_EDX, const Frustum* frustum)
 {
     static_cast<RoadCompiled*>(self)->updateChunkVisibility(frustum);
 }
 
-bool __fastcall rc_anyChunkVisible(void* self, void*)
+bool RD9_THUNK rc_anyChunkVisible(void* self RD9_THUNK_EDX)
 {
     return static_cast<RoadCompiled*>(self)->anyChunkVisible();
 }
@@ -144,89 +147,91 @@ void* const kRoadVtable[7] =
 // are MSVC adjustor thunks (`sub ecx, 4; jmp <primary body>`); every other entry that is not this
 // class's own body is one of the image-wide default bodies, each read: its `retn N` fixes the arity.
 
-int __fastcall rg_addRef(void* self, void*)
+int RD9_THUNK rg_addRef(void* self RD9_THUNK_EDX)
 {
     return fromGeometry(self)->addRef();
 }
 
-int __fastcall rg_getRef(void* self, void*)
+int RD9_THUNK rg_getRef(void* self RD9_THUNK_EDX)
 {
     return fromGeometry(self)->getRef();
 }
 
-int __fastcall rg_release(void* self, void*)
+int RD9_THUNK rg_release(void* self RD9_THUNK_EDX)
 {
     return fromGeometry(self)->release();
 }
 
-void* __fastcall rg_queryInterface(void* self, void*, unsigned int iid)
+void* RD9_THUNK rg_queryInterface(void* self RD9_THUNK_EDX, unsigned int iid)
 {
     return fromGeometry(self)->queryInterface(iid);
 }
 
-void __fastcall rg_emptyNoArgs(void*, void*) { }                                  // 0x10037D40 `ret`
-void __fastcall rg_emptyOneArg(void*, void*, int) { }                             // 0x100E13B0 `retn 4`
-void __fastcall rg_emptyTwoArgs(void*, void*, int, int) { }                       // 0x100E1480 `retn 8`
-void __fastcall rg_emptyThreeArgs(void*, void*, int, int, int) { }                // 0x10083AB0 `retn 0Ch`
-void __fastcall rg_emptySixArgs(void*, void*, int, int, int, int, int, int) { }   // 0x10082D20 `retn 18h`
-int  __fastcall rg_returnsZero(void*, void*) { return 0; }
-int  __fastcall rg_returnsZeroOneArg(void*, void*, int) { return 0; }             // 0x10088060 `retn 4`
-bool __fastcall rg_returnsFalse(void*, void*) { return false; }
-bool __fastcall rg_returnsFalseOneArg(void*, void*, int) { return false; }        // 0x1005DA00 `retn 4`
-int  __fastcall rg_returnsOne(void*, void*) { return 1; }
-int  __fastcall rg_returnsMinusOne(void*, void*) { return -1; }
-int  __fastcall rg_returnsSeven(void*, void*) { return 7; }
-float __fastcall rg_returnsMinusOneF(void*, void*) { return -1.0f; }              // 0x10082D10 `fld -1.0`
+void RD9_THUNK rg_emptyNoArgs(void* RD9_THUNK_EDX) { }                                  // 0x10037D40 `ret`
+void RD9_THUNK rg_emptyOneArg(void* RD9_THUNK_EDX, int) { }                             // 0x100E13B0 `retn 4`
+void RD9_THUNK rg_emptyTwoArgs(void* RD9_THUNK_EDX, int, int) { }                       // 0x100E1480 `retn 8`
+void RD9_THUNK rg_emptyThreeArgs(void* RD9_THUNK_EDX, int, int, int) { }                // 0x10083AB0 `retn 0Ch`
+void RD9_THUNK rg_emptySixArgs(void* RD9_THUNK_EDX, int, int, int, int, int, int) { }   // 0x10082D20 `retn 18h`
+// The two zero bodies also fill pointer slots (+0x28 the light record, +0xA4 the root object, +0xCC the
+// next geometry), so the zero is pointer-sized: the same `xor eax, eax` on x86, all of RAX on x64.
+std::uintptr_t RD9_THUNK rg_returnsZero(void* RD9_THUNK_EDX) { return 0; }
+std::uintptr_t RD9_THUNK rg_returnsZeroOneArg(void* RD9_THUNK_EDX, int) { return 0; }   // 0x10088060 `retn 4`
+bool RD9_THUNK rg_returnsFalse(void* RD9_THUNK_EDX) { return false; }
+bool RD9_THUNK rg_returnsFalseOneArg(void* RD9_THUNK_EDX, int) { return false; }        // 0x1005DA00 `retn 4`
+int  RD9_THUNK rg_returnsOne(void* RD9_THUNK_EDX) { return 1; }
+int  RD9_THUNK rg_returnsMinusOne(void* RD9_THUNK_EDX) { return -1; }
+int  RD9_THUNK rg_returnsSeven(void* RD9_THUNK_EDX) { return 7; }
+float RD9_THUNK rg_returnsMinusOneF(void* RD9_THUNK_EDX) { return -1.0f; }              // 0x10082D10 `fld -1.0`
 
 // +0x18, (`retn 0Ch`) - the ObjectDrawer's deferred pass passes (renderView, occluder, 1);
 // the body reads none of the three.
-void __fastcall rg_addToRenderQueue(void* self, void*, void*, void*, int)
+void RD9_THUNK rg_addToRenderQueue(void* self RD9_THUNK_EDX, void*, void*, int)
 {
     fromGeometry(self)->addToRenderQueue();
 }
 
 // +0x34, 0x1015BB00 - `sub ecx, 4; jmp 0x1015BB60`, the scalar deleting destructor.
-void* __fastcall rg_destroy(void* self, void*, unsigned int flags)
+void* RD9_THUNK rg_destroy(void* self RD9_THUNK_EDX, unsigned int flags)
 {
     return fromGeometry(self)->destroy(flags);
 }
 
 // +0x38, the same body as IRoad +0x04 (`mov eax, [ecx+34h]`), which on the subobject
 // reads object +0x38: the template. ICF folded "getRef" and "getTemplate" into one function.
-void* __fastcall rg_getTemplate(void* self, void*)
+void* RD9_THUNK rg_getTemplate(void* self RD9_THUNK_EDX)
 {
     return fromGeometry(self)->m_template;
 }
 
 // +0x40, 0x1015AD50 - `lea eax, [ecx+94h]`: the local bounds (object +0x98).
-const void* __fastcall rg_getLocalBounds(void* self, void*)
+const void* RD9_THUNK rg_getLocalBounds(void* self RD9_THUNK_EDX)
 {
     return &fromGeometry(self)->m_localBounds;
 }
 
 // +0x44, 0x1015AD60 - `fld dword ptr [ecx+54h]`: the file's radius (object +0x58).
-float __fastcall rg_getRadius(void* self, void*)
+float RD9_THUNK rg_getRadius(void* self RD9_THUNK_EDX)
 {
     return fromGeometry(self)->m_radius;
 }
 
 // +0x48, 0x1015AD70 - `lea eax, [ecx+0D0h]`: the transform (object +0xD4).
-const Mat4* __fastcall rg_getTransform(void* self, void*)
+const Mat4* RD9_THUNK rg_getTransform(void* self RD9_THUNK_EDX)
 {
     return &fromGeometry(self)->m_transform;
 }
 
 // +0x50, (`retn 4`).
-void __fastcall rg_setTransform(void* self, void*, const Mat4* transform)
+void RD9_THUNK rg_setTransform(void* self RD9_THUNK_EDX, const Mat4* transform)
 {
     fromGeometry(self)->setTransform(transform);
 }
 
 // +0x68, 0x10082D30 - `add ecx, 4; jmp std::string::operator=`: the subobject's own name string
 // (object +0x08). The shared body StaticMesh's +0x68 is; it answers the string.
-vc71::string* __fastcall rg_setName(void* self, void*, const vc71::string& value)
+std::string* RD9_THUNK rg_setName(void* self RD9_THUNK_EDX, const std::string& value)
 {
-    vc71::string& name = static_cast<GeometryInstanceData*>(self)->m_name;
+    std::string& name = static_cast<GeometryInstanceData*>(self)->m_name;
     name = value;
     return &name;
 }
@@ -366,9 +371,8 @@ RoadCompiled::RoadCompiled(RoadCompiledTemplate* owner)
 }
 
 // the vertex buffer and the index buffer released owner-side (each only when present),
-// then the members in reverse order: the +0x170 string, the visible bits (_Mysize zeroed, then the
-// words freed), the centres, radii, index counts and starts (each freed and nulled), and finally the
-// IGeometry prefix's name string.
+// then the members in reverse order: the +0x170 string, the visible bits, the centres, radii, index
+// counts and starts, and finally the IGeometry prefix's name string.
 RoadCompiled::~RoadCompiled()
 {
     if (m_vertexBuffer)
@@ -399,8 +403,8 @@ int RoadCompiled::release()
     const int remaining = --m_refCount;
     if (!remaining)
     {
-        typedef void* (__fastcall* DestroyFn)(void*, void*, unsigned int);
-        reinterpret_cast<DestroyFn>(m_geometry.m_vptr[0x34 / sizeof(void*)])(&m_geometry, 0, 1);
+        typedef void* (__thiscall* DestroyFn)(void*, unsigned int);
+        reinterpret_cast<DestroyFn>(m_geometry.m_vptr[0x34 / 4])(&m_geometry, 1);
     }
     return remaining;
 }
@@ -458,12 +462,12 @@ void RoadCompiled::updateChunkVisibility(const Frustum* frustum)
             const float distance = std::sqrt((dz * dz + dy * dy) + dx * dx) - *radius;
             if (distance < maxDistance)
             {
-                m_chunkVisible.set(i, frustum->inside(centre, *radius));
-                m_anyChunkVisible |= m_chunkVisible.test(i) ? 1 : 0;
+                m_chunkVisible[i] = frustum->inside(centre, *radius);
+                m_anyChunkVisible |= m_chunkVisible[i] ? 1 : 0;
             }
             else
             {
-                m_chunkVisible.set(i, false);
+                m_chunkVisible[i] = false;
             }
         }
     }
@@ -485,8 +489,8 @@ void RoadCompiled::addToRenderQueue()
         return;
 
     const Frustum* const frustum = dx9rend::rendererGetRenderView()->getFrustumPtr();
-    typedef void (__fastcall* VisibilityFn)(void*, void*, const Frustum*);
-    reinterpret_cast<VisibilityFn>(m_roadVptr[0x14 / sizeof(void*)])(this, 0, frustum);
+    typedef void (__thiscall* VisibilityFn)(void*, const Frustum*);
+    reinterpret_cast<VisibilityFn>(m_roadVptr[0x14 / 4])(this, frustum);
 
     if (m_anyChunkVisible)
         roadCompiledRendererAdd(this);
@@ -505,7 +509,7 @@ void RoadCompiled::setTransform(const Mat4* transform)
 // Missing files trap. Failed buffer locks skip reads and desynchronize the stream.
 // Version 1.4 requires a chunk table even though the editable-road writer omits it.
 
-void RoadCompiled::loadMesh(const vc71::string& file)
+void RoadCompiled::loadMesh(const std::string& file)
 {
     renddx9abi::HostStream* const stream = ::dice::hfe::fileManager->open(
         renddx9abi::makeHostString(file), static_cast<renddx9abi::HostFileMode>(2),
@@ -534,7 +538,7 @@ void RoadCompiled::loadMesh(const vc71::string& file)
     stream->read(&m_vertexCount, 4);                                         // +0x3C
 
     m_vertexBuffer = dx9rend::createVertexBuffer(dx9rend::g_bufferManager, m_vertexCount, 32,
-                                                 vc71::string("RoadCompiled"), 8);   // writeonly
+                                                 std::string("RoadCompiled"), 8);   // writeonly
     RoadCompiledVertex* const vertices = static_cast<RoadCompiledVertex*>(
         dx9rend::vertexBufferLock(m_vertexBuffer, 0, 0, 0));
     if (vertices)
@@ -636,14 +640,14 @@ void RoadCompiled::draw()
         {
             do
             {
-                if (m_chunkVisible.test(i))
+                if (m_chunkVisible[i])
                 {
                     start = m_chunkStarts[i];
                     count = m_chunkIndexCounts[i];
                     ++i;
                     while (i < m_chunkCount)
                     {
-                        if (!m_chunkVisible.test(i))
+                        if (!m_chunkVisible[i])
                         {
                             dx9rend::rendererDrawIndexedPrimitive(count / 3u, 4u, 0, 0u,
                                                                   m_vertexCount, start);

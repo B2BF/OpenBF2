@@ -1,5 +1,7 @@
 #include "Quad.h"
 #if !DEDICATED
+#include <cmath>
+#include <cstddef>
 namespace dice { namespace meme {
 Quad::Quad()
     : clip(nullptr), blend(1), state08(7), state0c(8),
@@ -75,6 +77,7 @@ Quad::Quad(const Rect* bounds, const Rect* clipping, const Color* color)
 void rotateQuad(Quad* quad, const float center[2], float radians)
 {
     float cosine, sine;
+#if defined(_M_IX86)
     __asm {
         fld radians
         fcos
@@ -83,6 +86,12 @@ void rotateQuad(Quad* quad, const float center[2], float radians)
         fsin
         fstp sine
     }
+#else
+    // [PLATFORM] x64: no x87 fcos/fsin. The CRT double results rounded to float match the
+    // x87 ones except in rare last-bit cases; |radians| >= 2^63 (left unreduced by x87) differs.
+    cosine = static_cast<float>(std::cos(static_cast<double>(radians)));
+    sine = static_cast<float>(std::sin(static_cast<double>(radians)));
+#endif
     for (unsigned int i = 0; i < 4; ++i) {
         const float dx = quad->corners[i].x - center[0];
         const float dy = quad->corners[i].y - center[1];
@@ -128,6 +137,14 @@ void setQuadBounds(Quad* quad, float x, float y, float width, float height)
 }
 
 static_assert(sizeof(QuadCorner) == 32, "retail quad corner stride");
+#if defined(_M_IX86)
 static_assert(sizeof(Quad) == 192, "retail QuadDrawer request size");
+#else
+// RendDX9's QuadDrawRequest (GeomMisc/MenuRend/QuadDrawer.cpp) declares an 8-byte clip pointer,
+// a pointer texture2 and 0x20 bytes before the corners; with the pointer-sized handle both
+// sides place texture2 at +0x20 and the corners at +0x48 on x64.
+static_assert(offsetof(Quad, texture2) == 0x20 && offsetof(Quad, corners) == 0x48
+              && sizeof(Quad) == 0xC8, "x64 QuadDrawer request layout");
+#endif
 } }
 #endif

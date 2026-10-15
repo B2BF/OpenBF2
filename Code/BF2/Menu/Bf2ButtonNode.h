@@ -33,7 +33,7 @@ public:
     // Index 0 and any index above 3 are refused, and so is a zero texture; the
     // shipped body also returns the index's low byte rather than a literal 1 on
     // the index-1 arm, which happens to be the same value.
-    bool setTextureForHud(int index, int texture);        // 7D0650, +EC
+    bool setTextureForHud(int index, TextureHandle texture); // 7D0650, +EC
     bool setActionForHud(Action* action, int index);      // 7D0B50, +F0
     bool setAltActionForHud(Action* action, int index);   // 7D0B70, +F4
     Action* getActionForHud(int index);                   // 7D0B90, +F8
@@ -49,10 +49,10 @@ protected:
     friend struct Bf2ButtonNodeFixture;
     // The three texture handles the console row selects by index, and the one
     // the paint path actually uses. Index 1 also writes PictureNode::m_texture.
-    int m_normalTexture;                                 // +60, index 1
-    int m_pressedTexture;                                // +64, index 2 [INFERRED] role
-    int m_highlightTexture;                              // +68, index 3 [INFERRED] role
-    int m_currentTexture;                                // +6C
+    TextureHandle m_normalTexture;                       // +60, index 1
+    TextureHandle m_pressedTexture;                      // +64, index 2 [INFERRED] role
+    TextureHandle m_highlightTexture;                    // +68, index 3 [INFERRED] role
+    TextureHandle m_currentTexture;                      // +6C
     // Four action slots and four alternate action slots. The console rows accept
     // an index below 4, which is exactly these four entries.
     Action* m_actions[4];                                // +70..7C
@@ -67,7 +67,9 @@ protected:
     std::uint32_t m_fieldb4, m_fieldb8;                  // [UNRESOLVED], never written
     bool m_fieldbc;                                      // +BC [UNRESOLVED] role, ctor false
 };
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2ButtonNode) == 192, "native Bf2ButtonNode storage");
+#endif
 } }
 #endif
 #endif

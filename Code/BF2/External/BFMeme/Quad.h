@@ -25,7 +25,7 @@ struct Quad
     int state08, state0c, state10, state14;      // +08..+14
     unsigned char state18;                      // +18
     unsigned char padding19[3];                 // untouched
-    int texture2;                              // +1C, opaque texture handle
+    TextureHandle texture2;                     // +1C, texture handle; RendDX9 reads an IMemeTexture*
     std::uint32_t state20[8];                   // +20..+3C, all zeroed
     QuadCorner corners[4];                      // +40,+60,+80,+A0
 };

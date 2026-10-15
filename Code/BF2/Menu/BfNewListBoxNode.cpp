@@ -13,6 +13,9 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#if !defined(_M_IX86)
+#include <emmintrin.h>
+#endif
 namespace dice { namespace hfe { namespace io {
 extern IBase* inputDeviceManager;
 } } }
@@ -22,6 +25,7 @@ namespace {
 int floorToInt(double value)
 {
     const double floored = std::floor(value);
+#if defined(_M_IX86)
     unsigned short original, truncating;
     int result;
     __asm {
@@ -35,6 +39,10 @@ int floorToInt(double value)
         fldcw original
     }
     return result;
+#else
+    // cvttsd2si truncates like the chopped fistp, including the 0x80000000 indefinite result.
+    return _mm_cvttsd_si32(_mm_set_sd(floored));
+#endif
 }
 int floorFloatToInt(float value) { return floorToInt(static_cast<double>(value)); }
 }
@@ -54,7 +62,7 @@ BfNewListBoxNode::BfNewListBoxNode()
       m_field108(false), m_field109(false), m_field128(false)
 {
     for (auto& word : m_field10c) word = 0;
-    for (int& font : m_fonts) font = 0;
+    for (FontHandle& font : m_fonts) font = 0;
 }
 BfNewListBoxNode::~BfNewListBoxNode() {} // list destruction, then Node/Object
 unsigned int BfNewListBoxNode::getObjectSize() { return sizeof(BfNewListBoxNode); }
@@ -1015,6 +1023,8 @@ bool BfNewListBoxNode::onEvent3(System*, const Rect*, const NodeState*, int, int
     std::fflush(stderr);
     std::abort();
 }
+#if defined(_M_IX86)
 static_assert(sizeof(BfNewListBoxNode) == 296, "native BfNewListBoxNode storage");
+#endif
 } }
 #endif

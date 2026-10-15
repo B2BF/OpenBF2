@@ -1,8 +1,11 @@
-// [TEMP] [CHOSEN, not recovered] Focused PE-layout constructor/lifecycle fixture.
+// [TEMP] [CHOSEN, not recovered] Focused constructor/lifecycle fixture.
 // Uses production OverGrowth methods, authored untouched-byte sentinels and process-local heaps.
+// Members are read by name: the native object holds std containers (issue #7), so retail offsets
+// after the first container no longer apply.
 #include "../BF2/Geom/Overgrowth/OverGrowth.h"
-#include "../RendDX9Abi/Vc71String.h"
-#include "../RendDX9Abi/Vc71Vector.h"
+#include "../BF2/Geom/XpLightManager.h"
+#include <string>
+#include <vector>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -13,8 +16,14 @@ int checks;
 int failures;
 int frees;
 int nullFrees;
-template<class T> T& field(void* p, unsigned int off)
-{ return *reinterpret_cast<T*>(static_cast<unsigned char*>(p) + off); }
+// The raw word of a member the constructor leaves as allocated (0xCC fill).
+template<class T> unsigned int bits(const T& member)
+{
+    static_assert(sizeof(T) == 4, "word-sized member");
+    unsigned int value;
+    std::memcpy(&value, &member, 4);
+    return value;
+}
 void check(bool value, const char* name)
 {
     ++checks;
@@ -29,8 +38,6 @@ void* engineAlloc(unsigned int size)
     return p;
 }
 void engineFree(void* p) { if (p) ++frees; else ++nullFrees; std::free(p); }
-void* crtMalloc(size_t size) { return std::malloc(size); }
-void crtFree(void* p) { std::free(p); }
 }
 namespace dice { namespace hfe { namespace dx9rend {
 void* g_OverGrowth;
@@ -47,19 +54,19 @@ int main(int argc, char** argv)
     g_OverGrowth = p;
     if (argc > 1 && std::strcmp(argv[1], "nonempty") == 0)
     {
-        field<vc71::string>(p, 0x88) = "authored/nonempty";
+        p->m_path = "authored/nonempty";
         overGrowthPreLoadResources(); // Must diagnose and abort; never return fabricated success.
         return 99;
     }
-    check(p && sizeof(*p) == 0x154, "340-byte owner allocated");
-    check(field<vc71::string>(p, 0x88).empty() && field<unsigned int>(p, 0x9C) == 0,
-          "real constructed empty path has zero size at +9C");
-    check(field<unsigned int>(p, 0x18) == 0x759DC150 && field<int>(p, 0x10) == 10
-              && field<float>(p, 0x24) == 500.0f && field<float>(p, 0xF4) == 1.0f,
+    check(p != 0, "owner allocated");
+    check(p->m_path.empty() && p->m_path.size() == 0,
+          "real constructed empty path has zero size");
+    check(p->m_randomSeed == 0x759DC150 && p->m_gridSize == 10
+              && p->m_viewDistance == 500.0f && p->m_qualityScale == 1.0f,
           "base and derived scalar defaults match the PE");
-    check(field<unsigned int>(p, 0x64) == 0xCCCCCCCC
-              && field<unsigned int>(p, 0xD8) == 0xCCCCCCCC
-              && field<unsigned int>(p, 0x104) == 0xCCCCCCCC,
+    check(bits(p->m_originX) == 0xCCCCCCCC
+              && bits(p->m_patchCountX) == 0xCCCCCCCC
+              && bits(p->m_streamVertexCounts[0]) == 0xCCCCCCCC,
           "constructor preserves unwritten coordinates, grid and tail");
     void** table = *reinterpret_cast<void***>(p);
     typedef float (__thiscall* Getter)(void*);
@@ -71,44 +78,40 @@ int main(int argc, char** argv)
     overGrowthPostLoadResources();
     reinterpret_cast<Draw>(table[0x34 / 4])(p, 0, 12.0f);
     reinterpret_cast<Update>(table[0x1C / 4])(p, 0);
-    check(field<unsigned int>(p, 0xD8) == 0xCCCCCCCC && field<void*>(p, 0xE0) == 0,
+    check(bits(p->m_patchCountX) == 0xCCCCCCCC && p->m_patches == 0,
           "empty direct lifecycle and actual draw slots touch no resource/view fields");
     {
         typedef void (__thiscall* ShadowQuery)(void*, void*, void*, void*, void*);
         const ShadowQuery shadowQuery = reinterpret_cast<ShadowQuery>(table[0x38 / 4]);
-        vc71::vector_layout records = { 0, 0, 0, 0 };
-        vc71::vector_layout geometry = { 0, 0, 0, 0 };
-        alignas(4) unsigned char oneRecord[0x498];
+        std::vector<dice::hfe::geom::LightShadowRecord> records;
+        std::vector<void*> geometry;
         unsigned char patchSentinel = 0;
 
         // The rebuilt client's OverGrowth: never loaded, patch array +0xE0 still the ctor's null.
         shadowQuery(p, &records, 0, 0, &geometry);
-        check(geometry.first == 0 && geometry.last == 0 && field<void*>(p, 0xE0) == 0,
+        check(geometry.empty() && p->m_patches == 0,
               "+38 on the never-loaded owner returns at the patch-array test, touching nothing");
 
         // Each later guard, one at a time.
-        field<void*>(p, 0xE0) = &patchSentinel;
-        field<unsigned char>(p, 0xD4) = 0;
+        p->m_patches = reinterpret_cast<dice::hfe::geom::OverGrowthPatch*>(&patchSentinel);
+        p->m_drawNear = 0;
         shadowQuery(p, &records, 0, 0, &geometry);
-        check(geometry.first == 0, "+38 returns at the +D4 byte");
-        field<unsigned char>(p, 0xD4) = 1;
+        check(geometry.empty(), "+38 returns at the +D4 byte");
+        p->m_drawNear = 1;
         shadowQuery(p, &records, 0, 0, &geometry);
-        check(geometry.first == 0, "+38 returns on a null records vector (100CE200)");
-        records.first = records.last = reinterpret_cast<char*>(oneRecord);
+        check(geometry.empty(), "+38 returns on an empty records vector (100CE200)");
+        records.resize(1);
+        const int gridSize = p->m_gridSize;
+        p->m_gridSize = 0;
         shadowQuery(p, &records, 0, 0, &geometry);
-        check(geometry.first == 0, "+38 returns on an empty records vector (100CE200)");
-        records.last = records.first + 0x498;
-        const int gridSize = field<int>(p, 0x10);
-        field<int>(p, 0x10) = 0;
-        shadowQuery(p, &records, 0, 0, &geometry);
-        check(geometry.first == 0, "+38 returns on a non-positive grid size (signed +10)");
-        field<int>(p, 0x10) = gridSize;
+        check(geometry.empty(), "+38 returns on a non-positive grid size (signed +10)");
+        p->m_gridSize = gridSize;
         if (argc > 1 && std::strcmp(argv[1], "shadowwalk") == 0)
         {
             shadowQuery(p, &records, 0, 0, &geometry); // Must name the patch walk and abort.
             return 98;
         }
-        field<void*>(p, 0xE0) = 0;                     // clear() must see the ctor's state again
+        p->m_patches = 0;                              // clear() must see the ctor's state again
     }
     const int oldFrees = frees;
     const int oldNullFrees = nullFrees;

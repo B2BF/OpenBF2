@@ -76,7 +76,7 @@ int __fastcall releaseTemplate(void* value, void*)
     ++object.releases;
     return --object.refs;
 }
-void __fastcall setTemplateFixtureName(void* value, void*, const vc71::string& name)
+void __fastcall setTemplateFixtureName(void* value, void*, const std::string& name)
 {
     FixtureTemplate& object = *static_cast<FixtureTemplate*>(value);
     check(std::strcmp(name.c_str(), object.label) == 0, "real registry forwards each template name");
@@ -136,8 +136,6 @@ void engineFree(void* value)
     if (value && (value == watchedManagers[0] || value == watchedManagers[1])) ++managerFrees;
     std::free(value);
 }
-void* crtMalloc(size_t size) { return std::malloc(size); }
-void crtFree(void* value) { std::free(value); }
 void trace(const char*, const void*, unsigned int) {}
 void logf(const char* format, ...)
 {
@@ -212,12 +210,12 @@ int main()
     check(receiver->getUsedTemplateCount() == 0, "count returns zero before readiness without walking templates");
     receiver->loadUsedTemplates();
     check(readyCalls == 2 && settingCalls == 0 && progressCalls == 0 &&
-          receiver->getActive() == failed.asTemplate() && receiver->getTemplateRegistry()->size == 4,
+          receiver->getActive() == failed.asTemplate() && receiver->getTemplateRegistry()->size() == 4,
           "unready load preserves registry and active ownership before all further callbacks");
     receiver->resetTemplateUse();
     check(readyCalls == 2 && !unused.used && !loaded.used && !pending.used && !failed.used,
           "reset clears every nonzero use byte independently of readiness");
-    check(receiver->getTemplateRegistry()->size == 4 && unused.refs == 2 && failed.refs == 3,
+    check(receiver->getTemplateRegistry()->size() == 4 && unused.refs == 2 && failed.refs == 3,
           "reset changes neither registry nor references");
 
     loaded.used = pending.used = failed.used = 1;
@@ -239,7 +237,7 @@ int main()
     check(erasedBeforeRelease && unused.refs == 1 &&
           receiver->getTemplate(renddx9abi::HostString("a_unused")) == 0,
           "unmarked entry is unlinked before its registry reference is released");
-    check(receiver->getTemplateRegistry()->size == 3 && receiver->getActive() == 0 && failed.refs == 2,
+    check(receiver->getTemplateRegistry()->size() == 3 && receiver->getActive() == 0 && failed.refs == 2,
           "false keep setting erases only unmarked entries and drops active ownership");
     check(loaded.loadedQueries == 1 && loaded.loads == 0 && pending.loads == 1 && failed.loads == 1,
           "only marked unloaded templates load, including a failing loader");
@@ -256,7 +254,7 @@ int main()
         "isLoaded:b_loaded", "isLoaded:d_failed", "load:d_failed"};
     check(events == std::vector<std::string>(kept, kept + 9),
           "keep=true retains the retail counterintuitive log branch and skips unmarked callbacks");
-    check(receiver->getTemplateRegistry()->size == 4 && lateUnused.refs == 2 &&
+    check(receiver->getTemplateRegistry()->size() == 4 && lateUnused.refs == 2 &&
           lateUnused.loadedQueries == 0 && lateUnused.loads == 0 && pending.loadedQueries == 1,
           "keep=true retains unmarked entries without querying or loading them");
     check(!loaded.used && !pending.used && !failed.used && !lateUnused.used && failed.loads == 2,
@@ -266,7 +264,7 @@ int main()
 
     expectedActive = expectedErased = 0;
     receiver->clear(); published->clear();
-    check(receiver->getTemplateRegistry()->size == 0 && published->getTemplateRegistry()->size == 0,
+    check(receiver->getTemplateRegistry()->size() == 0 && published->getTemplateRegistry()->size() == 0,
           "real clear empties both registries");
     check(unused.refs == 1 && loaded.refs == 1 && pending.refs == 1 && failed.refs == 1 &&
           lateUnused.refs == 1 && publishedA.refs == 1 && publishedB.refs == 1,

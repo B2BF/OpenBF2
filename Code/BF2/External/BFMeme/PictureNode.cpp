@@ -28,10 +28,12 @@ public:
     int getInstanceCount() override { return pictureNodeInstances; }
     unsigned int getInstanceSize() override { return sizeof(PictureNode); }
 };
+#if defined(_M_IX86)
 static_assert(sizeof(PictureNodeTypeDescriptor) == 16, "PictureNode metadata storage");
+#endif
 }
 
-PictureNode::PictureNode(int texture) : Node(), m_texture(texture) {}
+PictureNode::PictureNode(TextureHandle texture) : Node(), m_texture(texture) {}
 TypeDescriptor* PictureNode::getClassType()
 {
     static PictureNodeTypeDescriptor type;

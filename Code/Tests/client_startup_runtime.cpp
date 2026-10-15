@@ -192,8 +192,8 @@ struct FakeSwiffPlayer : ui::ISwiffPlayer
     void  getTextInput1(std::string& out) override { out = "cut"; }
     void  setSwiffHost(ui::ISwiffHost* h) override { host = h; }
     ui::ISwiffHost* getSwiffHost() override { return host; }
-    char  renderCapability0(int) override { return 1; }
-    char  renderCapability1(int) override { return 1; }
+    char  renderCapability0(intptr_t) override { return 1; }
+    char  renderCapability1(intptr_t) override { return 1; }
     int   getMovieWidth() override { return 800; }
     int   getMovieHeight() override { return 600; }
     void  renderSetPairState(int, int) override {}
@@ -259,8 +259,8 @@ struct FakeSwiffRender : ui::ISwiffRender
     void  setMouseState(int, int, int) override {}
     int   slot47(int) override { return -1; }
     void  nullsub48(int) override {}
-    char  slot49(int) override { return 1; }
-    char  slot50(int) override { return 1; }
+    char  slot49(intptr_t) override { return 1; }
+    char  slot50(intptr_t) override { return 1; }
     int   beginFrame() override { ++beginFrames; return 1; }
     int   endFrame() override { ++endFrames; return 1; }
     void* setTextureTechnique(const std::string&, int) override { return 0; }

@@ -9,6 +9,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <new>
+#if !defined(_M_IX86)
+#include <emmintrin.h>
+#endif
 namespace dice { namespace meme {
 namespace {
 char* cloneName(const char* name)
@@ -46,6 +49,7 @@ void formatStringDataFloat(float value, char* output, int digits)
         *cursor++ = '-';
         magnitude = -magnitude;
     }
+#if defined(_M_IX86)
     unsigned short oldControl, truncControl;
     __int64 whole;
     int integral;
@@ -63,6 +67,11 @@ void formatStringDataFloat(float value, char* output, int digits)
         mov eax, dword ptr whole
         mov integral, eax
     }
+#else
+    // cvttsd2si truncates like the chopped fistp and yields the same integer-indefinite
+    // value for NaN and out-of-range input; the low dword is kept, as above.
+    const int integral = static_cast<int>(_mm_cvttsd_si64(_mm_set_sd(magnitude)));
+#endif
     int remaining = integral;
     if (remaining == 0) {
         *cursor++ = '0';
@@ -76,6 +85,7 @@ void formatStringDataFloat(float value, char* output, int digits)
         while (length != 0) *cursor++ = reverse[--length];
     }
     *cursor++ = '.';
+#if defined(_M_IX86)
     const double ten = 10.0;
     int digit;
     __asm {
@@ -99,6 +109,20 @@ void formatStringDataFloat(float value, char* output, int digits)
         fstp st(0)
         mov cursor, edi
     }
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    // The dec/jnz counter is unsigned: a nonpositive digit count runs 2^32 times, as shipped.
+    {
+        double fraction = magnitude - static_cast<double>(integral);
+        unsigned int count = static_cast<unsigned int>(digits);
+        do {
+            fraction *= 10.0;
+            const int digit = _mm_cvttsd_si32(_mm_set_sd(fraction));
+            *cursor++ = static_cast<char>(static_cast<unsigned char>(digit) + 0x30);
+            fraction -= static_cast<double>(digit);
+        } while (--count != 0);
+    }
+#endif
     *cursor = 0;
 }
 

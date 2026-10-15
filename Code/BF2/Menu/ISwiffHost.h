@@ -2,6 +2,7 @@
 #ifndef MENU_ISWIFFHOST_H
 #define MENU_ISWIFFHOST_H
 #include "../Core/IBase.h"
+#include <stdint.h>
 #include "../Game/IModInfo.h"
 #include "../Game/Persistence/PlayerAwards.h"      // getCachedAwards (+0x228): IPlayerAwards::AwardList
 #include "../Game/Persistence/PlayerRankInfo.h"
@@ -373,9 +374,12 @@ struct ISwiffHost : public IBase
     virtual std::string getCurrentMapGameMode() = 0;                                // +0x05C
     virtual int  getCurrentMapMaxPlayers() = 0;                                     // +0x060
     virtual int  getCurrentMapSize() = 0;                                           // +0x064
-    virtual bool setPlayerRenderCapability0(int value) = 0;                         //  26 +0x068  0x486E10  SwiffPlayer +0x60, then window +0x3B = 0
+// [CHOSEN, not recovered] x64 (https://github.com/B2BF/OpenBF2/issues/7): the render-capability
+// chain (host +0x68/+0x70 -> player +0x60/+0x64 -> render slots 49/50) carries the address of a
+// SwiffPlayer string, so it is intptr_t - int on x86, where signatures and mangling are unchanged.
+    virtual bool setPlayerRenderCapability0(intptr_t value) = 0;                         //  26 +0x068  0x486E10  SwiffPlayer +0x60, then window +0x3B = 0
     virtual void* getCursor(int which) = 0;                                         //  27 +0x06C  0x488960  hcursor: 0 arrow, 1 busy, 2 keybinding
-    virtual bool setPlayerRenderCapability1(int value) = 0;                         //  28 +0x070  0x486E80  SwiffPlayer +0x64
+    virtual bool setPlayerRenderCapability1(intptr_t value) = 0;                         //  28 +0x070  0x486E80  SwiffPlayer +0x64
     virtual void setFlag28(bool value) = 0;                                         //  29 +0x074  0x5DF3C0 (ICF)  [UNRESOLVED] role
     virtual bool getFlag28() = 0;                                                   //  30 +0x078  0x659F70 (ICF)
     virtual IServerBrowser* getServerList(const std::string& name) = 0;             //  31 +0x07C  0x486D10  ServerBrowserManager +0x14

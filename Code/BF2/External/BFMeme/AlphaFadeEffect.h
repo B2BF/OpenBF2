@@ -11,9 +11,9 @@ public:
     // Inlined83581E/79DD40 construction installs only the primary; no fields.
     AlphaFadeEffect() = default;
     TypeDescriptor* getType() override;
-    bool drawCharacter(System*, int character, int font, int elementIndex,
+    bool drawCharacter(System*, int character, FontHandle font, int elementIndex,
                        Quad*, RenderContext*) override; // +4C 834F10
-    bool drawTexture(System*, int texture, Quad*, RenderContext*) override;
+    bool drawTexture(System*, TextureHandle texture, Quad*, RenderContext*) override;
     static TypeDescriptor* getClassType();
 };
 } }

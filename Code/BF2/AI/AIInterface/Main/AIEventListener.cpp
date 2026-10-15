@@ -1,6 +1,7 @@
 
 #include "AIEventListener.h"
 
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -87,6 +88,18 @@ void unwrittenArm(const char* what, int category, unsigned int id)
     std::fflush(stderr);
     std::abort();
 }
+
+// Category 3 id 0x16 (enemy spotted): SpottedEvent::executeServer's eight-byte stack block, an AI
+// object pointer followed by the low byte of the team. The x86 layout is retail's (team at +4);
+// the struct keeps the team after the full pointer on native x64.
+struct SpottedPayload
+{
+    IAIObject*    aiObject;     // +0x00
+    unsigned char team;         // +0x04
+};
+#if defined(_M_IX86)
+static_assert(offsetof(SpottedPayload, team) == 4, "retail spotted-event team byte");
+#endif
 
 } // anonymous namespace
 
@@ -253,9 +266,9 @@ void AIEventListener::handleEvent(EventCategory category,
 
         case 0x16u:
             {
-                // The payload is an object pointer followed by a team byte at offset 4.
-                const unsigned char* const bytes = static_cast<const unsigned char*>(userData);
-                courier->event_enemySpotted(*static_cast<IAIObject* const*>(userData), bytes[4]);
+                // The payload is an object pointer followed by a team byte (offset 4 on x86).
+                const SpottedPayload* const payload = static_cast<const SpottedPayload*>(userData);
+                courier->event_enemySpotted(payload->aiObject, payload->team);
             }
             return;
 

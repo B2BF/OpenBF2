@@ -3,11 +3,13 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
+#include "../../../RendDX9Abi/ThunkAbi.h"
+#include "ParticleRawLayout.h"
 #include "../../../RendDX9Abi/HfeAbi.h"
 #include "../../../RendDX9Abi/ModuleCommon.h"
 #include "../../../RendDX9Abi/BfMemory.h"
 #include "../../../RendDX9Abi/Frontier.h"
-#include "../../../RendDX9Abi/Vc71String.h"
+#include <string>
 
 #include <new>
 #include <string.h>
@@ -24,26 +26,27 @@ IParticleSystemTemplate* particleSystemManagerFindTemplateByName(const char* nam
 
 namespace {
 
-// [CHOSEN, not recovered] Native BF2 passes std::string through the descriptor interface; retail passes
-// VC7.1 string. The two strings are host strings in their original 28-byte spans (+0x6C..+0x87 and
+// [CHOSEN, not recovered] BF2 passes std::string through the descriptor interface. The two strings
+// are host strings in their original 28-byte spans (x64: ParticleRawLayout.h tail slots) (+0x6C..+0x87 and
 // +0x16C..+0x187), exactly as the type-0/1/2/4 descriptors carry theirs, so every later offset is kept.
 using ParticleHostString = ::renddx9abi::HostString;
-static_assert(sizeof(ParticleHostString) <= 28, "particle host string exceeds its reserved span");
+static_assert(sizeof(ParticleHostString) <= kPsmDescriptorStringSpan, "particle host string exceeds its reserved span");
 
-inline unsigned&      U (void* p, unsigned off) { return *reinterpret_cast<unsigned*>(static_cast<char*>(p) + off); }
-inline float&         F (void* p, unsigned off) { return *reinterpret_cast<float*>(static_cast<char*>(p) + off); }
-inline unsigned char& Bt(void* p, unsigned off) { return *reinterpret_cast<unsigned char*>(static_cast<char*>(p) + off); }
+inline unsigned&      U (void* p, unsigned off) { return psmDescriptor3<unsigned>(p, off); }
+inline float&         F (void* p, unsigned off) { return psmDescriptor3<float>(p, off); }
+inline unsigned char& Bt(void* p, unsigned off) { return psmDescriptor3<unsigned char>(p, off); }
 inline unsigned       fbits(float f) { unsigned u; ::memcpy(&u, &f, 4); return u; }
 
-#define PT_SET(name, off)  void     __fastcall name(void* s, void*, unsigned v){ U(s,(off)) = v; }
-#define PT_GETF(name, off) float    __fastcall name(void* s, void*){ return F(s,(off)); }
-#define PT_GETD(name, off) unsigned __fastcall name(void* s, void*){ return U(s,(off)); }
-#define PT_SETB(name, off) void     __fastcall name(void* s, void*, unsigned v){ Bt(s,(off)) = static_cast<unsigned char>(v); }
-#define PT_GETB(name, off) unsigned __fastcall name(void* s, void*){ return Bt(s,(off)); }
-#define PT_LEA(name, off)  void*    __fastcall name(void* s, void*){ return static_cast<char*>(s) + (off); }
-#define PT_SETVEC(name, off, n) void __fastcall name(void* s, void*, const float* v){ for (int i=0;i<(n);++i) F(s,(off)+4u*i)=v[i]; }
-#define PT_GETVEC(name, off, n) void* __fastcall name(void* s, void*, float* o){ for (int i=0;i<(n);++i) o[i]=F(s,(off)+4u*i); return o; }
-#define PT_VEC3A(name, off) void __fastcall name(void* s, void*, unsigned a, unsigned b, unsigned c){ U(s,(off))=a; U(s,(off)+4)=b; U(s,(off)+8)=c; }
+#define PT_SET(name, off)  void     RD9_THUNK name(void* s RD9_THUNK_EDX, unsigned v){ U(s,(off)) = v; }
+#define PT_SETFLT(name, off) void RD9_THUNK name(void* s RD9_THUNK_EDX, PsmFloatArg v){ U(s,(off)) = psmFloatArgBits(v); }
+#define PT_GETF(name, off) float    RD9_THUNK name(void* s RD9_THUNK_EDX){ return F(s,(off)); }
+#define PT_GETD(name, off) unsigned RD9_THUNK name(void* s RD9_THUNK_EDX){ return U(s,(off)); }
+#define PT_SETB(name, off) void     RD9_THUNK name(void* s RD9_THUNK_EDX, unsigned v){ Bt(s,(off)) = static_cast<unsigned char>(v); }
+#define PT_GETB(name, off) unsigned RD9_THUNK name(void* s RD9_THUNK_EDX){ return Bt(s,(off)); }
+#define PT_LEA(name, off)  void*    RD9_THUNK name(void* s RD9_THUNK_EDX){ return &psmDescriptor3<unsigned char>(s, (off)); }
+#define PT_SETVEC(name, off, n) void RD9_THUNK name(void* s RD9_THUNK_EDX, const float* v){ for (int i=0;i<(n);++i) F(s,(off)+4u*i)=v[i]; }
+#define PT_GETVEC(name, off, n) void* RD9_THUNK name(void* s RD9_THUNK_EDX, float* o){ for (int i=0;i<(n);++i) o[i]=F(s,(off)+4u*i); return o; }
+#define PT_VEC3A(name, off) void RD9_THUNK name(void* s RD9_THUNK_EDX, PSM_VEC3_PARAMS){ U(s,(off))=PSM_VEC3_X; U(s,(off)+4)=PSM_VEC3_Y; U(s,(off)+8)=PSM_VEC3_Z; }
 
 // simple slots
 PT_LEA (n3_s1,  0x16C)
@@ -55,9 +58,9 @@ PT_SET (n3_s8,  0x68)
 PT_GETD(n3_s9,  0x68)
 PT_VEC3A(n3_s10, 0x10)
 PT_GETVEC(n3_s11, 0x10, 3)
-PT_SET (n3_s12, 0x5C)
+PT_SETFLT(n3_s12, 0x5C)
 PT_GETF(n3_s13, 0x5C)
-PT_SET (n3_s14, 0x58)
+PT_SETFLT(n3_s14, 0x58)
 PT_GETF(n3_s15, 0x58)
 PT_SET (n3_s16, 0x188)
 PT_SETVEC(n3_s17, 0x1C, 5)
@@ -67,15 +70,15 @@ PT_LEA (n3_s20, 0x30)
 PT_SETVEC(n3_s21, 0x44, 5)
 PT_LEA (n3_s22, 0x44)
 PT_GETF(n3_s24, 0x0C)
-PT_SET (n3_s25, 0x140)
+PT_SETFLT(n3_s25, 0x140)
 PT_GETF(n3_s26, 0x140)
-PT_SET (n3_s27, 0x08)
+PT_SETFLT(n3_s27, 0x08)
 PT_GETF(n3_s28, 0x08)
-PT_SET (n3_s29, 0x144)
+PT_SETFLT(n3_s29, 0x144)
 PT_GETF(n3_s30, 0x144)
 PT_SETB(n3_s31, 0x148)
 PT_GETB(n3_s32, 0x148)
-PT_SET (n3_s33, 0x154)
+PT_SETFLT(n3_s33, 0x154)
 PT_GETF(n3_s34, 0x154)
 PT_SETVEC(n3_s35, 0x134, 3)
 PT_GETVEC(n3_s36, 0x134, 3)
@@ -84,14 +87,14 @@ PT_SETVEC(n3_s39, 0xD4, 4)
 PT_LEA (n3_s40, 0xD4)
 PT_SETB(n3_s41, 0x164)
 PT_GETB(n3_s42, 0x164)
-PT_SET (n3_s43, 0x8C)
+PT_SETFLT(n3_s43, 0x8C)
 PT_GETF(n3_s44, 0x8C)
 PT_GETF(n3_s46, 0x90)
-PT_SET (n3_s47, 0x98)
+PT_SETFLT(n3_s47, 0x98)
 PT_GETF(n3_s48, 0x98)
-PT_SET (n3_s49, 0x9C)
+PT_SETFLT(n3_s49, 0x9C)
 PT_GETF(n3_s50, 0x9C)
-PT_SET (n3_s51, 0x130)
+PT_SETFLT(n3_s51, 0x130)
 PT_GETF(n3_s52, 0x130)
 PT_SETVEC(n3_s53, 0xE4, 4)
 PT_LEA (n3_s54, 0xE4)
@@ -101,33 +104,33 @@ PT_SETVEC(n3_s57, 0x104, 4)
 PT_LEA (n3_s58, 0x104)
 PT_SETVEC(n3_s59, 0x114, 4)
 PT_LEA (n3_s60, 0x114)
-PT_SET (n3_s61, 0xB8)
+PT_SETFLT(n3_s61, 0xB8)
 PT_GETF(n3_s62, 0xB8)
 PT_SETB(n3_s63, 0xC4)
 PT_GETB(n3_s64, 0xC4)
-PT_SET (n3_s65, 0xC8)
+PT_SETFLT(n3_s65, 0xC8)
 PT_GETF(n3_s66, 0xC8)
-PT_SET (n3_s67, 0xCC)
+PT_SETFLT(n3_s67, 0xCC)
 PT_GETF(n3_s68, 0xCC)
 PT_SETB(n3_s69, 0x165)
 PT_GETB(n3_s70, 0x165)
 PT_SETB(n3_s71, 0xBC)
 PT_GETB(n3_s72, 0xBC)
-PT_SET (n3_s73, 0xC0)
+PT_SETFLT(n3_s73, 0xC0)
 PT_GETF(n3_s74, 0xC0)
 PT_SET (n3_s75, 0x18C)
 PT_GETD(n3_s76, 0x18C)
-PT_SET (n3_s77, 0x190)
+PT_SETFLT(n3_s77, 0x190)
 PT_GETF(n3_s78, 0x190)
-PT_SET (n3_s79, 0x194)
+PT_SETFLT(n3_s79, 0x194)
 PT_GETF(n3_s80, 0x194)
-PT_SET (n3_s81, 0x198)
+PT_SETFLT(n3_s81, 0x198)
 PT_GETF(n3_s82, 0x198)
-PT_SET (n3_s83, 0x19C)
+PT_SETFLT(n3_s83, 0x19C)
 PT_GETF(n3_s84, 0x19C)
-PT_SET (n3_s85, 0x1A0)
+PT_SETFLT(n3_s85, 0x1A0)
 PT_GETF(n3_s86, 0x1A0)
-PT_SET (n3_s87, 0x1A4)
+PT_SETFLT(n3_s87, 0x1A4)
 PT_GETF(n3_s88, 0x1A4)
 PT_LEA (n3_s90, 0x6C)
 PT_VEC3A(n3_s91, 0x124)
@@ -136,16 +139,16 @@ PT_VEC3A(n3_s93, 0xA0)
 PT_GETVEC(n3_s94, 0xA0, 3)
 PT_VEC3A(n3_s95, 0xAC)
 PT_GETVEC(n3_s96, 0xAC, 3)
-PT_SET (n3_s97, 0x168)
+PT_SETFLT(n3_s97, 0x168)
 PT_GETF(n3_s98, 0x168)
 
 // complex slots
 
-unsigned __fastcall n3_s3(void*, void*) { return 3; }   // emitter type id
+unsigned RD9_THUNK n3_s3(void* RD9_THUNK_EDX) { return 3; }   // emitter type id
 
 // slot 2 (0x101865F0): mode@+0x60 -> scale @+0x150 {0.5,0.7,1.0}; inverse lifetime @+0x14C. No
 // external calls (type 3 has no LightManager dependency).
-void __fastcall n3_s2(void* self, void*)
+void RD9_THUNK n3_s2(void* self RD9_THUNK_EDX)
 {
     unsigned mode = U(self, 0x60);
     F(self, 0x150) = (mode == 0) ? 0.5f : (mode == 1) ? 0.7f : 1.0f;
@@ -154,17 +157,17 @@ void __fastcall n3_s2(void* self, void*)
 }
 
 // slot 23 (0x10186DB0): setLifetime - store +0x0C, cache 1/lifetime at +0x14C (unconditional divide).
-void __fastcall n3_s23(void* self, void*, unsigned a)
+void RD9_THUNK n3_s23(void* self RD9_THUNK_EDX, PsmFloatArg a)
 {
-    U(self, 0x0C) = a;
+    U(self, 0x0C) = psmFloatArgBits(a);
     F(self, 0x14C) = 1.0f / F(self, 0x0C);
 }
 
 // slot 37 (0x10186A10): store Vec3 at +0x158, normalize in place.
-void __fastcall n3_s37(void* self, void*, const float* v)
+void RD9_THUNK n3_s37(void* self RD9_THUNK_EDX, const float* v)
 {
     F(self, 0x158) = v[0]; F(self, 0x15C) = v[1]; F(self, 0x160) = v[2];
-    float* p = reinterpret_cast<float*>(static_cast<char*>(self) + 0x158);
+    float* p = &psmDescriptor3<float>(self, 0x158);
     float s = p[0] * p[0] + p[1] * p[1] + p[2] * p[2];
     if (fabsf(s - 1.0f) >= FLT_EPSILON)
     {
@@ -174,9 +177,9 @@ void __fastcall n3_s37(void* self, void*, const float* v)
 }
 
 // slot 45 (0x10186650): store +0x90; cache 1/x at +0x94 when positive.
-void __fastcall n3_s45(void* self, void*, unsigned a)
+void RD9_THUNK n3_s45(void* self RD9_THUNK_EDX, PsmFloatArg a)
 {
-    U(self, 0x90) = a;
+    U(self, 0x90) = psmFloatArgBits(a);
     if (F(self, 0x90) > 0.0f) F(self, 0x94) = 1.0f / F(self, 0x90);
 }
 
@@ -185,21 +188,22 @@ void __fastcall n3_s45(void* self, void*, unsigned a)
 // non-empty name (`cmp [esi+80h], 0`, the VC7.1 size word) - look the child up at once: a BY-value
 // copy of the name to 100D3410 on the manager (ds:1024B900), whose answer lands in +0x88. A child
 // defined later answers null here, and the instance constructor's re-resolve (10186540) picks it up.
-void __fastcall n3_s89(void* self, void*, const ParticleHostString& name)
+void RD9_THUNK n3_s89(void* self RD9_THUNK_EDX, const ParticleHostString& name)
 {
-    ParticleHostString& dst = *reinterpret_cast<ParticleHostString*>(static_cast<char*>(self) + 0x6C);
+    ParticleHostString& dst = psmDescriptor3<ParticleHostString>(self, 0x6C);
     dst = name;
-    if (U(self, 0x88))
-        U(self, 0x88) = 0;
+    IParticleSystemTemplate*& child = psmDescriptor3<IParticleSystemTemplate*>(self, 0x88);
+    if (child)
+        child = 0;
     if (!dst.empty())
-        U(self, 0x88) = ::renddx9abi::addr(particleSystemManagerFindTemplateByName(dst.c_str()));
+        child = particleSystemManagerFindTemplateByName(dst.c_str());
 }
 
 // slot 0 (0x10187080): destroy the two strings, restore base vtable, free-if-flag.
-void* __fastcall n3_dtor(void* self, void*, int flags)
+void* RD9_THUNK n3_dtor(void* self RD9_THUNK_EDX, int flags)
 {
-    reinterpret_cast<ParticleHostString*>(static_cast<char*>(self) + 0x16C)->~ParticleHostString();
-    reinterpret_cast<ParticleHostString*>(static_cast<char*>(self) + 0x6C)->~ParticleHostString();
+    psmDescriptor3<ParticleHostString>(self, 0x16C).~ParticleHostString();
+    psmDescriptor3<ParticleHostString>(self, 0x6C).~ParticleHostString();
     if (flags & 1)
         ::renddx9abi::engineFree(self);
     return self;
@@ -247,8 +251,8 @@ void initType3Defaults(void* self)
     F (self, 0x58) = 360.0f;
     U (self, 0x5C) = 0u;
 
-    n3_s45(self, 0, fbits(4.0f));         // +0x90 = 4.0, +0x94 = 0.25
-    n3_s43(self, 0, 0u);                   // +0x8C = 0
+    n3_s45(self RD9_THUNK_ARG, psmFloatArgFromBits(fbits(4.0f)));         // +0x90 = 4.0, +0x94 = 0.25
+    n3_s43(self RD9_THUNK_ARG, psmFloatArgFromBits(0u));                   // +0x8C = 0
 
     F (self, 0x0C) = 32.0f;
     F (self, 0x14C) = 0.03125f;            // 1/32
@@ -271,11 +275,11 @@ void initType3Defaults(void* self)
     F (self, 0xC8) = 0.7f;
     F (self, 0xCC) = 0.8f;
 
-    { float v[4] = { 0.0f, 0.0f, 0.0f, 1.0f }; n3_s39(self, 0, v); }
-    { float v[4] = { 0.0f, 0.0f, 0.0f, 1.0f }; n3_s53(self, 0, v); }
-    { float v[4] = { 0.0f, 0.0f, 0.0f, 1.0f }; n3_s55(self, 0, v); }
-    { float v[4] = { 0.0f, 0.0f, 0.0f, 1.0f }; n3_s57(self, 0, v); }
-    { float v[4] = { 0.0f, 0.0f, 0.0f, 1.0f }; n3_s59(self, 0, v); }
+    { float v[4] = { 0.0f, 0.0f, 0.0f, 1.0f }; n3_s39(self RD9_THUNK_ARG, v); }
+    { float v[4] = { 0.0f, 0.0f, 0.0f, 1.0f }; n3_s53(self RD9_THUNK_ARG, v); }
+    { float v[4] = { 0.0f, 0.0f, 0.0f, 1.0f }; n3_s55(self RD9_THUNK_ARG, v); }
+    { float v[4] = { 0.0f, 0.0f, 0.0f, 1.0f }; n3_s57(self RD9_THUNK_ARG, v); }
+    { float v[4] = { 0.0f, 0.0f, 0.0f, 1.0f }; n3_s59(self RD9_THUNK_ARG, v); }
 
     U (self, 0x168)=0u; U(self,0x158)=0u; U(self,0x160)=0u;
     F (self, 0x15C) = 1.0f;
@@ -294,8 +298,8 @@ void initType3Defaults(void* self)
 // geom_ParticleSystem_type3_ctor, 0x10186AA0.
 void* constructParticleSystemType3(void* mem, const void* nameString)
 {
-    ::memset(mem, 0, 0x1A8u);
-    U(mem, 0x00) = ::renddx9abi::addr(kVtable);
+    ::memset(mem, 0, PSM_DESCRIPTOR_SIZE(0x1A8u));
+    *static_cast<const void* const**>(mem) = kVtable;
 
     U(mem, 0x20) = 1065353216u;   // 1.0
     U(mem, 0x2C) = 1973272912u;   // range sentinel
@@ -304,10 +308,10 @@ void* constructParticleSystemType3(void* mem, const void* nameString)
     U(mem, 0x48) = 1065353216u;
     U(mem, 0x54) = 1973272912u;
 
-    // The manager supplies an internal VC7.1 name; native getters expose an owned HostString.
-    new (static_cast<char*>(mem) + 0x6C)  ParticleHostString();
-    new (static_cast<char*>(mem) + 0x16C) ParticleHostString(
-        ::renddx9abi::toHostString(*static_cast<const vc71::string*>(nameString)));
+    // The manager supplies the renderer's own string; the getters expose an owned HostString.
+    new (&psmDescriptor3<unsigned char>(mem, 0x6C)) ParticleHostString();
+    new (&psmDescriptor3<unsigned char>(mem, 0x16C)) ParticleHostString(
+        ::renddx9abi::toHostString(*static_cast<const std::string*>(nameString)));
 
     initType3Defaults(mem);
     return mem;

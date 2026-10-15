@@ -4,6 +4,7 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
+#include "../../RendDX9Abi/ThunkAbi.h"
 #include "RoadCompiled.h"
 #include "RoadCompiledTemplate.h"
 #include "QuadPatch.h"                          // TerrainCuller
@@ -22,7 +23,7 @@
 #include "../../RendDX9Abi/ModuleCommon.h"
 #include "../../RendDX9Abi/PluginAbi.h"
 #include "../../RendDX9Abi/PluginEntry.h"
-#include "../../RendDX9Abi/Vc71String.h"
+#include <string>
 
 #include <cmath>
 #include <cstring>
@@ -59,9 +60,10 @@ const unsigned int kRaFogColor                 = 0xBC;    // FogColor
 const unsigned int kRaAmbientIlluminationRange = 0xD0;    // AmbientIlluminationRange (sub_100380E0)
 const unsigned int kRaSinglePointColor         = 0x230;   // SinglePointColor
 
-unsigned char* raConstants()
+// The Ra constants block (g_raShaderConstants) word at a retail x86 byte offset.
+unsigned char* raConstantAt(unsigned int byteOffset)
 {
-    return static_cast<unsigned char*>(dx9rend::g_raShaderConstants);
+    return dx9rend::raShaderConstantsAt(byteOffset);
 }
 
 unsigned int floatBits(float value)
@@ -72,12 +74,11 @@ unsigned int floatBits(float value)
 }
 
 // Renderer +0x780 - one of the renderer's path targets (+0x778..+0x7C8, released by the render-path
-// deactivation), read through g_Renderer at 0x10145356 for the render-path-2 arm. RendDX9-internal
-// field of the same image, read at its shipped offset (the XpLightManager.cpp precedent).
+// deactivation), read through g_Renderer at 0x10145356 for the render-path-2 arm. Read through
+// BF2Render.cpp's path-target accessor, keyed by that retail offset.
 dx9rend::EngineTexture* rendererPathTarget780()
 {
-    return *reinterpret_cast<dx9rend::EngineTexture**>(
-        static_cast<unsigned char*>(static_cast<void*>(dx9rend::g_Renderer)) + 0x780);
+    return dx9rend::rendererPathTarget(0x780);
 }
 
 // (retn 8) - a row vector through a Mat4: out = in * m. Every product is formed before the
@@ -122,8 +123,8 @@ public:
     int   getSlot84() const    { return m_int84; }             // +0x14
     void  setEnabled(unsigned char value) { m_enabled = value; }       // +0x18
     unsigned char getEnabled() const { return m_enabled; }             // +0x1C
-    vc71::string& setName(const vc71::string& value) { return m_name = value; }   // +0x20
-    vc71::string* getName() { return &m_name; }                        // +0x24
+    std::string& setName(const std::string& value) { return m_name = value; }   // +0x20
+    std::string* getName() { return &m_name; }                        // +0x24
 
     // the work
     void add(RoadCompiled* road);
@@ -141,7 +142,7 @@ public:
     void* const*               m_vptr;                         // +0x00
     unsigned char              m_enabled;                      // +0x04
     unsigned char              m_pad05[3];
-    vc71::string               m_name;                         // +0x08
+    std::string               m_name;                         // +0x08
     void* const*               m_listenerVptr;                 // +0x24
     int                        m_renderPath;                   // +0x28
     int                        m_refCount;                     // +0x2C
@@ -183,90 +184,71 @@ private:
 #if defined(_M_IX86)
 static_assert(offsetof(RoadCompiledRenderer, m_enabled) == 0x04, "enabled byte at +0x04");
 static_assert(offsetof(RoadCompiledRenderer, m_name) == 0x08, "name at +0x08");
-static_assert(offsetof(RoadCompiledRenderer, m_listenerVptr) == 0x24,
-              "renderFrame calls the listener at renderer+36 (BF2Render.cpp)");
-static_assert(offsetof(RoadCompiledRenderer, m_renderPath) == 0x28, "render path at +0x28");
-static_assert(offsetof(RoadCompiledRenderer, m_refCount) == 0x2C, "refCount at +0x2C");
-static_assert(offsetof(RoadCompiledRenderer, m_effect) == 0x30, "effect at +0x30");
-static_assert(offsetof(RoadCompiledRenderer, m_paramWorldSpaceCamPos) == 0x50, "WorldSpaceCamPos at +0x50");
-static_assert(offsetof(RoadCompiledRenderer, m_paramAmbientIlluminationRange) == 0x74,
-              "AmbientIlluminationRange at +0x74");
-static_assert(offsetof(RoadCompiledRenderer, m_roads) == 0x78, "road list at +0x78");
-static_assert(offsetof(RoadCompiledRenderer, m_int84) == 0x84, "+0x84");
-static_assert(offsetof(RoadCompiledRenderer, m_hemiDirectFlag) == 0x88, "hemi direct flag at +0x88");
-static_assert(offsetof(RoadCompiledRenderer, m_viewDistanceScale) == 0x8C, "view-distance scale at +0x8C");
-static_assert(offsetof(RoadCompiledRenderer, m_depthBias) == 0x90, "depth bias at +0x90");
-static_assert(offsetof(RoadCompiledRenderer, m_slopeScaleDepthBias) == 0x94, "slope bias at +0x94");
-static_assert(offsetof(RoadCompiledRenderer, m_heightmapCluster) == 0x98, "HeightmapCluster at +0x98");
-static_assert(offsetof(RoadCompiledRenderer, m_terrain) == 0x9C, "terrain at +0x9C");
-static_assert(offsetof(RoadCompiledRenderer, m_worldSpaceCamPos) == 0xA0, "WorldSpaceCamPos value at +0xA0");
-static_assert(offsetof(RoadCompiledRenderer, m_fadeOut) == 0xB0,
-              "renderFrame and roadQueuePass read the fade pair at +0xB0/+0xB4");
-static_assert(sizeof(RoadCompiledRenderer) == 0xB8,
-              "RefFactory_geom_RoadCompiledRenderer allocates 0xB8 (0x100B0AA8)");
 #endif
 
 namespace {
 
+// The owner of the listener subobject (retail: listener - 0x24).
 RoadCompiledRenderer* fromListener(void* listener)
 {
-    return reinterpret_cast<RoadCompiledRenderer*>(static_cast<unsigned char*>(listener) - 0x24);
+    return reinterpret_cast<RoadCompiledRenderer*>(static_cast<unsigned char*>(listener)
+                                                   - offsetof(RoadCompiledRenderer, m_listenerVptr));
 }
 
 
 // Primary-table thunks use __fastcall with unused EDX to match the __thiscall slots.
 
-int __fastcall rcr_addRef(void* self, void*)
+int RD9_THUNK rcr_addRef(void* self RD9_THUNK_EDX)
 {
     return static_cast<RoadCompiledRenderer*>(self)->addRef();
 }
 
-int __fastcall rcr_getRef(void* self, void*)
+int RD9_THUNK rcr_getRef(void* self RD9_THUNK_EDX)
 {
     return static_cast<RoadCompiledRenderer*>(self)->getRef();
 }
 
-int __fastcall rcr_release(void* self, void*)
+int RD9_THUNK rcr_release(void* self RD9_THUNK_EDX)
 {
     return static_cast<RoadCompiledRenderer*>(self)->release();
 }
 
-void* __fastcall rcr_queryInterface(void* self, void*, unsigned int iid)
+void* RD9_THUNK rcr_queryInterface(void* self RD9_THUNK_EDX, unsigned int iid)
 {
     return static_cast<RoadCompiledRenderer*>(self)->queryInterface(iid);
 }
 
 // +0x10 / +0x14 - the int at +0x84. [UNRESOLVED] role: StaticMeshRenderer's +0x10 is an empty body and
 // its +0x14 answers 0; nothing recovered calls either on this singleton.
-void __fastcall rcr_setSlot84(void* self, void*, int value)
+void RD9_THUNK rcr_setSlot84(void* self RD9_THUNK_EDX, int value)
 {
     static_cast<RoadCompiledRenderer*>(self)->setSlot84(value);
 }
 
-int __fastcall rcr_getSlot84(void* self, void*)
+int RD9_THUNK rcr_getSlot84(void* self RD9_THUNK_EDX)
 {
     return static_cast<RoadCompiledRenderer*>(self)->getSlot84();
 }
 
 // +0x18, the one VideoOptions::apply calls. A single byte store.
-void __fastcall rcr_setEnabled(void* self, void*, int value)
+void RD9_THUNK rcr_setEnabled(void* self RD9_THUNK_EDX, int value)
 {
     static_cast<RoadCompiledRenderer*>(self)->setEnabled(static_cast<unsigned char>(value));
 }
 
-unsigned char __fastcall rcr_getEnabled(void* self, void*)
+unsigned char RD9_THUNK rcr_getEnabled(void* self RD9_THUNK_EDX)
 {
     return static_cast<RoadCompiledRenderer*>(self)->getEnabled();
 }
 
 // +0x20, 0x10121A10 - `add ecx, 8; jmp std::string::operator=(const std::string&)`: the import's
 // mangled name pins the argument, and the assignment's result (the name) is what it answers.
-vc71::string* __fastcall rcr_setName(void* self, void*, const vc71::string& value)
+std::string* RD9_THUNK rcr_setName(void* self RD9_THUNK_EDX, const std::string& value)
 {
     return &static_cast<RoadCompiledRenderer*>(self)->setName(value);
 }
 
-vc71::string* __fastcall rcr_getName(void* self, void*)
+std::string* RD9_THUNK rcr_getName(void* self RD9_THUNK_EDX)
 {
     return static_cast<RoadCompiledRenderer*>(self)->getName();
 }
@@ -291,30 +273,30 @@ void* const kPrimaryVtable[10] =
 
 
 // +0x00, 0x101C43C0 - `mov [ecx+4], arg`: the activated path into +0x28.
-void __fastcall rcr_onRenderPathActivated(void* self, void*, int path)
+void RD9_THUNK rcr_onRenderPathActivated(void* self RD9_THUNK_EDX, int path)
 {
     fromListener(self)->m_renderPath = path;
 }
 
-void __fastcall rcr_onRenderPathDeactivated(void*, void*) { }            // +0x04  0x10037D40 `ret`
-void __fastcall rcr_onRenderPathChanged(void*, void*, int) { }           // +0x08  0x100E13B0 `retn 4`
+void RD9_THUNK rcr_onRenderPathDeactivated(void* RD9_THUNK_EDX) { }            // +0x04  0x10037D40 `ret`
+void RD9_THUNK rcr_onRenderPathChanged(void* RD9_THUNK_EDX, int) { }           // +0x08  0x100E13B0 `retn 4`
 
 // +0x0C, (`retn 4`) - the per-frame call. The argument (renderFrame passes 0) is not read.
-void __fastcall rcr_onRenderPathNotification(void* self, void*, int)
+void RD9_THUNK rcr_onRenderPathNotification(void* self RD9_THUNK_EDX, int)
 {
     fromListener(self)->onRenderPathNotification();
 }
 
 // +0x10, 0x101A9A10 - `mov eax, [ecx+4]`.
-int __fastcall rcr_getCurrentRenderPath(void* self, void*)
+int RD9_THUNK rcr_getCurrentRenderPath(void* self RD9_THUNK_EDX)
 {
     return fromListener(self)->m_renderPath;
 }
 
 // +0x14, (`retn 4`) - the name, constructed into the caller's hidden return slot.
-vc71::string* __fastcall rcr_getRenderPathListenerName(void*, void*, vc71::string* out)
+std::string* RD9_THUNK rcr_getRenderPathListenerName(void* RD9_THUNK_EDX, std::string* out)
 {
-    new (out) vc71::string("RoadCompiledRenderer");
+    new (out) std::string("RoadCompiledRenderer");
     return out;
 }
 
@@ -382,29 +364,29 @@ void RoadCompiledRenderer::bindEffect()
 {
     m_effect = static_cast<dx9rend::Effect*>(dx9rend::shaderManagerGetEffect(
         dx9rend::g_shaderManager, "mods/xpack/shaders/RoadCompiled"));
-    dx9rend::effectSetTechniqueByName(m_effect, vc71::string("roadcompiledFull"));
+    dx9rend::effectSetTechniqueByName(m_effect, std::string("roadcompiledFull"));
 
     m_paramWorldViewProjection =
-        dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("WorldViewProjection"));
-    m_paramLocalEye       = dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("LocalEye"));
-    m_paramTexBlendFactor = dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("TexBlendFactor"));
-    m_paramFadeOut        = dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("FadeOut"));
-    m_paramTexLayer3      = dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("TEXLAYER3"));
-    m_paramTexLayer4      = dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("TEXLAYER4"));
-    m_paramTexLayer2      = dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("TEXLAYER2"));
-    m_paramScaleY         = dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("SCALEY"));
-    m_paramSunColor       = dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("SUNCOLOR"));
-    m_paramGIColor        = dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("GICOLOR"));
-    m_paramFogRange       = dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("fogRange"));
-    m_paramFogColor       = dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("fogColor"));
+        dx9rend::effectGetShaderParameterTyped(m_effect, std::string("WorldViewProjection"));
+    m_paramLocalEye       = dx9rend::effectGetShaderParameterTyped(m_effect, std::string("LocalEye"));
+    m_paramTexBlendFactor = dx9rend::effectGetShaderParameterTyped(m_effect, std::string("TexBlendFactor"));
+    m_paramFadeOut        = dx9rend::effectGetShaderParameterTyped(m_effect, std::string("FadeOut"));
+    m_paramTexLayer3      = dx9rend::effectGetShaderParameterTyped(m_effect, std::string("TEXLAYER3"));
+    m_paramTexLayer4      = dx9rend::effectGetShaderParameterTyped(m_effect, std::string("TEXLAYER4"));
+    m_paramTexLayer2      = dx9rend::effectGetShaderParameterTyped(m_effect, std::string("TEXLAYER2"));
+    m_paramScaleY         = dx9rend::effectGetShaderParameterTyped(m_effect, std::string("SCALEY"));
+    m_paramSunColor       = dx9rend::effectGetShaderParameterTyped(m_effect, std::string("SUNCOLOR"));
+    m_paramGIColor        = dx9rend::effectGetShaderParameterTyped(m_effect, std::string("GICOLOR"));
+    m_paramFogRange       = dx9rend::effectGetShaderParameterTyped(m_effect, std::string("fogRange"));
+    m_paramFogColor       = dx9rend::effectGetShaderParameterTyped(m_effect, std::string("fogColor"));
     m_paramWorldSpaceCamPos =
-        dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("WorldSpaceCamPos"));
-    m_paramTexProjOffset  = dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("TEXPROJOFFSET"));
-    m_paramTexProjScale   = dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("TEXPROJSCALE"));
+        dx9rend::effectGetShaderParameterTyped(m_effect, std::string("WorldSpaceCamPos"));
+    m_paramTexProjOffset  = dx9rend::effectGetShaderParameterTyped(m_effect, std::string("TEXPROJOFFSET"));
+    m_paramTexProjScale   = dx9rend::effectGetShaderParameterTyped(m_effect, std::string("TEXPROJSCALE"));
     m_paramSinglePointColor =
-        dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("SINGLEPOINTCOLOR"));
+        dx9rend::effectGetShaderParameterTyped(m_effect, std::string("SINGLEPOINTCOLOR"));
     m_paramAmbientIlluminationRange =
-        dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("AmbientIlluminationRange"));
+        dx9rend::effectGetShaderParameterTyped(m_effect, std::string("AmbientIlluminationRange"));
 }
 
 
@@ -467,22 +449,21 @@ void* RoadCompiledRenderer::queryInterface(unsigned int iid) const
 void RoadCompiledRenderer::add(RoadCompiled* road)
 {
     RoadCompiledTemplate* const tmpl = road->m_template;
-    RoadListNode* const head = m_roads.head;
-    RoadListNode* where = head->next;
-    if (where != head)
+    RoadList::iterator where = m_roads.begin();
+    if (where != m_roads.end())
     {
         const int priority = tmpl->m_priority;
         do
         {
-            RoadCompiled* const queued = where->value;
+            RoadCompiled* const queued = *where;
             RoadCompiledTemplate* const queuedTemplate = queued->m_template;
             if (priority < queuedTemplate->m_priority)
                 break;
             if (tmpl == queuedTemplate && road->m_order < queued->m_order)
                 break;
-            where = where->next;
+            ++where;
         }
-        while (where != head);
+        while (where != m_roads.end());
     }
     m_roads.insert(where, road);                           // 0x1013B1C0 + _Incsize + the link
 }
@@ -493,7 +474,7 @@ void RoadCompiledRenderer::add(RoadCompiled* road)
 
 void RoadCompiledRenderer::onRenderPathNotification()
 {
-    if (!m_roads.size)
+    if (m_roads.empty())
         return;
     if (!m_enabled)
     {
@@ -562,10 +543,9 @@ void RoadCompiledRenderer::drawAll()
     updateFrameConstants();
 
     RoadCompiledTemplate* last = 0;
-    RoadListNode* const head = m_roads.head;
-    for (RoadListNode* node = head->next; node != head; node = node->next)
+    for (RoadList::iterator node = m_roads.begin(); node != m_roads.end(); ++node)
     {
-        RoadCompiled* const road = node->value;
+        RoadCompiled* const road = *node;
         RoadCompiledTemplate* const tmpl = road->m_template;
 
         terrainOriginScratch(camera);                                                        // inlined sub_100E11B0
@@ -654,8 +634,8 @@ void RoadCompiledRenderer::updateFrameConstants()
         m_paramGIColor->setValue(gi, 0);
     }
 
-    m_paramFogRange->setValue(raConstants() + kRaFogRange, 0);
-    m_paramFogColor->setValue(raConstants() + kRaFogColor, 0);
+    m_paramFogRange->setValue(raConstantAt(kRaFogRange), 0);
+    m_paramFogColor->setValue(raConstantAt(kRaFogColor), 0);
     m_paramWorldSpaceCamPos->setValue(m_worldSpaceCamPos, 0);
 
     dx9rend::EngineTexture* const hemi = dx9rend::rendererGetHemiScratchTexture();          // g_Renderer +0x774
@@ -685,12 +665,12 @@ void RoadCompiledRenderer::updateFrameConstants()
     m_paramTexProjScale->setValue(s_texProjScale, 0);
     m_paramTexProjOffset->setValue(s_texProjOffset, 0);
 
-    m_paramSinglePointColor->setValue(raConstants() + kRaSinglePointColor, 0);
+    m_paramSinglePointColor->setValue(raConstantAt(kRaSinglePointColor), 0);
     m_paramTexLayer2->setValue(dx9rend::rendererGetHemiScratchTexture(), 0);
 
     {
         const float* const holder = reinterpret_cast<const float*>(
-            raConstants() + kRaAmbientIlluminationRange);
+            raConstantAt(kRaAmbientIlluminationRange));
         const float range[4] = { holder[0], holder[1], holder[2], holder[3] };
         m_paramAmbientIlluminationRange->setValue(range, 0);
     }
@@ -714,6 +694,13 @@ float roadCompiledRendererViewDistanceScale()
 {
     return static_cast<RoadCompiledRenderer*>(static_cast<void*>(g_RoadCompiledRenderer))
         ->m_viewDistanceScale;
+}
+
+// renderFrame's `g_RoadCompiledRenderer + 36`: the listener subobject whose +0x0C it calls with 0.
+void* roadCompiledRendererListener()
+{
+    return &static_cast<RoadCompiledRenderer*>(static_cast<void*>(g_RoadCompiledRenderer))
+        ->m_listenerVptr;
 }
 
 // Renderer::roadQueuePass (BF2Render.cpp, 0x1002A560) - the three things it reads off the singleton:
@@ -759,7 +746,8 @@ void roadCompiledRendererSetHemiDirectFlag(unsigned char value)
             ->setHemiDirectFlag(value);
 }
 
-// RefFactory_geom_RoadCompiledRenderer, 0x100B0A9C: `if (outer) return 0`, allocate 0xB8, construct,
+// RefFactory_geom_RoadCompiledRenderer, 0x100B0A9C: `if (outer) return 0`, allocate the object
+// (retail 0xB8 bytes), construct,
 // then queryInterface through the new object without testing the allocation (a failed allocation
 // faults at the QI, as shipped), and release it when the interface is refused.
 IBase* __fastcall createRoadCompiledRenderer(unsigned int iid, IBase* outer)

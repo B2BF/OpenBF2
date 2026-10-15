@@ -27,8 +27,10 @@ void Bf2BlendFuncEffect::setSource(int source) { m_source = source; }
 void Bf2BlendFuncEffect::setDestination(int destination)
 { m_destination = destination; }
 
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2BlendFuncEffect) == 12, "native Bf2BlendFuncEffect storage");
 static_assert(sizeof(ClassTypeDescriptor<Bf2BlendFuncEffect, BlendFuncEffect>) == 16,
     "Bf2BlendFuncEffect metadata");
+#endif
 } }
 #endif

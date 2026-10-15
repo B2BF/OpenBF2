@@ -27,8 +27,10 @@ bool Bf2MoveEffect::setDirection(Data* direction)
 bool Bf2MoveEffect::setLength(Data* length)
 { m_length = length; return true; }
 
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2MoveEffect) == 12, "native Bf2MoveEffect storage");
 static_assert(sizeof(ClassTypeDescriptor<Bf2MoveEffect, MoveEffect>) == 16,
     "Bf2MoveEffect metadata");
+#endif
 } }
 #endif

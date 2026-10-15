@@ -10,8 +10,6 @@
 #include <algorithm>
 #include "../BF2/GeomMisc/MenuRend/IQuadDrawer.h"
 #include "../RendDX9Abi/HfeAbi.h"
-#include "../RendDX9Abi/Vc71Map.h"
-#include "../RendDX9Abi/Vc71Vector.h"
 #define private public
 #include "../BF2/RendDX9/Effect.cpp"
 #undef private
@@ -179,19 +177,19 @@ int main()
               "end preserves unsigned pass threshold, state pop order and technique restoration");
     }
     events.clear();
-    effectBeginTechniqueStates(effect,vc71::string("Menu"));
-    effectEndTechniqueStates(effect,vc71::string("Menu"));
+    effectBeginTechniqueStates(effect,std::string("Menu"));
+    effectEndTechniqueStates(effect,std::string("Menu"));
     check(events.empty(),"named helpers miss in member Effect technique map");
     EffectTechnique& memberRecord=effect->techniqueMap()["Menu"];
     memberRecord.handle=reinterpret_cast<void*>(0x111);
     memberRecord.states=state;
     fake.passes=2;events.clear();
-    effectBeginTechniqueStates(effect,vc71::string("Menu"));
-    effectEndTechniqueStates(effect,vc71::string("Menu"));
+    effectBeginTechniqueStates(effect,std::string("Menu"));
+    effectEndTechniqueStates(effect,std::string("Menu"));
     check(events==std::vector<std::string>{"state","begin","push","pass0","endPass","end","original",
           "state","begin","pass1","endPass","pop","end","original"},
           "named helper hit uses member technique record and both state passes");
-    events.clear();effectBeginTechniqueStates(effect,vc71::string("menu"));
+    events.clear();effectBeginTechniqueStates(effect,std::string("menu"));
     check(events.empty(),"technique lookup remains case-sensitive");
     DrawerRecorder recorder;dice::hfe::geom::IQuadDrawer* drawer=&recorder;
     check(drawer->getRef()==1 && drawer->queryInterface(80031)==drawer,"IQuadDrawer IBase prefix");
@@ -236,7 +234,7 @@ int main()
     auto validatePosition=std::find(events.begin(),events.end(),"validate:QuadWithTexture");
     auto createPosition=std::find(events.begin(),events.end(),"createDeclaration");
     check(descPosition<validatePosition && validatePosition<createPosition,"descriptor then validation then declaration creation");
-    events.clear();effectSetTechniqueByName(reflected,vc71::string("QuadWithTexture"));
+    events.clear();effectSetTechniqueByName(reflected,std::string("QuadWithTexture"));
     check(reflected->m_currentTechnique==quadRecord && std::strcmp(reflected->m_string38.c_str(),"QuadWithTexture")==0,
           "name selection uses native record and copies its real name");
     fake.passes=1;events.clear();check(effectBegin(reflected)==1,"begin returns D3DX pass count");
@@ -244,8 +242,8 @@ int main()
     events.clear();effectSetTechniqueRecord(reflected,menuRecord);
     check(reflected->m_currentTechnique==menuRecord && fake.handle==&menu,"opaque record round-trip selects original handle");
     fake.passes=2;events.clear();
-    effectBeginTechniqueStates(reflected,vc71::string("Menu"));
-    effectEndTechniqueStates(reflected,vc71::string("Menu"));
+    effectBeginTechniqueStates(reflected,std::string("Menu"));
+    effectEndTechniqueStates(reflected,std::string("Menu"));
     check(events==std::vector<std::string>{"state","begin","push","pass0","endPass","end","original",
           "state","begin","pass1","endPass","pop","end","original"},
           "production reflection state link reaches both actual frame helpers");

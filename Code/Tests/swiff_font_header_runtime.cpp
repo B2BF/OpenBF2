@@ -103,12 +103,12 @@ int readIntSetting(const char*, int fallback)
     return fallback;
 }
 
-void readStringSetting(const char*, vc71::string& value)
+void readStringSetting(const char*, std::string& value)
 {
     value = "english";
 }
 
-void* textureManagerGetTexture(const vc71::string& name)
+void* textureManagerGetTexture(const std::string& name)
 {
     g_textureRequest = name.c_str();
     return reinterpret_cast<void*>(1);
@@ -124,7 +124,7 @@ void* renderDevice()
 }
 
 void* shaderManagerGetEffect(void*, const char*) { return 0; }
-void* effectGetShaderParameter(Effect*, const vc71::string&) { return 0; }
+void* effectGetShaderParameter(Effect*, const std::string&) { return 0; }
 void* effectFindTechniqueRecord(void*, const char*) { return 0; }
 void effectSetTechniqueRecord(void*, void*) {}
 unsigned int effectBegin(void*) { return 0; }

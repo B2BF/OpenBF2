@@ -76,7 +76,9 @@ namespace {
 // Eager initializer871650 shares the lazy descriptor, registering before lookup.
 TypeDescriptor* const registeredSplitNodeType = SplitNode::getClassType();
 }
+#if defined(_M_IX86)
 static_assert(sizeof(SplitNode) == 12, "client BFMeme SplitNode");
 static_assert(sizeof(SplitNodeTypeDescriptor) == 16, "client SplitNode metadata");
+#endif
 } }
 #endif

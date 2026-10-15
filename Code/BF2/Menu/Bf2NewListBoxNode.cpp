@@ -69,7 +69,7 @@ void Bf2NewListBoxNode::bindDataToSelfForHud() { m_data->m_node = this; }
 // 7CDD80, +D8. Two shipped quirks: a negative index is accepted and writes
 // before the array, and the return value is the index's low byte - so index 0
 // reports false even though the write happened.
-bool Bf2NewListBoxNode::setFontForHud(int font, int index)
+bool Bf2NewListBoxNode::setFontForHud(FontHandle font, int index)
 {
     if (index < 5) m_fonts[index] = font;
     return index != 0;

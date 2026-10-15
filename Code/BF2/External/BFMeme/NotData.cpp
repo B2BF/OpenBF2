@@ -31,7 +31,9 @@ float NotData::getFloat(System* system)
     return m_first->getFloat(system) == 0.0f ? 1.0f : 0.0f;
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(NotData) == 16, "client BFMeme NotData");
 static_assert(sizeof(ClassTypeDescriptor<NotData, LogicalData>) == 16, "NotData metadata");
+#endif
 } }
 #endif

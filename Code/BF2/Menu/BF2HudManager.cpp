@@ -46,6 +46,9 @@
 #include <cmath>
 #include <cfloat>
 #include <new>
+#if !defined(_M_IX86)
+#include <emmintrin.h>
+#endif
 
 namespace dice { namespace hfe { extern hud::BF2HudManager* hudManager; } }
 namespace dice { namespace hfe { class IMenuLogic; extern IMenuLogic* menuLogic; } }
@@ -70,6 +73,7 @@ bool commanderWaitRemaining(double last, double cooldown, double now, double& re
     const double minutesPerSecond = 1.0 / 60.0;
     double value;
     bool denied;
+#if defined(_M_IX86)
     __asm {
         fld now
         fsub last
@@ -86,12 +90,19 @@ bool commanderWaitRemaining(double last, double cooldown, double now, double& re
         fstp st(0)
     wait_done:
     }
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    // setp after test ah,41h: denied for a positive or unordered wait, not for <= 0.
+    value = cooldown - (now - last) * minutesPerSecond;
+    denied = !(value <= 0.0);
+#endif
     if (denied) remaining = value;
     return denied;
 }
 int commanderWaitInteger(double remaining)
 {
     const double rounded = std::ceil(remaining);
+#if defined(_M_IX86)
     unsigned short original, truncating;
     int result;
     __asm {
@@ -105,6 +116,10 @@ int commanderWaitInteger(double remaining)
         fldcw original
     }
     return result;
+#else
+    // cvttsd2si truncates like the chopped fistp, including the 0x80000000 indefinite result.
+    return _mm_cvttsd_si32(_mm_set_sd(rounded));
+#endif
 }
 }
 
@@ -452,7 +467,7 @@ bool BF2HudManager::isPlayerAlive(world::IPlayer* player)
     return static_cast<world::IArmorGLComp*>(object->m_armorComponent)->getStatus() == 1;
 }
 
-int BF2HudManager::getPlayerKitIcon(world::IPlayer* player, bool mapIcon, bool spotted)
+std::intptr_t BF2HudManager::getPlayerKitIcon(world::IPlayer* player, bool mapIcon, bool spotted)
 {
     if (!player) return 0;
     world::IPlayer* local = world::playerManager->getLocalHumanPlayer();
@@ -463,13 +478,13 @@ int BF2HudManager::getPlayerKitIcon(world::IPlayer* player, bool mapIcon, bool s
                 if (player->getTeam() != team) {
                     if (!m_field184 && ref2System)
                         m_field184 = ref2System->loadTexture("Ingame/Scoreboard/Icons/icon_Faded.tga", true);
-                    return static_cast<int>(m_field184);
+                    return static_cast<std::intptr_t>(m_field184);
                 }
             }
         } else {
             if (!m_field188 && ref2System)
                 m_field188 = ref2System->loadTexture("Ingame/Scoreboard/Icons/icon_Death.tga", true);
-            return static_cast<int>(m_field188);
+            return static_cast<std::intptr_t>(m_field188);
         }
     }
     world::IObject* object = player->getDefaultVehicle();
@@ -880,7 +895,7 @@ bool BF2HudManager::hasActiveMenu()
     return state != 0 && state != 2 && state != 9 && state != 10;
 }
 
-int BF2HudManager::getPlayerVehicleIcon(world::IPlayer* player, bool typeIcon)
+std::intptr_t BF2HudManager::getPlayerVehicleIcon(world::IPlayer* player, bool typeIcon)
 {
     if (!player)
         return 0;
@@ -907,7 +922,7 @@ world::ICameraObject* BF2HudManager::getCameraObject(int team)
     return camera;
 }
 
-int BF2HudManager::getPlayerRankIcon(world::IPlayer* player)
+std::intptr_t BF2HudManager::getPlayerRankIcon(world::IPlayer* player)
 {
     if (player)
     {
@@ -927,7 +942,7 @@ int BF2HudManager::getPlayerRankIcon(world::IPlayer* player)
     return m_field18c[0];
 }
 
-int BF2HudManager::getVehicleTypeIcon(int type)
+std::intptr_t BF2HudManager::getVehicleTypeIcon(int type)
 {
     switch (type)
     {

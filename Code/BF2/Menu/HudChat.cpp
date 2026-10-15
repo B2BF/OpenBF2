@@ -223,7 +223,7 @@ void HudChat::appendMessage(std::wstring text, int kind, int team, int first,
         wrapMessage(6, text, team, first, count, capacity, row);
         break;
     case 4: {
-        const int icon = hudManager->getPlayerRankIcon(player);
+        const meme::TextureHandle icon = hudManager->getPlayerRankIcon(player);
         m_data->setImageCell(0, row, icon, 16,16,1,-1, 1,1,1,1, 0);
         std::wstring decorated = std::wstring(L"\xA7" L"1") + text;
         wrapMessage(4, decorated + L"\xA7" L"0", team, first, count, capacity, row);
@@ -231,7 +231,7 @@ void HudChat::appendMessage(std::wstring text, int kind, int team, int first,
     }
     case 5: {
         path = "Ingame/GeneralIcons/empty.dds";
-        const int icon = m_system->loadTexture(std::string(path).c_str(), true);
+        const meme::TextureHandle icon = m_system->loadTexture(std::string(path).c_str(), true);
         m_data->setImageCell(0, row, icon, 18,11,1,7, 1,1,1,1, 0);
         std::wstring decorated = std::wstring(L"\xA7" L"1") + text;
         wrapMessage(5, decorated + L"\xA7" L"0", team, first, count, capacity, row);
@@ -269,11 +269,13 @@ void HudChat::wrapMessage(int kind, std::wstring text, int team, int first,
         }
         meme::System* system = castChatSystem(hudManager->getSystem());
         unsigned int consumed = m_data->measureText(system, text.substr(offset, text.size() - offset), 1, row, &nextMode);
-        const unsigned int remaining = text.size() - offset;
+        // 32-bit counts as on x86; a missing space (npos) still narrows to 0xFFFFFFFF on x64.
+        const unsigned int remaining = static_cast<unsigned int>(text.size() - offset);
         bool skipSpace = false;
         if (consumed >= remaining) consumed = remaining;
         else {
-            const unsigned int space = text.substr(offset, consumed + 1).rfind(L' ', consumed);
+            const unsigned int space = static_cast<unsigned int>(
+                text.substr(offset, consumed + 1).rfind(L' ', consumed));
             if (static_cast<int>(space) > 0 && consumed - space < 20) {
                 consumed = space; skipSpace = true;
             }

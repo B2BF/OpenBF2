@@ -26,7 +26,9 @@ protected:
     Data* m_type;          // +10, streamed as "Type", borrowed; gates the paint
     ColorEffect* m_shadow; // +14, owned; the constructor allocates a black one
 };
+#if defined(_M_IX86)
 static_assert(sizeof(BfTextNode) == 24, "native BfTextNode storage");
+#endif
 
 // A free __fastcall helper, not a member: the System and the Style sit
 // in ECX/EDX and the rest on the stack. Name [INFERRED].

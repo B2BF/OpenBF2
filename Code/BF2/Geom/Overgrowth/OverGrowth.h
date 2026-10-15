@@ -1,198 +1,29 @@
 // Vegetation resources, cell batching, near-instance rendering and shadow collection.
-// Shared internal records retain compatibility offsets; console records use typed values.
+// The owner, its tables and their records are native objects with std containers (issue #7); the
+// `// +0xNN` comments keep the recovered retail offsets.
 
 #ifndef BF2_GEOM_OVERGROWTH_H
 #define BF2_GEOM_OVERGROWTH_H
 
 #ifdef BF2_IMAGE_RENDDX9
+#include "../../Math/Mat4.h"
 #include "../../Math/Vec3.h"
-#include "../../../RendDX9Abi/Vc71String.h"     // the records' 28-byte strings
-#include "../../../RendDX9Abi/Vc71Vector.h"     // engineAlloc/engineFree, <new>
+#include <string>
+#include <vector>
 
 namespace dice { namespace hfe {
-namespace dx9rend { class IRenderView; }
+class Frustum;
+namespace dx9rend { class IRenderView; struct EngineTexture; struct TextureAtlas; }
+namespace world { class IHeightmap; class IHeightmapCluster; class IObjectTemplate; }
 namespace geom {
 using dx9rend::IRenderView;
+class IGeometryTemplate;
 
 // [INFERRED] names for instruction-proven pointer carriers. These declarations do not claim
-// recovered record members, STL element types beyond the observed strides, or source constness.
+// recovered record members beyond the observed strides, or source constness.
 struct OverGrowthCell;             // 0x2AC bytes, defined in OverGrowthCell.h (constructor 100D0C90)
-struct OverGrowthPatch;            // 0x98-byte entries at owner +0xE0
-struct OverGrowthInstance;         // 0x60-byte entries
-struct OverGrowthInstanceVector;   // VC7.1 vector of the preceding entries
-struct OverGrowthShadowVolumes;    // vector of 0x498-byte records
-struct OverGrowthShadowBounds;
-struct OverGrowthShadowState;
-struct OverGrowthGeometryVector;
-
-
-// [CHOSEN, not recovered] Nonowning VC7.1 vector view for raw owner storage.
-// Companion helpers construct/copy/destroy elements and manage buffers on the engine heap.
-
-template <class T>
-struct OverGrowthVector
-{
-    void* allocator;   // +0x00  std::allocator<T>: empty, padded to 4 - never read by the image
-    T*    first;       // +0x04  _Myfirst
-    T*    last;        // +0x08  _Mylast
-    T*    end;         // +0x0C  _Myend
-};
-
-template <class T>
-inline unsigned int overGrowthVectorSize(const OverGrowthVector<T>& v)
-{
-    return v.first ? static_cast<unsigned int>(v.last - v.first) : 0u;
-}
-
-template <class T>
-inline unsigned int overGrowthVectorCapacity(const OverGrowthVector<T>& v)
-{
-    return v.first ? static_cast<unsigned int>(v.end - v.first) : 0u;
-}
-
-// _Destroy(first, last)
-template <class T>
-inline void overGrowthDestroyRange(T* first, T* last)
-{
-    for (; first != last; ++first)
-        first->~T();
-}
-
-// _Ucopy(first, last, dest) - copy-construct into raw storage, answer the new end.
-template <class T>
-inline T* overGrowthUninitializedCopy(const T* first, const T* last, T* dest)
-{
-    for (; first != last; ++first, ++dest)
-        ::new (static_cast<void*>(dest)) T(*first);
-    return dest;
-}
-
-// std::copy for class types - element-wise assignment, answer the new end.
-template <class T>
-inline T* overGrowthCopyAssign(const T* first, const T* last, T* dest)
-{
-    for (; first != last; ++first, ++dest)
-        *dest = *first;
-    return dest;
-}
-
-// _Tidy - VC7.1's clear() AND the destructor's body: destroy, free, null all three pointers.
-// (VC7.1 vector::clear() is `_Tidy()`, which is why removeActiveMaterial's `types.clear()` and the
-// base cleanup's table release are the same 100CFE80 body.)
-template <class T>
-inline void overGrowthVectorTidy(OverGrowthVector<T>& v)
-{
-    if (v.first)
-    {
-        overGrowthDestroyRange(v.first, v.last);
-        ::renddx9abi::engineFree(v.first);
-    }
-    v.first = 0;
-    v.last  = 0;
-    v.end   = 0;
-}
-
-// _Buy(n): allocate exactly n, nothing for n == 0.
-template <class T>
-inline void overGrowthVectorBuy(OverGrowthVector<T>& v, unsigned int capacity)
-{
-    v.first = 0;
-    v.last  = 0;
-    v.end   = 0;
-    if (capacity == 0)
-        return;
-    v.first = static_cast<T*>(::renddx9abi::engineAlloc(capacity * sizeof(T)));
-    v.last  = v.first;
-    v.end   = v.first + capacity;
-}
-
-// vector(const vector&) - 100D0600: _Buy(right.size()) then _Ucopy.
-template <class T>
-inline void overGrowthVectorCopyConstruct(OverGrowthVector<T>& v, const OverGrowthVector<T>& right)
-{
-    v.allocator = 0;   // [CHOSEN, not recovered] the empty allocator's padding; never read
-    overGrowthVectorBuy(v, overGrowthVectorSize(right));
-    if (v.first)
-        v.last = overGrowthUninitializedCopy(right.first, right.last, v.first);
-}
-
-// operator= - 100D0AE0, the VC7.1 four-arm assignment.
-template <class T>
-inline void overGrowthVectorAssign(OverGrowthVector<T>& v, const OverGrowthVector<T>& right)
-{
-    if (&v == &right)
-        return;
-    const unsigned int count = overGrowthVectorSize(right);
-    if (count == 0)
-    {
-        overGrowthVectorTidy(v);                                  // clear(): free storage
-    }
-    else if (count <= overGrowthVectorSize(v))
-    {
-        T* const newLast = overGrowthCopyAssign(right.first, right.last, v.first);
-        overGrowthDestroyRange(newLast, v.last);                  // destroy old
-        v.last = v.first + count;
-    }
-    else if (count <= overGrowthVectorCapacity(v))
-    {
-        const T* const middle = right.first + overGrowthVectorSize(v);
-        overGrowthCopyAssign(right.first, middle, v.first);
-        v.last = overGrowthUninitializedCopy(middle, right.last, v.last);
-    }
-    else
-    {
-        if (v.first)
-        {
-            overGrowthDestroyRange(v.first, v.last);             // discard old array
-            ::renddx9abi::engineFree(v.first);
-        }
-        overGrowthVectorBuy(v, count);
-        if (v.first)
-            v.last = overGrowthUninitializedCopy(right.first, right.last, v.first);
-    }
-}
-
-// push_back - construct in place when there is room, otherwise _Insert_n at
-// end() (100D0880 / 100D2A20): copy the value first, grow by half (at least to size + 1), copy the
-// prefix, construct the new element, then destroy and free the old array.
-template <class T>
-inline void overGrowthVectorPushBack(OverGrowthVector<T>& v, const T& value)
-{
-    const unsigned int size = overGrowthVectorSize(v);
-    if (v.first && size < overGrowthVectorCapacity(v))
-    {
-        ::new (static_cast<void*>(v.last)) T(value);             // _Ufill(_Mylast, 1, _Val)
-        ++v.last;
-        return;
-    }
-
-    const T copy(value);                                          // _Tmp = _Val
-    const unsigned int oldCapacity = overGrowthVectorCapacity(v);
-    unsigned int capacity = oldCapacity + oldCapacity / 2u;
-    if (capacity < size + 1u)
-        capacity = size + 1u;
-    T* const buffer = static_cast<T*>(::renddx9abi::engineAlloc(capacity * sizeof(T)));
-    T* p = overGrowthUninitializedCopy(v.first, v.last, buffer);  // prefix (the suffix is empty)
-    ::new (static_cast<void*>(p)) T(copy);
-    if (v.first)
-    {
-        overGrowthDestroyRange(v.first, v.last);
-        ::renddx9abi::engineFree(v.first);
-    }
-    v.end   = buffer + capacity;
-    v.last  = buffer + size + 1u;
-    v.first = buffer;
-}
-
-// erase(where) - std::copy(where + 1, last, where); destroy the last; --last.
-template <class T>
-inline T* overGrowthVectorErase(OverGrowthVector<T>& v, T* where)
-{
-    overGrowthCopyAssign(where + 1, static_cast<const T*>(v.last), where);
-    overGrowthDestroyRange(v.last - 1, v.last);
-    --v.last;
-    return where;
-}
+struct OverGrowthPatch;            // 0x98-byte entries at owner +0xE0, defined in OverGrowthCell.h
+struct LightShadowRecord;          // XpLightManager.h - the LightManager's shadow records
 
 
 // Per-material vegetation type, including placement weight and preloaded geometry.
@@ -201,8 +32,8 @@ struct OverGrowthType
 {
     OverGrowthType();
 
-    vc71::string name;                   // +0x00  addType/setActiveType key (case-sensitive ==)
-    vc71::string geometry;               // +0x1C  OvergrowthType.geometry; addType seeds it with name
+    std::string name;                   // +0x00  addType/setActiveType key (case-sensitive ==)
+    std::string geometry;               // +0x1C  OvergrowthType.geometry; addType seeds it with name
     float        probability;            // +0x38  [INFERRED] 1.0f; postLoad: density / sum(density)
     float        density;                // +0x3C  OvergrowthType.density
     float        rotationScale;          // +0x40  OvergrowthType.rotationScale
@@ -212,31 +43,90 @@ struct OverGrowthType
     float        normalScale;            // +0x54  OvergrowthType.normalScale
     int          geometryIndex;          // +0x58  -1 until preLoad resolves `geometry` (1015F450)
 };
-static_assert(sizeof(OverGrowthType) == 0x5C, "OverGrowthType is 0x5C in the PE (100D0600 divides by 92)");
 
 
-// OverGrowthMaterial - one Overgrowth.addMaterial record, 0x30 bytes, in the owner's +0x3C vector
-// (preLoad/save/getMaterialList divide by 48). The copy constructor is inlined at every by-value
-// copy (string, +0x1C, then 100D0600 on the types); assignment is 100D1A70's element body (string =,
-// +0x1C, 100D0AE0); the destructor is 100D28B0's element body (_Tidy the types, then the string).
+// OverGrowthMaterial - one Overgrowth.addMaterial record, 0x30 bytes in the PE, in the owner's +0x3C
+// vector (preLoad/save/getMaterialList divide by 48). Copies and assignment are member-wise (the
+// string, +0x1C, then the type vector - 100D0600 / 100D1A70 / 100D0AE0); the destructor releases the
+// types, then the name (100D28B0).
 
 struct OverGrowthMaterial
 {
     OverGrowthMaterial();
-    OverGrowthMaterial(const OverGrowthMaterial& other);
-    OverGrowthMaterial& operator=(const OverGrowthMaterial& other);
-    ~OverGrowthMaterial();
 
-    vc71::string                     name;   // +0x00  setActiveMaterial key (_stricmp)
-    unsigned int                     id;     // +0x1C  addMaterial's second argument (unique): the
-                                             //        Overgrowth.raw value, 0..15 (the coverage slot)
-    OverGrowthVector<OverGrowthType> types;  // +0x20  first +0x24, last +0x28, end +0x2C
+    std::string                name;    // +0x00  setActiveMaterial key (_stricmp)
+    unsigned int                id;      // +0x1C  addMaterial's second argument (unique): the
+                                         //        Overgrowth.raw value, 0..15 (the coverage slot)
+    std::vector<OverGrowthType> types;   // +0x20
 };
-static_assert(sizeof(OverGrowthMaterial) == 0x30, "OverGrowthMaterial is 0x30 in the PE");
 
-// The native host and compatibility image retain this image-owned layout. In particular,
-// VideoOptions writes +0xF4 and post-load/draw test the VC7.1 string length at +0x9C.
+
+// One half of a geometry-table entry (0x50 bytes in the PE): a template, its own instance and the
+// pool of instances the frame hands out. Construction 1015EB80, copy 1015EC70, destruction 1015EC00
+// (OverGrowth.cpp). Field names are [INFERRED].
+
+struct OverGrowthGeometryRecord
+{
+    explicit OverGrowthGeometryRecord(const std::string& templateName);
+    OverGrowthGeometryRecord(const OverGrowthGeometryRecord& other);
+    ~OverGrowthGeometryRecord();
+
+    std::string             name;              // +0x00  the template name
+    void*                    geometry;          // +0x1C  the template's own instance (createInstance)
+    // +0x20 / +0x24 - the vegetation vertices of the non-"tile_" (leaf, [0]) and "tile_" (trunk, [1])
+    // materials; +0x28 / +0x2C the matching index counts (postLoadResources).
+    unsigned int             vertexCounts[2];
+    unsigned int             indexCounts[2];
+    world::IObjectTemplate*  objectTemplate;    // +0x30  ObjectTemplateManager getTemplate(name)
+    IGeometryTemplate*       geometryTemplate;  // +0x34  GeometryTemplateManager getTemplate(name)
+    unsigned int             poolUsed;          // +0x38  pool geometries handed out this frame;
+                                                //        NOT constructed (render resets it)
+    std::vector<void*>       pool;              // +0x3C  the instances the pool owns
+    float                    distanceScale;     // +0x4C  1.0; postLoad clamp((radius * 0.2)^2, 0.3, 1)
+
+private:
+    OverGrowthGeometryRecord& operator=(const OverGrowthGeometryRecord&);
+};
+
+// The 0xA0-byte geometry-table element. Its copy (0x10160610: +0x00 then +0x50) and its destruction
+// (0x10160640 / the range destroy 0x101607F0: +0x50 then +0x00) are the two records' own.
+struct OverGrowthGeometryPair
+{
+    OverGrowthGeometryPair(const std::string& lodName, const std::string& fullName)
+        : lod(lodName), full(fullName) {}
+
+    OverGrowthGeometryRecord lod;    // +0x00  "<name>_lod" - the batched cell geometry
+    OverGrowthGeometryRecord full;   // +0x50  "<name>" - the near instances
+
+private:
+    OverGrowthGeometryPair& operator=(const OverGrowthGeometryPair&);
+};
+
+
+// One placed vegetation instance - 0x60 bytes, a patch's vector entries (100D19E0 divides by 0x60).
+// Construction 1015E930 (OverGrowthCells.cpp / OverGrowthLoad.cpp). Field names are [INFERRED].
+struct OverGrowthInstance
+{
+    int           geometryIndex;    // +0x00  the geometry pair, -1
+    Mat4          transform;        // +0x04  identity; the translation row is +0x34..+0x3C
+    float         scale;            // +0x44  1.0
+    float         cullRadius;       // +0x48  the full geometry's bounding radius (times scale)
+    float         radiusToSame;     // +0x4C  radius * minRadiusToSame
+    float         radiusToOthers;   // +0x50  radius * minRadiusToOthers
+    float         shadow;           // +0x54  the shadow-map sample; NOT constructed
+    unsigned char generated;        // +0x58  1 when populatePatch placed it, 0 for a level object
+    unsigned char pad59[3];
+    float         lodFadeState;     // +0x5C  1.0; the lodTimer cross-fade
+};
+
+// The instance list carrier of the cell/patch virtuals.
+typedef std::vector<OverGrowthInstance> OverGrowthInstanceVector;
+
+
+// The native host and compatibility image retain this image-owned object. VideoOptions writes the
+// quality scale (+0xF4); post-load/draw test the path (+0x88) for emptiness.
 // The unpublished base's constructor/cleanup are factored as helpers; no base type name is guessed.
+// Data members are public: the Overgrowth translation units' file-local helpers read them.
 class OverGrowth
 {
 public:
@@ -255,12 +145,12 @@ public:
     virtual void reload();                                         // +2C 100CDDC0
     virtual void clear();
     virtual void render(IRenderView* view, float time);
-    // +38 the LightManager's directional records (VC7.1 vector, 0x498-byte elements), the
-    // pulled-back light Frustum it culls patches with, the caster Frustum whose near plane it grows,
-    // and the geometry vector it fills (LightManager +0x970). The opaque carrier names stay; the
-    // call site casts.
-    virtual void collectShadowGeometry(OverGrowthShadowVolumes*, OverGrowthShadowBounds*,
-                                       OverGrowthShadowState*, OverGrowthGeometryVector*);
+    // +38 the LightManager's directional records (+0x79C), the pulled-back light Frustum it culls
+    // patches with, the caster Frustum whose near plane it grows, and the geometry vector it fills
+    // (LightManager +0x970).
+    virtual void collectShadowGeometry(const std::vector<LightShadowRecord>* records,
+                                       const Frustum* lightFrustum, Frustum* casterFrustum,
+                                       std::vector<void*>* geometries);
     virtual void updateCell(OverGrowthCell*, OverGrowthInstanceVector*, bool changed); // +3C 100CB080
     virtual void placeInstance(OverGrowthType*, Vec3*, OverGrowthInstance*);
     virtual void populatePatch(OverGrowthPatch*);
@@ -275,20 +165,20 @@ public:
     // from the console spelling; getter constness is [INFERRED]. Every OvergrowthType.* member acts
     // on the active type (+0xEC) and is a no-op / default read when there is none.
 
-    void                setPath(const vc71::string& path);
-    const vc71::string& getPath() const;
+    void                setPath(const std::string& path);
+    const std::string& getPath() const;
     void                preLoad();
-    vc71::string        getMaterialList() const;
-    bool                addMaterial(const vc71::string& name, unsigned int id);
+    std::string        getMaterialList() const;
+    bool                addMaterial(const std::string& name, unsigned int id);
     bool                removeActiveMaterial();
-    void                setActiveMaterial(const vc71::string& name);
-    vc71::string        getActiveMaterialName() const;
-    vc71::string        getTypeList() const;
-    bool                addType(const vc71::string& name);
+    void                setActiveMaterial(const std::string& name);
+    std::string        getActiveMaterialName() const;
+    std::string        getTypeList() const;
+    bool                addType(const std::string& name);
     bool                removeActiveType();
-    void                setActiveType(const vc71::string& name);
+    void                setActiveType(const std::string& name);
     void                save();                                             // 100CD7E0 (editor)
-    vc71::string        getGeometryList() const;
+    std::string        getGeometryList() const;
     float               getLodDistance() const;
     void                generateAtlas();                                    // 100CCD20 (editor)
     void                setEditorEnable(bool enable);
@@ -300,10 +190,14 @@ public:
     float getCloseDistPercentage() const;     void setCloseDistPercentage(float value);   // +0xC8
     float getCloseDistFade() const;           void setCloseDistFade(float value);         // +0xCC
     float getLodTimer() const;                void setLodTimer(float value);              // +0xF8
+    // +0xF4 - the vegetation quality scale VideoOptions::apply stores (0.4 / 0.7 / 1.0 per quality
+    // level); updateCells multiplies it into the near distance. [CHOSEN] typed accessors for the
+    // field VideoOptions wrote by offset.
+    float getQualityScale() const;            void setQualityScale(float scale);          // +0xF4
 
     // The active type's properties - OvergrowthType.*. Each setter writes the field and, once the
     // level is loaded (+0xA4, set by postLoadResources), regenerates everything through reload().
-    void         setTypeGeometry(const vc71::string& geometry);  vc71::string getTypeGeometry() const;
+    void         setTypeGeometry(const std::string& geometry);  std::string getTypeGeometry() const;
     void         setTypeDensity(float value);           float getTypeDensity() const;
     void         setTypeNormalScale(float value);       float getTypeNormalScale() const;
     void         setTypeRotationScale(float value);     float getTypeRotationScale() const;
@@ -315,7 +209,7 @@ public:
     // or full (+0x50) name is `name`; else a new record built from `name + "_lod"` and `name`, kept
     // only when both templates gave a geometry; -1 for an empty name or a dropped record. preLoad,
     // initialize, the static-object adoption and the editor's populatePatch call it.
-    int findOrAddGeometry(const vc71::string& name);
+    int findOrAddGeometry(const std::string& name);
 
 
     // The editor's painting (OverGrowth.cpp). x / z / radius are world metres on the primary
@@ -336,12 +230,76 @@ public:
     void exportShadowmapRectToTerrainTexture(unsigned int x0, unsigned int x1,
                                              unsigned int z0, unsigned int z1);
 
+    // data, in shipped order (the vptr is +0x00). Names are [INFERRED] except the console's
+    // (viewDistance, viewDistanceScale, closeDistPercentage, closeDistFade, lodTimer, editorEnable,
+    // path). The constructor writes only the fields the PE writes; the rest stay as allocated.
+    Vec3                                m_cameraPosition;       // +0x04  baseUpdateCells: the camera
+    int                                 m_gridSize;             // +0x10  N, the N x N camera cells (10)
+    float                               m_cellSize;             // +0x14
+    unsigned int                        m_randomSeed;           // +0x18  0x759DC150, then per cell/patch
+    unsigned char                       m_enabled;              // +0x1C  1
+    unsigned char                       m_unresolved1D;         // +0x1D  0 [UNRESOLVED]
+    unsigned char                       m_initialized;          // +0x1E  initialize sets it
+    unsigned char                       m_pad1F;
+    float                               m_fadeBand;             // +0x20  0.3; postLoad 0
+    float                               m_viewDistance;         // +0x24  Overgrowth.viewDistance
+    float                               m_viewDistanceScale;    // +0x28  Overgrowth.viewDistanceScale
+    float                               m_heightFadeDistance;   // +0x2C  1.0
+    float                               m_minimumHeightFade;    // +0x30  0.4; postLoad 1.0
+    float                               m_cellFadeDistance;     // +0x34  12.0
+    unsigned char                       m_reseatCells;          // +0x38  rebuildCells sets it
+    unsigned char                       m_pad39[3];
+    std::vector<OverGrowthMaterial>     m_materials;            // +0x3C
+    std::vector<OverGrowthGeometryPair> m_geometries;           // +0x4C
+    float                               m_extentX;              // +0x5C  map width * scale.x
+    float                               m_extentZ;              // +0x60  map height * scale.z
+    float                               m_originX;              // +0x64  -extentX / 2; NOT constructed
+    float                               m_originZ;              // +0x68  -extentZ / 2; NOT constructed
+    Vec3                                m_patchOrigin;          // +0x6C  (originX, 0, originZ)
+    unsigned int                        m_mapWidth;             // +0x78  the primary heightmap's size
+    unsigned int                        m_mapHeight;            // +0x7C
+    unsigned char*                      m_densityMap;           // +0x80  Overgrowth.raw - material ids
+    unsigned char*                      m_shadowMap;            // +0x84  OvergrowthShadowmap.raw
+    std::string                        m_path;                 // +0x88  Overgrowth.path
+    unsigned char                       m_loaded;               // +0xA4  postLoadResources sets it
+    unsigned char                       m_padA5[3];
+    world::IHeightmap*                  m_heightmap;            // +0xA8  NOT constructed
+    world::IHeightmapCluster*           m_cluster;              // +0xAC  NOT constructed
+    unsigned char                       m_reloading;            // +0xB0  reload() brackets with it
+    unsigned char                       m_padB1[3];
+    // +0xB4 - a vector the constructor empties and the destructor frees; nothing else touches it.
+    // [UNRESOLVED] element type.
+    std::vector<void*>                  m_unresolvedB4;
+    float                               m_closeDistance;        // +0xC4  updateCells; NOT constructed
+    float                               m_closeDistPercentage;  // +0xC8  Overgrowth.closeDistPercentage
+    float                               m_closeDistFade;        // +0xCC  Overgrowth.closeDistFade
+    unsigned int                        m_unresolvedD0;         // +0xD0  0 [UNRESOLVED]
+    unsigned char                       m_drawNear;             // +0xD4  1 - render and the shadow walk
+    unsigned char                       m_updateBeforeRender;   // +0xD5  1 - render calls update()
+    unsigned char                       m_padD6[2];
+    int                                 m_patchCountX;          // +0xD8  setViewDistance; NOT constructed
+    int                                 m_patchCountZ;          // +0xDC
+    OverGrowthPatch*                    m_patches;              // +0xE0  new[] of countX * countZ
+    OverGrowthCell**                    m_cells;                // +0xE4  N x N
+    OverGrowthMaterial*                 m_activeMaterial;       // +0xE8
+    OverGrowthType*                     m_activeType;           // +0xEC
+    unsigned char                       m_editorEnable;         // +0xF0  Overgrowth.editorEnable
+    unsigned char                       m_unresolvedF1;         // +0xF1  0 [UNRESOLVED]
+    unsigned char                       m_padF2[2];
+    float                               m_qualityScale;         // +0xF4  1.0; VideoOptions writes it
+    float                               m_lodTimer;             // +0xF8  Overgrowth.lodTimer
+    dx9rend::TextureAtlas*              m_atlas;                // +0xFC
+    dx9rend::EngineTexture*             m_atlasPage;            // +0x100 the atlas's first page
+    // +0x104 / +0x108 - the largest per-patch vertex count of the leaf [0] and trunk [1] stream;
+    // +0x10C / +0x110 the matching index counts. NOT constructed.
+    unsigned int                        m_streamVertexCounts[2];
+    unsigned int                        m_streamIndexCounts[2];
+    float                               m_materialCoverageMax[16]; // +0x114 NOT constructed
+
 private:
-    // [UNRESOLVED] Names for the unrecovered members; constructor writes only observed fields.
-    // The string at +0x88 is explicitly constructed/destroyed in its original order.
-    alignas(4) unsigned char m_storage[0x150];
+    OverGrowth(const OverGrowth&);
+    OverGrowth& operator=(const OverGrowth&);
 };
-static_assert(sizeof(OverGrowth) == 0x154, "OverGrowth PE image-owned layout");
 
 OverGrowth* createOverGrowth();
 } } }

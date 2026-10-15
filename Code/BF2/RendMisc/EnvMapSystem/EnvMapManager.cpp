@@ -9,6 +9,7 @@
 #include "../../RendDX9/Texture.h"
 #include "../../RendDX9/RendDX9Base.h"
 #include "../../Math/Mat4.h"
+#include "../../../RendDX9Abi/BfMemory.h"
 #include "../../../RendDX9Abi/EngineFile.h"
 #include "../../../RendDX9Abi/Frontier.h"
 #include "../../../RendDX9Abi/PluginEntry.h"
@@ -28,27 +29,6 @@ bool rendererRenderEnvMapFace(unsigned int size,EngineTexture* cube,int face,con
 }
 namespace Rend {
 namespace {
-void freeVector(vc71::vector_layout& value)
-{
-    if(value.first)::renddx9abi::engineFree(value.first);
-    value.first=value.last=value.end=0;
-}
-// Container operations stay source-level; VC7.1 bridge allocation/growth is tracked by RW-74.
-void clearStringMap(vc71::map_layout& map)
-{ while(vc71::map_node* n=vc71::mapFirst(map))vc71::mapErase(map,n); }
-void freePlainTree(vc71::map_node* n,vc71::map_node* head)
-{
-    if(n==head)return;
-    freePlainTree(n->right,head);
-    freePlainTree(n->left,head);
-    ::renddx9abi::engineFree(n);
-}
-void clearPlainMap(vc71::map_layout& map)
-{
-    freePlainTree(map.head->parent,map.head);
-    map.head->left=map.head->right=map.head->parent=map.head;
-    map.size=0;
-}
 void releaseTexture(dx9rend::EngineTexture* texture)
 {
     if(texture && --texture->refCount==0)
@@ -60,22 +40,14 @@ EnvMapEntry::EnvMapEntry() : flag(false),texture(0)
 { position.x=position.y=position.z=0; } // padding untouched
 EnvMapManager::EnvMapManager() : m_refCount(1)
 {
-    m_objects.first=m_objects.last=m_objects.end=0;
-    m_templates.construct(48);
-    m_pendingRemoval.first=m_pendingRemoval.last=m_pendingRemoval.end=0;
-    m_map34.construct(24); m_map40.construct(24); m_maps.construct(48);
     m_currentTexture=0; m_templateCount=0; m_enabled=true; m_perPixelEnabled=true;
 }
 EnvMapManager::~EnvMapManager()
 {
-    // 101C0770 preserves cleanup order; the object's no-dtor vtable stays installed.
+    // 101C0770 preserves cleanup order; the object's no-dtor vtable stays installed. The member
+    // destructors then release the containers in 101C0770's order (reverse declaration order):
+    // m_maps, m_map40, m_map34, m_pendingRemoval, m_templates, m_objects.
     flushRemovals(); clearObjects(); clearMaps();
-    clearStringMap(m_maps); ::renddx9abi::engineFree(m_maps.head); m_maps.head=0; m_maps.size=0;
-    clearPlainMap(m_map40); ::renddx9abi::engineFree(m_map40.head); m_map40.head=0; m_map40.size=0;
-    clearPlainMap(m_map34); ::renddx9abi::engineFree(m_map34.head); m_map34.head=0; m_map34.size=0;
-    freeVector(m_pendingRemoval);
-    clearStringMap(m_templates); ::renddx9abi::engineFree(m_templates.head); m_templates.head=0; m_templates.size=0;
-    freeVector(m_objects);
 }
 void EnvMapManager::addRef() { ++m_refCount; }
 int EnvMapManager::getRef() { return m_refCount; }
@@ -91,22 +63,23 @@ void EnvMapManager::reset()
 { m_currentTexture=0; m_templateCount=0; m_perPixelEnabled=true; }
 EnvMapObject* EnvMapManager::createObject(EnvMapObjectTemplate* objectTemplate)
 {
-    void* storage=::renddx9abi::engineAlloc(0x1C);
+    void* storage=::renddx9abi::engineAlloc(sizeof(EnvMapObject));
     EnvMapObject* object=storage ? new(storage) EnvMapObject(objectTemplate):0;
-    vc71::vectorPushBackIn(m_objects,4,&object);
+    m_objects.push_back(object);
     return object;
 }
 void EnvMapManager::queueRemoval(EnvMapObject* object)
-{ vc71::vectorPushBackIn(m_pendingRemoval,4,&object); }
-EnvMapObjectTemplate* EnvMapManager::getTemplate(const vc71::string& name)
+{ m_pendingRemoval.push_back(object); }
+EnvMapObjectTemplate* EnvMapManager::getTemplate(const std::string& name)
 {
-    if(vc71::map_node* n=vc71::mapFindInsensitive(m_templates,name))
-        return static_cast<EnvMapObjectTemplate*>(vc71::mapNodeValue(n));
+    const auto found=m_templates.find(name);
+    if(found!=m_templates.end())
+        return found->second;
     if(m_templateCount>=256)
         ::renddx9abi::logf("RendMisc/EnvMapSystem/EnvMapManager.cpp:120 To many EnvMapManager templates");
-    void* storage=::renddx9abi::engineAlloc(0x28);
+    void* storage=::renddx9abi::engineAlloc(sizeof(EnvMapObjectTemplate));
     EnvMapObjectTemplate* value=storage ? new(storage) EnvMapObjectTemplate(name):0;
-    vc71::mapNodeValueRef(vc71::mapInsertInsensitive(m_templates,48,name))=value;
+    m_templates[name]=value;
     ++m_templateCount;
     return value;
 }
@@ -122,54 +95,52 @@ void EnvMapManager::clear()
 }
 void EnvMapManager::flushRemovals()
 {
-    for(EnvMapObject** item=reinterpret_cast<EnvMapObject**>(m_pendingRemoval.first);
-        item!=reinterpret_cast<EnvMapObject**>(m_pendingRemoval.last);++item)
+    for(auto item=m_pendingRemoval.begin();item!=m_pendingRemoval.end();++item)
     {
-        EnvMapObject** begin=reinterpret_cast<EnvMapObject**>(m_objects.first);
-        EnvMapObject** end=reinterpret_cast<EnvMapObject**>(m_objects.last);
-        EnvMapObject** found=begin;
+        const auto end=m_objects.end();
+        auto found=m_objects.begin();
         while(found!=end && *found!=*item)++found;
         if(found!=end)
         {
             *found=*(end-1);
-            if(begin && end!=begin)m_objects.last-=4;
+            if(!m_objects.empty())m_objects.pop_back();
             if(*item)delete *item;
         }
     }
-    m_pendingRemoval.last=m_pendingRemoval.first;
+    m_pendingRemoval.clear();
 }
 void EnvMapManager::clearObjects()
 {
-    for(vc71::map_node* n=vc71::mapFirst(m_templates);n;n=vc71::mapNext(m_templates,n))
-        if(void* value=vc71::mapNodeValue(n))delete static_cast<EnvMapObjectTemplate*>(value);
-    for(void** item=reinterpret_cast<void**>(m_objects.first);item!=reinterpret_cast<void**>(m_objects.last);++item)
-        if(*item)delete static_cast<EnvMapObject*>(*item);
-    m_pendingRemoval.last=m_pendingRemoval.first;
-    clearStringMap(m_templates);
-    clearPlainMap(m_map34);
-    freeVector(m_objects); m_templateCount=0;
+    for(auto n=m_templates.begin();n!=m_templates.end();++n)
+        if(EnvMapObjectTemplate* value=n->second)delete value;
+    for(auto item=m_objects.begin();item!=m_objects.end();++item)
+        if(*item)delete *item;
+    m_pendingRemoval.clear();
+    m_templates.clear();
+    m_map34.clear();
+    m_objects.clear(); m_templateCount=0;
 }
 void EnvMapManager::clearMaps()
 {
-    for(vc71::map_node* n=vc71::mapFirst(m_maps);n;n=vc71::mapNext(m_maps,n))
+    for(auto n=m_maps.begin();n!=m_maps.end();++n)
     {
-        EnvMapEntry* value=static_cast<EnvMapEntry*>(vc71::mapNodeValue(n));
+        EnvMapEntry* value=n->second;
         releaseTexture(value->texture);
         // Separate cache eviction after our reference decrement, even if it deleted the wrapper.
         dx9rend::textureManagerEvictFromCache(value->texture);
         ::renddx9abi::engineFree(value);
     }
-    clearStringMap(m_maps);
+    m_maps.clear();
 }
 void EnvMapManager::removeEntry(EnvMapEntry* value)
 {
     // owns neither the entry nor cache eviction; only texture reference and map node.
-    if(!m_maps.size)return;
-    for(vc71::map_node* n=vc71::mapFirst(m_maps);n;n=vc71::mapNext(m_maps,n))
-        if(vc71::mapNodeValue(n)==value)
-        { releaseTexture(value->texture); vc71::mapErase(m_maps,n); return; }
+    if(m_maps.empty())return;
+    for(auto n=m_maps.begin();n!=m_maps.end();++n)
+        if(n->second==value)
+        { releaseTexture(value->texture); m_maps.erase(n); return; }
 }
-bool EnvMapManager::loadInfo(const vc71::string& path)
+bool EnvMapManager::loadInfo(const std::string& path)
 {
     ::renddx9abi::EngineStream file;
     if(!file.open(path))
@@ -214,13 +185,13 @@ bool EnvMapManager::loadInfo(const vc71::string& path)
                     bool flag;
                     record>>x; record.get(delimiter); record>>y; record.get(delimiter);
                     record>>z; record.get(delimiter); record>>flag;
-                    void* storage=::renddx9abi::engineAlloc(0x14);
+                    void* storage=::renddx9abi::engineAlloc(sizeof(EnvMapEntry));
                     EnvMapEntry* entry=storage ? new(storage) EnvMapEntry:0;
                     entry->position.x=x; entry->position.y=y; entry->position.z=z; entry->flag=flag;
                     const std::string texturePath=directory+name+".dds";
-                    entry->texture=static_cast<dx9rend::EngineTexture*>(dx9rend::textureManagerGetTexture(vc71::string(texturePath.c_str())));
+                    entry->texture=static_cast<dx9rend::EngineTexture*>(dx9rend::textureManagerGetTexture(std::string(texturePath.c_str())));
                     // Duplicate keys replace the pointer without freeing the old record (retail).
-                    vc71::mapNodeValueRef(vc71::mapInsert(m_maps,48,name.c_str()))=entry;
+                    m_maps[name]=entry;
                 }
             }
             input.getline(buffer,1023);
@@ -232,11 +203,11 @@ bool EnvMapManager::loadInfo(const vc71::string& path)
 }
 void EnvMapManager::onPostLoad()
 {
-    if(m_maps.size || !m_enabled)return;
-    vc71::string level,directory;
+    if(!m_maps.empty() || !m_enabled)return;
+    std::string level,directory;
     dx9rend::readStringSettingDefault("GSLoadLevel","lightsPlease",level);
     dx9rend::readStringSettingDefault("GSLevelDirectory","",directory);
-    const vc71::string path((std::string(directory.c_str())+level.c_str()+"/Envmaps/EnvironmentMapInfo.emi").c_str());
+    const std::string path((std::string(directory.c_str())+level.c_str()+"/Envmaps/EnvironmentMapInfo.emi").c_str());
     if(::renddx9abi::engineFileExists(path))loadInfo(path);
 }
 
@@ -251,18 +222,17 @@ const unsigned char kEnvironmentMapInfoMinorVersion=1;
 }
 bool EnvMapManager::save()
 {
-    if(!m_objects.first)return false;
-    if(!((m_objects.last-m_objects.first)>>2))return false;
-    vc71::string level,directory;
+    if(m_objects.empty())return false;
+    std::string level,directory;
     dx9rend::readStringSettingDefault("GSLoadLevel","lightsPlease",level);
     dx9rend::readStringSettingDefault("GSLevelDirectory","",directory);
-    vc71::string levelPath(directory); levelPath+=level;
-    vc71::string envmapDirectory(levelPath); envmapDirectory+="/Envmaps/";
-    vc71::string infoPath(envmapDirectory); infoPath+="EnvironmentMapInfo.emi";
-    vc71::string savePath;
+    std::string levelPath(directory); levelPath+=level;
+    std::string envmapDirectory(levelPath); envmapDirectory+="/Envmaps/";
+    std::string infoPath(envmapDirectory); infoPath+="EnvironmentMapInfo.emi";
+    std::string savePath;
     dx9rend::readStringSettingDefault("Editor_LevelSavePath"," ERROR ",savePath);
 
-    vc71::string fullPath(savePath); fullPath+="/"; fullPath+=infoPath;
+    std::string fullPath(savePath); fullPath+="/"; fullPath+=infoPath;
     renddx9abi::HostStream* const stream=::dice::hfe::fileManager->open(
         ::renddx9abi::makeHostString(fullPath),static_cast<renddx9abi::HostFileMode>(0),
         static_cast<renddx9abi::HostFileAccess>(2),0);
@@ -273,8 +243,7 @@ bool EnvMapManager::save()
     out<<"# Version 0."<<kEnvironmentMapInfoMinorVersion<<" "<<"May 26 2009"<<" "<<std::endl;
     out<<"# "<<std::endl;
     int index=0;
-    for(EnvMapObject** item=reinterpret_cast<EnvMapObject**>(m_objects.first);
-        item!=reinterpret_cast<EnvMapObject**>(m_objects.last);++item)
+    for(auto item=m_objects.begin();item!=m_objects.end();++item)
     {
         EnvMapObject* const object=*item;
         EnvMapEntry* const entry=object->m_entry;
@@ -287,7 +256,7 @@ bool EnvMapManager::save()
         sprintf(name,"EnvMap%i",index);
         out<<name<<" "<<entry->position.x<<","<<entry->position.y<<","<<entry->position.z<<","
            <<object->m_entry->flag<<" "<<std::endl;
-        vc71::string texturePath(savePath); texturePath+="/"; texturePath+=envmapDirectory; texturePath+=name;
+        std::string texturePath(savePath); texturePath+="/"; texturePath+=envmapDirectory; texturePath+=name;
         dx9rend::textureManagerSaveTexture(object->m_entry->texture,texturePath);
         ++index;
     }
@@ -303,10 +272,8 @@ bool EnvMapManager::save()
 
 bool EnvMapManager::generateEnvMaps()
 {
-    if(!m_objects.first)return false;
-    if(!((m_objects.last-m_objects.first)>>2))return false;
-    for(EnvMapObject** item=reinterpret_cast<EnvMapObject**>(m_objects.first);
-        item!=reinterpret_cast<EnvMapObject**>(m_objects.last);++item)
+    if(m_objects.empty())return false;
+    for(auto item=m_objects.begin();item!=m_objects.end();++item)
     {
         EnvMapObject* const object=*item;
         int savedManaged=dx9rend::textureManagerSwapManaged(0);
@@ -334,9 +301,8 @@ bool EnvMapManager::generateEnvMaps()
             ::renddx9abi::logf("RendMisc/EnvMapSystem/EnvMapManager.cpp:452 Could not generate mip maps on "
                                "envmap cube texture (hr=0x%08X)",static_cast<unsigned int>(hr));
     }
-    clearStringMap(m_maps);
-    for(EnvMapObject** item=reinterpret_cast<EnvMapObject**>(m_objects.first);
-        item!=reinterpret_cast<EnvMapObject**>(m_objects.last);++item)
+    m_maps.clear();
+    for(auto item=m_objects.begin();item!=m_objects.end();++item)
     {
         EnvMapObject* const object=*item;
         const Vec3& position=object->m_entry->position;
@@ -345,23 +311,23 @@ bool EnvMapManager::generateEnvMaps()
         const int x=static_cast<int>(position.x);
         char key[64];
         sprintf(key,"=%i=%i=%i",x,y,z);
-        vc71::mapNodeValueRef(vc71::mapInsert(m_maps,48,key))=object->m_entry;
+        m_maps[key]=object->m_entry;
     }
     return true;
 }
 void EnvMapManager::update(float)
 {
     flushRemovals();
-    if(!m_maps.size)return;
-    if(m_maps.size==1)
-    { m_currentTexture=static_cast<EnvMapEntry*>(vc71::mapNodeValue(m_maps.head->left))->texture; return; }
+    if(m_maps.empty())return;
+    if(m_maps.size()==1)
+    { m_currentTexture=m_maps.begin()->second->texture; return; }
     dx9rend::IRenderView* view=static_cast<dx9rend::IRenderer*>(dx9rend::g_rendererBase)->getRenderView();
     const Mat4* transform=view->getViewMatrixPtr();
     // Keep the shipped multimap operation and duplicate-distance order; no nearest-only shortcut.
     std::multimap<float,EnvMapEntry*> distances;
-    for(vc71::map_node* n=vc71::mapFirst(m_maps);n;n=vc71::mapNext(m_maps,n))
+    for(auto n=m_maps.begin();n!=m_maps.end();++n)
     {
-        EnvMapEntry* value=static_cast<EnvMapEntry*>(vc71::mapNodeValue(n));
+        EnvMapEntry* value=n->second;
         const float x=transform->m[12]-value->position.x;
         const double y=static_cast<double>(transform->m[13])-value->position.y;
         const double z=static_cast<double>(transform->m[14])-value->position.z;
@@ -374,7 +340,7 @@ void EnvMapManager::update(float)
 IBase* __fastcall createEnvMapManager(unsigned int iid,IBase* outer)
 {
     if(outer)return 0;
-    void* storage=::renddx9abi::engineAlloc(0x6C);
+    void* storage=::renddx9abi::engineAlloc(sizeof(EnvMapManager));
     EnvMapManager* instance=storage ? new(storage) EnvMapManager:0;
     IBase* result=static_cast<IBase*>(instance->queryInterface(iid));
     if(!result)instance->release();

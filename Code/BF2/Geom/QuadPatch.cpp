@@ -8,8 +8,7 @@
 #include "../../RendDX9Abi/HostFileAbi.h"
 #include "../../RendDX9Abi/BfMemory.h"
 #include "../../RendDX9Abi/Frontier.h"
-#include "../../RendDX9Abi/Vc71String.h"
-#include "../../RendDX9Abi/Vc71Vector.h"
+#include <string>
 #include "../../RendDX9Abi/D3dx9Sdk.h"
 #include "QuadPatch.h"
 #include "Terrain.h"
@@ -22,12 +21,14 @@
 #include "../RendDX9/ShaderParameter.h"
 #include "../RendDX9/Texture.h"
 #include "../RendMisc/IRenderView.h"
+#include "../RendMisc/EnvMapSystem/EnvMapManager.h"   // the borrowed environment texture
 
 #include <cfloat>
 #include <cmath>
 #include <new>
 #include <cstdio>
 #include <cstring>
+#include <vector>
 
 namespace dice {
 namespace hfe {
@@ -61,6 +62,13 @@ namespace geom {
 extern LightManager* g_LightManager;                                               // ModuleGeom.cpp
 
 namespace {
+
+// The count word the culler's node array carries ahead of its first node (4 bytes in retail).
+// [CHOSEN, not recovered] x64 (https://github.com/B2BF/OpenBF2/issues/7): padded to pointer size so
+// the nodes, which hold pointers, stay pointer-aligned.
+const unsigned int kNodeCountHeader =
+    sizeof(void*) > sizeof(unsigned int) ? static_cast<unsigned int>(sizeof(void*))
+                                         : static_cast<unsigned int>(sizeof(unsigned int));
 
 inline dx9rend::ShaderParameter* param(void* handle)
 {
@@ -113,7 +121,7 @@ inline bool lod1n(const TerrainCullerNode* n) { return n && n->visible && n->lod
 
 // sub_10074AB0 - the image's printf-into-a-std::string helper: vsnprintf into a 0xFFF-byte
 // buffer, or the "WARNING: ..." text when it does not fit (StaticMesh.cpp carries the same body).
-void formatString(vc71::string& out, const char* format, int a, int b, int c)
+void formatString(std::string& out, const char* format, int a, int b, int c)
 {
     char buffer[0x1000];
     const int written = std::snprintf(buffer, 0xFFF, format, a, b, c);
@@ -123,11 +131,6 @@ void formatString(vc71::string& out, const char* format, int a, int b, int c)
     else
         buffer[written] = 0;
     out = buffer;
-}
-
-inline unsigned int layerCount(const vc71::vector_layout& v)
-{
-    return vc71::vectorSizeIn(v, 4u);
 }
 
 } // anonymous namespace
@@ -185,18 +188,18 @@ int QuadPatchDetailLayer::load(TerrainRawReader& reader)
 
     if (t->m_rawHasVersion && t->m_rawVersion >= 0x18u)
     {
-        // N records of 400 bytes; record i links to children 1+4i..4+4i while they exist, and
-        // reads its three 64-byte rows as (row, row+192) u32 pairs.
+        // N TerrainLodRecords (400 bytes each in retail); record i links to children 1+4i..4+4i
+        // while they exist, and reads its three 64-byte rows as (row, row+192) u32 pairs.
         int tableCount = 0;
         reader.readU32(&tableCount);
-        lodTables = static_cast<unsigned char*>(::renddx9abi::engineAlloc(static_cast<unsigned int>(400 * tableCount)));
+        lodTables = static_cast<unsigned char*>(::renddx9abi::engineAlloc(static_cast<unsigned int>(kTerrainLodRecordSize * tableCount)));
         int offset = 0;
-        int childOffset = 400;
+        int childOffset = kTerrainLodRecordSize;
         int firstChild = 1;
         for (int record = 0; record < tableCount; ++record)
         {
             unsigned char* const table = lodTables + offset;
-            unsigned char** const children = reinterpret_cast<unsigned char**>(table + 384);
+            unsigned char** const children = reinterpret_cast<TerrainLodRecord*>(table)->children;   // +384
             if (firstChild >= tableCount)
             {
                 children[3] = 0; children[2] = 0; children[1] = 0; children[0] = 0;
@@ -204,9 +207,9 @@ int QuadPatchDetailLayer::load(TerrainRawReader& reader)
             else
             {
                 children[0] = lodTables + childOffset;
-                children[1] = lodTables + childOffset + 400;
-                children[2] = lodTables + childOffset + 800;
-                children[3] = lodTables + childOffset + 1200;
+                children[1] = lodTables + childOffset + kTerrainLodRecordSize;
+                children[2] = lodTables + childOffset + 2 * kTerrainLodRecordSize;
+                children[3] = lodTables + childOffset + 3 * kTerrainLodRecordSize;
             }
             unsigned char* row = table;
             for (int r = 0; r < 3; ++r)
@@ -215,8 +218,8 @@ int QuadPatchDetailLayer::load(TerrainRawReader& reader)
                 reader.readU32(row + 192);
                 row += 64;
             }
-            offset += 400;
-            childOffset += 1600;
+            offset += kTerrainLodRecordSize;
+            childOffset += 4 * kTerrainLodRecordSize;
             firstChild += 4;
         }
         indexBuffer = dx9rend::bufferManagerCreateIndexBuffer(indexCount, 8u, 101u);
@@ -231,11 +234,11 @@ int QuadPatchDetailLayer::load(TerrainRawReader& reader)
     // count, the legacy table builder, then the upload. 1.50 content never comes here.
     legacyIndices = ::renddx9abi::engineAlloc(2u * indexCount);
     reader.read(legacyIndices, 2u * indexCount);
-    void* const storage = ::renddx9abi::engineAlloc(0x190);
+    void* const storage = ::renddx9abi::engineAlloc(sizeof(TerrainLodRecord));        // 0x190
     if (storage)
-        ::memset(storage, 0, 0x190u);
+        ::memset(storage, 0, sizeof(TerrainLodRecord));
     lodTables = static_cast<unsigned char*>(storage);
-    ::memset(lodTables, 0, 0x190u);                                               // a second, unguarded clear, as shipped
+    ::memset(lodTables, 0, sizeof(TerrainLodRecord));                             // a second, unguarded clear, as shipped
     *reinterpret_cast<unsigned int*>(lodTables + 192) = indexCount;
     RD9_FRONTIER_AT("dice::hfe::geom::QuadPatchDetailLayer::load (sub_101BB490 - the pre-0x18 LOD "
                     "table builder)", this, 0x00);
@@ -276,7 +279,7 @@ void QuadPatchDetailLayer::freeLodTableTree(unsigned char* table)
 {
     if (!table)
         return;
-    unsigned char* const* const children = reinterpret_cast<unsigned char* const*>(table + 0x180);
+    unsigned char* const* const children = reinterpret_cast<TerrainLodRecord*>(table)->children;   // +0x180
     if (children[0])
     {
         freeLodTableTree(children[0]);
@@ -293,7 +296,6 @@ void QuadPatchDetailLayer::freeLodTableTree(unsigned char* table)
 QuadPatch::QuadPatch(Terrain* owner)
 {
     terrain = owner;
-    detailLayers.first = 0; detailLayers.last = 0; detailLayers.end = 0;
     center.x = 0.0f; center.y = 0.0f; center.z = 0.0f;
     vertexBuffer24 = 0;
     unresolved28 = 0;
@@ -352,8 +354,8 @@ void raQuadPatchAdapterServerDestroy()
 // The legacy vertex table was freed during load and must not be freed again.
 QuadPatch::~QuadPatch()
 {
-    for (QuadPatchDetailLayer** it = reinterpret_cast<QuadPatchDetailLayer**>(detailLayers.first);
-         it != reinterpret_cast<QuadPatchDetailLayer**>(detailLayers.last); ++it)
+    for (std::vector<QuadPatchDetailLayer*>::iterator it = detailLayers.begin();
+         it != detailLayers.end(); ++it)
     {
         QuadPatchDetailLayer* const layer = *it;
         if (layer)
@@ -375,12 +377,7 @@ QuadPatch::~QuadPatch()
     if (vertexBuffer)   dx9rend::vertexBufferRelease(vertexBuffer);               // +0x60
 
     raQuadPatchAdapterServerDestroy();
-
-    if (detailLayers.first)                                                       // ~vector: _Tidy
-        ::renddx9abi::engineFree(detailLayers.first);
-    detailLayers.first = 0;
-    detailLayers.last  = 0;
-    detailLayers.end   = 0;
+    // detailLayers' own destructor frees the vector after this body.
 }
 
 // the patch's file record: six header fields, the placement, the vertex buffer, the
@@ -516,7 +513,7 @@ void QuadPatch::load(TerrainRawReader& reader)
     const int half = t->m_patchCount / 2;
     const int nameX = half + gridX;
     const int nameZ = half + gridZ;
-    vc71::string name;
+    std::string name;
     formatString(name, "%02ix%02i", nameX, nameZ, 0);
     patchIndex = nameX + nameZ * t->m_patchCount;
 
@@ -524,17 +521,17 @@ void QuadPatch::load(TerrainRawReader& reader)
     {
         const int savedClass = dx9rend::textureManagerSwapDefaultMipClass(2);
         {
-            vc71::string colormapName(t->m_colormapBaseName.c_str());
+            std::string colormapName(t->m_colormapBaseName.c_str());
             colormapName += name;
             colormap = dx9rend::textureManagerGetTexture(colormapName);
         }
         if (!t->m_lowQuality)
             loadDetailMaps();
         dx9rend::textureManagerSwapDefaultMipClass(4);                            // the answer is discarded
-        vc71::string lowName(t->m_lowDetailmapBaseName.c_str());
+        std::string lowName(t->m_lowDetailmapBaseName.c_str());
         lowName += name;
         {
-            vc71::string dds(lowName.c_str());
+            std::string dds(lowName.c_str());
             dds += ".dds";
             if (::dice::hfe::fileManager->fileExists(::renddx9abi::makeHostString(dds)))
                 lowDetailmap = dx9rend::textureManagerGetTexture(lowName);
@@ -543,7 +540,7 @@ void QuadPatch::load(TerrainRawReader& reader)
     }
     const int savedClass7 = dx9rend::textureManagerSwapDefaultMipClass(7);
     {
-        vc71::string lightmapName(t->m_lightmapBaseName.c_str());
+        std::string lightmapName(t->m_lightmapBaseName.c_str());
         lightmapName += name;
         lightmap = dx9rend::textureManagerGetTexture(lightmapName);
     }
@@ -559,7 +556,7 @@ void QuadPatch::loadDetailLayers(TerrainRawReader& reader)
     for (int i = 0; i < t->m_detailTextureCount + 1; ++i)
     {
         QuadPatchDetailLayer* const null = 0;
-        vc71::vectorPushBackIn(detailLayers, 4u, &null);
+        detailLayers.push_back(null);
     }
     maxDetailLayerIndex = -1;
     int marker = 0;
@@ -574,10 +571,10 @@ void QuadPatch::loadDetailLayers(TerrainRawReader& reader)
         }
         else
         {
-            void* const storage = ::renddx9abi::engineAlloc(0x3C);
+            void* const storage = ::renddx9abi::engineAlloc(sizeof(QuadPatchDetailLayer));
             QuadPatchDetailLayer* const layer = storage ? new (storage) QuadPatchDetailLayer(t) : 0;
             detailIndex = layer->load(reader);                                    // unguarded, as shipped
-            reinterpret_cast<QuadPatchDetailLayer**>(detailLayers.first)[detailIndex] = layer;
+            detailLayers.data()[detailIndex] = layer;                             // unchecked index, as shipped
         }
         if (detailIndex < t->m_detailTextureCount)
         {
@@ -601,11 +598,11 @@ void QuadPatch::loadDetailMaps()
     {
         Terrain* const t = terrain;
         const int half = t->m_patchCount / 2;
-        vc71::string name;
+        std::string name;
         formatString(name, "%02ix%02i_%i", half + gridX, half + gridZ, k + 1);
         if (!detailMap[k] && threshold <= maxDetailLayerIndex)
         {
-            vc71::string full(t->m_detailmapBaseName.c_str());
+            std::string full(t->m_detailmapBaseName.c_str());
             full += name;
             detailMap[k] = dx9rend::textureManagerGetTexture(full);
         }
@@ -832,7 +829,6 @@ TerrainCullerNode::TerrainCullerNode()
 {
     patch = 0;
     lodTable = 0;
-    layerLodTables.first = 0; layerLodTables.last = 0; layerLodTables.end = 0;
     occlusionQuery = 0;
     bounds.min.x = 0.0f; bounds.min.y = 0.0f; bounds.min.z = 0.0f;
     bounds.max.x = 0.0f; bounds.max.y = 0.0f; bounds.max.z = 0.0f;
@@ -870,8 +866,6 @@ TerrainCuller::TerrainCuller()
     lodFactor28 = 2.0f;
     lodFactor2C = 2.7f;
     lodFactor30 = 3.0f;
-    visible.first = 0; visible.last = 0; visible.end = 0;
-    gathered.first = 0; gathered.last = 0; gathered.end = 0;
     frustum = 0;
     cameraPosition = 0;
     gatherCentre = 0;
@@ -897,11 +891,7 @@ TerrainCullerNode::~TerrainCullerNode()
 {
     if (occlusionQuery)
         dx9rend::queryReleaseRef(occlusionQuery);                                 // --ref; sub_10003FA0 + free at zero
-    if (layerLodTables.first)                                                     // ~vector: _Tidy
-        ::renddx9abi::engineFree(layerLodTables.first);
-    layerLodTables.first = 0;
-    layerLodTables.last  = 0;
-    layerLodTables.end   = 0;
+    // layerLodTables' own destructor frees the vector after this body.
 }
 
 // Destroys array nodes for modern terrain files or recursively frees legacy nodes.
@@ -913,8 +903,8 @@ TerrainCuller::~TerrainCuller()
     {
         if (nodes)
         {
-            unsigned int* const block = reinterpret_cast<unsigned int*>(nodes) - 1;
-            const int count = static_cast<int>(*block);
+            unsigned char* const block = reinterpret_cast<unsigned char*>(nodes) - kNodeCountHeader;
+            const int count = static_cast<int>(*reinterpret_cast<unsigned int*>(block));
             for (int i = count - 1; i >= 0; --i)                                  // `sub ecx,1 / js` - signed
                 nodes[i].~TerrainCullerNode();
             ::renddx9abi::engineFree(block);
@@ -933,17 +923,7 @@ TerrainCuller::~TerrainCuller()
         root->~TerrainCullerNode();
         ::renddx9abi::engineFree(root);
     }
-
-    if (gathered.first)                                                           // ~vector (+0x44): _Tidy
-        ::renddx9abi::engineFree(gathered.first);
-    gathered.first = 0;
-    gathered.last  = 0;
-    gathered.end   = 0;
-    if (visible.first)                                                            // ~vector (+0x34): _Tidy
-        ::renddx9abi::engineFree(visible.first);
-    visible.first = 0;
-    visible.last  = 0;
-    visible.end   = 0;
+    // gathered (+0x44) and visible (+0x34) are destroyed after this body, in that order.
 }
 
 // sub_100E3D10 - the pre-0x18 tree, one node at a time: the four subtrees when the first child is
@@ -1008,13 +988,13 @@ void TerrainCuller::load(TerrainRawReader& reader)
         versionFlag78 = 1;
     reader.readU32(&nodeCount);
     const int count = nodeCount;
-    unsigned int* const storage = static_cast<unsigned int*>(
-        ::renddx9abi::engineAlloc(static_cast<unsigned int>(272 * count + 4)));
+    unsigned char* const storage = static_cast<unsigned char*>(::renddx9abi::engineAlloc(
+        static_cast<unsigned int>(sizeof(TerrainCullerNode) * count + kNodeCountHeader)));
     TerrainCullerNode* first = 0;
     if (storage)
     {
-        *storage = static_cast<unsigned int>(count);
-        first = reinterpret_cast<TerrainCullerNode*>(storage + 1);
+        *reinterpret_cast<unsigned int*>(storage) = static_cast<unsigned int>(count);
+        first = reinterpret_cast<TerrainCullerNode*>(storage + kNodeCountHeader);
         for (int i = 0; i < count; ++i)
             new (first + i) TerrainCullerNode();
     }
@@ -1044,13 +1024,12 @@ void TerrainCuller::load(TerrainRawReader& reader)
         {
             node->lodTable = t->m_lodTables;
             QuadPatch* const patch = node->patch;                                 // unguarded, as shipped
-            const unsigned int layers = layerCount(patch->detailLayers);
+            const unsigned int layers = static_cast<unsigned int>(patch->detailLayers.size());
             for (unsigned int i = 0; i < layers; ++i)
             {
-                QuadPatchDetailLayer* const layer =
-                    reinterpret_cast<QuadPatchDetailLayer**>(patch->detailLayers.first)[i];
+                QuadPatchDetailLayer* const layer = patch->detailLayers[i];
                 unsigned char* const table = layer ? layer->lodTables : 0;
-                vc71::vectorPushBackIn(node->layerLodTables, 4u, &table);
+                node->layerLodTables.push_back(table);
             }
         }
         else if (!node->fileByteEC)
@@ -1061,15 +1040,15 @@ void TerrainCuller::load(TerrainRawReader& reader)
         {
             TerrainCullerNode* const parent = nodes + (k - 1) / 4;
             const int which = (k - 1) % 4;
-            node->lodTable = *reinterpret_cast<unsigned char**>(parent->lodTable + 384 + 4 * which);
-            const unsigned int layers = layerCount(node->patch->detailLayers);    // unguarded, as shipped
+            node->lodTable = reinterpret_cast<TerrainLodRecord*>(parent->lodTable)->children[which];   // +384 + 4 * which
+            const unsigned int layers =
+                static_cast<unsigned int>(node->patch->detailLayers.size());      // unguarded, as shipped
             for (unsigned int i = 0; i < layers; ++i)
             {
-                unsigned char* const parentTable =
-                    reinterpret_cast<unsigned char**>(parent->layerLodTables.first)[i];
+                unsigned char* const parentTable = parent->layerLodTables.data()[i];   // unchecked, as shipped
                 unsigned char* const table =
-                    parentTable ? *reinterpret_cast<unsigned char**>(parentTable + 384 + 4 * which) : 0;
-                vc71::vectorPushBackIn(node->layerLodTables, 4u, &table);
+                    parentTable ? reinterpret_cast<TerrainLodRecord*>(parentTable)->children[which] : 0;
+                node->layerLodTables.push_back(table);
             }
         }
     }
@@ -1144,8 +1123,7 @@ void TerrainAabb::refresh()
 // the zoom (floored at param14), the root walk, the crack fixup.
 void TerrainCuller::update()
 {
-    if (visible.first)                                                            // sub_100E7520(0, 0)
-        visible.last = visible.first;
+    visible.clear();                                                              // sub_100E7520(0, 0)
     dx9rend::IRenderView* const view = dx9rend::rendererGetRenderView();                   // base +0x48
     frustum = view->getFrustumPtr();                                              // +0x74
     cameraPosition = view->getViewMatrixPtr()->m + 12;                            // +0x64, row 3
@@ -1330,7 +1308,7 @@ void TerrainCuller::walkMode3(TerrainCullerNode* parent)
             child->lod = 0;
         }
         if (child->fileByteEE)
-            vc71::vectorPushBackIn(visible, 4u, &child);
+            visible.push_back(child);
         else
             walkMode3(child);
         ++parent->childrenWalked;
@@ -1357,8 +1335,8 @@ void TerrainCuller::setLod(TerrainCullerNode* node, int lod)
 // drops to LOD 1 and the mask stays 0.
 void TerrainCuller::fixCracks()
 {
-    TerrainCullerNode** const first = reinterpret_cast<TerrainCullerNode**>(visible.first);
-    TerrainCullerNode** const last  = reinterpret_cast<TerrainCullerNode**>(visible.last);
+    TerrainCullerNode** const first = visible.data();
+    TerrainCullerNode** const last  = first + visible.size();
     if (versionFlag78)
     {
         for (TerrainCullerNode** it = first; it != last; ++it)
@@ -1517,8 +1495,7 @@ void TerrainCuller::fixCracks()
 // clear the gathered list, take the centre and radius, walk from the root.
 void TerrainCuller::gatherSphere(const float* centre, float radius)
 {
-    if (gathered.first)                                                           // sub_100E7520(0, 0)
-        gathered.last = gathered.first;
+    gathered.clear();                                                             // sub_100E7520(0, 0)
     gatherRadius = radius;
     gatherRadiusSq = radius * radius;
     gatherCentre = centre;
@@ -1545,15 +1522,14 @@ void TerrainCuller::gatherNode(TerrainCullerNode* node)
     if (static_cast<double>(radius) + gatherRadius > std::sqrt(dz * dz + dx * dx + dy * dy))
     {
         if (node->patch)
-            vc71::vectorPushBackIn(gathered, 4u, &node);
+            gathered.push_back(node);
     }
 }
 
 // Gathers sphere-overlapping patches from this frame's visible terrain tree.
 void TerrainCuller::gatherVisibleSphere(const float* centre, float radius)
 {
-    if (gathered.first)                                                           // sub_100E7520(0, 0)
-        gathered.last = gathered.first;
+    gathered.clear();                                                             // sub_100E7520(0, 0)
     gatherCentre = centre;
     gatherRadiusSq = radius * radius;
     gatherRadius = radius;
@@ -1587,7 +1563,7 @@ void TerrainCuller::gatherVisibleNode(TerrainCullerNode* node)
     const float distance = std::sqrt(dz * dz + dx * dx + dy * dy);          // the float overload
     const float reach = radius + gatherRadius;
     if (reach > distance && node->patch)
-        vc71::vectorPushBackIn(gathered, 4u, &node);
+        gathered.push_back(node);
 }
 
 
@@ -1635,8 +1611,8 @@ void QuadPatch::draw(TerrainCullerNode**& it)
         s_vertexCount = static_cast<unsigned int>((n + 1) * (n + 1));
     }
     beginPatchDraw(this);
-    vc71::vector_layout* const list = t->m_culler->visiblePatches();
-    TerrainCullerNode** const end = reinterpret_cast<TerrainCullerNode**>(list->last);
+    std::vector<TerrainCullerNode*>* const list = t->m_culler->visiblePatches();
+    TerrainCullerNode** const end = list->data() + list->size();
     if (t->m_mergeDrawRanges == 0)
     {
         while (it != end)
@@ -1696,7 +1672,7 @@ void QuadPatch::draw(TerrainCullerNode**& it)
 
 // Draws gathered nodes while advancing it, switching passes and morph constants as needed.
 // The default mode uses uncracked index ranges. Counts primitives, without merging ranges.
-void QuadPatch::drawGatheredNodes(TerrainCullerNode**& it, vc71::vector_layout* list,
+void QuadPatch::drawGatheredNodes(TerrainCullerNode**& it, std::vector<TerrainCullerNode*>* list,
                                   int passLod0, int passOther)
 {
     static unsigned int s_once = 0;                                               // dword_10261A0C
@@ -1710,7 +1686,7 @@ void QuadPatch::drawGatheredNodes(TerrainCullerNode**& it, vc71::vector_layout* 
         s_vertexCount = static_cast<unsigned int>((n + 1) * (n + 1));
     }
     beginPatchDraw(this);
-    if (it == reinterpret_cast<TerrainCullerNode**>(list->last))
+    if (it == list->data() + list->size())
         return;
     do
     {
@@ -1738,7 +1714,7 @@ void QuadPatch::drawGatheredNodes(TerrainCullerNode**& it, vc71::vector_layout* 
         drawPatchRange(t, static_cast<unsigned int>(prims), s_vertexCount, start);
         terrainRendererStat(0x270) += static_cast<unsigned int>(prims);           // Renderer +0x6C, then +0x270
         ++it;
-    } while (it != reinterpret_cast<TerrainCullerNode**>(list->last));
+    } while (it != list->data() + list->size());
 }
 
 // (132 B) - "TerrainPointLight": this patch's run of the culler's gathered list (the
@@ -1772,8 +1748,8 @@ void QuadPatch::drawFinal(TerrainCullerNode**& it)
     }
     beginPatchDraw(this);
     TerrainCullerNode** const begin = it;
-    vc71::vector_layout* const list = t->m_culler->visiblePatches();
-    TerrainCullerNode** const end = reinterpret_cast<TerrainCullerNode**>(list->last);
+    std::vector<TerrainCullerNode*>* const list = t->m_culler->visiblePatches();
+    TerrainCullerNode** const end = list->data() + list->size();
     currentDetailMap = -1;
     int previous = -2;
     if (!t->m_lowQualityB)
@@ -1793,8 +1769,7 @@ void QuadPatch::drawFinal(TerrainCullerNode**& it)
             }
             if (t->m_hiddenDetailLayer != -1 && t->m_hiddenDetailLayer == layer)
                 continue;
-            QuadPatchDetailLayer* const detailLayer =
-                reinterpret_cast<QuadPatchDetailLayer**>(detailLayers.first)[layer];
+            QuadPatchDetailLayer* const detailLayer = detailLayers.data()[layer];   // unchecked, as shipped
             if (!detailLayer)
                 continue;
             it = begin;
@@ -1812,7 +1787,7 @@ void QuadPatch::drawFinal(TerrainCullerNode**& it)
                 if (!bound)
                 {
                     TerrainDetailTexture* const record =
-                        reinterpret_cast<TerrainDetailTexture**>(t->m_detailTextures.first)[detailLayer->detailIndex];
+                        t->m_detailTextures.data()[detailLayer->detailIndex];
                     if (t->m_currentLod != 0)
                         t->setMorphConstants(0);
                     dx9rend::indexBufferBind(detailLayer->indexBuffer);
@@ -1827,9 +1802,10 @@ void QuadPatch::drawFinal(TerrainCullerNode**& it)
                             currentDetailMap = map;
                             param(t->m_hTexLayer[2])->setValue(detailMap[map], 0);
                         }
-                        // The real EnvMapManager now owns the borrowed texture at +64.
+                        // The real EnvMapManager now owns the borrowed texture (retail +0x64).
                         void* envTexture = record->planeMap ? 0 :
-                            *reinterpret_cast<void**>(reinterpret_cast<unsigned char*>(terrainEnvMapManager()) + 0x64);
+                            static_cast<void*>(static_cast<Rend::EnvMapManager*>(
+                                terrainEnvMapManager())->m_currentTexture);
                         if (layer == t->m_currentDetailLayer)
                         {
                             if (record->planeMap)
@@ -1872,7 +1848,7 @@ void QuadPatch::drawFinal(TerrainCullerNode**& it)
                     bound = true;
                 }
                 const unsigned int* const table =
-                    reinterpret_cast<unsigned int**>(node->layerLodTables.first)[layer];
+                    reinterpret_cast<const unsigned int*>(node->layerLodTables.data()[layer]);
                 const unsigned int count = table[48];
                 if (!count)
                 {
@@ -2007,21 +1983,21 @@ void QuadPatch::drawShadow()
     {
         for (unsigned int k = 0; ; ++k)
         {
-            const vc71::vector_layout& ranges = t->m_shadowRanges;
-            if (!ranges.first || k >= static_cast<unsigned int>((ranges.last - ranges.first) / 24))
+            const std::vector<TerrainShadowRange>& ranges = t->m_shadowRanges;
+            if (k >= ranges.size())
                 break;
-            const unsigned int* const record = reinterpret_cast<const unsigned int*>(ranges.first + 24 * k);
-            const TerrainCullerNode* const node = reinterpret_cast<const TerrainCullerNode*>(record[3]);
-            const unsigned char* const shadow = reinterpret_cast<const unsigned char*>(record[2]);
-            if (node->lod == lod && static_cast<int>(record[5]) == patchIndex)
+            const TerrainShadowRange& record = ranges[k];
+            const TerrainCullerNode* const node = record.node;
+            const unsigned char* const shadow = record.shadowRecord;
+            if (node->lod == lod && record.patchIndex == patchIndex)
             {
                 param(t->m_hLightViewProj)->setValue(shadow + 952, 0);
                 param(t->m_hLightViewProjOrtho)->setValue(shadow + 760, 0);
                 param(t->m_hTexLayer[0])->setValue(lightmap, 0);
                 if (t->m_currentLod != lod)
                     t->setMorphConstants(lod);
-                const unsigned int prims = record[1] / 3;
-                drawPatchRange(t, prims, s_vertexCount, record[0]);
+                const unsigned int prims = record.count / 3;
+                drawPatchRange(t, prims, s_vertexCount, record.start);
                 terrainRendererStat(624) += prims;
             }
         }
@@ -2036,10 +2012,9 @@ void QuadPatch::drawShadow()
 bool QuadPatch::gatherShadowRanges(void** lockedIndices, int* cursor)
 {
     unsigned char any = 0;
-    const vc71::vector_layout& records = terrainShadowRecords();
     for (unsigned int i = 0; ; ++i)
     {
-        if (!records.first || i >= static_cast<unsigned int>((records.last - records.first) / 1176))
+        if (i >= terrainShadowRecordCount())                                      // the LightManager's +0x79C records
             break;
         (void)lockedIndices;
         (void)cursor;
@@ -2055,7 +2030,7 @@ bool QuadPatch::gatherShadowRanges(void** lockedIndices, int* cursor)
 // (dword_1026743C: sub_101BBE20 binds the settings, sub_101BBEB0 takes a pooled adapter and
 // queues the entry). All of it is read; none of it is written, because no shipped shader defines
 // the "ShaderVersion" that selects this arm (see TerrainDraw.cpp) - it stops at the adapter.
-void QuadPatch::drawWater(TerrainCullerNode**& it, vc71::vector_layout* list,
+void QuadPatch::drawWater(TerrainCullerNode**& it, std::vector<TerrainCullerNode*>* list,
                           void* materialParameters, void* objectParameters)
 {
     static unsigned int s_once = 0;                                               // dword_1026326C
@@ -2073,7 +2048,7 @@ void QuadPatch::drawWater(TerrainCullerNode**& it, vc71::vector_layout* list,
                  "sub_101BC7C0), read but unwritten; reachable only when a water RaShader defines "
                  "ShaderVersion == 1)", 0x00);
     // Continue mode only: skip this patch's entries so the caller's loop can end. Not recovered.
-    TerrainCullerNode** const end = reinterpret_cast<TerrainCullerNode**>(list->last);
+    TerrainCullerNode** const end = list->data() + list->size();
     while (it != end && (*it)->patch == this)
         ++it;
 }

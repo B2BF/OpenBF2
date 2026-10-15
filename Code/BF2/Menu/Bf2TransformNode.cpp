@@ -16,6 +16,7 @@ void (*editorHudNodeUpdated)(Bf2TransformNode*, float, float, float, float) = nu
 namespace {
 bool sumNotLess(float first, float second, float limit) // 7C1ED1..7C1EEE, unordered passes
 {
+#if defined(_M_IX86)
     bool result;
     __asm {
         fld first
@@ -26,9 +27,16 @@ bool sumNotLess(float first, float second, float limit) // 7C1ED1..7C1EEE, unord
         setp result
     }
     return result;
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    // setp after test ah,5: false only for an ordered sum below the limit.
+    const double sum = static_cast<double>(first) + second;
+    return !(sum < limit);
+#endif
 }
 bool stateEnabled(float value) // 7C1EF3..7C1F24; decoded value stays in x87
 {
+#if defined(_M_IX86)
     const float one = 1.0f;
     bool result;
     __asm {
@@ -47,6 +55,12 @@ bool stateEnabled(float value) // 7C1EF3..7C1F24; decoded value stays in x87
         setp result
     }
     return result;
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    // Only an ordered negative value is decoded; unordered compares pass.
+    const double decoded = value < 0.0f ? -(static_cast<double>(value) + 1.0) : value;
+    return !(decoded < 1.0);
+#endif
 }
 
 // [INFERRED] descriptor class name. Counter A22194 has only the add/sub/get
@@ -200,7 +214,9 @@ namespace {
 // pointer); native C++ supplies the guard/teardown spelling.
 TypeDescriptor* const registeredBf2TransformNodeType = Bf2TransformNode::getClassType();
 }
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2TransformNodeTypeDescriptor) == 16, "client BF2 transform metadata");
 static_assert(sizeof(Bf2TransformNode) == 0x3C, "client BF2 named TransformNode");
+#endif
 } }
 #endif

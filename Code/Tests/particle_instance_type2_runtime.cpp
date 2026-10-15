@@ -28,7 +28,6 @@ int main()
     ParticleSystemManager manager={}; manager.m_vptr=const_cast<const void**>(kVtable);
     manager.m_poolsInitialized=1; manager.m_qualityLevel=2; manager.m_effectiveViewDistance=1000;
     manager.m_type2PoolCount=8;
-    psmReclassification(&manager).construct();
     psmAllocatePool(manager.m_type2PoolBacking,manager.m_type2FreeList,manager.m_type2PoolCount,168,2);
     g_ParticleSystemManager=reinterpret_cast<IBase*>(&manager);
     unsigned char constants[0x200]={}; dx9rend::g_raShaderConstants=constants;
@@ -130,7 +129,7 @@ int main()
     // Destructor has its own wrapped-ring free walk; it must not depend on null termination.
     first=trailTake(manager); second=trailTake(manager); ring[15]=first; ring[0]=second;
     psmRuntimeField<unsigned int>(instance,0x178)=15; psmRuntimeField<unsigned int>(instance,0x174)=1;
-    instance->destroy(); manager.m_instances.last=manager.m_instances.first;
+    instance->destroy(); manager.m_instances.clear();
     CHECK(manager.m_type2FreeList==second && psmRuntimeField<void*>(second,0)==first);
 
     // Capacity selection uses lifetime or the shorter finite emit time, then a power-of-two ring.
@@ -143,7 +142,7 @@ int main()
     instance=psmCreateType2Instance(descriptor); CHECK(instance->reserved34()==2048); instance->destroy();
     freeList(manager.m_instances); freeList(manager.m_pendingDestroy); freeList(manager.m_pendingClassification);
     for(int i=0;i<10;++i) freeList(manager.m_renderBuckets[i]);
-    psmReclassification(&manager).destroy(); cleanup();
+    cleanup();
     std::printf("Trail particle lifecycle/transform: %d/%d checks passed\n",checks-failures,checks);
     return failures?1:0;
 }

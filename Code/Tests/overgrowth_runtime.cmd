@@ -12,7 +12,6 @@ cl /nologo /EHsc /O2 /std:c++14 /permissive /MD /D_ITERATOR_DEBUG_LEVEL=0 ^
  /FI"%TASK_ROOT%\BF2\Core\BuildConfig.h" ^
  "%TASK_ROOT%\Tests\overgrowth_runtime.cpp" ^
  "%TASK_ROOT%\BF2\Geom\Overgrowth\OverGrowth.cpp" ^
- "%TASK_ROOT%\RendDX9Abi\Vc71String.cpp" ^
  /Fe"%BF2_BUILD_OUT%\overgrowth_runtime.exe" /link /INCREMENTAL:NO ^
  >"%BF2_BUILD_OUT%\build.log" 2>&1
 if errorlevel 1 (

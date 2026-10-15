@@ -40,7 +40,9 @@ int RelativeIStream::getPosition()
         + static_cast<unsigned int>(m_skippedBytes)
         - static_cast<unsigned int>(m_initialPosition));
 }
+#if defined(_M_IX86)
 static_assert(sizeof(TeeIStream) == 20, "client recording input layout");
 static_assert(sizeof(RelativeIStream) == 24, "client relative input layout");
+#endif
 } }
 #endif

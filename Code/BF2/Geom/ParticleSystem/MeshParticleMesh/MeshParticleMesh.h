@@ -10,8 +10,8 @@
 #include "../../GeometryInstanceData.h"
 #include "../../../Math/Mat4.h"
 #include "../../../Math/Vec3.h"
-#include "../../../../RendDX9Abi/Vc71Vector.h"
 #include <cstddef>
+#include <vector>
 
 namespace dice {
 namespace hfe {
@@ -19,6 +19,7 @@ namespace geom {
 
 class  MeshParticleMeshTemplate;
 struct MeshParticleMeshLod;
+struct MeshParticleMeshMaterial;
 
 // Batches type-1 particles and queues legacy Particle/Bundle geometry for drawExtras.
 // Retail vtables are adapter arrays in MeshParticleMesh.cpp; preserve all 64 primary slots.
@@ -77,14 +78,14 @@ public:
     // current (geom, lod). Not a vtable slot. The constructor inlines the same body.
     void  refreshSelection();
 
-    // layout
+    // layout; the `+0xNN` comments are the retail offsets
     void* const*              m_scaleableVptr;   // +0x030
     int                       m_refCount;        // +0x034
     const Mat4**              m_partTransforms;  // +0x038  26 entries
     unsigned int              m_dword3C;         // +0x03C  ctor 0 [UNRESOLVED]
     float                     m_fov;             // +0x040  ctor -1.0f
     MeshParticleMeshLod*      m_lodRecord;       // +0x044
-    vc71::vector_layout*      m_lodMaterials;    // +0x048  vector<MeshParticleMeshMaterial>
+    std::vector<MeshParticleMeshMaterial>* m_lodMaterials; // +0x048  the template's lod materials
     int                       m_geomIndex;       // +0x04C
     int                       m_lodIndex;        // +0x050
     unsigned char             m_lodExplicit;     // +0x054
@@ -100,21 +101,7 @@ public:
 };
 
 #if defined(_M_IX86)
-#define BF2_MPM_OFFSET(member, offset) \
-    static_assert(offsetof(MeshParticleMesh, member) == offset, #member)
-BF2_MPM_OFFSET(m_name, 0x04);           BF2_MPM_OFFSET(m_float28, 0x28);
-BF2_MPM_OFFSET(m_scaleableVptr, 0x30);  BF2_MPM_OFFSET(m_refCount, 0x34);
-BF2_MPM_OFFSET(m_partTransforms, 0x38); BF2_MPM_OFFSET(m_dword3C, 0x3C);
-BF2_MPM_OFFSET(m_fov, 0x40);            BF2_MPM_OFFSET(m_lodRecord, 0x44);
-BF2_MPM_OFFSET(m_lodMaterials, 0x48);   BF2_MPM_OFFSET(m_geomIndex, 0x4C);
-BF2_MPM_OFFSET(m_lodIndex, 0x50);       BF2_MPM_OFFSET(m_lodExplicit, 0x54);
-BF2_MPM_OFFSET(m_dword58, 0x58);        BF2_MPM_OFFSET(m_scale, 0x5C);
-BF2_MPM_OFFSET(m_unknown6C, 0x6C);      BF2_MPM_OFFSET(m_firstPerson, 0x7C);
-BF2_MPM_OFFSET(m_alternateView, 0x7D);  BF2_MPM_OFFSET(m_alpha, 0x80);
-BF2_MPM_OFFSET(m_template, 0x84);
-#undef BF2_MPM_OFFSET
-static_assert(sizeof(MeshParticleMesh) == 0x88,
-              "MeshParticleMeshTemplate::createInstance (0x10127870) allocates 0x88");
+static_assert(offsetof(MeshParticleMesh, m_name) == 0x04, "m_name");
 #endif
 
 // The retail primary and IScaleable tables as adapter arrays (MeshParticleMesh.cpp).
@@ -129,9 +116,10 @@ void* meshParticleMeshDestroyFlags(void* instance, unsigned char flags);
 void  meshParticleMeshRefreshSelection(MeshParticleMesh* instance);
 
 // sub_101B04C0 (84 B) - the MeshParticlesRenderer's inline push_back onto its retained pointer list
-// at renderer +0x1D80 (a VC7.1 vector_layout; the renderer's constructor zeroes +0x1D84..+0x1D8C).
+// at renderer +0x1D80 (a std::vector the renderer's constructor builds in place).
 // The body sits in this TU's address range because MSVC instantiated the renderer's inline member
-// here; IGeometry +0x18 is its only caller. `renderer` is g_ParticleSystemManager + 0x5F30.
+// here; IGeometry +0x18 is its only caller. `renderer` is the manager's embedded MeshParticles
+// renderer (retail g_ParticleSystemManager + 0x5F30).
 void  meshParticlesRendererQueueMesh(unsigned char* renderer, MeshParticleMesh* mesh);
 
 } // namespace geom

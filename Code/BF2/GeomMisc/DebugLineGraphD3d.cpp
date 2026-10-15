@@ -2,11 +2,12 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
+#include "../../RendDX9Abi/ThunkAbi.h"
 #include "../../RendDX9Abi/HfeAbi.h"
 #include "../../RendDX9Abi/ModuleCommon.h"
 #include "../../RendDX9Abi/BfMemory.h"
 #include "../../RendDX9Abi/Frontier.h"
-#include "../../RendDX9Abi/Vc71String.h"
+#include <string>
 
 #include <stdio.h>
 
@@ -14,9 +15,9 @@ namespace dice { namespace hfe { namespace dx9rend {
 class Effect;
 extern void* g_bufferManager;
 extern void* g_shaderManager;
-void* createVertexBuffer(void*, unsigned int, unsigned int, const vc71::string&, unsigned int);
+void* createVertexBuffer(void*, unsigned int, unsigned int, const std::string&, unsigned int);
 void* shaderManagerGetEffect(void*, const char*);
-void* effectGetShaderParameter(Effect*, const vc71::string&);
+void* effectGetShaderParameter(Effect*, const std::string&);
 } } }
 
 #include <new>
@@ -43,7 +44,7 @@ public:
     int   release();
 
     void setRect(const float* rect);
-    void setName(const vc71::string& name);
+    void setName(const std::string& name);
     void setColors(unsigned a, unsigned b, unsigned c);
     void setHistorySize(int n);
     void setBounds(unsigned a, unsigned b) { m_bounds0 = a; m_bounds1 = b; }
@@ -78,7 +79,7 @@ private:
     float         m_seenMax;         // +0x48
     unsigned char m_seeded;          // +0x4C
     unsigned char m_pad4D[3];
-    vc71::string  m_name;            // +0x50
+    std::string  m_name;            // +0x50
     unsigned int  m_dword6C;         // +0x6C   not written by either constructor
     unsigned int  m_block70[5];      // +0x70 .. +0x80
     unsigned char m_byte84;          // +0x84   ctor: 1
@@ -87,34 +88,31 @@ private:
     float         m_lastSample;      // +0x88
     unsigned int  m_dword8C;         // +0x8C
     unsigned int  m_dword90;         // +0x90
-    vc71::string  m_string94;        // +0x94
+    std::string  m_string94;        // +0x94
     int           m_refCount;        // +0xB0   ctor: 1
     int           m_stride;          // +0xB4
     int           m_vertexCount;     // +0xB8   ctor: 801
     int           m_bufferBytes;     // +0xBC   not written by the constructor
     int           m_dwordC0;         // +0xC0
-    vc71::string  m_className;       // +0xC4   "DebugLineGraph"
+    std::string  m_className;       // +0xC4   "DebugLineGraph"
     void*         m_vertexBuffer;    // +0xE0
     void*         m_effect;          // +0xE4
     void*         m_paramGraphSize;  // +0xE8
     void*         m_paramViewPort;   // +0xEC
 };
 
-static_assert(sizeof(DebugLineGraphD3D) == 0xF0,
-              "RefFactory_geom_DebugLineGraph allocates 0xF0 - see 0x1007CC2C");
-
 namespace {
 
-void  __fastcall dlg_addRef(void* s, void*) { static_cast<DebugLineGraphD3D*>(s)->addRef(); }
-int   __fastcall dlg_release(void* s, void*) { return static_cast<DebugLineGraphD3D*>(s)->release(); }
-void* __fastcall dlg_queryInterface(void* s, void*, unsigned int iid)
+void  RD9_THUNK dlg_addRef(void* s RD9_THUNK_EDX) { static_cast<DebugLineGraphD3D*>(s)->addRef(); }
+int   RD9_THUNK dlg_release(void* s RD9_THUNK_EDX) { return static_cast<DebugLineGraphD3D*>(s)->release(); }
+void* RD9_THUNK dlg_queryInterface(void* s RD9_THUNK_EDX, unsigned int iid)
 {
     return static_cast<DebugLineGraphD3D*>(s)->queryInterface(iid);
 }
 
 // +0x10, sub_100A26B0. Four floats to +0x08..+0x14, then return 1. The original writes index 3
 // before index 2 - compiler scheduling, same net effect.
-char __fastcall dlg_setRect(void* s, void*, const float* rect)
+char RD9_THUNK dlg_setRect(void* s RD9_THUNK_EDX, const float* rect)
 {
     RD9_TRACE_AT("dice::hfe::geom::DebugLineGraphD3D::setRect", s, 0x10);
     static_cast<DebugLineGraphD3D*>(s)->setRect(rect);
@@ -122,21 +120,21 @@ char __fastcall dlg_setRect(void* s, void*, const float* rect)
 }
 
 // +0x18, sub_10096470. One statement: `this->name(+0x50) = a2`.
-void __fastcall dlg_setName(void* s, void*, const vc71::string& n)
+void RD9_THUNK dlg_setName(void* s RD9_THUNK_EDX, const std::string& n)
 {
     RD9_TRACE_AT("dice::hfe::geom::DebugLineGraphD3D::setName", s, 0x18);
     static_cast<DebugLineGraphD3D*>(s)->setName(n);
 }
 
 // +0x28, sub_10096480. One byte store at +0x05 - see the field's note for why it is not "built".
-char __fastcall dlg_setFlag05(void* s, void*, char v)
+char RD9_THUNK dlg_setFlag05(void* s RD9_THUNK_EDX, char v)
 {
     static_cast<DebugLineGraphD3D*>(s)->setFlag05(static_cast<unsigned char>(v));
     return v;
 }
 
 // Adds a sample through the void plugin slot. Returning a floating-point value would leave an unused x87 result.
-void __fastcall dlg_addSample(void* s, void*, float v)
+void RD9_THUNK dlg_addSample(void* s RD9_THUNK_EDX, float v)
 {
     static_cast<DebugLineGraphD3D*>(s)->addSample(v);
 }
@@ -144,7 +142,7 @@ void __fastcall dlg_addSample(void* s, void*, float v)
 // +0x1C, sub_10095C40 -> sub_100A2610. A thunk onto a two-field setter: `this[14] = a; this[15] = b`
 // at +0x38 and +0x3C. Renderer::initialize passes (0, <float>) - 100.0f, 60.0f and 584.0f for the
 // three graphs.
-void __fastcall dlg_setBounds(void* s, void*, unsigned a, unsigned b)
+void RD9_THUNK dlg_setBounds(void* s RD9_THUNK_EDX, unsigned a, unsigned b)
 {
     RD9_TRACE_AT("dice::hfe::geom::DebugLineGraphD3D::setBounds", s, 0x1C);
     static_cast<DebugLineGraphD3D*>(s)->setBounds(a, b);
@@ -152,7 +150,7 @@ void __fastcall dlg_setBounds(void* s, void*, unsigned a, unsigned b)
 
 // +0x44, sub_100A25E0. Three dwords to +0x18/+0x1C/+0x20. Neither constructor writes them, so this
 // is their only initialiser.
-void __fastcall dlg_setColors(void* s, void*, unsigned a, unsigned b, unsigned c)
+void RD9_THUNK dlg_setColors(void* s RD9_THUNK_EDX, unsigned a, unsigned b, unsigned c)
 {
     RD9_TRACE_AT("dice::hfe::geom::DebugLineGraphD3D::setColors", s, 0x44);
     static_cast<DebugLineGraphD3D*>(s)->setColors(a, b, c);
@@ -160,14 +158,14 @@ void __fastcall dlg_setColors(void* s, void*, unsigned a, unsigned b, unsigned c
 
 // +0x4C, sub_100A2630. guarded, and the guard is the whole of it: `if (lo >= hi) return 0;`. An
 // inverted range is rejected outright rather than clamped.
-char __fastcall dlg_setRange(void* s, void*, float lo, float hi)
+char RD9_THUNK dlg_setRange(void* s RD9_THUNK_EDX, float lo, float hi)
 {
     RD9_TRACE_AT("dice::hfe::geom::DebugLineGraphD3D::setRange", s, 0x4C);
     return static_cast<DebugLineGraphD3D*>(s)->setRange(lo, hi) ? 1 : 0;
 }
 
 // +0x50, sub_100A2660. One byte store at +0x40.
-char __fastcall dlg_setEnabled(void* s, void*, char v)
+char RD9_THUNK dlg_setEnabled(void* s RD9_THUNK_EDX, char v)
 {
     RD9_TRACE_AT("dice::hfe::geom::DebugLineGraphD3D::setEnabled", s, 0x50);
     static_cast<DebugLineGraphD3D*>(s)->setEnabled(static_cast<unsigned char>(v));
@@ -178,7 +176,7 @@ char __fastcall dlg_setEnabled(void* s, void*, char v)
 // Initializes sample history, vertex storage and graph shader parameters.
 // Must complete before addSample, which requires an allocated ring buffer.
 
-void __fastcall dlg_setHistorySize(void* s, void*, int n)
+void RD9_THUNK dlg_setHistorySize(void* s RD9_THUNK_EDX, int n)
 {
     RD9_TRACE_AT("dice::hfe::geom::DebugLineGraphD3D::setHistorySize", s, 0x3C);
 
@@ -187,7 +185,7 @@ void __fastcall dlg_setHistorySize(void* s, void*, int n)
 }
 
 #define RD9_DLG_SLOT(name, slotOffset, addr)                                        \
-    void __fastcall name(void* s, void*)                                            \
+    void RD9_THUNK name(void* s RD9_THUNK_EDX)                                            \
     {                                                                               \
         RD9_FRONTIER_AT("dice::hfe::geom::DebugLineGraphD3D::slot_" #slotOffset      \
                         " (" #addr ")", s, 0x00);                                   \
@@ -296,7 +294,10 @@ int DebugLineGraphD3D::release()
 {
     const int remaining = --m_refCount;
     if (remaining == 0)
+    {
+        this->~DebugLineGraphD3D();          // the three name strings
         ::renddx9abi::engineFree(this);
+    }
     return remaining;
 }
 
@@ -329,7 +330,7 @@ void DebugLineGraphD3D::setHistorySize(int n)
     m_vertexBuffer = ::dice::hfe::dx9rend::createVertexBuffer(
         ::dice::hfe::dx9rend::g_bufferManager,
         static_cast<unsigned int>(m_vertexCount), static_cast<unsigned int>(m_stride),
-        vc71::string("DebugLineGraphD3D"), 520u);
+        std::string("DebugLineGraphD3D"), 520u);
 
     // Use the class name for the shared shader; the per-graph name may not yet be set.
     char shaderPath[128];
@@ -340,13 +341,13 @@ void DebugLineGraphD3D::setHistorySize(int n)
     if (m_effect)
     {
         m_paramGraphSize = ::dice::hfe::dx9rend::effectGetShaderParameter(
-            static_cast<::dice::hfe::dx9rend::Effect*>(m_effect), vc71::string("GRAPHSIZE"));
+            static_cast<::dice::hfe::dx9rend::Effect*>(m_effect), std::string("GRAPHSIZE"));
         if (!m_paramGraphSize)
             ::renddx9abi::logf("DebugLineGraphD3d.cpp:95 Could not load m_paramGraphSize parameter "
                                "from shader");
 
         m_paramViewPort = ::dice::hfe::dx9rend::effectGetShaderParameter(
-            static_cast<::dice::hfe::dx9rend::Effect*>(m_effect), vc71::string("VIEWPORTSIZE"));
+            static_cast<::dice::hfe::dx9rend::Effect*>(m_effect), std::string("VIEWPORTSIZE"));
         if (!m_paramViewPort)
             ::renddx9abi::logf("DebugLineGraphD3d.cpp:103 Could not load m_paramViewPort parameter "
                                "from shader");
@@ -354,11 +355,10 @@ void DebugLineGraphD3D::setHistorySize(int n)
 
     m_flag05 = 1;
 
-    ::renddx9abi::logf("DebugLineGraphD3D::setHistorySize(%d) \"%s\": ring=0x%08X vb=0x%08X "
-                       "effect=0x%08X graphSize=0x%08X viewPort=0x%08X", n, m_className.c_str(),
-                       ::renddx9abi::addr(m_samples), ::renddx9abi::addr(m_vertexBuffer),
-                       ::renddx9abi::addr(m_effect), ::renddx9abi::addr(m_paramGraphSize),
-                       ::renddx9abi::addr(m_paramViewPort));
+    ::renddx9abi::logf("DebugLineGraphD3D::setHistorySize(%d) \"%s\": ring=0x%p vb=0x%p "
+                       "effect=0x%p graphSize=0x%p viewPort=0x%p", n, m_className.c_str(),
+                       static_cast<const void*>(m_samples), m_vertexBuffer, m_effect,
+                       m_paramGraphSize, m_paramViewPort);
 }
 
 
@@ -411,7 +411,7 @@ void DebugLineGraphD3D::setRect(const float* rect)
     m_rect[3] = rect[3];
 }
 
-void DebugLineGraphD3D::setName(const vc71::string& name) { m_name = name; }
+void DebugLineGraphD3D::setName(const std::string& name) { m_name = name; }
 
 void DebugLineGraphD3D::setColors(unsigned a, unsigned b, unsigned c)
 {

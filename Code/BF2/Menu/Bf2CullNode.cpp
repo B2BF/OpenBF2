@@ -44,6 +44,7 @@ char* cloneCullNodeName(const char* name)
 // Names are [INFERRED]. Typed float storage avoids any cross-build field offset.
 void decreaseCullFade(float& current, float delta, float duration)
 {
+#if defined(_M_IX86)
     const float zero = 0.0f;
     __asm {
         mov ecx, current
@@ -58,9 +59,17 @@ void decreaseCullFade(float& current, float delta, float duration)
         mov dword ptr [ecx], 0
     decreased:
     }
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    // The rounded value is stored first; only an ordered negative result then becomes +0.
+    const double unrounded = static_cast<double>(current) - static_cast<double>(delta) / duration;
+    current = static_cast<float>(unrounded);
+    if (unrounded < 0.0) current = 0.0f;
+#endif
 }
 void increaseCullFade(float& current, float delta, float duration)
 {
+#if defined(_M_IX86)
     const float one = 1.0f;
     __asm {
         mov ecx, current
@@ -75,6 +84,13 @@ void increaseCullFade(float& current, float delta, float duration)
         mov dword ptr [ecx], 3F800000h
     increased:
     }
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    // The rounded value is stored first; only an ordered result above one is then clamped.
+    const double unrounded = static_cast<double>(delta) / duration + current;
+    current = static_cast<float>(unrounded);
+    if (unrounded > 1.0) current = 1.0f;
+#endif
 }
 }
 
@@ -173,7 +189,9 @@ bool Bf2CullNode::update(System* system, const NodeState* state,
     m_previousVisibility = visible;
     return true;
 }
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2CullNodeTypeDescriptor) == 16, "client Bf2CullNode metadata");
 static_assert(sizeof(Bf2CullNode) == 32, "client Bf2CullNode storage");
+#endif
 } }
 #endif

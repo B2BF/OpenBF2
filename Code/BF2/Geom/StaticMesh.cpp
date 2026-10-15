@@ -1,6 +1,7 @@
 // Static-mesh instance rendering, visibility and shadow state.
 
 
+#include "../../RendDX9Abi/ThunkAbi.h"
 #include "StaticMesh.h"
 
 #ifdef BF2_IMAGE_RENDDX9
@@ -10,7 +11,6 @@
 #include "../../RendDX9Abi/EngineFile.h"      // engineFileExists / readEngineFile
 #include "../../RendDX9Abi/Frontier.h"
 #include "../../RendDX9Abi/PluginEntry.h"     // classManager - the WindManager lookup
-#include "../../RendDX9Abi/Vc71Map.h"         // the int-keyed lightmap-cache node
 #include "../Core/Ids.h"                      // IID_IGeometry / IRenderable / ILightSampleable
 #include "../Game/Main/IVideoOptions.h"
 #include "../Game/Objects/IObject.h"          // the owner's getIsOvergrowth
@@ -30,6 +30,7 @@
 #include "MeshTemplate.h"                     // MeshBounds / meshBoundsFinalize
 #include "StaticMeshRenderer.h"               // the singleton's flags, counters and atlases
 #include "StaticMeshTemplate.h"               // the tail gate reads MeshTemplate::m_loaded
+#include "Terrain.h"                          // the water arm's techniques and envmap
 #include "XpLightManager.h"                   // the light gather and the five colour getters
 
 #include <cmath>
@@ -62,7 +63,7 @@ bool rendererIsExpansionPack();
 // BufferManager.cpp - declared here the way StaticMeshMaterial.cpp declares the same entry points.
 extern void* g_bufferManager;                                              // dword_1023B978
 void* createVertexBuffer(void* bufferManager, unsigned int count, unsigned int stride,
-                         const vc71::string& name, unsigned int usage);
+                         const std::string& name, unsigned int usage);
 void* vertexBufferLock(void* wrapper, unsigned int offsetVerts, unsigned int countVerts,
                        unsigned int flags);
 bool  vertexBufferUnlock(void* wrapper);
@@ -77,6 +78,7 @@ void rendererDrawIndexedPrimitive(unsigned int primCount, unsigned int type, int
                                   unsigned int startIndex);
 void stateManagerPush();
 void stateManagerPop();
+void* effectD3dxHandle(void* effect);   // Effect.cpp - the wrapper's +0x08 ID3DXEffect*
 }
 
 namespace geom {
@@ -89,13 +91,13 @@ namespace {
 
 // The primary table has 63 slots; ILightSampleable has seven.
 // Explicit tables preserve the ABI while remaining interface signatures are unknown.
-void __fastcall sm_drawSilhouette(void* self, void*, void* unused, int legacyArm)
+void RD9_THUNK sm_drawSilhouette(void* self RD9_THUNK_EDX, void* unused, int legacyArm)
 {
     static_cast<StaticMesh*>(self)->drawSilhouette(unused, legacyArm);
 }
 
 // +0x20, the shadow-map draw.  `retn 18h`.
-void __fastcall sm_drawShadowMap(void* self, void*, void* caster, unsigned int a2,
+void RD9_THUNK sm_drawShadowMap(void* self RD9_THUNK_EDX, void* caster, unsigned int a2,
                                  unsigned int a3, unsigned int a4, unsigned int a5,
                                  unsigned int a6)
 {
@@ -115,7 +117,7 @@ void staticMeshDrawExpansionStop(void* self)
 
 // +0x34, the scalar deleting destructor. Bit 0 of the flag means "and
 // free the storage", which is the MSVC convention release() relies on.
-void* __fastcall sm_deletingDestructor(void* self, void*, int flags)
+void* RD9_THUNK sm_deletingDestructor(void* self RD9_THUNK_EDX, int flags)
 {
     static_cast<StaticMesh*>(self)->~StaticMesh();
     if ((flags & 1) != 0)
@@ -123,89 +125,89 @@ void* __fastcall sm_deletingDestructor(void* self, void*, int flags)
     return self;
 }
 
-int __fastcall sm_addRef(void* self, void*)
+int RD9_THUNK sm_addRef(void* self RD9_THUNK_EDX)
 {
     return static_cast<StaticMesh*>(self)->addRef();
 }
 
-int __fastcall sm_getRef(void* self, void*)
+int RD9_THUNK sm_getRef(void* self RD9_THUNK_EDX)
 {
     return static_cast<StaticMesh*>(self)->getRef();
 }
 
-int __fastcall sm_release(void* self, void*)
+int RD9_THUNK sm_release(void* self RD9_THUNK_EDX)
 {
     return static_cast<StaticMesh*>(self)->release();
 }
 
-void* __fastcall sm_queryInterface(void* self, void*, unsigned int iid)
+void* RD9_THUNK sm_queryInterface(void* self RD9_THUNK_EDX, unsigned int iid)
 {
     return static_cast<StaticMesh*>(self)->queryInterface(iid);
 }
 
 // +0x18, the draw.  `retn 0Ch`: renderView, occluder, flag.
-void __fastcall sm_draw(void* self, void*, void* renderView, void* occluder, int flag)
+void RD9_THUNK sm_draw(void* self RD9_THUNK_EDX, void* renderView, void* occluder, int flag)
 {
     static_cast<StaticMesh*>(self)->draw(renderView, occluder, flag);
 }
 
 // +0x14, 0x10082D10 - `fld -1.0; retn`.  Shared with the base family (fifteen constructors
 // install the base table this slot comes from).
-float __fastcall sm_slot14(void* self, void*)
+float RD9_THUNK sm_slot14(void* self RD9_THUNK_EDX)
 {
     return static_cast<const StaticMesh*>(self)->slot14ReturnsMinusOne();
 }
 
 // +0x30, 0x1005DA00 - `xor al,al; retn 4`.
-bool __fastcall sm_slot30(void* self, void*, int argument)
+bool RD9_THUNK sm_slot30(void* self RD9_THUNK_EDX, int argument)
 {
     return static_cast<const StaticMesh*>(self)->slot30ReturnsFalse(argument);
 }
 
 // +0x3C and +0xC8, 0x10088060 - `xor eax,eax; retn 4`.  One body, two slots, one arity.
-int __fastcall sm_slot3C(void* self, void*, int argument)
+int RD9_THUNK sm_slot3C(void* self RD9_THUNK_EDX, int argument)
 {
     return static_cast<const StaticMesh*>(self)->slot3CReturnsZero(argument);
 }
 
 // +0x44, the bounding radius.
-float __fastcall sm_getBoundingRadius(void* self, void*)
+float RD9_THUNK sm_getBoundingRadius(void* self RD9_THUNK_EDX)
 {
     return static_cast<StaticMesh*>(self)->getBoundingRadius();
 }
 
 // +0x48, the transform, or the shared identity.
-const Mat4* __fastcall sm_getGeometryTransformation(void* self, void*)
+const Mat4* RD9_THUNK sm_getGeometryTransformation(void* self RD9_THUNK_EDX)
 {
     return static_cast<const StaticMesh*>(self)->getGeometryTransformation();
 }
 
 // +0x4C, 0x100FB320 - `retn 8`.
-void __fastcall sm_setDynamicPartTransformation(void* self, void*, unsigned int part,
+void RD9_THUNK sm_setDynamicPartTransformation(void* self RD9_THUNK_EDX, unsigned int part,
                                                 const Mat4* transform)
 {
     static_cast<StaticMesh*>(self)->setDynamicPartTransformation(part, transform);
 }
 
-void __fastcall sm_setGeometryTransformation(void* self, void*, const Mat4* transform)
+void RD9_THUNK sm_setGeometryTransformation(void* self RD9_THUNK_EDX, const Mat4* transform)
 {
     static_cast<StaticMesh*>(self)->setGeometryTransformation(transform);
 }
 
 // +0x54, +0x60, +0x94, +0x98 - 0x100E1480, `retn 8`: an empty virtual taking two dwords.  The
 // one body sits in four slots; its arity is its own, so the four adapters are one function.
-void __fastcall sm_emptyTwoArgs(void*, void*, unsigned int, unsigned int)
+void RD9_THUNK sm_emptyTwoArgs(void* RD9_THUNK_EDX, unsigned int, unsigned int)
 {
 }
 
 // +0x58, +0x64, +0xB4, +0xD4, +0xDC - 0x100E13B0, `retn 4`: an empty virtual taking one dword.
-void __fastcall sm_emptyOneArg(void*, void*, unsigned int)
+void RD9_THUNK sm_emptyOneArg(void* RD9_THUNK_EDX, unsigned int)
 {
 }
 
 // +0x5C, +0xA0, +0xCC - 0x100ED3B0, `xor eax,eax; retn`: zero, no arguments.  +0xCC is the
 // "next geometry in the chain" slot the object walkers follow; see getNextGeometry.
-int __fastcall sm_returnsZero(void*, void*)
+int RD9_THUNK sm_returnsZero(void* RD9_THUNK_EDX)
 {
     return 0;
 }
@@ -214,168 +216,169 @@ int __fastcall sm_returnsZero(void*, void*)
 // name at +0x04 assigned from the argument.  The argument is a VC7.1 std::string in the
 // shipped image; whether the host ever calls this slot (with its own string layout) is not known -
 // no recovered host body does - so it is typed as the image types it.
-void __fastcall sm_setName(void* self, void*, const vc71::string* value)
+void RD9_THUNK sm_setName(void* self RD9_THUNK_EDX, const std::string* value)
 {
     static_cast<StaticMesh*>(self)->setName(*value);
 }
 
 // +0x84, 0x100FC010 - `retn 4`.
-void __fastcall sm_setMaterialOverride(void* self, void*, int index)
+void RD9_THUNK sm_setMaterialOverride(void* self RD9_THUNK_EDX, int index)
 {
     static_cast<StaticMesh*>(self)->setMaterialOverride(index);
 }
 
 // +0x8C
-int __fastcall sm_getMaterialCount(void* self, void*)
+int RD9_THUNK sm_getMaterialCount(void* self RD9_THUNK_EDX)
 {
     return static_cast<const StaticMesh*>(self)->getMaterialCount();
 }
 
 // +0x90, 0x10083AB0 - `retn 0Ch`: an empty virtual taking three dwords.
-void __fastcall sm_emptyThreeArgs(void*, void*, unsigned int, unsigned int, unsigned int)
+void RD9_THUNK sm_emptyThreeArgs(void* RD9_THUNK_EDX, unsigned int, unsigned int, unsigned int)
 {
 }
 
 // +0xA8, +0xD0, +0xD8 - 0x10083AF0, `xor al,al; retn`: false, no arguments.
-bool __fastcall sm_returnsFalse(void*, void*)
+bool RD9_THUNK sm_returnsFalse(void* RD9_THUNK_EDX)
 {
     return false;
 }
 
 // +0xE8
-int __fastcall sm_getOccluderRecordCount(void* self, void*)
+int RD9_THUNK sm_getOccluderRecordCount(void* self RD9_THUNK_EDX)
 {
     return static_cast<const StaticMesh*>(self)->getOccluderRecordCount();
 }
 
 // +0xEC, 0x100FC120 - `retn 4`.
-const void* __fastcall sm_getOccluderRecord(void* self, void*, unsigned int index)
+const void* RD9_THUNK sm_getOccluderRecord(void* self RD9_THUNK_EDX, unsigned int index)
 {
     return static_cast<const StaticMesh*>(self)->getOccluderRecord(index);
 }
 
-int __fastcall sm_getNextGeometry(void* self, void*)
+int RD9_THUNK sm_getNextGeometry(void* self RD9_THUNK_EDX)
 {
     return static_cast<StaticMesh*>(self)->getNextGeometry();
 }
 
-void __fastcall sm_setDword28C(void* self, void*, void* value)
+void RD9_THUNK sm_setDword28C(void* self RD9_THUNK_EDX, void* value)
 {
     static_cast<StaticMesh*>(self)->setDword28C(value);
 }
 
-void* __fastcall sm_getDword28C(void* self, void*)
+void* RD9_THUNK sm_getDword28C(void* self RD9_THUNK_EDX)
 {
     return static_cast<StaticMesh*>(self)->getDword28C();
 }
 
-void __fastcall sm_setGeom(void* self, void*, int geom)
+void RD9_THUNK sm_setGeom(void* self RD9_THUNK_EDX, int geom)
 {
     static_cast<StaticMesh*>(self)->setGeom(geom);
 }
 
-void __fastcall sm_setLod(void* self, void*, int lod)
+void RD9_THUNK sm_setLod(void* self RD9_THUNK_EDX, int lod)
 {
     static_cast<StaticMesh*>(self)->setLod(lod);
 }
 
-int __fastcall sm_getGeomCount(void* self, void*)
+int RD9_THUNK sm_getGeomCount(void* self RD9_THUNK_EDX)
 {
     return static_cast<StaticMesh*>(self)->getGeomCount();
 }
 
-int __fastcall sm_getLodCount(void* self, void*)
+int RD9_THUNK sm_getLodCount(void* self RD9_THUNK_EDX)
 {
     return static_cast<StaticMesh*>(self)->getLodCount();
 }
 
-int __fastcall sm_getGeomIndex(void* self, void*)
+int RD9_THUNK sm_getGeomIndex(void* self RD9_THUNK_EDX)
 {
     return static_cast<StaticMesh*>(self)->getGeomIndex();
 }
 
-int __fastcall sm_getLodIndex(void* self, void*)
+int RD9_THUNK sm_getLodIndex(void* self RD9_THUNK_EDX)
 {
     return static_cast<StaticMesh*>(self)->getLodIndex();
 }
 
-int __fastcall sm_getDword31C(void* self, void*)
+int RD9_THUNK sm_getDword31C(void* self RD9_THUNK_EDX)
 {
     return static_cast<StaticMesh*>(self)->getDword31C();
 }
 
-void __fastcall sm_updateFlags(void* self, void*, unsigned int set, unsigned int clear)
+void RD9_THUNK sm_updateFlags(void* self RD9_THUNK_EDX, unsigned int set, unsigned int clear)
 {
     static_cast<StaticMesh*>(self)->updateFlags(set, clear);
 }
 
-unsigned int __fastcall sm_getFlags(void* self, void*)
+unsigned int RD9_THUNK sm_getFlags(void* self RD9_THUNK_EDX)
 {
     return static_cast<StaticMesh*>(self)->getFlags();
 }
 
-void __fastcall sm_stampFrameOrdinal(void* self, void*)
+void RD9_THUNK sm_stampFrameOrdinal(void* self RD9_THUNK_EDX)
 {
     static_cast<StaticMesh*>(self)->stampFrameOrdinal();
 }
 
-void __fastcall sm_setDword350(void* self, void*, void* value)
+void RD9_THUNK sm_setDword350(void* self RD9_THUNK_EDX, void* value)
 {
     static_cast<StaticMesh*>(self)->setDword350(value);
 }
 
-void* __fastcall sm_getDword350(void* self, void*)
+void* RD9_THUNK sm_getDword350(void* self RD9_THUNK_EDX)
 {
     return static_cast<StaticMesh*>(self)->getDword350();
 }
 
-void __fastcall sm_setOwnerObject(void* self, void*, void* object)
+void RD9_THUNK sm_setOwnerObject(void* self RD9_THUNK_EDX, void* object)
 {
     static_cast<StaticMesh*>(self)->setOwnerObject(object);
 }
 
-void* __fastcall sm_refreshRootObject(void* self, void*)
+void* RD9_THUNK sm_refreshRootObject(void* self RD9_THUNK_EDX)
 {
     return static_cast<StaticMesh*>(self)->refreshRootObject();
 }
 
-void __fastcall sm_setFade(void* self, void*, float value)
+void RD9_THUNK sm_setFade(void* self RD9_THUNK_EDX, float value)
 {
     static_cast<StaticMesh*>(self)->setFade(value);
 }
 
 // the nine accessors
-void* __fastcall sm_getTemplate(void* self, void*)
+void* RD9_THUNK sm_getTemplate(void* self RD9_THUNK_EDX)
 {
     return static_cast<StaticMesh*>(self)->getTemplate();
 }
 
-const void* __fastcall sm_getLocalBounds(void* self, void*)
+const void* RD9_THUNK sm_getLocalBounds(void* self RD9_THUNK_EDX)
 {
     return static_cast<StaticMesh*>(self)->getLocalBounds();
 }
 
-void* __fastcall sm_getRootObject(void* self, void*)
+void* RD9_THUNK sm_getRootObject(void* self RD9_THUNK_EDX)
 {
     return static_cast<StaticMesh*>(self)->getRootObject();
 }
 
-void __fastcall sm_setFloat308(void* self, void*, float value)
+void RD9_THUNK sm_setFloat308(void* self RD9_THUNK_EDX, float value)
 {
     static_cast<StaticMesh*>(self)->setFloat308(value);
 }
 
-void __fastcall sm_setDword34C(void* self, void*, unsigned int value)
+// The +0x24 caller (XpLightManager) passes a LightShadowRecord pointer; pointer-sized on x64.
+void RD9_THUNK sm_setDword34C(void* self RD9_THUNK_EDX, uintptr_t value)
 {
     static_cast<StaticMesh*>(self)->setDword34C(value);
 }
 
-unsigned int __fastcall sm_getDword34C(void* self, void*)
+uintptr_t RD9_THUNK sm_getDword34C(void* self RD9_THUNK_EDX)
 {
     return static_cast<StaticMesh*>(self)->getDword34C();
 }
 
-int __fastcall sm_getGeometryType(void* self, void*)
+int RD9_THUNK sm_getGeometryType(void* self RD9_THUNK_EDX)
 {
     return static_cast<StaticMesh*>(self)->getGeometryType();
 }
@@ -383,12 +386,12 @@ int __fastcall sm_getGeometryType(void* self, void*)
 // THE truncation IS THE point. The shipped body compares the low byte of the argument
 // slot, so 0x100 is false to it and would be true to an `int != 0` test. Taking the raw dword
 // here and narrowing it is what keeps that.
-void __fastcall sm_setFlagBit1(void* self, void*, int raw)
+void RD9_THUNK sm_setFlagBit1(void* self RD9_THUNK_EDX, int raw)
 {
     static_cast<StaticMesh*>(self)->setFlagBit1(static_cast<unsigned char>(raw));
 }
 
-bool __fastcall sm_getFlagBit1(void* self, void*)
+bool RD9_THUNK sm_getFlagBit1(void* self RD9_THUNK_EDX)
 {
     return static_cast<StaticMesh*>(self)->getFlagBit1();
 }
@@ -461,40 +464,41 @@ void* const kStaticMeshVtable[63] =
 };
 
 
-// Converts the ILightSampleable face at +0x30 to its owning StaticMesh.
+// Converts the ILightSampleable face (retail +0x30) to its owning StaticMesh.
 
 inline StaticMesh* fromLightSampleable(void* subobject)
 {
-    return reinterpret_cast<StaticMesh*>(static_cast<unsigned char*>(subobject) - 0x30);
+    return reinterpret_cast<StaticMesh*>(static_cast<unsigned char*>(subobject)
+                                         - offsetof(StaticMesh, m_lightSampleableVptr));
 }
 
-int __fastcall sm_ls_addRef(void* self, void*)
+int RD9_THUNK sm_ls_addRef(void* self RD9_THUNK_EDX)
 {
     return fromLightSampleable(self)->addRef();
 }
 
-int __fastcall sm_ls_getRef(void* self, void*)
+int RD9_THUNK sm_ls_getRef(void* self RD9_THUNK_EDX)
 {
     return fromLightSampleable(self)->getRef();
 }
 
-int __fastcall sm_ls_release(void* self, void*)
+int RD9_THUNK sm_ls_release(void* self RD9_THUNK_EDX)
 {
     return fromLightSampleable(self)->release();
 }
 
-void* __fastcall sm_ls_queryInterface(void* self, void*, unsigned int iid)
+void* RD9_THUNK sm_ls_queryInterface(void* self RD9_THUNK_EDX, unsigned int iid)
 {
     return fromLightSampleable(self)->queryInterface(iid);
 }
 
-bool __fastcall sm_ls_slot10(void* self, void*)
+bool RD9_THUNK sm_ls_slot10(void* self RD9_THUNK_EDX)
 {
     return fromLightSampleable(self)->lightSampleableSlot10ReturnsTrue();
 }
 
 // Defined below with the other name builders.
-void staticMeshLightmapName(const StaticMesh* self, vc71::string& out);
+void staticMeshLightmapName(const StaticMesh* self, std::string& out);
 
 // ILightSampleable +0x14: a MeshLightSampler for the current (geom, lod), loaded from
 // "<template path>/Meshes/<template name>.samples" (geom 0, lod 0) or ".samp_<geom><lod>" and
@@ -504,15 +508,15 @@ void staticMeshLightmapName(const StaticMesh* self, vc71::string& out);
 // when the file cannot be opened. The allocation is used unchecked, as shipped.
 // [INFERRED] placement: retail keeps this body with the rest of its run in
 // StaticMeshLightmapGeneration.cpp; this tree keeps the run's other members here.
-ILightSampling* __fastcall sm_ls_createLightSampler(void* self, void*, float resolutionModifier)
+ILightSampling* RD9_THUNK sm_ls_createLightSampler(void* self RD9_THUNK_EDX, float resolutionModifier)
 {
     StaticMesh* const mesh = fromLightSampleable(self);
     void* const storage = ::renddx9abi::engineAlloc(sizeof(MeshLightSampler));
     MeshLightSampler* const sampler = storage ? new (storage) MeshLightSampler() : 0;
 
-    typedef int (__fastcall* IndexFn)(const void*, void*);
-    const int lod  = reinterpret_cast<IndexFn>(mesh->m_vptr[0x7C / sizeof(void*)])(mesh, 0);
-    const int geom = reinterpret_cast<IndexFn>(mesh->m_vptr[0x70 / sizeof(void*)])(mesh, 0);
+    typedef int (__thiscall* IndexFn)(const void*);
+    const int lod  = reinterpret_cast<IndexFn>(mesh->m_vptr[0x7C / 4])(mesh);
+    const int geom = reinterpret_cast<IndexFn>(mesh->m_vptr[0x70 / 4])(mesh);
     char suffix[12];
     if ((geom | lod) != 0)
         std::sprintf(suffix, ".samp_%d%d", geom, lod);
@@ -524,13 +528,13 @@ ILightSampling* __fastcall sm_ls_createLightSampler(void* self, void*, float res
         sampler->m_sizeCap = tmpl->getLightmapSize(geom, lod);             // +0x74
     sampler->m_resolutionModifier = resolutionModifier;
 
-    vc71::string meshes(tmpl->getPath());                                  // +0x20
+    std::string meshes(tmpl->getPath());                                  // +0x20
     meshes += "/Meshes/";
-    vc71::string named(meshes);
+    std::string named(meshes);
     named += tmpl->getName();                                              // +0x18
-    vc71::string path(named);
+    std::string path(named);
     path += suffix;
-    vc71::string outputName;
+    std::string outputName;
     staticMeshLightmapName(mesh, outputName);
     const bool failed = !sampler->load(path, outputName);
     if (failed)
@@ -541,13 +545,12 @@ ILightSampling* __fastcall sm_ls_createLightSampler(void* self, void*, float res
     }
 
     const int geomTimesFive =
-        5 * reinterpret_cast<IndexFn>(mesh->m_vptr[0x70 / sizeof(void*)])(mesh, 0);
+        5 * reinterpret_cast<IndexFn>(mesh->m_vptr[0x70 / 4])(mesh);
     const unsigned int key = static_cast<unsigned int>(
-        reinterpret_cast<IndexFn>(mesh->m_vptr[0x7C / sizeof(void*)])(mesh, 0) + 2 * geomTimesFive);
-    vc71::map_node_u32* const node = vc71::mapInsertU32(mesh->m_map260, key);
-    dx9rend::EngineTexture*& slot = *reinterpret_cast<dx9rend::EngineTexture**>(node->value);
+        reinterpret_cast<IndexFn>(mesh->m_vptr[0x7C / 4])(mesh) + 2 * geomTimesFive);
+    dx9rend::EngineTexture*& slot = mesh->m_map260[key].texture;
     dx9rend::EngineTexture* const cached = slot;
-    mesh->m_dword26C = reinterpret_cast<unsigned int>(cached);
+    mesh->m_dword26C = reinterpret_cast<uintptr_t>(cached);
     if (cached)
     {
         if (--cached->refCount == 0)
@@ -564,7 +567,7 @@ ILightSampling* __fastcall sm_ls_createLightSampler(void* self, void*, float res
 // ILightSampleable +0x18: destroys and frees the sampler when one is passed (its destructor
 // writes the lightmap file), then re-fetches this instance's lightmap texture from its (geom, lod)
 // map entry, lowers the "no lightmap" flag and runs the lightmap loader again. Always true.
-bool __fastcall sm_ls_destroyLightSampler(void* self, void*, ILightSampling* sampler)
+bool RD9_THUNK sm_ls_destroyLightSampler(void* self RD9_THUNK_EDX, ILightSampling* sampler)
 {
     StaticMesh* const mesh = fromLightSampleable(self);
     if (sampler)
@@ -576,8 +579,7 @@ bool __fastcall sm_ls_destroyLightSampler(void* self, void*, ILightSampling* sam
 
     const unsigned int key = static_cast<unsigned int>(mesh->getLodIndex())
                            + 2u * (5u * static_cast<unsigned int>(mesh->getGeomIndex()));
-    vc71::map_node_u32* const node = vc71::mapInsertU32(mesh->m_map260, key);
-    mesh->m_dword26C = node ? *reinterpret_cast<unsigned int*>(node->value) : 0u;
+    mesh->m_dword26C = reinterpret_cast<uintptr_t>(mesh->m_map260[key].texture);
     mesh->m_byte35A  = 0;
     mesh->loadLightmap();
     return true;
@@ -629,10 +631,10 @@ bool staticMeshTemplateUsesLightmaps(const void* objectTemplate)
     if (!objectTemplate)
         return false;
 
-    const unsigned char* const t = static_cast<const unsigned char*>(objectTemplate);
-    if (!t[0x185])
+    const StaticMeshTemplate* const t = static_cast<const StaticMeshTemplate*>(objectTemplate);
+    if (!t->m_finished)                                    // +0x185
         return false;
-    if (t[0x2A4])
+    if (t->m_isWater)                                      // +0x2A4
         return true;
 
     dx9rend::IRenderer* const base =
@@ -654,15 +656,14 @@ bool staticMeshTemplateUsesLightmaps(const void* objectTemplate)
 
 
 // Refreshes selected LOD/material pointers and bounds after a geometry or LOD change.
-// Template tables use 32-byte geometry records for LODs and 16-byte companion records.
 
 void staticMeshRefreshSelection(StaticMesh* self)
 {
-    unsigned char* const lodRecord = static_cast<unsigned char*>(self->m_dword30C);
+    StaticMeshLod* const lodRecord = self->m_dword30C;
     if (!lodRecord)
         return;
 
-    MeshBounds* const bounds = reinterpret_cast<MeshBounds*>(lodRecord + 0x04);
+    MeshBounds* const bounds = &lodRecord->bounds;
     if (bounds->dirty)
         meshBoundsFinalize(*bounds);
 
@@ -671,51 +672,42 @@ void staticMeshRefreshSelection(StaticMesh* self)
     // The lightmap entry for this (geom, lod). The shipped call is the inserting
     // operator[], not a find - a miss leaves a zeroed entry behind and copies those zeros out, which
     // is why a fresh selection can clear the 1.0f UV scale the constructor seeded.
-    if (self->m_byte35A || self->m_map260.size == 0)
+    if (self->m_byte35A || self->m_map260.empty())
         return;
 
-    const unsigned char* const objectTemplate =
-        static_cast<const unsigned char*>(self->m_template);
+    const StaticMeshTemplate* const objectTemplate =
+        static_cast<const StaticMeshTemplate*>(self->m_template);
     if (!objectTemplate)
         return;
 
     const unsigned int geom = static_cast<unsigned int>(self->getGeomIndex());
     const unsigned int lod  = static_cast<unsigned int>(self->getLodIndex());
 
+    // The base's +0x70 per-geom skipped-lod counts (null until the vector first allocates).
     const unsigned int* const perGeom =
-        *reinterpret_cast<const unsigned int* const*>(objectTemplate + 0x74);
+        reinterpret_cast<const unsigned int*>(objectTemplate->m_geomInts.data());
     if (!perGeom)
         return;
 
     const unsigned int key = perGeom[geom] + lod + 2u * (5u * geom);
 
-    vc71::map_node_u32* const node = vc71::mapInsertU32(self->m_map260, key);
-    if (!node)
-        return;
-
-    const unsigned char* const value = node->value;
-    self->m_dword26C = *reinterpret_cast<const unsigned int*>(value + 0);
-    self->m_float270 = *reinterpret_cast<const float*>(value + 4);
-    self->m_float274 = *reinterpret_cast<const float*>(value + 8);
-    self->m_dword278 = *reinterpret_cast<const unsigned int*>(value + 12);
-    self->m_dword27C = *reinterpret_cast<const unsigned int*>(value + 16);
+    const StaticMeshLightmapEntry& entry = self->m_map260[key];
+    self->m_dword26C = reinterpret_cast<uintptr_t>(entry.texture);
+    self->m_float270 = entry.offset[0];
+    self->m_float274 = entry.offset[1];
+    self->m_dword278 = *reinterpret_cast<const unsigned int*>(&entry.offset[2]);
+    self->m_dword27C = *reinterpret_cast<const unsigned int*>(&entry.offset[3]);
 }
 
-// Release every cached lightmap texture in the +0x260 map. Recurse right, iterate left -
-// deliberately the same walk mapEraseTreeU32 performs, because this must visit exactly the
-// nodes that walk is about to free, and it must happen first: the textures live in the nodes.
-void staticMeshReleaseLightmaps(vc71::map_node_u32* node)
+// Release every cached lightmap texture in the +0x260 map, before the map frees its nodes. The
+// shipped walk recurses right and iterates left - descending key order.
+void staticMeshReleaseLightmaps(StaticMesh::LightmapCache& cache)
 {
-    while (node && !node->isNil)
+    for (StaticMesh::LightmapCache::reverse_iterator it = cache.rbegin(); it != cache.rend(); ++it)
     {
-        staticMeshReleaseLightmaps(node->right);
-
-        dx9rend::EngineTexture*& texture =
-            *reinterpret_cast<dx9rend::EngineTexture**>(node->value);
+        dx9rend::EngineTexture*& texture = it->second.texture;
         if (texture)
             dx9rend::textureReleaseRef(texture);
-
-        node = node->left;
     }
 }
 
@@ -758,49 +750,28 @@ void staticMeshNormalizeInPlace(float* v)
     v[0] *= inverse; v[1] *= inverse; v[2] *= inverse;
 }
 
-// sub_100FFB50 - allocate the map's sentinel node. forty bytes: left/parent/right, a 24-byte
-// value, then the colour byte at +0x24 and the nil flag at +0x25. The shipped helper zeroes the
-// three links and writes colour=1/nil=0; the caller then flips nil to 1 and self-links all three,
-// which is what makes it a header rather than an element.
-void* staticMeshAllocateMapNode()
-{
-    vc71::map_node_u32* const node = static_cast<vc71::map_node_u32*>(
-        ::renddx9abi::engineAlloc(sizeof(vc71::map_node_u32)));
-    if (!node)
-        return 0;
-
-    node->left   = 0;
-    node->parent = 0;
-    node->right  = 0;
-    node->color  = 1;      // black
-    node->isNil  = 0;      // the caller flips this to 1 - see the constructor
-    return node;
-}
-
-
-// Accesses renderer configuration through its fixed compatibility layout.
+// Renderer configuration, named by its retail offset through BF2Render.cpp's tail accessors.
 unsigned char rendererByte(unsigned int byteOffset)
 {
-    return *(reinterpret_cast<const unsigned char*>(::dice::hfe::dx9rend::g_Renderer) + byteOffset);
+    return ::dice::hfe::dx9rend::rendererTailByte(byteOffset);
 }
 
 unsigned int rendererDword(unsigned int byteOffset)
 {
-    return *reinterpret_cast<const unsigned int*>(
-        reinterpret_cast<const unsigned char*>(::dice::hfe::dx9rend::g_Renderer) + byteOffset);
+    return static_cast<unsigned int>(::dice::hfe::dx9rend::rendererTailInt(byteOffset));
 }
 
 float rendererFloat(unsigned int byteOffset)
 {
-    return *reinterpret_cast<const float*>(
-        reinterpret_cast<const unsigned char*>(::dice::hfe::dx9rend::g_Renderer) + byteOffset);
+    return ::dice::hfe::dx9rend::rendererTailFloat(byteOffset);
 }
 
 // The base object's +0x102 byte, the "editor / lightmap generation" gate BF2Render.cpp's step 14
 // tests too.
-unsigned char rendererBaseByte(unsigned int byteOffset)
+unsigned char rendererBaseFlag102()
 {
-    return *(static_cast<const unsigned char*>(::dice::hfe::dx9rend::g_rendererBase) + byteOffset);
+    return static_cast<const ::dice::hfe::dx9rend::RendDX9Base*>(
+        ::dice::hfe::dx9rend::g_rendererBase)->flag102;
 }
 
 } // anonymous namespace - the two helpers below are shared with
@@ -849,11 +820,18 @@ void staticMeshAssignTexture(void*& slot, dx9rend::EngineTexture* incoming)
         dx9rend::textureAddRef(incoming);
 }
 
-// Cached technique pointer at material +0x178, refreshed for each draw.
-// This shares storage with normalUnpack.value[2]; the shader uses only its first two components.
-dx9rend::Ra::RaShader*& staticMeshMaterialShader(unsigned char* material)
+// Cached technique pointer at material +0x178 (parameter block +0x14C), refreshed for each draw.
+// On x86 this shares storage with normalUnpack.value[2]; the shader uses only its first two components.
+dx9rend::Ra::RaShader*& staticMeshMaterialShader(StaticMeshMaterial* material)
 {
-    return *reinterpret_cast<dx9rend::Ra::RaShader**>(material + 0x178);
+    return reinterpret_cast<dx9rend::Ra::RaShader*&>(
+        raMaterialShaderSlot(staticMeshMaterialParameters(material)));
+}
+
+// The material parameter block's CubeMap holder value: material +0x14C, block +0x120.
+void*& staticMeshMaterialCubeMap(StaticMeshMaterial* material)
+{
+    return staticMeshMaterialParameters(material).cubeMap.value;
 }
 
 // The IDirect3DBaseTexture9 the lightmap holder of a render entry keeps, with COM reference
@@ -955,61 +933,10 @@ struct StaticMeshBoundsCorners
     }
 };
 
-// sub_100E1C20 - vector<T*>::resize(n, fill): shrink moves _Last down (the shipped memmove of
-// zero bytes), grow inserts copies of `fill` at the end.
-void staticMeshPointerVectorResize(vc71::vector_layout& v, unsigned int count, void* fill)
-{
-    const unsigned int size = v.first
-        ? static_cast<unsigned int>(v.last - v.first) / sizeof(void*)
-        : 0u;
-    if (size >= count)
-    {
-        if (v.first && count < size)
-            v.last = v.first + count * sizeof(void*);
-        return;
-    }
-    for (unsigned int i = size; i < count; ++i)
-        vc71::vectorPushBackIn(v, sizeof(void*), &fill);
-}
-
-// sub_10102690 - vector<RaLightRecord>::resize(n, fill) on the 68-byte elements; the same two arms.
-void staticMeshLightRecordVectorResize(vc71::vector_layout& v, unsigned int count,
-                                       const dx9rend::Ra::RaLightRecord& fill)
-{
-    const unsigned int stride = sizeof(dx9rend::Ra::RaLightRecord);
-    const unsigned int size = v.first ? static_cast<unsigned int>(v.last - v.first) / stride : 0u;
-    if (size >= count)
-    {
-        if (v.first && count < size)
-            v.last = v.first + count * stride;
-        return;
-    }
-    for (unsigned int i = size; i < count; ++i)
-        vc71::vectorPushBackIn(v, stride, &fill);
-}
-
-// sub_10199AE0 - the same on the 28-byte ".lights" records.
-void staticMeshVertexLightVectorResize(vc71::vector_layout& v, unsigned int count)
-{
-    const unsigned int stride = 28u;
-    const unsigned int size = v.first ? static_cast<unsigned int>(v.last - v.first) / stride : 0u;
-    if (size >= count)
-    {
-        if (v.first && count < size)
-            v.last = v.first + count * stride;
-        return;
-    }
-    unsigned char zero[28];
-    for (unsigned int b = 0; b < sizeof(zero); ++b)
-        zero[b] = 0;
-    for (unsigned int i = size; i < count; ++i)
-        vc71::vectorPushBackIn(v, stride, zero);
-}
-
 // sub_10074AB0 - the image's printf-into-a-std::string helper: vsnprintf into a 0xFFF-byte
 // buffer, or the "WARNING: The original message was too long for formatString()." text when it
 // does not fit.
-void staticMeshFormatString(vc71::string& out, const char* format, int a, int b, int c, int d,
+void staticMeshFormatString(std::string& out, const char* format, int a, int b, int c, int d,
                             bool four)
 {
     char buffer[0x1000];
@@ -1035,33 +962,33 @@ StaticMeshRenderer* staticMeshRendererByName()
 //     followed by "=<key:02>=<x>=<y>=<z>" when the renderer's +0x62 flag is set, else "_<x>-<y>-<z>"
 // where key = lod + 10 * geom and x/y/z are the transform's translation truncated to int.
 // The three settings come with the shipped defaults: "", "" and "lightsPlease".
-void staticMeshLightmapName(const StaticMesh* self, vc71::string& out)
+void staticMeshLightmapName(const StaticMesh* self, std::string& out)
 {
     const float* const position = &self->m_transform->m[12];
     StaticMeshRenderer* const smr = staticMeshRendererByName();
     const int key = self->getLodIndex() + 2 * (5 * self->getGeomIndex());
 
-    vc71::string savePath("");
+    std::string savePath("");
     dx9rend::readStringSettingDefault("Editor_LevelSavePath", "", savePath);
-    vc71::string root(savePath);
+    std::string root(savePath);
     root += "/";
-    vc71::string levelDirectory("");
+    std::string levelDirectory("");
     dx9rend::readStringSettingDefault("GSLevelDirectory", "", levelDirectory);
-    vc71::string withDirectory(root);
+    std::string withDirectory(root);
     withDirectory += levelDirectory;
-    vc71::string level("");
+    std::string level("");
     dx9rend::readStringSettingDefault("GSLoadLevel", "lightsPlease", level);
-    vc71::string levelPath(withDirectory);
+    std::string levelPath(withDirectory);
     levelPath += level;
 
     const MeshTemplate* const t = static_cast<const MeshTemplate*>(
         static_cast<const StaticMeshTemplate*>(self->m_template));
-    vc71::string objects(levelPath);
+    std::string objects(levelPath);
     objects += "/Lightmaps/Objects/";
-    vc71::string named(objects);
+    std::string named(objects);
     named += t->getName();                                             // MeshTemplate +0x18
 
-    vc71::string suffix("");
+    std::string suffix("");
     if (smr->m_flags60[2])
         staticMeshFormatString(suffix, "=%02d=%d=%d=%d", key, static_cast<int>(position[0]),
                                static_cast<int>(position[1]), static_cast<int>(position[2]), true);
@@ -1070,13 +997,13 @@ void staticMeshLightmapName(const StaticMesh* self, vc71::string& out)
                                static_cast<int>(position[1]), static_cast<int>(position[2]), 0,
                                false);
 
-    vc71::string result(named);
+    std::string result(named);
     result += suffix;
     out = result;
 }
 
 // sub_10198410 - the object part alone: <template name> plus the same suffix.
-void staticMeshLightmapObjectName(const StaticMesh* self, vc71::string& out)
+void staticMeshLightmapObjectName(const StaticMesh* self, std::string& out)
 {
     const float* const position = &self->m_transform->m[12];
     StaticMeshRenderer* const smr = staticMeshRendererByName();
@@ -1084,7 +1011,7 @@ void staticMeshLightmapObjectName(const StaticMesh* self, vc71::string& out)
     const MeshTemplate* const t = static_cast<const MeshTemplate*>(
         static_cast<const StaticMeshTemplate*>(self->m_template));
 
-    vc71::string suffix("");
+    std::string suffix("");
     if (smr->m_flags60[2])
         staticMeshFormatString(suffix, "=%02d=%d=%d=%d", key, static_cast<int>(position[0]),
                                static_cast<int>(position[1]), static_cast<int>(position[2]), true);
@@ -1093,22 +1020,22 @@ void staticMeshLightmapObjectName(const StaticMesh* self, vc71::string& out)
                                static_cast<int>(position[1]), static_cast<int>(position[2]), 0,
                                false);
 
-    vc71::string result(t->getName());
+    std::string result(t->getName());
     result += suffix;
     out = result;
 }
 
 // sub_10197F00 - the directory part: <GSLevelDirectory><GSLoadLevel>/Lightmaps/Objects/ (no save
 // path, unlike the full name).
-void staticMeshLightmapDirectory(vc71::string& out)
+void staticMeshLightmapDirectory(std::string& out)
 {
-    vc71::string level("");
+    std::string level("");
     dx9rend::readStringSettingDefault("GSLoadLevel", "lightsPlease", level);
-    vc71::string levelDirectory("");
+    std::string levelDirectory("");
     dx9rend::readStringSettingDefault("GSLevelDirectory", "", levelDirectory);
-    vc71::string path(levelDirectory);
+    std::string path(levelDirectory);
     path += level;
-    vc71::string result(path);
+    std::string result(path);
     result += "/Lightmaps/Objects/";
     out = result;
 }
@@ -1148,32 +1075,8 @@ StaticMesh::StaticMesh(void* objectTemplate)
     // +0x38 .. +0x25B - the Ra per-object parameter block. Already recovered; see the header.
     ::dice::hfe::dx9rend::Ra::raObjectParametersConstruct(m_objectParameters);
 
-    // +0x260 - the VC7.1 map header. The node comes back with its links null; the constructor
-    // then makes it the self-linked nil sentinel.
-    m_map260.comp = 0;
-    m_map260.head  = reinterpret_cast<vc71::map_node*>(staticMeshAllocateMapNode());
-    m_map260.size  = 0;
-    if (m_map260.head)
-    {
-        vc71::map_node_u32* const head = reinterpret_cast<vc71::map_node_u32*>(m_map260.head);
-        head->isNil  = 1;
-        head->parent = head;
-        head->left   = head;
-        head->right  = head;
-    }
-
-    // The four vectors the destructor (0x100FDE50) frees. Their allocator words are
-    // deliberately left alone, exactly as the shipped constructor leaves them.
-    m_vector2D0.first = 0; m_vector2D0.last = 0; m_vector2D0.end = 0;
-    m_vector2E0.first = 0; m_vector2E0.last = 0; m_vector2E0.end = 0;
-    m_vector2F0.first = 0; m_vector2F0.last = 0; m_vector2F0.end = 0;
-    m_vector338.first = 0; m_vector338.last = 0; m_vector338.end = 0;
-
-    // +0x35C and +0x36C - the two per-geom vectors.  The allocator word of each is
-    // deliberately NOT written, exactly as the constructor leaves it and exactly as ObjectDrawer's
-    // three vectors are handled.
-    m_geomRadii.first = 0;             m_geomRadii.last = 0;             m_geomRadii.end = 0;
-    m_geomLodDistanceCounts.first = 0; m_geomLodDistanceCounts.last = 0; m_geomLodDistanceCounts.end = 0;
+    // +0x260 - the lightmap cache (its sentinel from sub_100FFB50), the std::vectors at +0x2D0,
+    // +0x2E0, +0x2F0, +0x338, +0x35C and +0x36C: default-constructed empty by the compiler.
 
     // +0x290 - identity.
     for (int i = 0; i < 16; ++i)
@@ -1195,19 +1098,14 @@ StaticMesh::StaticMesh(void* objectTemplate)
 
 StaticMesh::~StaticMesh()
 {
-    // 1. Release every cached lightmap texture, then drop the nodes.
-    if (m_map260.head)
-        staticMeshReleaseLightmaps(
-            reinterpret_cast<vc71::map_node_u32*>(m_map260.head)->parent);
+    // 1. Release every cached lightmap texture; the nodes go with the map (step 7).
+    staticMeshReleaseLightmaps(m_map260);
 
     // 2. Deregister from the template's instance set (+0xEC), the one createInstance inserted
-    //    into. Reached by documented raw offset, as everywhere else this file touches the
-    //    template.
+    //    into.
     if (m_template)
     {
-        vc71::set_layout* const instances = reinterpret_cast<vc71::set_layout*>(
-            static_cast<unsigned char*>(m_template) + 0xEC);
-        vc71::setEraseValue(*instances, this);
+        static_cast<StaticMeshTemplate*>(m_template)->m_instances.erase(this);
     }
 
     // 3. The refcounted vertex-buffer wrapper at +0x300.
@@ -1218,70 +1116,35 @@ StaticMesh::~StaticMesh()
     }
 
     // The template flag controls release of each selected material's +0x14C texture.
-    if (m_template && *(static_cast<const unsigned char*>(m_template) + 0x2A4) && m_dword310)
+    if (m_template && static_cast<const StaticMeshTemplate*>(m_template)->m_isWater && m_dword310)
     {
-        unsigned char* const first = *reinterpret_cast<unsigned char**>(m_dword310 + 4);
+        StaticMeshMaterial* const first = m_dword310->data();
         if (first)
         {
-            unsigned char* const last = *reinterpret_cast<unsigned char**>(m_dword310 + 8);
-            const unsigned int count = static_cast<unsigned int>(last - first) / 516u;
+            StaticMeshMaterial* const last =
+                (m_dword310->data() + m_dword310->size());
+            const unsigned int count = static_cast<unsigned int>(last - first);
             for (unsigned int i = 0; i < count; ++i)
             {
-                unsigned char* const material = first + 516u * i;
-                dx9rend::EngineTexture*& slot =
-                    *reinterpret_cast<dx9rend::EngineTexture**>(material + 332);
+                dx9rend::EngineTexture*& slot = reinterpret_cast<dx9rend::EngineTexture*&>(
+                    staticMeshMaterialCubeMap(first + i));
                 if (slot)
                     dx9rend::textureReleaseRef(slot);   // nulls the slot itself
             }
         }
     }
 
-    // Destroy the two nested vectors in each 36-byte element before freeing m_vector338.
-    if (m_vector338.first)
-    {
-        for (unsigned char* p = reinterpret_cast<unsigned char*>(m_vector338.first);
-             p != reinterpret_cast<unsigned char*>(m_vector338.last); p += 36)
-        {
-            for (unsigned int inner = 0; inner < 2; ++inner)
-            {
-                vc71::vector_layout* const v =
-                    reinterpret_cast<vc71::vector_layout*>(p + 16 * inner);
-                if (v->first)
-                    ::renddx9abi::engineFree(v->first);
-                v->first = 0; v->last = 0; v->end = 0;
-            }
-        }
-    }
+    // 5./6. The occluder records' nested vectors, the records, and the other vectors go with
+    //    their own destructors after this body; the light-pointer vector's buffer is freed here.
+    std::vector<world::LightSource*>().swap(m_vector2D0);
 
-    // 6. The six vectors themselves.
-    {
-        vc71::vector_layout* const owned[] =
-        {
-            &m_geomLodDistanceCounts, &m_geomRadii, &m_vector338,
-            &m_vector2F0, &m_vector2E0, &m_vector2D0
-        };
-        for (unsigned int i = 0; i < sizeof(owned) / sizeof(owned[0]); ++i)
-        {
-            if (owned[i]->first)
-                ::renddx9abi::engineFree(owned[i]->first);
-            owned[i]->first = 0; owned[i]->last = 0; owned[i]->end = 0;
-        }
-    }
-
-    // 7. Clear the map, then free its sentinel - the one node mapClearU32 deliberately keeps.
-    if (m_map260.head)
-    {
-        vc71::mapClearU32(m_map260);
-        ::renddx9abi::engineFree(m_map260.head);
-        m_map260.head = 0;
-        m_map260.size = 0;
-    }
+    // 7. The lightmap cache's nodes and sentinel also go with its destructor.
 
     // 8. The Ra per-object parameter block, the exact counterpart of the constructor's
     //    raObjectParametersConstruct.
     ::dice::hfe::dx9rend::Ra::raObjectParametersDestroy(m_objectParameters);
 
-    // 9. m_name's destructor runs after this body - see the header note.
+    // 9. The member destructors (the containers, then m_name) run after this body.
 }
 
 // the IBase quartet
@@ -1304,8 +1167,8 @@ int StaticMesh::release()
     --m_refCount;
     if (m_refCount == 0)
     {
-        typedef void (__fastcall* DeletingDtorFn)(void*, void*, int);
-        reinterpret_cast<DeletingDtorFn>(m_vptr[0x34 / sizeof(void*)])(this, 0, 1);
+        typedef void (__thiscall* DeletingDtorFn)(void*, int);
+        reinterpret_cast<DeletingDtorFn>(m_vptr[0x34 / 4])(this, 1);
     }
     return m_refCount;
 }
@@ -1319,7 +1182,7 @@ void* StaticMesh::queryInterface(unsigned int iid)
         return this;
 
     if (iid == IID_ILightSampleable && this)
-        return reinterpret_cast<unsigned char*>(this) + 0x30;
+        return &m_lightSampleableVptr;
 
     return 0;
 }
@@ -1327,7 +1190,7 @@ void* StaticMesh::queryInterface(unsigned int iid)
 
 // Borrows transform and lazily builds each part's world-space occluder geometry.
 // A template with no parts keeps initialization pending. Requires a valid template.
-// Occluder planes retain their template back-pointer and occupy 20 bytes.
+// Occluder faces retain their template plane's edge references, records the group's edges.
 
 void StaticMesh::setGeometryTransformation(const Mat4* transform)
 {
@@ -1337,13 +1200,13 @@ void StaticMesh::setGeometryTransformation(const Mat4* transform)
     if (transform && m_byte348)
     {
         // +0xF0 is the template's part count, +0xF4 fetches one part record by index.
-        typedef int (__fastcall* PartCountFn)(void*, void*);
-        typedef unsigned char* (__fastcall* GetPartFn)(void*, void*, int);
+        typedef int (__thiscall* PartCountFn)(void*);
+        typedef StaticMeshOccluderGroup* (__thiscall* GetPartFn)(void*, int);
 
         void* const objectTemplate = m_template;
         void** const tvtbl = *reinterpret_cast<void***>(objectTemplate);
         const int partCount = reinterpret_cast<PartCountFn>(
-            tvtbl[0xF0 / sizeof(void*)])(objectTemplate, 0);
+            tvtbl[0xF0 / 4])(objectTemplate);
 
         // reached AS sixteen RAW floats, exactly as the shipped body reaches it - every
         // access below is one of its documented byte offsets, not a named Mat4 member.
@@ -1353,57 +1216,40 @@ void StaticMesh::setGeometryTransformation(const Mat4* transform)
         {
             m_byte348 = 0;
 
-            unsigned char* const source = reinterpret_cast<GetPartFn>(
-                tvtbl[0xF4 / sizeof(void*)])(objectTemplate, 0, part);
+            StaticMeshOccluderGroup* const source = reinterpret_cast<GetPartFn>(
+                tvtbl[0xF4 / 4])(objectTemplate, part);
 
-            // The 36-byte element, built on the stack exactly as the shipped body builds it.
-            // The shipped code leaves both allocator words unwritten (that is how this
-            // class's vectors were identified in the first place); zeroing all 36 bytes here
-            // avoids copying indeterminate bytes into the vector and is otherwise identical.
-            unsigned char record[36];
-            for (unsigned int b = 0; b < sizeof(record); ++b)
-                record[b] = 0;
+            // The record, built on the stack exactly as the shipped body builds it.
+            StaticMeshOccluderRecord record;
+            std::vector<StaticMeshOccluderFace>& planes = record.faces;
+            std::vector<Vec3>& points = record.points;
+            record.edges = &source->edges;
 
-            vc71::vector_layout& planes = *reinterpret_cast<vc71::vector_layout*>(record);
-            vc71::vector_layout& points = *reinterpret_cast<vc71::vector_layout*>(record + 16);
-            *reinterpret_cast<unsigned char**>(record + 32) = source + 0x20;
-
-            // the points, source +0x14/+0x18 on a twelve-byte stride
-            unsigned char* const pointFirst = *reinterpret_cast<unsigned char**>(source + 0x14);
-            if (pointFirst)
+            // the points, transformed
             {
-                unsigned char* const pointLast =
-                    *reinterpret_cast<unsigned char**>(source + 0x18);
-                const unsigned int count =
-                    static_cast<unsigned int>(pointLast - pointFirst) / 12u;
+                const unsigned int count = static_cast<unsigned int>(source->points.size());
                 for (unsigned int i = 0; i < count; ++i)
                 {
-                    const float* const v =
-                        reinterpret_cast<const float*>(pointFirst + 12u * i);
-                    float world[3];
-                    world[0] = v[0] * m[0] + v[1] * m[4] + v[2] * m[8]  + m[12];
-                    world[1] = v[0] * m[1] + v[1] * m[5] + v[2] * m[9]  + m[13];
-                    world[2] = v[0] * m[2] + v[1] * m[6] + v[2] * m[10] + m[14];
-                    vc71::vectorPushBackIn(points, 12u, world);
+                    const Vec3& v = source->points[i];
+                    Vec3 world;
+                    world.x = v.x * m[0] + v.y * m[4] + v.z * m[8]  + m[12];
+                    world.y = v.x * m[1] + v.y * m[5] + v.z * m[9]  + m[13];
+                    world.z = v.x * m[2] + v.y * m[6] + v.z * m[10] + m[14];
+                    points.push_back(world);
                 }
             }
 
-            // the planes, source +0x04/+0x08 on a thirty-TWO byte stride
-            unsigned char* const planeFirst = *reinterpret_cast<unsigned char**>(source + 0x04);
-            if (planeFirst)
+            // the planes
             {
-                unsigned char* const planeLast =
-                    *reinterpret_cast<unsigned char**>(source + 0x08);
-                const unsigned int count =
-                    static_cast<unsigned int>(planeLast - planeFirst) >> 5;
+                const unsigned int count = static_cast<unsigned int>(source->planes.size());
                 for (unsigned int i = 0; i < count; ++i)
                 {
-                    unsigned char* const src = planeFirst + 32u * i;
-                    const float* const plane = reinterpret_cast<const float*>(src);
+                    const StaticMeshOccluderPlane& src = source->planes[i];
+                    const float* const plane = src.plane;
 
-                    unsigned char element[20];
+                    StaticMeshOccluderFace element;
                     // The back-pointer first, as the shipped body writes it first.
-                    *reinterpret_cast<unsigned char**>(element + 16) = src + 0x10;
+                    element.edgeReferences = &src.edgeReferences;
 
                     // Normalize the input normal only.
                     float input[4];
@@ -1411,14 +1257,13 @@ void StaticMesh::setGeometryTransformation(const Mat4* transform)
                     staticMeshNormalizeInPlace(input);
                     input[3] = plane[3];
 
-                    staticMeshTransformPlane(reinterpret_cast<float*>(element), input, m);
-                    vc71::vectorPushBackIn(planes, 20u, element);
+                    staticMeshTransformPlane(reinterpret_cast<float*>(&element.plane), input, m);
+                    planes.push_back(element);
                 }
             }
 
             // Transfers nested points/planes storage to the vector record.
-            // Do not free either local buffer; the record destructor now owns them.
-            vc71::vectorPushBackIn(m_vector338, 36u, record);
+            m_vector338.push_back(std::move(record));
         }
     }
 }
@@ -1438,8 +1283,8 @@ void StaticMesh::setOwnerObject(void* object)
 {
     m_dword330 = object;
 
-    typedef void* (__fastcall* RefreshFn)(void*, void*);
-    reinterpret_cast<RefreshFn>(m_vptr[0xF8 / sizeof(void*)])(this, 0);
+    typedef void* (__thiscall* RefreshFn)(void*);
+    reinterpret_cast<RefreshFn>(m_vptr[0xF8 / 4])(this);
 }
 
 // +0xF8, memoise the owner's root parent at +0x334, AND return IT.
@@ -1492,9 +1337,9 @@ void StaticMesh::stampFrameOrdinal()
     if (!base)
         return;
 
-    typedef unsigned int (__fastcall* FrameOrdinalFn)(void*, void*);
+    typedef unsigned int (__thiscall* FrameOrdinalFn)(void*);
     m_dword24 = reinterpret_cast<FrameOrdinalFn>(
-        (*reinterpret_cast<void***>(base))[0x54 / sizeof(void*)])(base, 0);
+        (*reinterpret_cast<void***>(base))[0x54 / 4])(base);
 }
 
 // the nine accessors
@@ -1504,10 +1349,10 @@ void* StaticMesh::getTemplate() const
     return m_template;
 }
 
-// Requires a selected LOD; returns its bounds at offset +4 without a null check.
+// Requires a selected LOD; returns its bounds (record +4) without a null check.
 const void* StaticMesh::getLocalBounds() const
 {
-    return m_dword30C + 4;
+    return &m_dword30C->bounds;
 }
 
 void* StaticMesh::getRootObject() const
@@ -1520,12 +1365,12 @@ void StaticMesh::setFloat308(float value)
     m_float308 = value;
 }
 
-void StaticMesh::setDword34C(unsigned int value)
+void StaticMesh::setDword34C(uintptr_t value)
 {
     m_dword34C = value;
 }
 
-unsigned int StaticMesh::getDword34C() const
+uintptr_t StaticMesh::getDword34C() const
 {
     return m_dword34C;
 }
@@ -1538,23 +1383,23 @@ int StaticMesh::getGeometryType() const
 // Updates flag bit 1 through the virtual updateFlags slot, honoring overrides.
 void StaticMesh::setFlagBit1(unsigned char enable)
 {
-    typedef void (__fastcall* UpdateFlagsFn)(void*, void*, unsigned int, unsigned int);
+    typedef void (__thiscall* UpdateFlagsFn)(void*, unsigned int, unsigned int);
     const UpdateFlagsFn update =
-        reinterpret_cast<UpdateFlagsFn>(m_vptr[0xC0 / sizeof(void*)]);
+        reinterpret_cast<UpdateFlagsFn>(m_vptr[0xC0 / 4]);
 
     if (enable)
-        update(this, 0, 2u, 0u);
+        update(this, 2u, 0u);
     else
-        update(this, 0, 0u, 2u);
+        update(this, 0u, 2u);
 }
 
 // 0x10103B70 - `call [eax+0C4h]; shr eax, 1; and al, 1`. The 8-bit AND is the bool return
 // convention, not a mask over the whole register: only AL is meaningful and only AL is read.
 bool StaticMesh::getFlagBit1() const
 {
-    typedef unsigned int (__fastcall* GetFlagsFn)(const void*, void*);
+    typedef unsigned int (__thiscall* GetFlagsFn)(const void*);
     const unsigned int flags = reinterpret_cast<GetFlagsFn>(
-        m_vptr[0xC4 / sizeof(void*)])(this, 0);
+        m_vptr[0xC4 / 4])(this);
     return ((flags >> 1) & 1u) != 0u;
 }
 
@@ -1577,32 +1422,25 @@ void StaticMesh::setGeom(int geom)
 {
     m_dword314 = static_cast<unsigned int>(geom);
 
-    unsigned char* const objectTemplate = static_cast<unsigned char*>(m_template);
+    StaticMeshTemplate* const objectTemplate = static_cast<StaticMeshTemplate*>(m_template);
     if (!objectTemplate)
         return;
 
-    unsigned char* const table16 =
-        *reinterpret_cast<unsigned char**>(objectTemplate + 0xD0);
-    unsigned char* const entry =
-        *reinterpret_cast<unsigned char**>(table16 + 16 * geom + 4);
+    // The template's material tree, geom level: one vector of lod material vectors.
+    StaticMeshLodMaterialLists* const table16 = objectTemplate->m_materials.data();
+    StaticMeshMaterialList* const entry = table16[geom].data();
 
     unsigned int count = 0;
     if (entry)
-    {
-        unsigned char* const end =
-            *reinterpret_cast<unsigned char**>(table16 + 16 * geom + 8);
-        count = static_cast<unsigned int>(end - entry) >> 4;
-    }
+        count = static_cast<unsigned int>(table16[geom].size());
 
     unsigned int lod = count - 1u;              // see the unsigned note above
     if (m_dword318 < lod)
         lod = m_dword318;
     m_dword318 = lod;
 
-    unsigned char* const table32 =
-        *reinterpret_cast<unsigned char**>(objectTemplate + 0xE0);
-    m_dword30C = *reinterpret_cast<unsigned char**>(table32 + 32 * geom + 4) + 104 * lod;
-    m_dword310 = *reinterpret_cast<unsigned char**>(table16 + 16 * geom + 4) + 16 * lod;
+    m_dword30C = objectTemplate->m_geoms[geom].lods.data() + lod;
+    m_dword310 = entry + lod;
 
     staticMeshRefreshSelection(this);
 }
@@ -1616,21 +1454,14 @@ void StaticMesh::setGeom(int geom)
 
 void StaticMesh::setLod(int lod)
 {
-    unsigned char* const objectTemplate = static_cast<unsigned char*>(m_template);
+    StaticMeshTemplate* const objectTemplate = static_cast<StaticMeshTemplate*>(m_template);
     if (!objectTemplate)
         return;
 
     const unsigned int geom = m_dword314;
 
-    unsigned char* const table32 =
-        *reinterpret_cast<unsigned char**>(objectTemplate + 0xE0);
-    unsigned char* const table16 =
-        *reinterpret_cast<unsigned char**>(objectTemplate + 0xD0);
-
-    unsigned char* const lodBase =
-        *reinterpret_cast<unsigned char**>(table32 + 32 * geom + 4);
-    unsigned char* const recBase =
-        *reinterpret_cast<unsigned char**>(table16 + 16 * geom + 4);
+    StaticMeshLod* const lodBase = objectTemplate->m_geoms[geom].lods.data();
+    StaticMeshMaterialList* const recBase = objectTemplate->m_materials.data()[geom].data();
 
     if (lod == -1)
     {
@@ -1643,8 +1474,8 @@ void StaticMesh::setLod(int lod)
     {
         m_dword318 = static_cast<unsigned int>(lod);
         m_byte357  = 1;
-        m_dword30C = lodBase + 104 * lod;
-        m_dword310 = recBase + 16 * lod;
+        m_dword30C = lodBase + lod;
+        m_dword310 = recBase + lod;
     }
 
     staticMeshRefreshSelection(this);
@@ -1660,23 +1491,22 @@ void StaticMesh::postLoad()
         return;
     m_byte359 = 1;
 
-    unsigned char* const objectTemplate = static_cast<unsigned char*>(m_template);
+    StaticMeshTemplate* const objectTemplate = static_cast<StaticMeshTemplate*>(m_template);
     if (!objectTemplate)
         return;
 
-    unsigned char* const table32 = *reinterpret_cast<unsigned char**>(objectTemplate + 0xE0);
-    unsigned char* const table16 = *reinterpret_cast<unsigned char**>(objectTemplate + 0xD0);
-    if (!table32 || !table16)
+    StaticMeshLodMaterialLists* const table16 = objectTemplate->m_materials.data();
+    if (objectTemplate->m_geoms.empty() || !table16)
         return;
 
     // Re-select the current (geom, lod) from the freshly loaded tables.
     {
         const unsigned int geom = m_dword314;
         const unsigned int lod  = m_dword318;
-        m_dword30C = *reinterpret_cast<unsigned char**>(table32 + 32 * geom + 4) + 104 * lod;
-        m_dword310 = *reinterpret_cast<unsigned char**>(table16 + 16 * geom + 4) + 16 * lod;
+        m_dword30C = objectTemplate->m_geoms[geom].lods.data() + lod;
+        m_dword310 = table16[geom].data() + lod;
 
-        MeshBounds* const bounds = reinterpret_cast<MeshBounds*>(m_dword30C + 4);
+        MeshBounds* const bounds = &m_dword30C->bounds;
         if (bounds->dirty)
             meshBoundsFinalize(*bounds);
         m_dword304 = *reinterpret_cast<const unsigned int*>(&bounds->radius);
@@ -1685,41 +1515,26 @@ void StaticMesh::postLoad()
     if (!staticMeshTemplateUsesLightmaps(objectTemplate))
         m_byte35A = 1;
 
-    // The geom count, from the template's +0xE0 vector.
-    unsigned char* const geomsFirst = *reinterpret_cast<unsigned char**>(objectTemplate + 0xE0);
-    unsigned char* const geomsLast  = *reinterpret_cast<unsigned char**>(objectTemplate + 0xE4);
-    const unsigned int geomCount =
-        geomsFirst ? static_cast<unsigned int>(geomsLast - geomsFirst) >> 5 : 0;
+    // The geom count, from the template's +0xDC vector.
+    const unsigned int geomCount = static_cast<unsigned int>(objectTemplate->m_geoms.size());
 
     // Keep the material-count walk even though its result is unused.
     {
         unsigned int unusedMaxMaterials = 0;
         for (unsigned int g = 0; g < geomCount; ++g)
         {
-            unsigned char* const lodFirst =
-                *reinterpret_cast<unsigned char**>(table32 + 32 * g + 4);
-            if (!lodFirst)
-                continue;
-            unsigned char* const lodLast =
-                *reinterpret_cast<unsigned char**>(table32 + 32 * g + 8);
             const unsigned int lodCount =
-                static_cast<unsigned int>(lodLast - lodFirst) / 104u;
+                static_cast<unsigned int>(objectTemplate->m_geoms[g].lods.size());
             if (!lodCount)
                 continue;
 
-            unsigned char* const recBase =
-                *reinterpret_cast<unsigned char**>(table16 + 16 * g + 4);
+            StaticMeshMaterialList* const recBase = table16[g].data();
             for (unsigned int l = 0; l < lodCount; ++l)
             {
-                unsigned char* const rec = recBase + 16 * l;
-                unsigned char* const matFirst = *reinterpret_cast<unsigned char**>(rec + 4);
+                const StaticMeshMaterialList& rec = recBase[l];
                 unsigned int materials = 0;
-                if (matFirst)
-                {
-                    unsigned char* const matLast =
-                        *reinterpret_cast<unsigned char**>(rec + 8);
-                    materials = static_cast<unsigned int>(matLast - matFirst) / 516u;
-                }
+                if (rec.data())
+                    materials = static_cast<unsigned int>(rec.size());
                 if (materials >= unusedMaxMaterials)
                     unusedMaxMaterials = materials;
             }
@@ -1730,49 +1545,38 @@ void StaticMesh::postLoad()
     const int savedGeom = getGeomIndex();
     const int savedLod  = getLodIndex();
 
-    staticMeshFloatVectorResize(m_geomRadii, geomCount, 0.0f);
-    staticMeshUnsignedVectorResize(m_geomLodDistanceCounts, geomCount, 0u);
+    m_geomRadii.resize(geomCount, 0.0f);                       // sub_100EC600
+    m_geomLodDistanceCounts.resize(geomCount, 0u);
 
     for (unsigned int g = 0; g < geomCount; ++g)
     {
         m_dword314 = g;
 
-        unsigned char* const lodBase = *reinterpret_cast<unsigned char**>(table32 + 32 * g + 4);
-        MeshBounds* const bounds = reinterpret_cast<MeshBounds*>(lodBase + 4);
+        StaticMeshGeom& geomRecord = objectTemplate->m_geoms[g];
+        StaticMeshLod* const lodBase = geomRecord.lods.data();
+        MeshBounds* const bounds = &lodBase->bounds;
         if (bounds->dirty)
             meshBoundsFinalize(*bounds);
 
-        if (m_geomRadii.first)
-        {
-            reinterpret_cast<unsigned int*>(m_geomRadii.first)[g] =
-                *reinterpret_cast<const unsigned int*>(&bounds->radius);
-        }
+        if (!m_geomRadii.empty())
+            m_geomRadii[g] = bounds->radius;
 
         // Count this geometry's LOD switch distances.
-        unsigned char* const distancesFirst =
-            *reinterpret_cast<unsigned char**>(table32 + 32 * g + 20);
-        unsigned int distanceCount = 0;
-        if (distancesFirst)
-        {
-            unsigned char* const distancesLast =
-                *reinterpret_cast<unsigned char**>(table32 + 32 * g + 24);
-            distanceCount = static_cast<unsigned int>(distancesLast - distancesFirst) >> 2;
-        }
-        if (m_geomLodDistanceCounts.first)
-            reinterpret_cast<unsigned int*>(m_geomLodDistanceCounts.first)[g] = distanceCount;
+        const unsigned int distanceCount =
+            static_cast<unsigned int>(geomRecord.lodDistances.size());
+        if (!m_geomLodDistanceCounts.empty())
+            m_geomLodDistanceCounts[g] = distanceCount;
 
         if (m_byte35A || !staticMeshTemplateUsesLightmaps(objectTemplate))
             continue;
 
         // Pre-populate this geom's lightmap entries with the default (1,1) UV scale - which is
         // exactly what the constructor seeds +0x270/+0x274 with.
-        unsigned char* const lodFirst = lodBase;
-        unsigned char* const lodLast  = *reinterpret_cast<unsigned char**>(table32 + 32 * g + 8);
-        const unsigned int lodCount =
-            lodFirst ? static_cast<unsigned int>(lodLast - lodFirst) / 104u : 0;
+        const unsigned int lodCount = static_cast<unsigned int>(geomRecord.lods.size());
 
+        // The base's +0x70 per-geom skipped-lod counts (null until the vector first allocates).
         const unsigned int* const perGeom =
-            *reinterpret_cast<const unsigned int* const*>(objectTemplate + 0x74);
+            reinterpret_cast<const unsigned int*>(objectTemplate->m_geomInts.data());
 
         for (unsigned int l = 0; l < lodCount; ++l)
         {
@@ -1786,27 +1590,16 @@ void StaticMesh::postLoad()
                                    + static_cast<unsigned int>(getLodIndex())
                                    + 2u * (5u * geomIndex);
 
-            // mapFindU32 answers NULL on a miss where the shipped find returns the head
-            // sentinel; the shipped test compares against the head, so this compares against null.
-            if (!vc71::mapFindU32(m_map260, key))
-            {
-                vc71::map_node_u32* const fresh = vc71::mapInsertU32(m_map260, key);
-                if (fresh)
-                {
-                    for (unsigned int b = 0; b < sizeof(fresh->value); ++b)
-                        fresh->value[b] = 0;
-                }
-            }
+            // find, then insert a zeroed entry on a miss, then operator[] for the stores.
+            if (m_map260.find(key) == m_map260.end())
+                m_map260.insert(LightmapCache::value_type(key, StaticMeshLightmapEntry()));
 
-            vc71::map_node_u32* const entry = vc71::mapInsertU32(m_map260, key);
-            if (entry)
-            {
-                *reinterpret_cast<unsigned int*>(entry->value + 0)  = 0;
-                *reinterpret_cast<float*>(entry->value + 4)         = 1.0f;
-                *reinterpret_cast<float*>(entry->value + 8)         = 1.0f;
-                *reinterpret_cast<unsigned int*>(entry->value + 12) = 0;
-                *reinterpret_cast<unsigned int*>(entry->value + 16) = 0;
-            }
+            StaticMeshLightmapEntry& entry = m_map260[key];
+            entry.texture   = 0;
+            entry.offset[0] = 1.0f;
+            entry.offset[1] = 1.0f;
+            *reinterpret_cast<unsigned int*>(&entry.offset[2]) = 0;
+            *reinterpret_cast<unsigned int*>(&entry.offset[3]) = 0;
 
             if (m_transform)
                 loadLightmap();
@@ -1850,17 +1643,9 @@ void* StaticMesh::getDword28C() const
 
 int StaticMesh::getGeomCount() const
 {
-    const unsigned char* const objectTemplate =
-        static_cast<const unsigned char*>(m_template);
-
-    const unsigned char* const first =
-        *reinterpret_cast<const unsigned char* const*>(objectTemplate + 0xE0);
-    if (!first)
-        return 0;
-
-    const unsigned char* const last =
-        *reinterpret_cast<const unsigned char* const*>(objectTemplate + 0xE4);
-    return static_cast<int>(static_cast<unsigned int>(last - first) >> 5);
+    const StaticMeshTemplate* const objectTemplate =
+        static_cast<const StaticMeshTemplate*>(m_template);
+    return static_cast<int>(objectTemplate->m_geoms.size());
 }
 
 
@@ -1868,21 +1653,9 @@ int StaticMesh::getGeomCount() const
 
 int StaticMesh::getLodCount() const
 {
-    const unsigned char* const objectTemplate =
-        static_cast<const unsigned char*>(m_template);
-
-    const unsigned char* const geomRecord =
-        *reinterpret_cast<const unsigned char* const*>(objectTemplate + 0xE0)
-        + 32 * m_dword314;
-
-    const unsigned char* const first =
-        *reinterpret_cast<const unsigned char* const*>(geomRecord + 4);
-    if (!first)
-        return 0;
-
-    const unsigned char* const last =
-        *reinterpret_cast<const unsigned char* const*>(geomRecord + 8);
-    return static_cast<int>((last - first) / 104);
+    const StaticMeshTemplate* const objectTemplate =
+        static_cast<const StaticMeshTemplate*>(m_template);
+    return static_cast<int>(objectTemplate->m_geoms[m_dword314].lods.size());
 }
 
 // +0xF4, one store, into RaObjectParameters::transparency.value.
@@ -1918,7 +1691,7 @@ float StaticMesh::getBoundingRadius()
     if (!m_dword30C)
         return 0.00999999978f;                       // ds:1020CE4C
 
-    MeshBounds* const bounds = reinterpret_cast<MeshBounds*>(m_dword30C + 4);
+    MeshBounds* const bounds = &m_dword30C->bounds;
     if (bounds->dirty)
         meshBoundsFinalize(*bounds);
     m_dword304 = *reinterpret_cast<const unsigned int*>(&bounds->radius);
@@ -1946,7 +1719,7 @@ void StaticMesh::setDynamicPartTransformation(unsigned int part, const Mat4* tra
 }
 
 // +0x68, 0x10082D30 - `add ecx, 4; jmp basic_string::operator=(const basic_string&)`.
-void StaticMesh::setName(const vc71::string& value)
+void StaticMesh::setName(const std::string& value)
 {
     m_name = value;
 }
@@ -1965,36 +1738,31 @@ void StaticMesh::setMaterialOverride(int index)
     m_dword31C = static_cast<unsigned int>(index);
 }
 
-// +0x8C, the selected lod's 516-byte material records, counted; 0 with no lod or
-// no materials.
+// +0x8C, the selected lod's material records, counted; 0 with no lod or no materials.
 int StaticMesh::getMaterialCount() const
 {
     if (!m_dword310)
         return 0;
-    const unsigned char* const first = *reinterpret_cast<const unsigned char* const*>(m_dword310 + 4);
+    const StaticMeshMaterial* const first =
+        m_dword310->data();
     if (!first)
         return 0;
-    const unsigned char* const last = *reinterpret_cast<const unsigned char* const*>(m_dword310 + 8);
-    return static_cast<int>((last - first) / 516);
+    return static_cast<int>((m_dword310->data() + m_dword310->size()) - first);
 }
 
-// +0xE8, the +0x338 records, counted at their 36-byte stride.
+// +0xE8, the +0x338 records, counted.
 int StaticMesh::getOccluderRecordCount() const
 {
-    if (!m_vector338.first)
-        return 0;
-    return static_cast<int>((m_vector338.last - m_vector338.first) / 36);
+    return static_cast<int>(m_vector338.size());
 }
 
 // +0xEC, the i-th +0x338 record, or null when there are none or i is past the end.
 const void* StaticMesh::getOccluderRecord(unsigned int index) const
 {
-    if (!m_vector338.first)
-        return 0;
-    const unsigned int count = static_cast<unsigned int>(m_vector338.last - m_vector338.first) / 36u;
+    const unsigned int count = static_cast<unsigned int>(m_vector338.size());
     if (!count || index >= count)
         return 0;
-    return m_vector338.first + 36u * index;
+    return &m_vector338[index];
 }
 
 // ILightSampleable +0x10, 0x10197EF0 - `mov al, 1; retn`.
@@ -2009,13 +1777,12 @@ bool StaticMesh::lightSampleableSlot10ReturnsTrue() const
 
 unsigned int StaticMesh::materialShaderBits(void* material, bool pointLightPass)
 {
-    unsigned char* const mat = static_cast<unsigned char*>(material);
-    const ShaderMaterial* const shaderMaterial =
-        *reinterpret_cast<const ShaderMaterial* const*>(mat + 0x28);
+    const StaticMeshMaterial* const mat = static_cast<const StaticMeshMaterial*>(material);
+    const ShaderMaterial* const shaderMaterial = mat->m_shaderMaterial;     // +0x28
     unsigned int bits = g_shaderComboFlags[shaderMaterial->shaderCombo];    // dword_1023A9D0
 
-    typedef unsigned int (__fastcall* GetFlagsFn)(const void*, void*);
-    if ((reinterpret_cast<GetFlagsFn>(m_vptr[0xC4 / sizeof(void*)])(this, 0) & 1u) != 0)
+    typedef unsigned int (__thiscall* GetFlagsFn)(const void*);
+    if ((reinterpret_cast<GetFlagsFn>(m_vptr[0xC4 / 4])(this) & 1u) != 0)
         bits &= ~8u;
 
     if (pointLightPass)
@@ -2026,15 +1793,15 @@ unsigned int StaticMesh::materialShaderBits(void* material, bool pointLightPass)
     {
         if (!m_byte35A && staticMeshTemplateUsesLightmaps(m_template) && m_dword26C)
             bits |= 1u;
-        typedef int (__fastcall* GetLodFn)(const void*, void*);
-        const int lod = reinterpret_cast<GetLodFn>(m_vptr[0x7C / sizeof(void*)])(this, 0);
+        typedef int (__thiscall* GetLodFn)(const void*);
+        const int lod = reinterpret_cast<GetLodFn>(m_vptr[0x7C / 4])(this);
         if (static_cast<int>(staticMeshRenderer()->m_dword98) < lod)
             bits &= ~1u;
         if (m_byte355)
             bits |= 0x200u;
     }
 
-    if (*reinterpret_cast<const unsigned int*>(mat + 0x17C) == 2u)       // m_alphaMode
+    if (mat->m_alphaMode == 2u)                                           // +0x17C
         bits |= 0x800u;
     return bits;
 }
@@ -2104,22 +1871,24 @@ void StaticMesh::updateObjectParameters()
     bool casterThisFrame = false;
     if (m_dword34C)
     {
-        typedef void* (__fastcall* GetDword350Fn)(const void*, void*);
+        typedef void* (__thiscall* GetDword350Fn)(const void*);
         const void* const stamped =
-            reinterpret_cast<GetDword350Fn>(m_vptr[0xB0 / sizeof(void*)])(this, 0);
-        if (reinterpret_cast<unsigned int>(stamped) == dx9rend::rendererFrameOrdinal())   // +0x54
+            reinterpret_cast<GetDword350Fn>(m_vptr[0xB0 / 4])(this);
+        // The pointer-typed slot carries a 32-bit frame ordinal.
+        if (static_cast<unsigned int>(reinterpret_cast<uintptr_t>(stamped))
+            == dx9rend::rendererFrameOrdinal())                                  // +0x54
             casterThisFrame = true;
     }
     m_byte355 = casterThisFrame ? 1 : 0;
 
     if (casterThisFrame)
     {
-        const unsigned char* const caster = reinterpret_cast<const unsigned char*>(m_dword34C);
+        const LightShadowRecord* const caster = reinterpret_cast<const LightShadowRecord*>(m_dword34C);
         Mat4 projection = Mat4::getIdentity();
-        projection.fullMult(*m_transform, *reinterpret_cast<const Mat4*>(caster + 0x2F8));
+        projection.fullMult(*m_transform, caster->matrices[4]);                 // +0x2F8
         std::memcpy(op.shadowProjMat.value, projection.m, sizeof(op.shadowProjMat.value));
         Mat4 trapezoid = Mat4::getIdentity();
-        trapezoid.fullMult(*m_transform, *reinterpret_cast<const Mat4*>(caster + 0x3B8));
+        trapezoid.fullMult(*m_transform, caster->matrices[7]);                  // +0x3B8
         std::memcpy(op.shadowTrapMat.value, trapezoid.m, sizeof(op.shadowTrapMat.value));
     }
 }
@@ -2130,25 +1899,25 @@ void StaticMesh::updateObjectParameters()
 
 void StaticMesh::loadLightmap()
 {
-    if (m_byte35A && !rendererBaseByte(0x102))
+    if (m_byte35A && !rendererBaseFlag102())
         return;
 
-    typedef int (__fastcall* IndexFn)(const void*, void*);
-    const int geom = reinterpret_cast<IndexFn>(m_vptr[0x70 / sizeof(void*)])(this, 0);
-    const int lod  = reinterpret_cast<IndexFn>(m_vptr[0x7C / sizeof(void*)])(this, 0);
+    typedef int (__thiscall* IndexFn)(const void*);
+    const int geom = reinterpret_cast<IndexFn>(m_vptr[0x70 / 4])(this);
+    const int lod  = reinterpret_cast<IndexFn>(m_vptr[0x7C / 4])(this);
     const unsigned int key = static_cast<unsigned int>(lod + 2 * (5 * geom));
 
-    vc71::map_node_u32* const node = vc71::mapInsertU32(m_map260, key);
-    dx9rend::EngineTexture*& slot = *reinterpret_cast<dx9rend::EngineTexture**>(node->value);
+    StaticMeshLightmapEntry& entry = m_map260[key];
+    dx9rend::EngineTexture*& slot = entry.texture;
     if (slot)
         return;
 
     StaticMeshRenderer* const smr = staticMeshRenderer();
-    if (rendererBaseByte(0x102))
+    if (rendererBaseFlag102())
     {
-        vc71::string name("");
+        std::string name("");
         staticMeshLightmapName(this, name);
-        vc71::string path(name);
+        std::string path(name);
         path += ".dds";
         if (!::renddx9abi::engineFileExists(path))                           // FileManager +0x1C
         {
@@ -2165,18 +1934,16 @@ void StaticMesh::loadLightmap()
             m_byte35A  = 1;
             return;
         }
-        m_dword26C = reinterpret_cast<unsigned int>(texture);
+        m_dword26C = reinterpret_cast<uintptr_t>(texture);
     }
     else if (smr->m_flags60[4])
     {
         const int savedMipClass = dx9rend::textureManagerSwapDefaultMipClass(13);
-        vc71::string objectName("");
+        std::string objectName("");
         staticMeshLightmapObjectName(this, objectName);
-        vc71::string directory("");
+        std::string directory("");
         staticMeshLightmapDirectory(directory);
-        staticMeshRendererTryLoadLightmapTexture(smr, directory, objectName,
-                                                 reinterpret_cast<float*>(node->value + 4),
-                                                 &slot);
+        staticMeshRendererTryLoadLightmapTexture(smr, directory, objectName, entry.offset, &slot);
         dx9rend::textureManagerSwapDefaultMipClass(savedMipClass);
         if (!slot)
         {
@@ -2184,9 +1951,9 @@ void StaticMesh::loadLightmap()
             m_byte35A  = 1;
             return;
         }
-        m_dword26C = reinterpret_cast<unsigned int>(slot);
+        m_dword26C = reinterpret_cast<uintptr_t>(slot);
         // sub_1000BDD0(this + 0x270, entry + 4): the four offset floats.
-        const unsigned int* const offset = reinterpret_cast<const unsigned int*>(node->value + 4);
+        const unsigned int* const offset = reinterpret_cast<const unsigned int*>(entry.offset);
         m_float270 = *reinterpret_cast<const float*>(&offset[0]);
         m_float274 = *reinterpret_cast<const float*>(&offset[1]);
         m_dword278 = offset[2];
@@ -2209,9 +1976,9 @@ void StaticMesh::loadVertexLightLists()
 
     if (!m_dword300)
     {
-        vc71::string name("StaticMesh : ");
+        std::string name("StaticMesh : ");
         name += t->getName();
-        m_dword300 = reinterpret_cast<unsigned int>(
+        m_dword300 = reinterpret_cast<uintptr_t>(
             dx9rend::createVertexBuffer(dx9rend::g_bufferManager, vertexCount, 4, name, 8));
     }
     void* const buffer = reinterpret_cast<void*>(m_dword300);
@@ -2222,33 +1989,24 @@ void StaticMesh::loadVertexLightLists()
         dx9rend::vertexBufferLock(buffer, 0, vertexCount, 0));
     std::memset(words, 0, 4u * vertexCount);
 
-    typedef int (__fastcall* IndexFn)(const void*, void*);
-    const int savedGeom = reinterpret_cast<IndexFn>(m_vptr[0x70 / sizeof(void*)])(this, 0);
-    const int savedLod  = reinterpret_cast<IndexFn>(m_vptr[0x7C / sizeof(void*)])(this, 0);
+    typedef int (__thiscall* IndexFn)(const void*);
+    const int savedGeom = reinterpret_cast<IndexFn>(m_vptr[0x70 / 4])(this);
+    const int savedLod  = reinterpret_cast<IndexFn>(m_vptr[0x7C / 4])(this);
 
-    const unsigned char* const objectTemplate = static_cast<const unsigned char*>(m_template);
-    const unsigned char* const geomsFirst =
-        *reinterpret_cast<const unsigned char* const*>(objectTemplate + 0xE0);
-    const unsigned char* const geomsLast =
-        *reinterpret_cast<const unsigned char* const*>(objectTemplate + 0xE4);
-    const unsigned int geomCount =
-        geomsFirst ? static_cast<unsigned int>(geomsLast - geomsFirst) >> 5 : 0u;
+    const StaticMeshTemplate* const objectTemplate =
+        static_cast<const StaticMeshTemplate*>(m_template);
+    const unsigned int geomCount = static_cast<unsigned int>(objectTemplate->m_geoms.size());
 
     for (unsigned int g = 0; g < geomCount; ++g)
     {
         m_dword314 = g;
-        const unsigned char* const geomRecord = geomsFirst + 32u * g;
-        const unsigned char* const lodFirst =
-            *reinterpret_cast<const unsigned char* const*>(geomRecord + 4);
-        const unsigned char* const lodLast =
-            *reinterpret_cast<const unsigned char* const*>(geomRecord + 8);
         const unsigned int lodCount =
-            lodFirst ? static_cast<unsigned int>(lodLast - lodFirst) / 104u : 0u;
+            static_cast<unsigned int>(objectTemplate->m_geoms[g].lods.size());
 
         for (unsigned int l = 0; l < lodCount; ++l)
         {
             m_dword318 = l;
-            vc71::string name("");
+            std::string name("");
             staticMeshLightmapName(this, name);
             name += ".lights";
 
@@ -2262,12 +2020,12 @@ void StaticMesh::loadVertexLightLists()
                 if (cursor + 4 <= end)
                     std::memcpy(&count, cursor, 4);
                 cursor += 4;
-                staticMeshVertexLightVectorResize(m_vector2F0, count);
-                for (unsigned char* record = reinterpret_cast<unsigned char*>(m_vector2F0.first);
-                     record != reinterpret_cast<unsigned char*>(m_vector2F0.last); record += 28)
+                m_vector2F0.resize(count);                                   // sub_10199AE0
+                for (std::vector<VertexLightRecord>::iterator record = m_vector2F0.begin();
+                     record != m_vector2F0.end(); ++record)
                 {
                     if (cursor + 28 <= end)
-                        std::memcpy(record, cursor, 28);                     // 12 + 12 + 4
+                        std::memcpy(record->bytes, cursor, 28);              // 12 + 12 + 4
                     cursor += 28;
                 }
 
@@ -2294,10 +2052,10 @@ void StaticMesh::loadVertexLightLists()
         }
     }
 
-    typedef void (__fastcall* SetIndexFn)(void*, void*, int);
-    reinterpret_cast<SetIndexFn>(m_vptr[0x6C / sizeof(void*)])(this, 0, savedGeom);
-    reinterpret_cast<SetIndexFn>(m_vptr[0x78 / sizeof(void*)])(this, 0, savedLod);
-    reinterpret_cast<SetIndexFn>(m_vptr[0x78 / sizeof(void*)])(this, 0, -1);
+    typedef void (__thiscall* SetIndexFn)(void*, int);
+    reinterpret_cast<SetIndexFn>(m_vptr[0x6C / 4])(this, savedGeom);
+    reinterpret_cast<SetIndexFn>(m_vptr[0x78 / 4])(this, savedLod);
+    reinterpret_cast<SetIndexFn>(m_vptr[0x78 / 4])(this, -1);
     dx9rend::vertexBufferUnlock(buffer);
 }
 
@@ -2359,19 +2117,14 @@ void StaticMesh::drawVanilla()
     // 3. lod selection
     if (!m_byte357)
     {
-        const float radius =
-            reinterpret_cast<const float*>(m_geomRadii.first)[m_dword314];
+        const float radius = m_geomRadii.data()[m_dword314];
         const float lodDistance = mainView->getInverseZoom() * distance - radius;   // +0x2C
 
         int selected = 0;
-        int i = static_cast<int>(
-            reinterpret_cast<const unsigned int*>(m_geomLodDistanceCounts.first)[m_dword314]) - 1;
+        int i = static_cast<int>(m_geomLodDistanceCounts.data()[m_dword314]) - 1;
         if (i >= 0)
         {
-            const StaticMeshGeom* const geoms =
-                reinterpret_cast<const StaticMeshGeom*>(t->m_geoms.first);
-            const float* const switchDistances =
-                reinterpret_cast<const float*>(geoms[m_dword314].lodDistances.first);
+            const float* const switchDistances = t->m_geoms[m_dword314].lodDistances.data();
             const float scale = rendererFloat(0x8B0) * rendererFloat(0x84C);
             for (;;)
             {
@@ -2403,15 +2156,15 @@ void StaticMesh::drawVanilla()
 
         if (selected != static_cast<int>(m_dword318))
         {
-            typedef void (__fastcall* SetLodFn)(void*, void*, int);
-            reinterpret_cast<SetLodFn>(m_vptr[0x78 / sizeof(void*)])(this, 0, selected);
+            typedef void (__thiscall* SetLodFn)(void*, int);
+            reinterpret_cast<SetLodFn>(m_vptr[0x78 / 4])(this, selected);
             m_byte357 = 0;
         }
     }
     if (smr->m_byte94 && !m_byte357)
     {
-        typedef void (__fastcall* SetLodFn)(void*, void*, int);
-        reinterpret_cast<SetLodFn>(m_vptr[0x78 / sizeof(void*)])(this, 0, 0);
+        typedef void (__thiscall* SetLodFn)(void*, int);
+        reinterpret_cast<SetLodFn>(m_vptr[0x78 / 4])(this, 0);
         m_byte357 = 0;
     }
 
@@ -2424,7 +2177,7 @@ void StaticMesh::drawVanilla()
     const bool transparent = op.transparency.value < 1.0f;
 
     // 5. the point-light gather
-    staticMeshPointerVectorResize(m_vector2D0, 0, 0);                     // sub_100E1C20(0, 0)
+    m_vector2D0.clear();                                                  // sub_100E1C20(0, 0)
     if (!transparent)
     {
         const int maxLights = g_LightManager->getMaxLightsPerStaticMesh();          // +0x68
@@ -2434,10 +2187,8 @@ void StaticMesh::drawVanilla()
                                                 required, 0u, true);                // +0x20
     }
 
-    const unsigned int lightCount = m_vector2D0.first
-        ? static_cast<unsigned int>(m_vector2D0.last - m_vector2D0.first) / sizeof(void*)
-        : 0u;
-    const bool hasLights = m_vector2D0.first && lightCount != 0 && !transparent;
+    const unsigned int lightCount = static_cast<unsigned int>(m_vector2D0.size());
+    const bool hasLights = lightCount != 0 && !transparent;
     m_byte354 = hasLights ? 1 : 0;
 
     if (hasLights)
@@ -2448,12 +2199,10 @@ void StaticMesh::drawVanilla()
         std::memset(&fill, 0, 0x38);
         fill.float3C = 1.0f;
         fill.float40 = 1.0f;
-        staticMeshLightRecordVectorResize(m_vector2E0, lightCount, fill);
+        m_vector2E0.resize(lightCount, fill);                            // sub_10102690
 
-        world::LightSource** const lights =
-            reinterpret_cast<world::LightSource**>(m_vector2D0.first);
-        dx9rend::Ra::RaLightRecord* const records =
-            reinterpret_cast<dx9rend::Ra::RaLightRecord*>(m_vector2E0.first);
+        world::LightSource* const* const lights = m_vector2D0.data();
+        dx9rend::Ra::RaLightRecord* const records = m_vector2E0.data();
         const float* const m = m_matrix290.m;
         for (unsigned int k = 0; k < lightCount; ++k)
         {
@@ -2498,10 +2247,7 @@ void StaticMesh::drawVanilla()
         unsigned int maskIndex = rendererDword(0x6CC);
         if (rendererByte(0x6D0))
         {
-            const unsigned int maskCount = g_staticMeshQualityMasks.first
-                ? static_cast<unsigned int>(g_staticMeshQualityMasks.last
-                                            - g_staticMeshQualityMasks.first) >> 2
-                : 0u;
+            const unsigned int maskCount = static_cast<unsigned int>(g_staticMeshQualityMasks.size());
             // `count` when the lod is past the end - one element past the vector.  Shipped.
             maskIndex = (maskCount < m_dword318) ? maskCount : m_dword318;
         }
@@ -2509,26 +2255,24 @@ void StaticMesh::drawVanilla()
         {
             maskIndex = m_dword320;
         }
-        const unsigned int qualityMask =
-            reinterpret_cast<const unsigned int*>(g_staticMeshQualityMasks.first)[maskIndex];
+        const unsigned int qualityMask = g_staticMeshQualityMasks.data()[maskIndex];
 
-        unsigned char* const materialsFirst =
-            *reinterpret_cast<unsigned char**>(m_dword310 + 4);
+        StaticMeshMaterial* const materialsFirst =
+            m_dword310->data();
         const unsigned int materialCount = materialsFirst
-            ? static_cast<unsigned int>(*reinterpret_cast<unsigned char**>(m_dword310 + 8)
-                                        - materialsFirst) / 516u
+            ? static_cast<unsigned int>(
+                  (m_dword310->data() + m_dword310->size()) - materialsFirst)
             : 0u;
 
         for (unsigned int i = 0; i < materialCount; ++i)
         {
             m_dword31C = i;
-            unsigned char* const material =
-                *reinterpret_cast<unsigned char**>(m_dword310 + 4) + 516u * i;
+            StaticMeshMaterial* const material =
+                m_dword310->data() + i;
 
             if (smr->m_flags60[0])
             {
-                StaticMeshBoundsCorners corners(
-                    *reinterpret_cast<const MeshBounds*>(material + 0x198), *m_transform);
+                StaticMeshBoundsCorners corners(material->m_bounds, *m_transform);   // +0x198
                 const Frustum* const frustum =
                     dx9rend::rendererGetRenderViewDup()->getFrustumPtr();        // +0x50, +0x74
                 if (corners.outside(*frustum))
@@ -2539,7 +2283,7 @@ void StaticMesh::drawVanilla()
             }
 
             dx9rend::RenderQueueEntry* const entry = dx9rend::renderEntryPoolAcquire();
-            entry->materialParameters = material + 0x2C;
+            entry->materialParameters = material->m_parameters;              // +0x2C
             entry->material           = material;
             entry->objectParameters   = &op;
 
@@ -2570,13 +2314,11 @@ void StaticMesh::drawVanilla()
                     staticMeshStoreLightMapOffset(entry, this);
                 }
 
-                const unsigned char* const terrain = static_cast<const unsigned char*>(g_terrain);
-                dx9rend::Ra::RaShader* const nearShader =
-                    *reinterpret_cast<dx9rend::Ra::RaShader* const*>(terrain + 0x718);
-                dx9rend::Ra::RaShader* const farShader =
-                    *reinterpret_cast<dx9rend::Ra::RaShader* const*>(terrain + 0x71C);
-                const float threshold = *reinterpret_cast<const float*>(terrain + 0x70C);
-                MeshBounds* const bounds = reinterpret_cast<MeshBounds*>(m_dword30C + 4);
+                const Terrain* const terrain = static_cast<const Terrain*>(g_terrain);
+                dx9rend::Ra::RaShader* const nearShader = terrain->m_waterDistantTechnique;   // +0x718
+                dx9rend::Ra::RaShader* const farShader  = terrain->m_waterDistantTechnique2;  // +0x71C
+                const float threshold = terrain->m_waterTechniqueMargin;                      // +0x70C
+                MeshBounds* const bounds = &m_dword30C->bounds;
                 if (bounds->dirty)
                     meshBoundsFinalize(*bounds);
                 staticMeshMaterialShader(material) =
@@ -2584,15 +2326,13 @@ void StaticMesh::drawVanilla()
 
                 // The material block's CubeMap holder (material + 0x148 / +0x14C): the terrain's
                 // +0x6C0 object's texture, else the LightManager's cube at its +0x248.
-                if (!*reinterpret_cast<void**>(material + 0x14C))
+                if (!staticMeshMaterialCubeMap(material))
                 {
-                    const unsigned char* const terrainCube =
-                        *reinterpret_cast<const unsigned char* const*>(terrain + 0x6C0);
+                    const TerrainEnvMapRecord* const terrainCube = terrain->m_waterEnvMap; // +0x6C0
                     dx9rend::EngineTexture* const cube = terrainCube
-                        ? *reinterpret_cast<dx9rend::EngineTexture* const*>(terrainCube + 0x10)
-                        : *reinterpret_cast<dx9rend::EngineTexture* const*>(
-                              reinterpret_cast<const unsigned char*>(g_LightManager) + 0x248);
-                    staticMeshAssignTexture(*reinterpret_cast<void**>(material + 0x14C), cube);
+                        ? static_cast<dx9rend::EngineTexture*>(terrainCube->texture)    // +0x10
+                        : lightManagerBlackCubeTexture(g_LightManager);                  // +0x248
+                    staticMeshAssignTexture(staticMeshMaterialCubeMap(material), cube);
                 }
                 entry->shader = staticMeshMaterialShader(material);
                 dx9rend::renderQueueAddToSlot(9, entry);                         // RSMTWater, +0x28
@@ -2604,13 +2344,14 @@ void StaticMesh::drawVanilla()
                 std::memcpy(op.viewProjection.value,
                             dx9rend::rendererGetRenderViewDup()->getViewProjectionMatrixPtr()->m,
                             sizeof(op.viewProjection.value));
-                dx9rend::EngineTexture* const scratch = *reinterpret_cast<dx9rend::EngineTexture**>(
-                    reinterpret_cast<unsigned char*>(dx9rend::g_Renderer) + 0x774);
+                dx9rend::EngineTexture* const scratch =
+                    dx9rend::rendererGetHemiScratchTexture();                    // Renderer +0x774
                 if (scratch)
                     staticMeshSwapD3DTexture(entry->lighting.lightMap.value, scratch->baseTexture);
 
                 dx9rend::Ra::RaShader* shader;
-                if (*reinterpret_cast<const void* const*>(material + 0xF0) == 0)   // DetailMap.value
+                // DetailMap.value: material +0xF0, parameter block +0xC4.
+                if (staticMeshMaterialParameters(material).detailMap.value == 0)
                     shader = staticMeshFindShaderBits(0xF1000000u);
                 else if (t->m_roadNoBlend)
                     shader = staticMeshFindShaderBits(0xF4000000u);
@@ -2628,7 +2369,7 @@ void StaticMesh::drawVanilla()
                 {
                     staticMeshMaterialShader(material) = staticMeshFindShaderBits(qualityMask & bits);
                 }
-                else if (material[0x1EC])                                      // m_vegetationNonTiled
+                else if (material->m_vegetationNonTiled)                       // +0x1EC
                 {
                     const float f = m_float25C;
                     const Vec3& treeSun = g_LightManager->getTreeSunColor();     // +0x1C8
@@ -2694,22 +2435,21 @@ void StaticMesh::drawVanilla()
                 {
                     // the point-light pass: one entry per gathered light
                     dx9rend::Ra::RaShader* pointShader;
-                    if (material[0x1EC])
+                    if (material->m_vegetationNonTiled)                        // +0x1EC
                     {
                         pointShader = staticMeshFindShaderBits(
                             m_byte355 ? 0xF0000600u : 0xF0000400u);
                     }
                     else
                     {
-                        const ShaderMaterial* const shaderMaterial =
-                            *reinterpret_cast<const ShaderMaterial* const*>(material + 0x28);
+                        const ShaderMaterial* const shaderMaterial = material->m_shaderMaterial;
                         unsigned int pointBits = g_shaderComboFlags[shaderMaterial->shaderCombo];
-                        typedef unsigned int (__fastcall* GetFlagsFn)(const void*, void*);
-                        if ((reinterpret_cast<GetFlagsFn>(m_vptr[0xC4 / sizeof(void*)])(this, 0)
+                        typedef unsigned int (__thiscall* GetFlagsFn)(const void*);
+                        if ((reinterpret_cast<GetFlagsFn>(m_vptr[0xC4 / 4])(this)
                              & 1u) != 0)
                             pointBits &= ~8u;
                         pointBits |= 0x400u;
-                        if (*reinterpret_cast<const unsigned int*>(material + 0x17C) == 2u)
+                        if (material->m_alphaMode == 2u)                       // +0x17C
                             pointBits |= 0x800u;
                         pointShader = staticMeshFindShaderBits(qualityMask & pointBits);
                     }
@@ -2717,11 +2457,8 @@ void StaticMesh::drawVanilla()
 
                     for (unsigned int k = 0; ; ++k)
                     {
-                        if (!m_vector2E0.first)
-                            break;
                         const unsigned int recordCount =
-                            static_cast<unsigned int>(m_vector2E0.last - m_vector2E0.first)
-                            / sizeof(dx9rend::Ra::RaLightRecord);
+                            static_cast<unsigned int>(m_vector2E0.size());
                         if (k >= recordCount)
                             break;
 
@@ -2731,11 +2468,10 @@ void StaticMesh::drawVanilla()
                             static_cast<dx9rend::Ra::RaLightRecord*>(
                                 lightEntry->lightArray.lights.value);
                         lightEntry->material           = material;
-                        lightEntry->materialParameters = material + 0x2C;
+                        lightEntry->materialParameters = material->m_parameters;
                         lightEntry->objectParameters   = &op;
                         lightEntry->shader             = staticMeshMaterialShader(material);
-                        *destination = reinterpret_cast<const dx9rend::Ra::RaLightRecord*>(
-                            m_vector2E0.first)[k];
+                        *destination = m_vector2E0[k];
                         dx9rend::renderQueueEnqueue(lightEntry, transparent, false, true);
                     }
                 }
@@ -2756,8 +2492,7 @@ namespace {
 bool staticMeshCornersOutside(const void* material, const Mat4& world, const Frustum& frustum)
 {
     StaticMeshBoundsCorners corners(
-        *reinterpret_cast<const MeshBounds*>(static_cast<const unsigned char*>(material) + 0x198),
-        world);
+        static_cast<const StaticMeshMaterial*>(material)->m_bounds, world);   // +0x198
     return corners.outside(frustum);
 }
 
@@ -2772,17 +2507,17 @@ void staticMeshCountShadowPrimitives(unsigned int primitives)
 }
 
 // `mov eax, [effect+8]; call [[eax]+104h]` - ID3DXEffect::CommitChanges on the wrapper's D3DX
-// effect.  The wrapper's +0x08 is the interface pointer.
+// effect.  The wrapper's +0x08 is the interface pointer. The only caller, drawShadowMap, has
+// already dereferenced the effect in its parameter lookups, so it is non-null here.
 void staticMeshEffectCommitChanges(dx9rend::Effect* effect)
 {
-    ID3DXEffect* const d3dx =
-        *reinterpret_cast<ID3DXEffect**>(reinterpret_cast<unsigned char*>(effect) + 8);
+    ID3DXEffect* const d3dx = static_cast<ID3DXEffect*>(dx9rend::effectD3dxHandle(effect));
     d3dx->CommitChanges();
 }
 
 dx9rend::ShaderParameter* staticMeshShadowParameter(dx9rend::Effect* effect, const char* name)
 {
-    return dx9rend::effectGetShaderParameterTyped(effect, vc71::string(name));
+    return dx9rend::effectGetShaderParameterTyped(effect, std::string(name));
 }
 
 // dword_10239698 - the shadow draw's mode word, 2 in .data and never written by the image:
@@ -2823,43 +2558,45 @@ void StaticMesh::drawShadowMap(void* caster, unsigned int, unsigned int, unsigne
         return;
     if (!t->m_indexBuffer)                                                // +0x9C
         return;
-    if (reinterpret_cast<const StaticMeshLod*>(m_dword30C)->hasAlphaMaterial)   // +0x54
+    if (m_dword30C->hasAlphaMaterial)                                    // +0x54
         return;
 
     bool fromOwnCaster = false;
-    const unsigned char* casterRecord = static_cast<const unsigned char*>(caster);
+    const LightShadowRecord* casterRecord = static_cast<const LightShadowRecord*>(caster);
     const Mat4* lightMatrix;
     if (!casterRecord)
     {
-        typedef void* (__fastcall* GetDword350Fn)(const void*, void*);
+        typedef void* (__thiscall* GetDword350Fn)(const void*);
         const void* const stamped =
-            reinterpret_cast<GetDword350Fn>(m_vptr[0xB0 / sizeof(void*)])(this, 0);
-        if (reinterpret_cast<unsigned int>(stamped) != dx9rend::rendererFrameOrdinal())   // +0x54
+            reinterpret_cast<GetDword350Fn>(m_vptr[0xB0 / 4])(this);
+        // The pointer-typed slot carries a 32-bit frame ordinal.
+        if (static_cast<unsigned int>(reinterpret_cast<uintptr_t>(stamped))
+            != dx9rend::rendererFrameOrdinal())                                  // +0x54
             return;
-        casterRecord  = reinterpret_cast<const unsigned char*>(m_dword34C);
-        lightMatrix   = reinterpret_cast<const Mat4*>(casterRecord + 0x238);
+        casterRecord  = reinterpret_cast<const LightShadowRecord*>(m_dword34C);
+        lightMatrix   = &casterRecord->matrices[1];                           // +0x238
         fromOwnCaster = true;
     }
     else
     {
-        lightMatrix = reinterpret_cast<const Mat4*>(casterRecord + 0x1F8);
+        lightMatrix = &casterRecord->matrices[0];                             // +0x1F8
     }
 
     const int shadowLod  = g_LightManager->getStaticMeshShadowLod();     // +0x280
-    typedef int (__fastcall* GetIndexFn)(const void*, void*);
-    const int currentLod = reinterpret_cast<GetIndexFn>(m_vptr[0x7C / sizeof(void*)])(this, 0);
-    const int lodCount   = reinterpret_cast<GetIndexFn>(m_vptr[0x80 / sizeof(void*)])(this, 0);
+    typedef int (__thiscall* GetIndexFn)(const void*);
+    const int currentLod = reinterpret_cast<GetIndexFn>(m_vptr[0x7C / 4])(this);
+    const int lodCount   = reinterpret_cast<GetIndexFn>(m_vptr[0x80 / 4])(this);
     if (currentLod != shadowLod)
     {
         int lod = lodCount - 1;
         if (lod >= shadowLod)
             lod = shadowLod;
-        typedef void (__fastcall* SetLodFn)(void*, void*, int);
-        reinterpret_cast<SetLodFn>(m_vptr[0x78 / sizeof(void*)])(this, 0, lod);
+        typedef void (__thiscall* SetLodFn)(void*, int);
+        reinterpret_cast<SetLodFn>(m_vptr[0x78 / 4])(this, lod);
     }
     // setLod rewrites +0x30C; every read below is of the lod now selected (the shipped body
     // reloads the word at each use).
-    StaticMeshLod* const lodRecord = reinterpret_cast<StaticMeshLod*>(m_dword30C);
+    StaticMeshLod* const lodRecord = m_dword30C;
 
     StaticMeshRenderer* const smr = staticMeshRenderer();
     dx9rend::Effect* const effect = smr->m_shadowEffect;                  // +0x44
@@ -2872,18 +2609,17 @@ void StaticMesh::drawShadowMap(void* caster, unsigned int, unsigned int, unsigne
     }
     staticMeshShadowParameter(effect, "TEXUNPACK")->setValue(&t->m_uvDecompress, 0);  // +0x150
 
-    if (casterRecord && casterRecord[0x495])
+    if (casterRecord && casterRecord->tail494[1])                             // +0x495
     {
         Mat4 light = Mat4::getIdentity();
-        light.fullMult(*reinterpret_cast<const Mat4*>(casterRecord + 0x238),
-                       *reinterpret_cast<const Mat4*>(casterRecord + 0x278));
+        light.fullMult(casterRecord->matrices[1], casterRecord->matrices[2]);  // +0x238, +0x278
         staticMeshShadowParameter(effect, "vpLightMat")->setValue(&light, 0);
         staticMeshShadowParameter(effect, "vpLightTrapezMat")->setValue(&light, 0);
     }
     else
     {
         staticMeshShadowParameter(effect, "vpLightMat")->setValue(lightMatrix, 0);
-        staticMeshShadowParameter(effect, "vpLightTrapezMat")->setValue(casterRecord + 0x278, 0);
+        staticMeshShadowParameter(effect, "vpLightTrapezMat")->setValue(&casterRecord->matrices[2], 0);
     }
     staticMeshEffectCommitChanges(effect);                                    // ID3DXEffect +0x104
 
@@ -2934,12 +2670,10 @@ void StaticMesh::drawShadowMap(void* caster, unsigned int, unsigned int, unsigne
             bool streamsBound = false;
             for (unsigned int i = 0; i < materialCount; ++i)
             {
-                unsigned char* const material =
-                    *reinterpret_cast<unsigned char**>(m_dword310 + 4) + 516u * i;
-                const ShaderMaterial* const shaderMaterial =
-                    *reinterpret_cast<const ShaderMaterial* const*>(material + 0x28);
-                const unsigned int alphaMode =
-                    *reinterpret_cast<const unsigned int*>(material + 0x17C);
+                StaticMeshMaterial* const material =
+                    m_dword310->data() + i;
+                const ShaderMaterial* const shaderMaterial = material->m_shaderMaterial;  // +0x28
+                const unsigned int alphaMode = material->m_alphaMode;                    // +0x17C
                 int pass;
                 bool skipPassSwitch = false;
                 if (!fromOwnCaster && alphaMode == 2u)
@@ -2977,7 +2711,7 @@ void StaticMesh::drawShadowMap(void* caster, unsigned int, unsigned int, unsigne
                     dx9rend::effectBeginPass(effect, static_cast<unsigned int>(pass));
                 }
 
-                StaticMeshMaterial* const typed = reinterpret_cast<StaticMeshMaterial*>(material);
+                StaticMeshMaterial* const typed = material;
                 dx9rend::rendererDrawIndexedPrimitive(
                     static_cast<unsigned int>(typed->getPrimitiveCount()),     // +0x10
                     static_cast<unsigned int>(typed->getDword1F0()),           // +0x14
@@ -2992,15 +2726,11 @@ void StaticMesh::drawShadowMap(void* caster, unsigned int, unsigned int, unsigne
 
     if (drawLastLodMaterial)
     {
-        const int lastLod = reinterpret_cast<GetIndexFn>(m_vptr[0x80 / sizeof(void*)])(this, 0) - 1;
-        const StaticMeshGeom& geom =
-            reinterpret_cast<const StaticMeshGeom*>(t->m_geoms.first)[m_dword314];
-        const StaticMeshLod* const lastRecord =
-            reinterpret_cast<const StaticMeshLod*>(geom.lods.first) + lastLod;
-        const vc71::vector_layout* const lodRecords = reinterpret_cast<const vc71::vector_layout*>(
-            reinterpret_cast<const vc71::vector_layout*>(t->m_materials.first)[m_dword314].first);
-        const StaticMeshMaterial* const material =
-            reinterpret_cast<const StaticMeshMaterial*>(lodRecords[lastLod].first);
+        const int lastLod = reinterpret_cast<GetIndexFn>(m_vptr[0x80 / 4])(this) - 1;
+        const StaticMeshGeom& geom = t->m_geoms[m_dword314];
+        const StaticMeshLod* const lastRecord = geom.lods.data() + lastLod;
+        const StaticMeshMaterialList* const lodRecords = t->m_materials.data()[m_dword314].data();
+        const StaticMeshMaterial* const material = lodRecords[lastLod].data();
         const unsigned int alphaMode = material->m_alphaMode;
         if (alphaMode != 2u && alphaMode != 1u)
         {
@@ -3014,8 +2744,8 @@ void StaticMesh::drawShadowMap(void* caster, unsigned int, unsigned int, unsigne
 
     if (currentLod != shadowLod)
     {
-        typedef void (__fastcall* SetLodFn)(void*, void*, int);
-        reinterpret_cast<SetLodFn>(m_vptr[0x78 / sizeof(void*)])(this, 0, -1);
+        typedef void (__thiscall* SetLodFn)(void*, int);
+        reinterpret_cast<SetLodFn>(m_vptr[0x78 / 4])(this, -1);
     }
 }
 

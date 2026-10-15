@@ -75,17 +75,16 @@ float __fastcall sampleIO(void*,void*,float,float){return ioValue;}
 const Vec2& __fastcall shadowRange(void*,void*){return fadeRange;}
 float __fastcall one(void*,void*){return 1.0f;}
 int __fastcall maxLights(void*,void*){return 4;}
-void __fastcall gather(void*,void*,void*,vc71::vector_layout&,unsigned int maximum,
+void __fastcall gather(void*,void*,void*,std::vector<world::LightSource*>&,unsigned int maximum,
                        unsigned int required,unsigned int forbidden,bool occlusion);
-void __fastcall gather(void*,void*,void*,vc71::vector_layout& out,unsigned int maximum,
+void __fastcall gather(void*,void*,void*,std::vector<world::LightSource*>& out,unsigned int maximum,
                        unsigned int required,unsigned int forbidden,bool occlusion)
 {
     ++gatherCount;requiredMask=required;CHECK(maximum==4 && forbidden==0 && occlusion);
     if(gatherPointLights)
     {
-        vc71::vectorRef<world::LightSource*> list(&out);
-        list.push_back(reinterpret_cast<world::LightSource*>(&staticLight));
-        list.push_back(reinterpret_cast<world::LightSource*>(&dynamicLight));
+        out.push_back(reinterpret_cast<world::LightSource*>(&staticLight));
+        out.push_back(reinterpret_cast<world::LightSource*>(&dynamicLight));
     }
 }
 float __fastcall pointRange(void*,void*){return 2.0f;}
@@ -125,7 +124,6 @@ void initialize()
     testCamera.bind(0x70,frequency);testCamera.bind(0x74,threshold);testCamera.bind(0x78,ambientRgb);
     testVehicle.bind(0x58,armor);testArmor.bind(0x3C,health);testArmor.bind(0x84,maximumHealth);
     testSystem.bind(0x14,exactTime);
-    field<double>(&lm,0x838)=1.0;
     templStorage.bind(0xFC,materialInteger);templStorage.bind(0xF4,materialGloss);templStorage.bind(0x44,materialEnv);
 }
 void clearSubmission(){nextEntry=0;routes.clear();shaders.clear();gatherCount=playerQueries=0;}
@@ -133,8 +131,6 @@ void clearSubmission(){nextEntry=0;routes.clear();shaders.clear();gatherCount=pl
 namespace renddx9abi {
 void* engineAlloc(unsigned int n){return std::malloc(n);}
 void engineFree(void* p){std::free(p);}
-void* crtMalloc(size_t n){return std::malloc(n);}
-void crtFree(void* p){std::free(p);}
 }
 namespace dice { namespace hfe {
 IBase* playerManager=reinterpret_cast<IBase*>(&pm);System* g_system=reinterpret_cast<System*>(&testSystem);
@@ -146,19 +142,32 @@ void textureDtor(EngineTexture*){CHECK(false);}
 RenderQueueEntry* renderEntryPoolAcquire()
 {
     CHECK(nextEntry<64);unsigned int n=nextEntry++;
-    std::memset(&entries[n],0,sizeof(entries[n]));std::memset(&records[n],0,sizeof(records[n]));
+    // A fresh value-initialized entry each acquire: zeroed words, an empty lighting block.
+    entries[n].~RenderQueueEntry();new(&entries[n]) RenderQueueEntry();
+    std::memset(&records[n],0,sizeof(records[n]));
     entries[n].lightArray.lights.value=&records[n];return &entries[n];
 }
 void renderQueueEnqueue(RenderQueueEntry* e,bool t,bool f,bool d)
 {routes.push_back({unsigned(t)+2u*unsigned(f)+4u*unsigned(d),e});}
 void renderQueueAddToSlot(unsigned int s,RenderQueueEntry* e){routes.push_back({s,e});}
 namespace Ra {
-RaShader* getShader(RaShaderTable*,const vc71::string& name,bool skip)
+RaShader* getShader(RaShaderTable*,const std::string& name,bool skip)
 {CHECK(std::strcmp(name.c_str(),"BMadditive")==0 && !skip);return reinterpret_cast<RaShader*>(0x1234);}
+// [TEMP] Storage-only lighting block for the pooled entries and the copy probes: RaShader.cpp (the
+// recovered constructor, registry and binder tables) is not linked. Every holder starts zeroed and
+// every vector empty, the state the earlier zero-filled entries modeled.
+RaLightingParameters::RaLightingParameters()
+    : vptr(0),registry(0),unnamed008(),terrainLightMap(),lightMap(),lightMapOffset(),matBones(),
+      overGrowthAmbient(),shadowViewProj(),shadowViewProjArray(),clampViewProjArray(),
+      shadowPosArray(),shadowSizeArray(),shadowCount(),tail0FC(),tail10C(0){}
+RaLightingParameters::~RaLightingParameters(){}
 }
 }
 namespace geom {
 LightManager* g_LightManager=reinterpret_cast<LightManager*>(&lm);
+// The typed LightManager read the draw uses for its shadow fade (retail LightManager +0x838).
+double lightManagerShadowFadeDuration(const LightManager* manager)
+{CHECK(manager==g_LightManager);return 1.0;}
 BundledMeshStateManager* g_bundledMeshStateManager=reinterpret_cast<BundledMeshStateManager*>(&manager);
 const Mat4* BundledMesh::getGeometryTransformation()const{return m_partTransforms[0];}
 void BundledMesh::updateHeightOverTerrain(){++heights;}
@@ -192,7 +201,7 @@ int main()
     BundledMeshState& state=*reinterpret_cast<BundledMeshState*>(stateMemory);
     BundledMeshLod lod={};lod.partCount=2;const Mat4* parts[]={&rootTransform,&zero};
     BundledMeshMaterial* materials[]={&material};
-    vc71::vector_layout materialVector={0,reinterpret_cast<char*>(materials),reinterpret_cast<char*>(materials+1),reinterpret_cast<char*>(materials+1)};
+    std::vector<BundledMeshMaterial*> materialVector(materials,materials+1);
     mesh.m_template=&templ;mesh.m_partTransforms=parts;mesh.m_parameters.transparency.value=1;
     mesh.m_lodRecord=&lod;mesh.m_lodMaterials=&materialVector;mesh.m_fov=-1;
     mesh.m_shadowSunHeight=100;mesh.m_shadowFadeTime=9;mesh.m_heightOverTerrain=12;
@@ -254,12 +263,12 @@ int main()
     clearSubmission();material.m_kind=1;animationValue=2;mesh.m_parameters.transparency.value=1;
     state.m_animated=1;templ.m_dword10C=1;mesh.draw(0,0,0);
     CHECK(entries[0].lighting.tail10C==42 && field<unsigned char>(&material,0x24)==0);
-    CHECK(vc71::vectorSizeIn(mesh.m_parameters.userData.value,64)==2);
-    CHECK(std::memcmp(mesh.m_parameters.userData.value.first,&identity,64)==0);
-    CHECK(std::memcmp(mesh.m_parameters.userData.value.first+64,&identity,64)==0);
+    CHECK(mesh.m_parameters.userData.value.size()==2*64);
+    CHECK(std::memcmp(mesh.m_parameters.userData.value.data(),&identity,64)==0);
+    CHECK(std::memcmp(mesh.m_parameters.userData.value.data()+64,&identity,64)==0);
     Mat4 uv[2]={identity,identity};uv[1].m[12]=9;mesh.m_uvMatrices=uv;
     clearSubmission();templ.m_primitiveType=5;mesh.draw(0,0,0);
-    CHECK(entries[0].lighting.tail10C==18 && reinterpret_cast<Mat4*>(mesh.m_parameters.userData.value.first)[1].m[12]==9);
+    CHECK(entries[0].lighting.tail10C==18 && reinterpret_cast<Mat4*>(mesh.m_parameters.userData.value.data())[1].m[12]==9);
 
     clearSubmission();state.m_alphaOne=1;traceHit=false;mesh.draw(0,0,0);
     CHECK(routes.size()==1 && routes[0].index==10 && mesh.m_parameters.transparency.value==1);
@@ -272,16 +281,16 @@ int main()
     CHECK(mesh.m_parameters.transparency.value==0 && routes.empty());
 
     // Parameter copy retains holder vptrs, owns copied vectors, frees on empty assignment.
-    dx9rend::Ra::RaLightingParameters src={},dst={};
+    dx9rend::Ra::RaLightingParameters src,dst;
     src.registry=reinterpret_cast<void*>(17);dst.unnamed008.vptr=reinterpret_cast<void*>(19);
     src.unnamed008.value[2]=7;src.tail10C=3;
-    resizePod(src.shadowViewProjArray.value,1,64,false);
-    reinterpret_cast<Mat4*>(src.shadowViewProjArray.value.first)->m[8]=27;
+    src.shadowViewProjArray.value.resize(64);
+    reinterpret_cast<Mat4*>(src.shadowViewProjArray.value.data())->m[8]=27;
     copyLighting(dst,src);
     CHECK(dst.registry==src.registry && dst.unnamed008.vptr==reinterpret_cast<void*>(19));
     CHECK(dst.unnamed008.value[2]==7 && dst.tail10C==3);
-    CHECK(dst.shadowViewProjArray.value.first!=src.shadowViewProjArray.value.first);
-    CHECK(reinterpret_cast<Mat4*>(dst.shadowViewProjArray.value.first)->m[8]==27);
+    CHECK(dst.shadowViewProjArray.value.data()!=src.shadowViewProjArray.value.data());
+    CHECK(reinterpret_cast<Mat4*>(dst.shadowViewProjArray.value.data())->m[8]==27);
     CountedTexture oldTexture,newTexture;
     dst.terrainLightMap.value=&oldTexture;src.terrainLightMap.value=&newTexture;
     copyLighting(dst,src);
@@ -290,22 +299,15 @@ int main()
     CHECK(comEvents=="RA" && newTexture.refs==2);
     src.terrainLightMap.value=0;copyLighting(dst,src);
     CHECK(comEvents=="RAR" && newTexture.refs==1);
-    assignPod(src.shadowViewProjArray.value,vc71::vector_layout{},64);copyLighting(dst,src);
-    CHECK(dst.shadowViewProjArray.value.first==0 && dst.shadowViewProjArray.value.end==0);
-    vc71::vector_layout byteVector={};resizePod(byteVector,4,1,false);
-    CHECK(byteVector.end-byteVector.first==4);byteVector.first[0]=17;
-    resizePod(byteVector,5,1,false);CHECK(byteVector.end-byteVector.first==6 && byteVector.first[0]==17 && byteVector.first[4]==0);
-    char* const allocation=byteVector.first;resizePod(byteVector,0,1,false);
-    CHECK(byteVector.first==allocation && byteVector.last==allocation && byteVector.end-allocation==6);
-    ::operator delete(byteVector.first);
-    byteVector={};
-    bool lengthRejected=false;
-    try{resizePod(byteVector,0xFFFFFFFFu,68,true);}catch(const std::length_error&){lengthRejected=true;}
-    CHECK(lengthRejected);
-    if(mesh.m_parameters.userData.value.first)::operator delete(mesh.m_parameters.userData.value.first);
-    if(mesh.m_lights.first)::operator delete(mesh.m_lights.first);
-    if(mesh.m_lightRecords.first)::operator delete(mesh.m_lightRecords.first);
+    // An empty source releases the destination's storage, as the shipped vector assignment does.
+    std::vector<unsigned char>().swap(src.shadowViewProjArray.value);copyLighting(dst,src);
+    CHECK(dst.shadowViewProjArray.value.data()==0 && dst.shadowViewProjArray.value.capacity()==0);
+    // The mesh lives in zeroed raw storage, so release the vectors its draws grew by hand.
+    std::vector<unsigned char>().swap(mesh.m_parameters.userData.value);
+    std::vector<world::LightSource*>().swap(mesh.m_lights);
+    std::vector<dx9rend::Ra::RaLightRecord>().swap(mesh.m_lightRecords);
     renddx9abi::engineFree(mesh.m_inverseTransform);
     std::printf("BundledMesh draw: %d checks passed (strict x86 fixture).\n",checks);
 }
 
+#include "renderer_accessor_fixture_support.h"   // RendDX9Base.h Renderer accessors (x86 identity)

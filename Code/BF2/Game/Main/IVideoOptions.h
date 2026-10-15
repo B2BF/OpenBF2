@@ -1,6 +1,5 @@
 // Host view of renderer video options. Virtual order is fixed and has no destructor slot.
-// Native plugins share host STL types; retail-compatible plugins convert VC7.1 strings/vectors
-// at the boundary. Do not pass native STL objects through a retail-layout interface.
+// The renderer shares the host's STL types (issue #7), so strings and vectors cross directly.
 // [INFERRED] Interface/member names. [UNRESOLVED] Unnamed option slots retain provisional roles.
 #ifndef GAME_MAIN_IVIDEOOPTIONS_H
 #define GAME_MAIN_IVIDEOOPTIONS_H

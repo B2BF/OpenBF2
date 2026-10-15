@@ -6,22 +6,19 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
+#include "../../RendDX9Abi/ThunkAbi.h"
 #include "../../RendDX9Abi/PluginModules.h"
 #include "../../RendDX9Abi/PluginEntry.h"    // dice::hfe::classManager, for hWndBf2TempSlt
 #include "../../RendDX9Abi/ModuleCommon.h"
-#include "../../RendDX9Abi/Vc71Map.h"
-#include "../../RendDX9Abi/Vc71Vector.h"
 #include "../../RendDX9Abi/BfMemory.h"
 #include "../../RendDX9Abi/Frontier.h"
 #include "../Game/Main/IVideoOptions.h"
 #include "../Core/EventManager.h"
-#if BF2_PLUGIN_ABI_NATIVE
 // The ECCore CEPreLoad hook hands two of the host's own records to ModInfo::parseMapDesc. In the
 // native flavour the host IS this toolchain, so the recovered declarations are the right types; the
 // retail flavour cannot use them (VC7.1 string/vector layouts) and mirrors them instead - see
 // selectShaderArchive below.
 #include "../Game/IModInfo.h"
-#endif
 #include "../IO/Console/Console.h"
 #include "../Geom/XpLightManager.h"
 #include "../Geom/HemiMapManager/HemiMapManager.h"
@@ -30,10 +27,14 @@
 #include "../Geom/UndergrowthSystem.h"
 #include "../Geom/ParticleSystem/ParticleSystemManager.h"
 #include "../Geom/Terrain.h"
+#include "../Geom/SkyDome.h"                 // the draw pass's RenderPathListener call
 #include "../Geom/ObjectDrawer.h"
+#include "../Geom/StaticMeshRenderer.h"          // the frame's culled-material reset
+#include "../Geom/DecalSystem/DecalManager.h"    // typed update / render-path draw
 #include "../Geom/RoadEditableRenderer.h"   // IRoadEditableRenderer - the typed drawAll below
 #include "../RendMisc/IRenderer.h"
 #include "../RendMisc/IRenderView.h"
+#include "../Math/Frustum.h"
 #include "../RendMisc/EnvMapSystem/EnvMapManager.h"
 #include "../Scene/Object/ObjectManager.h"
 // HM1: Renderer::setLods walks the geometry-template registry and the three mesh
@@ -42,9 +43,7 @@
 #include "../Geom/StaticMeshTemplate.h"
 #include "../Geom/SkinnedMeshTemplate.h"
 #include "../Geom/BundledMeshTemplate.h"
-#if BF2_PLUGIN_ABI_NATIVE
 #include "../Game/Objects/ObjectLayoutAccess.h"
-#endif
 #include "RendDX9Base.h"
 #include "Texture.h"
 #include "../../RendDX9Abi/D3dx9Sdk.h"
@@ -55,13 +54,14 @@
 #include "../Core/System.h"
 #include "../Scene/Object/WindManager.h"
 #include "../Scene/Object/PlayerManager.h"
-#if BF2_PLUGIN_ABI_NATIVE
 #include "../Game/ModInfo.h"
 #include "../Menu/BF2HudManager.h"
 #include "../Menu/ISwiffHost.h"
-#endif
 
+#include <cstdlib>
 #include <cstring>
+#include <math.h>
+#include <stddef.h>
 
 namespace dice {
 namespace hfe {
@@ -97,60 +97,32 @@ void* localHumanPlayer()                                                        
 
 void hudSetPaint(void* hudManager, unsigned char enabled)                              // +0x20
 {
-#if BF2_PLUGIN_ABI_NATIVE
     static_cast<hud::BF2HudManager*>(hudManager)->setPaint(enabled != 0);
-#else
-    typedef void (__fastcall* SetByteFn)(void*, void*, unsigned char);
-    reinterpret_cast<SetByteFn>((*static_cast<void***>(hudManager))[8])(hudManager, 0, enabled);
-#endif
 }
 
 void hudUpdate(void* hudManager, float timeF, void* player, float x, float y, float z) // +0x28
 {
-#if BF2_PLUGIN_ABI_NATIVE
     Vec3 look;
     look.x = x; look.y = y; look.z = z;
     static_cast<hud::BF2HudManager*>(hudManager)->update(
         timeF, static_cast<world::IPlayer*>(player), look);
-#else
-    typedef void (__fastcall* PrepFn)(void*, void*, float, void*, float, float, float);
-    reinterpret_cast<PrepFn>((*static_cast<void***>(hudManager))[10])(
-        hudManager, 0, timeF, player, x, y, z);
-#endif
 }
 
 void hudPaint(void* hudManager)                                                         // +0x1C
 {
-#if BF2_PLUGIN_ABI_NATIVE
     static_cast<hud::BF2HudManager*>(hudManager)->paint();
-#else
-    typedef void (__fastcall* Fn)(void*, void*);
-    reinterpret_cast<Fn>((*static_cast<void***>(hudManager))[7])(hudManager, 0);
-#endif
 }
 
-// The streaming scan's frustum query. The renderer keeps the result as a VC7.1 vector at dwords
-// 469..472 of itself - an allocator word, then first / last / end - and the retail flavour hands
-// that whole object over. A native std::vector<IObject*> is exactly the three pointers, so the
-// native flavour overlays it on dword 470; handing it dword 469 (as the raw call did) would have
-// given the host a vector shifted by one word the day its body is written. In this tree the host
-// body is still the empty ObjectManager::getObjectsFromGridNoCullConst [FRONTIER] forwarder
-// (Scene/Object/ObjectManager.cpp), so the query answers nothing in either flavour.
-void objectManagerQueryFrustum(void* frustum488, unsigned int* resultVectorAt469)      // +0x5C
+// The streaming scan's frustum query, into the Renderer's result vector (retail: the VC7.1 vector
+// at dwords 469..472 of the Renderer). In this tree the host body is still the empty
+// ObjectManager::getObjectsFromGridNoCullConst [FRONTIER] forwarder (Scene/Object/ObjectManager.cpp),
+// so the query answers nothing.
+void objectManagerQueryFrustum(void* frustum488, std::vector<world::IObject*>& result)  // +0x5C
 {
-#if BF2_PLUGIN_ABI_NATIVE
     // reinterpret_cast, as BundledMeshHeight.cpp reaches the same singleton: the published IBase*
     // is the object's start, which is what the raw dispatch assumed too.
     reinterpret_cast<world::ObjectManager*>(objectManager)->getObjectsFromGridNoCullConst(
-        *static_cast<const Frustum*>(frustum488),
-        *reinterpret_cast<std::vector<world::IObject*>*>(resultVectorAt469 + 1), 0, false, 0.0f,
-        0.0f);
-#else
-    void* om = objectManager;
-    typedef void (__fastcall* QueryFn)(void*, void*, void*, void*, int, int, int, int);
-    reinterpret_cast<QueryFn>((*static_cast<void***>(om))[23])(
-        om, 0, frustum488, resultVectorAt469, 0, 0, 0, 0);
-#endif
+        *static_cast<const Frustum*>(frustum488), result, 0, false, 0.0f, 0.0f);
 }
 
 } // namespace hostCalls
@@ -196,6 +168,8 @@ extern IBase* g_Terrain;
 const float* roadCompiledRendererFadeOut();
 unsigned int roadCompiledRendererDepthBiasBits();
 unsigned int roadCompiledRendererSlopeScaleDepthBiasBits();
+// The singleton's RenderPathListener subobject (retail +0x24), whose +0x0C renderFrame calls.
+void* roadCompiledRendererListener();
 }
 
 namespace dx9rend {
@@ -236,11 +210,9 @@ bool stateManagerIsFullyRestored();
 void stateManagerForceRestore();
 void stateManagerSetRenderStatePersistent(unsigned int state, unsigned int value);
 void stateManagerSetTransparencyAA(bool enabled);
-#if BF2_PLUGIN_ABI_NATIVE
 // RendererConsole.cpp - the `renderer` console object's list (the static at 0x10241668).
 bool registerRendererConsoleObjects();
 bool unregisterRendererConsoleObjects();
-#endif
 // RenderQueues.cpp - the mesh sort buckets and the withheld world-infrastructure globals.
 void renderQueueFlush(unsigned int slotByteOffset, int flushArg);
 extern void* g_renderQueues;
@@ -258,6 +230,11 @@ extern void* g_renderTargetSystem;
 // QueryManager.cpp - the GPU-throttle fences.
 void queryIssueEnd(void* query);
 void queryWaitDone(void* query);
+// PostProductionFrameWork.cpp - the owner block's size and published interface subobject (548 and
+// owner + 8 on x86), and sub_1004F1C0, the is-active predicate on the published owner.
+unsigned int postProductionFrameWorkOwnerSize();
+void* postProductionFrameWorkInterface(void* owner);
+bool  postProductionFrameWorkIsActive();
 
 // Code/BF2/Core/Ids.h already carries both, recovered from the ELF, and both are confirmed here:
 // getSingletonList registers the pair (830001, 831001) and queryInterface tests 830001.
@@ -395,6 +372,19 @@ public:
     // which the native plugin cannot express as a host carrier - see rendererApplyCurrentDisplayMode.
     bool applyCurrentDisplayMode();
 
+    // The texture name at +0x6E0 that rendererReloadOverlayTexture loads into +0x8D8.
+    const std::string& overlayTextureName() const { return m_overlayTextureName; }
+
+    // The per-pass render switch byte at retail `retailOffset` (+0x69C..+0x6AB, +0x6B0..+0x6B7);
+    // a null result names no switch. Recovered bodies spell these as decimal byte indices.
+    unsigned char* renderSwitch(unsigned int retailOffset);
+    unsigned char& sw(unsigned int retailOffset);
+
+    // [CHOSEN, not recovered] The tail field that sits at `retailOffset` in the retail x86 layout,
+    // when it is a mapped field of `bytes` bytes and the given kind (issue #7); null otherwise.
+    enum TailKind { TailByte, TailInt, TailFloat, TailDouble };
+    void* tailField(unsigned int retailOffset, TailKind kind, unsigned int bytes);
+
 private:
     // Step 6 factors the two identical debug-text-writer calls; see its definition.
     void setDebugTextWriterFont(const char* singletonName, const char* fontPath);
@@ -405,27 +395,46 @@ private:
     void geometryStreamTick();                // sub_1002DF20 - the streaming scan (budget 25.0)
     void roadQueuePass();                     // sub_1002A560 - terrain-gated road queue flush
 
-    // The base occupies +0x000..+0x537 and is accessed through RendDX9Base's overlay.
-    // The primary vptr is already declared, so storage starts at +0x004.
-    char         m_baseStorage[0x538 - 4];   // +0x004 .. +0x537
+public:
+    // The data members are public inside this translation unit: the hand-built listener thunks
+    // and the owner-TU seams below reach them by name. [CHOSEN, not recovered] (issue #7): every
+    // field the recovered bodies read or write is a named member. The x86 object keeps the retail
+    // layout (the offsets below, asserted after the class); the x64 object is native, which is
+    // why no code may reach these fields by raw byte offset - other TUs use the RendDX9Base.h
+    // accessors (rendererTail*, rendererRenderSwitch, ...), which map a retail offset to a member.
+    // Unread retail ranges stay opaque byte arrays and are zeroed with everything else.
+
+    // The base occupies +0x000..+0x537 and is accessed through RendDX9Base's overlay; constructD3DHalf
+    // constructs its std containers in place and destructD3DHalf destroys them. The primary vptr is
+    // already declared, so storage starts at +0x004. The native RendDX9Base fits the retail 0x538
+    // bytes on x86; a larger one (x64) grows the storage instead of overflowing it.
+    char         m_baseStorage[(sizeof(RendDX9Base) > 0x538 ? sizeof(RendDX9Base) : 0x538)
+                               - sizeof(void*)];   // +0x004 .. +0x537
     void*        m_evHandlerVptr;        // +0x538  ECCoreEventHandler       - kECCoreEventHandlerVtable
     void*        m_deviceLostVptr;       // +0x53C  DeviceLostResetListener  - kRendererDeviceLostVtable
     void*        m_renderPathVptr;       // +0x540  RenderPathListener       - kRendererRenderPathVtable
-    unsigned int m_unknown544;           // +0x544  [UNRESOLVED] - the ctor does not write it
+    // The render-path listener's own word (listener + 4): renderer_renderPathActivated stores the
+    // path, renderer_getCurrentRenderPath returns it. The ctor does not write it.
+    int          m_currentRenderPath;    // +0x544
     int          m_refCount;             // +0x548
 
     // A 4x4 matrix at dword indices 339..354. The constructor lays an identity into it twice (once
     // in the run of zeros, once at the very end), and initialize both writes its translation row
     // and hands the whole thing to RenderView::setViewMatrix - which is what identifies it.
     float        m_viewMatrix[16];       // +0x54C .. +0x58B
-    float        m_f58C;                 // +0x58C  (355) ctor: 1.0
-    float        m_f590;                 // +0x590  (356) ctor: 0x3D25F55E
-    float        m_near;                 // +0x594  (357) ctor: 0.01
+    float        m_f58C;                 // +0x58C  (355) ctor: 1.0; divides the path-target size
+    float        m_f590;                 // +0x590  (356) ctor: 0x3D25F55E; both views' near plane
+    float        m_near;                 // +0x594  (357) ctor: 0.01; the second view's near plane
     float        m_far;                  // +0x598  (358) ctor: 15.0
     float        m_f59C;                 // +0x59C  (359) ctor: 6.0
-    char         m_tail1aBeforeRenderAheadLimit[0x5B8 - 0x5A0]; // +0x5A0 .. +0x5B7
-    unsigned int m_renderAheadLimit;                            // +0x5B8, ctor 2, max 5
-    char         m_tail1aAfterRenderAheadLimit[0x5C0 - 0x5BC];  // +0x5BC .. +0x5BF
+    unsigned char m_clearDepthBeforeFirstPerson;   // +0x5A0  (byte 1440) ctor: 1
+    unsigned char m_postProductionNeedsActive;     // +0x5A1  (byte 1441) ctor: 1
+    unsigned char m_pad5A2[2];
+    // The GPU-throttle fence ring: five D3DQUERYTYPE_EVENT queries (dwords 361..365), the ring
+    // size in use (366, slot +0xA4/+0xA8's renderAheadLimit) and the cursor (367).
+    void*        m_frameFences[5];       // +0x5A4 .. +0x5B7
+    unsigned int m_renderAheadLimit;     // +0x5B8  (366) ctor 2, max 5
+    unsigned int m_fenceCursor;          // +0x5BC  (367)
     // dword 368. initialize releases whatever is here, then replaces it with a fresh
     // dice.hfe.geom.ObjectDrawer and publishes the same pointer to a file-scope global.
     void*        m_objectDrawer;         // +0x5C0  (368)
@@ -439,27 +448,175 @@ private:
     void*        m_hudManager;           // +0x5D0  (372)
     void*        m_weatherManager;       // +0x5D4  (373)
     void*        m_rainManager;          // +0x5D8  (374)
-    char         m_tail1bBeforeFrameRate[0x600 - 0x5DC];   // +0x5DC .. +0x5FF [FRONTIER]
-    double       m_frameRate;                              // +0x600 measured FPS
-    char         m_tail1bAfterFrameRate[0x774 - 0x608];    // +0x608 .. +0x773 [FRONTIER]
-    EngineTexture* m_hemiScratchTexture;                 // +0x774 accumulation/Hemi scratch target
-    char         m_tail1bAfterHemiScratch[0x884 - 0x778]; // +0x778 .. +0x883 [FRONTIER]
+    // The 48-byte QPC frame timer (sub_10077710); the mesh fades read its total time at +0x20.
+    void*        m_frameTimer;           // +0x5DC  (375)
+    unsigned char m_tail5E0[0x5E8 - 0x5E0];        // +0x5E0 [FRONTIER] unread
+    // The frame's time argument, stored by update and by renderFrame (double 189).
+    double       m_frameTime;            // +0x5E8
+    unsigned char m_tail5F0[0x600 - 0x5F0];        // +0x5F0 [FRONTIER] unread
+    double       m_frameRate;            // +0x600  measured FPS
+    double       m_fpsAccumulatedTime;   // +0x608  (double 193)
+    unsigned int m_fpsAccumulatedFrames; // +0x610  (388)
+    unsigned char m_tail614[0x69C - 0x614];        // +0x614 [FRONTIER] unread
+    // The per-pass render switches (bytes 1692..1707 and 1712..1719); 0x6AC between them is a
+    // dword. See renderSwitch.
+    unsigned char m_renderSwitches69C[0x6AC - 0x69C];  // +0x69C .. +0x6AB
+    unsigned int m_frameTimeOverlay;     // +0x6AC  (427) gates sub_10029C50; the hemi bake clears it
+    unsigned char m_renderSwitches6B0[0x6B8 - 0x6B0];  // +0x6B0 .. +0x6B7
+    unsigned char m_tail6B8[0x6BC - 0x6B8];        // +0x6B8 [FRONTIER] unread
+    unsigned char m_fullSizeRenderTargets;         // +0x6BC
+    unsigned char m_pad6BD[3];
+    // The fog override triple the fog block swaps into the host ObjectManager (floats 432..434,
+    // ctor 4, 5, 100; VideoOptions::apply rewrites them; the hemi bake treats +0x6C0 as a dword).
+    float        m_fogOverride[3];       // +0x6C0 .. +0x6CB
+    unsigned int m_raPath;               // +0x6CC  (435) the RAPATH shader define / quality index
+    unsigned char m_byte6D0;             // +0x6D0  [UNRESOLVED] read by the static-mesh draw
+    unsigned char m_pad6D1[3];
+    unsigned int m_dword6D4;             // +0x6D4  (437) gates sub_1002E440
+    unsigned char m_tail6D8[0x6DC - 0x6D8];        // +0x6D8 [FRONTIER] unread
+    unsigned char m_byte6DC;             // +0x6DC  (1756) ctor 1; makeTopWorldScreen's particles flag
+    unsigned char m_byte6DD;             // +0x6DD  (1757) ctor 0
+    unsigned char m_pad6DE[2];
+    // The two std::string members sit in retail 28-byte VC7.1 string slots, padded back up to
+    // their slot so the x86 tail keeps its retail offsets.
+    std::string m_overlayTextureName;                     // +0x6E0 (dword 440) [INFERRED] name
+    char         m_overlayTextureNamePad[sizeof(std::string) < 0x1C
+                                         ? 0x1C - sizeof(std::string) : 1];
+    float        m_f6FC[3];              // +0x6FC .. +0x707 (447..449) ctor 0.25, 0.75, 0.75
+    unsigned char m_meshShaderLodEnabled;// +0x708  the mesh draws' shader-LOD gate
+    unsigned char m_pad709[3];
+    // Three four-entry distance tables (451..462, ctor [0] = 10.0): the static-mesh draw reads
+    // +0x70C + 4 * bucket, the bundled-mesh LOD +0x72C + 4 * i.
+    float        m_lodDistances70C[4];   // +0x70C
+    float        m_lodDistances71C[4];   // +0x71C
+    float        m_lodDistances72C[4];   // +0x72C
+    float        m_f73C;                 // +0x73C  (463) ctor 9999; PostProductionFrameWork +0x54
+    float        m_f740;                 // +0x740  (464) ctor 9999; PostProductionFrameWork +0x58
+    float        m_streamBudget;         // +0x744  (465) ctor 25; the geometry-streaming budget
+    unsigned int m_dword748;             // +0x748  (466) ctor 10
+    unsigned int m_dword74C;             // +0x74C  (467) the streaming scan zeroes it
+    unsigned int m_dword750;             // +0x750  (468) the streaming scan zeroes it
+    unsigned int m_streamObjectsAllocator;  // +0x754 the retail vector's allocator word (unused)
+    // The streaming scan's frustum-query result (retail dwords 470..472).
+    std::vector<world::IObject*> m_streamObjects;          // +0x758
+    unsigned char m_expansionPack;       // +0x764  isExpansionPack / setExpansionPack
+    unsigned char m_pad765[3];
+    unsigned int m_dword768;             // +0x768  (474) ctor 2; slot +0xB0 returns it
+    IDirect3DSurface9* m_backBuffer;     // +0x76C  the device back buffer reference
+    IDirect3DSurface9* m_depthStencil;   // +0x770  the depth-stencil reference
+    EngineTexture* m_hemiScratchTexture; // +0x774  accumulation/Hemi scratch target
+    // The render-path targets: +0x778..+0x7C8 (+0x788 full size, +0x7A0 a quarter-height strip,
+    // +0x7A4..+0x7C8 quarter size), then +0x7CC/+0x7D0/+0x7D4.
+    EngineTexture* m_pathTargets[(0x7D8 - 0x778) / 4];      // +0x778 .. +0x7D7
+    // The forced static/skinned/bundled mesh LODs (502..504, ctor -1).
+    int          m_forcedLod[3];         // +0x7D8 / +0x7DC / +0x7E0
+    int          m_lodSkipBase;          // +0x7E4  the mesh templates' LOD-skip base
+    unsigned int m_dword7E8;             // +0x7E8  (506) ctor 100
+    int          m_lodSkipBias;          // +0x7EC  the mesh templates' LOD-skip bias
+    unsigned char m_frameHookEnabled;    // +0x7F0  beginFrame's slot +0x60 gate [FRONTIER] no writer
+    unsigned char m_tail7F1[0x820 - 0x7F1];        // +0x7F1 [FRONTIER] unread
+    float        m_fpsBucketScale;       // +0x820  (520) ctor 10
+    unsigned int m_fpsHistogram[10];     // +0x824 .. +0x84B (521..530)
+    float        m_lodScale84C;          // +0x84C  (531) ctor 1; every mesh LOD distance scale
+    unsigned char m_tail850[0x860 - 0x850];        // +0x850 [FRONTIER] unread
+    unsigned int m_dword860;             // +0x860  (536) ctor 8
+    float        m_f864;                 // +0x864  (537) ctor 2
+    std::string m_string868;                              // +0x868 (dword 538) [UNRESOLVED] role
+    char         m_string868Pad[sizeof(std::string) < 0x1C ? 0x1C - sizeof(std::string) : 1];
     void*        m_lazy884;              // +0x884  (545) ctor: 0; initialize lazily allocates it
-    char         m_tail2a[0x894 - 0x888];// +0x888 .. +0x893   [FRONTIER] unread
+    // The ECCore performance-test pair (ids 10/11, the handler's +0x350/+0x354/+0x358).
+    unsigned char m_performanceTestActive;  // +0x888
+    unsigned char m_pad889[3];
+    unsigned int m_performanceTest88C;   // +0x88C
+    unsigned int m_performanceTest890;   // +0x890
     // Graph slots must match frame rendering: framerate, render time, then draw calls.
     void*        m_debugGraphs[3];       // +0x894 / +0x898 / +0x89C
     // +0x8A0 / +0x8A8, dbl[276] and dbl[277]. The frame bracket: slot_0x20 stamps the start, and
     // renderFrame's tail subtracts it from the same clock to get the frame's wall time, which is
-    // then the sample fed to the Rendering-time graph. Named here because the pair is now written
-    // at both ends; they used to be reached only through the raw `dbl` alias, which is how the
-    // overlap above went unnoticed.
+    // then the sample fed to the Rendering-time graph.
     double       m_frameStartTime;       // +0x8A0
     double       m_frameWallTime;        // +0x8A8
-    char         m_tail2b[0x8E0 - 0x8B0];// +0x8B0 .. +0x8DF   [FRONTIER] unread
+    // Per-family LOD distance scales (556..558, ctor 1): static, bundled, skinned mesh.
+    float        m_lodScale8B0;          // +0x8B0
+    float        m_lodScale8B4;          // +0x8B4
+    float        m_lodScale8B8;          // +0x8B8
+    unsigned char m_tail8BC[0x8D8 - 0x8BC];        // +0x8BC [FRONTIER] unread
+    EngineTexture* m_overlayTexture;     // +0x8D8  rendererReloadOverlayTexture's texture
+    unsigned char m_tail8DC[0x8E0 - 0x8DC];        // +0x8DC [FRONTIER] unread
 };
 
+// The retail x86 layout, member by member. The x64 Renderer is native: nothing may depend on
+// these offsets there (issue #7).
+#if defined(_M_IX86)
 static_assert(sizeof(Renderer) == 0x8E0,
               "RefFactory_dx9rend_Renderer allocates 0x8E0 - see 0x10051940");
+static_assert(offsetof(Renderer, m_evHandlerVptr)        == 0x538, "+0x538");
+static_assert(offsetof(Renderer, m_deviceLostVptr)       == 0x53C, "+0x53C");
+static_assert(offsetof(Renderer, m_renderPathVptr)       == 0x540, "+0x540");
+static_assert(offsetof(Renderer, m_currentRenderPath)    == 0x544, "+0x544");
+static_assert(offsetof(Renderer, m_refCount)             == 0x548, "+0x548");
+static_assert(offsetof(Renderer, m_viewMatrix)           == 0x54C, "+0x54C");
+static_assert(offsetof(Renderer, m_f58C)                 == 0x58C, "+0x58C");
+static_assert(offsetof(Renderer, m_f59C)                 == 0x59C, "+0x59C");
+static_assert(offsetof(Renderer, m_clearDepthBeforeFirstPerson) == 0x5A0, "+0x5A0");
+static_assert(offsetof(Renderer, m_frameFences)          == 0x5A4, "+0x5A4");
+static_assert(offsetof(Renderer, m_renderAheadLimit)     == 0x5B8, "+0x5B8");
+static_assert(offsetof(Renderer, m_fenceCursor)          == 0x5BC, "+0x5BC");
+static_assert(offsetof(Renderer, m_objectDrawer)         == 0x5C0, "+0x5C0");
+static_assert(offsetof(Renderer, m_consoleOverlay)       == 0x5C8, "+0x5C8");
+static_assert(offsetof(Renderer, m_hudManager)           == 0x5D0, "+0x5D0");
+static_assert(offsetof(Renderer, m_frameTimer)           == 0x5DC, "+0x5DC");
+static_assert(offsetof(Renderer, m_frameTime)            == 0x5E8, "+0x5E8");
+static_assert(offsetof(Renderer, m_frameRate)            == 0x600, "+0x600");
+static_assert(offsetof(Renderer, m_fpsAccumulatedTime)   == 0x608, "+0x608");
+static_assert(offsetof(Renderer, m_fpsAccumulatedFrames) == 0x610, "+0x610");
+static_assert(offsetof(Renderer, m_renderSwitches69C)    == 0x69C, "+0x69C");
+static_assert(offsetof(Renderer, m_frameTimeOverlay)     == 0x6AC, "+0x6AC");
+static_assert(offsetof(Renderer, m_renderSwitches6B0)    == 0x6B0, "+0x6B0");
+static_assert(offsetof(Renderer, m_fullSizeRenderTargets) == 0x6BC, "+0x6BC");
+static_assert(offsetof(Renderer, m_fogOverride)          == 0x6C0, "+0x6C0");
+static_assert(offsetof(Renderer, m_raPath)               == 0x6CC, "+0x6CC");
+static_assert(offsetof(Renderer, m_byte6D0)              == 0x6D0, "+0x6D0");
+static_assert(offsetof(Renderer, m_dword6D4)             == 0x6D4, "+0x6D4");
+static_assert(offsetof(Renderer, m_byte6DC)              == 0x6DC, "+0x6DC");
+static_assert(offsetof(Renderer, m_overlayTextureName)   == 0x6E0, "+0x6E0");
+static_assert(offsetof(Renderer, m_f6FC)                 == 0x6FC, "+0x6FC");
+static_assert(offsetof(Renderer, m_meshShaderLodEnabled) == 0x708, "+0x708");
+static_assert(offsetof(Renderer, m_lodDistances70C)      == 0x70C, "+0x70C");
+static_assert(offsetof(Renderer, m_lodDistances71C)      == 0x71C, "+0x71C");
+static_assert(offsetof(Renderer, m_lodDistances72C)      == 0x72C, "+0x72C");
+static_assert(offsetof(Renderer, m_f73C)                 == 0x73C, "+0x73C");
+static_assert(offsetof(Renderer, m_streamBudget)         == 0x744, "+0x744");
+static_assert(offsetof(Renderer, m_dword748)             == 0x748, "+0x748");
+static_assert(offsetof(Renderer, m_streamObjectsAllocator) == 0x754, "+0x754");
+static_assert(offsetof(Renderer, m_streamObjects)        == 0x758, "+0x758");
+static_assert(offsetof(Renderer, m_expansionPack)        == 0x764, "+0x764");
+static_assert(offsetof(Renderer, m_dword768)             == 0x768, "+0x768");
+static_assert(offsetof(Renderer, m_backBuffer)           == 0x76C, "+0x76C");
+static_assert(offsetof(Renderer, m_depthStencil)         == 0x770, "+0x770");
+static_assert(offsetof(Renderer, m_hemiScratchTexture)   == 0x774, "+0x774");
+static_assert(offsetof(Renderer, m_pathTargets)          == 0x778, "+0x778");
+static_assert(offsetof(Renderer, m_forcedLod)            == 0x7D8, "+0x7D8");
+static_assert(offsetof(Renderer, m_lodSkipBase)          == 0x7E4, "+0x7E4");
+static_assert(offsetof(Renderer, m_dword7E8)             == 0x7E8, "+0x7E8");
+static_assert(offsetof(Renderer, m_lodSkipBias)          == 0x7EC, "+0x7EC");
+static_assert(offsetof(Renderer, m_frameHookEnabled)     == 0x7F0, "+0x7F0");
+static_assert(offsetof(Renderer, m_fpsBucketScale)       == 0x820, "+0x820");
+static_assert(offsetof(Renderer, m_fpsHistogram)         == 0x824, "+0x824");
+static_assert(offsetof(Renderer, m_lodScale84C)          == 0x84C, "+0x84C");
+static_assert(offsetof(Renderer, m_dword860)             == 0x860, "+0x860");
+static_assert(offsetof(Renderer, m_f864)                 == 0x864, "+0x864");
+static_assert(offsetof(Renderer, m_string868)            == 0x868, "+0x868");
+static_assert(offsetof(Renderer, m_lazy884)              == 0x884, "+0x884");
+static_assert(offsetof(Renderer, m_performanceTestActive) == 0x888, "+0x888");
+static_assert(offsetof(Renderer, m_performanceTest890)   == 0x890, "+0x890");
+static_assert(offsetof(Renderer, m_debugGraphs)          == 0x894, "+0x894");
+static_assert(offsetof(Renderer, m_frameStartTime)       == 0x8A0, "+0x8A0");
+static_assert(offsetof(Renderer, m_frameWallTime)        == 0x8A8, "+0x8A8");
+static_assert(offsetof(Renderer, m_lodScale8B0)          == 0x8B0, "+0x8B0");
+static_assert(offsetof(Renderer, m_lodScale8B8)          == 0x8B8, "+0x8B8");
+static_assert(offsetof(Renderer, m_overlayTexture)       == 0x8D8, "+0x8D8");
+#endif
 
 
 // The globals the registration records point at. Both are `IBase` slots in a SingletonRegInfo, so
@@ -468,7 +625,7 @@ static_assert(sizeof(Renderer) == 0x8E0,
 
 IBase* g_Renderer                     = 0;   // ctor writes it, registration republishes
 IBase* g_PostProductionFrameWork      = 0;   // published by DX9RendModule::init, flags == 4
-IBase* g_PostProductionFrameWorkOwner = 0;   // the 548-byte owner; the singleton is owner + 8
+IBase* g_PostProductionFrameWorkOwner = 0;   // the owner block; the singleton is its interface subobject
 
 // Shared renderer instance, published by base construction before device initialization.
 extern void* g_rendererBase;
@@ -491,10 +648,24 @@ unsigned char g_transparencyAARenderBracketsEnabled = 1;
 // Retain each case's own null checks; CEPostLoad calls NametagManager unconditionally.
 namespace {
 
-template <typename T>
-inline T& rendererField(void* base, unsigned int offset)
+// The three listener subobjects back to their Renderer: retail `lea ecx, [esi-538h]` and the
+// +0x53C / +0x540 twins. offsetof keeps the x86 adjustment and is the native one on x64.
+inline Renderer* rendererFromEventHandler(void* subobject)
 {
-    return *reinterpret_cast<T*>(static_cast<unsigned char*>(base) + offset);
+    return reinterpret_cast<Renderer*>(static_cast<unsigned char*>(subobject) -
+                                       offsetof(Renderer, m_evHandlerVptr));
+}
+
+inline Renderer* rendererFromDeviceLostListener(void* subobject)
+{
+    return reinterpret_cast<Renderer*>(static_cast<unsigned char*>(subobject) -
+                                       offsetof(Renderer, m_deviceLostVptr));
+}
+
+inline Renderer* rendererFromRenderPathListener(void* subobject)
+{
+    return reinterpret_cast<Renderer*>(static_cast<unsigned char*>(subobject) -
+                                       offsetof(Renderer, m_renderPathVptr));
 }
 
 
@@ -523,7 +694,7 @@ void eccoreSeam(unsigned int& hits, void* self, const char* qualifiedName, const
 // MSVC will not let a free function be __thiscall, so the ECX/EDX pair is spelled out: __fastcall
 // with an unused second parameter is byte-for-byte the same calling convention for a slot like
 // this one, whose arguments are all stack-passed after `this`.
-void __fastcall renderer_handleECCoreEvent(void* self, void* /*edx, unused*/,
+void RD9_THUNK renderer_handleECCoreEvent(void* self RD9_THUNK_EDX,
                                            int category, unsigned int id,
                                            void* node, void* userData)
 {
@@ -533,8 +704,7 @@ void __fastcall renderer_handleECCoreEvent(void* self, void* /*edx, unused*/,
         return;
 
     // `lea ecx, [esi-538h]` - the handler's own `this` is the Renderer's +0x538 subobject.
-    Renderer* const renderer =
-        reinterpret_cast<Renderer*>(static_cast<unsigned char*>(self) - 0x538);
+    Renderer* const renderer = rendererFromEventHandler(self);
 
     switch (id)
     {
@@ -559,7 +729,7 @@ void __fastcall renderer_handleECCoreEvent(void* self, void* /*edx, unused*/,
         {
             typedef void (__thiscall* SlotFn)(void*);
             void** const vtbl = *reinterpret_cast<void***>(geom::g_NametagManager);
-            reinterpret_cast<SlotFn>(vtbl[0x44 / sizeof(void*)])(geom::g_NametagManager);
+            reinterpret_cast<SlotFn>(vtbl[0x44 / 4])(geom::g_NametagManager);
         }
 
         // 1002F469 ->same optional guard, now backed by the real reflection owner.
@@ -576,19 +746,16 @@ void __fastcall renderer_handleECCoreEvent(void* self, void* /*edx, unused*/,
         return;
 
     // id 10, CEStartPerformanceTest / id 11, CEStopPerformanceTest
-    // Pure field writes on the subobject, so the offsets stay relative to `self` exactly as the
-    // instructions have them (esi+0x350/+0x354/+0x358 == Renderer +0x888/+0x88C/+0x890). They are
-    // reached through rendererField rather than carved into the Renderer declaration on purpose:
-    // carving a member out of an m_tail block removes it from that block's zeroing loop, which has
-    // already cost this file one fault (see m_objectDrawer).
+    // Pure field writes on the subobject (esi+0x350/+0x354/+0x358 == Renderer +0x888/+0x88C/
+    // +0x890), in the shipped store order.
     case 10:
-        rendererField<unsigned int >(self, 0x354) = 0;
-        rendererField<unsigned int >(self, 0x358) = 0;
-        rendererField<unsigned char>(self, 0x350) = 1;
+        renderer->m_performanceTest88C = 0;
+        renderer->m_performanceTest890 = 0;
+        renderer->m_performanceTestActive = 1;
         return;
 
     case 11:
-        rendererField<unsigned char>(self, 0x350) = 0;
+        renderer->m_performanceTestActive = 0;
         return;
 
     // Unloads renderer state, environment/hemi maps, vegetation, and particle systems.
@@ -603,7 +770,7 @@ void __fastcall renderer_handleECCoreEvent(void* self, void* /*edx, unused*/,
         if (envMap)
         {
             typedef void (__thiscall* SlotFn)(void*);
-            reinterpret_cast<SlotFn>((*reinterpret_cast<void***>(envMap))[0x38 / sizeof(void*)])(
+            reinterpret_cast<SlotFn>((*reinterpret_cast<void***>(envMap))[0x38 / 4])(
                 envMap);
         }
 
@@ -612,7 +779,7 @@ void __fastcall renderer_handleECCoreEvent(void* self, void* /*edx, unused*/,
         {
             // +0x10 is IHemiMapManager::clear(), which IS written - Geom/HemiMapManager.
             typedef void (__thiscall* SlotFn)(void*);
-            reinterpret_cast<SlotFn>((*reinterpret_cast<void***>(hemiMap))[0x10 / sizeof(void*)])(
+            reinterpret_cast<SlotFn>((*reinterpret_cast<void***>(hemiMap))[0x10 / 4])(
                 hemiMap);
         }
 
@@ -640,7 +807,7 @@ void __fastcall renderer_handleECCoreEvent(void* self, void* /*edx, unused*/,
     // id 15, CEActivateApp
     //     *(byte*)(esi - 0x21) = *(byte*)userData;     i.e. Renderer +0x517 = the payload's byte
     case 15:
-        rendererField<unsigned char>(renderer, 0x517) =
+        reinterpret_cast<RendDX9Base*>(renderer)->appActive =
             *static_cast<const unsigned char*>(userData);
         return;
 
@@ -656,56 +823,62 @@ void* const kECCoreEventHandlerVtable[1] =
     reinterpret_cast<void*>(&renderer_handleECCoreEvent)
 };
 
-void releaseRendererPathResources(void* base)
+// The render-path target at retail `retailOffset` (+0x778..+0x7D4).
+inline EngineTexture*& pathTarget(Renderer* renderer, unsigned int retailOffset)
 {
-    IDirect3DSurface9*& backBuffer = rendererField<IDirect3DSurface9*>(base, 0x76C);
-    IDirect3DSurface9*& depth      = rendererField<IDirect3DSurface9*>(base, 0x770);
+    return renderer->m_pathTargets[(retailOffset - 0x778u) / 4u];
+}
+
+void releaseRendererPathResources(Renderer* renderer)
+{
+    IDirect3DSurface9*& backBuffer = renderer->m_backBuffer;      // +0x76C
+    IDirect3DSurface9*& depth      = renderer->m_depthStencil;    // +0x770
     if (backBuffer) backBuffer->Release();
     if (depth) depth->Release();
     backBuffer = 0;
     depth = 0;
 
-    static_cast<Renderer*>(base)->releaseHemiScratchTexture();
+    renderer->releaseHemiScratchTexture();
     for (unsigned int offset = 0x778; offset <= 0x7C8; offset += 4)
-        dx9rend::textureReleaseRef(rendererField<dx9rend::EngineTexture*>(base, offset));
-    dx9rend::textureReleaseRef(rendererField<dx9rend::EngineTexture*>(base, 0x7CC));
-    dx9rend::textureReleaseRef(rendererField<dx9rend::EngineTexture*>(base, 0x7D0));
-    dx9rend::textureReleaseRef(rendererField<dx9rend::EngineTexture*>(base, 0x7D4));
+        dx9rend::textureReleaseRef(pathTarget(renderer, offset));
+    dx9rend::textureReleaseRef(pathTarget(renderer, 0x7CC));
+    dx9rend::textureReleaseRef(pathTarget(renderer, 0x7D0));
+    dx9rend::textureReleaseRef(pathTarget(renderer, 0x7D4));
 }
 
 // These are Renderer-owned path targets, created after LightManager's own shadow
 // resources.  No failure checks were present in retail; null wrappers remain null and are handled
 // by the same downstream target-selection fallbacks.
-void createRendererPathResources(void* base)
+void createRendererPathResources(Renderer* renderer)
 {
     const int oldManaged = dx9rend::textureManagerSwapManaged(0);
     dx9rend::IRenderView* const view = static_cast<dx9rend::IRenderView*>(
-        reinterpret_cast<RendDX9Base*>(base)->renderView);
+        reinterpret_cast<RendDX9Base*>(renderer)->renderView);
     float* const viewport = view->getViewport();
-    const float scale = rendererField<float>(base, 0x58C);
+    const float scale = renderer->m_f58C;                                  // +0x58C
     const unsigned int scaledWidth = static_cast<unsigned int>(viewport[2] / scale);
     const unsigned int scaledHeight = static_cast<unsigned int>(viewport[3] / scale);
-    static_cast<Renderer*>(base)->setHemiScratchTexture(
+    renderer->setHemiScratchTexture(
         static_cast<dx9rend::EngineTexture*>(dx9rend::textureManagerCreateEmpty(
             scaledWidth, scaledHeight, D3DFMT_A8R8G8B8, 1, D3DUSAGE_RENDERTARGET, 0)));
 
     const bool fullSize = dx9rend::deviceCapsSupportsFullSizeRenderTargets();
-    rendererField<unsigned char>(base, 0x6BC) = fullSize ? 1u : 0u;
+    renderer->m_fullSizeRenderTargets = fullSize ? 1u : 0u;              // +0x6BC
     const unsigned int width = fullSize ? static_cast<unsigned int>(viewport[2]) : 512u;
     const unsigned int height = fullSize ? static_cast<unsigned int>(viewport[3]) : 512u;
     const unsigned int quarterWidth = fullSize ? width / 4u : 128u;
     const unsigned int quarterHeight = fullSize ? height / 4u : 128u;
 
-    rendererField<dx9rend::EngineTexture*>(base, 0x788) =
+    pathTarget(renderer, 0x788) =
         static_cast<dx9rend::EngineTexture*>(dx9rend::textureManagerCreateEmpty(
             width, height, D3DFMT_A8R8G8B8, 1, D3DUSAGE_RENDERTARGET, 0));
-    rendererField<dx9rend::EngineTexture*>(base, 0x7A0) =
+    pathTarget(renderer, 0x7A0) =
         static_cast<dx9rend::EngineTexture*>(dx9rend::textureManagerCreateEmpty(
             width, fullSize ? height / 4u : 128u, D3DFMT_A8R8G8B8, 1,
             D3DUSAGE_RENDERTARGET, 0));
     for (unsigned int offset = 0x7A4; offset <= 0x7C8; offset += 4)
     {
-        rendererField<dx9rend::EngineTexture*>(base, offset) =
+        pathTarget(renderer, offset) =
             static_cast<dx9rend::EngineTexture*>(dx9rend::textureManagerCreateEmpty(
                 quarterWidth, quarterHeight, D3DFMT_A8R8G8B8, 1,
                 D3DUSAGE_RENDERTARGET, 0));
@@ -713,38 +886,34 @@ void createRendererPathResources(void* base)
     dx9rend::textureManagerSwapManaged(oldManaged);
 }
 
-void __fastcall renderer_renderPathActivated(void* listener, void*, int path)
+void RD9_THUNK renderer_renderPathActivated(void* listener RD9_THUNK_EDX, int path)
 {
-    unsigned char* const base = static_cast<unsigned char*>(listener) - 0x540;
-    rendererField<unsigned int>(base, 0x544) = static_cast<unsigned int>(path);
+    Renderer* const self = rendererFromRenderPathListener(listener);
+    self->m_currentRenderPath = path;                                      // +0x544
 
-    RendDX9Base* const renderer = reinterpret_cast<RendDX9Base*>(base);
-    renderer->device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO,
-                                    &rendererField<IDirect3DSurface9*>(base, 0x76C));
-    renderer->device->GetDepthStencilSurface(
-        &rendererField<IDirect3DSurface9*>(base, 0x770));
-    dx9rend::stateManagerSetRenderTarget(
-        0, rendererField<IDirect3DSurface9*>(base, 0x76C));
-    dx9rend::stateManagerSetDepthStencilSurface(
-        rendererField<IDirect3DSurface9*>(base, 0x770));
+    RendDX9Base* const renderer = reinterpret_cast<RendDX9Base*>(self);
+    renderer->device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &self->m_backBuffer);
+    renderer->device->GetDepthStencilSurface(&self->m_depthStencil);
+    dx9rend::stateManagerSetRenderTarget(0, self->m_backBuffer);
+    dx9rend::stateManagerSetDepthStencilSurface(self->m_depthStencil);
 
     if (geom::g_LightManager)
         geom::createShadowResources(geom::g_LightManager);
-    createRendererPathResources(base);
+    createRendererPathResources(self);
 }
 
-void __fastcall renderer_renderPathDeactivated(void* listener, void*)
+void RD9_THUNK renderer_renderPathDeactivated(void* listener RD9_THUNK_EDX)
 {
-    releaseRendererPathResources(static_cast<unsigned char*>(listener) - 0x540);
+    releaseRendererPathResources(rendererFromRenderPathListener(listener));
 }
 
-void __fastcall renderer_renderPathNull(void*, void*) {}
-void __fastcall renderer_renderPathNullWithPath(void*, void*, int) {}
-int __fastcall renderer_getCurrentRenderPath(void* listener, void*)
+void RD9_THUNK renderer_renderPathNull(void* RD9_THUNK_EDX) {}
+void RD9_THUNK renderer_renderPathNullWithPath(void* RD9_THUNK_EDX, int) {}
+int RD9_THUNK renderer_getCurrentRenderPath(void* listener RD9_THUNK_EDX)
 {
-    return *reinterpret_cast<int*>(static_cast<unsigned char*>(listener) + 4);
+    return rendererFromRenderPathListener(listener)->m_currentRenderPath;   // listener + 4
 }
-void* __fastcall renderer_getRenderPathName(void*, void*, void* out)
+void* RD9_THUNK renderer_getRenderPathName(void* RD9_THUNK_EDX, void* out)
 {
     RD9_FRONTIER_AT("dice::hfe::dx9rend::Renderer::getRenderPathListenerName", out, 0x14);
     return out;
@@ -763,43 +932,42 @@ void* const kRendererRenderPathVtable[6] =
 
 // Replaces the owned overlay texture from its stored name; an empty name leaves it alone.
 // Device reset and lazy frame loading share this operation.
-void rendererReloadOverlayTexture(unsigned char* base)
+void rendererReloadOverlayTexture(Renderer* renderer)
 {
-    const vc71::string& name = *reinterpret_cast<const vc71::string*>(base + 0x6E0);
+    const std::string& name = renderer->overlayTextureName();
     if (name.size() == 0)                                   // cmp [edi+6F4h], 0 / jz
         return;
-    dx9rend::textureReleaseRef(rendererField<dx9rend::EngineTexture*>(base, 0x8D8));
-    rendererField<dx9rend::EngineTexture*>(base, 0x8D8) =
+    dx9rend::textureReleaseRef(renderer->m_overlayTexture);              // +0x8D8
+    renderer->m_overlayTexture =
         static_cast<dx9rend::EngineTexture*>(dx9rend::textureManagerGetTexture(name));
 }
 
 // Releases overlay texture, then render-path resources on device loss.
 // StateManager's higher-priority listener has already released its surface references.
-void __fastcall renderer_onDeviceLost(void* listener, void*)
+void RD9_THUNK renderer_onDeviceLost(void* listener RD9_THUNK_EDX)
 {
-    unsigned char* const base = static_cast<unsigned char*>(listener) - 0x53C;
-    dx9rend::textureReleaseRef(rendererField<dx9rend::EngineTexture*>(base, 0x8D8));
-    releaseRendererPathResources(base);
+    Renderer* const renderer = rendererFromDeviceLostListener(listener);
+    dx9rend::textureReleaseRef(renderer->m_overlayTexture);              // +0x8D8
+    releaseRendererPathResources(renderer);
 }
 
 // Reacquires back/depth surfaces, rebuilds path resources, and reloads the overlay.
 // LightManager restores its own shadow resources; D3D acquisition results are unchecked.
-void __fastcall renderer_onDeviceReset(void* listener, void*)
+void RD9_THUNK renderer_onDeviceReset(void* listener RD9_THUNK_EDX)
 {
-    unsigned char* const base = static_cast<unsigned char*>(listener) - 0x53C;
-    RendDX9Base* const renderer = reinterpret_cast<RendDX9Base*>(base);
+    Renderer* const self = rendererFromDeviceLostListener(listener);
+    RendDX9Base* const renderer = reinterpret_cast<RendDX9Base*>(self);
 
-    renderer->device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO,
-                                    &rendererField<IDirect3DSurface9*>(base, 0x76C));
-    renderer->device->GetDepthStencilSurface(&rendererField<IDirect3DSurface9*>(base, 0x770));
-    dx9rend::stateManagerSetRenderTarget(0, rendererField<IDirect3DSurface9*>(base, 0x76C));
-    dx9rend::stateManagerSetDepthStencilSurface(rendererField<IDirect3DSurface9*>(base, 0x770));
-    createRendererPathResources(base);
-    rendererReloadOverlayTexture(base);
+    renderer->device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &self->m_backBuffer);
+    renderer->device->GetDepthStencilSurface(&self->m_depthStencil);
+    dx9rend::stateManagerSetRenderTarget(0, self->m_backBuffer);
+    dx9rend::stateManagerSetDepthStencilSurface(self->m_depthStencil);
+    createRendererPathResources(self);
+    rendererReloadOverlayTexture(self);
 }
 
 // 0x10027FC0 - `ret`.
-void __fastcall renderer_onDeviceDestroy(void*, void*) {}
+void RD9_THUNK renderer_onDeviceDestroy(void* RD9_THUNK_EDX) {}
 
 void* const kRendererDeviceLostVtable[3] =
 {
@@ -814,40 +982,33 @@ void* const kRendererDeviceLostVtable[3] =
 // Initializes renderer state. Zero-filled opaque storage differs from allocator leftovers
 // for fields the original constructor did not write.
 
+namespace {
+
+// Zeroes the plain members laid out from `first` up to (not including) `end`.
+inline void zeroMemberRange(void* first, const void* end)
+{
+    ::memset(first, 0, static_cast<size_t>(static_cast<const unsigned char*>(end) -
+                                           static_cast<unsigned char*>(first)));
+}
+
+} // anonymous namespace
+
 Renderer::Renderer()
     : m_evHandlerVptr(0)
     , m_deviceLostVptr(0)
     , m_renderPathVptr(0)
-    , m_unknown544(0)
+    , m_currentRenderPath(0)
     , m_refCount(1)          // mov dword ptr [esi+548h], 1
 {
     for (unsigned int i = 0; i < sizeof(m_baseStorage); ++i) m_baseStorage[i] = 0;
-    for (unsigned int i = 0; i < sizeof(m_tail1aBeforeRenderAheadLimit); ++i)
-        m_tail1aBeforeRenderAheadLimit[i] = 0;
-    m_renderAheadLimit = 0;
-    for (unsigned int i = 0; i < sizeof(m_tail1aAfterRenderAheadLimit); ++i)
-        m_tail1aAfterRenderAheadLimit[i] = 0;
-    // must BE zeroed, AND IT IS NOT optional. initialize step 10 does `if (m_objectDrawer)
-    // release it` before replacing it, so a member left holding allocator garbage is dispatched
-    // through as a vtable on the first boot. It was inside m_tail1a's zeroing until +0x5C0 was
-    // named; splitting it out without adding it here cost exactly that fault.
-    m_objectDrawer = 0;
-    m_consoleOverlayReady = 0; m_pad5C5[0] = 0; m_pad5C5[1] = 0; m_pad5C5[2] = 0;
-    m_consoleOverlay = 0; m_consoleFont = 0;
-    for (unsigned int i = 0; i < sizeof(m_tail1bBeforeFrameRate); ++i)
-        m_tail1bBeforeFrameRate[i] = 0;
-    m_frameRate = 0.0;
-    for (unsigned int i = 0; i < sizeof(m_tail1bAfterFrameRate); ++i)
-        m_tail1bAfterFrameRate[i] = 0;
-    m_hemiScratchTexture = 0;
-    for (unsigned int i = 0; i < sizeof(m_tail1bAfterHemiScratch); ++i)
-        m_tail1bAfterHemiScratch[i] = 0;
-    m_hudManager = 0; m_weatherManager = 0; m_rainManager = 0;
-    for (unsigned int i = 0; i < sizeof(m_tail2a); ++i) m_tail2a[i] = 0;
-    m_debugGraphs[0] = 0; m_debugGraphs[1] = 0; m_debugGraphs[2] = 0;
-    // Carved out of m_tail2b, so they need their own zeroing - see the note beside m_objectDrawer.
-    m_frameStartTime = 0.0; m_frameWallTime = 0.0;
-    for (unsigned int i = 0; i < sizeof(m_tail2b); ++i) m_tail2b[i] = 0;
+    // Every plain tail member is zeroed here, before the base half runs - in four ranges around
+    // the three std containers, which their own constructors have already built empty. This
+    // includes m_objectDrawer, which must be zero: initialize step 10 releases a non-null one
+    // before replacing it.
+    zeroMemberRange(&m_viewMatrix, &m_overlayTextureName);              // +0x54C .. +0x6DF
+    zeroMemberRange(&m_overlayTextureNamePad, &m_streamObjects);        // +0x6FC .. +0x757
+    zeroMemberRange(&m_expansionPack, &m_string868);                    // +0x764 .. +0x867
+    zeroMemberRange(&m_string868Pad, this + 1);                         // +0x884 .. +0x8DF
 
     // Base construction creates the D3D device before initialize().
     constructD3DHalf(this);
@@ -870,16 +1031,13 @@ Renderer::Renderer()
     m_f59C = 6.0f;
     m_lazy884 = 0;
 
-    // Initialize per-frame subsystem enable flags and state.
+    // Initialize per-frame subsystem enable flags and state. Byte/dword/float indices are the
+    // retail ones (byte 1440 == +0x5A0, dword 375 == +0x5DC, float 432 == +0x6C0).
     {
-        unsigned char* self = reinterpret_cast<unsigned char*>(this);
-        unsigned int*  dw   = reinterpret_cast<unsigned int*>(this);
-        float*         fl   = reinterpret_cast<float*>(this);
-
-        self[1440] = 1;              // clear the frame at the world pass's end (flags 2, z-only)
-        self[1441] = 1;              // post-production requires its active() query
+        m_clearDepthBeforeFirstPerson = 1;   // byte 1440: the z-only clear before the 1st-person passes
+        m_postProductionNeedsActive = 1;     // byte 1441: post-production requires its active() query
         m_renderAheadLimit = 2;      // the GPU-throttle fence ring uses TWO of the five fences
-        dw[367] = 0;                 // ring cursor
+        m_fenceCursor = 0;           // dword 367, the ring cursor
 
         // the frame timer at +0x5DC - 48 bytes, QueryPerformanceCounter-backed (sub_10077710):
         // {pad, lastCounter int64 +8, accum int64 +16, dt double +24, total double +32,
@@ -897,60 +1055,60 @@ Renderer::Renderer()
                 ::QueryPerformanceCounter(&now);
                 *reinterpret_cast<LONGLONG*>(timer + 8) = now.QuadPart;
             }
-            dw[375] = reinterpret_cast<unsigned int>(timer);
+            m_frameTimer = timer;    // dword 375
         }
 
-        self[1693] = 1;              // fog block
-        self[1694] = 1;
-        self[1695] = 1;              // particles
-        self[1696] = 1;              // decals
-        self[1697] = 1;
-        self[1698] = 1;
-        self[1699] = 1;              // skinned meshes
-        self[1700] = 1;
-        self[1701] = 1;
-        self[1702] = 1;              // undergrowth
-        self[1703] = 1;
-        self[1704] = 1;              // nametags
-        self[1705] = 1;
-        self[1706] = 0;
-        self[1707] = 1;
-        self[1712] = 0;              // the debug graphs stay hidden
-        self[1713] = 1;              // the HudManager post-frame call
-        self[1714] = 1;              // sky
-        self[1715] = 1;
-        self[1716] = 1;              // the console query
-        self[1717] = 1;              // post-production
-        self[1756] = 1;
-        self[1757] = 0;
+        sw(1693) = 1;                // fog block
+        sw(1694) = 1;
+        sw(1695) = 1;                // particles
+        sw(1696) = 1;                // decals
+        sw(1697) = 1;
+        sw(1698) = 1;
+        sw(1699) = 1;                // skinned meshes
+        sw(1700) = 1;
+        sw(1701) = 1;
+        sw(1702) = 1;                // undergrowth
+        sw(1703) = 1;
+        sw(1704) = 1;                // nametags
+        sw(1705) = 1;
+        sw(1706) = 0;
+        sw(1707) = 1;
+        sw(1712) = 0;                // the debug graphs stay hidden
+        sw(1713) = 1;                // the HudManager post-frame call
+        sw(1714) = 1;                // sky
+        sw(1715) = 1;
+        sw(1716) = 1;                // the console query
+        sw(1717) = 1;                // post-production
+        m_byte6DC = 1;               // byte 1756
+        m_byte6DD = 0;               // byte 1757
 
-        fl[432] = 4.0f;              // the fog override triple the fog block swaps in
-        fl[433] = 5.0f;
-        fl[434] = 100.0f;
-        fl[447] = 0.25f;
-        fl[448] = 0.75f;
-        fl[449] = 0.75f;
-        fl[451] = 10.0f;
-        fl[455] = 10.0f;
-        fl[459] = 10.0f;
-        fl[463] = 9999.0f;
-        fl[464] = 9999.0f;
-        fl[465] = 25.0f;             // the geometry-streaming budget - the scan runs every frame
-        dw[466] = 10;
-        dw[474] = 2;
-        dw[502] = 0xFFFFFFFFu;       // the FPS histogram's -1 triple
-        dw[503] = 0xFFFFFFFFu;
-        dw[504] = 0xFFFFFFFFu;
-        dw[506] = 100;
-        fl[520] = 10.0f;             // the FPS bucket scale
-        fl[531] = 1.0f;
-        dw[536] = 8;
-        fl[537] = 2.0f;
-        fl[556] = 1.0f;
-        fl[557] = 1.0f;
-        fl[558] = 1.0f;
-        // The two vc71::string members at dword 440 and 538 stay zeroed storage: a zeroed string
-        // reads as "" through c_str(), and nothing recovered writes or reads them yet.
+        m_fogOverride[0] = 4.0f;     // floats 432..434: the fog override triple the fog block swaps in
+        m_fogOverride[1] = 5.0f;
+        m_fogOverride[2] = 100.0f;
+        m_f6FC[0] = 0.25f;           // floats 447..449
+        m_f6FC[1] = 0.75f;
+        m_f6FC[2] = 0.75f;
+        m_lodDistances70C[0] = 10.0f;    // float 451
+        m_lodDistances71C[0] = 10.0f;    // float 455
+        m_lodDistances72C[0] = 10.0f;    // float 459
+        m_f73C = 9999.0f;            // float 463
+        m_f740 = 9999.0f;            // float 464
+        m_streamBudget = 25.0f;      // float 465: the geometry-streaming budget - the scan runs every frame
+        m_dword748 = 10;             // dword 466
+        m_dword768 = 2;              // dword 474
+        m_forcedLod[0] = -1;         // dwords 502..504: the forced static/skinned/bundled mesh LODs
+        m_forcedLod[1] = -1;
+        m_forcedLod[2] = -1;
+        m_dword7E8 = 100;            // dword 506
+        m_fpsBucketScale = 10.0f;    // float 520: the FPS bucket scale
+        m_lodScale84C = 1.0f;        // float 531
+        m_dword860 = 8;              // dword 536
+        m_f864 = 2.0f;               // float 537
+        m_lodScale8B0 = 1.0f;        // floats 556..558
+        m_lodScale8B4 = 1.0f;
+        m_lodScale8B8 = 1.0f;
+        // The two string members at dword 440 and 538 are constructed empty; nothing recovered
+        // writes them yet.
     }
 
     // The renderer owns and constructs its render view.
@@ -970,7 +1128,7 @@ Renderer::Renderer()
     // Not reproduced, and each is a separate gap rather than one vague one:
     //   - RendDX9_base_ctor (0x1000B940), the whole base object including the D3D device
     //   - the 48-byte sub-object at +0x5DC (bf_malloc(48) -> sub_10077710)
-    //   - the two std::string members at +0x6E0 and +0x868
+    //   - any initial value of the two std::string members at +0x6E0 and +0x868 (empty here)
     //   - roughly 120 further scalar members between +0x5A0 and +0x8DF
     // [FRONTIER] dice::hfe::dx9rend::Renderer::Renderer - the base half and the tail members
 }
@@ -995,6 +1153,10 @@ int Renderer::release()
         // frees the allocation directly.  Do not let that pre-existing shortcut leak the three
         // now-owned display vectors: this is the recovered sub_1000C9B0 portion of the base dtor.
         clearDisplayModeCopies(this);
+        // [CHOSEN, not recovered] End the std containers' lifetimes before the storage is freed
+        // (issue #7): the base storage's, then this object's own members.
+        destructD3DHalf(this);
+        this->~Renderer();
         ::renddx9abi::engineFree(this);
     }
     return remaining;
@@ -1204,16 +1366,16 @@ bool Renderer::initialize()
     {
         IBase*  gtmBase = geom::g_GeometryTemplateManager;
         void**  vtbl    = *reinterpret_cast<void***>(gtmBase);
-        typedef bool (__thiscall* RegisterFn)(void*, const vc71::string&, const vc71::string&);
+        typedef bool (__thiscall* RegisterFn)(void*, const std::string&, const std::string&);
         typedef void (__thiscall* VoidFn)(void*);
 
         if (!readBoolSetting("GSOptimizeGeomOnDemand", false))
         {
             RegisterFn registerOptimizer = reinterpret_cast<RegisterFn>(vtbl[0x50 / 4]);
-            registerOptimizer(gtmBase, vc71::string("BundledMeshOptimizer"),
-                                       vc71::string("BundledMeshOptimizer"));
-            registerOptimizer(gtmBase, vc71::string("StaticMeshOptimizer"),
-                                       vc71::string("StaticMeshOptimizer"));
+            registerOptimizer(gtmBase, std::string("BundledMeshOptimizer"),
+                                       std::string("BundledMeshOptimizer"));
+            registerOptimizer(gtmBase, std::string("StaticMeshOptimizer"),
+                                       std::string("StaticMeshOptimizer"));
             reinterpret_cast<VoidFn>(vtbl[0x54 / 4])(gtmBase);   // runOptimizers
         }
 
@@ -1267,8 +1429,8 @@ bool Renderer::initialize()
     // [UNRESOLVED] Base flag +0x102 enables the following branch.
     // [FRONTIER] Its handler sub_10042150 remains unavailable.
     {
-        const unsigned char* base = reinterpret_cast<const unsigned char*>(g_rendererBase);
-        if (base && base[0x102])
+        const RendDX9Base* base = static_cast<const RendDX9Base*>(g_rendererBase);
+        if (base && base->flag102)
         {
             RD9_FRONTIER("dice::hfe::dx9rend::Renderer::initialize step14 "
                          "(the flag at base+0x102 is set; sub_10042150 is unwritten)", 0x1C);
@@ -1335,7 +1497,7 @@ bool Renderer::initialize()
 
             void** v = *reinterpret_cast<void***>(g);
             typedef void (__thiscall* IntFn)(void*, int);
-            typedef void (__thiscall* StrFn)(void*, const vc71::string&);
+            typedef void (__thiscall* StrFn)(void*, const std::string&);
             typedef void (__thiscall* PtrFn)(void*, const float*);
             typedef void (__thiscall* Col3Fn)(void*, unsigned, unsigned, unsigned);
             typedef void (__thiscall* Flt2Fn)(void*, float, float);
@@ -1346,7 +1508,7 @@ bool Renderer::initialize()
             // call writes into. See DebugLineGraphD3d.cpp - it is a named frontier.
             reinterpret_cast<IntFn>(v[0x3C / 4])(g, 250);
 
-            reinterpret_cast<StrFn>(v[0x18 / 4])(g, vc71::string(spec.name));
+            reinterpret_cast<StrFn>(v[0x18 / 4])(g, std::string(spec.name));
             reinterpret_cast<PtrFn>(v[0x10 / 4])(g, spec.rect);
             reinterpret_cast<Col3Fn>(v[0x44 / 4])(g, spec.colours[0], spec.colours[1],
                                                   spec.colours[2]);
@@ -1402,8 +1564,8 @@ void Renderer::initializeFontAndConsoleOverlay()
     {
         // font->vslot+0x10(path). The bool decides only which message is logged.
         void** vtbl = *reinterpret_cast<void***>(m_consoleFont);
-        typedef bool (__thiscall* LoadFn)(void*, const vc71::string&);
-        vc71::string path("Fonts/BF1942.font");
+        typedef bool (__thiscall* LoadFn)(void*, const std::string&);
+        std::string path("Fonts/BF1942.font");
         const bool loaded = reinterpret_cast<LoadFn>(vtbl[0x10 / 4])(m_consoleFont, path);
 
         if (!loaded)
@@ -1430,10 +1592,10 @@ void Renderer::initializeFontAndConsoleOverlay()
 
     {
         void** vtbl = *reinterpret_cast<void***>(m_consoleOverlay);
-        typedef void (__thiscall* SetTextureFn)(void*, const vc71::string&);
+        typedef void (__thiscall* SetTextureFn)(void*, const std::string&);
         typedef void (__thiscall* SetFloatFn)(void*, float);
 
-        vc71::string texture("Menu/Console/white");
+        std::string texture("Menu/Console/white");
         reinterpret_cast<SetTextureFn>(vtbl[0x2C / 4])(m_consoleOverlay, texture);
 
         // 1061997773 == 0x3F4CCCCD == 0.8f
@@ -1466,9 +1628,9 @@ void Renderer::setDebugTextWriterFont(const char* singletonName, const char* fon
     }
 
     void** vtbl = *reinterpret_cast<void***>(writer);
-    typedef bool (__thiscall* SetFontFn)(void*, const vc71::string&);
+    typedef bool (__thiscall* SetFontFn)(void*, const std::string&);
 
-    vc71::string path(fontPath);
+    std::string path(fontPath);
     const bool ok = reinterpret_cast<SetFontFn>(vtbl[0x10 / 4])(writer, path);
 
     ::renddx9abi::logf("Renderer::initialize: step 6 - %s.setFont(\"%s\") -> %s "
@@ -1570,11 +1732,7 @@ bool isMultisampleActive()
         return true;
     if (base->disableMultisample)
         return false;
-    unsigned int* const first = base->multiSampleFirst;
-    unsigned int* const last  = base->multiSampleLast;
-    if (first && ((last - first) >> 1))
-        return *reinterpret_cast<int*>(first) > 0;
-    return false;
+    return multiSampleListActive(base);
 }
 
 // PE 0x10030257..0x100303A1 repeats this complete predicate before every atoc transition.  Do not
@@ -1606,20 +1764,13 @@ void frameTimerTick(void* timer)
         static_cast<double>(*reinterpret_cast<LONGLONG*>(t + 16)) * invFreq;
 }
 
-// sub_1004F1C0 - is post-production active. Reads the owner object's flags; the rebuilt owner is
-// 548 zeroed bytes, so every term is false - the at-rest state of a real one.
+// sub_1004F1C0 - is post-production active. Reads the owner object's flags (+0x200, +0x24, +0x164,
+// +0x27, +0x220, +0xFA, then the float +0xE0) through its owner TU, which knows the layout; a
+// null owner answers false. The rebuilt owner is zeroed, so every term is false - the at-rest
+// state of a real one.
 bool postProductionActive()
 {
-    unsigned char* o = reinterpret_cast<unsigned char*>(g_PostProductionFrameWorkOwner);
-    if (!o)
-        return false;
-    if (*reinterpret_cast<unsigned int*>(o + 512) || o[36])
-        return true;
-    return *reinterpret_cast<unsigned int*>(o + 356) == 1
-        || o[39]
-        || *reinterpret_cast<unsigned int*>(o + 544)
-        || o[250]
-        || *reinterpret_cast<float*>(o + 224) > 0.0f;
+    return postProductionFrameWorkIsActive();
 }
 
 // sub_100F7AD0 - is the camera under water: view matrix Y against the constants block's
@@ -1630,7 +1781,7 @@ bool isCameraUnderWater()
         return false;
     float* m = viewGetMatrixPtr(rendererGetRenderView());
     return m[13] < *reinterpret_cast<float*>(
-        static_cast<unsigned char*>(g_raShaderConstants) + 444);
+        raShaderConstantsAt(444));
 }
 
 // One-time notes for the guarded withheld-singleton arms, so the log shows each divergence once
@@ -1657,7 +1808,7 @@ float underwaterDepth()
     if (!g_raShaderConstants)
         return 0.0f;
     const float waterHeight = *reinterpret_cast<float*>(
-        static_cast<unsigned char*>(g_raShaderConstants) + 444);
+        raShaderConstantsAt(444));
     float* m = viewGetMatrixPtr(rendererGetRenderView());
     const float depth = waterHeight - m[13];
     return (0.0f < depth) ? depth : 0.0f;
@@ -1678,11 +1829,8 @@ bool cameraIsUnderWater()
 
 void Renderer::update(double time)
 {
-    unsigned char* self = reinterpret_cast<unsigned char*>(this);
-    unsigned int*  dw   = reinterpret_cast<unsigned int*>(this);
-
-    ++dw[65];
-    *reinterpret_cast<double*>(self + 1512) = time;
+    ++reinterpret_cast<RendDX9Base*>(this)->frameOrdinal;      // retail dword 65
+    m_frameTime = time;                                         // +0x5E8 (self + 1512)
     const float timeF = static_cast<float>(time);
 
     {
@@ -1693,14 +1841,14 @@ void Renderer::update(double time)
 
     if (geom::g_SkyDome)
     {
-        typedef void (__fastcall* Fn)(void*, void*, float);
+        typedef void (__thiscall* Fn)(void*, float);
         reinterpret_cast<Fn>((*reinterpret_cast<void***>(geom::g_SkyDome))[4])(
-            geom::g_SkyDome, 0, timeF);
+            geom::g_SkyDome, timeF);
     }
     else
         noteOnce(1u, "SkyDome::update");
 
-    if (self[1702] && geom::g_UndergrowthSystem)
+    if (sw(1702) && geom::g_UndergrowthSystem)
         static_cast<geom::UndergrowthSystem*>(geom::g_UndergrowthSystem)->update(timeF);   // +0x24
 
     if (geom::g_LightManager)
@@ -1718,11 +1866,7 @@ void Renderer::update(double time)
         noteOnce(4u, "ParticleSystemManager::update");
 
     if (geom::g_DecalManager)
-    {
-        typedef void (__fastcall* Fn)(void*, void*, float);
-        reinterpret_cast<Fn>((*reinterpret_cast<void***>(geom::g_DecalManager))[12])(
-            geom::g_DecalManager, 0, timeF);
-    }
+        static_cast<geom::IDecalManager*>(geom::g_DecalManager)->update(timeF);    // +0x30
     else
         noteOnce(8u, "DecalManager::update");
 
@@ -1740,12 +1884,11 @@ void Renderer::update(double time)
 
 void Renderer::hudManagerFramePrep(float timeF)
 {
-    unsigned char* self = reinterpret_cast<unsigned char*>(this);
     void* hud = m_hudManager;
     if (!hud)
         return;
 
-    hostCalls::hudSetPaint(hud, self[1713]);                                           // +0x20
+    hostCalls::hudSetPaint(hud, sw(1713));                                           // +0x20
 
     void* player = hostCalls::localHumanPlayer();                                       // +0x30
 
@@ -1763,16 +1906,15 @@ void Renderer::roadQueuePass()
         return;
 
     IRenderView* const view = rendererGetRenderViewDup();                                   // +0x50
-    const double* const dbl = reinterpret_cast<const double*>(this);
-    unsigned char* const constants = static_cast<unsigned char*>(g_raShaderConstants);
-    *reinterpret_cast<float*>(constants + 0x94) += static_cast<float>(dbl[189]);
+    // The Ra constants block by retail offset (raShaderConstantsAt maps it on x64, issue #7).
+    *reinterpret_cast<float*>(raShaderConstantsAt(0x94)) += static_cast<float>(m_frameTime);
 
     {
         const float* const m = view->getViewMatrixPtr()->m;                                  // +0x64
-        float* const matrix = reinterpret_cast<float*>(constants + 0x1C);
+        float* const matrix = reinterpret_cast<float*>(raShaderConstantsAt(0x1C));
         for (int i = 0; i < 16; ++i)
             matrix[i] = m[i];
-        float* const camera = reinterpret_cast<float*>(constants + 0x60);
+        float* const camera = reinterpret_cast<float*>(raShaderConstantsAt(0x60));
         camera[0] = matrix[12];
         camera[1] = matrix[13];
         camera[2] = matrix[14];
@@ -1787,13 +1929,13 @@ void Renderer::roadQueuePass()
         sun.y = 1.0f;
         sun.z = 1.0f;
     }
-    float* const sunColor = reinterpret_cast<float*>(constants + 0x11C);
+    float* const sunColor = reinterpret_cast<float*>(raShaderConstantsAt(0x11C));
     sunColor[0] = sun.x;
     sunColor[1] = sun.y;
     sunColor[2] = sun.z;
 
     const float* const fade = geom::roadCompiledRendererFadeOut();
-    float* const roadFadeOut = reinterpret_cast<float*>(constants + 0x12C);
+    float* const roadFadeOut = reinterpret_cast<float*>(raShaderConstantsAt(0x12C));
     roadFadeOut[0] = fade[0];
     roadFadeOut[1] = fade[1];
 
@@ -1815,20 +1957,16 @@ void Renderer::roadQueuePass()
 
 void Renderer::geometryStreamTick()
 {
-    unsigned char* self = reinterpret_cast<unsigned char*>(this);
-    unsigned int*  dw   = reinterpret_cast<unsigned int*>(this);
-    float*         fl   = reinterpret_cast<float*>(this);
-
-    if (fl[465] <= 0.00000011920929f)
+    if (m_streamBudget <= 0.00000011920929f)
         return;
 
-    dw[467] = 0;
-    dw[468] = 0;
-    dw[471] = dw[470];                       // resize the result vector to zero (first == last)
+    m_dword74C = 0;
+    m_dword750 = 0;
+    m_streamObjects.clear();                 // resize the result vector to zero (first == last)
 
     void* view = getRenderViewDup();
-    unsigned char* vf = static_cast<unsigned char*>(viewGetFrustumPtr(view));
-    float* vfMatrix = reinterpret_cast<float*>(vf + 0x174);
+    Frustum* const vf = static_cast<Frustum*>(viewGetFrustumPtr(view));
+    const float* vfMatrix = vf->m_transformation.m;                         // frustum +0x174
 
     float m[16];
     for (int i = 0; i < 16; ++i)
@@ -1836,33 +1974,31 @@ void Renderer::geometryStreamTick()
 
     // slide the frustum origin half a budget along the look row, and stretch near/far by the
     // budget - the shipped -budget * row * 0.5 fold.
-    const float budget = fl[465];
+    const float budget = m_streamBudget;
     m[12] += m[8]  * -budget * 0.5f;
     m[13] += m[9]  * -budget * 0.5f;
     m[14] += m[10] * -budget * 0.5f;
 
-    const float scanFar  = budget * 1.5f + *reinterpret_cast<float*>(vf + 0x1E0);
+    const float scanFar  = budget * 1.5f + vf->m_farDist;                  // frustum +0x1E0
     const float scanNear = budget * 0.5f;
 
-    unsigned char scan[0x1E8];
-    ::memset(scan, 0, sizeof(scan));
-    Rend::renderViewBuildFrustum(scan, *reinterpret_cast<float*>(vf + 0x1CC),
-                                 *reinterpret_cast<float*>(vf + 0x1D0), scanNear, scanFar, m);
+    // The pointer-free Frustum is 0x1E8 bytes on both architectures (RenderView.cpp asserts it).
+    union { unsigned char bytes[0x1E8]; float align; } scanStorage;
+    unsigned char* const scan = scanStorage.bytes;
+    ::memset(scan, 0, sizeof(scanStorage.bytes));
+    Rend::renderViewBuildFrustum(scan, vf->m_fov, vf->m_aspect,             // +0x1CC / +0x1D0
+                                 scanNear, scanFar, m);
 
-    // host ObjectManager vslot +0x5C: query(frustum, &resultVector, 0, 0, 0, 0). The vector
-    // fields live at dwords 469..471 of this object; the host fills them through the engine heap.
-    // Typed in the native flavour with the vector correctly overlaid - see hostCalls (RW-266).
-    hostCalls::objectManagerQueryFrustum(scan, dw + 469);                              // +0x5C
+    // host ObjectManager vslot +0x5C: query(frustum, &resultVector, 0, 0, 0, 0) into this
+    // object's result vector (retail dwords 469..472) - see hostCalls (RW-266).
+    hostCalls::objectManagerQueryFrustum(scan, m_streamObjects);                       // +0x5C
 
-    unsigned int first = dw[470];
-    unsigned int last  = dw[471];
-    if (first != last)
+    if (!m_streamObjects.empty())
     {
         RD9_FRONTIER_AT("dice::hfe::dx9rend::Renderer::geometryStreamTick (the host query "
                         "returned objects - the template-touch walk belongs to the unbuilt mesh "
                         "front)", this, 0x28);
     }
-    (void)self;
 }
 
 
@@ -1873,10 +2009,6 @@ void Renderer::geometryStreamTick()
 
 bool Renderer::renderFrame(double time, float deltaTime)
 {
-    unsigned char* self = reinterpret_cast<unsigned char*>(this);
-    unsigned int*  dw   = reinterpret_cast<unsigned int*>(this);
-    float*         fl   = reinterpret_cast<float*>(this);
-    double*        dbl  = reinterpret_cast<double*>(this);
     const float    timeF = static_cast<float>(time);
 
     // BF2Render.cpp:991 - the state-manager sanity check.
@@ -1888,32 +2020,30 @@ bool Renderer::renderFrame(double time, float deltaTime)
     }
 
     if (geom::g_StaticMeshRenderer)
-        *reinterpret_cast<unsigned int*>(
-            reinterpret_cast<unsigned char*>(geom::g_StaticMeshRenderer) + 92) = 0;
+        static_cast<geom::StaticMeshRenderer*>(
+            static_cast<void*>(geom::g_StaticMeshRenderer))->m_culledMaterials = 0;   // retail +0x5C
 
     // host System vslot +0x28: frame begin - storeAndTurnOffFPUExceptions (typed, RW-266).
     hostCalls::systemFrameBegin();
 
     // The view setup: near planes, the second view's far, its matrix from the first view, the
     // camera into the (withheld) constant block, the frame timer.
-    viewSetNearPlane(getRenderView(),    fl[356]);
-    viewSetNearPlane(getRenderViewDup(), fl[356]);
-    viewSetNearPlane(getRenderView2(),   fl[357]);
-    viewSetFarPlane(getRenderView2(),    fl[358] - fl[357]);
+    viewSetNearPlane(getRenderView(),    m_f590);
+    viewSetNearPlane(getRenderViewDup(), m_f590);
+    viewSetNearPlane(getRenderView2(),   m_near);
+    viewSetFarPlane(getRenderView2(),    m_far - m_near);
     viewSetViewMatrix(getRenderView2(),  viewGetMatrixPtr(getRenderViewDup()));
     if (g_raShaderConstants)
     {
         // sub_10037EE0: view matrix into block+28, camera position into block+96 (WorldSpaceCamPos)
-        float* dst = reinterpret_cast<float*>(
-            static_cast<unsigned char*>(g_raShaderConstants) + 28);
+        float* dst = reinterpret_cast<float*>(raShaderConstantsAt(28));
         float* src = viewGetMatrixPtr(getRenderViewDup());
         for (int i = 0; i < 16; ++i)
             dst[i] = src[i];
-        float* cam = reinterpret_cast<float*>(
-            static_cast<unsigned char*>(g_raShaderConstants) + 96);
+        float* cam = reinterpret_cast<float*>(raShaderConstantsAt(96));
         cam[0] = src[12]; cam[1] = src[13]; cam[2] = src[14];
     }
-    frameTimerTick(reinterpret_cast<void*>(dw[375]));
+    frameTimerTick(m_frameTimer);
 
     const double presentGate = time;
 
@@ -1921,14 +2051,13 @@ bool Renderer::renderFrame(double time, float deltaTime)
         stateManagerSetRenderStatePersistent(161, 1);
 
     // base+0x3F4 - the EnvMapManager, withheld: one iteration, no capture arms.
-    const unsigned int envMgr =
-        *reinterpret_cast<unsigned int*>(static_cast<unsigned char*>(g_rendererBase) + 0x3F4);
+    void* const envMgr = static_cast<RendDX9Base*>(g_rendererBase)->envMapManager;
     const int iterations = 1;
     (void)envMgr;
 
     for (int i = 0; i < iterations; ++i)
     {
-        dbl[189] = time;
+        m_frameTime = time;
 
         if (isExpansionPack())
         {
@@ -1954,74 +2083,70 @@ bool Renderer::renderFrame(double time, float deltaTime)
         // The fog block: save the host ObjectManager's fog triple, swap in the renderer's
         // override, run the ObjectDrawer, restore. The drawer is withheld; the host fog churn is
         // the shipped behaviour and runs.
-        if (self[1693])
+        if (sw(1693))
         {
             void* om = objectManager;
             void*** omv = reinterpret_cast<void***>(om);
-            typedef float (__fastcall* GetF)(void*, void*);
-            typedef void  (__fastcall* SetF)(void*, void*, float);
-            const float fogA = reinterpret_cast<GetF>((*omv)[49])(om, 0);   // +196
-            const float fogB = reinterpret_cast<GetF>((*omv)[51])(om, 0);   // +204
-            const float fogC = reinterpret_cast<GetF>((*omv)[47])(om, 0);   // +188
-            reinterpret_cast<SetF>((*omv)[46])(om, 0, fl[434]);             // +184
-            reinterpret_cast<SetF>((*omv)[48])(om, 0, fl[432]);             // +192
-            reinterpret_cast<SetF>((*omv)[50])(om, 0, fl[433]);             // +200
+            typedef float (__thiscall* GetF)(void*);
+            typedef void  (__thiscall* SetF)(void*, float);
+            const float fogA = reinterpret_cast<GetF>((*omv)[49])(om);   // +196
+            const float fogB = reinterpret_cast<GetF>((*omv)[51])(om);   // +204
+            const float fogC = reinterpret_cast<GetF>((*omv)[47])(om);   // +188
+            reinterpret_cast<SetF>((*omv)[46])(om, m_fogOverride[2]);             // +184
+            reinterpret_cast<SetF>((*omv)[48])(om, m_fogOverride[0]);             // +192
+            reinterpret_cast<SetF>((*omv)[50])(om, m_fogOverride[1]);             // +200
             if (m_objectDrawer)
             {
                 void*** dv = reinterpret_cast<void***>(m_objectDrawer);
-                typedef void (__fastcall* SetViewFn)(void*, void*, void*);
-                typedef void (__fastcall* TimeFn)(void*, void*, float);
-                reinterpret_cast<SetViewFn>((*dv)[10])(m_objectDrawer, 0, getRenderView());
-                reinterpret_cast<TimeFn>((*dv)[5])(m_objectDrawer, 0, timeF);
-                reinterpret_cast<TimeFn>((*dv)[4])(m_objectDrawer, 0, timeF);
+                typedef void (__thiscall* SetViewFn)(void*, void*);
+                typedef void (__thiscall* TimeFn)(void*, float);
+                reinterpret_cast<SetViewFn>((*dv)[10])(m_objectDrawer, getRenderView());
+                reinterpret_cast<TimeFn>((*dv)[5])(m_objectDrawer, timeF);
+                reinterpret_cast<TimeFn>((*dv)[4])(m_objectDrawer, timeF);
             }
             else
                 noteOnce(16u, "ObjectDrawer (fog block)");
-            reinterpret_cast<SetF>((*omv)[48])(om, 0, fogA);
-            reinterpret_cast<SetF>((*omv)[50])(om, 0, fogB);
-            reinterpret_cast<SetF>((*omv)[46])(om, 0, fogC);
+            reinterpret_cast<SetF>((*omv)[48])(om, fogA);
+            reinterpret_cast<SetF>((*omv)[50])(om, fogB);
+            reinterpret_cast<SetF>((*omv)[46])(om, fogC);
         }
 
-        if (self[1714])
+        if (sw(1714))
         {
             if (geom::g_SkyDome)
             {
-                typedef void (__fastcall* Fn)(void*, void*, float);
+                typedef void (__thiscall* Fn)(void*, float);
                 reinterpret_cast<Fn>((*reinterpret_cast<void***>(geom::g_SkyDome))[4])(
-                    geom::g_SkyDome, 0, timeF);
+                    geom::g_SkyDome, timeF);
             }
             else
                 noteOnce(32u, "SkyDome (frame update)");
         }
 
-        if (m_weatherManager && self[1695])
+        if (m_weatherManager && sw(1695))
         {
-            typedef void (__fastcall* Fn)(void*, void*, double);
+            typedef void (__thiscall* Fn)(void*, double);
             reinterpret_cast<Fn>((*static_cast<void***>(m_weatherManager))[6])(
-                m_weatherManager, 0, time);
+                m_weatherManager, time);
         }
-        if (m_rainManager && self[1695])
+        if (m_rainManager && sw(1695))
         {
-            typedef void (__fastcall* Fn)(void*, void*, double);
+            typedef void (__thiscall* Fn)(void*, double);
             reinterpret_cast<Fn>((*static_cast<void***>(m_rainManager))[6])(
-                m_rainManager, 0, time);
+                m_rainManager, time);
         }
-        if (self[1702] && geom::g_UndergrowthSystem)
+        if (sw(1702) && geom::g_UndergrowthSystem)
             static_cast<geom::UndergrowthSystem*>(geom::g_UndergrowthSystem)->update(timeF);   // +0x24
         if (geom::g_LightManager)
         {
             geom::g_LightManager->update(time);
         }
-        if (self[1695] && geom::g_ParticleSystemManager)
+        if (sw(1695) && geom::g_ParticleSystemManager)
         {
             geom::asParticleSystemManager(geom::g_ParticleSystemManager)->update(timeF);
         }
         if (geom::g_DecalManager)
-        {
-            typedef void (__fastcall* Fn)(void*, void*, float);
-            reinterpret_cast<Fn>((*reinterpret_cast<void***>(geom::g_DecalManager))[12])(
-                geom::g_DecalManager, 0, timeF);
-        }
+            static_cast<geom::IDecalManager*>(geom::g_DecalManager)->update(timeF); // +0x30
 
         // 0x1002FDED `mov eax, [ebp+arg_8]; push eax` - the second argument is forwarded verbatim
         // and lands on BF2HudManager::update as its float dt. It IS a float: BF2.exe pushes its
@@ -2030,8 +2155,8 @@ bool Renderer::renderFrame(double time, float deltaTime)
         // every HUD easing - most visibly the spawn map, which never grew to full size.
         hudManagerFramePrep(deltaTime);
 
-        if (self[1717] && g_PostProductionFrameWorkOwner
-            && (!self[1441] || postProductionActive()))
+        if (sw(1717) && g_PostProductionFrameWorkOwner
+            && (!m_postProductionNeedsActive || postProductionActive()))
         {
             RD9_FRONTIER_AT("dice::hfe::dx9rend::Renderer::renderFrame (sub_1004F210 - the "
                             "post-production prepare)", this, 0x28);
@@ -2054,13 +2179,11 @@ bool Renderer::renderFrame(double time, float deltaTime)
             // sub_100057E0(7, 0, 1.0f, 0, 0, 0) - the frame clear: RT flush + Clear ALL, black.
             flushRenderTargetsSeam();
             {
-                typedef IDirect3DDevice9* DevPtr;
-                DevPtr dev = *reinterpret_cast<DevPtr*>(
-                    static_cast<unsigned char*>(g_rendererBase) + 0x0C);
+                IDirect3DDevice9* dev = static_cast<RendDX9Base*>(g_rendererBase)->device;
                 dev->Clear(0, 0, 7, 0, 1.0f, 0);
             }
 
-            if (self[1695] && geom::g_ParticleSystemManager)
+            if (sw(1695) && geom::g_ParticleSystemManager)
             {
                 geom::particleSystemManagerBeginFrame(
                     geom::asParticleSystemManager(geom::g_ParticleSystemManager));
@@ -2069,8 +2192,8 @@ bool Renderer::renderFrame(double time, float deltaTime)
             // sub_100383D0 - GlobalTime accumulate on the withheld constants block.
             if (g_raShaderConstants)
                 *reinterpret_cast<float*>(
-                    static_cast<unsigned char*>(g_raShaderConstants) + 148) +=
-                    static_cast<float>(dbl[189]);
+                    raShaderConstantsAt(148)) +=
+                    static_cast<float>(m_frameTime);
 
             // The constants block is still unpublished in this
             // reconstruction, so retain its existing guard while using the exact LightManager
@@ -2078,27 +2201,24 @@ bool Renderer::renderFrame(double time, float deltaTime)
             if (g_raShaderConstants && geom::g_LightManager)
             {
                 geom::LightManager* const lights = geom::g_LightManager;
-                unsigned char* const constants =
-                    static_cast<unsigned char*>(g_raShaderConstants);
-
                 const Vec3& staticSky = lights->getStaticSkyColor();
-                *reinterpret_cast<Vec3*>(constants + 0x1F8) = staticSky;
+                *reinterpret_cast<Vec3*>(raShaderConstantsAt(0x1F8)) = staticSky;
 
                 const Vec3& treeSky = lights->getTreeSkyColor();
-                Vec3& treeSkyConstant = *reinterpret_cast<Vec3*>(constants + 0x154);
+                Vec3& treeSkyConstant = *reinterpret_cast<Vec3*>(raShaderConstantsAt(0x154));
                 treeSkyConstant.x = treeSky.x * 0.5f;
                 treeSkyConstant.y = treeSky.y * 0.5f;
                 treeSkyConstant.z = treeSky.z * 0.5f;
 
-                *reinterpret_cast<Vec3*>(constants + 0x214) =
+                *reinterpret_cast<Vec3*>(raShaderConstantsAt(0x214)) =
                     lights->getStaticSpecularColor();
-                *reinterpret_cast<Vec3*>(constants + 0x230) =
+                *reinterpret_cast<Vec3*>(raShaderConstantsAt(0x230)) =
                     lights->getSinglePointColor();
-                *reinterpret_cast<Vec3*>(constants + 0x24C) =
+                *reinterpret_cast<Vec3*>(raShaderConstantsAt(0x24C)) =
                     lights->getDynamicPointColor();
-                *reinterpret_cast<unsigned int*>(constants + 0x25C) =
+                *reinterpret_cast<unsigned int*>(raShaderConstantsAt(0x25C)) =
                     isExpansionPack() ? 1u : 0u;
-                *reinterpret_cast<float*>(constants + 0x264) =
+                *reinterpret_cast<float*>(raShaderConstantsAt(0x264)) =
                     lights->getOccludedSkyNightIntensity();
             }
 
@@ -2106,12 +2226,11 @@ bool Renderer::renderFrame(double time, float deltaTime)
             // pair (sub_100F7B00 + sub_1004FDA0) - all constants-block writers, all guarded.
             if (g_raShaderConstants && geom::g_RoadCompiledRenderer)
             {
-                unsigned char* road = reinterpret_cast<unsigned char*>(
-                    geom::g_RoadCompiledRenderer);
                 float* dst = reinterpret_cast<float*>(
-                    static_cast<unsigned char*>(g_raShaderConstants) + 300);
-                dst[0] = *reinterpret_cast<float*>(road + 176);
-                dst[1] = *reinterpret_cast<float*>(road + 180);
+                    raShaderConstantsAt(300));
+                const float* const fade = geom::roadCompiledRendererFadeOut();   // retail +0xB0
+                dst[0] = fade[0];
+                dst[1] = fade[1];
             }
 
             // the underwater fog pair, the camera's
@@ -2122,18 +2241,18 @@ bool Renderer::renderFrame(double time, float deltaTime)
             if (g_raShaderConstants && g_PostProductionFrameWorkOwner)
                 postProductionUpdateFog(underwaterDepth());
 
-            if (self[1693] && m_objectDrawer)
+            if (sw(1693) && m_objectDrawer)
             {
-                typedef void (__fastcall* TimeFn)(void*, void*, float);
+                typedef void (__thiscall* TimeFn)(void*, float);
                 reinterpret_cast<TimeFn>((*reinterpret_cast<void***>(m_objectDrawer))[6])(
-                    m_objectDrawer, 0, timeF);
+                    m_objectDrawer, timeF);
             }
 
             renderQueueFlush(0x30, 1);                       // RSMTZOnly
 
             // Terrain is available after the level's terrain.create command.
             IBase* terrain = geom::g_Terrain;
-            if (self[1701] && terrain)
+            if (sw(1701) && terrain)
             {
                 static_cast<geom::Terrain*>(terrain)->renderWorldPassBegin();   // +0xB8
                 terrain = geom::g_Terrain;
@@ -2144,7 +2263,7 @@ bool Renderer::renderFrame(double time, float deltaTime)
             // and its four constants. The shipped guard is only byte +0x69D; the old source also
             // tested dword 477 and thereby hid a real live path. Both texture records retain their
             // retail ownership semantics inside RenderQueues.cpp.
-            if (self[1693])
+            if (sw(1693))
             {
                 EngineTexture* const accumulationMap =
                     static_cast<Renderer*>(g_Renderer)->getHemiScratchTexture();
@@ -2164,7 +2283,7 @@ bool Renderer::renderFrame(double time, float deltaTime)
 
                 // fetch the view independently, then call +0x34.
                 // Its genuine empty-path return is recovered in OverGrowth.cpp.
-                if (self[1703] && g_OverGrowth)
+                if (sw(1703) && g_OverGrowth)
                 {
                     IRenderView* const overGrowthView = rendererGetRenderView();
                     static_cast<geom::OverGrowth*>(g_OverGrowth)->render(overGrowthView, timeF);
@@ -2179,7 +2298,7 @@ bool Renderer::renderFrame(double time, float deltaTime)
                     stateManagerSetTransparencyAA(true);
 
                 // Draw grass inside the transparency-AA bracket.
-                if (self[1702] && geom::g_UndergrowthSystem)
+                if (sw(1702) && geom::g_UndergrowthSystem)
                     static_cast<geom::UndergrowthSystem*>(geom::g_UndergrowthSystem)->render(timeF);
 
                 if (shouldToggleTransparencyAA())
@@ -2189,20 +2308,20 @@ bool Renderer::renderFrame(double time, float deltaTime)
             }
 
             // PE 0x100303A7..0x100303BC mirrors the pre-detail Terrain arm at +0xBC.
-            if (self[1701] && terrain)
+            if (sw(1701) && terrain)
                 static_cast<geom::Terrain*>(terrain)->renderWorldPassEnd();     // +0xBC
 
-            if (self[1700])
+            if (sw(1700))
                 roadQueuePass();
-            if (self[1700])
+            if (sw(1700))
             {
                 if (geom::g_RoadCompiledRenderer)
                 {
-                    unsigned char* roadListener = reinterpret_cast<unsigned char*>(
-                        geom::g_RoadCompiledRenderer) + 36;
-                    typedef void (__fastcall* Fn)(void*, void*, int);
+                    unsigned char* roadListener = static_cast<unsigned char*>(
+                        geom::roadCompiledRendererListener());                   // retail +0x24
+                    typedef void (__thiscall* Fn)(void*, int);
                     reinterpret_cast<Fn>((*reinterpret_cast<void***>(roadListener))[3])(
-                        roadListener, 0, 0);
+                        roadListener, 0);
                 }
                 if (geom::g_RoadEditableRenderer)
                 {
@@ -2212,19 +2331,20 @@ bool Renderer::renderFrame(double time, float deltaTime)
                 }
             }
 
-            if (self[1714])
+            if (sw(1714))
             {
                 if (geom::g_SkyDome)
                 {
-                    unsigned char* skySub = reinterpret_cast<unsigned char*>(geom::g_SkyDome) + 4;
-                    typedef void (__fastcall* Fn)(void*, void*, int);
-                    reinterpret_cast<Fn>((*reinterpret_cast<void***>(skySub))[3])(skySub, 0, 0);
-                    if (self[1715])
+                    // The SkyDome's RenderPathListener subobject (retail +0x04), slot +0x0C.
+                    RenderPathListener* const skyListener =
+                        static_cast<geom::SkyDome*>(geom::g_SkyDome);
+                    skyListener->onRenderPathNotification(0);
+                    if (sw(1715))
                     {
-                        typedef void (__fastcall* SkyFn)(void*, void*, int);
+                        typedef void (__thiscall* SkyFn)(void*, int);
                         reinterpret_cast<SkyFn>(
                             (*reinterpret_cast<void***>(geom::g_SkyDome))[42])(
-                            geom::g_SkyDome, 0, 0);
+                            geom::g_SkyDome, 0);
                     }
                 }
                 else
@@ -2233,28 +2353,28 @@ bool Renderer::renderFrame(double time, float deltaTime)
 
             renderQueueFlush(0x3C, 1);                       // RSMTFogPass
 
-            if (self[1693] && isCameraUnderWater())
+            if (sw(1693) && isCameraUnderWater())
             {
                 renderQueueFlush(0x08, -1);                  // RSMTTransparency
                 renderQueueFlush(0x48, -1);                  // RSMTAux0Transparency
                 renderQueueFlush(0x18, -1);                  // RSMTDeltaTransparency
                 renderQueueFlush(0x58, -1);                  // RSMTAux1Transparency
             }
-            if (self[1696] && geom::g_DecalManager)
+            if (sw(1696) && geom::g_DecalManager)
             {
-                unsigned char* decalSub = reinterpret_cast<unsigned char*>(
-                    geom::g_DecalManager) + 4;
-                typedef void (__fastcall* Fn)(void*, void*, int);
-                reinterpret_cast<Fn>((*reinterpret_cast<void***>(decalSub))[3])(decalSub, 0, 0);
+                // The manager's RenderPathListener subobject (retail +0x04), slot +0x0C.
+                RenderPathListener* const decalListener = static_cast<geom::DecalManager*>(
+                    static_cast<geom::IDecalManager*>(geom::g_DecalManager));
+                decalListener->onRenderPathNotification(0);
             }
-            if (self[1693] && !isCameraUnderWater())
+            if (sw(1693) && !isCameraUnderWater())
                 renderQueueFlush(0x2C, 1);                   // RSMTAdditive (above water)
-            if (self[1695] && geom::g_ParticleSystemManager)
+            if (sw(1695) && geom::g_ParticleSystemManager)
             {
                 geom::asParticleSystemManager(geom::g_ParticleSystemManager)->onPathDraw(false, true);
             }
             renderQueueFlush(0x28, -1);                      // RSMTWater
-            if (self[1693])
+            if (sw(1693))
             {
                 if (!isCameraUnderWater())
                 {
@@ -2266,100 +2386,99 @@ bool Renderer::renderFrame(double time, float deltaTime)
                 if (!isCameraUnderWater())
                     renderQueueFlush(0x2C, 1);               // RSMTAdditive
             }
-            if (self[1695] && geom::g_ParticleSystemManager)
+            if (sw(1695) && geom::g_ParticleSystemManager)
             {
                 geom::asParticleSystemManager(geom::g_ParticleSystemManager)->onPathDraw(false, false);
             }
             renderQueueFlush(0x40, 1);                       // RSMTFogTransparentPass
-            if (m_weatherManager && self[1695])
+            if (m_weatherManager && sw(1695))
             {
-                typedef void (__fastcall* Fn)(void*, void*);
+                typedef void (__thiscall* Fn)(void*);
                 reinterpret_cast<Fn>((*static_cast<void***>(m_weatherManager))[7])(
-                    m_weatherManager, 0);
+                    m_weatherManager);
             }
-            if (m_rainManager && self[1695])
+            if (m_rainManager && sw(1695))
             {
-                typedef void (__fastcall* Fn)(void*, void*);
+                typedef void (__thiscall* Fn)(void*);
                 reinterpret_cast<Fn>((*static_cast<void***>(m_rainManager))[7])(
-                    m_rainManager, 0);
+                    m_rainManager);
             }
-            if (self[1714] && self[1715] && geom::g_SkyDome)
+            if (sw(1714) && sw(1715) && geom::g_SkyDome)
             {
-                typedef void (__fastcall* SkyFn)(void*, void*, int);
+                typedef void (__thiscall* SkyFn)(void*, int);
                 reinterpret_cast<SkyFn>((*reinterpret_cast<void***>(geom::g_SkyDome))[42])(
-                    geom::g_SkyDome, 0, 1);
+                    geom::g_SkyDome, 1);
             }
-            if (self[1717] && g_PostProductionFrameWorkOwner
-                && (!self[1441] || postProductionActive()))
+            if (sw(1717) && g_PostProductionFrameWorkOwner
+                && (!m_postProductionNeedsActive || postProductionActive()))
             {
                 RD9_FRONTIER_AT("dice::hfe::dx9rend::Renderer::renderFrame (sub_1004FCD0 - the "
                                 "post-production pass)", this, 0x28);
             }
 
-            if (self[1440])
+            if (m_clearDepthBeforeFirstPerson)
             {
                 // sub_100057E0(2, 0, 1.0f, 0, 0, 0) - the z-only clear before the first-person
                 // passes.
                 flushRenderTargetsSeam();
-                IDirect3DDevice9* dev = *reinterpret_cast<IDirect3DDevice9**>(
-                    static_cast<unsigned char*>(g_rendererBase) + 0x0C);
+                IDirect3DDevice9* dev = static_cast<RendDX9Base*>(g_rendererBase)->device;
                 dev->Clear(0, 0, 2, 0, 1.0f, 0);
             }
 
-            renderQueueFlush(0x0C, self[1440]);              // RSMT1Person
+            renderQueueFlush(0x0C, m_clearDepthBeforeFirstPerson);              // RSMT1Person
             renderQueueFlush(0x4C, -1);                      // RSMTAux0Person
-            renderQueueFlush(0x1C, self[1440]);              // RSMTDelta1Person
+            renderQueueFlush(0x1C, m_clearDepthBeforeFirstPerson);              // RSMTDelta1Person
             renderQueueFlush(0x5C, -1);                      // RSMTAux1Person
             renderQueueFlush(0x60, -1);                      // RSMTAux1PersonTransparency
-            if (self[1695] && self[1440] && geom::g_ParticleSystemManager)
+            if (sw(1695) && m_clearDepthBeforeFirstPerson && geom::g_ParticleSystemManager)
             {
                 geom::asParticleSystemManager(geom::g_ParticleSystemManager)->onPathDraw(true, false);
             }
-            renderQueueFlush(0x10, self[1440]);              // RSMT1PersonTransparency
+            renderQueueFlush(0x10, m_clearDepthBeforeFirstPerson);              // RSMT1PersonTransparency
             renderQueueFlush(0x50, -1);                      // RSMTAux0PersonTransparency
-            renderQueueFlush(0x20, self[1440]);              // RSMTDelta1PersonTransparency
+            renderQueueFlush(0x20, m_clearDepthBeforeFirstPerson);              // RSMTDelta1PersonTransparency
             renderQueueFlush(0x60, -1);                      // RSMTAux1PersonTransparency
 
-            if (self[1714] && self[1715] && geom::g_SkyDome)
+            if (sw(1714) && sw(1715) && geom::g_SkyDome)
             {
-                typedef void (__fastcall* SkyFn)(void*, void*, int);
+                typedef void (__thiscall* SkyFn)(void*, int);
                 reinterpret_cast<SkyFn>((*reinterpret_cast<void***>(geom::g_SkyDome))[42])(
-                    geom::g_SkyDome, 0, 2);
+                    geom::g_SkyDome, 2);
             }
 
             // The multisample depth detach/reattach pair skips (not multisampled), and the
             // depth-stencil round trip with it.
 
-            if (self[1704])
+            if (sw(1704))
             {
                 void* nametags = classManager
                     ? classManager->getSingleton(renddx9abi::HostString("NametagManager")) : 0;
                 if (nametags)
                 {
-                    typedef void (__fastcall* Fn)(void*, void*);
-                    reinterpret_cast<Fn>((*static_cast<void***>(nametags))[6])(nametags, 0);
+                    typedef void (__thiscall* Fn)(void*);
+                    reinterpret_cast<Fn>((*static_cast<void***>(nametags))[6])(nametags);
                 }
             }
-            if (self[1713] && m_hudManager)
+            if (sw(1713) && m_hudManager)
                 hostCalls::hudPaint(m_hudManager);                                     // +0x1C
 
             // The three debug graphs: render-time (ms), FPS, draw calls. The draw-call sample
             // source (sub_10046E50 on the profiler counters) is the stat scaffolding this rebuild
             // does not reproduce - it samples 0 here. All three stay hidden (byte 1712 = 0).
             {
-                typedef void (__fastcall* SampleFn)(void*, void*, float);
-                typedef void (__fastcall* FlagFn)(void*, void*, unsigned char);
-                void* gRender = reinterpret_cast<void*>(dw[550]);
-                void* gFps    = reinterpret_cast<void*>(dw[549]);
-                void* gDraw   = reinterpret_cast<void*>(dw[551]);
+                typedef void (__thiscall* SampleFn)(void*, float);
+                typedef void (__thiscall* FlagFn)(void*, unsigned char);
+                void* gRender = m_debugGraphs[1];
+                void* gFps    = m_debugGraphs[0];
+                void* gDraw   = m_debugGraphs[2];
                 if (gRender)
                     reinterpret_cast<SampleFn>((*static_cast<void***>(gRender))[16])(
-                        gRender, 0, static_cast<float>(m_frameWallTime * 1000.0));
+                        gRender, static_cast<float>(m_frameWallTime * 1000.0));
                 if (gFps)
                     reinterpret_cast<SampleFn>((*static_cast<void***>(gFps))[16])(
-                        gFps, 0, static_cast<float>(1.0 / dbl[189]));
+                        gFps, static_cast<float>(1.0 / m_frameTime));
                 if (gDraw)
-                    reinterpret_cast<SampleFn>((*static_cast<void***>(gDraw))[16])(gDraw, 0, 0.0f);
+                    reinterpret_cast<SampleFn>((*static_cast<void***>(gDraw))[16])(gDraw, 0.0f);
 
                 // the ECRenderer / ECCore frame events - the posts BF2's own menu system draws
                 // from. Delay-zero, so BF2's handlers run inside these calls.
@@ -2375,7 +2494,7 @@ bool Renderer::renderFrame(double time, float deltaTime)
                 // "AI" singleton arm and the hook call skip.
                 statsSwapEnabled(statsWere);
 
-                if (dw[437])
+                if (m_dword6D4)
                 {
                     RD9_FRONTIER_AT("dice::hfe::dx9rend::Renderer::renderFrame (sub_1002E440 - "
                                     "the dword-437 arm)", this, 0x28);
@@ -2384,27 +2503,27 @@ bool Renderer::renderFrame(double time, float deltaTime)
                 // The FPS average: accumulate frame time and publish frames/seconds once the
                 // total is ordered and strictly greater than the binary64 0.33 at 0x101E09B0.
                 // Equal, less and unordered all skip publication (`fcom`; test C3|C0).
-                dbl[193] += dbl[189];
-                ++dw[388];
-                if (dbl[193] > 0.33)
+                m_fpsAccumulatedTime += m_frameTime;
+                ++m_fpsAccumulatedFrames;
+                if (m_fpsAccumulatedTime > 0.33)
                 {
-                    m_frameRate = static_cast<double>(dw[388]) / dbl[193];
-                    dw[388] = 0;
-                    dbl[193] = 0.0;
+                    m_frameRate = static_cast<double>(m_fpsAccumulatedFrames) / m_fpsAccumulatedTime;
+                    m_fpsAccumulatedFrames = 0;
+                    m_fpsAccumulatedTime = 0.0;
                 }
                 if (m_frameRate == 0.0)
-                    m_frameRate = 1.0 / dbl[189];
+                    m_frameRate = 1.0 / m_frameTime;
                 for (int bucket = 9; bucket >= 0; --bucket)
                 {
-                    if (static_cast<double>(bucket) * fl[520] < m_frameRate)
+                    if (static_cast<double>(bucket) * m_fpsBucketScale < m_frameRate)
                     {
-                        ++dw[bucket + 521];
+                        ++m_fpsHistogram[bucket];
                         break;
                     }
                 }
 
                 // [FRONTIER] Separate debug flags gate frame-time and culling text overlays.
-                if (dw[427])                                   // +0x6AC
+                if (m_frameTimeOverlay)                                   // +0x6AC
                 {
                     RD9_FRONTIER_AT("dice::hfe::dx9rend::Renderer::renderFrame (sub_10029C50 - the "
                                     "frame-time debug overlay, gated on +0x6AC)", this, 0x28);
@@ -2420,13 +2539,13 @@ bool Renderer::renderFrame(double time, float deltaTime)
 
                 if (gRender)
                     reinterpret_cast<FlagFn>((*static_cast<void***>(gRender))[10])(
-                        gRender, 0, self[1712]);
+                        gRender, sw(1712));
                 if (gFps)
                     reinterpret_cast<FlagFn>((*static_cast<void***>(gFps))[10])(
-                        gFps, 0, self[1712]);
+                        gFps, sw(1712));
                 if (gDraw)
                     reinterpret_cast<FlagFn>((*static_cast<void***>(gDraw))[10])(
-                        gDraw, 0, self[1712]);
+                        gDraw, sw(1712));
             }
 
             // Retail 0x10030AAF..0x10030ABA, just before the console gate: `cmp byte [esi+6AAh], 0;
@@ -2434,7 +2553,7 @@ bool Renderer::renderFrame(double time, float deltaTime)
             // (0x1002F781). The only instruction that writes +0x6AA is the constructor's zero store
             // (0x1002D6BB, `self[1706] = 0` above), so the arm is off unless something sets the
             // byte. Its body is unread: named stop.
-            if (self[1706])
+            if (sw(1706))
             {
                 RD9_FRONTIER_AT("dice::hfe::dx9rend::Renderer::renderFrame (sub_1002EAE0 - "
                                 "the byte-0x6AA debug overlay)", this, 0x28);
@@ -2445,11 +2564,11 @@ bool Renderer::renderFrame(double time, float deltaTime)
                 io::OldConsole* const con = reinterpret_cast<io::OldConsole*>(
                     ::dice::hfe::mainConsole);
                 const bool consoleOpen = con->getConsoleActive();
-                if (consoleOpen && self[1716])
+                if (consoleOpen && sw(1716))
                     slot_0x58();
             }
 
-            if (self[1695] && geom::g_ParticleSystemManager)
+            if (sw(1695) && geom::g_ParticleSystemManager)
             {
                 geom::particleSystemManagerEndFrame(
                     geom::asParticleSystemManager(geom::g_ParticleSystemManager));
@@ -2468,12 +2587,12 @@ bool Renderer::renderFrame(double time, float deltaTime)
     // The GPU-throttle fence ring: issue this frame's fence, block on the one from
     // ring-size frames ago.
     {
-        const unsigned int count = dw[366];
+        const unsigned int count = m_renderAheadLimit;
         if (count)
         {
-            queryIssueEnd(reinterpret_cast<void*>(dw[dw[367] % count + 361]));
-            const unsigned int cursor = ++dw[367];
-            queryWaitDone(reinterpret_cast<void*>(dw[(cursor - count) % count + 361]));
+            queryIssueEnd(m_frameFences[m_fenceCursor % count]);
+            const unsigned int cursor = ++m_fenceCursor;
+            queryWaitDone(m_frameFences[(cursor - count) % count]);
         }
     }
 
@@ -2539,9 +2658,9 @@ world::ObjectManager* hemiObjectManager()
 // virtuals (Geom/ObjectDrawer.h). Unguarded, as every shipped caller is.
 void objectDrawerSetRenderView(void* drawer, IRenderView* view)
 {
-    typedef void (__fastcall* SetViewFn)(void*, void*, void*);
-    reinterpret_cast<SetViewFn>((*static_cast<void***>(drawer))[0x28 / sizeof(void*)])(
-        drawer, 0, view);
+    typedef void (__thiscall* SetViewFn)(void*, void*);
+    reinterpret_cast<SetViewFn>((*static_cast<void***>(drawer))[0x28 / 4])(
+        drawer, view);
 }
 
 } // anonymous namespace
@@ -2559,9 +2678,9 @@ IRenderView* rendererGetHemiSecondaryView()
 void rendererInstallHemiView(IRenderView* view)
 {
     // The object pass forwards the new view to ObjectDrawer first.
-    unsigned char* const raw = static_cast<unsigned char*>(g_rendererBase);
-    if (raw[1693])
-        objectDrawerSetRenderView(*reinterpret_cast<void**>(raw + 1472), view);
+    Renderer* const raw = static_cast<Renderer*>(g_rendererBase);
+    if (raw->sw(1693))
+        objectDrawerSetRenderView(raw->m_objectDrawer, view);           // +0x5C0 (1472)
     Renderer* const renderer = static_cast<Renderer*>(g_rendererBase);
     renderer->setRenderView(view);
     renderer->setRenderViewDup(view);
@@ -2578,15 +2697,15 @@ void rendererRestoreHemiViews(IRenderView* primary, IRenderView* secondary)
 
 void rendererSetHemiTarget(EngineTexture* texture)
 {
-    unsigned char* const raw = static_cast<unsigned char*>(g_rendererBase);
-    IDirect3DSurface9*& fallback = *reinterpret_cast<IDirect3DSurface9**>(raw + 0x0F4);
+    Renderer* const raw = static_cast<Renderer*>(g_rendererBase);
+    IDirect3DSurface9*& fallback = static_cast<RendDX9Base*>(g_rendererBase)->tempBackBuffer;
     fallback = texture ? textureGetLevelSurface(texture, 0, 0x7FFFFFFFu) : 0;
 
     // sub_10005920(0, 0, 0, 0x7fffffff): with a null texture argument the renderer takes +0xF4,
     // AddRefs it around StateManager +0x60, then releases that temporary reference.
     IDirect3DSurface9* selected = fallback;
     if (!selected)
-        selected = *reinterpret_cast<IDirect3DSurface9**>(raw + 0x76C);
+        selected = raw->m_backBuffer;                                   // +0x76C
     if (selected)
         selected->AddRef();
     stateManagerSetRenderTarget(0, selected);
@@ -2621,7 +2740,7 @@ void rendererSetHemiScratchTexture(EngineTexture* texture)
 
 int rendererGetHemiRenderMode()
 {
-    return *reinterpret_cast<int*>(static_cast<unsigned char*>(g_rendererBase) + 0x20);
+    return static_cast<RendDX9Base*>(g_rendererBase)->renderMode;
 }
 
 void rendererSetHemiRenderMode(int mode)
@@ -2629,13 +2748,13 @@ void rendererSetHemiRenderMode(int mode)
     if (static_cast<unsigned int>(mode) <= 5u)
     {
         stateManagerSetRenderState(8u, (mode == 2 || mode == 3) ? 2u : 3u);
-        *reinterpret_cast<int*>(static_cast<unsigned char*>(g_rendererBase) + 0x20) = mode;
+        static_cast<RendDX9Base*>(g_rendererBase)->renderMode = mode;
     }
 }
 
 void rendererSetHemiRoadPass(bool enabled)
 {
-    static_cast<unsigned char*>(g_rendererBase)[1700] = enabled ? 1u : 0u;
+    static_cast<Renderer*>(g_rendererBase)->sw(1700) = enabled ? 1u : 0u;
 }
 
 void rendererRenderHemiFrame()
@@ -2676,68 +2795,57 @@ const unsigned int kBundledMeshTemplateClassId = 0x870CA651u;   // ds:1021AEFC
 // what makes the raw callee-cleanup dispatch stack-safe for all three.
 inline void* lodGeometrySlot(void* geometry, unsigned int offset)
 {
-    return (*static_cast<void***>(geometry))[offset / sizeof(void*)];
+    return (*static_cast<void***>(geometry))[offset / 4];
 }
 
 inline geom::IGeometryTemplate* lodGeometryTemplate(void* geometry)                    // +0x38
 {
-    typedef void* (__fastcall* GetTemplateFn)(void*, void*);
+    typedef void* (__thiscall* GetTemplateFn)(void*);
     return static_cast<geom::IGeometryTemplate*>(
-        reinterpret_cast<GetTemplateFn>(lodGeometrySlot(geometry, 0x38))(geometry, 0));
+        reinterpret_cast<GetTemplateFn>(lodGeometrySlot(geometry, 0x38))(geometry));
 }
 
 // The clamp all four arms inline.
 void forceGeometryLod(void* geometry, int lod)
 {
-    typedef int (__fastcall* GetLodCountFn)(void*, void*);
-    typedef void (__fastcall* SetLodFn)(void*, void*, int);
+    typedef int (__thiscall* GetLodCountFn)(void*);
+    typedef void (__thiscall* SetLodFn)(void*, int);
     int selected =
-        reinterpret_cast<GetLodCountFn>(lodGeometrySlot(geometry, 0x80))(geometry, 0) - 1;  // +0x80
+        reinterpret_cast<GetLodCountFn>(lodGeometrySlot(geometry, 0x80))(geometry) - 1;  // +0x80
     if (selected >= lod)
         selected = lod;
-    reinterpret_cast<SetLodFn>(lodGeometrySlot(geometry, 0x78))(geometry, 0, selected);     // +0x78
+    reinterpret_cast<SetLodFn>(lodGeometrySlot(geometry, 0x78))(geometry, selected);     // +0x78
 }
 
-// One template's live-instance set, in key order (the VC7.1 set iterator's increment: inlined for
+// One template's live-instance set, in key order (the set iterator's increment: inlined for
 // StaticMesh and SkinnedMesh, sub_1009F6E0 for BundledMesh). The set's key IS the instance pointer.
-void forceInstanceSetLod(const vc71::set_layout& instances, int lod)
+template <typename InstanceSet>
+void forceInstanceSetLod(const InstanceSet& instances, int lod)
 {
-    for (vc71::set_node* node = instances.begin(); node != instances.end();
-         node = vc71::set_layout::next(node))
-        forceGeometryLod(reinterpret_cast<void*>(node->key), lod);
+    for (typename InstanceSet::const_iterator it = instances.begin(); it != instances.end(); ++it)
+        forceGeometryLod(*it, lod);
 }
 
 // ObjectManager +0x44, getObjectsFromGrid(centre, radius, out, predicator) - the query setLods makes
 // (0x1002D3A5). Split as hostCalls::objectManagerQueryFrustum is: the recovered declaration in the
 // native flavour, whose result is this toolchain's std::vector; the retail slot in the compatibility
 // flavour, handed the VC7.1 vector object - its unwritten allocator word first - the retail host fills.
-#if BF2_PLUGIN_ABI_NATIVE
 void queryObjectsInRadius(const Vec3& centre, float radius, std::vector<world::IObject*>& out)
 {
     hemiObjectManager()->getObjectsFromGrid(centre, radius, out, 0);
 }
-#else
-void queryObjectsInRadius(const Vec3& centre, float radius, vc71::vector_layout& out)
-{
-    void* const manager = ::dice::hfe::objectManager;
-    typedef void (__fastcall* QueryFn)(void*, void*, const Vec3*, float, void*, void*);
-    reinterpret_cast<QueryFn>((*static_cast<void***>(manager))[0x44 / sizeof(void*)])(
-        manager, 0, &centre, radius, &out, 0);
-}
-#endif
 
 } // anonymous namespace
 
 void rendererSetLods(int lod, unsigned int classId)
 {
-    vc71::map_layout* const templates =
+    geom::GeometryTemplateRegistry* const templates =
         static_cast<geom::IGeometryTemplateManager*>(
             static_cast<void*>(geom::g_GeometryTemplateManager))->getTemplateRegistry();   // +0x60
-    for (vc71::map_node* node = templates->begin(); node != templates->end();
-         node = vc71::map_layout::next(node))
+    for (geom::GeometryTemplateRegistry::const_iterator node = templates->begin();
+         node != templates->end(); ++node)
     {
-        geom::IGeometryTemplate* const geometryTemplate =
-            static_cast<geom::IGeometryTemplate*>(vc71::mapNodeValue(node));                 // +0x28
+        geom::IGeometryTemplate* const geometryTemplate = node->second;                     // +0x28
         if (geometryTemplate->getClassId() != classId)                                      // +0x10
             continue;
         if (classId == kStaticMeshTemplateClassId)
@@ -2757,7 +2865,6 @@ void rendererSetLods(int lod, unsigned int classId)
     origin.x = 0.0f;
     origin.y = 0.0f;
     origin.z = 0.0f;
-#if BF2_PLUGIN_ABI_NATIVE
     std::vector<world::IObject*> objects;
     queryObjectsInRadius(origin, 10000.0f, objects);
     for (std::vector<world::IObject*>::const_iterator it = objects.begin(); it != objects.end(); ++it)
@@ -2766,24 +2873,6 @@ void rendererSetLods(int lod, unsigned int classId)
         if (geometry && lodGeometryTemplate(geometry)->getClassId() == classId)
             forceGeometryLod(geometry, lod);
     }
-#else
-    vc71::vector_layout objects;
-    objects.first = 0;                                   // the allocator word is not written
-    objects.last = 0;
-    objects.end = 0;
-    queryObjectsInRadius(origin, 10000.0f, objects);
-    for (char* it = objects.first; it != objects.last; it += sizeof(void*))
-    {
-        // IObject +0x38, the geometry - a raw field in the retail host's layout (BundledMesh.cpp's
-        // objectGeometryField precedent).
-        unsigned char* const object = *reinterpret_cast<unsigned char**>(it);
-        void* const geometry = *reinterpret_cast<void**>(object + 0x38);
-        if (geometry && lodGeometryTemplate(geometry)->getClassId() == classId)
-            forceGeometryLod(geometry, lod);
-    }
-    if (objects.first)
-        ::renddx9abi::engineFree(objects.first);          // sub_1005F360, bf_free
-#endif
 }
 
 // (29 B each, __thiscall on the renderer), the
@@ -2793,123 +2882,339 @@ void rendererSetLods(int lod, unsigned int classId)
 // 0x100595FB), whose GET arms read the stored dword back.
 void rendererSetStaticMeshLod(int lod)
 {
-    *reinterpret_cast<int*>(static_cast<unsigned char*>(g_rendererBase) + 2008) = lod;
+    static_cast<Renderer*>(g_rendererBase)->m_forcedLod[0] = lod;          // +0x7D8 (2008)
     rendererSetLods(lod, kStaticMeshTemplateClassId);
 }
 
 void rendererSetSkinnedMeshLod(int lod)
 {
-    *reinterpret_cast<int*>(static_cast<unsigned char*>(g_rendererBase) + 2012) = lod;
+    static_cast<Renderer*>(g_rendererBase)->m_forcedLod[1] = lod;          // +0x7DC (2012)
     rendererSetLods(lod, kSkinnedMeshTemplateClassId);
 }
 
 void rendererSetBundledMeshLod(int lod)
 {
-    *reinterpret_cast<int*>(static_cast<unsigned char*>(g_rendererBase) + 2016) = lod;
+    static_cast<Renderer*>(g_rendererBase)->m_forcedLod[2] = lod;          // +0x7E0 (2016)
     rendererSetLods(lod, kBundledMeshTemplateClassId);
 }
 
 int rendererGetSkinnedMeshLod()
 {
-    return *reinterpret_cast<const int*>(static_cast<unsigned char*>(g_rendererBase) + 2012);
+    return static_cast<const Renderer*>(g_rendererBase)->m_forcedLod[1];
 }
 
 int rendererGetBundledMeshLod()
 {
-    return *reinterpret_cast<const int*>(static_cast<unsigned char*>(g_rendererBase) + 2016);
+    return static_cast<const Renderer*>(g_rendererBase)->m_forcedLod[2];
 }
 
 // renderer.drawHud (ctor 0x1005CB70, arms 0x1005CCC0): the byte the HudManager paint call and
 // hudManagerFramePrep's hudSetPaint read; the SET arm stores the parsed bool unchanged.
 bool rendererGetDrawHud()
 {
-    return static_cast<const unsigned char*>(g_rendererBase)[1713] != 0;
+    return static_cast<Renderer*>(g_rendererBase)->sw(1713) != 0;
 }
 
 void rendererSetDrawHud(bool on)
 {
-    static_cast<unsigned char*>(g_rendererBase)[1713] = on;
+    static_cast<Renderer*>(g_rendererBase)->sw(1713) = on;
+}
+
+// The switch bytes, by retail offset: +0x69C..+0x6AB and +0x6B0..+0x6B7.
+unsigned char* Renderer::renderSwitch(unsigned int retailOffset)
+{
+    if (retailOffset >= 0x69Cu && retailOffset < 0x6ACu)
+        return &m_renderSwitches69C[retailOffset - 0x69Cu];
+    if (retailOffset >= 0x6B0u && retailOffset < 0x6B8u)
+        return &m_renderSwitches6B0[retailOffset - 0x6B0u];
+    return 0;
+}
+
+unsigned char& Renderer::sw(unsigned int retailOffset)
+{
+    unsigned char* const field = renderSwitch(retailOffset);
+    if (!field)
+    {
+        RD9_FRONTIER_AT("dice::hfe::dx9rend::Renderer::sw (a retail byte offset that names no "
+                        "render switch)", this, retailOffset);
+        std::abort();
+    }
+    return *field;
+}
+
+namespace {
+
+// [CHOSEN, not recovered] One row per mapped plain field of the Renderer's tail (issue #7): its
+// retail x86 offset and size, its value kind and element size, and its native offset. An array
+// row covers every element (`retail + i * element`). Pointer, container and listener members are
+// not plain fields and are reached through their own typed accessors.
+struct TailFieldRow
+{
+    unsigned short       retailOffset;
+    unsigned short       retailBytes;
+    Renderer::TailKind   kind;
+    unsigned char        elementBytes;
+    size_t               nativeOffset;
+};
+
+#define RD9_TAIL_ROW(member, retail, kind, element) \
+    { retail, static_cast<unsigned short>(sizeof(static_cast<Renderer*>(0)->member)), \
+      Renderer::kind, element, offsetof(Renderer, member) }
+
+const TailFieldRow kTailFields[] =
+{
+    RD9_TAIL_ROW(m_currentRenderPath,       0x544, TailInt,    4),
+    RD9_TAIL_ROW(m_viewMatrix,              0x54C, TailFloat,  4),
+    RD9_TAIL_ROW(m_f58C,                    0x58C, TailFloat,  4),
+    RD9_TAIL_ROW(m_f590,                    0x590, TailFloat,  4),
+    RD9_TAIL_ROW(m_near,                    0x594, TailFloat,  4),
+    RD9_TAIL_ROW(m_far,                     0x598, TailFloat,  4),
+    RD9_TAIL_ROW(m_f59C,                    0x59C, TailFloat,  4),
+    RD9_TAIL_ROW(m_clearDepthBeforeFirstPerson, 0x5A0, TailByte, 1),
+    RD9_TAIL_ROW(m_postProductionNeedsActive,   0x5A1, TailByte, 1),
+    RD9_TAIL_ROW(m_renderAheadLimit,        0x5B8, TailInt,    4),
+    RD9_TAIL_ROW(m_fenceCursor,             0x5BC, TailInt,    4),
+    RD9_TAIL_ROW(m_consoleOverlayReady,     0x5C4, TailByte,   1),
+    RD9_TAIL_ROW(m_frameTime,               0x5E8, TailDouble, 8),
+    RD9_TAIL_ROW(m_frameRate,               0x600, TailDouble, 8),
+    RD9_TAIL_ROW(m_fpsAccumulatedTime,      0x608, TailDouble, 8),
+    RD9_TAIL_ROW(m_fpsAccumulatedFrames,    0x610, TailInt,    4),
+    RD9_TAIL_ROW(m_renderSwitches69C,       0x69C, TailByte,   1),
+    RD9_TAIL_ROW(m_frameTimeOverlay,        0x6AC, TailInt,    4),
+    RD9_TAIL_ROW(m_renderSwitches6B0,       0x6B0, TailByte,   1),
+    RD9_TAIL_ROW(m_fullSizeRenderTargets,   0x6BC, TailByte,   1),
+    RD9_TAIL_ROW(m_fogOverride,             0x6C0, TailFloat,  4),
+    RD9_TAIL_ROW(m_raPath,                  0x6CC, TailInt,    4),
+    RD9_TAIL_ROW(m_byte6D0,                 0x6D0, TailByte,   1),
+    RD9_TAIL_ROW(m_dword6D4,                0x6D4, TailInt,    4),
+    RD9_TAIL_ROW(m_byte6DC,                 0x6DC, TailByte,   1),
+    RD9_TAIL_ROW(m_byte6DD,                 0x6DD, TailByte,   1),
+    RD9_TAIL_ROW(m_f6FC,                    0x6FC, TailFloat,  4),
+    RD9_TAIL_ROW(m_meshShaderLodEnabled,    0x708, TailByte,   1),
+    RD9_TAIL_ROW(m_lodDistances70C,         0x70C, TailFloat,  4),
+    RD9_TAIL_ROW(m_lodDistances71C,         0x71C, TailFloat,  4),
+    RD9_TAIL_ROW(m_lodDistances72C,         0x72C, TailFloat,  4),
+    RD9_TAIL_ROW(m_f73C,                    0x73C, TailFloat,  4),
+    RD9_TAIL_ROW(m_f740,                    0x740, TailFloat,  4),
+    RD9_TAIL_ROW(m_streamBudget,            0x744, TailFloat,  4),
+    RD9_TAIL_ROW(m_dword748,                0x748, TailInt,    4),
+    RD9_TAIL_ROW(m_dword74C,                0x74C, TailInt,    4),
+    RD9_TAIL_ROW(m_dword750,                0x750, TailInt,    4),
+    RD9_TAIL_ROW(m_expansionPack,           0x764, TailByte,   1),
+    RD9_TAIL_ROW(m_dword768,                0x768, TailInt,    4),
+    RD9_TAIL_ROW(m_forcedLod,               0x7D8, TailInt,    4),
+    RD9_TAIL_ROW(m_lodSkipBase,             0x7E4, TailInt,    4),
+    RD9_TAIL_ROW(m_dword7E8,                0x7E8, TailInt,    4),
+    RD9_TAIL_ROW(m_lodSkipBias,             0x7EC, TailInt,    4),
+    RD9_TAIL_ROW(m_frameHookEnabled,        0x7F0, TailByte,   1),
+    RD9_TAIL_ROW(m_fpsBucketScale,          0x820, TailFloat,  4),
+    RD9_TAIL_ROW(m_fpsHistogram,            0x824, TailInt,    4),
+    RD9_TAIL_ROW(m_lodScale84C,             0x84C, TailFloat,  4),
+    RD9_TAIL_ROW(m_dword860,                0x860, TailInt,    4),
+    RD9_TAIL_ROW(m_f864,                    0x864, TailFloat,  4),
+    RD9_TAIL_ROW(m_performanceTestActive,   0x888, TailByte,   1),
+    RD9_TAIL_ROW(m_performanceTest88C,      0x88C, TailInt,    4),
+    RD9_TAIL_ROW(m_performanceTest890,      0x890, TailInt,    4),
+    RD9_TAIL_ROW(m_frameStartTime,          0x8A0, TailDouble, 8),
+    RD9_TAIL_ROW(m_frameWallTime,           0x8A8, TailDouble, 8),
+    RD9_TAIL_ROW(m_lodScale8B0,             0x8B0, TailFloat,  4),
+    RD9_TAIL_ROW(m_lodScale8B4,             0x8B4, TailFloat,  4),
+    RD9_TAIL_ROW(m_lodScale8B8,             0x8B8, TailFloat,  4),
+};
+
+#undef RD9_TAIL_ROW
+
+Renderer* publishedRenderer()
+{
+    return static_cast<Renderer*>(static_cast<void*>(g_Renderer));
+}
+
+// The accessors' common stop: the offset or the value kind names no mapped field.
+void* requireTailField(unsigned int retailOffset, Renderer::TailKind kind, unsigned int bytes,
+                       const char* accessor)
+{
+    Renderer* const renderer = publishedRenderer();
+    void* const field = renderer->tailField(retailOffset, kind, bytes);
+    if (!field)
+    {
+        ::renddx9abi::logf("[FRONTIER] dice::hfe::dx9rend::%s(0x%X): no mapped Renderer tail field "
+                           "of that type at this retail offset", accessor, retailOffset);
+        RD9_FRONTIER_AT("dice::hfe::dx9rend::Renderer tail accessor (an unmapped retail offset)",
+                        renderer, retailOffset);
+        std::abort();
+    }
+    return field;
+}
+
+} // anonymous namespace
+
+void* Renderer::tailField(unsigned int retailOffset, TailKind kind, unsigned int bytes)
+{
+    for (unsigned int i = 0; i != sizeof(kTailFields) / sizeof(kTailFields[0]); ++i)
+    {
+        const TailFieldRow& row = kTailFields[i];
+        const unsigned int first = row.retailOffset;
+        const unsigned int end = first + row.retailBytes;
+        if (retailOffset < first || retailOffset >= end)
+            continue;
+        const unsigned int within = retailOffset - first;
+        if (row.kind != kind || row.elementBytes != bytes || (within % bytes) != 0)
+            return 0;
+        return reinterpret_cast<unsigned char*>(this) + row.nativeOffset + within;
+    }
+    return 0;
+}
+
+// [CHOSEN, not recovered] Owner-TU seams over the Renderer's unrecovered tail (issue #7): other
+// subsystems name these fields through BF2Render.cpp, which alone knows where they sit. Each maps
+// the retail x86 offset onto the named member (the identical address on x86). Callers keep their
+// own preconditions; none of these tests the Renderer singleton.
+unsigned char& rendererRenderSwitch(unsigned int retailOffset)
+{
+    return publishedRenderer()->sw(retailOffset);
+}
+
+unsigned char& rendererTailByte(unsigned int retailOffset)
+{
+    return *static_cast<unsigned char*>(
+        requireTailField(retailOffset, Renderer::TailByte, 1, "rendererTailByte"));
+}
+
+int& rendererTailInt(unsigned int retailOffset)
+{
+    return *static_cast<int*>(
+        requireTailField(retailOffset, Renderer::TailInt, 4, "rendererTailInt"));
+}
+
+float& rendererTailFloat(unsigned int retailOffset)
+{
+    return *static_cast<float*>(
+        requireTailField(retailOffset, Renderer::TailFloat, 4, "rendererTailFloat"));
+}
+
+double& rendererTailDouble(unsigned int retailOffset)
+{
+    return *static_cast<double*>(
+        requireTailField(retailOffset, Renderer::TailDouble, 8, "rendererTailDouble"));
+}
+
+unsigned int rendererRaPath()
+{
+    return publishedRenderer()->m_raPath;                                    // +0x6CC
+}
+
+void* rendererFrameTimer()
+{
+    return publishedRenderer()->m_frameTimer;                                // +0x5DC
+}
+
+IDirect3DSurface9* rendererBackBufferSurface()
+{
+    return publishedRenderer()->m_backBuffer;                                // +0x76C
+}
+
+IDirect3DSurface9* rendererDepthStencilSurface()
+{
+    return publishedRenderer()->m_depthStencil;                              // +0x770
+}
+
+EngineTexture* rendererPathTarget(unsigned int retailOffset)
+{
+    if (retailOffset < 0x778u || retailOffset >= 0x7D8u || (retailOffset & 3u) != 0)
+    {
+        RD9_FRONTIER_AT("dice::hfe::dx9rend::rendererPathTarget (not a render-path target "
+                        "offset)", publishedRenderer(), retailOffset);
+        std::abort();
+    }
+    return pathTarget(publishedRenderer(), retailOffset);
+}
+
+RenderPathListener* rendererRenderPathListener()
+{
+    // The +0x540 subobject; its table is the hand-built kRendererRenderPathVtable, laid out as
+    // RenderPathListener's six slots.
+    return reinterpret_cast<RenderPathListener*>(&publishedRenderer()->m_renderPathVptr);
 }
 
 void rendererCaptureHemiState(HemiRenderState& state)
 {
-    unsigned char* const renderer = static_cast<unsigned char*>(g_rendererBase);
-    state.bytes[40] = renderer[1695];
+    Renderer* const renderer = static_cast<Renderer*>(g_rendererBase);
+    state.bytes[40] = renderer->sw(1695);
     postProductionGetHemiState(reinterpret_cast<float*>(state.bytes + 24));
-    *reinterpret_cast<unsigned int*>(state.bytes + 20) =
-        *reinterpret_cast<unsigned int*>(renderer + 1728);
-    *reinterpret_cast<unsigned int*>(state.bytes + 16) =
-        *reinterpret_cast<unsigned int*>(renderer + 2008);
-    state.bytes[0] = renderer[1717];
-    state.bytes[1] = renderer[1693];
-    state.bytes[2] = renderer[1697];
-    state.bytes[3] = renderer[1698];
-    state.bytes[4] = renderer[1714];
-    state.bytes[5] = renderer[1700];
+    // +0x6C0 (1728) and +0x7D8 (2008), copied as their raw 32-bit words.
+    ::memcpy(state.bytes + 20, &renderer->m_fogOverride[0], 4);
+    ::memcpy(state.bytes + 16, &renderer->m_forcedLod[0], 4);
+    state.bytes[0] = renderer->sw(1717);
+    state.bytes[1] = renderer->sw(1693);
+    state.bytes[2] = renderer->sw(1697);
+    state.bytes[3] = renderer->sw(1698);
+    state.bytes[4] = renderer->sw(1714);
+    state.bytes[5] = renderer->sw(1700);
     state.bytes[6] = geom::roadCompiledRendererGetHemiDirectFlag() == 0 ? 1u : 0u;
-    state.bytes[7] = renderer[1701];
-    state.bytes[8] = renderer[1704];
-    state.bytes[9] = renderer[1702];
-    state.bytes[10] = renderer[1713];
-    state.bytes[11] = *reinterpret_cast<unsigned int*>(renderer + 1708) != 0 ? 1u : 0u;
-    state.bytes[15] = renderer[1716];
+    state.bytes[7] = renderer->sw(1701);
+    state.bytes[8] = renderer->sw(1704);
+    state.bytes[9] = renderer->sw(1702);
+    state.bytes[10] = renderer->sw(1713);
+    state.bytes[11] = renderer->m_frameTimeOverlay != 0 ? 1u : 0u;          // +0x6AC (1708)
+    state.bytes[15] = renderer->sw(1716);
     // bytes 12..14 and 41..43 are intentionally left untouched by the retail helper.
 }
 
 void rendererApplyHemiState()
 {
-    unsigned char* const renderer = static_cast<unsigned char*>(g_rendererBase);
-    renderer[1695] = 0;
+    Renderer* const renderer = static_cast<Renderer*>(g_rendererBase);
+    renderer->sw(1695) = 0;
     const float postState[4] = { 2000.0f, 2000.0f, 0.0f, 0.0f };
     postProductionSetHemiState(postState);
-    *reinterpret_cast<unsigned int*>(renderer + 1728) = 1000u;
+    // +0x6C0 (1728) receives the integer 1000 as its raw word, as shipped.
+    const unsigned int fogWord = 1000u;
+    ::memcpy(&renderer->m_fogOverride[0], &fogWord, 4);
     rendererSetStaticMeshLod(0);
-    renderer[1717] = 0;
-    renderer[1693] = 1;
-    renderer[1697] = 0;
+    renderer->sw(1717) = 0;
+    renderer->sw(1693) = 1;
+    renderer->sw(1697) = 0;
     geom::bundledMeshSetHemiEnabled(0); // unguarded in retail
-    renderer[1698] = 1;
+    renderer->sw(1698) = 1;
     geom::staticMeshRendererSetHemiEnabled(1); // unguarded in retail
-    renderer[1714] = 0;
-    renderer[1700] = 1;
+    renderer->sw(1714) = 0;
+    renderer->sw(1700) = 1;
     geom::roadCompiledRendererSetHemiEnabled(1); // unguarded in retail
-    renderer[1702] = 0;
-    renderer[1703] = 0;
+    renderer->sw(1702) = 0;
+    renderer->sw(1703) = 0;
     geom::roadCompiledRendererSetHemiDirectFlag(1); // guarded in its owner seam
-    renderer[1701] = 1;
-    renderer[1704] = 0;
-    renderer[1705] = 1;
-    renderer[1713] = 0;
-    *reinterpret_cast<unsigned int*>(renderer + 1708) = 0;
-    renderer[1716] = 0;
+    renderer->sw(1701) = 1;
+    renderer->sw(1704) = 0;
+    renderer->sw(1705) = 1;
+    renderer->sw(1713) = 0;
+    renderer->m_frameTimeOverlay = 0;                                       // +0x6AC (1708)
+    renderer->sw(1716) = 0;
 }
 
 void rendererRestoreHemiState(const HemiRenderState& state)
 {
-    unsigned char* const renderer = static_cast<unsigned char*>(g_rendererBase);
-    renderer[1695] = state.bytes[40];
+    Renderer* const renderer = static_cast<Renderer*>(g_rendererBase);
+    renderer->sw(1695) = state.bytes[40];
     postProductionSetHemiState(reinterpret_cast<const float*>(state.bytes + 24));
-    *reinterpret_cast<unsigned int*>(renderer + 1728) =
-        *reinterpret_cast<const unsigned int*>(state.bytes + 20);
+    ::memcpy(&renderer->m_fogOverride[0], state.bytes + 20, 4);              // +0x6C0 (1728)
     rendererSetStaticMeshLod(*reinterpret_cast<const int*>(state.bytes + 16));
-    renderer[1717] = state.bytes[0];
-    renderer[1693] = state.bytes[1];
-    renderer[1697] = state.bytes[2];
+    renderer->sw(1717) = state.bytes[0];
+    renderer->sw(1693) = state.bytes[1];
+    renderer->sw(1697) = state.bytes[2];
     geom::bundledMeshSetHemiEnabled(state.bytes[2]); // unguarded in retail
-    renderer[1698] = state.bytes[3];
+    renderer->sw(1698) = state.bytes[3];
     geom::staticMeshRendererSetHemiEnabled(state.bytes[3]); // unguarded in retail
-    renderer[1714] = state.bytes[4];
-    renderer[1700] = state.bytes[5];
+    renderer->sw(1714) = state.bytes[4];
+    renderer->sw(1700) = state.bytes[5];
     geom::roadCompiledRendererSetHemiEnabled(state.bytes[5]); // unguarded in retail
     geom::roadCompiledRendererSetHemiDirectFlag(state.bytes[6] == 0 ? 1u : 0u);
-    renderer[1701] = state.bytes[7];
-    renderer[1704] = state.bytes[8];
-    renderer[1705] = state.bytes[9];
-    renderer[1702] = state.bytes[9];
-    renderer[1703] = state.bytes[9];
-    renderer[1713] = state.bytes[10];
-    *reinterpret_cast<unsigned int*>(renderer + 1708) = state.bytes[11];
-    renderer[1716] = state.bytes[15];
+    renderer->sw(1701) = state.bytes[7];
+    renderer->sw(1704) = state.bytes[8];
+    renderer->sw(1705) = state.bytes[9];
+    renderer->sw(1702) = state.bytes[9];
+    renderer->sw(1703) = state.bytes[9];
+    renderer->sw(1713) = state.bytes[10];
+    renderer->m_frameTimeOverlay = state.bytes[11];                         // +0x6AC (1708)
+    renderer->sw(1716) = state.bytes[15];
 }
 
 
@@ -2933,10 +3238,10 @@ namespace {
 // dropped. The same tail rendererSetHemiTarget ends with.
 void rendererSelectTempBackBuffer()
 {
-    unsigned char* const raw = static_cast<unsigned char*>(g_rendererBase);
-    IDirect3DSurface9* selected = *reinterpret_cast<IDirect3DSurface9**>(raw + 0x0F4);
+    Renderer* const raw = static_cast<Renderer*>(g_rendererBase);
+    IDirect3DSurface9* selected = static_cast<RendDX9Base*>(g_rendererBase)->tempBackBuffer;
     if (!selected)
-        selected = *reinterpret_cast<IDirect3DSurface9**>(raw + 0x76C);
+        selected = raw->m_backBuffer;                                   // +0x76C
     if (selected)
         selected->AddRef();
     stateManagerSetRenderTarget(0, selected);
@@ -2954,6 +3259,7 @@ void setRotationYDegrees(Mat4& matrix, float degrees)
     const float radians = 0.01745329238474369f * degrees;
     float sine;
     float cosine;
+#if defined(_M_IX86)
     __asm
     {
         fld radians
@@ -2961,6 +3267,12 @@ void setRotationYDegrees(Mat4& matrix, float degrees)
         fstp cosine
         fstp sine
     }
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates); fsincos is the double
+    // cos/sin of the float radians, each stored as a float (issue #7).
+    cosine = static_cast<float>(::cos(static_cast<double>(radians)));
+    sine = static_cast<float>(::sin(static_cast<double>(radians)));
+#endif
     for (unsigned int i = 0; i < 16; ++i)
         matrix.m[i] = 0.0f;
     matrix.m[0] = 1.0f;
@@ -2978,6 +3290,7 @@ void setRotationXDegrees(Mat4& matrix, float degrees)
     const float radians = 0.01745329238474369f * degrees;
     float sine;
     float cosine;
+#if defined(_M_IX86)
     __asm
     {
         fld radians
@@ -2985,6 +3298,11 @@ void setRotationXDegrees(Mat4& matrix, float degrees)
         fstp cosine
         fstp sine
     }
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates) (issue #7).
+    cosine = static_cast<float>(::cos(static_cast<double>(radians)));
+    sine = static_cast<float>(::sin(static_cast<double>(radians)));
+#endif
     for (unsigned int i = 0; i < 16; ++i)
         matrix.m[i] = 0.0f;
     matrix.m[0] = 1.0f;
@@ -3008,7 +3326,7 @@ void rendererRenderOrthoTopDown(IDirect3DSurface9* target, IDirect3DSurface9* de
                                 Vec3 position, float orthoExtent, RenderFlags flags)
 {
     Renderer* const renderer = static_cast<Renderer*>(g_Renderer);
-    unsigned char* const raw = reinterpret_cast<unsigned char*>(renderer);
+    Renderer* const raw = renderer;
     IRenderView* const view = static_cast<IRenderView*>(static_cast<void*>(
         classManager->createInstance(Rend::CID_RenderView, Rend::IID_IRenderView, 0)));
     if (!view)
@@ -3036,8 +3354,8 @@ void rendererRenderOrthoTopDown(IDirect3DSurface9* target, IDirect3DSurface9* de
     view->setOrthoHeight(orthoExtent);                                                   // +0x58
     view->setViewMatrix(viewMatrix.m);                                                   // +0x60
 
-    if (raw[1693])
-        objectDrawerSetRenderView(*reinterpret_cast<void**>(raw + 1472), view);
+    if (raw->sw(1693))
+        objectDrawerSetRenderView(raw->m_objectDrawer, view);           // +0x5C0 (1472)
     renderer->setRenderView(view);                                                       // +0x44
     renderer->setRenderViewDup(view);                                                    // +0x4C
 
@@ -3045,7 +3363,7 @@ void rendererRenderOrthoTopDown(IDirect3DSurface9* target, IDirect3DSurface9* de
     IDirect3DSurface9* previousDepthStencil = 0;
     device->GetDepthStencilSurface(&previousDepthStencil);                               // +0xA0
     device->SetDepthStencilSurface(depthStencil);                                        // +0x9C
-    *reinterpret_cast<IDirect3DSurface9**>(raw + 0x0F4) = target;
+    reinterpret_cast<RendDX9Base*>(renderer)->tempBackBuffer = target;
     rendererSelectTempBackBuffer();
 
     EngineTexture* const savedScratch = renderer->getHemiScratchTexture();              // +0x774
@@ -3054,13 +3372,13 @@ void rendererRenderOrthoTopDown(IDirect3DSurface9* target, IDirect3DSurface9* de
         textureManagerCreateEmpty(side, side, D3DFMT_A8R8G8B8, 1u, 1u, 0)));
     textureManagerSwapManaged(savedManaged);
 
-    if (raw[0x102])
+    if (reinterpret_cast<RendDX9Base*>(renderer)->flag102)
     {
         renderer->renderScene(0.0, &flags, 0.0f);                                        // +0x2C
         stateManagerSetRenderState(195u, geom::roadCompiledRendererDepthBiasBits());   // depthbias
         stateManagerSetRenderState(175u, geom::roadCompiledRendererSlopeScaleDepthBiasBits());
         // `mov edx, g_Renderer; cmp byte ptr [edx+6A4h], 0` - the same object, reached as the global.
-        if (static_cast<unsigned char*>(static_cast<void*>(g_Renderer))[1700] &&
+        if (static_cast<Renderer*>(static_cast<void*>(g_Renderer))->sw(1700) &&
             geom::g_RoadEditableRenderer)
         {
             static_cast<geom::IRoadEditableRenderer*>(geom::g_RoadEditableRenderer)->drawAll();   // +0x18
@@ -3075,7 +3393,7 @@ void rendererRenderOrthoTopDown(IDirect3DSurface9* target, IDirect3DSurface9* de
     }
 
     device->SetDepthStencilSurface(previousDepthStencil);                                // +0x9C
-    IDirect3DSurface9*& tempBackBuffer = *reinterpret_cast<IDirect3DSurface9**>(raw + 0x0F4);
+    IDirect3DSurface9*& tempBackBuffer = reinterpret_cast<RendDX9Base*>(renderer)->tempBackBuffer;
     if (tempBackBuffer)
         tempBackBuffer->Release();
     tempBackBuffer = 0;
@@ -3114,7 +3432,7 @@ void rendererMakeTopWorldScreen(unsigned int resolution, renddx9abi::HostString 
 
     textureManagerSwapManaged(1);                                    // the old value dropped
 
-    unsigned char* const self = static_cast<unsigned char*>(static_cast<void*>(g_Renderer));
+    Renderer* const self = static_cast<Renderer*>(static_cast<void*>(g_Renderer));
     IDirect3DDevice9* const device = reinterpret_cast<RendDX9Base*>(self)->device;
     IDirect3DSurface9* target = 0;
     IDirect3DSurface9* depthStencil = 0;
@@ -3125,22 +3443,22 @@ void rendererMakeTopWorldScreen(unsigned int resolution, renddx9abi::HostString 
 
     RenderFlags flags;
     flags.useRenderView    = 0;
-    flags.field01          = self[1701];
-    flags.world            = self[1693];
+    flags.field01          = self->sw(1701);
+    flags.world            = self->sw(1693);
     flags.worldAlt         = 1;
-    flags.field04          = self[1697];
-    flags.staticMeshes     = self[1698];
-    flags.skinnedMeshes    = self[1699];
-    flags.decals           = self[1696];
-    flags.particles        = self[1756];
+    flags.field04          = self->sw(1697);
+    flags.staticMeshes     = self->sw(1698);
+    flags.skinnedMeshes    = self->sw(1699);
+    flags.decals           = self->sw(1696);
+    flags.particles        = self->m_byte6DC;
     flags.field09          = 0;
     flags.field0a          = 0;
-    flags.skyDome          = self[1714];
-    flags.undergrowth      = self[1702];
-    flags.field0d          = self[1703];
+    flags.skyDome          = self->sw(1714);
+    flags.undergrowth      = self->sw(1702);
+    flags.field0d          = self->sw(1703);
     flags.postProduction   = 0;
     flags.colourCorrection = 0;
-    flags.hud              = self[1713];
+    flags.hud              = self->sw(1713);
     flags.aiDebug          = 0;
     flags.field12          = static_cast<geom::Terrain*>(geom::g_Terrain)->m_flag35A;
     flags.pad13            = 0;                                      // unwritten in retail
@@ -3170,7 +3488,7 @@ void rendererMakeTopWorldScreen(unsigned int resolution, renddx9abi::HostString 
 bool rendererRenderEnvMapFace(unsigned int size, EngineTexture* cube, int face, const Vec3& position)
 {
     Renderer* const renderer = static_cast<Renderer*>(g_Renderer);
-    unsigned char* const raw = reinterpret_cast<unsigned char*>(renderer);
+    Renderer* const raw = renderer;
     IRenderView* const view = static_cast<IRenderView*>(static_cast<void*>(
         classManager->createInstance(Rend::CID_RenderView, Rend::IID_IRenderView, 0)));
     if (!view)
@@ -3205,29 +3523,29 @@ bool rendererRenderEnvMapFace(unsigned int size, EngineTexture* cube, int face, 
     viewMatrix.m[14] = position.z;
     view->setViewMatrix(viewMatrix.m);                                                   // +0x60
 
-    const unsigned char savedObjects    = raw[1693];
-    const unsigned char savedHud        = raw[1713];
-    const unsigned char saved1705       = raw[1705];
-    const unsigned char savedBundled    = raw[1697];
+    const unsigned char savedObjects    = raw->sw(1693);
+    const unsigned char savedHud        = raw->sw(1713);
+    const unsigned char saved1705       = raw->sw(1705);
+    const unsigned char savedBundled    = raw->sw(1697);
     const unsigned char savedDebugBoxes = g_debugBoxMeshDrawEnabled;
-    const unsigned char saved1702       = raw[1702];
-    const unsigned char saved1703       = raw[1703];
-    const unsigned char saved1717       = raw[1717];
-    raw[1713] = 0;
-    raw[1705] = 0;
-    raw[1701] = 1;
-    raw[1697] = 0;
+    const unsigned char saved1702       = raw->sw(1702);
+    const unsigned char saved1703       = raw->sw(1703);
+    const unsigned char saved1717       = raw->sw(1717);
+    raw->sw(1713) = 0;
+    raw->sw(1705) = 0;
+    raw->sw(1701) = 1;
+    raw->sw(1697) = 0;
     geom::bundledMeshSetHemiEnabled(0);                            // dword_102597F4 +0x10, unguarded
     g_debugBoxMeshDrawEnabled = 0;
-    raw[1702] = 0;
-    raw[1703] = 0;
-    raw[1717] = 0;
-    if (raw[1693])
-        objectDrawerSetRenderView(*reinterpret_cast<void**>(raw + 1472), view);
+    raw->sw(1702) = 0;
+    raw->sw(1703) = 0;
+    raw->sw(1717) = 0;
+    if (raw->sw(1693))
+        objectDrawerSetRenderView(raw->m_objectDrawer, view);           // +0x5C0 (1472)
     renderer->setRenderView(view);                                                       // +0x44
     renderer->setRenderViewDup(view);                                                    // +0x4C
 
-    IDirect3DSurface9*& tempBackBuffer = *reinterpret_cast<IDirect3DSurface9**>(raw + 0x0F4);
+    IDirect3DSurface9*& tempBackBuffer = reinterpret_cast<RendDX9Base*>(renderer)->tempBackBuffer;
     tempBackBuffer = textureGetLevelSurface(cube, 0u, static_cast<unsigned int>(face));
     rendererSelectTempBackBuffer();
     renderer->renderFrame(0.0, 0.0f);                                                    // +0x28
@@ -3238,15 +3556,15 @@ bool rendererRenderEnvMapFace(unsigned int size, EngineTexture* cube, int face, 
     renderer->setRenderView(savedPrimary);
     renderer->setRenderViewDup(savedSecondary);
 
-    raw[1697] = savedBundled;
+    raw->sw(1697) = savedBundled;
     geom::bundledMeshSetHemiEnabled(savedBundled);
-    raw[1693] = savedObjects;
-    raw[1713] = savedHud;
-    raw[1705] = saved1705;
+    raw->sw(1693) = savedObjects;
+    raw->sw(1713) = savedHud;
+    raw->sw(1705) = saved1705;
     g_debugBoxMeshDrawEnabled = savedDebugBoxes;
-    raw[1702] = saved1702;
-    raw[1703] = saved1703;
-    raw[1717] = saved1717;
+    raw->sw(1702) = saved1702;
+    raw->sw(1703) = saved1703;
+    raw->sw(1717) = saved1717;
     return false;
 }
 
@@ -3269,12 +3587,12 @@ void Renderer::beginFrame()
 {
     m_frameStartTime = hostCalls::systemWallClockTime();                              // +0x18
 
-    if (m_tail1bAfterHemiScratch[0x7F0 - 0x778] != 0)
+    if (m_frameHookEnabled != 0)                          // +0x7F0
     {
-        typedef void (__fastcall* Fn)(void*, void*, unsigned int, unsigned int, unsigned int,
+        typedef void (__thiscall* Fn)(void*, unsigned int, unsigned int, unsigned int,
                                       unsigned int, unsigned int, unsigned int, unsigned int);
         reinterpret_cast<Fn>((*static_cast<void***>(static_cast<void*>(this)))[0x60 / 4])(
-            this, 0, 0, 0, 0, 0, 0, 0, 0);
+            this, 0, 0, 0, 0, 0, 0, 0);
     }
 }
 // PE 0x1002BC50, slot +0x2C: render the world according to RenderFlags.
@@ -3309,10 +3627,9 @@ D3DFORMAT formatFromBpp(unsigned int bpp)
 
 // sub_10006990 - enumerate the adapter's modes for R5G6B5 (16-bit) then X8R8G8B8 (32-bit), keeping
 // (when minRes) only >= 640x480 @ 60Hz. Appends each D3DDISPLAYMODE to `out`.
-void enumAdapterModes(RendDX9Base* b, bool minRes, vc71::vector_layout* out)
+void enumAdapterModes(RendDX9Base* b, bool minRes, std::vector<D3DDISPLAYMODE>& out)
 {
     const D3DFORMAT passes[2] = { D3DFMT_R5G6B5, D3DFMT_X8R8G8B8 };
-    vc71::vectorRef<D3DDISPLAYMODE> v(out);
     for (int p = 0; p < 2; ++p)
     {
         const UINT count = b->d3d9->GetAdapterModeCount(b->adapter, passes[p]);
@@ -3322,16 +3639,15 @@ void enumAdapterModes(RendDX9Base* b, bool minRes, vc71::vector_layout* out)
             if (FAILED(b->d3d9->EnumAdapterModes(b->adapter, passes[p], i, &m)))
                 continue;
             if (!minRes || (m.Width >= 640 && m.Height >= 480 && m.RefreshRate >= 60))
-                v.push_back(m);
+                out.push_back(m);
         }
     }
 }
 
 // sub_10006B40 - the Win32 display list, used only to cross-check the D3D modes. Keeps 16/32bpp modes
 // with no special flags, matching the min-resolution and (optional) 4:3 gates.
-void enumDevModes(bool aspect43, bool minRes, vc71::vector_layout* out)
+void enumDevModes(bool aspect43, bool minRes, std::vector<DEVMODEA>& out)
 {
-    vc71::vectorRef<DEVMODEA> v(out);
     for (DWORD i = 0; ; ++i)
     {
         DEVMODEA dm;
@@ -3351,7 +3667,7 @@ void enumDevModes(bool aspect43, bool minRes, vc71::vector_layout* out)
             if (r > 0.1 || r < -0.1)
                 continue;
         }
-        v.push_back(dm);
+        out.push_back(dm);
     }
 }
 
@@ -3360,17 +3676,15 @@ void enumDevModes(bool aspect43, bool minRes, vc71::vector_layout* out)
 void fillDepthFormats(RendDX9Base* b)
 {
     const D3DFORMAT probes[2] = { D3DFMT_D32, D3DFMT_D24S8 };
-    for (Mode40* rec = reinterpret_cast<Mode40*>(b->modeList.first);
-         rec != reinterpret_cast<Mode40*>(b->modeList.last); ++rec)
+    for (std::vector<Mode40>::iterator rec = b->modeList.begin(); rec != b->modeList.end(); ++rec)
     {
         const D3DFORMAT adapterFmt = formatFromBpp(rec->bpp);
-        vc71::vectorRef<unsigned int> d(&rec->depthFormats);
         for (int k = 0; k < 2; ++k)
         {
             if (SUCCEEDED(b->d3d9->CheckDeviceFormat(b->adapter, static_cast<D3DDEVTYPE>(b->deviceType),
                                                      adapterFmt, D3DUSAGE_DEPTHSTENCIL,
                                                      D3DRTYPE_SURFACE, probes[k])))
-                d.push_back(static_cast<unsigned int>(probes[k]));
+                rec->depthFormats.push_back(static_cast<unsigned int>(probes[k]));
         }
     }
 }
@@ -3383,21 +3697,20 @@ void fillDepthFormats(RendDX9Base* b)
 // depth-stencil formats.
 void buildModeListImpl(RendDX9Base* b)
 {
-    if (b->modeList.first && b->modeList.first != b->modeList.last)
+    if (!b->modeList.empty())
         return;      // already built
     if (!b->d3d9)
         return;
 
-    vc71::vector_layout devModes;     devModes.alloc = 0;     devModes.first = 0;     devModes.last = 0;     devModes.end = 0;
-    vc71::vector_layout adapterModes; adapterModes.alloc = 0; adapterModes.first = 0; adapterModes.last = 0; adapterModes.end = 0;
+    std::vector<DEVMODEA>       devModes;
+    std::vector<D3DDISPLAYMODE> adapterModes;
 
-    enumDevModes(false /*aspect43*/, true /*minRes*/, &devModes);
-    enumAdapterModes(b, true /*minRes*/, &adapterModes);
-    const bool haveDevModes = (devModes.first != devModes.last);
+    enumDevModes(false /*aspect43*/, true /*minRes*/, devModes);
+    enumAdapterModes(b, true /*minRes*/, adapterModes);
+    const bool haveDevModes = !devModes.empty();
 
-    vc71::vectorRef<Mode40> modes(&b->modeList);
-    for (const D3DDISPLAYMODE* m = reinterpret_cast<const D3DDISPLAYMODE*>(adapterModes.first);
-         m != reinterpret_cast<const D3DDISPLAYMODE*>(adapterModes.last); ++m)
+    for (std::vector<D3DDISPLAYMODE>::const_iterator m = adapterModes.begin();
+         m != adapterModes.end(); ++m)
     {
         Mode40 rec;
         rec.width   = static_cast<unsigned short>(m->Width);
@@ -3408,8 +3721,8 @@ void buildModeListImpl(RendDX9Base* b)
         bool keep = !haveDevModes;   // no Win32 list -> keep every enumerated mode (the shipped v29 gate)
         if (haveDevModes)
         {
-            for (const DEVMODEA* dm = reinterpret_cast<const DEVMODEA*>(devModes.first);
-                 dm != reinterpret_cast<const DEVMODEA*>(devModes.last); ++dm)
+            for (std::vector<DEVMODEA>::const_iterator dm = devModes.begin(); dm != devModes.end();
+                 ++dm)
             {
                 if (dm->dmPelsWidth == m->Width && dm->dmPelsHeight == m->Height &&
                     dm->dmDisplayFrequency == m->RefreshRate &&
@@ -3421,11 +3734,8 @@ void buildModeListImpl(RendDX9Base* b)
             }
         }
         if (keep)
-            modes.push_back(rec);
+            b->modeList.push_back(rec);
     }
-
-    vectorClear<D3DDISPLAYMODE>(&adapterModes);
-    vectorClear<DEVMODEA>(&devModes);
 
     fillDepthFormats(b);
 }
@@ -3433,10 +3743,11 @@ void buildModeListImpl(RendDX9Base* b)
 } // anonymous namespace
 
 // the mode-list builder (Renderer vtable slot +0x3C, `retn 4`: one filter argument,
-// IRenderer.h). Returns `this+0x90`, building the list whenever it is null or empty
-// (0x10007439..0x1000746E) - in practice once, by VideoOptions::initialize. `this` is the base
-// object, as for slot +0x74. [CHOSEN] this rebuild keeps its fixed (false, true, true) policy and
-// ignores the filter bytes; see IRenderer.h for what each byte means to the shipped body.
+// IRenderer.h). Returns the base's std::vector<Mode40> (retail `this+0x90`), building the list
+// whenever it is null or empty (0x10007439..0x1000746E) - in practice once, by
+// VideoOptions::initialize. `this` is the base object, as for slot +0x74. [CHOSEN] this rebuild
+// keeps its fixed (false, true, true) policy and ignores the filter bytes; see IRenderer.h for what
+// each byte means to the shipped body.
 void* Renderer::slot_0x3C(const DisplayModeFilter* /*filter*/)
 {
     RendDX9Base* b = reinterpret_cast<RendDX9Base*>(this);
@@ -3458,8 +3769,7 @@ RD9_RENDERER_FRONTIER(slot_0x40,   0x40)
 // dword at +0x104, and the directional LightManager forwards it to IGeometry +0xAC.
 unsigned int Renderer::getFrameOrdinal()
 {
-    return *reinterpret_cast<unsigned int*>(
-        reinterpret_cast<unsigned char*>(this) + 0x104);
+    return reinterpret_cast<RendDX9Base*>(this)->frameOrdinal;
 }
 
 
@@ -3469,62 +3779,25 @@ namespace geom {
 // FontSystem/FontSystem.cpp and OverlayTexture.cpp - typed virtual forwards onto the two console
 // objects initializeFontAndConsoleOverlay created (held here as IBase*, as createInstance returned).
 int  fontPortedGetHeight(IBase* font);                                            // Font::Ported +0x1C
-void fontPortedDrawText(IBase* font, float x, float y, const vc71::string& text);  // Font::Ported +0x18
+void fontPortedDrawText(IBase* font, float x, float y, const std::string& text);  // Font::Ported +0x18
 void overlayTextureSetSize(IBase* overlay, const Vec2& size);                      // OverlayTexture +0x18
 void overlayTextureDraw(IBase* overlay);                                           // OverlayTexture +0x10
 } // namespace geom
 
 namespace dx9rend {
 
-#if !BF2_PLUGIN_ABI_NATIVE
-namespace {
-
-// Compatibility Console prefix through getLines, whose result uses VC7.1 strings/vectors.
-// Reserved preceding slots preserve order and must never be called.
-class RetailHostConsole
-{
-public:
-    virtual void reserved_deletingDestructor() = 0;                          // +0x00
-    virtual void reserved_setConsoleCompiler() = 0;                          // +0x04
-    virtual void reserved_executeLine() = 0;                                 // +0x08
-    virtual void reserved_executeLines() = 0;                                // +0x0C
-    virtual void reserved_output() = 0;                                      // +0x10
-    virtual void reserved_updateAsciiKey() = 0;                              // +0x14
-    virtual void reserved_updateGameInput() = 0;                             // +0x18
-    virtual void reserved_updateKeyMacros() = 0;                             // +0x1C
-    virtual void getLines(int rows, vc71::vector_layout& out) const = 0;     // +0x20
-
-protected:
-    ~RetailHostConsole() {}
-};
-
-} // anonymous namespace
-#endif // !BF2_PLUGIN_ABI_NATIVE
 
 // Draw the last 20 console lines, including the current prompt, over a full-width background.
 // Re-read font height per line and restore statistics before destroying the line vector.
 // Compat strings use the VC7.1 CRT; their vector storage uses the engine heap.
-// [CHOSEN, not recovered] native lines are copied to vc71::string at the font boundary.
+// [CHOSEN, not recovered] native lines are copied to std::string at the font boundary.
 void Renderer::slot_0x58()
 {
     const unsigned char statsWere = statsSwapEnabled(0);
 
-#if BF2_PLUGIN_ABI_NATIVE
     std::vector<std::string> lines;
     reinterpret_cast<io::Console*>(::dice::hfe::mainConsole)->getLines(20, lines);
     const unsigned int lineCount = static_cast<unsigned int>(lines.size());
-#else
-    vc71::vector_layout lines;
-    lines.alloc = 0;
-    lines.first = 0;
-    lines.last  = 0;
-    lines.end   = 0;
-    reinterpret_cast<RetailHostConsole*>(::dice::hfe::mainConsole)->getLines(20, lines);
-    vc71::string* const firstLine = reinterpret_cast<vc71::string*>(lines.first);
-    vc71::string* const lastLine  = reinterpret_cast<vc71::string*>(lines.last);
-    const unsigned int lineCount =
-        firstLine ? static_cast<unsigned int>(lastLine - firstLine) : 0u;
-#endif
 
     IBase* const font    = static_cast<IBase*>(m_consoleFont);                  // +0x5CC
     IBase* const overlay = static_cast<IBase*>(m_consoleOverlay);               // +0x5C8
@@ -3550,32 +3823,16 @@ void Renderer::slot_0x58()
     }
 
     int line = 0;
-#if BF2_PLUGIN_ABI_NATIVE
     for (std::vector<std::string>::const_iterator it = lines.begin(); it != lines.end();
          ++it, ++line)
     {
-        const vc71::string text = ::renddx9abi::toVc71String(*it);
+        const std::string text = ::renddx9abi::fromHostString(*it);
         const int height = geom::fontPortedGetHeight(font);                    // re-read per line
         geom::fontPortedDrawText(font, 2.0f, static_cast<float>((height + 1) * line + 2), text);
     }
-#else
-    for (vc71::string* text = firstLine; text != lastLine; ++text, ++line)
-    {
-        const int height = geom::fontPortedGetHeight(font);                    // re-read per line
-        geom::fontPortedDrawText(font, 2.0f, static_cast<float>((height + 1) * line + 2), *text);
-    }
-#endif
 
     statsSwapEnabled(statsWere);
 
-#if !BF2_PLUGIN_ABI_NATIVE
-    if (firstLine)
-    {
-        for (vc71::string* text = firstLine; text != lastLine; ++text)
-            text->~string();
-        ::renddx9abi::engineFree(firstLine);
-    }
-#endif
 }   // native: ~vector<std::string>
 
 RD9_RENDERER_FRONTIER(slot_0x5C,   0x5C)
@@ -3588,7 +3845,7 @@ RD9_RENDERER_FRONTIER(slot_0x68,   0x68)
 // per-category draw counters through this slot when an entry is added to a queue.
 void* Renderer::getRenderStats()
 {
-    return reinterpret_cast<unsigned char*>(this) + 0x108;
+    return reinterpret_cast<RendDX9Base*>(this)->renderStats;
 }
 RD9_RENDERER_FRONTIER(slot_0x70,   0x70)
 // one instruction: `return this + 1016`. The embedded VideoOptions getter, identical to
@@ -3644,7 +3901,7 @@ unsigned int Renderer::getRenderAheadLimit()
 
 bool Renderer::isExpansionPack()
 {
-    return m_tail1bAfterFrameRate[0x764 - 0x608] != 0;
+    return m_expansionPack != 0;
 }
 
 
@@ -3652,9 +3909,9 @@ bool Renderer::isExpansionPack()
 
 bool Renderer::setExpansionPack(unsigned char value)
 {
-    if (static_cast<unsigned char>(m_tail1bAfterFrameRate[0x764 - 0x608]) == value)
+    if (m_expansionPack == value)
         return false;
-    m_tail1bAfterFrameRate[0x764 - 0x608] = static_cast<char>(value);
+    m_expansionPack = value;
     return true;
 }
 
@@ -3664,7 +3921,7 @@ bool Renderer::setExpansionPack(unsigned char value)
 
 unsigned int Renderer::slot_0xB0()
 {
-    return *reinterpret_cast<const unsigned int*>(&m_tail1bAfterFrameRate[0x768 - 0x608]);
+    return m_dword768;
 }
 RD9_RENDERER_FRONTIER(slot_0xB4,   0xB4)
 
@@ -3676,8 +3933,8 @@ void Renderer::slot_0xB8(bool includeEffectManager)
 {
     shaderManagerClearEffectTextureBindings(g_shaderManager);
 
-    DeviceLostResetListener* const stateListener = reinterpret_cast<DeviceLostResetListener*>(
-        static_cast<unsigned char*>(g_stateManager) + 4);                      // dword_1023B984 + 4
+    DeviceLostResetListener* const stateListener =
+        stateManagerDeviceLostListener();                                     // dword_1023B984 + 4
 
     if (includeEffectManager)
         Ra::effectManagerResetEffects();       // EffectManager listener +0x00: 0x10037D50 -> sub_10034210
@@ -3774,140 +4031,10 @@ namespace {
 // Native containers use the host STL; the compatibility views retain VC7.1 layout.
 // isNightMap is initialized only by a successful map-description parse.
 
-#if BF2_PLUGIN_ABI_NATIVE
 
 typedef ::dice::hfe::IModInfo::Map HostLevelMap;
 typedef ::dice::hfe::IModInfo::Mod HostModRecord;
 
-#else
-
-// MSVC will not accept `p->~HostString()` through a typedef, so the element destructors below go
-// through this one-liner instead. It is a spelling device, nothing more.
-template <typename T>
-inline void destroyHostElement(char* p) { reinterpret_cast<T*>(p)->~T(); }
-
-// sub_10043C70 / sub_10043CD0 and sub_10043DA0 / sub_10043E40, as VC7.1-layout mirrors. They exist
-// only to be handed to the host's parseMapDesc, which fills them with the host's own allocations -
-// and that is safe across the DLL boundary for the same reason everything else here is: dice routed
-// operator new/delete in every image through Memory.dll, so engineFree releases what the host's
-// operator new took (see RendDX9Abi/BfMemory.h).
-struct HostLevelMap
-{
-    HostLevelMap()
-    {
-        gameModes.first = 0;                 // 10043C9x - first/last/end only...
-        gameModes.last  = 0;
-        gameModes.end   = 0;
-        gameSpyId       = 0;
-        plasma          = 0;
-        // ...and neither gameModes.alloc NOR isNightMap. Faithful; see the block above.
-    }
-
-    ~HostLevelMap()
-    {
-        if (gameModes.first)                 // sub_10043CD0's `if (*(this + 144))`
-        {
-            // sub_10043C10 destroys each element, then sub_1005F360 frees the buffer.
-            for (char* p = gameModes.first; p != gameModes.last; p += sizeof(HostGameMode))
-                reinterpret_cast<HostGameMode*>(p)->~HostGameMode();
-            ::renddx9abi::engineFree(gameModes.first);
-        }
-        gameModes.first = 0;
-        gameModes.last  = 0;
-        gameModes.end   = 0;
-    }
-
-    // IModInfo::GameMode in VC7.1 - one string plus a vector<MapType>; 44 bytes. Only its size and
-    // its teardown matter here, and the teardown of a MapType is three strings after a leading int.
-    struct HostMapType
-    {
-        int                 players;
-        renddx9abi::HostString type;
-        renddx9abi::HostString locId;
-        renddx9abi::HostString description;
-        unsigned char       ai;
-        unsigned char       pad[3];
-    };
-
-    struct HostGameMode
-    {
-        renddx9abi::HostString name;
-        vc71::vector_layout    mapTypes;
-
-        ~HostGameMode()
-        {
-            if (mapTypes.first)
-            {
-                for (char* p = mapTypes.first; p != mapTypes.last; p += sizeof(HostMapType))
-                    reinterpret_cast<HostMapType*>(p)->~HostMapType();
-                ::renddx9abi::engineFree(mapTypes.first);
-            }
-        }
-    };
-
-    renddx9abi::HostString path;             // +0    the level directory name
-    renddx9abi::HostString name;             // +28
-    renddx9abi::HostString briefing;         // +56
-    renddx9abi::HostString briefingLocId;    // +84
-    renddx9abi::HostString music;            // +112
-    vc71::vector_layout    gameModes;        // +140
-    int                    gameSpyId;        // +156
-    unsigned char          plasma;           // +160
-    unsigned char          isNightMap;       // +161  <- the byte selectShaderArchive tests
-    unsigned char          pad[2];
-};
-
-static_assert(sizeof(HostLevelMap) == 164, "the PE frame reserves 164 bytes at ebp-0x114");
-
-struct HostModRecord
-{
-    HostModRecord()
-    {
-        maps.first      = 0;                 // 10043E0x - 256/260/264
-        maps.last       = 0;
-        maps.end        = 0;
-        gameModes.first = 0;                 //            272/276/280
-        gameModes.last  = 0;
-        gameModes.end   = 0;
-    }
-
-    ~HostModRecord()
-    {
-        // sub_100111E0(this + 268) - parseMapDesc appends to this one, so it really can be non-empty.
-        if (gameModes.first)
-        {
-            for (char* p = gameModes.first; p != gameModes.last;
-                 p += sizeof(renddx9abi::HostString))
-                destroyHostElement<renddx9abi::HostString>(p);
-            ::renddx9abi::engineFree(gameModes.first);
-        }
-        // sub_10043D50(this + 252)
-        if (maps.first)
-        {
-            for (char* p = maps.first; p != maps.last; p += sizeof(HostLevelMap))
-                reinterpret_cast<HostLevelMap*>(p)->~HostLevelMap();
-            ::renddx9abi::engineFree(maps.first);
-        }
-    }
-
-    renddx9abi::HostString path;             // +0
-    renddx9abi::HostString name;             // +28
-    renddx9abi::HostString title;            // +56
-    renddx9abi::HostString desc;             // +84
-    renddx9abi::HostString url;              // +112
-    renddx9abi::HostString music;            // +140
-    renddx9abi::HostString logo;             // +168
-    renddx9abi::HostString icon;             // +196
-    renddx9abi::HostString version;          // +224
-    vc71::vector_layout    maps;             // +252
-    vc71::vector_layout    gameModes;        // +268
-    renddx9abi::HostString importLevels;     // +284
-    renddx9abi::HostString spStartupMap;     // +312
-};
-
-static_assert(sizeof(HostModRecord) == 340, "the PE frame reserves 340 bytes at ebp-0x268");
-
-#endif // BF2_PLUGIN_ABI_NATIVE
 
 // PE 0x10042CD0; [INFERRED] placement beside its only caller (the retail receiver is unused).
 // Select bf2/xpack shaders from the map's night flag and remount on change or first use.
@@ -3920,7 +4047,7 @@ bool selectShaderArchive(const char* levelName)
     // var_54 - built before the null test and destroyed after it, so it is read even for a null
     // level name. settings vslot +0x40 with an empty default, exactly as readStringSettingDefault
     // spells that call.
-    vc71::string modDirectory;
+    std::string modDirectory;
     readStringSettingDefault("GSModDirectory", "", modDirectory);
 
     if (levelName)
@@ -3936,29 +4063,14 @@ bool selectShaderArchive(const char* levelName)
         // +0x120 getModInfo, then +0x50 parseMapDesc(Mod*, const string& levelsPath, Map*).
         // Typed in the native flavour (RW-266): ISwiffHost slot 72 and ModInfo slot 20, whose Mod /
         // Map / std::string ARE the host's here; the retail-ABI flavour keeps both retail slots.
-#if BF2_PLUGIN_ABI_NATIVE
         ModInfo* const modInfo = static_cast<ModInfo*>(static_cast<IModInfo*>(
             static_cast<ui::ISwiffHost*>(swiffHost)->getModInfo()));
-#else
-        typedef void* (__thiscall* GetModInfoFn)(void*);
-        typedef bool  (__thiscall* ParseMapDescFn)(void*, HostModRecord*,
-                                                   const renddx9abi::HostString&, HostLevelMap*);
-
-        void* const modInfo = reinterpret_cast<GetModInfoFn>(
-            (*reinterpret_cast<void***>(swiffHost))[0x120 / sizeof(void*)])(swiffHost);
-#endif
 
         // var_70 = modDir; var_70 += "/levels/"; var_1C = var_70 - the PE copies it too.
         renddx9abi::HostString levelsPath(modDirectory.c_str());
         levelsPath += "/levels/";
 
-#if BF2_PLUGIN_ABI_NATIVE
         modInfo->parseMapDesc(&mod, levelsPath, &map);                                 // +0x50
-#else
-        reinterpret_cast<ParseMapDescFn>(
-            (*reinterpret_cast<void***>(modInfo))[0x50 / sizeof(void*)])(
-                modInfo, &mod, levelsPath, &map);
-#endif
 
         // var_38 - default-constructed at 0x10042DDC, before the branch, then assigned in each arm.
         renddx9abi::HostString archive;
@@ -4004,12 +4116,12 @@ void Renderer::handleLevelPreLoad(const char* levelName)
     if (m_weatherManager)
     {
         void** const vtbl = *reinterpret_cast<void***>(m_weatherManager);
-        reinterpret_cast<VoidFn>(vtbl[0x14 / sizeof(void*)])(m_weatherManager);
+        reinterpret_cast<VoidFn>(vtbl[0x14 / 4])(m_weatherManager);
     }
     if (m_rainManager)
     {
         void** const vtbl = *reinterpret_cast<void***>(m_rainManager);
-        reinterpret_cast<VoidFn>(vtbl[0x14 / sizeof(void*)])(m_rainManager);
+        reinterpret_cast<VoidFn>(vtbl[0x14 / 4])(m_rainManager);
     }
 
     IBase* const gtm = geom::g_GeometryTemplateManager;
@@ -4037,7 +4149,7 @@ void Renderer::handleLevelPreLoad(const char* levelName)
     }
 
     reinterpret_cast<VoidFn>(
-        (*reinterpret_cast<void***>(gtm))[0x48 / sizeof(void*)])(gtm);       // the technique re-arm
+        (*reinterpret_cast<void***>(gtm))[0x48 / 4])(gtm);       // the technique re-arm
 }
 RD9_RENDERER_FRONTIER(shutdown,    0xD8)
 
@@ -4120,8 +4232,8 @@ void DX9RendModule::getSingletonList(RD9_HOST_VECTOR_PARAMETER(SingletonRegInfo,
 }
 
 // Defined in PostProductionFrameWork.cpp: the recovered 0x1004FFA0 constructor. Takes the
-// pre-allocated 548-byte block, installs the three interface vtables + scalar defaults, and defers
-// the resource acquisition / listener registration. Returns the owner.
+// pre-allocated owner block (548 bytes on x86), installs the three interface vtables + scalar
+// defaults, and defers the resource acquisition / listener registration. Returns the owner.
 void* postProductionFrameWorkOwnerCtor(void* mem);
 
 
@@ -4135,13 +4247,15 @@ bool DX9RendModule::init()
     // three-interface object). The constructor at PostProductionFrameWorkOwner_ctor -
     // is recovered in PostProductionFrameWork.cpp; it installs the three vtables so BF2's virtual
     // calls through the singleton (the per-frame gas-mask blend among them) dispatch into recovered
-    // bodies rather than faulting on a null vptr.
-    void* owner = ::renddx9abi::engineAlloc(548);
+    // bodies rather than faulting on a null vptr. The owner TU supplies the size and the interface
+    // subobject: 548 and owner + 8 on x86, the native layout on x64 (issue #7).
+    void* owner = ::renddx9abi::engineAlloc(postProductionFrameWorkOwnerSize());
     if (owner)
     {
         postProductionFrameWorkOwnerCtor(owner);
         g_PostProductionFrameWorkOwner = reinterpret_cast<IBase*>(owner);
-        g_PostProductionFrameWork      = reinterpret_cast<IBase*>(static_cast<char*>(owner) + 8);
+        g_PostProductionFrameWork      =
+            reinterpret_cast<IBase*>(postProductionFrameWorkInterface(owner));
     }
     else
     {
@@ -4151,9 +4265,7 @@ bool DX9RendModule::init()
 
     // Register bindings only for the matching native string/container ABI.
     // [FRONTIER] DX9RendModule::init still lacks the 20-byte auxiliary object.
-#if BF2_PLUGIN_ABI_NATIVE
     registerRendererConsoleObjects();
-#endif
 
     ::renddx9abi::logf("DX9RendModule::init: PostProductionFrameWork published at 0x%08X "
                        "(owner 0x%08X + 8)",
@@ -4176,9 +4288,7 @@ bool DX9RendModule::close()
 
     // the list at 0x10241668 leaves the registry first (0x1007B6D0), before the
     // 20-byte object and the owner are torn down.
-#if BF2_PLUGIN_ABI_NATIVE
     unregisterRendererConsoleObjects();
-#endif
 
     if (g_PostProductionFrameWorkOwner)
     {

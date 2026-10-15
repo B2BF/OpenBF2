@@ -637,9 +637,16 @@ bf2_set_platform_compat(bf2_client_objects)
 # same MSVC STL layout even when this CMake tree is configured as Debug; iterator debugging changes
 # container layout and cannot cross the image boundary.  PluginAbi.h enforces the matching contract.
 target_compile_definitions(bf2_client_objects PRIVATE
-    BF2_PLUGIN_ABI_NATIVE=1
     _ITERATOR_DEBUG_LEVEL=0
 )
+# [CHOSEN, not recovered] The native x64 client (https://github.com/B2BF/OpenBF2/issues/7): a pointer
+# truncated into a 32-bit integer fails the build, as in the plugin scripts' x64 mode. The editor's
+# own objects and its second compilation of shared TUs take the same list.
+set(BF2_CLIENT_X64_COMPILE_OPTIONS)
+if(BF2_BUILD_X64 AND MSVC)
+    set(BF2_CLIENT_X64_COMPILE_OPTIONS /Gy /we4311 /we4312)
+endif()
+target_compile_options(bf2_client_objects PRIVATE ${BF2_CLIENT_X64_COMPILE_OPTIONS})
 target_include_directories(bf2_client_objects PRIVATE
     ${BF2_PYTHON_INCLUDE_DIRS}
     "${BF2_EXTERNAL_ROOT}/zlib-1.2.3"
@@ -1055,8 +1062,8 @@ endif() # BF2_BUILD_LINUX / MSVC link contracts
 
 # =================================================================================================
 # bf2_aidll - THE BOT-AI SIDE-DLL IMAGE.
-# The native-x64 profile is intentionally dedicated-only. Do not let it emit x64 binaries under
-# the shipped x86 AIDLL/BF2 names; those ports require separate targets and ABI validation.
+# x86 only. The native x64 configuration builds no AIDLL: an x64 AIDLL would need its own target
+# and ABI validation, never an x64 binary under the shipped x86 name.
 if(NOT BF2_BUILD_X64)
 #
 # AIDLL_w32ded.dll is a THIRD server-side image built from this same tree: bf2_w32ded.exe loads it
@@ -1218,6 +1225,13 @@ target_link_options(bf2_aidll PRIVATE
     "/MAP:${BF2_AIDLL_OUTPUT_DIR}/AIDLL_w32ded.map"
     /IGNORE:4006,4088,4098
 )
+endif() # NOT BF2_BUILD_X64 (bf2_aidll)
+
+# The client and the editor build in both Windows configurations: x86, and the native x64 client
+# ([CHOSEN, not recovered], https://github.com/B2BF/OpenBF2/issues/7). The x64 images keep the
+# shipped file names (BF2.exe and its plugin DLLs, which BF2.exe loads by name) and are written only
+# inside the x64 build tree.
+if(NOT BF2_BUILD_LINUX)
 
 # =================================================================================================
 # bf2_client - THE CLIENT LINK-REACH IMAGE (2026-09-03).
@@ -1263,7 +1277,7 @@ set_target_properties(bf2_client PROPERTIES
 )
 bf2_configure_cpp_target(bf2_client)
 bf2_set_image(bf2_client 0)
-target_compile_definitions(bf2_client PRIVATE BF2_PLUGIN_ABI_NATIVE=1 _ITERATOR_DEBUG_LEVEL=0)
+target_compile_definitions(bf2_client PRIVATE _ITERATOR_DEBUG_LEVEL=0)
 set_target_properties(bf2_client PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${BF2_GAME_DIR}"
     VS_DEBUGGER_COMMAND_ARGUMENTS "+modPath mods/bf2 +fullscreen 0 +multi 1"
@@ -1301,6 +1315,9 @@ endif()
 # The bounded Novint SDK surface contains no cross-compiler STL objects. Import
 # names and the 32-byte ApplicationData carrier are read from the original client;
 # the matching DLL supplies third-party bodies.
+# [CHOSEN, not recovered] x86 only: NovintHFX.dll is a 32-bit DLL, so the x64 client imports nothing
+# from it and IO/Input/FalconDevice.cpp reports the device as not connected (issue #7).
+if(NOT BF2_BUILD_X64)
 set(BF2_NOVINT_IMPORT_LIB "${CMAKE_BINARY_DIR}/novint_hfx/NovintHFX.lib")
 add_custom_command(OUTPUT "${BF2_NOVINT_IMPORT_LIB}"
     COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_BINARY_DIR}/novint_hfx"
@@ -1321,6 +1338,7 @@ if(EXISTS "${BF2_GAME_DIR}/NovintHFX.dll")
         VERBATIM
     )
 endif()
+endif() # NOT BF2_BUILD_X64 (Novint)
 
 # [CHOSEN, not recovered] Build and stage one native client/plugin set:
 # https://github.com/B2BF/OpenBF2/issues/7. These DLLs target the rebuilt host only;
@@ -1358,6 +1376,15 @@ endif()
 #
 # Rebuild and stage plugins on every client build. Their scripts do not emit full include
 # dependencies, so a glob over plugin sources would miss changes in shared engine headers.
+#
+# Each script takes the architecture as its flavour argument: `native` builds the x86 DLL into
+# Code/Build/bin_<name>_native, `x64` the native x64 DLL into Code/Build/bin_<name>_x64. The x64
+# RendDX9.dll has no Bink import (x64 skips movies, issue #7).
+if(BF2_BUILD_X64)
+    set(BF2_PLUGIN_FLAVOUR x64)
+else()
+    set(BF2_PLUGIN_FLAVOUR native)
+endif()
 if(TRUE)
     # ⚠ EACH SCRIPT IS NAMED BY ITS FULL NATIVE PATH, not bare beside WORKING_DIRECTORY. cmd.exe
     # finds a bare script name only by searching the current directory, and that search is OFF
@@ -1374,24 +1401,24 @@ if(TRUE)
     file(TO_NATIVE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/Code/Build/swiffplayer.cmd" BF2_SWIFFPLAYER_SCRIPT)
     file(TO_NATIVE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/Code/Build/textureatlasbuilder.cmd" BF2_TEXTUREATLAS_SCRIPT)
     add_custom_target(bf2_textureatlas_native
-        COMMAND cmd.exe /d /c "${BF2_TEXTUREATLAS_SCRIPT}" native
+        COMMAND cmd.exe /d /c "${BF2_TEXTUREATLAS_SCRIPT}" ${BF2_PLUGIN_FLAVOUR}
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/Code/Build"
-        COMMENT "Building the native TextureAtlasBuilder.dll (Code/Build/textureatlasbuilder.cmd native)"
+        COMMENT "Building the ${BF2_PLUGIN_FLAVOUR} TextureAtlasBuilder.dll (Code/Build/textureatlasbuilder.cmd ${BF2_PLUGIN_FLAVOUR})"
         VERBATIM
     )
     set_property(TARGET bf2_textureatlas_native PROPERTY FOLDER "BF2")
     add_custom_target(bf2_renddx9_native
-        COMMAND cmd.exe /d /c "${BF2_RENDDX9_SCRIPT}" native
+        COMMAND cmd.exe /d /c "${BF2_RENDDX9_SCRIPT}" ${BF2_PLUGIN_FLAVOUR}
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/Code/Build"
-        COMMENT "Building the native RendDX9.dll (Code/Build/renddx9.cmd native)"
+        COMMENT "Building the ${BF2_PLUGIN_FLAVOUR} RendDX9.dll (Code/Build/renddx9.cmd ${BF2_PLUGIN_FLAVOUR})"
         VERBATIM
     )
     set_property(TARGET bf2_renddx9_native PROPERTY FOLDER "BF2")
     add_dependencies(bf2_renddx9_native bf2_textureatlas_native)
     add_custom_target(bf2_swiffplayer_native
-        COMMAND cmd.exe /d /c "${BF2_SWIFFPLAYER_SCRIPT}" native
+        COMMAND cmd.exe /d /c "${BF2_SWIFFPLAYER_SCRIPT}" ${BF2_PLUGIN_FLAVOUR}
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/Code/Build"
-        COMMENT "Building the native SwiffPlayer.dll (Code/Build/swiffplayer.cmd native)"
+        COMMENT "Building the ${BF2_PLUGIN_FLAVOUR} SwiffPlayer.dll (Code/Build/swiffplayer.cmd ${BF2_PLUGIN_FLAVOUR})"
         VERBATIM
     )
     set_property(TARGET bf2_swiffplayer_native PROPERTY FOLDER "BF2")
@@ -1405,9 +1432,9 @@ if(TRUE)
     # ordering rule as the two above: after SwiffPlayer, never concurrently.
     file(TO_NATIVE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/Code/Build/bf2audio.cmd" BF2_BF2AUDIO_SCRIPT)
     add_custom_target(bf2_bf2audio_native
-        COMMAND cmd.exe /d /c "${BF2_BF2AUDIO_SCRIPT}" native
+        COMMAND cmd.exe /d /c "${BF2_BF2AUDIO_SCRIPT}" ${BF2_PLUGIN_FLAVOUR}
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/Code/Build"
-        COMMENT "Building the native BF2Audio.dll (Code/Build/bf2audio.cmd native)"
+        COMMENT "Building the ${BF2_PLUGIN_FLAVOUR} BF2Audio.dll (Code/Build/bf2audio.cmd ${BF2_PLUGIN_FLAVOUR})"
         VERBATIM
     )
     set_property(TARGET bf2_bf2audio_native PROPERTY FOLDER "BF2")
@@ -1417,26 +1444,26 @@ endif()
 set(BF2_PLUGIN_STAGE_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/Code/Build/stage_plugin.cmake")
 add_custom_target(bf2_client_plugins
     COMMAND "${CMAKE_COMMAND}"
-            "-DBF2_PLUGIN_SRC=${CMAKE_CURRENT_SOURCE_DIR}/Code/Build/bin_renddx9_native/RendDX9.dll"
+            "-DBF2_PLUGIN_SRC=${CMAKE_CURRENT_SOURCE_DIR}/Code/Build/bin_renddx9_${BF2_PLUGIN_FLAVOUR}/RendDX9.dll"
             "-DBF2_PLUGIN_DST_DIR=${BF2_CLIENT_OUTPUT_DIR}"
-            "-DBF2_PLUGIN_HINT=build it with Code/Build/renddx9.cmd native"
+            "-DBF2_PLUGIN_HINT=build it with Code/Build/renddx9.cmd ${BF2_PLUGIN_FLAVOUR}"
             -P "${BF2_PLUGIN_STAGE_SCRIPT}"
     COMMAND "${CMAKE_COMMAND}"
-            "-DBF2_PLUGIN_SRC=${CMAKE_CURRENT_SOURCE_DIR}/Code/Build/bin_swiffplayer_native/SwiffPlayer.dll"
+            "-DBF2_PLUGIN_SRC=${CMAKE_CURRENT_SOURCE_DIR}/Code/Build/bin_swiffplayer_${BF2_PLUGIN_FLAVOUR}/SwiffPlayer.dll"
             "-DBF2_PLUGIN_DST_DIR=${BF2_CLIENT_OUTPUT_DIR}"
-            "-DBF2_PLUGIN_HINT=build it with Code/Build/swiffplayer.cmd native"
+            "-DBF2_PLUGIN_HINT=build it with Code/Build/swiffplayer.cmd ${BF2_PLUGIN_FLAVOUR}"
             -P "${BF2_PLUGIN_STAGE_SCRIPT}"
     COMMAND "${CMAKE_COMMAND}"
-            "-DBF2_PLUGIN_SRC=${CMAKE_CURRENT_SOURCE_DIR}/Code/Build/bin_bf2audio_native/BF2Audio.dll"
+            "-DBF2_PLUGIN_SRC=${CMAKE_CURRENT_SOURCE_DIR}/Code/Build/bin_bf2audio_${BF2_PLUGIN_FLAVOUR}/BF2Audio.dll"
             "-DBF2_PLUGIN_DST_DIR=${BF2_CLIENT_OUTPUT_DIR}"
-            "-DBF2_PLUGIN_HINT=build it with Code/Build/bf2audio.cmd native"
+            "-DBF2_PLUGIN_HINT=build it with Code/Build/bf2audio.cmd ${BF2_PLUGIN_FLAVOUR}"
             -P "${BF2_PLUGIN_STAGE_SCRIPT}"
     COMMAND "${CMAKE_COMMAND}"
-            "-DBF2_PLUGIN_SRC=${CMAKE_CURRENT_SOURCE_DIR}/Code/Build/bin_textureatlasbuilder_native/TextureAtlasBuilder.dll"
+            "-DBF2_PLUGIN_SRC=${CMAKE_CURRENT_SOURCE_DIR}/Code/Build/bin_textureatlasbuilder_${BF2_PLUGIN_FLAVOUR}/TextureAtlasBuilder.dll"
             "-DBF2_PLUGIN_DST_DIR=${BF2_CLIENT_OUTPUT_DIR}"
-            "-DBF2_PLUGIN_HINT=build it with Code/Build/textureatlasbuilder.cmd native"
+            "-DBF2_PLUGIN_HINT=build it with Code/Build/textureatlasbuilder.cmd ${BF2_PLUGIN_FLAVOUR}"
             -P "${BF2_PLUGIN_STAGE_SCRIPT}"
-    COMMENT "Staging the four native plugins beside the diagnostic BF2.exe"
+    COMMENT "Staging the four ${BF2_PLUGIN_FLAVOUR} plugins beside the diagnostic BF2.exe"
     VERBATIM
 )
 # Ordering AND obligation: all four plugin builds complete before anything is copied. This
@@ -1445,6 +1472,13 @@ add_custom_target(bf2_client_plugins
 # point where it hurts, which is a live debugging session.
 add_dependencies(bf2_client_plugins bf2_textureatlas_native bf2_renddx9_native bf2_swiffplayer_native bf2_bf2audio_native)
 add_dependencies(bf2_client bf2_client_plugins)
+# The subsystem version that keeps the classic (pre-6.0) window frame; see the link options below.
+# x64: 5.02, the lowest version link.exe accepts for an x64 image, on the same side of 6.0.
+if(BF2_BUILD_X64)
+    set(BF2_CLIENT_SUBSYSTEM "/SUBSYSTEM:WINDOWS,5.02")
+else()
+    set(BF2_CLIENT_SUBSYSTEM "/SUBSYSTEM:WINDOWS,5.01")
+endif()
 # System imports present in the retail BF2.exe. VoIP remains intentionally omitted.
 target_link_libraries(bf2_client PRIVATE
     advapi32 crypt32 dbghelp dinput8 dsound dxguid gdi32 ole32 psapi shell32 user32 winmm ws2_32
@@ -1473,7 +1507,7 @@ target_link_options(bf2_client PRIVATE
     # default subsystem version assumed" and silently falls back to 6.0, which is the bug. 5.01 is
     # the lowest value it accepts for x86. What governs the frame is the 6.0 boundary, so 5.01 and
     # retail's 4.0 behave identically here; the field itself still differs from the shipped image.
-    /SUBSYSTEM:WINDOWS,5.01
+    "${BF2_CLIENT_SUBSYSTEM}"
     /NODEFAULTLIB:python23.lib
     "/MAP:${BF2_CLIENT_OUTPUT_DIR}/BF2.map"
     /IGNORE:4006,4088,4098
@@ -1518,8 +1552,10 @@ endif()
 target_link_libraries(bf2_client_linkcheck PRIVATE
     advapi32 crypt32 dbghelp dinput8 dsound dxguid gdi32 ole32 psapi shell32 user32 winmm ws2_32
 )
-add_dependencies(bf2_client_linkcheck bf2_novint_imports)
-target_link_libraries(bf2_client_linkcheck PRIVATE "${BF2_NOVINT_IMPORT_LIB}")
+if(TARGET bf2_novint_imports)
+    add_dependencies(bf2_client_linkcheck bf2_novint_imports)
+    target_link_libraries(bf2_client_linkcheck PRIVATE "${BF2_NOVINT_IMPORT_LIB}")
+endif()
 target_link_options(bf2_client_linkcheck PRIVATE
     /FORCE:MULTIPLE
     /INCREMENTAL:NO
@@ -1528,10 +1564,10 @@ target_link_options(bf2_client_linkcheck PRIVATE
     /NODEFAULTLIB:python23.lib
 )
 
-# The BF2 Editor links the client object
-# set above, so it lives in this Windows-x86-only block. Every editor target is EXCLUDE_FROM_ALL.
+# The BF2 Editor links the client object set above, so it lives in this Windows client block
+# (x86 and native x64). Every editor target is EXCLUDE_FROM_ALL.
 add_subdirectory(Code/Tools/BF2Editor)
-endif()
+endif() # NOT BF2_BUILD_LINUX (client and editor)
 
 # =================================================================================================
 # RUNNING IT. ⚠⚠ THE WORKING DIRECTORY IS NOT A CONVENIENCE - IT IS THE ENGINE'S ROOT.

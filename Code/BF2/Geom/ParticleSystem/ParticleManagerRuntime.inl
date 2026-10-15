@@ -5,11 +5,11 @@
 template<class T> T& psmRuntimeField(void* object, unsigned int offset)
 { return *reinterpret_cast<T*>(static_cast<unsigned char*>(object) + offset); }
 
-vc71::set_layout& psmReclassification(ParticleSystemManager* self)
-{ return *reinterpret_cast<vc71::set_layout*>(self->m_pendingReclassificationTree); }
+std::set<IParticleSystemInstance*>& psmReclassification(ParticleSystemManager* self)
+{ return self->m_pendingReclassification; }
 
-void psmPush(ParticleSystemInstanceList& list, IParticleSystemInstance* instance)
-{ vc71::vectorRef<IParticleSystemInstance*>(&list).push_back(instance); }
+void psmPush(ParticleSystemInstanceVector& list, IParticleSystemInstance* instance)
+{ list.push_back(instance); }
 
 // The renderer Debug stream is still a named boundary on the shipped invalid-state assertions.
 // Valid scheduling does not pass through these sites. [FRONTIER]
@@ -22,14 +22,14 @@ void psmRuntimeError(ParticleSystemManager* self, const char* message)
 // Add first, then classify. A trail forcibly clears both first-person flags.
 void psmAddActive(ParticleSystemManager* self, IParticleSystemInstance* instance, bool firstPerson)
 {
-    if (psmRuntimeField<unsigned char>(instance, 4))
+    if (psmInstance<unsigned char>(instance, 4))
         psmRuntimeError(self, "dice::hfe::geom::ParticleSystemManager::addActiveInstance "
                              "(Debug: Trying to add instance twice)");
     if (instance->getEffectController())
         instance->getEffectController()->addNumEmittersPlaying();
-    psmRuntimeField<unsigned char>(instance, 4) = 1;
-    psmRuntimeField<unsigned char>(instance, 6) = firstPerson;
-    psmRuntimeField<unsigned char>(instance, 7) = firstPerson;
+    psmInstance<unsigned char>(instance, 4) = 1;
+    psmInstance<unsigned char>(instance, 6) = firstPerson;
+    psmInstance<unsigned char>(instance, 7) = firstPerson;
     const bool water = instance->getWaterSide();
     const int type = instance->reserved01();
     int bucket;
@@ -44,17 +44,17 @@ void psmAddActive(ParticleSystemManager* self, IParticleSystemInstance* instance
                              "(Debug: Invalid template type)");
         return;
     }
-    ParticleSystemInstanceList& list = self->m_renderBuckets[bucket];
+    ParticleSystemInstanceVector& list = self->m_renderBuckets[bucket];
     if (!firstPerson || type == 2)
-        for (IParticleSystemInstance** cursor = list.first; cursor != list.last; ++cursor)
+        for (ParticleSystemInstanceVector::iterator cursor = list.begin(); cursor != list.end(); ++cursor)
             if (*cursor == instance)
                 psmRuntimeError(self, "dice::hfe::geom::ParticleSystemManager::addActiveInstance "
                                      "(Debug: Blah already added)");
     psmPush(list, instance);
     if (type == 2)
     {
-        psmRuntimeField<unsigned char>(instance, 6) = 0;
-        psmRuntimeField<unsigned char>(instance, 7) = 0;
+        psmInstance<unsigned char>(instance, 6) = 0;
+        psmInstance<unsigned char>(instance, 7) = 0;
     }
 }
 
@@ -65,12 +65,13 @@ void psmQueueInactive(ParticleSystemManager* self, IParticleSystemInstance* inst
 // Pending-list end and selected bucket storage are reread after callbacks.
 void psmRemoveActive(ParticleSystemManager* self, bool preserveReclassification)
 {
-    for (IParticleSystemInstance** cursor = self->m_pendingClassification.first;
-         cursor != self->m_pendingClassification.last; ++cursor)
+    for (IParticleSystemInstance** cursor = self->m_pendingClassification.data();
+         cursor != self->m_pendingClassification.data() + self->m_pendingClassification.size();
+         ++cursor)
     {
         IParticleSystemInstance* const instance = *cursor;
         int bucket;
-        if (psmRuntimeField<unsigned char>(instance, 6))
+        if (psmInstance<unsigned char>(instance, 6))
         {
             switch (instance->reserved01())
             {
@@ -103,62 +104,62 @@ void psmRemoveActive(ParticleSystemManager* self, bool preserveReclassification)
             }
         }
         if (!preserveReclassification)
-            vc71::setEraseValue(psmReclassification(self), instance);
-        ParticleSystemInstanceList& list = self->m_renderBuckets[bucket];
+            psmReclassification(self).erase(instance);
+        ParticleSystemInstanceVector& list = self->m_renderBuckets[bucket];
         for (unsigned int i = 0; i < list.size(); ++i)
-            if (list.first[i] == instance)
+            if (list.data()[i] == instance)
             {
-                psmRuntimeField<unsigned char>(instance, 4) = 0;
+                psmInstance<unsigned char>(instance, 4) = 0;
                 if (instance->getEffectController())
                     instance->getEffectController()->decNumEmittersPlaying();
-                list.first[i] = list.last[-1];
-                if (list.size()) --list.last;
+                list.data()[i] = list.back();
+                if (list.size()) list.pop_back();
                 break;
             }
     }
-    self->m_pendingClassification.last = self->m_pendingClassification.first;
+    self->m_pendingClassification.clear();
 }
 
 // destroy only entries still present in the master list; duplicates are harmless.
 void psmDrainDestroy(ParticleSystemManager* self)
 {
-    for (IParticleSystemInstance** cursor = self->m_pendingDestroy.first;
-         cursor != self->m_pendingDestroy.last; ++cursor)
+    for (IParticleSystemInstance** cursor = self->m_pendingDestroy.data();
+         cursor != self->m_pendingDestroy.data() + self->m_pendingDestroy.size(); ++cursor)
     {
         IParticleSystemInstance* const instance = *cursor;
         for (unsigned int i = 0; i < self->m_instances.size(); ++i)
-            if (self->m_instances.first[i] == instance)
+            if (self->m_instances[i] == instance)
             {
-                self->m_instances.first[i] = self->m_instances.last[-1];
-                --self->m_instances.last;
+                self->m_instances[i] = self->m_instances.back();
+                self->m_instances.pop_back();
                 if (instance) instance->destroy();
                 break;
             }
     }
-    self->m_pendingDestroy.last = self->m_pendingDestroy.first;
+    self->m_pendingDestroy.clear();
 }
 
 void psmReclassify(ParticleSystemManager* self)
 {
-    vc71::set_layout& pending = psmReclassification(self);
-    for (vc71::set_node* n = pending.begin(); n != pending.end(); n = vc71::set_layout::next(n))
-        psmPush(self->m_pendingClassification, reinterpret_cast<IParticleSystemInstance*>(n->key));
+    std::set<IParticleSystemInstance*>& pending = psmReclassification(self);
+    for (std::set<IParticleSystemInstance*>::iterator n = pending.begin(); n != pending.end(); ++n)
+        psmPush(self->m_pendingClassification, *n);
     psmRemoveActive(self, true);
-    for (vc71::set_node* n = pending.begin(); n != pending.end(); n = vc71::set_layout::next(n))
+    for (std::set<IParticleSystemInstance*>::iterator n = pending.begin(); n != pending.end(); ++n)
     {
-        IParticleSystemInstance* const instance = reinterpret_cast<IParticleSystemInstance*>(n->key);
-        psmAddActive(self, instance, psmRuntimeField<unsigned char>(instance, 7) != 0);
+        IParticleSystemInstance* const instance = *n;
+        psmAddActive(self, instance, psmInstance<unsigned char>(instance, 7) != 0);
     }
     pending.clear();
 }
 
 // reverse snapshot traversal, reread storage per element, skip only byte +5.
-void psmUpdateBucket(ParticleSystemInstanceList& list, float dt)
+void psmUpdateBucket(ParticleSystemInstanceVector& list, float dt)
 {
     for (int i = static_cast<int>(list.size()) - 1; i >= 0; --i)
     {
-        IParticleSystemInstance* const instance = list.first[i];
-        if (!psmRuntimeField<unsigned char>(instance, 5)) instance->reserved41(dt);
+        IParticleSystemInstance* const instance = list.data()[i];
+        if (!psmInstance<unsigned char>(instance, 5)) instance->reserved41(dt);
     }
 }
 
@@ -200,8 +201,8 @@ double psmCoverage(IParticleSystemInstance* instance, const PsmViewContext& cont
     const float dx = p.x - data[69];
     const double dy = static_cast<double>(p.y) - data[70], dz = static_cast<double>(p.z) - data[71];
     const float distance = static_cast<float>(::sqrt(dz * dz + dy * dy + static_cast<double>(dx) * dx));
-    void* const descriptor = psmRuntimeField<void*>(instance, 0x2C);
-    const int lod = psmRuntimeField<int>(descriptor, lodOffset);
+    void* const descriptor = psmInstance<void*>(instance, 0x2C);
+    const int lod = psmDescriptor<int>(descriptor, lodOffset);
     ParticleSystemManager* const published = reinterpret_cast<ParticleSystemManager*>(g_ParticleSystemManager);
     const float nearDistance = published->m_nearDistances[lod];
     double nearCoverage = 1.0;
@@ -215,15 +216,15 @@ double psmCoverage(IParticleSystemInstance* instance, const PsmViewContext& cont
     return result > 1.0 ? 1.0 : result;
 }
 
-void psmPrepareBucket(ParticleSystemInstanceList& list, const PsmViewContext& context, int type)
+void psmPrepareBucket(ParticleSystemInstanceVector& list, const PsmViewContext& context, int type)
 {
-    IParticleSystemInstance** const end = list.last;
-    for (IParticleSystemInstance** cursor = list.first; cursor != end; ++cursor)
+    IParticleSystemInstance** const end = list.data() + list.size();
+    for (IParticleSystemInstance** cursor = list.data(); cursor != end; ++cursor)
         if ((*cursor)->reserved01() == type)
         {
             IParticleSystemInstance* const instance = *cursor;
             if (instance->reserved10() && instance->reserved05())
-                psmRuntimeField<float>(instance, type == 1 ? 0x12C : 0x134) = static_cast<float>(
+                psmInstance<float>(instance, type == 1 ? 0x12C : 0x134) = static_cast<float>(
                     psmCoverage(instance, context, type == 0 ? 0x64 : type == 4 ? 0x6C : 0x68));
         }
 }

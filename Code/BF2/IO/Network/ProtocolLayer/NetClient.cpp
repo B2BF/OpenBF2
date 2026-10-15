@@ -938,7 +938,9 @@ bool NetClient::startReceiveThread()
     m_thread = ::CreateThread(0, 0, &netClientThreadProc, this, 0, &threadId);
     if (m_thread)
     {
-        static_cast<Profiler*>(profiler)->registerThread(reinterpret_cast<unsigned int>(m_thread), threadId,
+        // The shipped signature takes the handle as a 32-bit value; its (empty) body ignores it, so
+        // the explicit narrowing on x64 loses nothing.
+        static_cast<Profiler*>(profiler)->registerThread(static_cast<unsigned int>(reinterpret_cast<uintptr_t>(m_thread)), threadId,
                                                          std::string("NetClientThread"));   // 4594F0 on the Profiler singleton
         return true;
     }

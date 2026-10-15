@@ -4,7 +4,21 @@
 #define BFMEME_OBJECT_H
 #include "../../Core/BuildConfig.h"
 #if !DEDICATED
+#include <cstdint>
+#include <type_traits>
 namespace dice { namespace meme {
+// Font and texture handles carry the Font* / IMemeTexture* that the menu System returns, so
+// they are pointer-sized. MSVC x86 defines intptr_t as int: retail layouts and x86 signatures
+// are unchanged. [CHOSEN, not recovered] x64 port, issue #7.
+typedef std::intptr_t FontHandle;
+typedef std::intptr_t TextureHandle;
+#if defined(_M_IX86)
+static_assert(std::is_same<FontHandle, int>::value && std::is_same<TextureHandle, int>::value,
+              "x86 meme handles keep the retail int type");
+static_assert(std::is_same<std::uintptr_t, std::uint32_t>::value,
+              "x86 unsigned handle words keep the retail uint32_t type");
+#endif
+
 class TypeDescriptor;
 class System;
 class Stream; // [INFERRED] common stream/visitor identity, not Object-derived.

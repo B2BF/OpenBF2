@@ -5,12 +5,11 @@
 
 #include "../../RendDX9Abi/PluginAbi.h"
 
-#if BF2_PLUGIN_ABI_NATIVE
 
 #include "SkyDome.h"
 
 #include "../../RendDX9Abi/HfeAbi.h"
-#include "../../RendDX9Abi/Vc71String.h"
+#include <string>
 #include "../Core/ConsoleObjectMacro.h"
 #include "../Core/ConsoleObjects.h"
 #include "../Math/Vec3.h"
@@ -33,16 +32,15 @@ inline SkyDome* skyDome()
     return static_cast<SkyDome*>(g_SkyDome);
 }
 
-// The console boundary is the only place a string changes representation: the host console speaks
-// this toolchain's std::string, the object keeps the 28-byte VC7.1 one.
-inline std::string toConsole(const vc71::string& value)
+// The console boundary copies the object's string for the host console (both are std::string).
+inline std::string toConsole(const std::string& value)
 {
     return std::string(value.c_str());
 }
 
-inline vc71::string toRetail(const std::string& value)
+inline std::string toRetail(const std::string& value)
 {
-    return vc71::string(value.c_str());
+    return std::string(value.c_str());
 }
 
 // Small named adapters keep the generated bindings readable.  The retail slot each one used to
@@ -195,5 +193,4 @@ bool unregisterSkyDomeConsoleObjects()
 } // namespace hfe
 } // namespace dice
 
-#endif // BF2_PLUGIN_ABI_NATIVE
 #endif // BF2_IMAGE_RENDDX9

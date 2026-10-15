@@ -5,6 +5,7 @@
 #include "OverGrowthCell.h"                  // overGrowthBaseUpdateCells (1015EEB0)
 #include "../GeometryInstanceData.h"          // 100C88A0's +0x28 / +0x2C and the +0xF4 opacity slot
 #include "../MeshTemplate.h"                  // IGeometryTemplate::createInstance (+0x24), MeshBounds
+#include "../StaticMesh.h"                    // StaticMesh::m_float25C - the instance's shadow value
 #include "../StaticMeshTemplate.h"            // the template bounds the shadow walk reads at +0xFC
 #include "../Terrain.h"                       // terrainFrustumIntersectsBox - sub_101C7980
 #include "../XpLightManager.h"                // g_LightManager's type
@@ -15,21 +16,12 @@
 #include "../../Math/Vec3.h"
 #include "../../RendMisc/IRenderView.h"
 #include "../../RendDX9/RendDX9Base.h"        // RendDX9Base (+0x514..+0x516), rendererFrameOrdinal
-#include "../../../RendDX9Abi/Vc71String.h"
-#include "../../../RendDX9Abi/Vc71Vector.h"
+#include <string>
 
 // The ONE host (BF2.exe) call of the draw half: IObjectTemplate::getCullRadiusScale on the object
 // template a draw type keeps at +0x80. Included the way XpLightManager.cpp includes its host
 // interfaces: the retail-ABI flavour takes HfeAbi's IBase / ClassManager carriers.
-#if !BF2_PLUGIN_ABI_NATIVE
-#define CORE_IBASE_H
-#define CORE_CLASSMANAGER_H
-#endif
 #include "../../Game/Objects/IObjectTemplate.h"
-#if !BF2_PLUGIN_ABI_NATIVE
-#undef CORE_CLASSMANAGER_H
-#undef CORE_IBASE_H
-#endif
 
 #include <cfloat>
 #include <cmath>
@@ -51,33 +43,17 @@ extern LightManager* g_LightManager;   // dword_1024B914 - ModuleGeom.cpp
 
 namespace {
 
-template<class T> T& field(void* object, unsigned int offset)
-{ return *reinterpret_cast<T*>(static_cast<unsigned char*>(object) + offset); }
-template<class T> const T& field(const void* object, unsigned int offset)
-{ return *reinterpret_cast<const T*>(static_cast<const unsigned char*>(object) + offset); }
 
+// The vegetation draw records (OverGrowth.h): each draw type (geometry pair) holds the LOD and main
+// geometry pools; geometries borrow instance transforms. Instance draw-type indices are unchecked.
+// Patch bounds are finalized before culling.
 
-// [INFERRED] names for the vegetation draw records whose strides are fixed below.
-// Each draw type contains LOD and main geometry pools; geometries borrow instance transforms.
-// Instance draw-type indices are unchecked. Patch bounds are finalized before culling.
-
-
-const unsigned int kDrawTypeSize     = 0xA0;
-const unsigned int kPatchSize        = 0x98;
-const int          kInstanceSize     = 0x60;   // 100CA6E0 / 100CAA05 (magic 0x2AAAAAAB, sar 4)
-const unsigned int kShadowRecordSize = 0x498;  // 100CB5E8, 101617A2 (LightManager +0x79C records)
 
 // byte_102390C0 - file-backed 1 in .data with exactly ONE reference in the image, the read at
 // 0x100CA70E, and no writer: the +0x58 skip below can never fire in retail. Kept mutable so the load
 // happens at each instance, as shipped (the g_transparencyAARenderBracketsEnabled pattern).
 // [INFERRED] name.
 unsigned char g_overGrowthDrawObjectInstances = 1;
-
-inline unsigned int vectorCount(const unsigned char* first, const unsigned char* last, int stride)
-{
-    // VC7.1 size(): a signed byte span divided by the element size, then compared unsigned (`jnb`).
-    return static_cast<unsigned int>((last - first) / stride);
-}
 
 inline const Vec3& translationOf(const Mat4& transform)
 {
@@ -94,59 +70,59 @@ inline const Vec3& translationOf(const Mat4& transform)
 
 inline void* geometrySlot(void* geometry, unsigned int offset)
 {
-    return (*reinterpret_cast<void***>(geometry))[offset / sizeof(void*)];
+    return (*reinterpret_cast<void***>(geometry))[offset / 4];
 }
 
 // +0x18 draw(renderView, occluder, flag), `retn 0Ch` (StaticMesh 0x100FF510). The OverGrowth draw
 // always passes (view, 0, 1): 100CA974..100CA981 and 100CA9EC..100CA9F9.
 inline void geometryDraw(void* geometry, IRenderView* view)
 {
-    typedef void (__fastcall* DrawFn)(void*, void*, void*, void*, int);
-    reinterpret_cast<DrawFn>(geometrySlot(geometry, 0x18))(geometry, 0, view, 0, 1);
+    typedef void (__thiscall* DrawFn)(void*, void*, void*, int);
+    reinterpret_cast<DrawFn>(geometrySlot(geometry, 0x18))(geometry, view, 0, 1);
 }
 
 // +0x24 - the shadow record this geometry receives from (StaticMesh +0x34C), one argument.
 inline void geometryAttachShadowRecord(void* geometry, void* record)
 {
-    typedef void (__fastcall* AttachFn)(void*, void*, void*);
-    reinterpret_cast<AttachFn>(geometrySlot(geometry, 0x24))(geometry, 0, record);
+    typedef void (__thiscall* AttachFn)(void*, void*);
+    reinterpret_cast<AttachFn>(geometrySlot(geometry, 0x24))(geometry, record);
 }
 
 // +0x40 getLocalBounds - the selected lod's box (StaticMesh lod record + 4).
 inline const LocalBoundingBox& geometryLocalBounds(void* geometry)
 {
-    typedef const void* (__fastcall* BoundsFn)(void*, void*);
+    typedef const void* (__thiscall* BoundsFn)(void*);
     return *static_cast<const LocalBoundingBox*>(
-        reinterpret_cast<BoundsFn>(geometrySlot(geometry, 0x40))(geometry, 0));
+        reinterpret_cast<BoundsFn>(geometrySlot(geometry, 0x40))(geometry));
 }
 
 // +0x44 getBoundingRadius, float in ST0 (StaticMesh it finalises the lod bounds first,
 // so the call is NOT side-effect free and every shipped repetition is kept).
 inline float geometryBoundingRadius(void* geometry)
 {
-    typedef float (__fastcall* RadiusFn)(void*, void*);
-    return reinterpret_cast<RadiusFn>(geometrySlot(geometry, 0x44))(geometry, 0);
+    typedef float (__thiscall* RadiusFn)(void*);
+    return reinterpret_cast<RadiusFn>(geometrySlot(geometry, 0x44))(geometry);
 }
 
 // +0x48 getGeometryTransformation (StaticMesh the stored pointer or the shared identity).
 inline const Mat4* geometryTransformation(void* geometry)
 {
-    typedef const Mat4* (__fastcall* TransformFn)(void*, void*);
-    return reinterpret_cast<TransformFn>(geometrySlot(geometry, 0x48))(geometry, 0);
+    typedef const Mat4* (__thiscall* TransformFn)(void*);
+    return reinterpret_cast<TransformFn>(geometrySlot(geometry, 0x48))(geometry);
 }
 
 // +0x50 setGeometryTransformation - stores the pointer (StaticMesh 0x100FF2B0), one argument.
 inline void geometrySetTransformation(void* geometry, const Mat4* transform)
 {
-    typedef void (__fastcall* SetTransformFn)(void*, void*, const Mat4*);
-    reinterpret_cast<SetTransformFn>(geometrySlot(geometry, 0x50))(geometry, 0, transform);
+    typedef void (__thiscall* SetTransformFn)(void*, const Mat4*);
+    reinterpret_cast<SetTransformFn>(geometrySlot(geometry, 0x50))(geometry, transform);
 }
 
 // +0xAC - the shadow-caster frame stamp (StaticMesh +0x350), one argument: renderer +0x54.
 inline void geometryStampShadowFrame(void* geometry, unsigned int frameOrdinal)
 {
-    typedef void (__fastcall* StampFn)(void*, void*, unsigned int);
-    reinterpret_cast<StampFn>(geometrySlot(geometry, 0xAC))(geometry, 0, frameOrdinal);
+    typedef void (__thiscall* StampFn)(void*, unsigned int);
+    reinterpret_cast<StampFn>(geometrySlot(geometry, 0xAC))(geometry, frameOrdinal);
 }
 
 
@@ -216,11 +192,7 @@ bool isMultisampleActive()
         return true;
     if (base->disableMultisample)
         return false;
-    const unsigned int* const first = base->multiSampleFirst;
-    const unsigned int* const last  = base->multiSampleLast;
-    if (first && ((last - first) >> 1))
-        return *reinterpret_cast<const int*>(first) > 0;
-    return false;
+    return dx9rend::multiSampleListActive(base);
 }
 
 // The render's alpha-to-coverage doubling, 100CA929..100CA950 and the predicate is
@@ -411,10 +383,9 @@ static_assert(sizeof(BoxCorners) == 0x60, "the eight-corner box is 96 bytes (0x1
 static_assert(sizeof(LocalBoundingBox) == 0x3C, "the patch bounds run +0x5C..+0x97");
 static_assert(sizeof(Frustum) == 0x1E8, "a shadow record's frustum sits at +0x10 of 0x498 bytes");
 static_assert(sizeof(Mat4) == 0x40, "an instance's transform runs +0x04..+0x43");
-static_assert(offsetof(StaticMeshTemplate, m_bounds) == 0xFC,
-              "the shadow walk reads the pool template's bounds at +0xFC (100CB5A7)");
-static_assert(sizeof(MeshBounds) == sizeof(LocalBoundingBox), "MeshBounds is LocalBoundingBox");
 #endif
+// The patch and template bounds are read as LocalBoundingBox: every architecture.
+static_assert(sizeof(MeshBounds) == sizeof(LocalBoundingBox), "MeshBounds is LocalBoundingBox");
 
 // PE 0x101C6A90 (433 B), read in full - the box against a frustum's six planes (thiscall on the box,
 // `retn 4`): false as soon as one plane has ALL eight corners strictly in front of it (distance > 0,
@@ -506,10 +477,10 @@ void shiftShadowFrustumTowardLight(Frustum& frustum, float distance)
     frustum.transform(transformation);
 }
 
-void lightManagerAttachShadowReceiver(void* manager, void* geometry)
+void lightManagerAttachShadowReceiver(LightManager* manager, void* geometry)
 {
-    Frustum shadowFrustum(field<Frustum>(manager, 0x278));                  // [ebp-0x274]
-    shiftShadowFrustumTowardLight(shadowFrustum, field<float>(manager, 0x16C));
+    Frustum shadowFrustum(lightManagerShadowFrustum(manager));              // +0x278, [ebp-0x274]
+    shiftShadowFrustumTowardLight(shadowFrustum, lightManagerShadowPullbackDistance(manager));   // +0x16C
     {
         const Mat4* const transform = geometryTransformation(geometry);    // +0x48
         const float radius = geometryBoundingRadius(geometry);             // +0x44
@@ -517,11 +488,12 @@ void lightManagerAttachShadowReceiver(void* manager, void* geometry)
             return;
     }
 
-    for (unsigned char* record = field<unsigned char*>(manager, 0x7A0);
-         record != field<unsigned char*>(manager, 0x7A4); record += kShadowRecordSize)
+    std::vector<LightShadowRecord>& records = lightManagerShadowRecords(manager);   // +0x79C
+    for (LightShadowRecord* record = records.data();
+         record != records.data() + records.size(); ++record)
     {
-        Frustum recordFrustum(*reinterpret_cast<const Frustum*>(record + 0x10));   // [ebp-0x45C]
-        shiftShadowFrustumTowardLight(recordFrustum, field<float>(manager, 0x16C));
+        Frustum recordFrustum(record->frustum);                             // [ebp-0x45C]
+        shiftShadowFrustumTowardLight(recordFrustum, lightManagerShadowPullbackDistance(manager));
         const Mat4* const transform = geometryTransformation(geometry);    // +0x48, again
         const float radius = geometryBoundingRadius(geometry);             // +0x44, again
         if (recordFrustum.inside(translationOf(*transform), radius))
@@ -536,17 +508,14 @@ void lightManagerAttachShadowReceiver(void* manager, void* geometry)
 
 // PE 0x1015E9E0 (83 B), read in full - a member of the unpublished base (thiscall on the OverGrowth):
 // every draw type's two pools start the frame with nothing handed out - +0x38 (the "_lod" pool) and
-// +0x88 (the main pool's +0x38) zeroed, type by type, the type vector's first re-read for each store.
+// +0x88 (the main pool's +0x38) zeroed, type by type, the type vector re-read for each store.
 // Its one caller is render (0x100CA5E4). [INFERRED] name.
-void resetGeometryPools(void* self)
+void resetGeometryPools(OverGrowth* self)
 {
-    for (unsigned int index = 0; ; ++index)
+    for (unsigned int index = 0; index < self->m_geometries.size(); ++index)
     {
-        const unsigned char* const first = field<unsigned char*>(self, 0x50);
-        if (!first || index >= vectorCount(first, field<unsigned char*>(self, 0x54), kDrawTypeSize))
-            break;
-        field<unsigned int>(field<unsigned char*>(self, 0x50) + index * kDrawTypeSize, 0x38) = 0;
-        field<unsigned int>(field<unsigned char*>(self, 0x50) + index * kDrawTypeSize, 0x88) = 0;
+        self->m_geometries[index].lod.poolUsed = 0;
+        self->m_geometries[index].full.poolUsed = 0;
     }
 }
 
@@ -554,26 +523,30 @@ void resetGeometryPools(void* self)
 // for this instance. When every geometry the pool owns is already out (`cmp [esi+38h], eax; jnz` - an
 // equality test against the vector's size, `sar 2`) the pool's template creates one more (+0x24,
 // IGeometryTemplate::createInstance - no null test on the result) and it is pushed (0x1009ACE0, the
-// VC7.1 push_back); then the geometry at +0x38 is taken, +0x38 advances, and the geometry is handed
+// push_back); then the geometry at +0x38 is taken, +0x38 advances, and the geometry is handed
 // the address of the instance's transform (+0x50 with instance + 4). Callers: render (twice) and the
 // shadow walk. [INFERRED] name.
-void* acquireGeometry(unsigned char* pool, unsigned char* instance)
+void* acquireGeometry(OverGrowthGeometryRecord* pool, OverGrowthInstance* instance)
 {
-    vc71::vector_layout& geometries = field<vc71::vector_layout>(pool, 0x3C);
-    const unsigned int owned = geometries.first
-        ? static_cast<unsigned int>((geometries.last - geometries.first) >> 2) : 0u;
-    if (field<unsigned int>(pool, 0x38) == owned)
+    std::vector<void*>& geometries = pool->pool;
+    const unsigned int owned = static_cast<unsigned int>(geometries.size());
+    if (pool->poolUsed == owned)
     {
-        void* created = field<IGeometryTemplate*>(pool, 0x34)->createInstance();   // +0x24
-        // [CHOSEN, not recovered] growth policy: vc71::vectorPushBackIn (RW-74) stands in for the
-        // shipped _Insert_n (0x1009A340); first/last/end, the element and the engine heap are shipped.
-        vc71::vectorPushBackIn(geometries, sizeof(void*), &created);
+        void* created = pool->geometryTemplate->createInstance();              // +0x24
+        geometries.push_back(created);
     }
-    const unsigned int used = field<unsigned int>(pool, 0x38);
-    field<unsigned int>(pool, 0x38) = used + 1;
-    void* const geometry = reinterpret_cast<void**>(geometries.first)[used];
-    geometrySetTransformation(geometry, &field<Mat4>(instance, 0x04));      // +0x50
+    const unsigned int used = pool->poolUsed;
+    pool->poolUsed = used + 1;
+    void* const geometry = geometries[used];
+    geometrySetTransformation(geometry, &instance->transform);              // +0x50
     return geometry;
+}
+
+// StaticMesh +0x25C - the vegetation shadow value the draw hands each geometry (the instance's +0x54,
+// stored as its bits). The pools' geometries are StaticMesh instances.
+inline void geometrySetShadowValue(void* geometry, const OverGrowthInstance* instance)
+{
+    static_cast<StaticMesh*>(static_cast<GeometryInstanceData*>(geometry))->m_float25C = instance->shadow;
 }
 
 
@@ -584,9 +557,9 @@ void* acquireGeometry(unsigned char* pool, unsigned char* instance)
 
 inline bool objectDrawerOccludes(IBase* drawer, void* geometry)
 {
-    typedef bool (__fastcall* OccludedFn)(void*, void*, void*);
+    typedef bool (__thiscall* OccludedFn)(void*, void*);
     void** const table = *reinterpret_cast<void***>(drawer);
-    return reinterpret_cast<OccludedFn>(table[0x38 / sizeof(void*)])(drawer, 0, geometry);
+    return reinterpret_cast<OccludedFn>(table[0x38 / 4])(drawer, geometry);
 }
 
 // The host call. IObjectTemplate::getCullRadiusScale - MSVC slot 28 = +0x70 in this tree's table
@@ -608,62 +581,56 @@ inline float objectTemplateCullRadiusScale(const void* objectTemplate)
 // registered as a directional-shadow receiver.
 void OverGrowth::render(IRenderView* view, float time)
 {
-    if (field<vc71::string>(this, 0x88).empty())
+    if (m_path.empty())
         return;
-    if (field<unsigned char>(this, 0xD5))
+    if (m_updateBeforeRender)
         OverGrowth::update(view);                                           // 100CA5A2, direct
     else
         overGrowthBaseUpdateCells(this, view);                              // 100CA5AE, direct
-    if (!field<unsigned char>(this, 0x1C))
+    if (!m_enabled)
         return;
-    if (!field<void*>(this, 0xE0))
+    if (!m_patches)
         return;
-    if (!field<unsigned char>(this, 0xD4))
+    if (!m_drawNear)
         return;
 
     (void)view->getViewMatrixPtr();                                         // 100CA5DF +0x64, discarded
     resetGeometryPools(this);
     (void)view->getFrustumPtr();                                            // 100CA5ED +0x74, discarded
 
-    for (int row = 0; row < field<int>(this, 0x10); ++row)
+    for (int row = 0; row < m_gridSize; ++row)
     {
-        for (int column = 0; column < field<int>(this, 0x10); ++column)
+        for (int column = 0; column < m_gridSize; ++column)
         {
-            unsigned char* const cell =
-                field<unsigned char**>(this, 0xE4)[column + row * field<int>(this, 0x10)];
-            const int patchesX = field<int>(this, 0xD8);
-            const int patchesZ = field<int>(this, 0xDC);
-            const int x = patchesX / 2 + field<int>(cell, 0x5C);
-            const int z = patchesZ / 2 + field<int>(cell, 0x60);
+            const OverGrowthCell* const cell = m_cells[column + row * m_gridSize];
+            const int patchesX = m_patchCountX;
+            const int patchesZ = m_patchCountZ;
+            const int x = patchesX / 2 + cell->cellX;
+            const int z = patchesZ / 2 + cell->cellZ;
             if (x < 0 || z < 0 || x >= patchesX || z >= patchesZ)
                 continue;
-            unsigned char* const patch =
-                field<unsigned char*>(this, 0xE0) + kPatchSize * (x + z * patchesX);
-            const float reach = (field<float>(this, 0xCC) + 1.0f) * field<float>(this, 0xC4);
-            if (!field<LocalBoundingBox>(patch, 0x5C).intersectSphere(field<Vec3>(this, 0x04), reach))
+            OverGrowthPatch* const patch = m_patches + (x + z * patchesX);
+            const float reach = (m_closeDistFade + 1.0f) * m_closeDistance;
+            if (!reinterpret_cast<const LocalBoundingBox&>(patch->bounds).intersectSphere(
+                    m_cameraPosition, reach))
                 continue;
 
-            for (unsigned int index = 0; ; ++index)
+            for (unsigned int index = 0; index < patch->instances.size(); ++index)
             {
-                const unsigned char* const first = field<unsigned char*>(patch, 0x10);
-                if (!first || index >= vectorCount(first, field<unsigned char*>(patch, 0x14), kInstanceSize))
-                    break;
-                unsigned char* const instance = field<unsigned char*>(patch, 0x10) + index * kInstanceSize;
-                unsigned char* const type =
-                    field<unsigned char*>(this, 0x50)
-                    + field<int>(instance, 0x00) * static_cast<int>(kDrawTypeSize);
-                if (!g_overGrowthDrawObjectInstances && field<unsigned char>(instance, 0x58))
+                OverGrowthInstance* const instance = &patch->instances[index];
+                OverGrowthGeometryPair* const type = m_geometries.data() + instance->geometryIndex;
+                if (!g_overGrowthDrawObjectInstances && instance->generated)
                     continue;
 
                 const float drawRadius =
-                    objectTemplateCullRadiusScale(field<const void*>(type, 0x80)) * field<float>(instance, 0x48)
-                    + field<float>(this, 0x28) * field<float>(this, 0xC4) * field<float>(type, 0x9C);
-                const float ratio = distanceSquared(field<Vec3>(instance, 0x34), field<Vec3>(this, 0x04))
+                    objectTemplateCullRadiusScale(type->full.objectTemplate) * instance->cullRadius
+                    + m_viewDistanceScale * m_closeDistance * type->full.distanceScale;
+                const float ratio = distanceSquared(translationOf(instance->transform), m_cameraPosition)
                                   / (drawRadius * drawRadius);
                 if (!(ratio < 1.0f))                                        // `test ah,5; jp`
                     continue;
 
-                void* const geometry = acquireGeometry(type + 0x50, instance);
+                void* const geometry = acquireGeometry(&type->full, instance);
                 {
                     const Mat4* const transform = geometryTransformation(geometry);  // +0x48
                     const float radius = geometryBoundingRadius(geometry);           // +0x44
@@ -684,16 +651,16 @@ void OverGrowth::render(IRenderView* view, float time)
                 }
                 if (objectDrawerOccludes(dx9rend::g_ObjectDrawer, geometry))
                     continue;
-                lightManagerAttachShadowReceiver(static_cast<void*>(g_LightManager), geometry);
+                lightManagerAttachShadowReceiver(g_LightManager, geometry);
 
-                float fade = clampFloat((1.0f - std::sqrt(ratio)) / field<float>(this, 0xCC)
-                                        * std::sqrt(field<float>(type, 0x9C)), 0.0f, 1.0f);
-                if (field<float>(this, 0xF8) > 0.0f)                         // 100CA83B `test ah,41h`
+                float fade = clampFloat((1.0f - std::sqrt(ratio)) / m_closeDistFade
+                                        * std::sqrt(type->full.distanceScale), 0.0f, 1.0f);
+                if (m_lodTimer > 0.0f)                                       // 100CA83B `test ah,41h`
                 {
                     if (fade < 1.0f)                                         // 100CA852 `test ah,5; jp`
                     {
-                        const float rate = 1.0f / field<float>(this, 0xF8);
-                        float& state = field<float>(instance, 0x5C);
+                        const float rate = 1.0f / m_lodTimer;
+                        float& state = instance->lodFadeState;
                         if (fade > 0.5f)                                    // 100CA876 `test ah,41h`
                             state = maxFloat(0.0f, minFloat(state - rate * time, 2.0f - (fade + fade)));
                         else
@@ -701,18 +668,18 @@ void OverGrowth::render(IRenderView* view, float time)
                     }
                     else
                     {
-                        field<float>(instance, 0x5C) = 0.0f;
+                        instance->lodFadeState = 0.0f;
                     }
-                    fade = 1.0f - field<float>(instance, 0x5C);
+                    fade = 1.0f - instance->lodFadeState;
                 }
 
-                if (field<void*>(type, 0x1C) && fade < 1.0f)
+                if (type->lod.geometry && fade < 1.0f)
                 {
                     const float alpha = alphaToCoverageAdjusted(
                         clampFloat((1.0f - fade) + (1.0f - fade), 0.0f, 1.0f));
-                    void* const lodGeometry = acquireGeometry(type, instance);
+                    void* const lodGeometry = acquireGeometry(&type->lod, instance);
                     geometrySetDistanceFade(lodGeometry, alpha);
-                    field<unsigned int>(lodGeometry, 0x25C) = field<unsigned int>(instance, 0x54);
+                    geometrySetShadowValue(lodGeometry, instance);
                     geometryDraw(lodGeometry, view);                                   // +0x18
                 }
                 if (fade > 0.0f)                                             // 100CA984 `test ah,41h`
@@ -720,7 +687,7 @@ void OverGrowth::render(IRenderView* view, float time)
                     const float alpha = alphaToCoverageAdjusted(
                         clampFloat(fade + fade, 0.0f, 1.0f));
                     geometrySetDistanceFade(geometry, alpha);
-                    field<unsigned int>(geometry, 0x25C) = field<unsigned int>(instance, 0x54);
+                    geometrySetShadowValue(geometry, instance);
                     geometryDraw(geometry, view);                                      // +0x18
                 }
             }
@@ -733,62 +700,54 @@ void OverGrowth::render(IRenderView* view, float time)
 // Uses LOD geometry when available. Pool cursors are shared with drawing and reset only by
 // render, so this pass must run before the frame's vegetation draw resets those cursors.
 
-void OverGrowth::collectShadowGeometry(OverGrowthShadowVolumes* records, OverGrowthShadowBounds* bounds,
-                                       OverGrowthShadowState* state, OverGrowthGeometryVector* geometries)
+void OverGrowth::collectShadowGeometry(const std::vector<LightShadowRecord>* records,
+                                       const Frustum* lightFrustum, Frustum* casterFrustumPointer,
+                                       std::vector<void*>* geometries)
 {
-    if (!field<unsigned char>(this, 0x1C))
+    if (!m_enabled)
         return;
-    if (!field<void*>(this, 0xE0))
+    if (!m_patches)
         return;
-    if (!field<unsigned char>(this, 0xD4))
+    if (!m_drawNear)
         return;
-    vc71::vector_layout* const shadowRecords = reinterpret_cast<vc71::vector_layout*>(records);
-    if (!shadowRecords->first
-        || (shadowRecords->last - shadowRecords->first) / static_cast<int>(kShadowRecordSize) == 0)
+    const std::vector<LightShadowRecord>& shadowRecords = *records;
+    if (shadowRecords.size() == 0)
         return;
-    if (field<int>(this, 0x10) <= 0)
+    if (m_gridSize <= 0)
         return;
 
-    const Frustum* const lightFrustum = reinterpret_cast<const Frustum*>(bounds);
-    Frustum& casterFrustum = *reinterpret_cast<Frustum*>(state);
-    vc71::vector_layout& output = *reinterpret_cast<vc71::vector_layout*>(geometries);
+    Frustum& casterFrustum = *casterFrustumPointer;
+    std::vector<void*>& output = *geometries;
 
-    for (int row = 0; row < field<int>(this, 0x10); ++row)
+    for (int row = 0; row < m_gridSize; ++row)
     {
-        for (int column = 0; column < field<int>(this, 0x10); ++column)
+        for (int column = 0; column < m_gridSize; ++column)
         {
-            unsigned char* const cell =
-                field<unsigned char**>(this, 0xE4)[column + row * field<int>(this, 0x10)];
-            const int patchesX = field<int>(this, 0xD8);
-            const int patchesZ = field<int>(this, 0xDC);
-            const int x = patchesX / 2 + field<int>(cell, 0x5C);
-            const int z = patchesZ / 2 + field<int>(cell, 0x60);
+            const OverGrowthCell* const cell = m_cells[column + row * m_gridSize];
+            const int patchesX = m_patchCountX;
+            const int patchesZ = m_patchCountZ;
+            const int x = patchesX / 2 + cell->cellX;
+            const int z = patchesZ / 2 + cell->cellZ;
             if (x < 0 || z < 0 || x >= patchesX || z >= patchesZ)
                 continue;
-            unsigned char* const patch =
-                field<unsigned char*>(this, 0xE0) + kPatchSize * (x + z * patchesX);
-            if (!terrainFrustumIntersectsBox(lightFrustum, &field<float>(patch, 0x5C)))
+            OverGrowthPatch* const patch = m_patches + (x + z * patchesX);
+            if (!terrainFrustumIntersectsBox(lightFrustum, &patch->bounds.min.x))
                 continue;
 
-            for (unsigned int index = 0; ; ++index)
+            for (unsigned int index = 0; index < patch->instances.size(); ++index)
             {
-                const unsigned char* const first = field<unsigned char*>(patch, 0x10);
-                if (!first || index >= vectorCount(first, field<unsigned char*>(patch, 0x14), kInstanceSize))
-                    break;
-                unsigned char* const instance = field<unsigned char*>(patch, 0x10) + index * kInstanceSize;
-                unsigned char* const type =
-                    field<unsigned char*>(this, 0x50)
-                    + field<int>(instance, 0x00) * static_cast<int>(kDrawTypeSize);
-                const void* const lodTemplate = field<void*>(type, 0x34);
-                const BoxCorners box(field<LocalBoundingBox>(lodTemplate, 0xFC),
-                                     field<Mat4>(instance, 0x04));
+                OverGrowthInstance* const instance = &patch->instances[index];
+                OverGrowthGeometryPair* const type = m_geometries.data() + instance->geometryIndex;
+                const StaticMeshTemplate* const lodTemplate =
+                    static_cast<const StaticMeshTemplate*>(type->lod.geometryTemplate);
+                const BoxCorners box(reinterpret_cast<const LocalBoundingBox&>(lodTemplate->m_bounds),
+                                     instance->transform);
 
                 bool held = false;
-                for (unsigned char* record = reinterpret_cast<unsigned char*>(shadowRecords->first);
-                     record != reinterpret_cast<unsigned char*>(shadowRecords->last);
-                     record += kShadowRecordSize)
+                for (const LightShadowRecord* record = shadowRecords.data();
+                     record != shadowRecords.data() + shadowRecords.size(); ++record)
                 {
-                    if (boxCornersInsideFrustum(box, *reinterpret_cast<const Frustum*>(record + 0x10)))
+                    if (boxCornersInsideFrustum(box, record->frustum))
                     {
                         held = true;
                         break;
@@ -797,10 +756,9 @@ void OverGrowth::collectShadowGeometry(OverGrowthShadowVolumes* records, OverGro
                 if (!held)
                     continue;
 
-                unsigned char* const pool = field<void*>(type, 0x1C) ? type : type + 0x50;
+                OverGrowthGeometryRecord* const pool = type->lod.geometry ? &type->lod : &type->full;
                 void* geometry = acquireGeometry(pool, instance);
-                // [CHOSEN, not recovered] growth policy: see acquireGeometry (0x1009A340 stand-in).
-                vc71::vectorPushBackIn(output, sizeof(void*), &geometry);
+                output.push_back(geometry);                                 // 0x1009A340
                 fitShadowFrustumNearPlane(casterFrustum, box.corner);
             }
         }

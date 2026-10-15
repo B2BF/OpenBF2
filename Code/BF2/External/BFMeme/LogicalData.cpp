@@ -48,7 +48,9 @@ int LogicalData::getCharacter(System* system, int character)
     return (value ? "true" : "false")[character];
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(LogicalData) == 16, "client BFMeme LogicalData");
 static_assert(sizeof(ClassTypeDescriptor<LogicalData, Data>) == 16, "LogicalData metadata");
+#endif
 } }
 #endif

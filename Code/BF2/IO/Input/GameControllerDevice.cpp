@@ -364,10 +364,16 @@ bool GameControllerDevice::init(int index)
     return true;
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(GameControllerDevice) == 0xBC, "BF2 client GameControllerDevice layout");
+#endif
 static_assert(sizeof(DIDEVCAPS) == 44, "Retail DirectInput capabilities size");
 static_assert(sizeof(DIJOYSTATE2) == 272, "Retail joystick2 data format");
+// GetDeviceData is passed sizeof(DIDEVICEOBJECTDATA) and a typed array, so the x64 stride
+// (24 bytes, UINT_PTR uAppData) needs no adjustment.
+#if defined(_M_IX86)
 static_assert(sizeof(DIDEVICEOBJECTDATA) == 20, "Retail x86 buffered record stride");
+#endif
 
 } } }
 #endif

@@ -73,7 +73,9 @@ bool NameNode::setName(const char* name)
 }
 bool NameNode::slot_0x20() { return true; }
 bool NameNode::slot_0x24() { return true; }
+#if defined(_M_IX86)
 static_assert(sizeof(NameNode) == 12, "client BFMeme NameNode");
 static_assert(sizeof(NameNodeTypeDescriptor) == 16, "client NameNode descriptor");
+#endif
 } }
 #endif

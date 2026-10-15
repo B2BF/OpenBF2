@@ -26,19 +26,18 @@ namespace geom {
 #if defined(BF2_IMAGE_RENDDX9)
 // PE 0x1012B600 allocates 0x34 bytes.  This is an ordinary owned data object, not an interface;
 // publish the recovered layout so its clients can use the real field instead of growing an
-// accessor seam or a positional dispatch facade around it.  The internal name remains the retail
-// VC7.1 string even when the host/plugin boundary selects native STL carriers.
+// accessor seam or a positional dispatch facade around it.  The internal name is the renderer's
+// std::string.
 struct HemiMap
 {
     Vec3 position;                         // +0x00
     float range;                           // +0x0C
     float falloff;                         // +0x10
     dx9rend::EngineTexture* texture;       // +0x14
-    vc71::string name;                     // +0x18
+    std::string name;                     // +0x18
 };
 
 #if defined(_M_IX86)
-static_assert(sizeof(HemiMap) == 0x34, "HemiMap allocation is 0x34 bytes");
 static_assert(offsetof(HemiMap, texture) == 0x14, "HemiMap texture offset drift");
 static_assert(offsetof(HemiMap, name) == 0x18, "HemiMap name offset drift");
 #endif

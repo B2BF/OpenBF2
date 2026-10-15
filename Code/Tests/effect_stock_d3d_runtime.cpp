@@ -122,7 +122,7 @@ int main(int argc,char** argv)
         {0.75f,-0.75f,0,1,0,0,1,1,1,1,1}, {0.75f,0.75f,0,1,0,0,1,1,0,1,0}};
     check(SUCCEEDED(device->Clear(0,nullptr,D3DCLEAR_TARGET,0,1,0)),"clear actual render target");
     check(SUCCEEDED(device->BeginScene()),"begin actual D3D scene");
-    effectSetTechniqueByName(effect,vc71::string("QuadWithTexture"));
+    effectSetTechniqueByName(effect,std::string("QuadWithTexture"));
     // Direct device setup makes the component boundary explicit: StateManager
     // and its deferred draw application are NOT initialized or bypassed silently.
     check(SUCCEEDED(device->SetVertexDeclaration(decl)),"bind actual recovered declaration directly for component draw");

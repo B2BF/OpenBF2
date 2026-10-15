@@ -1,18 +1,18 @@
 // Path: [INFERRED]; adjacent NametagManager.cpp is attested at RendDX9 0x1021CFB0.
 // Nametag renderer declarations, recovered from RendDX9.dll 1.50 (PE only).
-// Retail member layout is 0x3860 bytes; embedded trees use VC7.1 layouts.
+// The shipped member layout is 0x3860 bytes; the embedded trees are std containers here.
 #ifndef GEOM_NAMETAGRENDERER_H
 #define GEOM_NAMETAGRENDERER_H
 
 #include <cstddef>
 #include <map>
+#include <set>
 
 #include "../Core/IBase.h"
 #include "../Math/Vec3.h"
 #include "../RendDX9/RendDX9Base.h"
 #include "../../RendDX9Abi/HfeAbi.h"
-#include "../../RendDX9Abi/Vc71String.h"
-#include "../../RendDX9Abi/Vc71Map.h"
+#include <string>
 
 namespace dice {
 namespace hfe {
@@ -28,9 +28,8 @@ struct EngineTexture;
 namespace geom {
 
 // The manager's per-tag item (nt_core owns the class and its five vtables 0x1021CF70/80, 0x1021D080/
-// 90/A0). [INFERRED] name, from INametagManager's addTouchItem family. bufferItem reads it at the
-// retail offsets listed in NameTagRenderer.cpp (TouchItemRendererFields); the integrator swaps that
-// overlay for nt_core's typed members.
+// 90/A0). [INFERRED] name, from INametagManager's addTouchItem family. bufferItem and the draws
+// read its typed members (NametagManager.h).
 class NametagItem;
 
 
@@ -135,7 +134,7 @@ public:
     virtual void onRenderPathChanged(int path);                    // +0x08 nullsub_53
     virtual void onRenderPathNotification(int path);               // +0x0C nullsub_53
     virtual int  getCurrentRenderPath() const;                     // +0x10
-    virtual vc71::string getRenderPathListenerName() const;        // +0x14
+    virtual std::string getRenderPathListenerName() const;        // +0x14
 
     // forwarded by NametagManager's DeviceLostResetListener subobject (0x1021D0E8), which loops
     // over the three renderers (renderer + i * 0x3860, i < 3)
@@ -190,13 +189,13 @@ public:
     // stores s_icons[key] - or, for count > 0, s_icons[key + i] = the i-th width-wide cell.
     // Callers: the manager's `Nametags.setTexture` path 0x1012C720 (count = the console's index
     // argument) and 0x1012D610 (count 0).
-    static void setTexture(int key, int count, const vc71::string& textureName,
+    static void setTexture(int key, int count, const std::string& textureName,
                            int x, int y, int width, int height);
     // 0x101B2D00, 502 B. ECX = key, EDX = &fullTextureName, then (const std::string& emptyTextureName,
     // left, top, right, bottom, fillStart, fillEnd), `retn 1Ch`. Caller: 0x1012C7B4 (the second
     // `Nametags.setTexture` after `Nametags.createBar`).
-    static void createBar(int key, const vc71::string& fullTextureName,
-                          const vc71::string& emptyTextureName, int left, int top, int right,
+    static void createBar(int key, const std::string& fullTextureName,
+                          const std::string& emptyTextureName, int left, int top, int right,
                           int bottom, int fillStart, int fillEnd);
     // ECX = key. s_bars.erase(key) with no resource release. NO caller in the image
     // (and IDA had not even made it a function); kept because the body is shipped.
@@ -212,11 +211,15 @@ private:
     NameTagRenderer(const NameTagRenderer&);
     NameTagRenderer& operator=(const NameTagRenderer&);
 
-    // data, in shipped order
+    // data, in shipped order. The `+0xNN` comments give the shipped x86 offsets; from m_slotMap on
+    // the std containers make the native offsets differ.
     int                     m_renderPath;           // +0x0004  never written (see the layout note)
-    vc71::set_layout        m_freeSlots;            // +0x0008  vestigial std::set<int>
-    vc71::map_layout        m_slotMap;              // +0x0014  vestigial, 0x18-byte nodes
-    vc71::set_layout        m_set20;                // +0x0020  vestigial, 0x14-byte nodes
+    std::set<int>           m_freeSlots;            // +0x0008  vestigial (head sub_101315F0)
+    std::map<int, int>      m_slotMap;              // +0x0014  vestigial, 0x18-byte nodes (head
+                                                    //          sub_1008A320, the slot maps' shape)
+    std::set<int>           m_set20;                // +0x0020  vestigial, 0x14-byte nodes (head
+                                                    //          sub_101B4870); a four-byte key,
+                                                    //          [INFERRED] int - nothing inserts one
     dx9rend::EngineTexture* m_stagingTexture;       // +0x002C
     dx9rend::EngineTexture* m_nameTexture;          // +0x0030
     void*                   m_vertexBuffer;         // +0x0034  not initialised by the ctor
@@ -251,35 +254,21 @@ private:
     friend struct NameTagRendererLayoutCheck;
 };
 
-// Offsets are held here, in both plugin flavours: the class holds no host container and no native
-// STL member, so the retail size is the rebuilt size in the native AND the compat build.
+// The vertex and record PODs keep their shipped sizes on every target (the GPU vertex declaration
+// and the uploaded record block depend on them); the pointer-holding icon and bar values keep
+// theirs on x86. The renderer itself holds std containers, so only the members before them keep
+// their shipped offsets; NametagManager allocates and indexes the renderers as a typed array
+// (shipped: 3 * 0x3860 + 4 at 0x1012F9B0, stride 0x3860).
 struct NameTagRendererLayoutCheck
 {
     static_assert(sizeof(NametagVertex) == 0x1C, "the Nametag.fx declaration is 28 bytes");
     static_assert(sizeof(NametagSlotRecord) == 0xE0, "0x101B4230 builds 224-byte records");
+#if defined(_M_IX86)
     static_assert(sizeof(NametagIcon) == 0x18, "s_icons' node is 0x2C = 12 + 4 + 24 + 4");
     static_assert(sizeof(NametagBar) == 0x3C, "s_bars' node is 0x50 = 12 + 4 + 60 + 4; "
                                               "createBar copies 15 dwords");
-#if defined(_M_IX86)
     static_assert(offsetof(NameTagRenderer, m_renderPath) == 0x0004, "+0x04");
     static_assert(offsetof(NameTagRenderer, m_freeSlots) == 0x0008, "+0x08");
-    static_assert(offsetof(NameTagRenderer, m_slotMap) == 0x0014, "+0x14");
-    static_assert(offsetof(NameTagRenderer, m_set20) == 0x0020, "+0x20");
-    static_assert(offsetof(NameTagRenderer, m_stagingTexture) == 0x002C, "+0x2C");
-    static_assert(offsetof(NameTagRenderer, m_nameTexture) == 0x0030, "+0x30");
-    static_assert(offsetof(NameTagRenderer, m_vertexBuffer) == 0x0034, "+0x34");
-    static_assert(offsetof(NameTagRenderer, m_indexBuffer) == 0x0038, "+0x38");
-    static_assert(offsetof(NameTagRenderer, m_arrowVertexBuffer) == 0x003C, "+0x3C");
-    static_assert(offsetof(NameTagRenderer, m_slots) == 0x0048, "+0x48");
-    static_assert(offsetof(NameTagRenderer, m_dirty) == 0x3848, "+0x3848");
-    static_assert(offsetof(NameTagRenderer, m_byte384A) == 0x384A, "+0x384A");
-    static_assert(offsetof(NameTagRenderer, m_slotCount) == 0x384C, "+0x384C");
-    static_assert(offsetof(NameTagRenderer, m_colorCount) == 0x3850, "+0x3850");
-    static_assert(offsetof(NameTagRenderer, m_type) == 0x3854, "+0x3854");
-    static_assert(offsetof(NameTagRenderer, m_fadeStart) == 0x3858, "+0x3858");
-    static_assert(offsetof(NameTagRenderer, m_fadeEnd) == 0x385C, "+0x385C");
-    static_assert(sizeof(NameTagRenderer) == 0x3860,
-                  "NametagManager's ctor allocates 3 * 0x3860 + 4 (0x1012F9B0) and strides 0x3860");
 #endif
 };
 

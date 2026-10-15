@@ -88,79 +88,52 @@ void notifyCollisionManagerRendererShutdown(IBase* manager)
 const char kSourcePath[] =
     "C:\\dice\\Projects\\BF2Branches\\Patch_1_50\\Code\\BF2\\Game\\Main\\BF2Render.cpp";
 
-// View of RendDX9's plugin-owned display modes. Both plugin flavors retain the
-// VC7.1 container layout and 40-byte records; this is not a host-owned exchange
-// container. The retail display-mode carrier embeds one record at offset 4.
-struct RendererDisplayMode
-{
-    /* +0x00 */ unsigned short      width;
-    /* +0x02 */ unsigned short      height;
-    /* +0x04 */ unsigned short      refreshHz;
-    /* +0x06 */ unsigned char       bpp;
-    /* +0x07 */ unsigned char       pad07;          // never copied by 0x4547F0
-    /* +0x08 */ vc71::vector_layout depthFormats;   // D3DFORMAT dwords
-    /* +0x18 */ vc71::vector_layout multiSamples;   // renddx9abi::DisplayModeMultiSample
-};
-static_assert(sizeof(RendererDisplayMode) == 40, "Renderer +0x3C hands back 40-byte records");
+// RendDX9's plugin-owned display modes: the std::vector of display-mode records Renderer +0x3C
+// returns (DisplayModeAbi.h; retail: a VC7.1 vector of 40-byte records). Both images share the STL
+// (issue #7). The retail display-mode carrier embeds one record at offset 4.
+typedef renddx9abi::DisplayModeRecord              RendererDisplayMode;
+typedef std::vector<renddx9abi::DisplayModeRecord> RendererDisplayModes;
 
-// size() with VC7.1's own arithmetic: 0 while _First is null, else (_Last - _First) / 40 as a signed
-// pointer difference - the imul / sar / shr-add sequence at 0x453849 and 0x454970 is a signed divide.
-int rendererModeCount(const vc71::vector_layout& modes)
+// size(). Retail open-codes it with VC7.1's arithmetic (0 while _First is null, else a signed
+// pointer difference over 40 - the imul / sar / shr-add sequence at 0x453849 and 0x454970).
+int rendererModeCount(const RendererDisplayModes& modes)
 {
-    if (!modes.first)
-        return 0;
-    return static_cast<int>(modes.last - modes.first) / static_cast<int>(sizeof(RendererDisplayMode));
+    return static_cast<int>(modes.size());
 }
 
-const RendererDisplayMode& rendererModeAt(const vc71::vector_layout& modes, unsigned int index)
+const RendererDisplayMode& rendererModeAt(const RendererDisplayModes& modes, unsigned int index)
 {
-    return reinterpret_cast<const RendererDisplayMode*>(modes.first)[index];
+    return modes[index];
 }
 
 // Requests modes with all three filter flags enabled. Renderer caching means
 // an earlier VideoOptions query can already have populated the list with its filter.
-const vc71::vector_layout& rendererDisplayModes(dx9rend::IRenderer* renderer)
+const RendererDisplayModes& rendererDisplayModes(dx9rend::IRenderer* renderer)
 {
     dx9rend::DisplayModeFilter filter;
     filter.aspect4by3                = true;                  // [ebp-4]
     filter.crossCheckDisplaySettings = true;                  // [ebp-3]
     filter.minimumResolution         = true;                  // [ebp-2]
-    return *static_cast<const vc71::vector_layout*>(renderer->slot_0x3C(&filter));
+    return *static_cast<const RendererDisplayModes*>(renderer->slot_0x3C(&filter));
 }
 
 // Requires a nonempty depth-format list; init and setDisplayMode retain one entry.
-// Returns a borrowed reference. Native and compatibility empty-list behavior differs.
+// Returns a borrowed reference.
 const unsigned int& carrierDepthFront(const renddx9abi::HostDisplayMode& carrier)
 {
     return *renddx9abi::hostDepthFirst(carrier);
 }
 
-// Copies display-mode scalars and assigns both owned lists.
-// [PLATFORM] The native carrier flattens the fields; compatibility uses the ABI
-// carrier's owned-range assignment.
+// Copies display-mode scalars (0x4547F0 skips the pad byte) and assigns both lists.
 void assignDisplayMode(renddx9abi::HostDisplayMode& carrier, const RendererDisplayMode& mode)
 {
     carrier.width     = mode.width;
     carrier.height    = mode.height;
-    carrier.refreshHz = mode.refreshHz;
+    carrier.refreshHz = mode.refresh;
     carrier.bpp       = mode.bpp;
 
-    const unsigned int* depthFirst =
-        reinterpret_cast<const unsigned int*>(mode.depthFormats.first);
-    const unsigned int* depthLast =
-        reinterpret_cast<const unsigned int*>(mode.depthFormats.last);
-    const renddx9abi::DisplayModeMultiSample* sampleFirst =
-        reinterpret_cast<const renddx9abi::DisplayModeMultiSample*>(mode.multiSamples.first);
-    const renddx9abi::DisplayModeMultiSample* sampleLast =
-        reinterpret_cast<const renddx9abi::DisplayModeMultiSample*>(mode.multiSamples.last);
-#if BF2_PLUGIN_ABI_NATIVE
-    carrier.depthFormats.assign(depthFirst, depthLast);
-    carrier.multiSamples.assign(sampleFirst, sampleLast);
-#else
-    renddx9abi::assignOwnedDisplayVector<unsigned int>(carrier.depthFormats, depthFirst, depthLast);
-    renddx9abi::assignOwnedDisplayVector<renddx9abi::DisplayModeMultiSample>(
-        carrier.multiSamples, sampleFirst, sampleLast);
-#endif
+    carrier.depthFormats.assign(mode.depthFormats.begin(), mode.depthFormats.end());
+    carrier.multiSamples.assign(mode.multiSample.begin(), mode.multiSample.end());
 }
 
 } // anonymous namespace
@@ -241,15 +214,9 @@ bool BF2Render::init()
     m_displayModeCarrier->bpp         = 32;
     m_displayModeCarrier->vsync       = 0;
 
-#if BF2_PLUGIN_ABI_NATIVE
     m_displayModeCarrier->depthFormats.push_back(75u); // D3DFMT_D24S8
     m_displayModeCarrier->windows.push_back(
         reinterpret_cast<void*>(m_window->getHwnd()));
-#else
-    vc71::vectorRef<unsigned int>(&m_displayModeCarrier->depthFormats).push_back(75u);
-    void* hwnd = reinterpret_cast<void*>(m_window->getHwnd());
-    vc71::vectorRef<void*>(&m_displayModeCarrier->windows).push_back(hwnd);
-#endif
 
     if (fullscreen)
         m_window->toggleFullscreenStyle();
@@ -296,15 +263,6 @@ void BF2Render::shutdown()
     {
         if (m_displayModeCarrier)
         {
-#if !BF2_PLUGIN_ABI_NATIVE
-            // The rebuilt client uses native mode. Keep the retail branch complete for isolated
-            // ABI compilation: its POD carrier has no automatic vector destructors.
-            renddx9abi::clearOwnedDisplayVector<void*>(m_displayModeCarrier->windows);
-            renddx9abi::clearOwnedDisplayVector<renddx9abi::DisplayModeMultiSample>(
-                m_displayModeCarrier->multiSamples);
-            renddx9abi::clearOwnedDisplayVector<unsigned int>(
-                m_displayModeCarrier->depthFormats);
-#endif
             delete m_displayModeCarrier;
         }
 
@@ -430,13 +388,12 @@ unsigned int BF2Render::toggleFullscreen()
 // listing because the original print path is absent. [INFERRED] Method spelling.
 void BF2Render::listScreenModes()
 {
-    const vc71::vector_layout& modes = rendererDisplayModes(m_renderer);        // +0x3C
+    const RendererDisplayModes& modes = rendererDisplayModes(m_renderer);       // +0x3C
     for (unsigned int i = 0; i < static_cast<unsigned int>(rendererModeCount(modes)); ++i)
     {
         const RendererDisplayMode& mode = rendererModeAt(modes, i);
-        const unsigned int* first = reinterpret_cast<const unsigned int*>(mode.depthFormats.first);
-        const unsigned int* last  = reinterpret_cast<const unsigned int*>(mode.depthFormats.last);
-        (void)std::find(first, last, carrierDepthFront(*m_displayModeCarrier)); // discarded
+        (void)std::find(mode.depthFormats.begin(), mode.depthFormats.end(),
+                        carrierDepthFront(*m_displayModeCarrier));              // discarded
     }
 }
 
@@ -447,7 +404,7 @@ void BF2Render::listScreenModes()
 // [PLATFORM] Native vector operations retain their own allocation semantics.
 void BF2Render::setDisplayMode(int index)
 {
-    const vc71::vector_layout& modes = rendererDisplayModes(m_renderer);        // +0x3C
+    const RendererDisplayModes& modes = rendererDisplayModes(m_renderer);       // +0x3C
     if (index < 0 || index >= rendererModeCount(modes))
     {
         Debug(DebugTypeError, kSourcePath, 460, "") << "ScreenMode out of range";
@@ -456,16 +413,9 @@ void BF2Render::setDisplayMode(int index)
 
     const unsigned int depthFormat = carrierDepthFront(*m_displayModeCarrier);
     assignDisplayMode(*m_displayModeCarrier, rendererModeAt(modes, index));
-#if BF2_PLUGIN_ABI_NATIVE
     m_displayModeCarrier->depthFormats.clear();
     m_displayModeCarrier->depthFormats.push_back(depthFormat);
     m_displayModeCarrier->multiSamples.clear();
-#else
-    renddx9abi::clearOwnedDisplayVector<unsigned int>(m_displayModeCarrier->depthFormats);
-    vc71::vectorRef<unsigned int>(&m_displayModeCarrier->depthFormats).push_back(depthFormat);
-    renddx9abi::clearOwnedDisplayVector<renddx9abi::DisplayModeMultiSample>(
-        m_displayModeCarrier->multiSamples);
-#endif
 
     m_window->resizeClient(m_displayModeCarrier->width,                         // +0x44
                            m_displayModeCarrier->height);

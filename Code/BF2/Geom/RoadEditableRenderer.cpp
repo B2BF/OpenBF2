@@ -30,8 +30,7 @@ const int kNoPriority = 999999999;
 
 } // anonymous namespace
 
-// vptr, refCount 1, the flag byte 0, the list (a fresh head, size 0 - the allocator word
-// is not written), +0x18 = 0.
+// vptr, refCount 1, the flag byte 0, the empty list, +0x18 = 0.
 RoadEditableRenderer::RoadEditableRenderer()
     : m_refCount(1)
     , m_flag08(0)
@@ -75,24 +74,23 @@ void* RoadEditableRenderer::queryInterface(unsigned int iid) const
 // the _Incsize test).
 void RoadEditableRenderer::add(IRoadEditable* road)
 {
-    RoadEditableListNode* const head = m_roads.head;
-    for (RoadEditableListNode* node = head->next; node != head; node = node->next)
+    for (RoadEditableList::iterator node = m_roads.begin(); node != m_roads.end(); ++node)
     {
-        if (node->value == road)
+        if (*node == road)
             return;
     }
-    m_roads.insert(m_roads.head, road);
+    m_roads.push_back(road);
 }
 
-// erase(find(begin, end, road)): the first match only; erase's own `node != head` guard
-// makes an absent road a no-op.
+// erase(find(begin, end, road)): the first match only; the shipped erase's own `node != head`
+// guard makes an absent road a no-op.
 void RoadEditableRenderer::remove(IRoadEditable* road)
 {
-    RoadEditableListNode* const head = m_roads.head;
-    RoadEditableListNode* node = head->next;
-    while (node != head && node->value != road)
-        node = node->next;
-    m_roads.erase(node);
+    RoadEditableList::iterator node = m_roads.begin();
+    while (node != m_roads.end() && *node != road)
+        ++node;
+    if (node != m_roads.end())
+        m_roads.erase(node);
 }
 
 // Draws a copy of the road queue by template priority, then road priority within a template.
@@ -102,20 +100,22 @@ void RoadEditableRenderer::remove(IRoadEditable* road)
 void RoadEditableRenderer::drawAll()
 {
     RoadEditableList queue(m_roads);
-    if (queue.size > 0)
+    if (!queue.empty())
     {
         lightManagerSetRenderTargetTexture(0, dx9rend::rendererGetHemiScratchTexture());
         dx9rend::stateManagerClear(1u, 0x00FFFFFFu, 0.0f, 0u);
         lightManagerSetRenderTargetTexture(0, 0);
         do
         {
-            RoadEditableListNode* best = 0;
+            // No winner leaves `best` singular and the draw below dereferences it, as shipped
+            // (retail: a null node).
+            RoadEditableList::iterator best = RoadEditableList::iterator();
             IRoadTemplate* bestTemplate = 0;
             int lowestTemplatePriority = kNoPriority;
             int lowestRoadPriority = kNoPriority;
-            for (RoadEditableListNode* node = queue.head->next; node != queue.head; node = node->next)
+            for (RoadEditableList::iterator node = queue.begin(); node != queue.end(); ++node)
             {
-                IRoadEditable* const road = node->value;
+                IRoadEditable* const road = *node;
                 IRoadTemplate* const roadTemplate = road->getTemplate();         // +0x20
                 if (roadTemplate->getPriority() < lowestTemplatePriority)         // +0x4C
                 {
@@ -131,10 +131,10 @@ void RoadEditableRenderer::drawAll()
                     best = node;
                 }
             }
-            best->value->draw();                                                  // +0x10
+            (*best)->draw();                                                      // +0x10
             queue.erase(best);
         }
-        while (queue.size > 0);
+        while (!queue.empty());
     }
 }
 
@@ -142,15 +142,15 @@ void RoadEditableRenderer::setFlag08(bool value)    { m_flag08 = value ? 1 : 0; 
 bool RoadEditableRenderer::getFlag08()              { return m_flag08 != 0; }
 
 
-// RefFactory refuse aggregation, 0x1C bytes, construct, QI with NO null test on the
-// object (shipped), release on refusal.
+// RefFactory refuse aggregation, the object (retail 0x1C bytes), construct, QI with NO null
+// test on the object (shipped), release on refusal.
 
 IBase* __fastcall createRoadEditableRenderer(unsigned int iid, IBase* outer)
 {
     if (outer)
         return 0;
 
-    void* const storage = ::renddx9abi::engineAlloc(0x1C);
+    void* const storage = ::renddx9abi::engineAlloc(sizeof(RoadEditableRenderer));
     RoadEditableRenderer* self = 0;
     if (storage)
         self = new (storage) RoadEditableRenderer();

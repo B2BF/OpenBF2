@@ -6,6 +6,9 @@
 #include "Node.h"
 #include "Stream.h"
 #include "TypeDescriptor.h"
+#if !defined(_M_IX86)
+#include <cmath>
+#endif
 namespace dice { namespace meme {
 namespace {
 // PE832B86..C39, same x87 order and float stores. Helper/name [INFERRED].
@@ -18,6 +21,7 @@ bool chooseSineValue(float current, float target, float delta, float speed,
     const float angle = 1.57075f;                        // 94CB68, bytes56 0E C9 3F
     float rounded;
     bool changed = false;
+#if defined(_M_IX86)
     __asm {
         fld target
         fld current
@@ -90,6 +94,28 @@ bool chooseSineValue(float current, float target, float delta, float speed,
         fstp st(0)
     done:
     }
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates) and the CRT cosine in
+    // place of fcos; the argument stays within [0, k], where both agree to double precision.
+    // Equal or unordered samples write nothing; an unordered braking test takes full speed.
+    if (current < target) {
+        const double distance = static_cast<double>(target) - current;
+        const double step = distance < braking
+            ? std::cos(angle - distance / braking * angle) * speed * delta
+            : static_cast<double>(delta) * speed;
+        const double candidate = step + current;
+        rounded = candidate > target ? target : static_cast<float>(candidate);
+        changed = true;
+    } else if (current > target) {
+        const double distance = static_cast<double>(current) - target;
+        const double step = distance < braking
+            ? std::cos(angle - distance / braking * angle) * speed * delta
+            : static_cast<double>(delta) * speed;
+        const double candidate = current - step;
+        rounded = candidate < target ? target : static_cast<float>(candidate);
+        changed = true;
+    }
+#endif
     if (changed) value = rounded;
     return changed;
 }
@@ -127,8 +153,10 @@ bool SetVariableSineAction::execute(System* system, const Rect*, const NodeState
     }
     return false;
 }
+#if defined(_M_IX86)
 static_assert(sizeof(SetVariableSineAction) == 20, "client SetVariableSineAction");
 static_assert(sizeof(ClassTypeDescriptor<SetVariableSineAction, SetVariableSoftAction>) == 16,
               "SetVariableSineAction metadata");
+#endif
 } }
 #endif

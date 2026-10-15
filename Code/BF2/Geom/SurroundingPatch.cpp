@@ -8,8 +8,7 @@
 #include "../../RendDX9Abi/HostFileAbi.h"
 #include "../../RendDX9Abi/BfMemory.h"
 #include "../../RendDX9Abi/Frontier.h"
-#include "../../RendDX9Abi/Vc71String.h"
-#include "../../RendDX9Abi/Vc71Vector.h"
+#include <string>
 #include "../../RendDX9Abi/D3dx9Sdk.h"
 #include "QuadPatch.h"
 #include "Terrain.h"
@@ -44,7 +43,7 @@ namespace geom {
 namespace {
 
 // sub_10074AB0 with one integer argument - see QuadPatch.cpp.
-void formatString(vc71::string& out, const char* format, int a)
+void formatString(std::string& out, const char* format, int a)
 {
     char buffer[0x1000];
     const int written = std::snprintf(buffer, 0xFFF, format, a);
@@ -178,15 +177,15 @@ void SurroundingPatch::load(int slotIndex, TerrainRawReader& reader)
     ::renddx9abi::engineFree(heights);
     dx9rend::vertexBufferUnlock(heightVertexBuffer);
 
-    vc71::string suffix;
+    std::string suffix;
     formatString(suffix, "_s%i", slot);
     {
-        vc71::string name(t->m_colormapBaseName.c_str());
+        std::string name(t->m_colormapBaseName.c_str());
         name += suffix;
         colormap = dx9rend::textureManagerGetTexture(name);
     }
     {
-        vc71::string name(t->m_lowDetailmapBaseName.c_str());
+        std::string name(t->m_lowDetailmapBaseName.c_str());
         name += suffix;
         lowDetailmap = dx9rend::textureManagerGetTexture(name);
     }

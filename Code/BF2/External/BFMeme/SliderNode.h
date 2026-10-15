@@ -41,7 +41,9 @@ protected:
     Node* m_child1;            // +20, ctor null; the thumb, child index 1
     NodeState m_state;         // +24/+28, ctor {1.0, 1.0}
 };
+#if defined(_M_IX86)
 static_assert(sizeof(SliderNode) == 44, "retail and native SliderNode storage");
+#endif
 } }
 #endif
 #endif

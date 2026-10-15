@@ -9,17 +9,16 @@
 
 #include "IRoadEditable.h"
 #include "IRoadEditableRenderer.h"           // IRoadEditableRenderer (table 0x1021DA00), shared with the editor
-#include "Vc71PtrList.h"
 #include "../../RendDX9Abi/HfeAbi.h"
 
 #include <stddef.h>
+#include <list>
 
 namespace dice {
 namespace hfe {
 namespace geom {
 
-typedef Vc71PtrList<IRoadEditable>     RoadEditableList;
-typedef Vc71PtrListNode<IRoadEditable> RoadEditableListNode;
+typedef std::list<IRoadEditable*> RoadEditableList;
 
 
 class RoadEditableRenderer : public IRoadEditableRenderer
@@ -56,8 +55,6 @@ private:
 static_assert(offsetof(RoadEditableRenderer, m_refCount) == 0x04, "refCount at +0x04");
 static_assert(offsetof(RoadEditableRenderer, m_flag08) == 0x08, "flag byte at +0x08");
 static_assert(offsetof(RoadEditableRenderer, m_roads) == 0x0C, "road list at +0x0C");
-static_assert(offsetof(RoadEditableRenderer, m_mode) == 0x18, "mode word at +0x18");
-static_assert(sizeof(RoadEditableRenderer) == 0x1C, "the factory 0x100B0A5D allocates 0x1C");
 #endif
 
 // RefFactory published by ModuleGeom::getClassList.

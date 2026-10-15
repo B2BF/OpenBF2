@@ -64,8 +64,10 @@ bool Bf2TextNode::setTypeDataForHud(Data* type)
 Data* Bf2TextNode::getStringDataForHud() { return m_string; }
 Style* Bf2TextNode::getStyleForHud() { return m_style; }
 
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2TextNode) == 28, "native Bf2TextNode storage");
 static_assert(sizeof(ClassTypeDescriptor<Bf2TextNode, BfTextNode>) == 16,
     "Bf2TextNode metadata");
+#endif
 } }
 #endif

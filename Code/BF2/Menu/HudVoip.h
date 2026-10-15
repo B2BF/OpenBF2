@@ -50,14 +50,17 @@ private:
     int m_speakerColumnWidth;      // +1C, ctor 15
     int m_nameColumnWidth;         // +20, ctor 30
     float m_field024;              // +24, ctor -1.0f; the cells' sixth float
-    int m_emptyTexture;            // +28, Ingame/GeneralIcons/empty.tga
-    int m_speakerTexture;          // +2C, Ingame/Respawn/icon_speaker.tga
-    int m_commanderTexture;        // +30, Ingame/Kits/Icons/kit_Commander.tga
+    // Meme texture handles (pointer-sized; int on x86).
+    std::intptr_t m_emptyTexture;     // +28, Ingame/GeneralIcons/empty.tga
+    std::intptr_t m_speakerTexture;   // +2C, Ingame/Respawn/icon_speaker.tga
+    std::intptr_t m_commanderTexture; // +30, Ingame/Kits/Icons/kit_Commander.tga
     // +34..+58. Per-squad minimap icons, loaded lazily by the row painter.
-    int m_squadTextures[10];       // ctor 0
+    std::intptr_t m_squadTextures[10]; // ctor 0
     meme::BfListBoxData* m_data;   // +5C, created by registerData, never deleted
 };
+#if defined(_M_IX86)
 static_assert(sizeof(HudVoip) == 0x60, "retail and native HudVoip storage");
+#endif
 } } }
 #endif
 #endif

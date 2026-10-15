@@ -10,10 +10,6 @@
 #include "../../Math/Mat4.h"
 // XpLightManager.cpp's pattern: in the retail-ABI flavour HfeAbi.h already supplies IBase and the
 // class-registration records, so the engine headers' own copies are suppressed around their include.
-#if !BF2_PLUGIN_ABI_NATIVE
-#define CORE_IBASE_H
-#define CORE_CLASSMANAGER_H
-#endif
 #include "../../Game/Objects/IObject.h"
 #include "../../Game/Objects/IObjectTemplate.h"
 #include "../../Game/Objects/ObjectLayoutAccess.h"
@@ -21,10 +17,6 @@
 #include "../../Physics/Heightmap.h"
 #include "../../Scene/Object/ObjectManager.h"
 #include "../../Scene/Object/ObjectTypes/Base/ObjectTemplateManager.h"
-#if !BF2_PLUGIN_ABI_NATIVE
-#undef CORE_CLASSMANAGER_H
-#undef CORE_IBASE_H
-#endif
 #include "../../RendDX9/RendDX9Base.h"        // pathToLower, pathStripExtension, readStringSettingDefault,
                                               // textureManagerSwapDefaultMipClass
 #include "../../RendDX9/Texture.h"            // EngineTexture, textureAddRef, textureReleaseRef
@@ -35,8 +27,7 @@
 #include "../../../RendDX9Abi/HostFileAbi.h"
 #include "../../../RendDX9Abi/PluginAbi.h"
 #include "../../../RendDX9Abi/PluginEntry.h"  // classManager, fileManager
-#include "../../../RendDX9Abi/Vc71String.h"
-#include "../../../RendDX9Abi/Vc71Vector.h"
+#include <string>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -60,20 +51,13 @@ namespace dice { namespace hfe { namespace geom {
 namespace {
 
 
-// House helpers - the same two OverGrowth.cpp keeps in its anonymous namespace.
 
-template<class T> T& field(void* object, unsigned int offset)
-{ return *reinterpret_cast<T*>(static_cast<unsigned char*>(object) + offset); }
-template<class T> const T& field(const void* object, unsigned int offset)
-{ return *reinterpret_cast<const T*>(static_cast<const unsigned char*>(object) + offset); }
-
-
-// VC7.1 std::string operations the bodies use, over the tree's 28-byte vc71::string.
+// The std::string operations the bodies use, in the shipped VC7.1 expansions.
 
 // std::operator+(const string&, const char*) - VC7.1 inlines it as `copy the left, then +=`.
-vc71::string concat(const vc71::string& left, const char* right)
+std::string concat(const std::string& left, const char* right)
 {
-    vc71::string result(left);
+    std::string result(left);
     result += right;
     return result;
 }
@@ -83,7 +67,7 @@ vc71::string concat(const vc71::string& left, const char* right)
 // 100CD22B, called with off 0 and count 5). The library algorithm: scan for the first character,
 // then compare the whole needle; npos when absent.
 const unsigned int kNpos = 0xFFFFFFFFu;
-unsigned int find(const vc71::string& haystack, const char* needle, unsigned int count)
+unsigned int find(const std::string& haystack, const char* needle, unsigned int count)
 {
     const unsigned int size = haystack.size();
     if (count == 0)
@@ -98,29 +82,29 @@ unsigned int find(const vc71::string& haystack, const char* needle, unsigned int
 }
 
 // std::less<std::string> - compare(): the common prefix by memcmp, then the lengths.
-struct Vc71StringLess
+struct StringLess
 {
-    bool operator()(const vc71::string& left, const vc71::string& right) const
+    bool operator()(const std::string& left, const std::string& right) const
     {
         const unsigned int n = left.size() < right.size() ? left.size() : right.size();
         const int c = std::memcmp(left.c_str(), right.c_str(), n);
         return c != 0 ? c < 0 : left.size() < right.size();
     }
 };
-typedef std::set<vc71::string, Vc71StringLess> TextureNameSet;   // set<std::string>, 0x2C-byte nodes
+typedef std::set<std::string, StringLess> TextureNameSet;   // set<std::string>, 0x2C-byte nodes
 
 // std::operator<<(ostream&, const string&) (sub_10001C10, 509 B, the image's own instantiation).
 // Every caller here streams with width 0, where the inserter's padding arms are dead, so the
 // characters are written as they are.
-std::ostream& operator<<(std::ostream& out, const vc71::string& value)
+std::ostream& operator<<(std::ostream& out, const std::string& value)
 {
     return out.write(value.c_str(), static_cast<std::streamsize>(value.size()));
 }
 
 // sub_10074E80 (55 B, read in full): copy, sub_10074D10 (pathToLower) the copy, return it.
-vc71::string toLower(const vc71::string& value)
+std::string toLower(const std::string& value)
 {
-    vc71::string lowered(value);
+    std::string lowered(value);
     dx9rend::pathToLower(lowered);
     return lowered;
 }
@@ -150,12 +134,12 @@ IGeometryTemplateManager* geometryTemplateManager()
 }
 
 // FileManager +0x2C readFile / +0x30 writeFile - HostFileAbi.h types both flavours.
-bool hostReadFile(const vc71::string& path, void* buffer, unsigned int size, unsigned int& read)
+bool hostReadFile(const std::string& path, void* buffer, unsigned int size, unsigned int& read)
 {
     return ::dice::hfe::fileManager->readFile(renddx9abi::toHostString(path), buffer, size, read);
 }
 
-bool hostWriteFile(const vc71::string& path, const void* data, unsigned int size, bool flag)
+bool hostWriteFile(const std::string& path, const void* data, unsigned int size, bool flag)
 {
     return ::dice::hfe::fileManager->writeFile(renddx9abi::toHostString(path), data, size, flag);
 }
@@ -167,42 +151,16 @@ bool hostWriteFile(const vc71::string& path, const void* data, unsigned int size
 // ObjectManager +0x34 getAllObjectsFromGrid - a std::map<unsigned int, IObject*> by reference.
 // Typed native; the retail flavour walks the VC7.1 map with the inlined _Tree::iterator::_Inc the
 // callers carry (0x100CBF4C..0x100CBF98, 0x100CC359..0x100CC397): _Isnil at node +0x15.
-#if BF2_PLUGIN_ABI_NATIVE
 typedef std::map<unsigned int, world::IObject*> HostObjectMap;
-#else
-struct HostObjectNode
-{
-    HostObjectNode* left;      // +0x00
-    HostObjectNode* parent;    // +0x04
-    HostObjectNode* right;     // +0x08
-    unsigned int    key;       // +0x0C
-    world::IObject* object;    // +0x10  it->second, the only field the walks read
-    unsigned char   color;     // +0x14
-    unsigned char   isNil;     // +0x15
-};
-struct HostObjectMap
-{
-    void*           comp;      // +0x00
-    HostObjectNode* head;      // +0x04  _Myhead (re-read by every loop test)
-    unsigned int    size;      // +0x08
-};
-#endif
 
 HostObjectMap& allObjectsFromGrid()
 {
-#if BF2_PLUGIN_ABI_NATIVE
     return reinterpret_cast<world::ObjectManager*>(::dice::hfe::objectManager)->getAllObjectsFromGrid();
-#else
-    typedef HostObjectMap* (__thiscall* GetAllFn)(void*);
-    void* const manager = ::dice::hfe::objectManager;
-    return *reinterpret_cast<GetAllFn>((*static_cast<void***>(manager))[0x34 / 4])(manager);
-#endif
 }
 
 class HostObjectWalk
 {
 public:
-#if BF2_PLUGIN_ABI_NATIVE
     HostObjectWalk() : m_map(allObjectsFromGrid()), m_it(m_map.begin()) {}
     bool done() const { return m_it == m_map.end(); }
     world::IObject* object() const { return m_it->second; }
@@ -210,34 +168,6 @@ public:
 private:
     HostObjectMap&          m_map;
     HostObjectMap::iterator m_it;
-#else
-    HostObjectWalk() : m_map(allObjectsFromGrid()), m_node(m_map.head->left) {}
-    bool done() const { return m_node == m_map.head; }
-    world::IObject* object() const { return m_node->object; }
-    void next()
-    {
-        if (m_node->isNil)
-            return;
-        HostObjectNode* right = m_node->right;
-        if (!right->isNil)
-        {
-            while (!right->left->isNil)
-                right = right->left;
-            m_node = right;
-            return;
-        }
-        HostObjectNode* parent = m_node->parent;
-        while (!parent->isNil && m_node == parent->right)
-        {
-            m_node = parent;
-            parent = parent->parent;
-        }
-        m_node = parent;
-    }
-private:
-    HostObjectMap&  m_map;
-    HostObjectNode* m_node;
-#endif
     HostObjectWalk(const HostObjectWalk&);
     HostObjectWalk& operator=(const HostObjectWalk&);
 };
@@ -250,7 +180,7 @@ private:
 
 inline void* geometrySlot(void* geometry, unsigned int offset)
 {
-    return (*reinterpret_cast<void***>(geometry))[offset / sizeof(void*)];
+    return (*reinterpret_cast<void***>(geometry))[offset / 4];
 }
 IGeometryTemplate* geometryGetTemplate(void* geometry)                         // +0x38
 {
@@ -268,18 +198,17 @@ float geometryBoundingRadius(void* geometry)                                   /
     return reinterpret_cast<Fn>(geometrySlot(geometry, 0x44))(geometry);
 }
 
-// The first geom's first lod's material vector: m_materials.first -> [0].first -> the lod-0
-// vector<StaticMeshMaterial> (516-byte elements) - 100CD0A4..100CD0B8 / 100CC3BE..100CC3C7. The
-// retail code reads the template this way with NO type check (vegetation is StaticMesh).
-const vc71::vector_layout& firstLodMaterials(IGeometryTemplate* geometryTemplate)
+// The template whose first geom's first lod materials the loaders walk (StaticMeshTemplate.h's
+// staticMeshFirstLodMaterialCount / staticMeshFirstLodMaterial: m_materials.first -> [0].first ->
+// the lod-0 materials) - 100CD0A4..100CD0B8 / 100CC3BE..100CC3C7. The retail code reads the
+// template this way with NO type check (vegetation is StaticMesh).
+const StaticMeshTemplate* vegetationTemplate(IGeometryTemplate* geometryTemplate)
 {
-    StaticMeshTemplate* const t = static_cast<StaticMeshTemplate*>(geometryTemplate);
-    const vc71::vector_layout* const geoms = reinterpret_cast<const vc71::vector_layout*>(t->m_materials.first);
-    return *reinterpret_cast<const vc71::vector_layout*>(geoms->first);
+    return static_cast<const StaticMeshTemplate*>(geometryTemplate);
 }
 // A material's first texture reference, slot 1 of the ShaderMaterial (+0x28 -> +0x2C), and its name
 // (+0x58) - 100CD0E3..100CD0EE / 100CC3FC..100CC405. No null tests, as shipped.
-const vc71::string& materialTextureName(const StaticMeshMaterial* material)
+const std::string& materialTextureName(const StaticMeshMaterial* material)
 {
     return static_cast<const dx9rend::EngineTexture*>(material->m_shaderMaterial->textures[1])->name;
 }
@@ -355,72 +284,33 @@ void meshBoundsExpandByBox(MeshBounds& bounds, const BoxCorners& box)
 }
 
 
-// THE instance - 0x60 bytes, a patch's vector entries.
-//   +0x00 int geometryIndex (-1)   +0x44 float scale (1.0)       +0x54 float shadow (NOT constructed)
-//   +0x04 Mat4 transform (identity) +0x48 Vec3 (0,0,0)           +0x58 bool (0)  +0x5C float (1.0)
-
-struct Instance
+// THE instance (OverGrowth.h) - sub_1015E930 (103 B, read in full). The sixteen transform floats
+// are zeroed and the diagonal set to 1.0 (+0x40, +0x2C, +0x18, +0x04 - the identity), then the tail;
+// +0x54 is left as it was.
+void instanceConstruct(OverGrowthInstance& instance)
 {
-    unsigned int words[0x60 / 4];
-    unsigned char* bytes() { return reinterpret_cast<unsigned char*>(words); }
-};
-static_assert(sizeof(Instance) == 0x60, "100D19E0 divides by 0x60");
-
-// sub_1015E930 (103 B, read in full). The sixteen transform floats are zeroed and the diagonal set
-// to 1.0 (+0x40, +0x2C, +0x18, +0x04 - the identity), then the tail; +0x54 is left as it was.
-void instanceConstruct(void* instance)
-{
-    field<int>(instance, 0x00) = -1;
-    for (unsigned int offset = 0x04; offset <= 0x40; offset += 4)
-        field<float>(instance, offset) = 0.0f;
-    field<float>(instance, 0x40) = 1.0f;
-    field<float>(instance, 0x2C) = 1.0f;
-    field<float>(instance, 0x18) = 1.0f;
-    field<float>(instance, 0x04) = 1.0f;
-    field<float>(instance, 0x44) = 1.0f;
-    field<float>(instance, 0x48) = 0.0f;
-    field<float>(instance, 0x4C) = 0.0f;
-    field<float>(instance, 0x50) = 0.0f;
-    field<unsigned char>(instance, 0x58) = 0;
-    field<float>(instance, 0x5C) = 1.0f;
+    instance.geometryIndex = -1;
+    for (unsigned int i = 0; i < 16; ++i)
+        instance.transform.m[i] = 0.0f;
+    instance.transform.m[15] = 1.0f;
+    instance.transform.m[10] = 1.0f;
+    instance.transform.m[5] = 1.0f;
+    instance.transform.m[0] = 1.0f;
+    instance.scale = 1.0f;
+    instance.cullRadius = 0.0f;
+    instance.radiusToSame = 0.0f;
+    instance.radiusToOthers = 0.0f;
+    instance.generated = 0;
+    instance.lodFadeState = 1.0f;
 }
 
 
-// THE patch - 0x98 bytes, the countX * countZ array at OverGrowth +0xE0 (operator new[] with the
-// element count in the dword before the first element).
-//   +0x00 Vec3 position             +0x1C float density[16] (fraction of texels per material index)
-//   +0x0C vector<Instance>          +0x5C MeshBounds bounds (60 bytes, ends at +0x98)
-
-// sub_100CAFF0 (86 B, read in full): position and the vector zeroed, the bounds zeroed with their
-// dirty byte (+0x7C) set; density[] is left unconstructed.
-void patchConstruct(unsigned char* patch)
+// The patch array: operator new[] (1005F340) - the element count ahead of the first element - then
+// the vector constructor iterator sub_10001000 (42 B, read: `count - 1; js` skips a count <= 0, else
+// count forward constructions). A failed allocation leaves a null.
+OverGrowthPatch* newPatchArray(int count)
 {
-    field<float>(patch, 0x00) = 0.0f;
-    field<float>(patch, 0x04) = 0.0f;
-    field<float>(patch, 0x08) = 0.0f;
-    field<void*>(patch, 0x10) = 0;
-    field<void*>(patch, 0x14) = 0;
-    field<void*>(patch, 0x18) = 0;
-    for (unsigned int offset = 0x5C; offset <= 0x78; offset += 4)
-        field<unsigned int>(patch, offset) = 0;
-    field<unsigned char>(patch, 0x7C) = 1;
-    for (unsigned int offset = 0x80; offset <= 0x94; offset += 4)
-        field<unsigned int>(patch, offset) = 0;
-}
-
-// The allocation operator new[] (1005F340) of count * 0x98 + 4, the count
-// stored first, then the non-EH vector constructor iterator sub_10001000 (42 B, read: `count - 1;
-// js` skips a count <= 0, else count forward constructions). A failed allocation leaves a null.
-unsigned char* newPatchArray(int count)
-{
-    void* const memory = ::renddx9abi::engineAlloc(static_cast<unsigned int>(count) * 0x98u + 4u);
-    if (!memory)
-        return 0;
-    *static_cast<int*>(memory) = count;
-    unsigned char* const patches = static_cast<unsigned char*>(memory) + 4;
-    for (int i = 0; i < count; ++i)
-        patchConstruct(patches + i * 0x98);
-    return patches;
+    return new (std::nothrow) OverGrowthPatch[count];
 }
 
 
@@ -433,19 +323,19 @@ unsigned char* newPatchArray(int count)
 void worldToGrid(OverGrowth* self, float x, float z, int* gridX, int* gridZ,
                  float* fracX, float* fracZ)
 {
-    x = x / field<world::IHeightmap*>(self, 0xA8)->getScale().x;
-    z = z / field<world::IHeightmap*>(self, 0xA8)->getScale().z;
+    x = x / self->m_heightmap->getScale().x;
+    z = z / self->m_heightmap->getScale().z;
     const float floorX = static_cast<float>(std::floor(static_cast<double>(x)));
     const float floorZ = static_cast<float>(std::floor(static_cast<double>(z)));
     *fracX = x - floorX;
     *fracZ = z - floorZ;
     *gridX = static_cast<int>(floorX);
     *gridZ = static_cast<int>(floorZ);
-    *gridX += static_cast<int>(field<unsigned int>(self, 0x78) >> 1);
-    *gridZ += static_cast<int>(field<unsigned int>(self, 0x7C) >> 1);
-    if (static_cast<unsigned int>(*gridX) > field<unsigned int>(self, 0x78) || *gridX < 0)
+    *gridX += static_cast<int>(self->m_mapWidth >> 1);
+    *gridZ += static_cast<int>(self->m_mapHeight >> 1);
+    if (static_cast<unsigned int>(*gridX) > self->m_mapWidth || *gridX < 0)
         *gridX = 0;
-    if (static_cast<unsigned int>(*gridZ) > field<unsigned int>(self, 0x7C) || *gridZ < 0)
+    if (static_cast<unsigned int>(*gridZ) > self->m_mapHeight || *gridZ < 0)
         *gridZ = 0;
 }
 
@@ -453,11 +343,11 @@ void worldToGrid(OverGrowth* self, float x, float z, int* gridX, int* gridZ,
 // 100C92F0 (a signed negative test and an unsigned upper test per axis).
 float shadowTexel(OverGrowth* self, int x, int z)
 {
-    const unsigned int width = field<unsigned int>(self, 0x78);
+    const unsigned int width = self->m_mapWidth;
     if (x < 0 || static_cast<unsigned int>(x) >= width || z < 0 ||
-        static_cast<unsigned int>(z) >= field<unsigned int>(self, 0x7C))
+        static_cast<unsigned int>(z) >= self->m_mapHeight)
         return 0.0f;                                                      // ds:101DDE64 (0.0)
-    const unsigned char texel = field<unsigned char*>(self, 0x84)[width * z + x];
+    const unsigned char texel = self->m_shadowMap[width * z + x];
     return static_cast<float>(static_cast<int>(texel)) * 0.003921568859368563f;   // ds:101E2B98
 }
 
@@ -484,12 +374,12 @@ float sampleShadow(OverGrowth* self, float x, float z)
 // patch's [p, p + cellSize] square (both corners through worldToGrid, the fractions discarded) is
 // histogrammed over all 256 byte values; density[l] = count(l) / texel count for l < 16. The texel
 // count is (gz1 - gz0 + 1) * (gx1 - gx0 + 1), converted as unsigned. Also called by 100CA3A0.
-void computePatchDensity(OverGrowth* self, unsigned char* patch)
+void computePatchDensity(OverGrowth* self, OverGrowthPatch* patch)
 {
-    const float x0 = field<float>(patch, 0x00);
-    const float z0 = field<float>(patch, 0x08);
-    const float x1 = field<float>(self, 0x14) + field<float>(patch, 0x00);
-    const float z1 = field<float>(self, 0x14) + field<float>(patch, 0x08);
+    const float x0 = patch->position.x;
+    const float z0 = patch->position.z;
+    const float x1 = self->m_cellSize + patch->position.x;
+    const float z1 = self->m_cellSize + patch->position.z;
     int gridX0 = 0, gridZ0 = 0, gridX1 = 0, gridZ1 = 0;
     float fracX = 0.0f, fracZ = 0.0f;
     worldToGrid(self, x0, z0, &gridX0, &gridZ0, &fracX, &fracZ);
@@ -500,7 +390,7 @@ void computePatchDensity(OverGrowth* self, unsigned char* patch)
     for (int gz = gridZ0; gz <= gridZ1; ++gz)
     {
         const unsigned char* const row =
-            field<unsigned char*>(self, 0x80) + field<unsigned int>(self, 0x78) * gz;
+            self->m_densityMap + self->m_mapWidth * gz;
         for (int gx = gridX0; gx <= gridX1; ++gx)
             ++histogram[row[gx]];
     }
@@ -508,7 +398,7 @@ void computePatchDensity(OverGrowth* self, unsigned char* patch)
         static_cast<unsigned int>((gridZ1 - gridZ0 + 1) * (gridX1 - gridX0 + 1));
     const float total = static_cast<float>(texels);
     for (unsigned int l = 0; l < 16; ++l)
-        field<float>(patch, 0x1C + 4 * l) = static_cast<float>(histogram[l]) / total;
+        patch->coverage[l] = static_cast<float>(histogram[l]) / total;
 }
 
 // sub_100CA450 (296 B, read in full): zero the sixteen per-material maxima (+0x114..+0x150, the
@@ -517,26 +407,25 @@ void computePatchDensity(OverGrowth* self, unsigned char* patch)
 void computePatchDensities(OverGrowth* self)
 {
     for (unsigned int l = 0; l < 16; ++l)
-        field<float>(self, 0x114 + 4 * l) = 0.0f;
-    for (int z = 0; z < field<int>(self, 0xDC); ++z)
+        self->m_materialCoverageMax[l] = 0.0f;
+    for (int z = 0; z < self->m_patchCountZ; ++z)
     {
-        for (int x = 0; x < field<int>(self, 0xD8); ++x)
+        for (int x = 0; x < self->m_patchCountX; ++x)
         {
-            unsigned char* const patch = field<unsigned char*>(self, 0xE0) +
-                                         (field<int>(self, 0xD8) * z + x) * 0x98;
+            OverGrowthPatch* const patch = self->m_patches + (self->m_patchCountX * z + x);
             computePatchDensity(self, patch);
             for (unsigned int l = 0; l < 16; ++l)
-                if (field<float>(patch, 0x1C + 4 * l) > field<float>(self, 0x114 + 4 * l))
-                    field<float>(self, 0x114 + 4 * l) = field<float>(patch, 0x1C + 4 * l);
+                if (patch->coverage[l] > self->m_materialCoverageMax[l])
+                    self->m_materialCoverageMax[l] = patch->coverage[l];
         }
     }
 }
 
-// The patch instance vector's push_back, the inline store when there is room, else
-// _Insert_n 100D09B0 -> 100D0270 (VC7.1 growth: half again, at least one more).
-void pushBackInstance(unsigned char* patch, Instance& instance)
+// The patch instance vector's push_back (the inline store when there is room, else _Insert_n
+// 100D09B0 -> 100D0270).
+void pushBackInstance(OverGrowthPatch* patch, OverGrowthInstance& instance)
 {
-    vc71::vectorRef<Instance>(&field<vc71::vector_layout>(patch, 0x0C)).push_back(instance);
+    patch->instances.push_back(instance);
 }
 
 
@@ -553,18 +442,17 @@ void addStaticObjects(OverGrowth* self)
             continue;
 
         const int patchX = static_cast<int>(
-            (object->getAbsoluteTransformation().m[12] - field<float>(self, 0x6C)) /
-            field<float>(self, 0x14));                                                   // +0x80
+            (object->getAbsoluteTransformation().m[12] - self->m_patchOrigin.x) /
+            self->m_cellSize);                                                           // +0x80
         const int patchZ = static_cast<int>(
-            (object->getAbsoluteTransformation().m[14] - field<float>(self, 0x74)) /
-            field<float>(self, 0x14));                                                   // +0x80
-        unsigned char* const patch = field<unsigned char*>(self, 0xE0) +
-                                     (patchZ * field<int>(self, 0xD8) + patchX) * 0x98;
+            (object->getAbsoluteTransformation().m[14] - self->m_patchOrigin.z) /
+            self->m_cellSize);                                                           // +0x80
+        OverGrowthPatch* const patch = self->m_patches + (patchZ * self->m_patchCountX + patchX);
 
-        const vc71::string name(geometryGetTemplate(geometry)->getName());       // +0x38, then +0x18
+        const std::string name(geometryGetTemplate(geometry)->getName());       // +0x38, then +0x18
         IGeometryTemplate* lodTemplate = 0;
         {
-            const vc71::string lodName = concat(name, "_lod");
+            const std::string lodName = concat(name, "_lod");
             lodTemplate = geometryTemplateManager()->getTemplate(renddx9abi::toHostString(lodName));
         }
         if (!lodTemplate)
@@ -576,23 +464,19 @@ void addStaticObjects(OverGrowth* self)
             continue;
         }
 
-        Instance instance;
-        instanceConstruct(instance.bytes());
-        field<int>(instance.bytes(), 0x00) = self->findOrAddGeometry(name);
-        field<Mat4>(instance.bytes(), 0x04) = object->getAbsoluteTransformation(); // +0x80
-        field<float>(instance.bytes(), 0x48) =
-            geometryBoundingRadius(geometry) * field<float>(instance.bytes(), 0x44);
-        field<float>(instance.bytes(), 0x4C) =
-            geometryBoundingRadius(geometry) * field<float>(instance.bytes(), 0x44);
-        field<float>(instance.bytes(), 0x50) =
-            geometryBoundingRadius(geometry) * field<float>(instance.bytes(), 0x44);
-        field<unsigned char>(instance.bytes(), 0x58) = 0;
-        field<float>(instance.bytes(), 0x54) = sampleShadow(
-            self, field<float>(instance.bytes(), 0x34), field<float>(instance.bytes(), 0x3C));
+        OverGrowthInstance instance;
+        instanceConstruct(instance);
+        instance.geometryIndex = self->findOrAddGeometry(name);
+        instance.transform = object->getAbsoluteTransformation();                  // +0x80
+        instance.cullRadius = geometryBoundingRadius(geometry) * instance.scale;
+        instance.radiusToSame = geometryBoundingRadius(geometry) * instance.scale;
+        instance.radiusToOthers = geometryBoundingRadius(geometry) * instance.scale;
+        instance.generated = 0;
+        instance.shadow = sampleShadow(self, instance.transform.m[12], instance.transform.m[14]);
         pushBackInstance(patch, instance);
 
-        const BoxCorners box(*geometryLocalBounds(geometry), field<Mat4>(instance.bytes(), 0x04));
-        meshBoundsExpandByBox(field<MeshBounds>(patch, 0x5C), box);
+        const BoxCorners box(*geometryLocalBounds(geometry), instance.transform);
+        meshBoundsExpandByBox(patch->bounds, box);
         object->setComponent(IID_IGeometry, 0);                                    // +0x54
     }
 }
@@ -608,12 +492,11 @@ void addStaticObjects(OverGrowth* self)
 void collectTextureNames(OverGrowth* self, TextureNameSet& out)
 {
     std::set<IGeometryTemplate*> templates;
-    const vc71::vector_layout& geometries = field<vc71::vector_layout>(self, 0x4C);
-    for (unsigned int i = 0; i < vc71::vectorSizeIn(geometries, 0xA0); ++i)
-        templates.insert(geometryGetTemplate(field<void*>(
-            reinterpret_cast<unsigned char*>(geometries.first) + i * 0xA0, 0x1C)));
+    const std::vector<OverGrowthGeometryPair>& geometries = self->m_geometries;
+    for (unsigned int i = 0; i < geometries.size(); ++i)
+        templates.insert(geometryGetTemplate(geometries[i].lod.geometry));
 
-    if (field<unsigned char>(self, 0xF0))
+    if (self->m_editorEnable)
     {
         for (HostObjectWalk walk; !walk.done(); walk.next())
         {
@@ -623,10 +506,10 @@ void collectTextureNames(OverGrowth* self, TextureNameSet& out)
             void* const geometry = world::object_detail::LayoutAccess::geometry(object); // +0x38
             if (!geometry)
                 continue;
-            const vc71::string name(geometryGetTemplate(geometry)->getName());
+            const std::string name(geometryGetTemplate(geometry)->getName());
             IGeometryTemplate* lodTemplate = 0;
             {
-                const vc71::string lodName = concat(name, "_lod");
+                const std::string lodName = concat(name, "_lod");
                 lodTemplate = geometryTemplateManager()->getTemplate(renddx9abi::toHostString(lodName));
             }
             if (lodTemplate)
@@ -638,12 +521,12 @@ void collectTextureNames(OverGrowth* self, TextureNameSet& out)
     {
         IGeometryTemplate* const geometryTemplate = *it;
         geometryTemplate->load();                                                          // +0x2C
-        const unsigned int count = vc71::vectorSizeIn(firstLodMaterials(geometryTemplate), 0x204);
+        const unsigned int count = staticMeshFirstLodMaterialCount(vegetationTemplate(geometryTemplate));
         for (unsigned int k = 0; k < count; ++k)
         {
             const StaticMeshMaterial* const material =
-                reinterpret_cast<const StaticMeshMaterial*>(firstLodMaterials(geometryTemplate).first) + k;
-            vc71::string stripped;
+                staticMeshFirstLodMaterial(vegetationTemplate(geometryTemplate), k);
+            std::string stripped;
             dx9rend::pathStripExtension(stripped, materialTextureName(material));
             out.insert(concat(stripped, ".dds"));
         }
@@ -663,7 +546,7 @@ void deleteAtlas(dx9rend::TextureAtlas* atlas)
 // operator new(0x14) + sub_10015E60, a failed allocation giving null.
 dx9rend::TextureAtlas* newAtlas()
 {
-    void* const memory = ::renddx9abi::engineAlloc(0x14);
+    void* const memory = ::renddx9abi::engineAlloc(sizeof(dx9rend::TextureAtlas));
     return memory ? dx9rend::textureAtlasCtor(memory) : 0;
 }
 
@@ -673,14 +556,14 @@ dx9rend::TextureAtlas* newAtlas()
 // that) - shipped.
 void adoptFirstAtlasPage(OverGrowth* self)
 {
-    if (!field<dx9rend::TextureAtlas*>(self, 0xFC))
+    if (!self->m_atlas)
         return;
     std::vector<dx9rend::EngineTexture*> pages;
-    dx9rend::textureAtlasCollectPages(field<dx9rend::TextureAtlas*>(self, 0xFC), pages);
+    dx9rend::textureAtlasCollectPages(self->m_atlas, pages);
     if (!pages.empty())
     {
         dx9rend::EngineTexture* const page = pages[0];
-        field<dx9rend::EngineTexture*>(self, 0x100) = page;
+        self->m_atlasPage = page;
         dx9rend::textureAddRef(page);                                                 // vslot +0x08
     }
 }
@@ -700,42 +583,39 @@ std::ostream& writeMatrix(std::ostream& out, const Mat4& matrix)
 // Returns at once when there is no patch array.
 void saveCollision(OverGrowth* self)
 {
-    if (!field<void*>(self, 0xE0))
+    if (!self->m_patches)
         return;
     std::ostringstream out;
     unsigned int objects = 0;
-    for (int z = 0; z < field<int>(self, 0xDC); ++z)
+    for (int z = 0; z < self->m_patchCountZ; ++z)
     {
-        for (int x = 0; x < field<int>(self, 0xD8); ++x)
+        for (int x = 0; x < self->m_patchCountX; ++x)
         {
-            unsigned char* const patch = field<unsigned char*>(self, 0xE0) +
-                                         (field<int>(self, 0xD8) * z + x) * 0x98;
+            const OverGrowthPatch* const patch = self->m_patches + (self->m_patchCountX * z + x);
             out << "rem Patch: " << x << ", " << z << std::endl << std::endl;
-            const vc71::vector_layout& instances = field<vc71::vector_layout>(patch, 0x0C);
-            for (unsigned int k = 0; k < vc71::vectorSizeIn(instances, 0x60); ++k)
+            const OverGrowthInstanceVector& instances = patch->instances;
+            for (unsigned int k = 0; k < instances.size(); ++k)
             {
-                const unsigned char* const instance =
-                    reinterpret_cast<unsigned char*>(instances.first) + k * 0x60;
-                if (field<int>(instance, 0x00) < 0 || !field<unsigned char>(instance, 0x58))
+                const OverGrowthInstance* const instance = &instances[k];
+                if (instance->geometryIndex < 0 || !instance->generated)
                     continue;
-                const unsigned char* const pair =
-                    reinterpret_cast<unsigned char*>(field<vc71::vector_layout>(self, 0x4C).first) +
-                    field<int>(instance, 0x00) * 0xA0;
-                out << "Object.create " << field<vc71::string>(pair, 0x50) << std::endl;
+                const OverGrowthGeometryPair* const pair =
+                    self->m_geometries.data() + instance->geometryIndex;
+                out << "Object.create " << pair->full.name << std::endl;
                 writeMatrix(out << "Object.absoluteTransformation ",
-                            field<Mat4>(instance, 0x04)) << std::endl;
+                            instance->transform) << std::endl;
                 out << "Object.isOvergrowth 1" << std::endl;
                 ++objects;
                 out << std::endl;
             }
         }
     }
-    out << "rem Patches: " << field<int>(self, 0xD8) << "x" << field<int>(self, 0xDC) << std::endl;
+    out << "rem Patches: " << self->m_patchCountX << "x" << self->m_patchCountZ << std::endl;
     out << "rem Objects: " << objects << std::endl;
 
     const std::string sizeText = out.str();                                               // str() #1: size
     const std::string dataText = out.str();                                               // str() #2: data
-    hostWriteFile(concat(field<vc71::string>(self, 0x88), "OvergrowthCollision.con"),
+    hostWriteFile(concat(self->m_path, "OvergrowthCollision.con"),
                   dataText.c_str(), static_cast<unsigned int>(sizeText.size()), true);  // FileManager +0x30
 }
 
@@ -743,18 +623,44 @@ void saveCollision(OverGrowth* self)
 // These names carry a leading backslash ("\\Overgrowth.raw") that initialize's reads do not.
 void saveDensityMap(OverGrowth* self)
 {
-    const unsigned int bytes = field<unsigned int>(self, 0x7C) * field<unsigned int>(self, 0x78);
-    hostWriteFile(concat(field<vc71::string>(self, 0x88), "\\Overgrowth.raw"),
-                  field<unsigned char*>(self, 0x80), bytes, true);
+    const unsigned int bytes = self->m_mapHeight * self->m_mapWidth;
+    hostWriteFile(concat(self->m_path, "\\Overgrowth.raw"),
+                  self->m_densityMap, bytes, true);
 }
 void saveShadowMap(OverGrowth* self)
 {
-    const unsigned int bytes = field<unsigned int>(self, 0x7C) * field<unsigned int>(self, 0x78);
-    hostWriteFile(concat(field<vc71::string>(self, 0x88), "\\OvergrowthShadowmap.raw"),
-                  field<unsigned char*>(self, 0x84), bytes, true);
+    const unsigned int bytes = self->m_mapHeight * self->m_mapWidth;
+    hostWriteFile(concat(self->m_path, "\\OvergrowthShadowmap.raw"),
+                  self->m_shadowMap, bytes, true);
 }
 
 } // namespace
+
+
+// sub_100CAFF0 (86 B, read in full): position and the vector zeroed, the bounds zeroed with their
+// dirty byte (+0x7C) set; coverage[] is left unconstructed.
+OverGrowthPatch::OverGrowthPatch()
+    : instances()
+{
+    position.x = 0.0f;
+    position.y = 0.0f;
+    position.z = 0.0f;
+    bounds.min.x = 0.0f;
+    bounds.min.y = 0.0f;
+    bounds.min.z = 0.0f;
+    bounds.max.x = 0.0f;
+    bounds.max.y = 0.0f;
+    bounds.max.z = 0.0f;
+    bounds.originRadius = 0.0f;
+    bounds.radius = 0.0f;
+    bounds.dirty = 1;
+    bounds.extent.x = 0.0f;
+    bounds.extent.y = 0.0f;
+    bounds.extent.z = 0.0f;
+    bounds.center.x = 0.0f;
+    bounds.center.y = 0.0f;
+    bounds.center.z = 0.0f;
+}
 
 
 // Initializes maps and geometry indices from the primary heightmap, then applies view distance.
@@ -764,67 +670,64 @@ void OverGrowth::initialize()
 {
     IBase* const cluster = ::dice::hfe::classManager->getSingleton(
         renddx9abi::HostString("HeightmapCluster"));                               // +0x48
-    field<world::IHeightmapCluster*>(this, 0xAC) =
-        static_cast<world::IHeightmapCluster*>(static_cast<void*>(cluster));
+    m_cluster = static_cast<world::IHeightmapCluster*>(static_cast<void*>(cluster));
     world::IHeightmap* const heightmap =
         static_cast<world::IHeightmapCluster*>(static_cast<void*>(cluster))->getPrimaryHeightmap();   // +0x40
-    field<world::IHeightmap*>(this, 0xA8) = heightmap;
+    m_heightmap = heightmap;
     int sizeX = 0;
     int sizeZ = 0;
     heightmap->getSize(sizeX, sizeZ);                                                 // +0x2C
-    field<unsigned int>(this, 0x78) = static_cast<unsigned int>(sizeX);
-    field<unsigned int>(this, 0x7C) = static_cast<unsigned int>(sizeZ);
+    m_mapWidth = static_cast<unsigned int>(sizeX);
+    m_mapHeight = static_cast<unsigned int>(sizeZ);
 
-    field<float>(this, 0x5C) = static_cast<float>(field<unsigned int>(this, 0x78)) *
-                               field<world::IHeightmap*>(this, 0xA8)->getScale().x;  // +0x54
-    field<float>(this, 0x60) = static_cast<float>(field<unsigned int>(this, 0x7C)) *
-                               field<world::IHeightmap*>(this, 0xA8)->getScale().z;  // +0x54
-    const float halfX = field<float>(this, 0x5C) * -0.5f;                             // ds:102089FC
-    field<float>(this, 0x64) = halfX;
-    const float halfZ = field<float>(this, 0x60) * -0.5f;
-    field<float>(this, 0x68) = halfZ;
-    field<float>(this, 0x70) = 0.0f;
-    field<float>(this, 0x6C) = halfX;
-    field<float>(this, 0x74) = halfZ;
+    m_extentX = static_cast<float>(m_mapWidth) * m_heightmap->getScale().x;           // +0x54
+    m_extentZ = static_cast<float>(m_mapHeight) * m_heightmap->getScale().z;          // +0x54
+    const float halfX = m_extentX * -0.5f;                                            // ds:102089FC
+    m_originX = halfX;
+    const float halfZ = m_extentZ * -0.5f;
+    m_originZ = halfZ;
+    m_patchOrigin.y = 0.0f;
+    m_patchOrigin.x = halfX;
+    m_patchOrigin.z = halfZ;
 
     unsigned char* const density = static_cast<unsigned char*>(::renddx9abi::engineAlloc(
-        field<unsigned int>(this, 0x7C) * field<unsigned int>(this, 0x78)));
-    field<unsigned char*>(this, 0x80) = density;
-    std::memset(density, 0, field<unsigned int>(this, 0x7C) * field<unsigned int>(this, 0x78));
+        m_mapHeight * m_mapWidth));
+    m_densityMap = density;
+    std::memset(density, 0, m_mapHeight * m_mapWidth);
     unsigned char* const shadow = static_cast<unsigned char*>(::renddx9abi::engineAlloc(
-        field<unsigned int>(this, 0x7C) * field<unsigned int>(this, 0x78)));
-    field<unsigned char*>(this, 0x84) = shadow;
-    std::memset(shadow, 0xFF, field<unsigned int>(this, 0x7C) * field<unsigned int>(this, 0x78));
+        m_mapHeight * m_mapWidth));
+    m_shadowMap = shadow;
+    std::memset(shadow, 0xFF, m_mapHeight * m_mapWidth);
 
     unsigned int bytesRead = 0;                                                        // var_10
-    const vc71::string& path = field<vc71::string>(this, 0x88);
+    const std::string& path = m_path;
     if (::renddx9abi::engineFileExists(concat(path, "Overgrowth.raw")))               // +0x1C
     {
-        const unsigned int bytes = field<unsigned int>(this, 0x7C) * field<unsigned int>(this, 0x78);
-        hostReadFile(concat(path, "Overgrowth.raw"), field<unsigned char*>(this, 0x80), bytes,
+        const unsigned int bytes = m_mapHeight * m_mapWidth;
+        hostReadFile(concat(path, "Overgrowth.raw"), m_densityMap, bytes,
                      bytesRead);                                                        // +0x2C
     }
     if (::renddx9abi::engineFileExists(concat(path, "OvergrowthShadowmap.raw")))
     {
-        const unsigned int bytes = field<unsigned int>(this, 0x7C) * field<unsigned int>(this, 0x78);
-        hostReadFile(concat(path, "OvergrowthShadowmap.raw"), field<unsigned char*>(this, 0x84),
+        const unsigned int bytes = m_mapHeight * m_mapWidth;
+        hostReadFile(concat(path, "OvergrowthShadowmap.raw"), m_shadowMap,
                      bytes, bytesRead);
     }
 
-    setViewDistance(field<float>(this, 0x24));                                        // vtable +0x0C
+    setViewDistance(m_viewDistance);                                                  // vtable +0x0C
 
-    const vc71::vector_layout& layers = field<vc71::vector_layout>(this, 0x3C);
-    for (unsigned int i = 0; i < vc71::vectorSizeIn(layers, 0x30); ++i)
+    std::vector<OverGrowthMaterial>& layers = m_materials;
+    for (unsigned int i = 0; i < layers.size(); ++i)
     {
-        unsigned char* const layer = reinterpret_cast<unsigned char*>(layers.first) + i * 0x30;
-        const vc71::vector_layout& types = field<vc71::vector_layout>(layer, 0x20);
-        for (unsigned int j = 0; j < vc71::vectorSizeIn(types, 0x5C); ++j)
+        OverGrowthMaterial& layer = layers[i];
+        std::vector<OverGrowthType>& types = layer.types;
+        for (unsigned int j = 0; j < types.size(); ++j)
         {
-            unsigned char* const type = reinterpret_cast<unsigned char*>(types.first) + j * 0x5C;
-            field<int>(type, 0x58) = findOrAddGeometry(field<vc71::string>(type, 0x1C));
+            OverGrowthType& type = types[j];
+            type.geometryIndex = findOrAddGeometry(type.geometry);
         }
     }
-    field<unsigned char>(this, 0x1E) = 1;
+    m_initialized = 1;
 }
 
 
@@ -833,33 +736,31 @@ void OverGrowth::initialize()
 
 void OverGrowth::preLoadResources()
 {
-    if (field<vc71::string>(this, 0x88).empty())
+    if (m_path.empty())
         return;
     OverGrowth::initialize();
 
-    field<unsigned char*>(this, 0xE0) = newPatchArray(field<int>(this, 0xD8) * field<int>(this, 0xDC));
-    for (int z = 0; z < field<int>(this, 0xDC); ++z)
+    m_patches = newPatchArray(m_patchCountX * m_patchCountZ);
+    for (int z = 0; z < m_patchCountZ; ++z)
     {
         const float rowZ = static_cast<float>(z);
-        for (int x = 0; x < field<int>(this, 0xD8); ++x)
+        for (int x = 0; x < m_patchCountX; ++x)
         {
-            unsigned char* const patch = field<unsigned char*>(this, 0xE0) +
-                                         (field<int>(this, 0xD8) * z + x) * 0x98;
-            const float offsetZ = rowZ * field<float>(this, 0x14);
-            field<float>(patch, 0x00) = static_cast<float>(x) * field<float>(this, 0x14) +
-                                        field<float>(this, 0x6C);
-            field<float>(patch, 0x04) = field<float>(this, 0x70);
-            field<float>(patch, 0x08) = offsetZ + field<float>(this, 0x74);
+            OverGrowthPatch* const patch = m_patches + (m_patchCountX * z + x);
+            const float offsetZ = rowZ * m_cellSize;
+            patch->position.x = static_cast<float>(x) * m_cellSize + m_patchOrigin.x;
+            patch->position.y = m_patchOrigin.y;
+            patch->position.z = offsetZ + m_patchOrigin.z;
 
-            const float half = field<float>(this, 0x14) * 0.5f;                         // ds:101DD4F0
-            const float height = field<world::IHeightmapCluster*>(this, 0xAC)->getHeightInWorldCoords(
-                half + field<float>(patch, 0x00), half + field<float>(patch, 0x08));    // +0x6C
-            field<float>(patch, 0x04) = height;
+            const float half = m_cellSize * 0.5f;                                       // ds:101DD4F0
+            const float height = m_cluster->getHeightInWorldCoords(
+                half + patch->position.x, half + patch->position.z);                    // +0x6C
+            patch->position.y = height;
 
-            const float centreHalf = field<float>(this, 0x14) * 0.5f;
-            const float centreX = centreHalf + field<float>(patch, 0x00);
-            const float centreZ = centreHalf + field<float>(patch, 0x08);
-            MeshBounds& bounds = field<MeshBounds>(patch, 0x5C);
+            const float centreHalf = m_cellSize * 0.5f;
+            const float centreX = centreHalf + patch->position.x;
+            const float centreZ = centreHalf + patch->position.z;
+            MeshBounds& bounds = patch->bounds;
             bounds.min.x = centreX;
             bounds.min.y = height;
             bounds.min.z = centreZ;
@@ -871,7 +772,7 @@ void OverGrowth::preLoadResources()
         }
     }
 
-    if (!field<unsigned char>(this, 0xF0))
+    if (!m_editorEnable)
         addStaticObjects(this);
 }
 
@@ -881,40 +782,37 @@ void OverGrowth::preLoadResources()
 
 void OverGrowth::postLoadResources()
 {
-    if (field<vc71::string>(this, 0x88).empty())
+    if (m_path.empty())
         return;
 
     // per geometry: the vegetation stream sizes and the lod fade (skipped while reloading)
-    if (!field<unsigned char>(this, 0xB0))
+    if (!m_reloading)
     {
-        for (unsigned int i = 0;
-             i < vc71::vectorSizeIn(field<vc71::vector_layout>(this, 0x4C), 0xA0); ++i)
+        for (unsigned int i = 0; i < m_geometries.size(); ++i)
         {
-            static const unsigned int kRecords[2] = { 0x50, 0x00 };   // the named record, then "_lod"
-            for (unsigned int r = 0; r < 2; ++r)
+            for (unsigned int r = 0; r < 2; ++r)                      // the named record, then "_lod"
             {
-                unsigned char* const record =
-                    reinterpret_cast<unsigned char*>(field<vc71::vector_layout>(this, 0x4C).first) +
-                    i * 0xA0 + kRecords[r];
+                OverGrowthGeometryRecord* const record =
+                    r == 0 ? &m_geometries[i].full : &m_geometries[i].lod;
                 IGeometryTemplate* const geometryTemplate =
-                    geometryGetTemplate(field<void*>(record, 0x1C));                  // +0x38
+                    geometryGetTemplate(record->geometry);                             // +0x38
                 for (unsigned int k = 0;
-                     k < vc71::vectorSizeIn(firstLodMaterials(geometryTemplate), 0x204); ++k)
+                     k < staticMeshFirstLodMaterialCount(vegetationTemplate(geometryTemplate)); ++k)
                 {
-                    const StaticMeshMaterial* const material = reinterpret_cast<const StaticMeshMaterial*>(
-                        firstLodMaterials(geometryTemplate).first) + k;
-                    const vc71::string lowered = toLower(materialTextureName(material));
+                    const StaticMeshMaterial* const material =
+                        staticMeshFirstLodMaterial(vegetationTemplate(geometryTemplate), k);
+                    const std::string lowered = toLower(materialTextureName(material));
                     unsigned int tiled = 0;
                     if (find(lowered, "tile_", 5) != kNpos)
                         tiled = 1;
-                    field<unsigned int>(record, 0x20 + tiled * 4) += material->m_vegetationVertexCount;
-                    field<unsigned int>(record, 0x28 + tiled * 4) += material->m_vegetationIndexCount;
+                    record->vertexCounts[tiled] += material->m_vegetationVertexCount;
+                    record->indexCounts[tiled] += material->m_vegetationIndexCount;
                 }                                                   // `lowered` dies here (100CD13F)
-                MeshBounds* const bounds = geometryLocalBounds(field<void*>(record, 0x1C));   // +0x40
+                MeshBounds* const bounds = geometryLocalBounds(record->geometry);      // +0x40
                 if (bounds->dirty)
                     meshBoundsFinalize(*bounds);
                 const float scaled = bounds->radius * 0.2f;                             // ds:101DDF30
-                field<float>(record, 0x4C) = clampFloat(scaled * scaled, 0.3f, 1.0f);
+                record->distanceScale = clampFloat(scaled * scaled, 0.3f, 1.0f);
             }
         }
     }
@@ -926,51 +824,44 @@ void OverGrowth::postLoadResources()
     unsigned int layerIndices[32];                                                      // var_80
     std::memset(layerVertices, 0, sizeof(layerVertices));
     std::memset(layerIndices, 0, sizeof(layerIndices));
-    for (unsigned int i = 0;
-         i < vc71::vectorSizeIn(field<vc71::vector_layout>(this, 0x3C), 0x30); ++i)
+    for (unsigned int i = 0; i < m_materials.size(); ++i)
     {
-        unsigned char* const layer =
-            reinterpret_cast<unsigned char*>(field<vc71::vector_layout>(this, 0x3C).first) + i * 0x30;
+        OverGrowthMaterial& layer = m_materials[i];
         for (unsigned int j = 0; j < 2; ++j)
         {
             float densitySum = 0.0f;                                                    // ds:101DDE64
-            const unsigned int slot = field<unsigned int>(layer, 0x1C) * 2 + j;
+            const unsigned int slot = layer.id * 2 + j;
             layerVertices[slot] = 0;
             layerIndices[slot] = 0;
-            const vc71::vector_layout& types = field<vc71::vector_layout>(layer, 0x20);
-            for (unsigned int k = 0; k < vc71::vectorSizeIn(types, 0x5C); ++k)
+            std::vector<OverGrowthType>& types = layer.types;
+            for (unsigned int k = 0; k < types.size(); ++k)
             {
-                unsigned char* const type = reinterpret_cast<unsigned char*>(types.first) + k * 0x5C;
-                const int perCell = static_cast<int>(field<float>(this, 0x14) * field<float>(this, 0x14) *
-                                                     field<float>(type, 0x3C) * 0.001f);   // ds:101DDE54
-                const unsigned char* const pair =
-                    reinterpret_cast<unsigned char*>(field<vc71::vector_layout>(this, 0x4C).first) +
-                    field<int>(type, 0x58) * 0xA0;
-                layerVertices[field<unsigned int>(layer, 0x1C) * 2 + j] +=
-                    field<unsigned int>(pair, 0x20 + j * 4) * perCell;
-                densitySum += field<float>(type, 0x3C);
-                layerIndices[field<unsigned int>(layer, 0x1C) * 2 + j] +=
-                    field<unsigned int>(pair, 0x28 + j * 4) * perCell;
+                OverGrowthType& type = types[k];
+                const int perCell = static_cast<int>(m_cellSize * m_cellSize *
+                                                     type.density * 0.001f);          // ds:101DDE54
+                const OverGrowthGeometryPair& pair = m_geometries.data()[type.geometryIndex];
+                layerVertices[layer.id * 2 + j] += pair.lod.vertexCounts[j] * perCell;
+                densitySum += type.density;
+                layerIndices[layer.id * 2 + j] += pair.lod.indexCounts[j] * perCell;
             }
-            for (unsigned int k = 0; k < vc71::vectorSizeIn(types, 0x5C); ++k)
+            for (unsigned int k = 0; k < types.size(); ++k)
             {
-                unsigned char* const type = reinterpret_cast<unsigned char*>(types.first) + k * 0x5C;
-                field<float>(type, 0x38) = field<float>(type, 0x3C) / densitySum;
+                OverGrowthType& type = types[k];
+                type.probability = type.density / densitySum;
             }
         }
     }
 
     // the largest per-patch vertex / index counts, per stream
-    field<unsigned int>(this, 0x104) = 10;
-    field<unsigned int>(this, 0x108) = 10;
-    field<unsigned int>(this, 0x10C) = 10;
-    field<unsigned int>(this, 0x110) = 10;
-    for (int z = 0; z < field<int>(this, 0xDC); ++z)
+    m_streamVertexCounts[0] = 10;
+    m_streamVertexCounts[1] = 10;
+    m_streamIndexCounts[0] = 10;
+    m_streamIndexCounts[1] = 10;
+    for (int z = 0; z < m_patchCountZ; ++z)
     {
-        for (int x = 0; x < field<int>(this, 0xD8); ++x)
+        for (int x = 0; x < m_patchCountX; ++x)
         {
-            unsigned char* const patch = field<unsigned char*>(this, 0xE0) +
-                                         (field<int>(this, 0xD8) * z + x) * 0x98;
+            const OverGrowthPatch* const patch = m_patches + (m_patchCountX * z + x);
             for (unsigned int j = 0; j < 2; ++j)
             {
                 unsigned int vertices = 0;
@@ -978,41 +869,37 @@ void OverGrowth::postLoadResources()
                 for (unsigned int l = 0; l < 16; ++l)
                 {
                     vertices += static_cast<int>(static_cast<float>(layerVertices[l * 2 + j]) *
-                                                 field<float>(patch, 0x1C + 4 * l));
+                                                 patch->coverage[l]);
                     indices += static_cast<int>(static_cast<float>(layerIndices[l * 2 + j]) *
-                                                field<float>(patch, 0x1C + 4 * l));
+                                                patch->coverage[l]);
                 }
-                const vc71::vector_layout& instances = field<vc71::vector_layout>(patch, 0x0C);
-                for (unsigned int k = 0; k < vc71::vectorSizeIn(instances, 0x60); ++k)
+                const OverGrowthInstanceVector& instances = patch->instances;
+                for (unsigned int k = 0; k < instances.size(); ++k)
                 {
-                    const unsigned char* const instance =
-                        reinterpret_cast<unsigned char*>(instances.first) + k * 0x60;
-                    if (field<unsigned char>(instance, 0x58))
+                    const OverGrowthInstance& instance = instances[k];
+                    if (instance.generated)
                         continue;
-                    const unsigned char* const pair =
-                        reinterpret_cast<unsigned char*>(field<vc71::vector_layout>(this, 0x4C).first) +
-                        field<int>(instance, 0x00) * 0xA0;
-                    vertices += field<unsigned int>(pair, 0x20 + j * 4);
-                    indices += field<unsigned int>(pair, 0x28 + j * 4);
+                    const OverGrowthGeometryPair& pair = m_geometries.data()[instance.geometryIndex];
+                    vertices += pair.lod.vertexCounts[j];
+                    indices += pair.lod.indexCounts[j];
                 }
-                if (vertices > field<unsigned int>(this, 0x104 + j * 4))
-                    field<unsigned int>(this, 0x104 + j * 4) = vertices;
-                if (indices > field<unsigned int>(this, 0x10C + j * 4))
-                    field<unsigned int>(this, 0x10C + j * 4) = indices;
+                if (vertices > m_streamVertexCounts[j])
+                    m_streamVertexCounts[j] = vertices;
+                if (indices > m_streamIndexCounts[j])
+                    m_streamIndexCounts[j] = indices;
             }
         }
     }
 
     // the N x N cells
-    const int gridSize = field<int>(this, 0x10);
-    field<OverGrowthCell**>(this, 0xE4) = static_cast<OverGrowthCell**>(
-        ::renddx9abi::engineAlloc(static_cast<unsigned int>(gridSize * gridSize * 4)));
-    for (int z = 0; z < field<int>(this, 0x10); ++z)
+    const int gridSize = m_gridSize;
+    m_cells = static_cast<OverGrowthCell**>(
+        ::renddx9abi::engineAlloc(static_cast<unsigned int>(gridSize * gridSize) * sizeof(OverGrowthCell*)));
+    for (int z = 0; z < m_gridSize; ++z)
     {
-        for (int x = 0; x < field<int>(this, 0x10); ++x)
+        for (int x = 0; x < m_gridSize; ++x)
         {
-            OverGrowthCell** const slot =
-                field<OverGrowthCell**>(this, 0xE4) + (field<int>(this, 0x10) * z + x);
+            OverGrowthCell** const slot = m_cells + (m_gridSize * z + x);
             *slot = createOverGrowthCell();
         }
     }
@@ -1022,9 +909,9 @@ void OverGrowth::postLoadResources()
         TextureNameSet names;
         collectTextureNames(this, names);
         adoptFirstAtlasPage(this);
-        field<float>(this, 0x20) = 0.0f;
-        field<float>(this, 0x30) = 1.0f;
-        field<unsigned char>(this, 0xA4) = 1;
+        m_fadeBand = 0.0f;
+        m_minimumHeightFade = 1.0f;
+        m_loaded = 1;
         rebuildCells();                                                                 // vtable +0x14
     }
 }
@@ -1039,26 +926,25 @@ void OverGrowth::postLoadResources()
 void OverGrowth::preLoad()
 {
     OverGrowth* const self = this;
-    const vc71::vector_layout& layers = field<vc71::vector_layout>(self, 0x3C);
-    for (unsigned int i = 0; i < vc71::vectorSizeIn(layers, 0x30); ++i)
+    std::vector<OverGrowthMaterial>& layers = self->m_materials;
+    for (unsigned int i = 0; i < layers.size(); ++i)
     {
-        unsigned char* const layer = reinterpret_cast<unsigned char*>(layers.first) + i * 0x30;
-        const vc71::vector_layout& types = field<vc71::vector_layout>(layer, 0x20);
-        for (unsigned int j = 0; j < vc71::vectorSizeIn(types, 0x5C); ++j)
+        OverGrowthMaterial& layer = layers[i];
+        std::vector<OverGrowthType>& types = layer.types;
+        for (unsigned int j = 0; j < types.size(); ++j)
         {
-            unsigned char* const type = reinterpret_cast<unsigned char*>(types.first) + j * 0x5C;
-            if (field<int>(type, 0x58) < 0)
-                field<int>(type, 0x58) = self->findOrAddGeometry(field<vc71::string>(type, 0x1C));
+            OverGrowthType& type = types[j];
+            if (type.geometryIndex < 0)
+                type.geometryIndex = self->findOrAddGeometry(type.geometry);
         }
     }
 
-    field<dx9rend::TextureAtlas*>(self, 0xFC) = newAtlas();
+    self->m_atlas = newAtlas();
     const int previousMipClass = dx9rend::textureManagerSwapDefaultMipClass(9);
-    if (!dx9rend::textureAtlasLoadTAI(field<dx9rend::TextureAtlas*>(self, 0xFC),
-                                      concat(field<vc71::string>(self, 0x88), "OvergrowthAtlas.tai")))
+    if (!dx9rend::textureAtlasLoadTAI(self->m_atlas, concat(self->m_path, "OvergrowthAtlas.tai")))
     {
-        deleteAtlas(field<dx9rend::TextureAtlas*>(self, 0xFC));
-        field<dx9rend::TextureAtlas*>(self, 0xFC) = 0;
+        deleteAtlas(self->m_atlas);
+        self->m_atlas = 0;
     }
     dx9rend::textureManagerSwapDefaultMipClass(previousMipClass);
 }
@@ -1072,24 +958,23 @@ void OverGrowth::generateAtlas()
     OverGrowth* const self = this;
     TextureNameSet names;
     collectTextureNames(self, names);
-    std::list<vc71::string> files(names.begin(), names.end());
+    std::list<std::string> files(names.begin(), names.end());
 
-    vc71::string saveDirectory;
+    std::string saveDirectory;
     dx9rend::readStringSettingDefault("Editor_LevelSavePath", "", saveDirectory);          // +0x40
     if (saveDirectory.size() == 0)
         dx9rend::readStringSettingDefault("GSModDirectory", "", saveDirectory);            // +0x40
 
-    deleteAtlas(field<dx9rend::TextureAtlas*>(self, 0xFC));
-    field<dx9rend::TextureAtlas*>(self, 0xFC) = newAtlas();
+    deleteAtlas(self->m_atlas);
+    self->m_atlas = newAtlas();
     const int previousMipClass = dx9rend::textureManagerSwapDefaultMipClass(9);
-    dx9rend::textureAtlasGenerate(field<dx9rend::TextureAtlas*>(self, 0xFC), saveDirectory,
-                                  concat(field<vc71::string>(self, 0x88), "OvergrowthAtlas"),
+    dx9rend::textureAtlasGenerate(self->m_atlas, saveDirectory,
+                                  concat(self->m_path, "OvergrowthAtlas"),
                                   saveDirectory, files, true);
-    if (!dx9rend::textureAtlasLoadTAI(field<dx9rend::TextureAtlas*>(self, 0xFC),
-                                      concat(field<vc71::string>(self, 0x88), "OvergrowthAtlas.tai")))
+    if (!dx9rend::textureAtlasLoadTAI(self->m_atlas, concat(self->m_path, "OvergrowthAtlas.tai")))
     {
-        deleteAtlas(field<dx9rend::TextureAtlas*>(self, 0xFC));
-        field<dx9rend::TextureAtlas*>(self, 0xFC) = 0;
+        deleteAtlas(self->m_atlas);
+        self->m_atlas = 0;
     }
     adoptFirstAtlasPage(self);
     dx9rend::textureManagerSwapDefaultMipClass(previousMipClass);
@@ -1105,44 +990,43 @@ void OverGrowth::save()
 {
     OverGrowth* const self = this;
     std::ostringstream out;
-    out << "Overgrowth.viewDistance " << field<float>(self, 0x24) << std::endl;
-    out << "Overgrowth.viewDistanceScale " << field<float>(self, 0x28) << std::endl;
-    out << "Overgrowth.closeDistPercentage " << field<float>(self, 0xC8) << std::endl;
+    out << "Overgrowth.viewDistance " << self->m_viewDistance << std::endl;
+    out << "Overgrowth.viewDistanceScale " << self->m_viewDistanceScale << std::endl;
+    out << "Overgrowth.closeDistPercentage " << self->m_closeDistPercentage << std::endl;
     out << std::endl;
-    const vc71::vector_layout& layers = field<vc71::vector_layout>(self, 0x3C);
-    for (unsigned char* layer = reinterpret_cast<unsigned char*>(layers.first);
-         layer != reinterpret_cast<unsigned char*>(layers.last); layer += 0x30)
+    const std::vector<OverGrowthMaterial>& layers = self->m_materials;
+    for (const OverGrowthMaterial* layer = layers.data(); layer != layers.data() + layers.size();
+         ++layer)
     {
-        out << "Overgrowth.addMaterial " << field<vc71::string>(layer, 0x00) << " "
-            << field<unsigned int>(layer, 0x1C) << std::endl;
-        out << "Overgrowth.setActiveMaterial " << field<vc71::string>(layer, 0x00) << std::endl;
-        const vc71::vector_layout& types = field<vc71::vector_layout>(layer, 0x20);
-        for (unsigned char* type = reinterpret_cast<unsigned char*>(types.first);
-             type != reinterpret_cast<unsigned char*>(types.last); type += 0x5C)
+        out << "Overgrowth.addMaterial " << layer->name << " "
+            << layer->id << std::endl;
+        out << "Overgrowth.setActiveMaterial " << layer->name << std::endl;
+        const std::vector<OverGrowthType>& types = layer->types;
+        for (const OverGrowthType* type = types.data(); type != types.data() + types.size(); ++type)
         {
-            out << "Overgrowth.addType " << field<vc71::string>(type, 0x00) << std::endl;
-            out << "Overgrowth.setActiveType " << field<vc71::string>(type, 0x00) << std::endl;
-            out << "OvergrowthType.geometry " << field<vc71::string>(type, 0x1C) << std::endl;
-            out << "OvergrowthType.density " << field<float>(type, 0x3C) << std::endl;
-            out << "OvergrowthType.normalScale " << field<float>(type, 0x54) << std::endl;
-            out << "OvergrowthType.rotationScale " << field<float>(type, 0x40) << std::endl;
-            out << "OvergrowthType.minRadiusToSame " << field<float>(type, 0x4C) << std::endl;
-            out << "OvergrowthType.minRadiusToOthers " << field<float>(type, 0x50) << std::endl;
+            out << "Overgrowth.addType " << type->name << std::endl;
+            out << "Overgrowth.setActiveType " << type->name << std::endl;
+            out << "OvergrowthType.geometry " << type->geometry << std::endl;
+            out << "OvergrowthType.density " << type->density << std::endl;
+            out << "OvergrowthType.normalScale " << type->normalScale << std::endl;
+            out << "OvergrowthType.rotationScale " << type->rotationScale << std::endl;
+            out << "OvergrowthType.minRadiusToSame " << type->minRadiusToSame << std::endl;
+            out << "OvergrowthType.minRadiusToOthers " << type->minRadiusToOthers << std::endl;
         }
         out << std::endl;
     }
-    out << "Overgrowth.path " << field<vc71::string>(self, 0x88) << std::endl;
+    out << "Overgrowth.path " << self->m_path << std::endl;
     out << "Overgrowth.preLoad" << std::endl;
     {
         const std::string sizeText = out.str();                                           // str() #1
         const std::string dataText = out.str();                                           // str() #2
-        hostWriteFile(concat(field<vc71::string>(self, 0x88), "Overgrowth.con"),
+        hostWriteFile(concat(self->m_path, "Overgrowth.con"),
                       dataText.c_str(), static_cast<unsigned int>(sizeText.size()), true);
     }
     saveCollision(self);
     saveDensityMap(self);
     saveShadowMap(self);
-    if (!field<unsigned char>(self, 0xB0))
+    if (!self->m_reloading)
     {
         TextureNameSet names;
         collectTextureNames(self, names);

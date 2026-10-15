@@ -21,7 +21,7 @@
 #include "../RendMisc/IRenderView.h"
 #include "../../RendDX9Abi/BfMemory.h"
 #include "../../RendDX9Abi/PluginEntry.h"
-#include "../../RendDX9Abi/Vc71String.h"
+#include <string>
 
 #include <cmath>
 #include <cstddef>
@@ -52,6 +52,9 @@ void rendererDrawIndexedPrimitive(unsigned int primCount, unsigned int type, int
 
 // QueryManager.cpp, the published half of the query surface.
 void* queryManagerCreateQuery(int type);                           // sub_10004420 via the global
+// The native address of the Query field at a retail x86 byte offset (the identity on x86); an
+// offset that names no field stops with a [FRONTIER] diagnostic.
+unsigned char* queryFieldAt(void* query, unsigned int retailOffset);
 
 } // namespace dx9rend
 
@@ -211,13 +214,18 @@ float clampFloat(float value, float low, float high)
 // the xyz of its `fogColor` parameter.
 const Vec3* raShaderConstantsFogColor()
 {
-    return reinterpret_cast<const Vec3*>(
-        static_cast<unsigned char*>(dx9rend::g_raShaderConstants) + 268);
+    return reinterpret_cast<const Vec3*>(dx9rend::raShaderConstantsAt(268));
 }
 
 // dx9rend::Query is private to QueryManager.cpp; these three bodies have no declaration there.
-// Layout facts used below are that file's own: +0x08 IDirect3DQuery9*, +0x0C type, +0x10 the frame
-// ordinal of the last accepted result, +0x14 the result itself, +0x18/+0x19 the two state bytes.
+// Fields by retail offset (QueryManager.cpp's own layout): +0x04 refcount, +0x08 IDirect3DQuery9*,
+// +0x0C type, +0x10 the frame ordinal of the last accepted result, +0x14 the result itself,
+// +0x18/+0x19 the two state bytes. queryFieldAt maps each onto the native field.
+template <typename T>
+T& queryField(void* query, unsigned int retailOffset)
+{
+    return *reinterpret_cast<T*>(dx9rend::queryFieldAt(query, retailOffset));
+}
 
 // sub_10004050 - read the occlusion result. Only a type-9 query with a live D3D object and the
 // "issued" byte set actually calls GetData; on S_OK it stamps the renderer's frame ordinal at +0x10,
@@ -225,19 +233,19 @@ const Vec3* raShaderConstantsFogColor()
 // returned and, on a failed GetData, restored.
 int queryReadOcclusionResult(void* query)
 {
-    unsigned char* const self = static_cast<unsigned char*>(query);
-    IDirect3DQuery9* const d3d = *reinterpret_cast<IDirect3DQuery9**>(self + 0x08);
-    int* const samples = reinterpret_cast<int*>(self + 0x14);
-    if (!d3d || *reinterpret_cast<int*>(self + 0x0C) != 9)
+    IDirect3DQuery9* const d3d = queryField<IDirect3DQuery9*>(query, 0x08);
+    int* const samples = &queryField<int>(query, 0x14);
+    if (!d3d || queryField<int>(query, 0x0C) != 9)
         return -1;
-    if (self[0x19])
+    unsigned char& issued = queryField<unsigned char>(query, 0x19);
+    if (issued)
     {
         const int previous = *samples;
         if (d3d->GetData(samples, 4, 0) == D3D_OK)
         {
-            *reinterpret_cast<unsigned int*>(self + 0x10) = dx9rend::rendererFrameOrdinal();
+            queryField<unsigned int>(query, 0x10) = dx9rend::rendererFrameOrdinal();
             const int result = *samples;
-            self[0x19] = 0;
+            issued = 0;
             return result;
         }
         *samples = previous;
@@ -248,7 +256,7 @@ int queryReadOcclusionResult(void* query)
 // sub_10004120 - the frame ordinal stamped by the read above.
 unsigned int queryResultFrame(void* query)
 {
-    return *reinterpret_cast<unsigned int*>(static_cast<unsigned char*>(query) + 0x10);
+    return queryField<unsigned int>(query, 0x10);
 }
 
 // sub_100041A0 - the begin/end toggle. It reads the pending result first, then, if nothing is
@@ -256,18 +264,19 @@ unsigned int queryResultFrame(void* query)
 // is set, flips the toggle, and marks "issued" on the END half. Two calls bracket a draw.
 void queryToggleBeginEnd(void* query)
 {
-    unsigned char* const self = static_cast<unsigned char*>(query);
     queryReadOcclusionResult(query);
-    if (self[0x19])
+    unsigned char& issued = queryField<unsigned char>(query, 0x19);
+    if (issued)
         return;
-    IDirect3DQuery9* const d3d = *reinterpret_cast<IDirect3DQuery9**>(self + 0x08);
+    IDirect3DQuery9* const d3d = queryField<IDirect3DQuery9*>(query, 0x08);
     if (!d3d)
         return;
-    const bool wasEnd = (self[0x18] != 0);
+    unsigned char& toggle = queryField<unsigned char>(query, 0x18);
+    const bool wasEnd = (toggle != 0);
     d3d->Issue(static_cast<DWORD>((wasEnd ? 0 : 1) + 1));
-    self[0x18] = static_cast<unsigned char>(wasEnd ? 0 : 1);
+    toggle = static_cast<unsigned char>(wasEnd ? 0 : 1);
     if (wasEnd)
-        self[0x19] = 1;
+        issued = 1;
 }
 
 // Returns the sky light's stored direction.
@@ -349,26 +358,14 @@ SkyDome::SkyDome()
     , m_flareOcclusionInterval(32)
     , m_lightingBlend(0.0f)
 {
-    // The layout the whole file depends on, checked here because the members are private and the
-    // class is complete only inside its own bodies.
+    // The retail x86 layout, checked here because the members are private and the class is
+    // complete only inside its own bodies. Every access is by member name, so x64 keeps its own
+    // offsets.
+#if defined(_M_IX86)
     static_assert(offsetof(SkyDome, m_renderPath) == 0x008, "listener path word at +0x08");
     static_assert(offsetof(SkyDome, m_refCount) == 0x00C, "refcount at +0x0C");
     static_assert(offsetof(SkyDome, m_skyTemplate) == 0x024, "skyTemplate string at +0x24");
-    static_assert(offsetof(SkyDome, m_hasCloudLayer) == 0x078, "cloud flags at +0x78/+0x79");
-    static_assert(offsetof(SkyDome, m_cloudLayerCount) == 0x07C, "cloud layer count at +0x7C");
-    static_assert(offsetof(SkyDome, m_scrollDirection) == 0x0D4, "scroll direction at +0xD4");
-    static_assert(offsetof(SkyDome, m_skyTemplatePtr) == 0x0E4, "sky template at +0xE4");
-    static_assert(offsetof(SkyDome, m_effect) == 0x0FC, "effect at +0xFC");
-    static_assert(offsetof(SkyDome, m_paramTexLayer0) == 0x100, "TEXLAYER0 at +0x100");
-    static_assert(offsetof(SkyDome, m_paramLightingColor) == 0x12C, "LIGHTINGCOLOR at +0x12C");
-    static_assert(offsetof(SkyDome, m_vertexDeclClouds) == 0x130, "cloud declaration at +0x130");
-    static_assert(offsetof(SkyDome, m_texOffset) == 0x13C, "texture offset at +0x13C");
-    static_assert(offsetof(SkyDome, m_skyMaterial) == 0x15C, "sky material at +0x15C");
-    static_assert(offsetof(SkyDome, m_flareQuery) == 0x168, "occlusion query at +0x168");
-    static_assert(offsetof(SkyDome, m_flareTextureName) == 0x184, "flare texture name at +0x184");
-    static_assert(offsetof(SkyDome, m_flareDirection) == 0x1A0, "flare direction at +0x1A0");
-    static_assert(offsetof(SkyDome, m_flareOcclusionInterval) == 0x1C0, "recheck interval at +0x1C0");
-    static_assert(offsetof(SkyDome, m_lightingColor) == 0x1C8, "lighting colour at +0x1C8");
+#endif
 
     m_position.x = 0.0f;
     m_position.y = 0.0f;
@@ -397,24 +394,24 @@ SkyDome::SkyDome()
     // releases. No null guard on the effect: the parameter lookups dereference it directly.
     m_effect = static_cast<dx9rend::Effect*>(
         dx9rend::shaderManagerGetEffect(dx9rend::g_shaderManager, "mods/xpack/shaders/SkyDome"));
-    m_paramTexLayer0 = dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("TEXLAYER0"));
-    m_paramTexLayer1 = dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("TEXLAYER1"));
-    m_paramTexLayer2 = dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("TEXLAYER2"));
-    m_paramTexOffset = dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("TEXOFFSET"));
-    m_paramTexOffset2 = dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("TEXOFFSET2"));
+    m_paramTexLayer0 = dx9rend::effectGetShaderParameterTyped(m_effect, std::string("TEXLAYER0"));
+    m_paramTexLayer1 = dx9rend::effectGetShaderParameterTyped(m_effect, std::string("TEXLAYER1"));
+    m_paramTexLayer2 = dx9rend::effectGetShaderParameterTyped(m_effect, std::string("TEXLAYER2"));
+    m_paramTexOffset = dx9rend::effectGetShaderParameterTyped(m_effect, std::string("TEXOFFSET"));
+    m_paramTexOffset2 = dx9rend::effectGetShaderParameterTyped(m_effect, std::string("TEXOFFSET2"));
     m_paramCloudsFadeOutDist =
-        dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("CLOUDSFADEOUTDIST"));
+        dx9rend::effectGetShaderParameterTyped(m_effect, std::string("CLOUDSFADEOUTDIST"));
     m_paramCloudLerpFactors =
-        dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("CLOUDLERPFACTORS"));
+        dx9rend::effectGetShaderParameterTyped(m_effect, std::string("CLOUDLERPFACTORS"));
     m_paramWorldViewProjection =
-        dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("WorldViewProjection"));
+        dx9rend::effectGetShaderParameterTyped(m_effect, std::string("WorldViewProjection"));
     m_paramFlareParams =
-        dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("FLAREPARAMS"));
-    m_paramFogColor = dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("fogColor"));
+        dx9rend::effectGetShaderParameterTyped(m_effect, std::string("FLAREPARAMS"));
+    m_paramFogColor = dx9rend::effectGetShaderParameterTyped(m_effect, std::string("fogColor"));
     m_paramLightingBlend =
-        dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("LIGHTINGBLEND"));
+        dx9rend::effectGetShaderParameterTyped(m_effect, std::string("LIGHTINGBLEND"));
     m_paramLightingColor =
-        dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("LIGHTINGCOLOR"));
+        dx9rend::effectGetShaderParameterTyped(m_effect, std::string("LIGHTINGCOLOR"));
 
     // register before the first technique selection.
     dx9rend::registerRenderPathListener(
@@ -512,12 +509,10 @@ SkyDome::~SkyDome()
         // The Query has no release slot - QueryManager.cpp's three-slot table is {getRef, nullsub,
         // addRef}. Retail open-codes `if (!--refcount) { dtor; engineFree; }` here (sub_10003FA0 is
         // that destructor: it releases the IDirect3DQuery9 and drops the manager's counter).
-        int* const refCount = reinterpret_cast<int*>(
-            static_cast<unsigned char*>(m_flareQuery) + 4);
+        int* const refCount = &queryField<int>(m_flareQuery, 0x04);
         if (--*refCount == 0)
         {
-            IDirect3DQuery9** const d3d = reinterpret_cast<IDirect3DQuery9**>(
-                static_cast<unsigned char*>(m_flareQuery) + 8);
+            IDirect3DQuery9** const d3d = &queryField<IDirect3DQuery9*>(m_flareQuery, 0x08);
             if (*d3d)
             {
                 (*d3d)->Release();
@@ -734,7 +729,7 @@ const Vec2& SkyDome::getCloudLerpFactors() const
 
 // Selects the first geometry/LOD/material of a loaded sky template.
 // Those containers and the material shader must exist; no guards are applied.
-void SkyDome::setSkyTemplate(const vc71::string& name)
+void SkyDome::setSkyTemplate(const std::string& name)
 {
     m_skyTemplate = name;
     if (m_skyTemplatePtr)
@@ -773,7 +768,7 @@ void SkyDome::setSkyTemplate(const vc71::string& name)
 
 // setFlareTemplate - 0x10138B50, primary +0x84. Same shape as setSkyTemplate minus the texture
 // harvesting, plus the flare-dirty reset before the lookup.
-void SkyDome::setFlareTemplate(const vc71::string& name)
+void SkyDome::setFlareTemplate(const std::string& name)
 {
     m_flareTemplate = name;
     if (m_flareTemplatePtr)
@@ -789,12 +784,12 @@ void SkyDome::setFlareTemplate(const vc71::string& name)
     }
 }
 
-const vc71::string& SkyDome::getSkyTemplate() const
+const std::string& SkyDome::getSkyTemplate() const
 {
     return m_skyTemplate;
 }
 
-const vc71::string& SkyDome::getFlareTemplate() const
+const std::string& SkyDome::getFlareTemplate() const
 {
     return m_flareTemplate;
 }
@@ -804,7 +799,7 @@ const vc71::string& SkyDome::getFlareTemplate() const
 // The shipped body ignores its argument and assigns the
 // current skyTemplate string instead. `Skydome.cloudTemplate whatever` therefore resolves the SKY
 // template again. Reproduced; `name` is deliberately unused.
-void SkyDome::setCloudTemplate(const vc71::string& name)
+void SkyDome::setCloudTemplate(const std::string& name)
 {
     (void)name;
     m_cloudTemplate = m_skyTemplate;
@@ -819,7 +814,7 @@ void SkyDome::setCloudTemplate(const vc71::string& name)
     }
 }
 
-const vc71::string& SkyDome::getCloudTemplate() const
+const std::string& SkyDome::getCloudTemplate() const
 {
     return m_cloudTemplate;
 }
@@ -828,7 +823,7 @@ const vc71::string& SkyDome::getCloudTemplate() const
 // Texture setters release the previous texture, save the name, then load a replacement.
 // The loader modifies its own string copy.
 
-void SkyDome::setSkyTexture(const vc71::string& name)
+void SkyDome::setSkyTexture(const std::string& name)
 {
     if (m_skyTextureTex)
         dx9rend::textureReleaseRef(m_skyTextureTex);
@@ -837,12 +832,12 @@ void SkyDome::setSkyTexture(const vc71::string& name)
         static_cast<dx9rend::EngineTexture*>(dx9rend::textureManagerGetTexture(m_skyTexture));
 }
 
-const vc71::string& SkyDome::getSkyTexture() const
+const std::string& SkyDome::getSkyTexture() const
 {
     return m_skyTexture;
 }
 
-void SkyDome::setCloudTexture(const vc71::string& name)
+void SkyDome::setCloudTexture(const std::string& name)
 {
     if (m_cloudTextureTex)
         dx9rend::textureReleaseRef(m_cloudTextureTex);
@@ -851,12 +846,12 @@ void SkyDome::setCloudTexture(const vc71::string& name)
         static_cast<dx9rend::EngineTexture*>(dx9rend::textureManagerGetTexture(m_cloudTexture));
 }
 
-const vc71::string& SkyDome::getCloudTexture() const
+const std::string& SkyDome::getCloudTexture() const
 {
     return m_cloudTexture;
 }
 
-void SkyDome::setCloudTexture2(const vc71::string& name)
+void SkyDome::setCloudTexture2(const std::string& name)
 {
     if (m_cloudTexture2Tex)
         dx9rend::textureReleaseRef(m_cloudTexture2Tex);
@@ -865,7 +860,7 @@ void SkyDome::setCloudTexture2(const vc71::string& name)
         static_cast<dx9rend::EngineTexture*>(dx9rend::textureManagerGetTexture(m_cloudTexture2));
 }
 
-const vc71::string& SkyDome::getCloudTexture2() const
+const std::string& SkyDome::getCloudTexture2() const
 {
     return m_cloudTexture2;
 }
@@ -874,7 +869,7 @@ const vc71::string& SkyDome::getCloudTexture2() const
 // an empty name simply clears m_hasFlare and does nothing else (the old wrapper is still released
 // first), and a non-empty name adopts the stock "flaresprite" geometry when no flare template has
 // been chosen yet - through the virtual +0x84 slot, not the member function.
-void SkyDome::setFlareTexture(const vc71::string& name)
+void SkyDome::setFlareTexture(const std::string& name)
 {
     if (m_flareTextureTex)
         dx9rend::textureReleaseRef(m_flareTextureTex);
@@ -882,7 +877,7 @@ void SkyDome::setFlareTexture(const vc71::string& name)
     if (name.size() != 0)
     {
         if (!m_flareTemplatePtr)
-            setFlareTemplate(vc71::string("flaresprite"));
+            setFlareTemplate(std::string("flaresprite"));
         m_flareOcclusionReference = 1;
         m_flareTextureName = name;
         m_flareTextureTex = static_cast<dx9rend::EngineTexture*>(
@@ -897,7 +892,7 @@ void SkyDome::setFlareTexture(const vc71::string& name)
 }
 
 // getFlareTexture - 0x101382D0, primary +0x90. See the header: the read has a side effect.
-const vc71::string& SkyDome::getFlareTexture()
+const std::string& SkyDome::getFlareTexture()
 {
     m_flareOcclusionReference = 1;
     return m_flareTextureName;
@@ -943,15 +938,15 @@ void SkyDome::setCloudLayerCount(int count)
     m_cloudLayerCount = count;
     if (getHasCloudLayer() && getHasCloudLayer2() && m_cloudLayerCount > 1)
     {
-        dx9rend::effectSetTechniqueByName(m_effect, vc71::string("SkyDomeNV3xDualClouds"));
+        dx9rend::effectSetTechniqueByName(m_effect, std::string("SkyDomeNV3xDualClouds"));
         return;
     }
     if (!getHasCloudLayer() || !m_cloudLayerCount)
     {
-        dx9rend::effectSetTechniqueByName(m_effect, vc71::string("SkyDomeNV3xNoClouds"));
+        dx9rend::effectSetTechniqueByName(m_effect, std::string("SkyDomeNV3xNoClouds"));
         return;
     }
-    dx9rend::effectSetTechniqueByName(m_effect, vc71::string("SkyDomeNV3x"));
+    dx9rend::effectSetTechniqueByName(m_effect, std::string("SkyDomeNV3x"));
 }
 
 
@@ -976,9 +971,9 @@ int SkyDome::getCurrentRenderPath() const                // 0x101A9A10 on the su
     return m_renderPath;
 }
 
-vc71::string SkyDome::getRenderPathListenerName() const
+std::string SkyDome::getRenderPathListenerName() const
 {
-    return vc71::string("SkyDome");
+    return std::string("SkyDome");
 }
 
 
@@ -1027,25 +1022,25 @@ void SkyDome::onRenderPathNotification(int unused)
 
     if (cameraPosition->y < waterLevel)
     {
-        dx9rend::effectSetTechniqueByName(m_effect, vc71::string("SkyDomeUnderWater"));
+        dx9rend::effectSetTechniqueByName(m_effect, std::string("SkyDomeUnderWater"));
     }
     else if (getHasCloudLayer() && getHasCloudLayer2() && m_cloudLayerCount > 1)
     {
-        dx9rend::effectSetTechniqueByName(m_effect, vc71::string("SkyDomeNV3xDualClouds"));
+        dx9rend::effectSetTechniqueByName(m_effect, std::string("SkyDomeNV3xDualClouds"));
     }
     else if (getHasCloudLayer() && m_cloudLayerCount)
     {
         if (m_lightingBlend > 0.0f)
-            dx9rend::effectSetTechniqueByName(m_effect, vc71::string("SkyDomeNV3xLit"));
+            dx9rend::effectSetTechniqueByName(m_effect, std::string("SkyDomeNV3xLit"));
         else
-            dx9rend::effectSetTechniqueByName(m_effect, vc71::string("SkyDomeNV3x"));
+            dx9rend::effectSetTechniqueByName(m_effect, std::string("SkyDomeNV3x"));
     }
     else
     {
         if (m_lightingBlend > 0.0f)
-            dx9rend::effectSetTechniqueByName(m_effect, vc71::string("SkyDomeNV3xNoCloudsLit"));
+            dx9rend::effectSetTechniqueByName(m_effect, std::string("SkyDomeNV3xNoCloudsLit"));
         else
-            dx9rend::effectSetTechniqueByName(m_effect, vc71::string("SkyDomeNV3xNoClouds"));
+            dx9rend::effectSetTechniqueByName(m_effect, std::string("SkyDomeNV3xNoClouds"));
     }
 
     // guard bit 2 zeroes the scratch block that is never read. See the declaration.
@@ -1318,7 +1313,7 @@ void SkyDome::drawFlare(int mode)
 
     if (mode == 2)
     {
-        dx9rend::effectSetTechniqueByName(m_effect, vc71::string("SkyDomeSunFlare"));
+        dx9rend::effectSetTechniqueByName(m_effect, std::string("SkyDomeSunFlare"));
 
         Vec4 flareParams = { 0.0f, 0.0f, 0.0f, 0.0f };
 
@@ -1380,9 +1375,9 @@ void SkyDome::drawFlare(int mode)
     if (mode == 1 && m_flareOcclusionPending)
     {
         if (m_flareOcclusionFrame % m_flareOcclusionInterval)
-            dx9rend::effectSetTechniqueByName(m_effect, vc71::string("SkyDomeFlareOcclude"));
+            dx9rend::effectSetTechniqueByName(m_effect, std::string("SkyDomeFlareOcclude"));
         else
-            dx9rend::effectSetTechniqueByName(m_effect, vc71::string("SkyDomeFlareOccludeCheck"));
+            dx9rend::effectSetTechniqueByName(m_effect, std::string("SkyDomeFlareOccludeCheck"));
 
         queryToggleBeginEnd(m_flareQuery);
         submitFlarePass();
@@ -1402,7 +1397,7 @@ IBase* __fastcall createSkyDome(unsigned int iid, IBase* outer)
 {
     if (outer)
         return 0;
-    void* const storage = ::renddx9abi::engineAlloc(0x1D4);
+    void* const storage = ::renddx9abi::engineAlloc(sizeof(SkyDome));
     SkyDome* const self = storage ? new (storage) SkyDome() : 0;
     void* const itf = self->queryInterface(iid);
     if (!itf)

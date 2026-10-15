@@ -15,7 +15,7 @@
 
 #include "../../../RendDX9Abi/PluginAbi.h"
 
-#if BF2_PLUGIN_ABI_NATIVE && defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+#if defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
 
 #include "LightmapGeneration.h"
 #include "../../Core/ConsoleObjectMacro.h"

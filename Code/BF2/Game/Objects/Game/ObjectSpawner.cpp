@@ -29,6 +29,7 @@
 #include "../IPlayer.h"                             // getVehicle - moveIntersectingSoldiers' occupant test
 #include "../GameLogicComp/ArmorGLComp.h"            // armorTemplateCanBeDestroyed
 #include "../GameLogicComp/ArmorGLCompTemplate.h"
+#include "EngineBase.h"                              // m_input - the hold arm's engine test
 #include <cmath>                                     // sqrtf / fabsf
 
 #include <cstdlib>
@@ -321,12 +322,6 @@ inline IPlayerControlObject* pcoOf(IObject* object)
     return 0;
 }
 
-// Reads the engine's current input from its fixed layout.
-inline float engineInput(IObject* engine)
-{
-    return *reinterpret_cast<const float*>(reinterpret_cast<const char*>(engine) + 0x1C4);
-}
-
 inline Vec3 V3(float x, float y, float z) { Vec3 v; v.x = x; v.y = y; v.z = z; return v; }   // Vec3 is an aggregate here
 
 inline float distanceBetween(const Vec3& a, const Vec3& b)
@@ -472,7 +467,10 @@ void ObjectSpawner::handleUpdate(float dt, unsigned int)
             {
                 IObject* engine = 0;
                 getEngineFromChildsAndSiblings(held, engine);
-                if (!engine || fabsf(engineInput(engine)) >= 0.1f)   // flt_888CA90
+                // The CID_EngineTemplate object is an EngineBase; the PE reads m_input at retail
+                // +0x1C4. The named member, because this build's layout is not retail's (m_input
+                // sits at +0x1D0 on x86 here). flt_888CA90 = 0.1.
+                if (!engine || fabsf(static_cast<EngineBase*>(engine)->m_input) >= 0.1f)
                     release = true;
             }
             if (release)

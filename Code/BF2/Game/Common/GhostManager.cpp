@@ -37,6 +37,7 @@
 #include "../../Core/ClassManager.h"          // getClassName +0x28 - debugShowActiveGhosts
 #include "../../Core/SettingsRepostitory.h"   // GSDebugGhostManager, boolGet +0x50
 
+#include <cstddef>                            // offsetof - the retail layout checks below
 #include <cstring>                            // memset - the 4 KB ghost table
 #include <string>                             // debugShowActiveGhosts' two locals
 
@@ -44,6 +45,12 @@ namespace dice {
 namespace hfe {
 
 extern ClassManager* classManager;            // Core/Globals.cpp - the per-TU extern convention
+
+#if defined(_M_IX86)
+// readData's remove and update arms read these two fields at their retail offsets.
+static_assert(offsetof(io::INetworkableObject, m_ownerId) == 0x04, "retail owner id");
+static_assert(offsetof(io::INetworkableObject, m_object) == 0x08, "retail replicated object");
+#endif
 
 // Initialize per-connection ghost queues and baseline storage. Ghost ids are seeded
 // lazily on first assignment. State masks and the control-object id are deliberately
@@ -1722,13 +1729,12 @@ bool GhostManager::readData(io::BitStream& stream)
                 io::INetworkableObject* const objEntry = networkable->m_networkableObject;
                 bool disable = true;
 
-                if (objEntry && *reinterpret_cast<const short*>(
-                        reinterpret_cast<const char*>(objEntry) + 4) >= 0)
+                // The retail reads are the low word of m_ownerId (+0x04 on x86), sign-extended.
+                if (objEntry && static_cast<short>(objEntry->m_ownerId) >= 0)
                 {
                     // the object belongs to a player - only disable it if that player is gone
                     //   or local, and only if it is not parented to something else.
-                    const short playerId = *reinterpret_cast<const short*>(
-                        reinterpret_cast<const char*>(objEntry) + 4);
+                    const short playerId = static_cast<short>(objEntry->m_ownerId);
                     world::IPlayer* const player = world::playerManager->getPlayerFromId(playerId);
                     if (!player || !player->getIsRemote() || object->getParent())
                         disable = false;
@@ -1782,10 +1788,10 @@ bool GhostManager::readData(io::BitStream& stream)
         io::INetworkable* const n = desc ? desc->properties[0].networkables[0] : 0;
         if (n && n->m_networkableObject)
         {
-            const unsigned char* const info =
-                *reinterpret_cast<unsigned char* const*>(
-                    reinterpret_cast<const char*>(n->m_networkableObject) + 8);
-            if (info && (info[4] & 0x20))
+            // The retail reads [netobj +0x08] (m_object) and tests the low byte of that object's
+            // +0x04 flag word, the same bit sendData skips on.
+            const world::IObject* const info = n->m_networkableObject->m_object;
+            if (info && (static_cast<unsigned char>(info->getFlags()) & 0x20))
                 desc = 0;                                // treat it as unknown: skip the payload
         }
     }

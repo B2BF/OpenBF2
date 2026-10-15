@@ -337,17 +337,17 @@ anim::IAnimationSystem* animationSystemCreateInstance(void* animationSystemTempl
 // Uses the PE calling convention and slot because the full geometry interface is not declared here.
 void geometrySlot10(void* geometry, float fov)
 {
-    typedef void(__fastcall* SetFovFn)(void*, void*, float);
+    typedef void(__thiscall* SetFovFn)(void*, float);
     reinterpret_cast<SetFovFn>(
-        (*reinterpret_cast<void***>(geometry))[0x10 / sizeof(void*)])(geometry, 0, fov);
+        (*reinterpret_cast<void***>(geometry))[0x10 / 4])(geometry, fov);
 }
 
 void geometrySlotD8(void* geometry, bool flag)
 {
-    typedef void(__fastcall* Fn)(void*, void*, unsigned int);
+    typedef void(__thiscall* Fn)(void*, unsigned int);
     reinterpret_cast<Fn>(
-        (*reinterpret_cast<void***>(geometry))[0xD4 / sizeof(void*)])(
-            geometry, 0, flag ? 1u : 0u);
+        (*reinterpret_cast<void***>(geometry))[0xD4 / 4])(
+            geometry, flag ? 1u : 0u);
 }
 
 // Registers animation templates by name; file loading is deferred to the core event.
@@ -364,17 +364,17 @@ void  animationSystemManagerRelease(void* systemTemplate)
 // Supplies a borrowed bone-transform palette to the kit geometry through its renderer interface.
 void geometrySetBoneTransforms(void* geometry, const Mat4* transforms, int boneCount)  // PE +0x54
 {
-    typedef void(__fastcall* SetBonesFn)(void*, void*, const Mat4*, unsigned int);
+    typedef void(__thiscall* SetBonesFn)(void*, const Mat4*, unsigned int);
     reinterpret_cast<SetBonesFn>(
-        (*reinterpret_cast<void***>(geometry))[0x54 / sizeof(void*)])(
-            geometry, 0, transforms, static_cast<unsigned int>(boneCount));
+        (*reinterpret_cast<void***>(geometry))[0x54 / 4])(
+            geometry, transforms, static_cast<unsigned int>(boneCount));
 }
 
 void geometrySlot7C(void* geometry, int a)                                             // PE +0x78
 {
-    typedef void*(__fastcall* SetLodFn)(void*, void*, int);
+    typedef void*(__thiscall* SetLodFn)(void*, int);
     reinterpret_cast<SetLodFn>(
-        (*reinterpret_cast<void***>(geometry))[0x78 / sizeof(void*)])(geometry, 0, a);
+        (*reinterpret_cast<void***>(geometry))[0x78 / 4])(geometry, a);
 }
 
 // AI events are available only when a published AI instance reports a bots game.
@@ -383,13 +383,28 @@ inline bool aiConnectionIsUp()
     return ai::g_aiInstance != 0 && ai::aiInstance()->isBotsGame();
 }
 
-// Object +0x34, read raw. It is the handle the AI event carries for this body, and this tree
-// has not yet named the base-class field it lives in - so it is a documented offset rather than
-// an invented member. [UNRESOLVED] name.
-inline int objectAiHandle(const void* object)
+// The ECAI 1/2 (entered/exited vehicle) payload this body posts for itself: retail stores five
+// dwords - this soldier's AI object (Object +0x34, IObject::m_aiObject), a null second AI object,
+// team, id and a zero trailing word. PlayerControlObject's AiEnterNote/AiExitNote give the same
+// events this shape; the pointer members keep it whole on native x64. The x86 layout is retail's.
+struct SoldierAiSeatPayload
 {
-    return *reinterpret_cast<const int*>(static_cast<const char*>(object) + 0x34);
-}
+    void* aiObject;         // +0x00 this soldier's AI object
+    void* otherAiObject;    // +0x04 always null here
+    int   team;             // +0x08
+    int   id;               // +0x0C
+    int   trailing;         // +0x10 the trailing flag byte, stored as a whole dword
+};
+// The ECAI 6/7 (man down / revived) payload: this soldier's AI object, then the player id.
+struct SoldierAiPlayerPayload
+{
+    void* aiObject;         // +0x00 Object +0x34
+    int   playerId;         // +0x04
+};
+#if defined(_M_IX86)
+static_assert(sizeof(SoldierAiSeatPayload) == 20, "retail five-dword ECAI 1/2 payload");
+static_assert(sizeof(SoldierAiPlayerPayload) == 8, "retail two-dword ECAI 6/7 payload");
+#endif
 
 // Retail Object +0x3C, read directly by handleMessage and enter. LayoutAccess names the same
 // cached armor component without depending on the shipped pointer width.
@@ -752,13 +767,13 @@ void Soldier::exit()
 
     if (aiConnectionIsUp() && getOccupingPlayer())
     {
-        int payload[5];
-        payload[0] = objectAiHandle(this);                                   // +0x34
-        payload[1] = 0;
-        payload[2] = getOccupingPlayer()->getTeam();                         // +0xE8
-        payload[3] = getOccupingPlayer()->getId();                           // +0x54
-        payload[4] = 0;                                                      // the trailing byte
-        eventManager->postEvent(ECAI, 2, payload, 0.0f);                    // +0x14
+        SoldierAiSeatPayload payload;
+        payload.aiObject = object_detail::LayoutAccess::aiObject(this);      // +0x34
+        payload.otherAiObject = 0;
+        payload.team = getOccupingPlayer()->getTeam();                       // +0xE8
+        payload.id = getOccupingPlayer()->getId();                           // +0x54
+        payload.trailing = 0;                                                // the trailing byte
+        eventManager->postEvent(ECAI, 2, &payload, 0.0f);                   // +0x14
     }
 
     if (getOccupingPlayer())
@@ -3052,13 +3067,13 @@ bool Soldier::enter(IPlayer* player)
     // 7. tell the AI, if there is one listening.
     if (aiConnectionIsUp() && getOccupingPlayer())
     {
-        int payload[5];
-        payload[0] = objectAiHandle(this);
-        payload[1] = 0;
-        payload[2] = getOccupingPlayer()->getTeam();
-        payload[3] = getOccupingPlayer()->getId();
-        payload[4] = 0;                             // a trailing byte in the ELF
-        eventManager->postEvent(static_cast<EventCategory>(3), 1, payload, 0.0f);
+        SoldierAiSeatPayload payload;
+        payload.aiObject = object_detail::LayoutAccess::aiObject(this);   // +0x34
+        payload.otherAiObject = 0;
+        payload.team = getOccupingPlayer()->getTeam();
+        payload.id = getOccupingPlayer()->getId();
+        payload.trailing = 0;                       // a trailing byte in the ELF
+        eventManager->postEvent(static_cast<EventCategory>(3), 1, &payload, 0.0f);
     }
 
     // 8. reset the per-body input latches. Backwards, 1 then 0 - dice's.
@@ -3129,10 +3144,10 @@ void Soldier::handleMessage(TemplateMessage message, IPlayer* player, bool remot
                                      + WorldPref::getTickCount()));
                 if (aiConnectionIsUp())
                 {
-                    int payload[2];
-                    payload[0] = objectAiHandle(this);
-                    payload[1] = getOccupingPlayer()->getId();
-                    eventManager->postEvent(static_cast<EventCategory>(3), 6, payload, 0.0f);
+                    SoldierAiPlayerPayload payload;
+                    payload.aiObject = object_detail::LayoutAccess::aiObject(this);   // +0x34
+                    payload.playerId = getOccupingPlayer()->getId();
+                    eventManager->postEvent(static_cast<EventCategory>(3), 6, &payload, 0.0f);
                 }
             }
 
@@ -3175,10 +3190,10 @@ void Soldier::handleMessage(TemplateMessage message, IPlayer* player, bool remot
 
             if (getOccupingPlayer() && aiConnectionIsUp())
             {
-                int payload[2];
-                payload[0] = objectAiHandle(this);
-                payload[1] = getOccupingPlayer()->getId();
-                eventManager->postEvent(static_cast<EventCategory>(3), 7, payload, 0.0f);
+                SoldierAiPlayerPayload payload;
+                payload.aiObject = object_detail::LayoutAccess::aiObject(this);   // +0x34
+                payload.playerId = getOccupingPlayer()->getId();
+                eventManager->postEvent(static_cast<EventCategory>(3), 7, &payload, 0.0f);
             }
         }
         break;

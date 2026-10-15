@@ -26,7 +26,7 @@ public:
     bool setSnapDirectionForHud(bool towardsEnd);
 protected:
     // Member names [INFERRED] from the update/paint bodies.
-    int m_fillTexture;              // +60, loaded from the second name pair
+    TextureHandle m_fillTexture;    // +60, loaded from the second name pair
     int m_fillTop, m_fillBottom;    // +64/+68, inset applied to the fill rect
     int m_fillLeft, m_fillRight;    // +6C/+70
     int m_snap;                     // +74, quantiser for the fill length
@@ -39,7 +39,9 @@ protected:
     float* m_value;                 // +88, defaults to a shared zero float
     int m_direction;                // +8C, 0 up, 1 down, 2 left, 3 right
 };
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2BarNode) == 144, "native Bf2BarNode storage");
+#endif
 } }
 #endif
 #endif

@@ -6,14 +6,13 @@
 
 #include "../../../RendDX9Abi/PluginAbi.h"
 
-#if BF2_PLUGIN_ABI_NATIVE
 
 #include "DecalManager.h"
 
 #include "../../Core/ConsoleObjectMacro.h"
 #include "../../Core/ConsoleObjects.h"
 #include "../../../RendDX9Abi/PluginEntry.h"
-#include "../../../RendDX9Abi/Vc71String.h"
+#include <string>
 
 #include <string>
 
@@ -59,7 +58,7 @@ void  setFadeOutPercentage(float value) { decalManager()->setFadeOutAtPercentage
 // with no argument: generateTexture(std::string("DecalAtlas")); the bool is the reply.
 bool generateDecalAtlas()
 {
-    return decalManager()->generateTexture(vc71::string("DecalAtlas"));
+    return decalManager()->generateTexture(std::string("DecalAtlas"));
 }
 
 BF2_CONSOLE_OBJECT("DecalManager", 2, 0)
@@ -100,5 +99,4 @@ bool unregisterDecalManagerConsoleObjects()
 } // namespace hfe
 } // namespace dice
 
-#endif // BF2_PLUGIN_ABI_NATIVE
 #endif // BF2_IMAGE_RENDDX9

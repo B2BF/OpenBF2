@@ -5,12 +5,11 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
+#include "../../RendDX9Abi/ThunkAbi.h"
 #include "SkinnedMesh.h"
 
 #include "../../RendDX9Abi/BfMemory.h"        // engineAlloc - the 104 bone matrices
 #include "../../RendDX9Abi/Frontier.h"
-#include "../../RendDX9Abi/Vc71Vector.h"
-#include "../../RendDX9Abi/Vc71Map.h"     // the renderer queues' multimap insert
 #include "../Core/Ids.h"                      // IID_IBase / IID_IGeometry / IID_IRenderable
 #include "../Game/Objects/Visual/LightSource.h"  // the gathered lights
 #include "../Math/Vec3.h"
@@ -23,9 +22,6 @@
 #include "StaticMesh.h"                       // staticMeshRootParent - sub_10103CE0, shared
 // Host interfaces preserve virtual order. Field and container access selects the host ABI;
 // only the common IObject layout prefix is shared directly.
-#if !BF2_PLUGIN_ABI_NATIVE
-#define CORE_CLASSMANAGER_H
-#endif
 #include "../Game/Objects/Visual/LightSourceTemplate.h"   // getIsDynamic - the lit path's +0xF0
 #include "../Game/Objects/IPlayer.h"                      // getVehicle / getCamera / hasFirstPersonView
 #include "../Game/Objects/ICameraObject.h"                // getAllowDynamicLights
@@ -33,13 +29,11 @@
 #include "../Game/Objects/ObjectLayoutAccess.h"           // IObject's retail-aligned prefix
 #include "../Scene/Object/PlayerManager.h"                // getLocalHumanPlayer
 #include "../Scene/Object/ObjectTypes/Game/IPlayerControlObject.h"   // the first-person pair
-#if !BF2_PLUGIN_ABI_NATIVE
-#undef CORE_CLASSMANAGER_H
-#endif
 
 #include <cmath>
 #include <map>
 #include <cstring>
+#include <vector>
 
 namespace dice {
 namespace hfe {
@@ -57,7 +51,8 @@ extern void* g_renderQueues;    // RenderQueues.cpp - dword_1023E408, the Ra sha
 extern void* g_shaderManager;   // ShaderManager.cpp  - dword_1023B97C
 
 // declared per-TU, as QuadDrawer.cpp does; Effect.cpp publishes no header for it.
-bool effectSetTechniqueByName(void* effect, const vc71::string& name);
+bool effectSetTechniqueByName(void* effect, const std::string& name);
+void* effectD3dxHandle(void* effect);   // Effect.cpp - the wrapper's +0x08 ID3DXEffect*
 
 // The Renderer console object - a different global from g_rendererBase, and declared in this same
 // namespace by StaticMesh.cpp, StaticMeshStateManager.cpp and StaticMeshTemplate.cpp.
@@ -81,28 +76,17 @@ extern IBase*        g_SkinnedMeshRenderer;   // ModuleGeom.cpp, dword_1024B8F8
 namespace {
 
 // Per-geometry records contain paired vectors of 132-byte LODs and distance floats.
-// The parallel companion table contains vectors of 16-byte records.
-const vc71::vector_layout* geomRecord(const SkinnedMeshTemplate* t, unsigned int geom)
+// The parallel material table holds one vector of 456-byte material records per lod.
+// Both are indexed unguarded, as shipped.
+SkinnedMeshGeomRecord* geomRecord(SkinnedMeshTemplate* t, unsigned int geom)
 {
-    return reinterpret_cast<const vc71::vector_layout*>(t->m_vector0DC.first + 32 * geom);
+    return t->m_geoms.data() + geom;
 }
 
-const vc71::vector_layout* companionRecord(const SkinnedMeshTemplate* t, unsigned int geom)
+SkinnedMeshTemplate::GeomMaterials* companionRecord(SkinnedMeshTemplate* t, unsigned int geom)
 {
-    return reinterpret_cast<const vc71::vector_layout*>(t->m_vector0CC.first + 16 * geom);
+    return t->m_materials.data() + geom;
 }
-
-enum
-{
-    kLodRecordStride       = 132,   // the records inside a geom's nested vector
-    kCompanionStride       =  16,   // the records inside the companion's nested vector
-    kMaterialStride        = 456,   // what +0x58 counts out of m_lodMaterials
-    kPartRecordStride      =  68,   // the records +0x58 gathers ids from
-    kLodBoundsOffset       =  28,   // MeshBounds inside the 132-byte lod record: the radius
-    kLodBoundsDirtyOffset  =  32,   // and its "needs finalising" byte
-    kLodPartVectorOffset   =  68,   // first/last of the part vector, at +68 / +72
-    kLightRecordStride     =  68    // the records the draw builds at +0x584
-};
 
 
 // Shared selection and matrix helpers.
@@ -137,49 +121,19 @@ const Mat4& skinnedMeshZeroMatrix()
 template <class R>
 R viewSlot(void* view, unsigned int slot)
 {
-    typedef R(__fastcall * Fn)(void*, void*);
+    typedef R(__thiscall * Fn)(void*);
     return reinterpret_cast<Fn>(
-        (*reinterpret_cast<void***>(view))[slot / sizeof(void*)])(view, 0);
+        (*reinterpret_cast<void***>(view))[slot / 4])(view);
 }
 
 // The Renderer's two gate bytes, read at +0x6A3 and +0x6AB off the console object.
 bool rendererFlagAt(unsigned int byteOffset)
 {
-    return *(reinterpret_cast<const unsigned char*>(dx9rend::g_Renderer) + byteOffset) != 0;
+    return dx9rend::rendererTailByte(byteOffset) != 0;
 }
 
-// SkinnedMeshRenderer +0x40 - a mode word the draw compares against 2 in three places.
-// sub_10123A40, `mov eax, [ecx+40h]; retn`. [INFERRED] name.
-int skinnedMeshRendererMode()
-{
-    return *reinterpret_cast<const int*>(
-        reinterpret_cast<const unsigned char*>(g_SkinnedMeshRenderer) + 0x40);
-}
-
-
-// Submits by camera distance to the selected renderer map; the two draw paths use
-// different maps. Compatibility nodes are 24 bytes.
-
-const unsigned int kSkinnedMeshRendererNodeSize = 0x18u;   // SkinnedMeshRenderer.cpp's construct()
-
-void skinnedMeshRendererSubmit(SkinnedMesh* mesh, unsigned int mapOffset)
-{
-    if (!g_SkinnedMeshRenderer || !mesh)
-        return;
-    vc71::map_layout* const queue = reinterpret_cast<vc71::map_layout*>(
-        reinterpret_cast<unsigned char*>(g_SkinnedMeshRenderer) + mapOffset);
-    queue->insertMultiFloat(mesh->m_distanceToCamera, mesh, kSkinnedMeshRendererNodeSize);
-}
-
-void skinnedMeshRendererSubmitA(SkinnedMesh* mesh)   // sub_10123A50, the renderer's +0x10 map
-{
-    skinnedMeshRendererSubmit(mesh, 0x10);
-}
-
-void skinnedMeshRendererSubmitB(SkinnedMesh* mesh)   // sub_10123A90, the renderer's +0x28 map
-{
-    skinnedMeshRendererSubmit(mesh, 0x28);
-}
+// SkinnedMeshRenderer's mode word (sub_10123A40) and its two distance-ordered submission queues
+// (sub_10123A50 / sub_10123A90) are defined beside the renderer, in SkinnedMeshRenderer.cpp.
 
 // the lit path's LightSource seams
 // The light's own virtuals are typed (RW-266): getAbsolutePosition +0x68, getDirection +0x17C,
@@ -194,13 +148,8 @@ world::LightSource* lightSourceOf(void* light)
 // Native LightSource has a different layout; never apply that offset to it.
 const world::LightSourceTemplate* lightSourceTemplate(void* light)
 {
-#if BF2_PLUGIN_ABI_NATIVE
     return static_cast<const world::LightSourceTemplate*>(
         static_cast<world::LightSource*>(light)->getTemplate());
-#else
-    return *reinterpret_cast<const world::LightSourceTemplate* const*>(
-        static_cast<unsigned char*>(light) + 0x144);
-#endif
 }
 
 // A virtual, so typed in both flavours: the tree's slot 60 (+0xF0) is retail's getIsDynamic.
@@ -227,7 +176,7 @@ int skinnedMeshLightDebugMode()
 }
 
 // Unreachable while the switch above stays zero, which in the shipped image is always.
-void skinnedMeshDebugLightList(SkinnedMesh* mesh, vc71::vector_layout* out)
+void skinnedMeshDebugLightList(SkinnedMesh* mesh, std::vector<world::LightSource*>* out)
 {
     (void)out;
     RD9_FRONTIER_AT("dice::hfe::geom::skinnedMeshDebugLightList (PE sub_100EEED0, a multimap "
@@ -260,56 +209,37 @@ const unsigned int kTemplateCastsDynamicShadow = 0x0800u;
 
 // Empties the light pointer vector while retaining capacity.
 
-void lightVectorResizeToEmpty(vc71::vector_layout& v)
+void lightVectorResizeToEmpty(std::vector<world::LightSource*>& v)
 {
-    if (v.first && v.first != v.last)
-        v.last = v.first;
+    v.clear();
 }
 
 
 // Resizes the light-record vector without freeing capacity on shrink.
-// New records leave attenuation at +0x38 untouched; the draw loop fills it before use.
+// New records zero their first fourteen dwords and set +0x3C/+0x40 to 1.0f. The shipped record
+// constructor leaves the attenuation at +0x38 unwritten; here it is value-initialised, which is
+// not observable because the draw loop fills it before use.
 
 void skinnedMeshReserveLightRecords(SkinnedMesh* mesh, unsigned int count)
 {
-    vc71::vector_layout& v = mesh->m_lightRecords;
+    std::vector<dx9rend::Ra::RaLightRecord>& v = mesh->m_lightRecords;
 
-    const unsigned int size =
-        v.first ? static_cast<unsigned int>((v.last - v.first) / kLightRecordStride) : 0u;
+    const unsigned int size = static_cast<unsigned int>(v.size());
 
     if (count <= size)
     {
         // Shrink (or no change): the shipped path walks a destroy range and republishes `last`.
-        v.last = v.first + kLightRecordStride * count;
+        v.resize(count);
         return;
     }
 
-    const unsigned int capacity =
-        v.first ? static_cast<unsigned int>((v.end - v.first) / kLightRecordStride) : 0u;
-    if (count > capacity)
-    {
-        char* const grown =
-            static_cast<char*>(::renddx9abi::engineAlloc(kLightRecordStride * count));
-        if (!grown)
-            return;
-        if (v.first)
-        {
-            std::memcpy(grown, v.first, kLightRecordStride * size);
-            ::renddx9abi::engineFree(v.first);
-        }
-        v.first = grown;
-        v.end   = grown + kLightRecordStride * count;
-    }
-    v.last = v.first + kLightRecordStride * count;
-
+    v.resize(count);
     for (unsigned int i = size; i < count; ++i)
     {
-        unsigned char* const record =
-            reinterpret_cast<unsigned char*>(v.first) + kLightRecordStride * i;
-        std::memset(record, 0, 0x38);                       // the fourteen zeroed dwords
-        // +0x38 is deliberately NOT written - see the header note.
-        *reinterpret_cast<float*>(record + 0x3C) = 1.0f;
-        *reinterpret_cast<float*>(record + 0x40) = 1.0f;
+        dx9rend::Ra::RaLightRecord& record = v[i];
+        std::memset(&record, 0, 0x38);                      // the fourteen zeroed dwords
+        record.float3C = 1.0f;
+        record.float40 = 1.0f;
     }
 }
 
@@ -318,10 +248,11 @@ void skinnedMeshReserveLightRecords(SkinnedMesh* mesh, unsigned int count)
 // sub_100286E0 -> sub_100776A0 - The Renderer holds a timer pointer at
 // its +0x5DC, and the time is that object's +0x20 read as a double. Two indirections, not one:
 // reading +0x5DC itself as a double would give a pointer bit pattern.
+// The timer is a raw 48-byte block of integers and doubles (BF2Render.cpp), so +0x20 holds on
+// every target.
 double rendererTimeSeconds()
 {
-    void* const timer = *reinterpret_cast<void* const*>(
-        reinterpret_cast<const unsigned char*>(dx9rend::g_Renderer) + 0x5DC);
+    void* const timer = dx9rend::rendererFrameTimer();                       // +0x5DC
     return *reinterpret_cast<const double*>(static_cast<const unsigned char*>(timer) + 0x20);
 }
 
@@ -332,7 +263,7 @@ double rendererTimeSeconds()
 // [CHOSEN, not recovered] Storage lives with its accessor.
 // [RETIRE-WHEN: the SkinnedMesh technique init fills it]
 
-vc71::vector_layout g_skinnedMeshQualityMasks = { 0, 0, 0, 0 };
+std::vector<unsigned int> g_skinnedMeshQualityMasks;
 
 // The SkinnedMesh technique map behind sub_1010EFF0's two lookups - header at 0x1025B574. Mirrors
 // `g_staticMeshTechniques` in StaticMeshTemplate.cpp, and like it this is a file-scope static that
@@ -345,11 +276,11 @@ extern unsigned char g_skinnedMeshTechniquesPending;
 
 // StaticMeshTemplate.cpp publishes this: it is sub_101921D0, which the shipped image calls from
 // both classes' technique inits. See the note beside the forwarder there.
-bool meshBuildTechniqueMasks(const vc71::string& mfxPath,
-                             const vc71::string& techniquePrefix,
+bool meshBuildTechniqueMasks(const std::string& mfxPath,
+                             const std::string& techniquePrefix,
                              const char* const* bitNames,
                              std::map<unsigned int, ::dice::hfe::dx9rend::Ra::RaShader*>& techniqueMap,
-                             vc71::vector_layout& maskVector);
+                             std::vector<unsigned int>& maskVector);
 
 
 // Shader feature names in bit order: each entry encodes 1 << index.
@@ -379,8 +310,8 @@ void skinnedMeshInitTechniques()
     bool built = false;
     if (g_skinnedMeshTechniquesPending)                       // byte_102397D4, 0x1010F19C
     {
-        vc71::string prefix("SM");
-        vc71::string mfx("shaders/RaShaderSM.mfx");
+        std::string prefix("SM");
+        std::string mfx("shaders/RaShaderSM.mfx");
         built = meshBuildTechniqueMasks(mfx, prefix, kSkinnedMeshShaderBitNames,
                                         g_skinnedMeshTechniques,
                                         g_skinnedMeshQualityMasks);
@@ -389,7 +320,7 @@ void skinnedMeshInitTechniques()
     if (!built)
         return;                                               // 0x1010F217, and nothing is logged
 
-    vc71::string name("Default");
+    std::string name("Default");
     ::dice::hfe::dx9rend::Ra::RaShader* const shader =
         ::dice::hfe::dx9rend::Ra::getShader(
             static_cast< ::dice::hfe::dx9rend::Ra::RaShaderTable*>(
@@ -406,17 +337,14 @@ namespace {
 
 unsigned int shaderMaskTableSize()
 {
-    return g_skinnedMeshQualityMasks.first
-        ? static_cast<unsigned int>(g_skinnedMeshQualityMasks.last
-                                    - g_skinnedMeshQualityMasks.first) >> 2
-        : 0u;
+    return static_cast<unsigned int>(g_skinnedMeshQualityMasks.size());
 }
 
 const unsigned int* shaderMaskTable()
 {
-    // [CHOSEN, not recovered] Report an unloaded technique table before indexed access.
-    // Normal material loading fills it before drawing.
-    if (!g_skinnedMeshQualityMasks.first)
+    // [CHOSEN, not recovered] Report an unloaded technique table (no storage yet) before indexed
+    // access. Normal material loading fills it before drawing.
+    if (!g_skinnedMeshQualityMasks.capacity())
     {
         RD9_FRONTIER_AT("dice::hfe::geom::shaderMaskTable - the per-quality mask vector "
                         "(ds:1025B584) is EMPTY. Its filler is the technique init inside "
@@ -425,7 +353,7 @@ const unsigned int* shaderMaskTable()
                         0, 0);
         return 0;
     }
-    return reinterpret_cast<const unsigned int*>(g_skinnedMeshQualityMasks.first);
+    return g_skinnedMeshQualityMasks.data();
 }
 
 
@@ -470,8 +398,7 @@ void* skinnedMeshObjectOf(void* object)
 
 double lightManagerFadeSeconds()
 {
-    return *reinterpret_cast<const double*>(
-        reinterpret_cast<const unsigned char*>(g_LightManager) + 0x838);
+    return lightManagerShadowFadeDuration(g_LightManager);                // +0x838
 }
 
 // The draw tail's remaining seams. [UNRESOLVED] owners; offsets are read.
@@ -559,100 +486,57 @@ void mat4Normalize(float v[3])
 }
 
 
-// Assigns POD elements, reusing capacity when possible and clearing an empty source.
-// [CHOSEN, not recovered] Allocation helpers reproduce contents and ownership without
-// the original allocator internals. [RETIRE-WHEN: RW-74]
-
-void vectorAssignRaw(vc71::vector_layout& dst, const vc71::vector_layout& src, unsigned elemSize)
-{
-    if (&dst == &src)
-        return;
-
-    const unsigned int srcCount =
-        src.first ? static_cast<unsigned int>((src.last - src.first) / elemSize) : 0u;
-    if (!srcCount)
-    {
-        if (dst.first)
-            ::renddx9abi::engineFree(dst.first);
-        dst.first = 0;
-        dst.last  = 0;
-        dst.end   = 0;
-        return;
-    }
-
-    const unsigned int capacity =
-        dst.first ? static_cast<unsigned int>((dst.end - dst.first) / elemSize) : 0u;
-    if (srcCount > capacity)
-    {
-        if (dst.first)
-            ::renddx9abi::engineFree(dst.first);
-        char* const grown = static_cast<char*>(::renddx9abi::engineAlloc(elemSize * srcCount));
-        dst.first = grown;
-        dst.end   = grown ? grown + elemSize * srcCount : 0;
-        if (!grown)
-        {
-            dst.last = 0;
-            return;
-        }
-    }
-    std::memcpy(dst.first, src.first, elemSize * srcCount);
-    dst.last = dst.first + elemSize * srcCount;
-}
-
-
-// Copies the base queue payload, including nested 64-byte and 16-byte record vectors.
+// Copies the base queue payload - the entry's lighting block (entry +0x08) - including its nested
+// 64-byte and 16-byte record vectors. The `+0xNN` comments are retail offsets in that block.
 // Ref-counted pointers release before addRef; keep the old != new guards for self-assignment.
 // The two references are COM interfaces: Release (+0x08) and AddRef (+0x04) are __stdcall with the
 // interface pushed, as the shipped copy calls them - not __fastcall with it in ECX, which hands the
 // callee a stack word as its `this` (a skinned mesh lit by a muzzle flash crashed in d3d9.dll so).
 
-void renderQueueEntryCopyPayload(void* destEntry, void* sourceEntry)
+void renderQueueEntryCopyPayload(dx9rend::Ra::RaLightingParameters& d,
+                                 const dx9rend::Ra::RaLightingParameters& a)
 {
-    unsigned char* const d = static_cast<unsigned char*>(destEntry);
-    const unsigned char* const a = static_cast<const unsigned char*>(sourceEntry);
-    if (d == a)
+    if (&d == &a)
         return;
 
     typedef unsigned long(__stdcall * RefFn)(void*);
     struct Local
     {
-        static void swapRef(unsigned char* dst, const unsigned char* src, unsigned int at)
+        static void swapRef(void*& dst, void* const& src)
         {
-            void* const  oldRef = *reinterpret_cast<void* const*>(dst + at);
-            void* const  newRef = *reinterpret_cast<void* const*>(src + at);
+            void* const  oldRef = dst;
+            void* const  newRef = src;
             if (oldRef == newRef)
                 return;
             if (oldRef)   // release first - shipped, and safe only behind the test above
                 reinterpret_cast<RefFn>((*reinterpret_cast<void***>(oldRef))[0x08 / 4])(oldRef);
-            *reinterpret_cast<void**>(dst + at) = newRef;
+            dst = newRef;
             if (newRef)
                 reinterpret_cast<RefFn>((*reinterpret_cast<void***>(newRef))[0x04 / 4])(newRef);
         }
     };
 
-    *reinterpret_cast<unsigned int*>(d + 0x04) = *reinterpret_cast<const unsigned int*>(a + 0x04);
+    d.registry = a.registry;                                                    // +0x04
 
-    std::memcpy(d + 0x0C, a + 0x0C, 0x1C - 0x0C);      // +0x0C .. +0x18
-    Local::swapRef(d, a, 0x20);
-    Local::swapRef(d, a, 0x28);
-    std::memcpy(d + 0x30, a + 0x30, 0x40 - 0x30);      // +0x30 .. +0x3C
-    *reinterpret_cast<unsigned int*>(d + 0x44) = *reinterpret_cast<const unsigned int*>(a + 0x44);
-    *reinterpret_cast<unsigned int*>(d + 0x48) = *reinterpret_cast<const unsigned int*>(a + 0x48);
-    std::memcpy(d + 0x50, a + 0x50, 0x60 - 0x50);      // +0x50 .. +0x5C
-    std::memcpy(d + 0x64, a + 0x64, sizeof(Mat4));
+    std::memcpy(d.unnamed008.value, a.unnamed008.value, sizeof(d.unnamed008.value));   // +0x0C
+    Local::swapRef(d.terrainLightMap.value, a.terrainLightMap.value);           // +0x20
+    Local::swapRef(d.lightMap.value, a.lightMap.value);                         // +0x28
+    std::memcpy(d.lightMapOffset.value, a.lightMapOffset.value,
+                sizeof(d.lightMapOffset.value));                                // +0x30
+    d.matBones.a = a.matBones.a;                                                // +0x44
+    d.matBones.b = a.matBones.b;                                                // +0x48
+    std::memcpy(d.overGrowthAmbient.value, a.overGrowthAmbient.value,
+                sizeof(d.overGrowthAmbient.value));                             // +0x50
+    std::memcpy(d.shadowViewProj.value, a.shadowViewProj.value, sizeof(Mat4));  // +0x64
 
-    vectorAssignRaw(*reinterpret_cast<vc71::vector_layout*>(d + 168),
-                    *reinterpret_cast<const vc71::vector_layout*>(a + 168), 64);
-    vectorAssignRaw(*reinterpret_cast<vc71::vector_layout*>(d + 188),
-                    *reinterpret_cast<const vc71::vector_layout*>(a + 188), 64);
-    vectorAssignRaw(*reinterpret_cast<vc71::vector_layout*>(d + 208),
-                    *reinterpret_cast<const vc71::vector_layout*>(a + 208), 16);
-    vectorAssignRaw(*reinterpret_cast<vc71::vector_layout*>(d + 228),
-                    *reinterpret_cast<const vc71::vector_layout*>(a + 228), 16);
-    *reinterpret_cast<unsigned int*>(d + 248) = *reinterpret_cast<const unsigned int*>(a + 248);
-    vectorAssignRaw(*reinterpret_cast<vc71::vector_layout*>(d + 252),
-                    *reinterpret_cast<const vc71::vector_layout*>(a + 252), 16);
-    *reinterpret_cast<unsigned int*>(d + 268) = *reinterpret_cast<const unsigned int*>(a + 268);
+    using ::dice::hfe::dx9rend::Ra::raAssignParamBytes;
+    raAssignParamBytes(d.shadowViewProjArray.value, a.shadowViewProjArray.value);    // +0xA8
+    raAssignParamBytes(d.clampViewProjArray.value, a.clampViewProjArray.value);      // +0xBC
+    raAssignParamBytes(d.shadowPosArray.value, a.shadowPosArray.value);              // +0xD0
+    raAssignParamBytes(d.shadowSizeArray.value, a.shadowSizeArray.value);            // +0xE4
+    d.shadowCount.value = a.shadowCount.value;                                       // +0xF8
+    raAssignParamBytes(d.tail0FC, a.tail0FC);                                        // +0xFC
+    d.tail10C = a.tail10C;                                                           // +0x10C
 }
 
 // The SkinnedMeshRenderer's cached shadow Effect (ds:1025B230) and its four cached ShaderParameters
@@ -687,37 +571,37 @@ void skinnedMeshInitShadowState()
 
     if (state.effect)
     {
-        typedef void(__fastcall * RefFn)(void*, void*);
+        typedef void(__thiscall * RefFn)(void*);
         reinterpret_cast<RefFn>(
-            (*reinterpret_cast<void***>(state.effect))[0x00 / sizeof(void*)])(state.effect, 0);
+            (*reinterpret_cast<void***>(state.effect))[0x00 / 4])(state.effect);
         void* const params[4] =
             { state.lightMat, state.lightTrapezMat, state.texLayer0, state.geomBones };
         for (int i = 0; i < 4; ++i)
             reinterpret_cast<RefFn>(
-                (*reinterpret_cast<void***>(params[i]))[0x04 / sizeof(void*)])(params[i], 0);
+                (*reinterpret_cast<void***>(params[i]))[0x04 / 4])(params[i]);
         return;
     }
 
     // dice.hfe.geom.GeometryTemplate.SkinnedMesh, from ModuleGeom.cpp's class-id census.
     const unsigned int kSkinnedMeshTemplateClassId = 0x870CA652u;
 
-    vc71::string effectName("Shaders/");          // *unk_10263DF0, static init at 0x101D5740
+    std::string effectName("Shaders/");          // *unk_10263DF0, static init at 0x101D5740
     effectName += "SkinnedMesh";
     state.effect = ::dice::hfe::dx9rend::shaderManagerGetEffect(
         ::dice::hfe::dx9rend::g_shaderManager, effectName.c_str());
 
     {
         void* const lm = g_LightManager;
-        typedef void(__fastcall * RegisterFn)(void*, void*, unsigned int, void*);
+        typedef void(__thiscall * RegisterFn)(void*, unsigned int, void*);
         reinterpret_cast<RegisterFn>(
-            (*reinterpret_cast<void***>(lm))[0x2F0 / sizeof(void*)])(
-                lm, 0, kSkinnedMeshTemplateClassId, state.effect);
+            (*reinterpret_cast<void***>(lm))[0x2F0 / 4])(
+                lm, kSkinnedMeshTemplateClassId, state.effect);
 
-        typedef unsigned char(__fastcall * PredFn)(void*, void*);
+        typedef unsigned char(__thiscall * PredFn)(void*);
         if (reinterpret_cast<PredFn>(
-                (*reinterpret_cast<void***>(lm))[0xF0 / sizeof(void*)])(lm, 0))
+                (*reinterpret_cast<void***>(lm))[0xF0 / 4])(lm))
         {
-            const vc71::string technique(
+            const std::string technique(
                 ::dice::hfe::dx9rend::deviceCapsIsNvidia() ? "DrawShadowMapNV" : "DrawShadowMap");
             ::dice::hfe::dx9rend::effectSetTechniqueByName(state.effect, technique);
         }
@@ -726,13 +610,13 @@ void skinnedMeshInitShadowState()
     ::dice::hfe::dx9rend::Effect* const effect =
         static_cast< ::dice::hfe::dx9rend::Effect*>(state.effect);
     state.lightMat =
-        ::dice::hfe::dx9rend::effectGetShaderParameterTyped(effect, vc71::string("vpLightMat"));
+        ::dice::hfe::dx9rend::effectGetShaderParameterTyped(effect, std::string("vpLightMat"));
     state.lightTrapezMat =
-        ::dice::hfe::dx9rend::effectGetShaderParameterTyped(effect, vc71::string("vpLightTrapezMat"));
+        ::dice::hfe::dx9rend::effectGetShaderParameterTyped(effect, std::string("vpLightTrapezMat"));
     state.texLayer0 =
-        ::dice::hfe::dx9rend::effectGetShaderParameterTyped(effect, vc71::string("TEXLAYER0"));
+        ::dice::hfe::dx9rend::effectGetShaderParameterTyped(effect, std::string("TEXLAYER0"));
     state.geomBones =
-        ::dice::hfe::dx9rend::effectGetShaderParameterTyped(effect, vc71::string("BoneArray"));
+        ::dice::hfe::dx9rend::effectGetShaderParameterTyped(effect, std::string("BoneArray"));
 }
 
 namespace {
@@ -761,26 +645,26 @@ SkinnedMeshShadowState* skinnedMeshShadowState()
 // reaches through its typed dx9rend::ShaderParameter::setValue.
 void shaderParameterSetValue(void* parameter, const void* value, int index)
 {
-    typedef void(__fastcall * Fn)(void*, void*, const void*, int);
+    typedef void(__thiscall * Fn)(void*, const void*, int);
     reinterpret_cast<Fn>(
-        (*reinterpret_cast<void***>(parameter))[0x18 / sizeof(void*)])(parameter, 0, value, index);
+        (*reinterpret_cast<void***>(parameter))[0x18 / 4])(parameter, value, index);
 }
 
 // ShaderParameter vslot +0x28 - the matrix-array upload, `(Mat4 palette, unsigned count)`. This
 // is the GeomBones set: the skinning palette reaching the shader.
 void shaderParameterSetMatrixArray(void* parameter, Mat4* const* palette, unsigned int count)
 {
-    typedef void(__fastcall * Fn)(void*, void*, Mat4* const*, unsigned int);
+    typedef void(__thiscall * Fn)(void*, Mat4* const*, unsigned int);
     reinterpret_cast<Fn>(
-        (*reinterpret_cast<void***>(parameter))[0x28 / sizeof(void*)])(parameter, 0, palette, count);
+        (*reinterpret_cast<void***>(parameter))[0x28 / 4])(parameter, palette, count);
 }
 
 // `mov eax, [effect+8]; call [[eax]+104h]` - ID3DXEffect::CommitChanges on the wrapper's D3DX
 // effect. Byte-for-byte the shape StaticMesh.cpp's staticMeshEffectCommitChanges records.
+// The only caller passes skinnedMeshShadowState()->effect, which that accessor has proven non-null.
 void skinnedMeshEffectCommitChanges(void* effect)
 {
-    ID3DXEffect* const d3dx =
-        *reinterpret_cast<ID3DXEffect**>(static_cast<unsigned char*>(effect) + 8);
+    ID3DXEffect* const d3dx = static_cast<ID3DXEffect*>(dx9rend::effectD3dxHandle(effect));
     d3dx->CommitChanges();
 }
 
@@ -790,9 +674,9 @@ void skinnedMeshEffectCommitChanges(void* effect)
 void skinnedMeshCountShadowPrimitives(unsigned int primitives)
 {
     void* const base = dx9rend::g_rendererBase;
-    typedef void*(__fastcall * Fn)(void*, void*);
+    typedef void*(__thiscall * Fn)(void*);
     void* const stats = reinterpret_cast<Fn>(
-        (*reinterpret_cast<void***>(base))[0x6C / sizeof(void*)])(base, 0);
+        (*reinterpret_cast<void***>(base))[0x6C / 4])(base);
     *reinterpret_cast<unsigned int*>(static_cast<unsigned char*>(stats) + 0x23C) += primitives;
 }
 
@@ -802,8 +686,7 @@ void skinnedMeshCountShadowPrimitives(unsigned int primitives)
 // views through the base. Two different globals, kept apart. [UNRESOLVED] names; offsets are read.
 float rendererLodScaleAt(unsigned int byteOffset)
 {
-    return *reinterpret_cast<const float*>(
-        reinterpret_cast<const unsigned char*>(dx9rend::g_Renderer) + byteOffset);
+    return dx9rend::rendererTailFloat(byteOffset);
 }
 
 
@@ -811,7 +694,7 @@ float rendererLodScaleAt(unsigned int byteOffset)
 
 
 // Initializes mesh state, selects loaded template data, then allocates the palette.
-// Vector allocator words and fields +0x160, +0x348, and +0x594 remain untouched.
+// Fields +0x160, +0x348, and +0x594 remain untouched.
 
 SkinnedMesh::SkinnedMesh(void* objectTemplate)
     : GeometryInstanceData(g_skinnedMeshVtable)
@@ -839,10 +722,7 @@ SkinnedMesh::SkinnedMesh(void* objectTemplate)
     m_matrixE0  = Mat4::getIdentity();
     m_matrix120 = Mat4::getIdentity();
 
-    // +0x164: first/last/end only. The allocator word is NOT written - shipped.
-    m_lights.first = 0;
-    m_lights.last  = 0;
-    m_lights.end   = 0;
+    // +0x164: the light vector is constructed empty with the object.
 
     m_boneTransforms     = 0;        // +0x174 / +0x178, the caller's skeleton palette
     m_boneTransformCount = 0;
@@ -858,13 +738,9 @@ SkinnedMesh::SkinnedMesh(void* objectTemplate)
     m_float354    = 1.0f;
     m_double358   = 0.0;
 
-    // +0x360 .. +0x583, the 0x224-byte block Terrain.cpp already drives.
-    ::dice::hfe::dx9rend::Ra::raObjectParametersConstruct(m_objectParameters);
+    // +0x360: m_objectParameters (sub_100458E0) is constructed with the object.
 
-    // +0x584: first/last/end only, allocator word untouched - the same shape again.
-    m_lightRecords.first = 0;
-    m_lightRecords.last  = 0;
-    m_lightRecords.end   = 0;
+    // +0x584: the light-record vector is constructed empty with the object.
 
     // the same arithmetic as refreshSelection, inlined here in retail.
     // No template/null/vector guards are shipped beyond this loaded-byte test. Instances made
@@ -935,8 +811,8 @@ int SkinnedMesh::release()
         // Dispatched through the vtable (`mov eax,[ecx]; push 1; call [eax+34h]`), not called
         // directly. Slot +0x34 is the scalar deleting destructor, and flag bit 0 tells it to free
         // the block after running ~SkinnedMesh.
-        typedef void*(__fastcall * DeleteFn)(void*, void*, unsigned int);
-        reinterpret_cast<DeleteFn>(m_vptr[0x34 / sizeof(void*)])(this, 0, 1u);
+        typedef void*(__thiscall * DeleteFn)(void*, unsigned int);
+        reinterpret_cast<DeleteFn>(m_vptr[0x34 / 4])(this, 1u);
     }
     return remaining;
 }
@@ -1027,12 +903,11 @@ float SkinnedMesh::getBoundingRadius() const
             return 1.0f;                                      // ds:101DDDE4 == 1.0f
     }
 
-    MeshBounds* const bounds =
-        reinterpret_cast<MeshBounds*>(m_lodRecord + kLodBoundsOffset - 28);
-    if (m_lodRecord[kLodBoundsDirtyOffset])
-        meshBoundsFinalize(*bounds);
+    MeshBounds& bounds = m_lodRecord->bounds;
+    if (bounds.dirty)                                         // lod +0x20
+        meshBoundsFinalize(bounds);
 
-    return *reinterpret_cast<const float*>(m_lodRecord + kLodBoundsOffset);
+    return bounds.radius;                                     // lod +0x1C
 }
 
 
@@ -1079,33 +954,23 @@ void SkinnedMesh::gatherVisibleParts(HostIntVector* out)
     updateLodSelection();            // sub_101A7180, the same refresh both draws run first
 
     const unsigned int geomCount =
-        m_lodMaterials && m_lodMaterials->first
-            ? static_cast<unsigned int>((m_lodMaterials->last - m_lodMaterials->first)
-                                        / kMaterialStride)
-            : 0u;
+        m_lodMaterials ? static_cast<unsigned int>(m_lodMaterials->size()) : 0u;
 
     // The ONE place this class touches a container the host owns. See the HostIntVector note in
-    // the header for why the type differs by flavour; the push below is the only line that cares.
-#if BF2_PLUGIN_ABI_NATIVE
+    // the header; the push below is the only line that cares.
     HostIntVector& ids = *out;       // our own BF2.exe: same STL, same /MD heap, same container
-#else
-    vc71::vectorRef<int> ids(out);   // the retail host's VC7.1 vector, driven through the shim
-#endif
 
     for (unsigned int i = 0; i < geomCount; ++i)
     {
-        const unsigned int byteOffset = 16 * i;
-        const int* part = *reinterpret_cast<int* const*>(
-            m_lodRecord + byteOffset + kLodPartVectorOffset);
+        // The lod's part vector i (lod +0x40 + 16 * i); its end is re-read per element.
+        const SkinnedMeshPart* part = m_lodRecord->parts[i].data();
 
-        while (part != *reinterpret_cast<int* const*>(
-                   m_lodRecord + byteOffset + kLodPartVectorOffset + 4))
+        while (part != m_lodRecord->parts[i].data() + m_lodRecord->parts[i].size())
         {
-            if (m_excludedPart != *part)
-                ids.push_back(*part);
+            if (m_excludedPart != part->partId)
+                ids.push_back(part->partId);
 
-            part = reinterpret_cast<const int*>(
-                reinterpret_cast<const unsigned char*>(part) + kPartRecordStride);
+            ++part;
         }
     }
 }
@@ -1133,9 +998,8 @@ void SkinnedMesh::setGeomIndex(int geom)
 
     m_geomIndex = geom;
     m_lodIndex  = 0;
-    m_lodRecord = reinterpret_cast<unsigned char*>(geomRecord(m_template, m_geomIndex)->first);
-    m_lodMaterials = reinterpret_cast<vc71::vector_layout*>(
-        companionRecord(m_template, m_geomIndex)->first);
+    m_lodRecord    = geomRecord(m_template, m_geomIndex)->lods.data();
+    m_lodMaterials = companionRecord(m_template, m_geomIndex)->data();
 }
 
 // +0x70, 0x101A6810 - `mov eax, [ecx+3Ch]; retn`.
@@ -1147,8 +1011,8 @@ int SkinnedMesh::getGeomIndex() const
 // +0x74, how many geoms the template has, out of its 32-byte-strided vector.
 int SkinnedMesh::getGeomCount() const
 {
-    if (m_template->m_loaded && m_template->m_vector0DC.first)
-        return static_cast<int>((m_template->m_vector0DC.last - m_template->m_vector0DC.first) / 32);
+    if (m_template->m_loaded && !m_template->m_geoms.empty())
+        return static_cast<int>(m_template->m_geoms.size());
     return 0;
 }
 
@@ -1166,30 +1030,26 @@ void* SkinnedMesh::setLodIndex(int lod)
     {
         m_lodIndex    = 0;
         m_lodExplicit = 0;
-        m_lodRecord = reinterpret_cast<unsigned char*>(geomRecord(m_template, m_geomIndex)->first);
-        m_lodMaterials = reinterpret_cast<vc71::vector_layout*>(
-            companionRecord(m_template, m_geomIndex)->first);
+        m_lodRecord    = geomRecord(m_template, m_geomIndex)->lods.data();
+        m_lodMaterials = companionRecord(m_template, m_geomIndex)->data();
         return m_lodMaterials;
     }
 
-    const vc71::vector_layout* const geom = geomRecord(m_template, m_geomIndex);
-    const unsigned int lodCount =
-        geom->first ? static_cast<unsigned int>((geom->last - geom->first) / kLodRecordStride) : 0u;
+    std::vector<SkinnedMeshLod>& lods = geomRecord(m_template, m_geomIndex)->lods;
+    const unsigned int lodCount = static_cast<unsigned int>(lods.size());
 
-    if (!geom->first || lod < 0 || static_cast<unsigned int>(lod) >= lodCount)
+    if (lods.empty() || lod < 0 || static_cast<unsigned int>(lod) >= lodCount)
     {
         // The shipped retry really is a virtual self-dispatch, and now that the table exists it
         // is written as one. A subclass overriding +0x78 sees the retry, exactly as in retail.
-        typedef void*(__fastcall * SetLodFn)(void*, void*, int);
-        return reinterpret_cast<SetLodFn>(m_vptr[0x78 / sizeof(void*)])(this, 0, -1);
+        typedef void*(__thiscall * SetLodFn)(void*, int);
+        return reinterpret_cast<SetLodFn>(m_vptr[0x78 / 4])(this, -1);
     }
 
     m_lodIndex    = lod;
     m_lodExplicit = 1;
-    m_lodRecord   = reinterpret_cast<unsigned char*>(geom->first) + kLodRecordStride * lod;
-    m_lodMaterials = reinterpret_cast<vc71::vector_layout*>(
-        reinterpret_cast<unsigned char*>(companionRecord(m_template, m_geomIndex)->first)
-        + kCompanionStride * lod);
+    m_lodRecord    = lods.data() + lod;
+    m_lodMaterials = companionRecord(m_template, m_geomIndex)->data() + lod;
     return m_lodRecord;
 }
 
@@ -1205,10 +1065,8 @@ int SkinnedMesh::getLodCount() const
     if (!m_template->m_loaded)
         return 0;
 
-    const vc71::vector_layout* const geom = geomRecord(m_template, m_geomIndex);
-    if (!geom->first)
-        return 0;
-    return static_cast<int>((geom->last - geom->first) / kLodRecordStride);
+    const std::vector<SkinnedMeshLod>& lods = geomRecord(m_template, m_geomIndex)->lods;
+    return static_cast<int>(lods.size());
 }
 
 
@@ -1287,7 +1145,7 @@ void* SkinnedMesh::getShadowCasterFrame()
 // flags "is translucent" below 1.0f.
 void SkinnedMesh::setTransparency(float alpha)
 {
-    *reinterpret_cast<float*>(m_objectParameters + (0x510 - 0x360)) = alpha;
+    m_objectParameters.transparency.value = alpha;           // +0x510
 }
 
 
@@ -1315,32 +1173,29 @@ void SkinnedMesh::updateLodSelection()
     else
     {
         void* const base = dx9rend::g_rendererBase;
-        typedef void*(__fastcall * ViewFn)(void*, void*);
+        typedef void*(__thiscall * ViewFn)(void*);
         view = reinterpret_cast<ViewFn>(
-            (*reinterpret_cast<void***>(base))[0xD4 / sizeof(void*)])(base, 0);
+            (*reinterpret_cast<void***>(base))[0xD4 / 4])(base);
     }
 
     // The current geom's first lod record supplies the radius the distance is biased by.
-    const vc71::vector_layout* const geom = geomRecord(m_template, m_geomIndex);
-    unsigned char* const firstLod = reinterpret_cast<unsigned char*>(geom->first);
-    if (firstLod[kLodBoundsDirtyOffset])
-        meshBoundsFinalize(*reinterpret_cast<MeshBounds*>(firstLod));
-    const float radius = *reinterpret_cast<const float*>(firstLod + kLodBoundsOffset);
+    SkinnedMeshGeomRecord* const geom = geomRecord(m_template, m_geomIndex);
+    SkinnedMeshLod* const firstLod = geom->lods.data();
+    if (firstLod->bounds.dirty)
+        meshBoundsFinalize(firstLod->bounds);
+    const float radius = firstLod->bounds.radius;
 
-    typedef float(__fastcall * LodScaleFn)(void*, void*);
+    typedef float(__thiscall * LodScaleFn)(void*);
     const float viewLodScale = reinterpret_cast<LodScaleFn>(
-        (*reinterpret_cast<void***>(view))[0x2C / sizeof(void*)])(view, 0);
+        (*reinterpret_cast<void***>(view))[0x2C / 4])(view);
 
     const float threshold = viewLodScale * m_distanceToCamera - radius;
     const float rendererScale = rendererLodScaleAt(0x84C) * rendererLodScaleAt(0x8B8);
 
     // The per-lod distances live in the geom record's second vector.
-    const vc71::vector_layout& distances = geom[1];
-    const unsigned int count =
-        distances.first
-            ? static_cast<unsigned int>((distances.last - distances.first) / sizeof(float))
-            : 0u;
-    const float* const values = reinterpret_cast<const float*>(distances.first);
+    const std::vector<float>& distances = geom->distances;
+    const unsigned int count = static_cast<unsigned int>(distances.size());
+    const float* const values = distances.data();
 
     unsigned int chosen = 0;
     for (unsigned int i = 0; i < count; ++i)
@@ -1350,10 +1205,8 @@ void SkinnedMesh::updateLodSelection()
     if (chosen != m_lodIndex)
     {
         m_lodIndex     = chosen;
-        m_lodRecord    = reinterpret_cast<unsigned char*>(geom->first) + kLodRecordStride * chosen;
-        m_lodMaterials = reinterpret_cast<vc71::vector_layout*>(
-            reinterpret_cast<unsigned char*>(companionRecord(m_template, m_geomIndex)->first)
-            + kCompanionStride * chosen);
+        m_lodRecord    = geom->lods.data() + chosen;
+        m_lodMaterials = companionRecord(m_template, m_geomIndex)->data() + chosen;
     }
 }
 
@@ -1370,10 +1223,7 @@ void SkinnedMesh::updateBonePalettes()
     m_paletteFrameStamp = frame;
 
     const unsigned int count =
-        m_lodMaterials && m_lodMaterials->first
-            ? static_cast<unsigned int>((m_lodMaterials->last - m_lodMaterials->first)
-                                        / kMaterialStride)
-            : 0u;
+        m_lodMaterials ? static_cast<unsigned int>(m_lodMaterials->size()) : 0u;
     if (!count)
         return;
 
@@ -1381,20 +1231,20 @@ void SkinnedMesh::updateBonePalettes()
     {
         m_boneCounts[geom] = 0;
 
-        const unsigned int vectorOffset = 16 * geom + kLodPartVectorOffset;
-        unsigned char* part = *reinterpret_cast<unsigned char* const*>(m_lodRecord + vectorOffset);
+        // The lod's part vector `geom` (lod +0x40 + 16 * geom).
+        const SkinnedMeshPart* part = m_lodRecord->parts[geom].data();
         Mat4** palette = &m_bonePalettes[geom][0];
 
-        if (part != *reinterpret_cast<unsigned char* const*>(m_lodRecord + vectorOffset + 4))
+        if (part != m_lodRecord->parts[geom].data() + m_lodRecord->parts[geom].size())
         {
             do
             {
-                const int partId = *reinterpret_cast<const int*>(part);
+                const int partId = part->partId;
                 if (m_boneTransforms)
                 {
                     if (m_excludedPart != partId)
                     {
-                        (*palette)->fullMult(*reinterpret_cast<const Mat4*>(part + 4),
+                        (*palette)->fullMult(part->transform,
                                              m_boneTransforms[partId]);   // partId << 6
                     }
                     else
@@ -1409,10 +1259,10 @@ void SkinnedMesh::updateBonePalettes()
 
                 ++m_boneCounts[geom];
                 ++palette;
-                part += kPartRecordStride;
+                ++part;
             }
             // The end pointer is RE-read from the object each iteration, not cached. Preserved.
-            while (part != *reinterpret_cast<unsigned char* const*>(m_lodRecord + vectorOffset + 4));
+            while (part != m_lodRecord->parts[geom].data() + m_lodRecord->parts[geom].size());
 
             if (m_boneCounts[geom])
                 continue;
@@ -1436,11 +1286,9 @@ void SkinnedMesh::updateBonePalettes()
 
 void* SkinnedMesh::refreshSelection()
 {
-    const vc71::vector_layout* const geom = geomRecord(m_template, m_geomIndex);
-    m_lodRecord = reinterpret_cast<unsigned char*>(geom->first) + kLodRecordStride * m_lodIndex;
-    m_lodMaterials = reinterpret_cast<vc71::vector_layout*>(
-        reinterpret_cast<unsigned char*>(companionRecord(m_template, m_geomIndex)->first)
-        + kCompanionStride * m_lodIndex);
+    SkinnedMeshGeomRecord* const geom = geomRecord(m_template, m_geomIndex);
+    m_lodRecord    = geom->lods.data() + m_lodIndex;
+    m_lodMaterials = companionRecord(m_template, m_geomIndex)->data() + m_lodIndex;
     return m_lodMaterials;
 }
 
@@ -1457,7 +1305,7 @@ void SkinnedMesh::drawShadowMap(void* caster, unsigned int, unsigned int, unsign
         return;
     if (!m_transform)
         return;
-    if (alphaPass && !m_lodRecord[129])
+    if (alphaPass && !m_lodRecord->hasAlphaTest)                         // lod +0x81
         return;
 
     updateLodSelection();
@@ -1486,60 +1334,58 @@ void SkinnedMesh::drawShadowMap(void* caster, unsigned int, unsigned int, unsign
     dx9rend::vertexBufferBindStream(t->m_vertexBuffer, 0);               // +0x94
     dx9rend::indexBufferBind(t->m_indexBuffer);                          // +0x9C
 
-    const unsigned char* const casterBytes = static_cast<const unsigned char*>(caster);
-    if (casterBytes && casterBytes[0x495])
+    // The caster is a LightManager shadow record (XpLightManager.h); the `+0xNN` comments are its
+    // retail offsets.
+    const LightShadowRecord* const casterRecord = static_cast<const LightShadowRecord*>(caster);
+    if (casterRecord && casterRecord->tail494[1])                       // +0x495
     {
         Mat4 light = Mat4::getIdentity();
-        light.fullMult(*m_transform, *reinterpret_cast<const Mat4*>(casterBytes + 0x238));
+        light.fullMult(*m_transform, casterRecord->matrices[1]);         // +0x238
         Mat4 scratch = Mat4::getIdentity();
-        scratch.fullMult(*m_transform, *reinterpret_cast<const Mat4*>(casterBytes + 0x238));
+        scratch.fullMult(*m_transform, casterRecord->matrices[1]);       // +0x238
         // `light` is recomputed here; the value above is discarded. Shipped.
-        light.fullMult(scratch, *reinterpret_cast<const Mat4*>(casterBytes + 0x278));
+        light.fullMult(scratch, casterRecord->matrices[2]);              // +0x278
         shaderParameterSetValue(state->lightMat, &light, 0);
         shaderParameterSetValue(state->lightTrapezMat, &light, 0);       // the same matrix
         skinnedMeshEffectCommitChanges(state->effect);
     }
     else
     {
-        const unsigned char* const own = static_cast<const unsigned char*>(m_dword33C);
+        const LightShadowRecord* const own = static_cast<const LightShadowRecord*>(m_dword33C);
         Mat4 light = Mat4::getIdentity();
-        light.fullMult(*m_transform, *reinterpret_cast<const Mat4*>(own + 0x238));
+        light.fullMult(*m_transform, own->matrices[1]);                  // +0x238
         Mat4 trapez = Mat4::getIdentity();
-        trapez.fullMult(*m_transform, *reinterpret_cast<const Mat4*>(own + 0x278));
+        trapez.fullMult(*m_transform, own->matrices[2]);                 // +0x278
         shaderParameterSetValue(state->lightMat, &light, 0);
         shaderParameterSetValue(state->lightTrapezMat, &trapez, 0);
         // No CommitChanges on this arm.
     }
 
     const unsigned int materials =
-        m_lodMaterials && m_lodMaterials->first
-            ? static_cast<unsigned int>((m_lodMaterials->last - m_lodMaterials->first)
-                                        / kMaterialStride)
-            : 0u;
+        m_lodMaterials ? static_cast<unsigned int>(m_lodMaterials->size()) : 0u;
 
     for (unsigned int i = 0; i < materials; ++i)
     {
-        const unsigned char* const material =
-            reinterpret_cast<const unsigned char*>(m_lodMaterials->first) + kMaterialStride * i;
-        const bool materialIsAlpha = material[0x18A] != 0;
+        const SkinnedMeshMaterial& material = m_lodMaterials->data()[i];
+        const bool materialIsAlpha = material.isAlpha != 0;               // +0x18A
         if (materialIsAlpha != alphaPass)
             continue;
 
         shaderParameterSetMatrixArray(state->geomBones, m_bonePalettes[i], m_boneCounts[i]);
         if (materialIsAlpha)
         {
-            shaderParameterSetValue(state->texLayer0,
-                                    **reinterpret_cast<void* const* const*>(material + 8), 0);
+            // The first texture, through the record's texture vector (+0x04, unguarded).
+            shaderParameterSetValue(state->texLayer0, material.textures.data()[0], 0);
         }
 
-        const unsigned int primitives = *reinterpret_cast<const unsigned int*>(material + 0x20);
+        const unsigned int primitives = material.primitiveCount;          // +0x20
         dx9rend::rendererDrawIndexedPrimitive(
             primitives,
             t->m_primitiveType,                                          // template +0xAC
-            *reinterpret_cast<const int*>(material + 0x18),
+            static_cast<int>(material.vertexStart),                      // +0x18
             0,
-            *reinterpret_cast<const unsigned int*>(material + 0x24),
-            *reinterpret_cast<const unsigned int*>(material + 0x1C));
+            material.vertexCount,                                        // +0x24
+            material.indexStart);                                        // +0x1C
 
         skinnedMeshCountShadowPrimitives(primitives);                    // renderer stats +0x23C
     }
@@ -1554,15 +1400,15 @@ void SkinnedMesh::drawShadowMap(void* caster, unsigned int, unsigned int, unsign
 
 // Builds material shader-permutation flags, including this frame's shadow-caster state.
 
-unsigned int SkinnedMesh::buildShaderDefineMask(const unsigned char* material, bool alphaPass,
+unsigned int SkinnedMesh::buildShaderDefineMask(const SkinnedMeshMaterial* material, bool alphaPass,
                                                 unsigned int quality)
 {
     unsigned int mask = 0;
-    if (material[0x188])
+    if (material->hasNormalMap)                                       // +0x188
         mask = 2;
-    if (material[0x189])
+    if (material->objSpaceNormalMap)                                  // +0x189
         mask |= 4u;
-    if (material[0x18B])
+    if (material->hasEnvMap)                                          // +0x18B
         mask |= 8u;
     mask |= 0x10u;
 
@@ -1570,7 +1416,8 @@ unsigned int SkinnedMesh::buildShaderDefineMask(const unsigned char* material, b
     {
         if (refreshAndGetByte334())                                       // +0xA8
         {
-            if (reinterpret_cast<unsigned int>(getShadowCasterFrame())    // +0xB0
+            // The pointer-typed slot carries a 32-bit frame ordinal.
+            if (static_cast<unsigned int>(reinterpret_cast<uintptr_t>(getShadowCasterFrame()))   // +0xB0
                 == dx9rend::rendererFrameOrdinal())
                 mask |= 0x40u;
         }
@@ -1578,11 +1425,11 @@ unsigned int SkinnedMesh::buildShaderDefineMask(const unsigned char* material, b
 
     // The quality refinement is gated on the 0x40 bit just set, so it can only ever apply to a
     // caster; and on the Renderer's +0xAC predicate being false.
-    typedef unsigned char(__fastcall * PredFn)(void*, void*);
+    typedef unsigned char(__thiscall * PredFn)(void*);
     void* const renderer = dx9rend::g_Renderer;
     if (quality >= 3
         && !reinterpret_cast<PredFn>(
-               (*reinterpret_cast<void***>(renderer))[0xAC / sizeof(void*)])(renderer, 0)
+               (*reinterpret_cast<void***>(renderer))[0xAC / 4])(renderer)
         && (mask & 0x40u) != 0)
         mask |= 0x100u;
 
@@ -1624,7 +1471,7 @@ void SkinnedMesh::draw(void*, void*, void*)
     // nothing; below 1.0f he is merely flagged translucent and takes a different queue later.
     if (!rendererFlagAt(0x6A3))
         return;
-    const float transparency = *reinterpret_cast<const float*>(m_objectParameters + (0x510 - 0x360));
+    const float transparency = m_objectParameters.transparency.value;   // +0x510
     if (transparency < 0.0000099999997f)
         return;
 
@@ -1650,7 +1497,7 @@ void SkinnedMesh::draw(void*, void*, void*)
     const float distance = static_cast<float>(std::sqrt(dx * dx + dy * dy + dz * dz));
     m_distanceToCamera = distance;                                    // +0x344
     // The same value is also written into the Ra block at +0x580, where the shader reads it.
-    *reinterpret_cast<float*>(m_objectParameters + (0x580 - 0x360)) = distance;
+    *reinterpret_cast<float*>(&m_objectParameters.tail220) = distance;
 
     updateLodSelection();
 
@@ -1682,13 +1529,11 @@ void SkinnedMesh::draw(void*, void*, void*)
         g_LightManager->gatherLightsForGeometry(this, m_lights,
                                                 static_cast<unsigned int>(maxLights),
                                                 0x1B09u, 0u, true);           // +0x20
-        const unsigned int gathered =
-            m_lights.first
-                ? static_cast<unsigned int>((m_lights.last - m_lights.first) >> 2) : 0u;
+        const unsigned int gathered = static_cast<unsigned int>(m_lights.size());
 
         if (gathered || skinnedMeshRendererMode() == 2)
         {
-            if (m_lodRecord[128] && skinnedMeshRendererMode() != 2)
+            if (m_lodRecord->humanSkin && skinnedMeshRendererMode() != 2)   // lod +0x80
                 skinnedMeshRendererSubmitA(this);
             skinnedMeshRendererSubmitB(this);
         }
@@ -1801,15 +1646,13 @@ void SkinnedMesh::draw(void*, void*, void*)
     }
 
     // -- 10. build one 68-byte record per gathered light
-    const unsigned int lightCount =
-        m_lights.first ? static_cast<unsigned int>((m_lights.last - m_lights.first) >> 2) : 0u;
+    const unsigned int lightCount = static_cast<unsigned int>(m_lights.size());
     skinnedMeshReserveLightRecords(this, lightCount);
 
     for (unsigned int i = 0; i < lightCount; ++i)
     {
-        void* const light = reinterpret_cast<void**>(m_lights.first)[i];
-        unsigned char* const record = reinterpret_cast<unsigned char*>(m_lightRecords.first)
-                                      + kLightRecordStride * i;
+        void* const light = m_lights[i];
+        dx9rend::Ra::RaLightRecord& record = m_lightRecords[i];
 
         float range = lightSourceOf(light)->getAttenuationRange2();                // +0x190
         const world::LightSourceTemplate* const lightTemplate = lightSourceTemplate(light);  // +0x144
@@ -1821,8 +1664,8 @@ void SkinnedMesh::draw(void*, void*, void*)
         // position lands in object space. Settled from the instruction stream (`lea ecx, [esi+60h]`
         // at 0x101A7F3D), not from the decompiler, which dropped the receiver entirely.
         mat4TransformPoint(m_matrix60, &lightSourceOf(light)->getAbsolutePosition().x,   // +0x68
-                           reinterpret_cast<float*>(record));
-        *reinterpret_cast<float*>(record + 0x38) = 1.0f / (range * range);
+                           record.position);
+        record.invRangeSq = 1.0f / (range * range);                                // +0x38
 
         const float* const color = &lightSourceOf(light)->getColor().x;             // +0x198
         float r = color[0], g = color[1], b = color[2];
@@ -1835,35 +1678,33 @@ void SkinnedMesh::draw(void*, void*, void*)
             g *= m_float354;
             b *= m_float354;
         }
-        *reinterpret_cast<float*>(record + 0x18) = r;
-        *reinterpret_cast<float*>(record + 0x1C) = g;
-        *reinterpret_cast<float*>(record + 0x20) = b;
+        record.color[0] = r;                                                       // +0x18
+        record.color[1] = g;
+        record.color[2] = b;
     }
 
-    // Fill the per-object shader parameters.
-    unsigned char* const ra = m_objectParameters;
+    // Fill the per-object shader parameters (the instance's +0x360 block; the `+0xNN` comments
+    // below are retail instance offsets).
+    dx9rend::Ra::RaObjectParameters& ra = m_objectParameters;
 
     // +0x3F4 = world x viewProjection -> WorldViewProjection.
-    reinterpret_cast<Mat4*>(ra + (0x3F4 - 0x360))
+    reinterpret_cast<Mat4*>(ra.worldViewProjection.value)
         ->fullMult(*m_transform, *viewSlot<const Mat4*>(view, 0x84));
     // +0x36C = the transform verbatim -> World. The same store StaticMesh.cpp makes.
-    std::memcpy(ra + (0x36C - 0x360), m_transform->m, sizeof(Mat4));
+    std::memcpy(ra.world.value, m_transform->m, sizeof(Mat4));
     // +0x518 = the camera's translation through m_matrix60 (= fullInvert(*m_transform)), w = 1
     // -> ObjectSpaceCamPos. Settled from `lea ecx, [esi+60h]` at 0x101A801B, not from the
     // decompiler, which rendered the receiver as an operand.
     mat4TransformPointVec4(m_matrix60, &viewSlot<const Mat4*>(view, 0x64)->m[12],
-                           ra + (0x518 - 0x360), 0x3F800000u);
-    // ObjectSpaceWorldUp retains multiplication by zero to preserve NaN/infinity behavior.
+                           ra.objectSpaceCamPos.value, 0x3F800000u);
+    // ObjectSpaceWorldUp (+0x574) retains multiplication by zero to preserve NaN/infinity behavior.
     const float* const inv = m_matrix60.m;
-    *reinterpret_cast<float*>(ra + (0x574 - 0x360)) = (inv[8] + inv[0]) * 0.0f + inv[4];
-    *reinterpret_cast<float*>(ra + (0x578 - 0x360)) = (inv[9] + inv[1]) * 0.0f + inv[5];
-    *reinterpret_cast<float*>(ra + (0x57C - 0x360)) = (inv[10] + inv[2]) * 0.0f + inv[6];
+    ra.objectSpaceWorldUp.value[0] = (inv[8] + inv[0]) * 0.0f + inv[4];
+    ra.objectSpaceWorldUp.value[1] = (inv[9] + inv[1]) * 0.0f + inv[5];
+    ra.objectSpaceWorldUp.value[2] = (inv[10] + inv[2]) * 0.0f + inv[6];
 
     const unsigned int materials =
-        m_lodMaterials && m_lodMaterials->first
-            ? static_cast<unsigned int>((m_lodMaterials->last - m_lodMaterials->first)
-                                        / kMaterialStride)
-            : 0u;
+        m_lodMaterials ? static_cast<unsigned int>(m_lodMaterials->size()) : 0u;
 
     // A FOV override marks first-person geometry; otherwise compare roots with the local player.
     bool firstPerson = true;
@@ -1892,13 +1733,13 @@ void SkinnedMesh::draw(void*, void*, void*)
     }
 
     // +0x558 = the height probe's first output -> HeightOverTerrain.
-    *reinterpret_cast<unsigned int*>(ra + (0x558 - 0x360)) = m_dword48;
+    *reinterpret_cast<unsigned int*>(&ra.heightOverTerrain.value) = m_dword48;
 
     // The shader quality, from IRenderer::getVideoOptions()'s +0x04 with 4.
     void* const videoOptions = viewSlot<void*>(base, 0x74);
-    typedef unsigned int(__fastcall * OptionFn)(void*, void*, int);
+    typedef unsigned int(__thiscall * OptionFn)(void*, int);
     const unsigned int quality = reinterpret_cast<OptionFn>(
-        (*reinterpret_cast<void***>(videoOptions))[0x04 / sizeof(void*)])(videoOptions, 0, 4);
+        (*reinterpret_cast<void***>(videoOptions))[0x04 / 4])(videoOptions, 4);
 
     // The sky light's direction, carried into object space.
     float skyDirection[3] = { 0.0f, 0.0f, 0.0f };
@@ -1924,14 +1765,12 @@ void SkinnedMesh::draw(void*, void*, void*)
     // -- 13. one queue entry per material, plus one more per gathered light
     for (unsigned int i = 0; i < materials; ++i)
     {
-        unsigned char* const material =
-            reinterpret_cast<unsigned char*>(m_lodMaterials->first) + kMaterialStride * i;
+        SkinnedMeshMaterial& material = m_lodMaterials->data()[i];
 
-        const unsigned int mask = buildShaderDefineMask(material, false, quality);
+        const unsigned int mask = buildShaderDefineMask(&material, false, quality);
 
         // Only the alternate path clamps this index, and it clamps to the LOD index.
-        unsigned int index = *reinterpret_cast<const unsigned int*>(
-            reinterpret_cast<const unsigned char*>(dx9rend::g_Renderer) + 0x6CC);
+        unsigned int index = dx9rend::rendererRaPath();                  // Renderer +0x6CC
         if (rendererFlagAt(0x6D0))
         {
             const unsigned int available = shaderMaskTableSize();
@@ -1942,20 +1781,25 @@ void SkinnedMesh::draw(void*, void*, void*)
         unsigned int bits = shaderMaskTable()[index] & mask;
         if ((bits & 0x1Bu) == 0)
             bits |= 1u;
-        *reinterpret_cast<void**>(material + 0x184) = findShaderForBits(bits);
+        // Record +0x184, the parameter block's last word.
+        void*& shaderSlot = raMaterialShaderSlot(skinnedMeshMaterialParameters(material));
+        shaderSlot = findShaderForBits(bits);
 
         // The shadow matrices, copied out of the +0x33C object - but only while this instance is a
         // shadow caster on this frame, the same +0xA8/+0xB0 pair buildShaderDefineMask consults.
         if (refreshAndGetByte334()
-            && reinterpret_cast<unsigned int>(getShadowCasterFrame())
+            && static_cast<unsigned int>(reinterpret_cast<uintptr_t>(getShadowCasterFrame()))
                    == dx9rend::rendererFrameOrdinal())
         {
             if (m_dword33C)
             {
-                const unsigned char* const caster = static_cast<const unsigned char*>(m_dword33C);
-                std::memcpy(ra + (0x438 - 0x360), caster + 0x2F8, sizeof(Mat4));
-                std::memcpy(ra + (0x4C0 - 0x360), caster + 0x3B8, sizeof(Mat4));
-                std::memcpy(ra + (0x47C - 0x360), caster + 0x338, sizeof(Mat4));
+                // The +0x33C object is a LightManager shadow record (XpLightManager.h): its
+                // matrices [4] (+0x2F8), [7] (+0x3B8) and [5] (+0x338).
+                const LightShadowRecord* const caster =
+                    static_cast<const LightShadowRecord*>(m_dword33C);
+                std::memcpy(ra.shadowProjMat.value, &caster->matrices[4], sizeof(Mat4));    // +0x438
+                std::memcpy(ra.shadowTrapMat.value, &caster->matrices[7], sizeof(Mat4));    // +0x4C0
+                std::memcpy(ra.shadowOccProjMat.value, &caster->matrices[5], sizeof(Mat4)); // +0x47C
             }
         }
 
@@ -1964,32 +1808,31 @@ void SkinnedMesh::draw(void*, void*, void*)
         const Vec3& skyColor = g_LightManager->getSkyColor();                  // +0x30
         if (viewSlot<unsigned char>(base, 0xAC))
         {
-            *reinterpret_cast<float*>(ra + (0x560 - 0x360)) = ambientScale * skyColor.x;
-            *reinterpret_cast<float*>(ra + (0x564 - 0x360)) = ambientScale * skyColor.y;
-            *reinterpret_cast<float*>(ra + (0x568 - 0x360)) = ambientScale * skyColor.z;
+            ra.hemiMapSkyColor.value[0] = ambientScale * skyColor.x;           // +0x560
+            ra.hemiMapSkyColor.value[1] = ambientScale * skyColor.y;
+            ra.hemiMapSkyColor.value[2] = ambientScale * skyColor.z;
         }
         else
         {
-            *reinterpret_cast<float*>(ra + (0x560 - 0x360)) = skyColor.x;
-            *reinterpret_cast<float*>(ra + (0x564 - 0x360)) = skyColor.y;
-            *reinterpret_cast<float*>(ra + (0x568 - 0x360)) = skyColor.z;
+            ra.hemiMapSkyColor.value[0] = skyColor.x;
+            ra.hemiMapSkyColor.value[1] = skyColor.y;
+            ra.hemiMapSkyColor.value[2] = skyColor.z;
         }
 
         dx9rend::RenderQueueEntry* const entry = dx9rend::renderEntryPoolAcquire();
-        entry->material           = material;
-        entry->materialParameters = material + 0x38;
-        entry->objectParameters   = ra;
-        *reinterpret_cast<void**>(reinterpret_cast<unsigned char*>(entry) + 0x138) =
-            *reinterpret_cast<void**>(material + 0x184);
-        // +0x4C / +0x50 - this material's bone palette and its count. This is where the skinning
-        // reaches the shader, and it is why the palettes are per-material rather than per-instance.
-        *reinterpret_cast<void**>(reinterpret_cast<unsigned char*>(entry) + 0x4C) =
-            &m_bonePalettes[i][0];
-        *reinterpret_cast<unsigned int*>(reinterpret_cast<unsigned char*>(entry) + 0x50) =
-            m_boneCounts[i];
+        entry->material           = &material;
+        entry->materialParameters = material.parameters;                       // record +0x38
+        entry->objectParameters   = &ra;
+        entry->shader = static_cast<dx9rend::Ra::RaShader*>(shaderSlot);       // entry +0x138
+        // entry +0x4C / +0x50 (the lighting block's MatBones pair) - this material's bone palette
+        // and its count. This is where the skinning reaches the shader, and it is why the palettes
+        // are per-material rather than per-instance.
+        // A pointer in the holder's first word: RaParamPair must be pointer-sized on x64.
+        entry->lighting.matBones.a = reinterpret_cast<uintptr_t>(&m_bonePalettes[i][0]);
+        entry->lighting.matBones.b = m_boneCounts[i];
 
-        unsigned char* const params =
-            *reinterpret_cast<unsigned char**>(reinterpret_cast<unsigned char*>(entry) + 0x128);
+        // entry +0x128, the light-array block's Lights holder: one RaLightRecord.
+        unsigned char* const params = static_cast<unsigned char*>(entry->lightArray.lights.value);
         {
             const Vec3& sun = g_LightManager->getSunColor();                   // +0x1AC
             float* const dst = reinterpret_cast<float*>(params + 24);
@@ -2015,35 +1858,27 @@ void SkinnedMesh::draw(void*, void*, void*)
 
         // One extra entry per light record, sharing the material but carrying that light's data
         // and a re-based define mask.
-        const unsigned int records =
-            m_lightRecords.first
-                ? static_cast<unsigned int>((m_lightRecords.last - m_lightRecords.first)
-                                            / kLightRecordStride)
-                : 0u;
+        const unsigned int records = static_cast<unsigned int>(m_lightRecords.size());
         for (unsigned int l = 0; l < records; ++l)
         {
             dx9rend::RenderQueueEntry* const lit = dx9rend::renderEntryPoolAcquire();
-            lit->material           = material;
-            lit->materialParameters = material + 0x38;
-            lit->objectParameters   = ra;
+            lit->material           = &material;
+            lit->materialParameters = material.parameters;
+            lit->objectParameters   = &ra;
 
             // THE RE-base IS TWO steps AND THE first ONE IS dead: `bits & 0xFFFFFCBF` is computed
             // and then its low byte is overwritten by `(bits & 0x3F) | 0x80`. Reproduced as the
             // shipped pair rather than folded to the value it actually yields.
             unsigned int rebased = bits & 0xFFFFFCBFu;
             rebased = (rebased & 0xFFFFFF00u) | ((bits & 0x3Fu) | 0x80u);
-            *reinterpret_cast<void**>(reinterpret_cast<unsigned char*>(lit) + 0x138) =
-                findShaderForBits(rebased);
+            lit->shader = static_cast<dx9rend::Ra::RaShader*>(findShaderForBits(rebased));
 
-            unsigned char* const litParams =
-                *reinterpret_cast<unsigned char**>(reinterpret_cast<unsigned char*>(lit) + 0x128);
-            std::memcpy(litParams, reinterpret_cast<unsigned char*>(m_lightRecords.first)
-                                       + kLightRecordStride * l, kLightRecordStride);
+            std::memcpy(lit->lightArray.lights.value, &m_lightRecords[l],
+                        sizeof(dx9rend::Ra::RaLightRecord));
 
             // both operands are the entry + 8: `lea ecx,[edi+8]` / `lea ecx,[ebx+8]` at
-            // The payload starts one dword past the entry's own head.
-            renderQueueEntryCopyPayload(reinterpret_cast<unsigned char*>(lit) + 8,
-                                        reinterpret_cast<unsigned char*>(entry) + 8);
+            // The payload starts one dword past the entry's own head: the lighting block.
+            renderQueueEntryCopyPayload(lit->lighting, entry->lighting);
             dx9rend::renderQueueEnqueue(lit, translucent, m_fov != -1.0f, true);
         }
     }
@@ -2065,19 +1900,12 @@ SkinnedMesh::~SkinnedMesh()
         for (int bone = 0; bone < kSkinnedMeshBonesPerPalette; ++bone)
             ::renddx9abi::engineFree(m_bonePalettes[palette][bone]);   // sub_1005F360, unguarded
 
-    if (m_lightRecords.first)
-        ::renddx9abi::engineFree(m_lightRecords.first);
-    m_lightRecords.first = 0;
-    m_lightRecords.last  = 0;
-    m_lightRecords.end   = 0;
+    // The light records' storage is released here, in the shipped order.
+    std::vector<dx9rend::Ra::RaLightRecord>().swap(m_lightRecords);
 
-    ::dice::hfe::dx9rend::Ra::raObjectParametersDestroy(m_objectParameters);
-
-    if (m_lights.first)
-        ::renddx9abi::engineFree(m_lights.first);
-    m_lights.first = 0;
-    m_lights.last  = 0;
-    m_lights.end   = 0;
+    // The gathered lights' storage is released here. m_objectParameters (sub_1004D900), which the
+    // shipped body tears down just before it, is destroyed with the object after this body.
+    std::vector<world::LightSource*>().swap(m_lights);
 }
 
 
@@ -2086,30 +1914,30 @@ SkinnedMesh::~SkinnedMesh()
 
 namespace {
 
-int   __fastcall skm_addRef(void* self, void*)  { return static_cast<SkinnedMesh*>(self)->addRef(); }
-int   __fastcall skm_getRef(void* self, void*)  { return static_cast<SkinnedMesh*>(self)->getRef(); }
-int   __fastcall skm_release(void* self, void*) { return static_cast<SkinnedMesh*>(self)->release(); }
-void* __fastcall skm_queryInterface(void* self, void*, unsigned int iid)
+int   RD9_THUNK skm_addRef(void* self RD9_THUNK_EDX)  { return static_cast<SkinnedMesh*>(self)->addRef(); }
+int   RD9_THUNK skm_getRef(void* self RD9_THUNK_EDX)  { return static_cast<SkinnedMesh*>(self)->getRef(); }
+int   RD9_THUNK skm_release(void* self RD9_THUNK_EDX) { return static_cast<SkinnedMesh*>(self)->release(); }
+void* RD9_THUNK skm_queryInterface(void* self RD9_THUNK_EDX, unsigned int iid)
 { return static_cast<SkinnedMesh*>(self)->queryInterface(iid); }
 
-void __fastcall skm_setFov(void* self, void*, float fov)
+void RD9_THUNK skm_setFov(void* self RD9_THUNK_EDX, float fov)
 { return static_cast<SkinnedMesh*>(self)->setFov(fov); }
-float __fastcall skm_getFov(void* self, void*)
+float RD9_THUNK skm_getFov(void* self RD9_THUNK_EDX)
 { return static_cast<const SkinnedMesh*>(self)->getFov(); }
 
-void __fastcall skm_draw(void* self, void*, void* a, void* b, void* c)
+void RD9_THUNK skm_draw(void* self RD9_THUNK_EDX, void* a, void* b, void* c)
 { static_cast<SkinnedMesh*>(self)->draw(a, b, c); }
-void __fastcall skm_drawShadowMap(void* self, void*, void* caster, unsigned int a,
+void RD9_THUNK skm_drawShadowMap(void* self RD9_THUNK_EDX, void* caster, unsigned int a,
                                   unsigned int b, unsigned int c, bool alphaPass, unsigned int d)
 { static_cast<SkinnedMesh*>(self)->drawShadowMap(caster, a, b, c, alphaPass, d); }
 
-void* __fastcall skm_setDword33C(void* self, void*, void* v)
+void* RD9_THUNK skm_setDword33C(void* self RD9_THUNK_EDX, void* v)
 { return static_cast<SkinnedMesh*>(self)->setDword33C(v); }
-void* __fastcall skm_getDword33C(void* self, void*)
+void* RD9_THUNK skm_getDword33C(void* self RD9_THUNK_EDX)
 { return static_cast<const SkinnedMesh*>(self)->getDword33C(); }
 
 // +0x34 - the MSVC scalar deleting destructor: run the real one, then free when bit 0 is set.
-void* __fastcall skm_scalarDeletingDtor(void* self, void*, unsigned int flags)
+void* RD9_THUNK skm_scalarDeletingDtor(void* self RD9_THUNK_EDX, unsigned int flags)
 {
     SkinnedMesh* const mesh = static_cast<SkinnedMesh*>(self);
     mesh->~SkinnedMesh();
@@ -2118,71 +1946,71 @@ void* __fastcall skm_scalarDeletingDtor(void* self, void*, unsigned int flags)
     return self;
 }
 
-void* __fastcall skm_getTemplate(void* self, void*)
+void* RD9_THUNK skm_getTemplate(void* self RD9_THUNK_EDX)
 { return static_cast<const SkinnedMesh*>(self)->getTemplate(); }
-const void* __fastcall skm_getLocalBounds(void* self, void*)
+const void* RD9_THUNK skm_getLocalBounds(void* self RD9_THUNK_EDX)
 { return static_cast<const SkinnedMesh*>(self)->getLocalBounds(); }
-float __fastcall skm_getBoundingRadius(void* self, void*)
+float RD9_THUNK skm_getBoundingRadius(void* self RD9_THUNK_EDX)
 { return static_cast<const SkinnedMesh*>(self)->getBoundingRadius(); }
-const Mat4* __fastcall skm_getGeometryTransformation(void* self, void*)
+const Mat4* RD9_THUNK skm_getGeometryTransformation(void* self RD9_THUNK_EDX)
 { return static_cast<const SkinnedMesh*>(self)->getGeometryTransformation(); }
-void __fastcall skm_setGeometryTransformation(void* self, void*, const Mat4* m)
+void RD9_THUNK skm_setGeometryTransformation(void* self RD9_THUNK_EDX, const Mat4* m)
 { static_cast<SkinnedMesh*>(self)->setGeometryTransformation(m); }
 
-void __fastcall skm_setBoneTransforms(void* self, void*, const Mat4* bones, unsigned int count)
+void RD9_THUNK skm_setBoneTransforms(void* self RD9_THUNK_EDX, const Mat4* bones, unsigned int count)
 { static_cast<SkinnedMesh*>(self)->setBoneTransforms(bones, count); }
-void __fastcall skm_gatherVisibleParts(void* self, void*, HostIntVector* out)
+void RD9_THUNK skm_gatherVisibleParts(void* self RD9_THUNK_EDX, HostIntVector* out)
 { static_cast<SkinnedMesh*>(self)->gatherVisibleParts(out); }
-void __fastcall skm_setExcludedPart(void* self, void*, int part, bool enable)
+void RD9_THUNK skm_setExcludedPart(void* self RD9_THUNK_EDX, int part, bool enable)
 { static_cast<SkinnedMesh*>(self)->setExcludedPart(part, enable); }
 
-void  __fastcall skm_setGeomIndex(void* self, void*, int g)
+void  RD9_THUNK skm_setGeomIndex(void* self RD9_THUNK_EDX, int g)
 { static_cast<SkinnedMesh*>(self)->setGeomIndex(g); }
-int   __fastcall skm_getGeomIndex(void* self, void*)
+int   RD9_THUNK skm_getGeomIndex(void* self RD9_THUNK_EDX)
 { return static_cast<const SkinnedMesh*>(self)->getGeomIndex(); }
-int   __fastcall skm_getGeomCount(void* self, void*)
+int   RD9_THUNK skm_getGeomCount(void* self RD9_THUNK_EDX)
 { return static_cast<const SkinnedMesh*>(self)->getGeomCount(); }
-void* __fastcall skm_setLodIndex(void* self, void*, int lod)
+void* RD9_THUNK skm_setLodIndex(void* self RD9_THUNK_EDX, int lod)
 { return static_cast<SkinnedMesh*>(self)->setLodIndex(lod); }
-int   __fastcall skm_getLodIndex(void* self, void*)
+int   RD9_THUNK skm_getLodIndex(void* self RD9_THUNK_EDX)
 { return static_cast<const SkinnedMesh*>(self)->getLodIndex(); }
-int   __fastcall skm_getLodCount(void* self, void*)
+int   RD9_THUNK skm_getLodCount(void* self RD9_THUNK_EDX)
 { return static_cast<const SkinnedMesh*>(self)->getLodCount(); }
 
-void  __fastcall skm_setOwnerObject(void* self, void*, void* o)
+void  RD9_THUNK skm_setOwnerObject(void* self RD9_THUNK_EDX, void* o)
 { static_cast<SkinnedMesh*>(self)->setOwnerObject(o); }
-void* __fastcall skm_getOwnerObject(void* self, void*)
+void* RD9_THUNK skm_getOwnerObject(void* self RD9_THUNK_EDX)
 { return static_cast<const SkinnedMesh*>(self)->getOwnerObject(); }
-void* __fastcall skm_refreshRootObject(void* self, void*)
+void* RD9_THUNK skm_refreshRootObject(void* self RD9_THUNK_EDX)
 { return static_cast<SkinnedMesh*>(self)->refreshRootObject(); }
-unsigned char __fastcall skm_refreshAndGetByte334(void* self, void*)
+unsigned char RD9_THUNK skm_refreshAndGetByte334(void* self RD9_THUNK_EDX)
 { return static_cast<SkinnedMesh*>(self)->refreshAndGetByte334(); }
-void  __fastcall skm_setShadowCasterFrame(void* self, void*, void* f)
+void  RD9_THUNK skm_setShadowCasterFrame(void* self RD9_THUNK_EDX, void* f)
 { static_cast<SkinnedMesh*>(self)->setShadowCasterFrame(f); }
-void* __fastcall skm_getShadowCasterFrame(void* self, void*)
+void* RD9_THUNK skm_getShadowCasterFrame(void* self RD9_THUNK_EDX)
 { return static_cast<SkinnedMesh*>(self)->getShadowCasterFrame(); }
-void  __fastcall skm_setTransparency(void* self, void*, float a)
+void  RD9_THUNK skm_setTransparency(void* self RD9_THUNK_EDX, float a)
 { static_cast<SkinnedMesh*>(self)->setTransparency(a); }
 
 // the shared bodies, each read
-void __fastcall skm_empty1(void*, void*, unsigned int) {}
-void __fastcall skm_empty2(void*, void*, unsigned int, unsigned int) {}
-void __fastcall skm_empty3(void*, void*, unsigned int, unsigned int,
+void RD9_THUNK skm_empty1(void* RD9_THUNK_EDX, unsigned int) {}
+void RD9_THUNK skm_empty2(void* RD9_THUNK_EDX, unsigned int, unsigned int) {}
+void RD9_THUNK skm_empty3(void* RD9_THUNK_EDX, unsigned int, unsigned int,
                            unsigned int) {}
-unsigned int __fastcall skm_zero0(void*, void*) { return 0; }
-unsigned int __fastcall skm_zero1(void*, void*, unsigned int) { return 0; }
-bool __fastcall skm_false0(void*, void*) { return false; }
-bool __fastcall skm_false1(void*, void*, unsigned int) { return false; }
-int  __fastcall skm_minusOne(void*, void*) { return -1; }
-int  __fastcall skm_seven(void*, void*) { return 7; }
-int  __fastcall skm_three(void*, void*) { return 3; }
+unsigned int RD9_THUNK skm_zero0(void* RD9_THUNK_EDX) { return 0; }
+unsigned int RD9_THUNK skm_zero1(void* RD9_THUNK_EDX, unsigned int) { return 0; }
+bool RD9_THUNK skm_false0(void* RD9_THUNK_EDX) { return false; }
+bool RD9_THUNK skm_false1(void* RD9_THUNK_EDX, unsigned int) { return false; }
+int  RD9_THUNK skm_minusOne(void* RD9_THUNK_EDX) { return -1; }
+int  RD9_THUNK skm_seven(void* RD9_THUNK_EDX) { return 7; }
+int  RD9_THUNK skm_three(void* RD9_THUNK_EDX) { return 3; }
 
 // 0x10082D30 - `m_name = value` through MSVCP71's string operator=. Writes +0x04.
-void __fastcall skm_setName(void* self, void*, const vc71::string& name)
+void RD9_THUNK skm_setName(void* self RD9_THUNK_EDX, const std::string& name)
 { static_cast<SkinnedMesh*>(self)->m_name = name; }
 
 // 0x10103AD0 - `[ecx+24h] = rendererFrameOrdinal()`. Writes +0x24, valid in both classes.
-void __fastcall skm_stampFrameOrdinal(void* self, void*)
+void RD9_THUNK skm_stampFrameOrdinal(void* self RD9_THUNK_EDX)
 { static_cast<SkinnedMesh*>(self)->m_dword24 = dx9rend::rendererFrameOrdinal(); }
 
 } // anonymous namespace

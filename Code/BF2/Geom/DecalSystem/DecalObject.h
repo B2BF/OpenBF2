@@ -244,11 +244,12 @@ private:
 // either object crosses the host boundary, so the layout is the same in both RendDX9 flavours.
 struct DecalObjectLayoutCheck
 {
+    // The host's collision-face array is read through this view: every architecture.
+    static_assert(sizeof(DecalFace) == 8, "the collision face stride is 8 ([face*8])");
 #if defined(_M_IX86)
     static_assert(sizeof(DecalVertex) == 0x14, "the decal vertex stride is 20 (lea [n+n*4]*4)");
     static_assert(offsetof(DecalVertex, u) == 0x0C, "u at +0x0C");
     static_assert(offsetof(DecalVertex, v) == 0x10, "v at +0x10");
-    static_assert(sizeof(DecalFace) == 8, "the collision face stride is 8 ([face*8])");
     static_assert(sizeof(DecalRecord) == 0x58, "the pool stride is 0x58 (sub_10124450)");
     static_assert(offsetof(DecalRecord, position) == 0x04, "+0x04");
     static_assert(offsetof(DecalRecord, diffuse) == 0x14, "+0x14");

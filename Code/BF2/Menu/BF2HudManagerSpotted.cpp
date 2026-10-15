@@ -61,9 +61,15 @@ void BF2HudManager::sendSpottedMessage(bool announce, world::VehicleType type)
                 // Shipped BF2142-install check. The opened handle is leaked and
                 // this arm bypasses spam filtering and radio announcement.
                 HKEY installedKey;
+#if defined(_M_IX86)
+                const REGSAM installedAccess = KEY_QUERY_VALUE;
+#else
+                // [CHOSEN, not recovered] x64 (issue #7): the 32-bit installer's registry view.
+                const REGSAM installedAccess = KEY_QUERY_VALUE | KEY_WOW64_32KEY;
+#endif
                 if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
                         "SOFTWARE\\Electronic Arts\\EA Games\\Battlefield 2142\\InstallDir",
-                        0, KEY_QUERY_VALUE, &installedKey) == ERROR_SUCCESS) {
+                        0, installedAccess, &installedKey) == ERROR_SUCCESS) {
                     if (m_field1e4 || !invalidSpottedPosition(m_field1e8))
                         game->sendSpottedMessage(local, m_field1e4,
                             Vec2{m_field1e8.x, m_field1e8.z}, type);

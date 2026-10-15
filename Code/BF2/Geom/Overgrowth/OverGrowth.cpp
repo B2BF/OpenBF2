@@ -6,18 +6,10 @@
 #include "../GeometryTemplateManager.h"       // IGeometryTemplateManager, g_GeometryTemplateManager
 // XpLightManager.cpp's pattern: in the retail-ABI flavour HfeAbi.h already supplies IBase and the
 // class-registration records, so the engine headers' own copies are suppressed around their include.
-#if !BF2_PLUGIN_ABI_NATIVE
-#define CORE_IBASE_H
-#define CORE_CLASSMANAGER_H
-#endif
 #include "../../Game/Objects/IObjectTemplate.h"
 #include "../../Scene/Object/ObjectTypes/Base/ObjectTemplateManager.h"
 #include "../../Physics/HeightmapCluster.h"
 #include "../../Physics/Heightmap.h"
-#if !BF2_PLUGIN_ABI_NATIVE
-#undef CORE_CLASSMANAGER_H
-#undef CORE_IBASE_H
-#endif
 #include "../ITerrainEditable.h"              // the painters' overlays (IID 820005)
 #include "../Terrain.h"                       // the "Terrain" singleton's patch size / count
 #include "../../RendDX9/Texture.h"            // EngineTexture, textureReleaseRef (10014E20)
@@ -26,8 +18,7 @@
 #include "../../../RendDX9Abi/HfeAbi.h"
 #include "../../../RendDX9Abi/PluginAbi.h"
 #include "../../../RendDX9Abi/PluginEntry.h"  // classManager
-#include "../../../RendDX9Abi/Vc71String.h"
-#include "../../../RendDX9Abi/Vc71Vector.h"
+#include <string>
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
@@ -45,42 +36,36 @@ extern IBase* objectTemplateManager;
 
 namespace dice { namespace hfe { namespace geom {
 namespace {
-template<class T> T& field(void* object, unsigned int offset)
-{ return *reinterpret_cast<T*>(static_cast<unsigned char*>(object) + offset); }
-template<class T> const T& field(const void* object, unsigned int offset)
-{ return *reinterpret_cast<const T*>(static_cast<const unsigned char*>(object) + offset); }
 
 // The two owner tables and the two "active" cursors the console drives.
-//   +0x3C  VC7.1 vector<OverGrowthMaterial>   (first +0x40, last +0x44, end +0x48)
-//   +0x4C  VC7.1 vector of 0xA0 geometry records (first +0x50, last +0x54, end +0x58)
+//   +0x3C  vector<OverGrowthMaterial>
+//   +0x4C  vector<OverGrowthGeometryPair> (0xA0-byte records in the PE)
 //   +0xE8  OverGrowthMaterial*  the active material   (setActiveMaterial; addMaterial nulls it)
 //   +0xEC  OverGrowthType*      the active type        (setActiveType; OvergrowthType.* act on it)
-OverGrowthVector<OverGrowthMaterial>& materialTable(void* self)
-{ return field<OverGrowthVector<OverGrowthMaterial> >(self, 0x3C); }
-const OverGrowthVector<OverGrowthMaterial>& materialTable(const void* self)
-{ return field<OverGrowthVector<OverGrowthMaterial> >(self, 0x3C); }
-OverGrowthMaterial*& activeMaterial(void* self) { return field<OverGrowthMaterial*>(self, 0xE8); }
-OverGrowthMaterial* activeMaterial(const void* self) { return field<OverGrowthMaterial*>(self, 0xE8); }
-OverGrowthType*& activeType(void* self) { return field<OverGrowthType*>(self, 0xEC); }
-OverGrowthType* activeType(const void* self) { return field<OverGrowthType*>(self, 0xEC); }
+std::vector<OverGrowthMaterial>& materialTable(OverGrowth* self) { return self->m_materials; }
+const std::vector<OverGrowthMaterial>& materialTable(const OverGrowth* self) { return self->m_materials; }
+OverGrowthMaterial*& activeMaterial(OverGrowth* self) { return self->m_activeMaterial; }
+OverGrowthMaterial* activeMaterial(const OverGrowth* self) { return self->m_activeMaterial; }
+OverGrowthType*& activeType(OverGrowth* self) { return self->m_activeType; }
+OverGrowthType* activeType(const OverGrowth* self) { return self->m_activeType; }
 
 // std::operator==(const string&, const string&) from MSVCP71 - compare(): same length and the
 // same bytes (memcmp over the length).
-bool sameString(const vc71::string& a, const vc71::string& b)
+bool sameString(const std::string& a, const std::string& b)
 {
     return a.size() == b.size() && std::memcmp(a.c_str(), b.c_str(), a.size()) == 0;
 }
 
 // sub_10075080 (fastcall, 63 B) - std::string equality through _stricmp on the two c_str()s.
-bool equalsNoCase(const vc71::string& a, const vc71::string& b)
+bool equalsNoCase(const std::string& a, const std::string& b)
 {
     return ::_stricmp(a.c_str(), b.c_str()) == 0;
 }
 
 // std::operator+(const string&, const char*) - VC7.1 inlines it as `copy the left, then +=`.
-vc71::string concat(const vc71::string& left, const char* right)
+std::string concat(const std::string& left, const char* right)
 {
-    vc71::string result(left);
+    std::string result(left);
     result += right;
     return result;
 }
@@ -90,7 +75,7 @@ vc71::string concat(const vc71::string& left, const char* right)
 // shared 4096-byte buffer, a 0xFFF limit, and an overflow replaced by the fixed warning.
 char g_overGrowthFormatBuffer[0x1000];
 
-vc71::string overGrowthFormatString(const char* format, ...)
+std::string overGrowthFormatString(const char* format, ...)
 {
     va_list args;
     va_start(args, format);
@@ -102,7 +87,7 @@ vc71::string overGrowthFormatString(const char* format, ...)
     else
         ::sprintf(g_overGrowthFormatBuffer, "%s",
                   "WARNING: The original message was too long for formatString(). \n");
-    return vc71::string(g_overGrowthFormatBuffer);
+    return std::string(g_overGrowthFormatBuffer);
 }
 
 
@@ -110,7 +95,7 @@ vc71::string overGrowthFormatString(const char* format, ...)
 // Geometry instances retain the same virtual order across host ABI flavors.
 inline void* geometrySlot(void* geometry, unsigned int offset)
 {
-    return (*reinterpret_cast<void***>(geometry))[offset / sizeof(void*)];
+    return (*reinterpret_cast<void***>(geometry))[offset / 4];
 }
 void geometryAddRef(void* geometry)                                           // +0x00
 {
@@ -131,252 +116,173 @@ IGeometryTemplateManager* geometryTemplateManager()
 // ObjectTemplateManager PE +0x34. MSVC groups the five getTemplate overloads in reverse declaration
 // order at the first one's position, so +0x34 is getTemplate(const std::string&) - the one-argument
 // call 1015EBB8..1015EBC1 makes. A std::string crosses: typed native, raw retail slot otherwise.
-world::IObjectTemplate* objectTemplateByName(const vc71::string& name)
+world::IObjectTemplate* objectTemplateByName(const std::string& name)
 {
-#if BF2_PLUGIN_ABI_NATIVE
     return reinterpret_cast<world::ObjectTemplateManager*>(::dice::hfe::objectTemplateManager)
         ->getTemplate(renddx9abi::toHostString(name));
-#else
-    typedef world::IObjectTemplate* (__thiscall* GetTemplateFn)(void*, const vc71::string&);
-    void* const manager = ::dice::hfe::objectTemplateManager;
-    return reinterpret_cast<GetTemplateFn>((*static_cast<void***>(manager))[0x34 / 4])(manager, name);
-#endif
 }
 
+} // anonymous namespace
+
 // sub_1015EB80 (123 B, read in full): members in declaration order (+0x1C, +0x30, +0x34, the vector,
-// +0x4C = 1.0), the two count pairs in the body, then the two template lookups. NO null test on
-// the geometry template before load()/createInstance() - shipped.
-void geometryRecordConstruct(void* record, const vc71::string& name)
+// +0x4C = 1.0), the two count pairs in the body, then the two template lookups. +0x38 is not
+// written. NO null test on the geometry template before load()/createInstance() - shipped.
+OverGrowthGeometryRecord::OverGrowthGeometryRecord(const std::string& templateName)
+    : name(templateName), geometry(0), objectTemplate(0), geometryTemplate(0), pool(),
+      distanceScale(1.0f)
 {
-    ::new (&field<vc71::string>(record, 0x00)) vc71::string(name);
-    field<void*>(record, 0x1C) = 0;
-    field<void*>(record, 0x30) = 0;
-    field<void*>(record, 0x34) = 0;
-    field<void*>(record, 0x40) = 0;
-    field<void*>(record, 0x44) = 0;
-    field<void*>(record, 0x48) = 0;
-    field<float>(record, 0x4C) = 1.0f;
-    field<unsigned int>(record, 0x20) = 0;
-    field<unsigned int>(record, 0x24) = 0;
-    field<unsigned int>(record, 0x28) = 0;
-    field<unsigned int>(record, 0x2C) = 0;
+    vertexCounts[0] = 0;
+    vertexCounts[1] = 0;
+    indexCounts[0] = 0;
+    indexCounts[1] = 0;
 
-    world::IObjectTemplate* const objectTemplate =
-        objectTemplateByName(field<vc71::string>(record, 0x00));
-    field<world::IObjectTemplate*>(record, 0x30) = objectTemplate;
-    if (objectTemplate)
-        objectTemplate->preCache();                                             // IObjectTemplate +0x68
+    world::IObjectTemplate* const found = objectTemplateByName(name);
+    objectTemplate = found;
+    if (found)
+        found->preCache();                                                      // IObjectTemplate +0x68
 
-    field<IGeometryTemplate*>(record, 0x34) = geometryTemplateManager()->getTemplate(
-        renddx9abi::toHostString(field<vc71::string>(record, 0x00)));           // +0x18
-    field<IGeometryTemplate*>(record, 0x34)->load();                            // +0x2C
-    field<void*>(record, 0x1C) = field<IGeometryTemplate*>(record, 0x34)->createInstance();   // +0x24
+    geometryTemplate = geometryTemplateManager()->getTemplate(
+        renddx9abi::toHostString(name));                                        // +0x18
+    geometryTemplate->load();                                                   // +0x2C
+    geometry = geometryTemplate->createInstance();                              // +0x24
 }
 
 // sub_1015EC70 (230 B, read in full): the copy constructor. The initializer list copies the
 // pointers, +0x38 and +0x4C (the vector starts empty); the body addRefs the geometry (its slot
 // +0x00, NO null test), copies the two count pairs, then pushes and addRefs every vector entry.
-void geometryRecordCopy(void* record, const void* other)
+OverGrowthGeometryRecord::OverGrowthGeometryRecord(const OverGrowthGeometryRecord& other)
+    : name(other.name), geometry(other.geometry), objectTemplate(other.objectTemplate),
+      geometryTemplate(other.geometryTemplate), poolUsed(other.poolUsed), pool(),
+      distanceScale(other.distanceScale)
 {
-    ::new (&field<vc71::string>(record, 0x00)) vc71::string(field<vc71::string>(other, 0x00));
-    field<void*>(record, 0x1C) = field<void*>(other, 0x1C);
-    field<void*>(record, 0x30) = field<void*>(other, 0x30);
-    field<void*>(record, 0x34) = field<void*>(other, 0x34);
-    field<unsigned int>(record, 0x38) = field<unsigned int>(other, 0x38);
-    field<void*>(record, 0x40) = 0;
-    field<void*>(record, 0x44) = 0;
-    field<void*>(record, 0x48) = 0;
-    field<float>(record, 0x4C) = field<float>(other, 0x4C);
-    geometryAddRef(field<void*>(record, 0x1C));
-    field<unsigned int>(record, 0x20) = field<unsigned int>(other, 0x20);
-    field<unsigned int>(record, 0x24) = field<unsigned int>(other, 0x24);
-    field<unsigned int>(record, 0x28) = field<unsigned int>(other, 0x28);
-    field<unsigned int>(record, 0x2C) = field<unsigned int>(other, 0x2C);
+    geometryAddRef(geometry);
+    vertexCounts[0] = other.vertexCounts[0];
+    vertexCounts[1] = other.vertexCounts[1];
+    indexCounts[0] = other.indexCounts[0];
+    indexCounts[1] = other.indexCounts[1];
 
-    const vc71::vector_layout& source = field<vc71::vector_layout>(other, 0x3C);
-    vc71::vectorRef<void*> target(&field<vc71::vector_layout>(record, 0x3C));
-    for (unsigned int i = 0; i < vc71::vectorSizeIn(source, 4); ++i)
+    for (unsigned int i = 0; i < other.pool.size(); ++i)
     {
-        void* const entry = reinterpret_cast<void* const*>(source.first)[i];
-        target.push_back(entry);                                                // 1009A340 when full
+        void* const entry = other.pool[i];
+        pool.push_back(entry);                                                  // 1009A340 when full
         geometryAddRef(entry);                                                  // slot +0x00
     }
 }
 
 // sub_1015EC00 (101 B, read in full): release the geometry (slot +0x08, guarded), release every
-// vector entry (slot +0x08, unguarded), free and zero the vector, destroy the name.
-void geometryRecordDestroy(void* record)
+// vector entry (slot +0x08, unguarded); the vector and then the name are destroyed as members.
+OverGrowthGeometryRecord::~OverGrowthGeometryRecord()
 {
-    if (field<void*>(record, 0x1C))
-        geometryRelease(field<void*>(record, 0x1C));
-    vc71::vector_layout& entries = field<vc71::vector_layout>(record, 0x3C);
-    for (unsigned int i = 0; i < vc71::vectorSizeIn(entries, 4); ++i)
-        geometryRelease(reinterpret_cast<void**>(entries.first)[i]);
-    if (entries.first)
-        ::renddx9abi::engineFree(entries.first);
-    entries.first = 0;
-    entries.last = 0;
-    entries.end = 0;
-    field<vc71::string>(record, 0x00).~string();
+    if (geometry)
+        geometryRelease(geometry);
+    for (unsigned int i = 0; i < pool.size(); ++i)
+        geometryRelease(pool[i]);
 }
 
-// The 0xA0-byte vector element. Its copy (0x10160610: +0x00 then +0x50) and its destruction
-// (0x10160640 / the range destroy 0x101607F0: +0x50 then +0x00) are the two records' own.
-// [CHOSEN] carrier so vc71::vectorRef can copy/destroy raw records with their own bodies.
-struct GeometryPair
+namespace {
+
+// Base cleanup (1015F9B0 / the base destructor 1015FA50): the geometry table (101607F0, each pair
+// destroyed +0x50 then +0x00, 1015F9E9..1015FA13) and then the material table (100D28B0, each
+// element's destructor releases its type vector and then its name).
+void releaseTypeVectors(OverGrowth* self)
 {
-    unsigned int words[0xA0 / 4];
-
-    unsigned char*       bytes()       { return reinterpret_cast<unsigned char*>(words); }
-    const unsigned char* bytes() const { return reinterpret_cast<const unsigned char*>(words); }
-
-    GeometryPair(const vc71::string& lodName, const vc71::string& name)
-    {
-        geometryRecordConstruct(bytes(), lodName);
-        geometryRecordConstruct(bytes() + 0x50, name);
-    }
-    GeometryPair(const GeometryPair& other)
-    {
-        geometryRecordCopy(bytes(), other.bytes());
-        geometryRecordCopy(bytes() + 0x50, other.bytes() + 0x50);
-    }
-    ~GeometryPair()
-    {
-        geometryRecordDestroy(bytes() + 0x50);
-        geometryRecordDestroy(bytes());
-    }
-
-private:
-    GeometryPair& operator=(const GeometryPair&);
-};
-static_assert(sizeof(GeometryPair) == 0xA0, "10160BA0 divides by 0xA0");
-
-// sub_101607F0 (47 B, read in full): destroy [first, last) of the geometry vector.
-void destroyGeometryPairs(unsigned char* first, unsigned char* last)
-{
-    for (; first != last; first += 0xA0)
-        reinterpret_cast<GeometryPair*>(first)->~GeometryPair();
-}
-
-// Base cleanup (1015F9B0 / the base destructor 1015FA50): the geometry table (101607F0 + free,
-// 1015F9E9..1015FA13) and then the material table (100D28B0 + free, each
-// element's destructor tidies its type vector and then its name), each vector's three pointers zeroed.
-void releaseTypeVectors(void* self)
-{
-    vc71::vector_layout& geometries = field<vc71::vector_layout>(self, 0x4C);
-    if (geometries.first)
-    {
-        destroyGeometryPairs(reinterpret_cast<unsigned char*>(geometries.first),
-                             reinterpret_cast<unsigned char*>(geometries.last));
-        ::renddx9abi::engineFree(geometries.first);
-    }
-    geometries.first = 0;
-    geometries.last = 0;
-    geometries.end = 0;
-    overGrowthVectorTidy(materialTable(self));
+    self->m_geometries.clear();
+    materialTable(self).clear();
 }
 
 // the two array frees are unconditional, then each field is cleared in order.
-void clearBase(void* self)
+void clearBase(OverGrowth* self)
 {
-    ::renddx9abi::engineFree(field<void*>(self, 0x80));
-    void* second = field<void*>(self, 0x84);
-    field<void*>(self, 0x80) = 0;
+    ::renddx9abi::engineFree(self->m_densityMap);
+    void* second = self->m_shadowMap;
+    self->m_densityMap = 0;
     ::renddx9abi::engineFree(second);
-    field<void*>(self, 0x84) = 0;
-    if (!field<unsigned char>(self, 0xB0))
+    self->m_shadowMap = 0;
+    if (!self->m_reloading)
         releaseTypeVectors(self);
-    field<unsigned char>(self, 0x1E) = 0;
+    self->m_initialized = 0;
 }
 
 // sub_1015E5D0 (39 B) - the unpublished base class's setViewDistance (its own table 0x1021EBC0 holds
 // it at +0x0C); the derived +0x0C calls it directly. Store the distance, then the cell size:
 // distance / (grid / 2 - 1), the halving a signed `cdq; sub; sar 1` on the int at +0x10.
-void baseSetViewDistance(void* self, float distance)
+void baseSetViewDistance(OverGrowth* self, float distance)
 {
-    field<float>(self, 0x24) = distance;
-    field<float>(self, 0x14) = distance / static_cast<float>(field<int>(self, 0x10) / 2 - 1);
+    self->m_viewDistance = distance;
+    self->m_cellSize = distance / static_cast<float>(self->m_gridSize / 2 - 1);
 }
 
 // sub_100D0550 (161 B, read in full), called with 3 by clear and setViewDistance: the vector
-// deleting destructor. Elements are destroyed last TO first (the patch destructor is its vector's:
-// free the buffer when set, zero first/last/end), then operator delete[] (1005F370) on the cookie.
-// The scalar arm (flags without 2) is not reached by any caller.
-void deletePatchArray(unsigned char* patches)
+// deleting destructor. Elements are destroyed last TO first (the patch destructor is its vector's),
+// then operator delete[] (1005F370) on the cookie. The scalar arm (flags without 2) is not reached
+// by any caller.
+void deletePatchArray(OverGrowthPatch* patches)
 {
-    const int count = *reinterpret_cast<int*>(patches - 4);
-    for (int i = count - 1; i >= 0; --i)
-    {
-        unsigned char* const patch = patches + i * 0x98;
-        if (field<void*>(patch, 0x10))
-            ::renddx9abi::engineFree(field<void*>(patch, 0x10));
-        field<void*>(patch, 0x10) = 0;
-        field<void*>(patch, 0x14) = 0;
-        field<void*>(patch, 0x18) = 0;
-    }
-    ::renddx9abi::engineFree(patches - 4);
+    delete[] patches;
 }
 }
 
 OverGrowth::OverGrowth()
 {
-    // PE 1015F8F0, preserving untouched padding/fields rather than zeroing the whole object.
-    field<unsigned int>(this, 0x04) = 0;
-    field<unsigned int>(this, 0x08) = 0;
-    field<unsigned int>(this, 0x0C) = 0;
-    field<unsigned int>(this, 0x10) = 10;
-    field<unsigned int>(this, 0x14) = 0;
-    field<unsigned int>(this, 0x18) = 0x759DC150;
-    field<unsigned char>(this, 0x1C) = 1;
-    field<unsigned char>(this, 0x1D) = 0;
-    field<unsigned char>(this, 0x1E) = 0;
-    field<float>(this, 0x20) = 0.3f;
-    field<unsigned int>(this, 0x24) = 0;
-    field<float>(this, 0x30) = 0.4f;
-    field<float>(this, 0x34) = 12.0f;
-    field<unsigned char>(this, 0x38) = 0;
-    field<float>(this, 0x28) = 1.0f;
-    field<float>(this, 0x2C) = 1.0f;
-    const unsigned int zeroFields[] = {
-        0x40, 0x44, 0x48, 0x50, 0x54, 0x58, 0x5C, 0x60,
-        0x6C, 0x70, 0x74, 0x78, 0x7C, 0x80, 0x84
-    };
-    for (unsigned int offset : zeroFields) field<unsigned int>(this, offset) = 0;
-    ::new (static_cast<unsigned char*>(static_cast<void*>(this)) + 0x88) vc71::string();
-    field<unsigned int>(this, 0x10) &= ~1u;
-    field<unsigned char>(this, 0xA4) = 0;
-    field<unsigned char>(this, 0xB0) = 0;
-    field<float>(this, 0x24) = 80.0f;
+    // PE 1015F8F0, preserving untouched padding/fields rather than zeroing the whole object. The
+    // three vectors and the path are empty-constructed as members.
+    m_cameraPosition.x = 0.0f;
+    m_cameraPosition.y = 0.0f;
+    m_cameraPosition.z = 0.0f;
+    m_gridSize = 10;
+    m_cellSize = 0.0f;
+    m_randomSeed = 0x759DC150;
+    m_enabled = 1;
+    m_unresolved1D = 0;
+    m_initialized = 0;
+    m_fadeBand = 0.3f;
+    m_viewDistance = 0.0f;
+    m_minimumHeightFade = 0.4f;
+    m_cellFadeDistance = 12.0f;
+    m_reseatCells = 0;
+    m_viewDistanceScale = 1.0f;
+    m_heightFadeDistance = 1.0f;
+    m_extentX = 0.0f;
+    m_extentZ = 0.0f;
+    m_patchOrigin.x = 0.0f;
+    m_patchOrigin.y = 0.0f;
+    m_patchOrigin.z = 0.0f;
+    m_mapWidth = 0;
+    m_mapHeight = 0;
+    m_densityMap = 0;
+    m_shadowMap = 0;
+    m_gridSize &= ~1;
+    m_loaded = 0;
+    m_reloading = 0;
+    m_viewDistance = 80.0f;
 
     // PE 100CB940 derived half. The compiler supplies the complete 18-entry primary table.
-    const unsigned int derivedZeroFields[] = {
-        0xB8, 0xBC, 0xC0, 0xD0, 0xE0, 0xE4, 0xE8, 0xEC
-    };
-    for (unsigned int offset : derivedZeroFields) field<unsigned int>(this, offset) = 0;
-    field<unsigned char>(this, 0xF0) = 0;
-    field<unsigned char>(this, 0xF1) = 0;
-    field<unsigned int>(this, 0xF8) = 0;
-    field<unsigned int>(this, 0xFC) = 0;
-    field<unsigned int>(this, 0x100) = 0;
-    field<float>(this, 0xC8) = 0.15f;
-    field<float>(this, 0xCC) = 0.3f;
-    field<unsigned char>(this, 0xD4) = 1;
-    field<unsigned char>(this, 0xD5) = 1;
-    field<float>(this, 0xF4) = 1.0f;
-    field<unsigned int>(this, 0x10) = 10;
-    field<float>(this, 0x24) = 500.0f;
+    m_unresolvedD0 = 0;
+    m_patches = 0;
+    m_cells = 0;
+    m_activeMaterial = 0;
+    m_activeType = 0;
+    m_editorEnable = 0;
+    m_unresolvedF1 = 0;
+    m_lodTimer = 0.0f;
+    m_atlas = 0;
+    m_atlasPage = 0;
+    m_closeDistPercentage = 0.15f;
+    m_closeDistFade = 0.3f;
+    m_drawNear = 1;
+    m_updateBeforeRender = 1;
+    m_qualityScale = 1.0f;
+    m_gridSize = 10;
+    m_viewDistance = 500.0f;
 }
 
 OverGrowth::~OverGrowth()
 {
-    // PE 100D2720 -> 100CB6C0 -> 1015FA50. Base cleanup runs again before the string dtor.
+    // PE 100D2720 -> 100CB6C0 -> 1015FA50. Base cleanup runs again; the path and the emptied
+    // tables are then destroyed as members.
     OverGrowth::clear();
-    if (field<void*>(this, 0xB8)) ::renddx9abi::engineFree(field<void*>(this, 0xB8));
-    field<void*>(this, 0xB8) = 0;
-    field<void*>(this, 0xBC) = 0;
-    field<void*>(this, 0xC0) = 0;
+    m_unresolvedB4.clear();
     clearBase(this);
-    field<vc71::string>(this, 0x88).~string();
     releaseTypeVectors(this);
 }
 void OverGrowth::operator delete(void* memory) noexcept
@@ -384,7 +290,7 @@ void OverGrowth::operator delete(void* memory) noexcept
 
 OverGrowth* createOverGrowth()
 {
-    void* memory = ::renddx9abi::engineAlloc(0x154);
+    void* memory = ::renddx9abi::engineAlloc(sizeof(OverGrowth));
     return memory ? ::new (memory) OverGrowth() : 0;
 }
 
@@ -399,34 +305,33 @@ OverGrowth* createOverGrowth()
 
 void OverGrowth::clear()
 {
-    if (field<unsigned char*>(this, 0xE0))
-        deletePatchArray(field<unsigned char*>(this, 0xE0));
-    field<unsigned char*>(this, 0xE0) = 0;
-    if (field<OverGrowthCell**>(this, 0xE4))
+    if (m_patches)
+        deletePatchArray(m_patches);
+    m_patches = 0;
+    if (m_cells)
     {
-        for (int z = 0; z < field<int>(this, 0x10); ++z)
+        for (int z = 0; z < m_gridSize; ++z)
         {
-            for (int x = 0; x < field<int>(this, 0x10); ++x)
+            for (int x = 0; x < m_gridSize; ++x)
             {
-                OverGrowthCell* const cell =
-                    field<OverGrowthCell**>(this, 0xE4)[field<int>(this, 0x10) * z + x];
+                OverGrowthCell* const cell = m_cells[m_gridSize * z + x];
                 if (cell)
                     cell->destroy(1);
             }
         }
-        ::renddx9abi::engineFree(field<OverGrowthCell**>(this, 0xE4));
-        field<OverGrowthCell**>(this, 0xE4) = 0;
+        ::renddx9abi::engineFree(m_cells);
+        m_cells = 0;
     }
-    if (dx9rend::TextureAtlas* const atlas = field<dx9rend::TextureAtlas*>(this, 0xFC))
+    if (dx9rend::TextureAtlas* const atlas = m_atlas)
     {
         dx9rend::textureAtlasDtor(atlas);
         ::renddx9abi::engineFree(atlas);
     }
-    field<dx9rend::TextureAtlas*>(this, 0xFC) = 0;
-    if (field<dx9rend::EngineTexture*>(this, 0x100))
-        dx9rend::textureReleaseRef(field<dx9rend::EngineTexture*>(this, 0x100));
+    m_atlas = 0;
+    if (m_atlasPage)
+        dx9rend::textureReleaseRef(m_atlasPage);
     clearBase(this);
-    field<unsigned char>(this, 0xA4) = 0;
+    m_loaded = 0;
 }
 
 
@@ -435,31 +340,29 @@ void OverGrowth::clear()
 
 void OverGrowth::setViewDistance(float distance)
 {
-    if (field<unsigned char*>(this, 0xE0))
-        deletePatchArray(field<unsigned char*>(this, 0xE0));
-    field<unsigned char*>(this, 0xE0) = 0;
+    if (m_patches)
+        deletePatchArray(m_patches);
+    m_patches = 0;
     baseSetViewDistance(this, distance);
 
-    const float extentX = field<float>(this, 0x5C);
-    const float extentZ = field<float>(this, 0x60);
+    const float extentX = m_extentX;
+    const float extentZ = m_extentZ;
     const float extent = (extentX < extentZ) ? extentX : extentZ;
     if (extent == 0.0f)
         return;
 
-    const double cells = std::floor(static_cast<double>(extent / field<float>(this, 0x14)));
+    const double cells = std::floor(static_cast<double>(extent / m_cellSize));
     const float cellSize = extent / static_cast<float>(cells);                         // 100CBAA8 fdivr
-    field<float>(this, 0x14) = cellSize;                                               // 100CBAAF fst
+    m_cellSize = cellSize;                                                             // 100CBAAF fst
     const float inverse = 1.0f / cellSize;                                             // 100CBAB2 fdivr 1.0
-    field<int>(this, 0xD8) =
-        static_cast<int>((field<float>(this, 0x5C) * inverse + 1.0f) * 0.5f) * 2;
-    field<int>(this, 0xDC) =
-        static_cast<int>((field<float>(this, 0x60) * inverse + 1.0f) * 0.5f) * 2;
+    m_patchCountX = static_cast<int>((m_extentX * inverse + 1.0f) * 0.5f) * 2;
+    m_patchCountZ = static_cast<int>((m_extentZ * inverse + 1.0f) * 0.5f) * 2;
 }
 
-float OverGrowth::getViewDistance() const { return field<float>(this, 0x24); }         // +0x10
+float OverGrowth::getViewDistance() const { return m_viewDistance; }                   // +0x10
 OverGrowthCell* OverGrowth::getCell(int x, int z)                                      // +0x20
 {
-    return field<OverGrowthCell**>(this, 0xE4)[x + z * field<int>(this, 0x10)];
+    return m_cells[x + z * m_gridSize];
 }
 
 
@@ -471,14 +374,14 @@ OverGrowthCell* OverGrowth::getCell(int x, int z)                               
 
 void OverGrowth::reload()
 {
-    field<unsigned char>(this, 0xB0) = 1;
+    m_reloading = 1;
     save();
     clear();                                                               // 100CDDD3 virtual +0x30
     preLoad();
     preLoadResources();
     postLoadResources();
     generateAtlas();
-    field<unsigned char>(this, 0xB0) = 0;
+    m_reloading = 0;
 }
 
 
@@ -488,27 +391,27 @@ void OverGrowth::reload()
 // instance (the named record tested first), answering the new last index; else -1.
 // Callers: initialize, preLoad, the static-object adoption, and populatePatch (+0x44, 100CC800).
 
-int OverGrowth::findOrAddGeometry(const vc71::string& name)
+int OverGrowth::findOrAddGeometry(const std::string& name)
 {
     if (name.size() == 0)                                                  // [name+0x14] == 0
         return -1;
-    vc71::vector_layout& geometries = field<vc71::vector_layout>(this, 0x4C);
-    for (unsigned int i = 0; i < vc71::vectorSizeIn(geometries, 0xA0); ++i)
+    std::vector<OverGrowthGeometryPair>& geometries = m_geometries;
+    for (unsigned int i = 0; i < geometries.size(); ++i)
     {
-        const unsigned char* const pair = reinterpret_cast<unsigned char*>(geometries.first) + i * 0xA0;
-        if (sameString(field<vc71::string>(pair, 0x00), name) ||
-            sameString(field<vc71::string>(pair, 0x50), name))
+        const OverGrowthGeometryPair& pair = geometries[i];
+        if (sameString(pair.lod.name, name) ||
+            sameString(pair.full.name, name))
             return static_cast<int>(i);
     }
 
-    const vc71::string full(name);                                        // var_20
-    const vc71::string lod = concat(name, "_lod");                        // var_3C
-    const GeometryPair pair(lod, full);                                   // var_F8 / var_A8
+    const std::string full(name);                                        // var_20
+    const std::string lod = concat(name, "_lod");                        // var_3C
+    const OverGrowthGeometryPair pair(lod, full);                         // var_F8 / var_A8
     int index = -1;
-    if (field<void*>(pair.bytes(), 0x50 + 0x1C) && field<void*>(pair.bytes(), 0x1C))
+    if (pair.full.geometry && pair.lod.geometry)
     {
-        vc71::vectorRef<GeometryPair>(&geometries).push_back(pair);
-        index = static_cast<int>(vc71::vectorSizeIn(geometries, 0xA0)) - 1;
+        geometries.push_back(pair);
+        index = static_cast<int>(geometries.size()) - 1;
     }
     return index;
 }
@@ -524,40 +427,13 @@ OverGrowthType::OverGrowthType()
     randomScale.y = 1.0f;
 }
 
-// addMaterial's temporary (100CDFA0..): the name default-constructed and the three type-vector
-// pointers zeroed. [CHOSEN, not recovered] the id: retail leaves the temporary's +0x1C unwritten
-// (it is overwritten the moment the record lands in the table), and the allocator padding - both
-// are zeroed here so no copy reads an indeterminate value.
+// addMaterial's temporary (100CDFA0..): the name default-constructed and the type vector empty.
+// [CHOSEN, not recovered] the id: retail leaves the temporary's +0x1C unwritten (it is overwritten
+// the moment the record lands in the table); it is zeroed here so no copy reads an indeterminate
+// value.
 OverGrowthMaterial::OverGrowthMaterial()
-    : name(), id(0)
+    : name(), id(0), types()
 {
-    types.allocator = 0;
-    types.first = 0;
-    types.last  = 0;
-    types.end   = 0;
-}
-
-// Inlined at every by-value copy (100CDE20..100CDE3A, 100CDF00..): the string, +0x1C, then the
-// type vector's copy constructor 100D0600.
-OverGrowthMaterial::OverGrowthMaterial(const OverGrowthMaterial& other)
-    : name(other.name), id(other.id)
-{
-    overGrowthVectorCopyConstruct(types, other.types);
-}
-
-// 100D1A70's element body (the erase copy-down): string =, +0x1C, then 100D0AE0.
-OverGrowthMaterial& OverGrowthMaterial::operator=(const OverGrowthMaterial& other)
-{
-    name = other.name;
-    id = other.id;
-    overGrowthVectorAssign(types, other.types);
-    return *this;
-}
-
-// 100D28B0's element body: the type vector's _Tidy, then the name.
-OverGrowthMaterial::~OverGrowthMaterial()
-{
-    overGrowthVectorTidy(types);
 }
 
 // Overgrowth.path
@@ -565,25 +441,25 @@ OverGrowthMaterial::~OverGrowthMaterial()
 // 100C92C0 (12 B): `add ecx, 88h; jmp std::string::operator=` - the only writer of +0x88 in the
 // image (its one caller is the path executor 100C5407). A non-empty +0x88 is what opens
 // preLoadResources / postLoadResources / render / updateCells (their +0x9C size tests).
-void OverGrowth::setPath(const vc71::string& path)
+void OverGrowth::setPath(const std::string& path)
 {
-    field<vc71::string>(this, 0x88) = path;
+    m_path = path;
 }
 
 // 100C92D0 (7 B): `lea eax, [ecx+88h]; retn`.
-const vc71::string& OverGrowth::getPath() const
+const std::string& OverGrowth::getPath() const
 {
-    return field<vc71::string>(this, 0x88);
+    return m_path;
 }
 
 // the material table
 
 // every material as "<name> [<id>]", backslash-separated, in table order.
-vc71::string OverGrowth::getMaterialList() const
+std::string OverGrowth::getMaterialList() const
 {
-    vc71::string list;
-    const OverGrowthVector<OverGrowthMaterial>& materials = materialTable(this);
-    for (const OverGrowthMaterial* it = materials.first; it != materials.last; ++it)
+    std::string list;
+    const std::vector<OverGrowthMaterial>& materials = materialTable(this);
+    for (const OverGrowthMaterial* it = materials.data(); it != materials.data() + materials.size(); ++it)
     {
         if (list.size())
             list += "\\";
@@ -595,18 +471,18 @@ vc71::string OverGrowth::getMaterialList() const
 // 100CDEE0 (365 B), read in full. A duplicate ID answers false (the name is not compared). A new
 // record is a default-constructed temporary pushed at the end (100D2D90); then ITS id is written,
 // then its name, and both cursors are cleared.
-bool OverGrowth::addMaterial(const vc71::string& name, unsigned int id)
+bool OverGrowth::addMaterial(const std::string& name, unsigned int id)
 {
-    OverGrowthVector<OverGrowthMaterial>& materials = materialTable(this);
-    for (OverGrowthMaterial* it = materials.first; it != materials.last; ++it)
+    std::vector<OverGrowthMaterial>& materials = materialTable(this);
+    for (OverGrowthMaterial* it = materials.data(); it != materials.data() + materials.size(); ++it)
     {
         const OverGrowthMaterial material(*it);                            // by value, as shipped
         if (id == material.id)
             return false;
     }
 
-    overGrowthVectorPushBack(materials, OverGrowthMaterial());
-    OverGrowthMaterial& added = materials.last[-1];                        // `[this+44h] - 30h`
+    materials.push_back(OverGrowthMaterial());
+    OverGrowthMaterial& added = materials.back();                          // `[this+44h] - 30h`
     added.id = id;                                                         // +0x1C first,
     added.name = name;                                                     // then the name
     activeMaterial(this) = 0;                                              // +0xE8
@@ -615,20 +491,20 @@ bool OverGrowth::addMaterial(const vc71::string& name, unsigned int id)
 }
 
 // 100CDE00 (210 B), read in full. Only the active material can be removed. Its types are cleared
-// (VC7.1 clear() == _Tidy, 100CFE80) before the erase copies the tail down over it (100D1A70),
-// destroys the last record (100D28B0) and shortens the table; both cursors are then cleared.
+// (100CFE80) before the erase moves the tail down over it (100D1A70), destroys the last record
+// (100D28B0) and shortens the table; both cursors are then cleared.
 bool OverGrowth::removeActiveMaterial()
 {
     if (!activeMaterial(this))
         return false;
-    OverGrowthVector<OverGrowthMaterial>& materials = materialTable(this);
-    for (OverGrowthMaterial* it = materials.first; it != materials.last; ++it)
+    std::vector<OverGrowthMaterial>& materials = materialTable(this);
+    for (OverGrowthMaterial* it = materials.data(); it != materials.data() + materials.size(); ++it)
     {
         const OverGrowthMaterial material(*it);                            // by value, as shipped
         if (activeMaterial(this) == it)
         {
-            overGrowthVectorTidy(activeMaterial(this)->types);
-            overGrowthVectorErase(materials, it);
+            activeMaterial(this)->types.clear();
+            materials.erase(materials.begin() + (it - materials.data()));
             activeType(this) = 0;
             activeMaterial(this) = 0;
             return true;
@@ -639,10 +515,10 @@ bool OverGrowth::removeActiveMaterial()
 
 // the first material whose name matches case-INsensitively becomes active. A miss
 // changes nothing, and the active type is never touched here.
-void OverGrowth::setActiveMaterial(const vc71::string& name)
+void OverGrowth::setActiveMaterial(const std::string& name)
 {
-    OverGrowthVector<OverGrowthMaterial>& materials = materialTable(this);
-    for (OverGrowthMaterial* it = materials.first; it != materials.last; ++it)
+    std::vector<OverGrowthMaterial>& materials = materialTable(this);
+    for (OverGrowthMaterial* it = materials.data(); it != materials.data() + materials.size(); ++it)
     {
         if (equalsNoCase(it->name, name))                                  // 100C9EF5 sub_10075080
         {
@@ -653,26 +529,26 @@ void OverGrowth::setActiveMaterial(const vc71::string& name)
 }
 
 // the active material's name, or "" (unk_101DC333) without one.
-vc71::string OverGrowth::getActiveMaterialName() const
+std::string OverGrowth::getActiveMaterialName() const
 {
     const OverGrowthMaterial* const material = activeMaterial(this);
     if (material)
         return material->name;
-    return vc71::string("");
+    return std::string("");
 }
 
 // the active material's type table
 
 // the active material's type names ("%s"), backslash-separated; each record copied by
 // value first; the end re-read through +0xE8 every pass.
-vc71::string OverGrowth::getTypeList() const
+std::string OverGrowth::getTypeList() const
 {
-    vc71::string list;
+    std::string list;
     const OverGrowthMaterial* const material = activeMaterial(this);
     if (material)
     {
-        for (const OverGrowthType* it = material->types.first;
-             it != activeMaterial(this)->types.last; ++it)
+        for (const OverGrowthType* it = material->types.data();
+             it != activeMaterial(this)->types.data() + activeMaterial(this)->types.size(); ++it)
         {
             const OverGrowthType type(*it);                                // by value, as shipped
             if (list.size())
@@ -687,23 +563,23 @@ vc71::string OverGrowth::getTypeList() const
 // record is a default-constructed temporary pushed at the end (100D1950); its name AND geometry are
 // both set to the given name; then the previously active type is re-selected by its saved name
 // (an empty name when there was none, which setActiveType turns into "no active type").
-bool OverGrowth::addType(const vc71::string& name)
+bool OverGrowth::addType(const std::string& name)
 {
     if (!activeMaterial(this))
         return false;
-    for (OverGrowthType* it = activeMaterial(this)->types.first;
-         it != activeMaterial(this)->types.last; ++it)
+    for (OverGrowthType* it = activeMaterial(this)->types.data();
+         it != activeMaterial(this)->types.data() + activeMaterial(this)->types.size(); ++it)
     {
         const OverGrowthType type(*it);                                    // by value, as shipped
         if (sameString(type.name, name))
             return false;
     }
 
-    vc71::string previous;
+    std::string previous;
     if (activeType(this))
         previous = activeType(this)->name;
-    overGrowthVectorPushBack(activeMaterial(this)->types, OverGrowthType());
-    OverGrowthType& added = activeMaterial(this)->types.last[-1];          // `[+0E8h]+28h - 5Ch`
+    activeMaterial(this)->types.push_back(OverGrowthType());
+    OverGrowthType& added = activeMaterial(this)->types.back();            // `[+0E8h]+28h - 5Ch`
     added.name = name;
     added.geometry = name;
     setActiveType(previous);
@@ -718,13 +594,14 @@ bool OverGrowth::removeActiveType()
         return false;
     if (!activeType(this))
         return false;
-    for (OverGrowthType* it = activeMaterial(this)->types.first;
-         it != activeMaterial(this)->types.last; ++it)
+    for (OverGrowthType* it = activeMaterial(this)->types.data();
+         it != activeMaterial(this)->types.data() + activeMaterial(this)->types.size(); ++it)
     {
         const OverGrowthType type(*it);
         if (activeType(this) == it)
         {
-            overGrowthVectorErase(activeMaterial(this)->types, it);
+            std::vector<OverGrowthType>& types = activeMaterial(this)->types;
+            types.erase(types.begin() + (it - types.data()));
             activeType(this) = 0;
             return true;
         }
@@ -734,13 +611,13 @@ bool OverGrowth::removeActiveType()
 
 // 100CA050 (215 B), read in full. The first type of the active material whose name matches
 // (case-sensitive) becomes active; no active material, or a miss, nulls the active type.
-void OverGrowth::setActiveType(const vc71::string& name)
+void OverGrowth::setActiveType(const std::string& name)
 {
     OverGrowthMaterial* const material = activeMaterial(this);
     if (material)
     {
-        for (OverGrowthType* it = material->types.first;
-             it != activeMaterial(this)->types.last; ++it)
+        for (OverGrowthType* it = material->types.data();
+             it != activeMaterial(this)->types.data() + activeMaterial(this)->types.size(); ++it)
         {
             const OverGrowthType type(*it);                                // by value, as shipped
             if (sameString(type.name, name))
@@ -758,21 +635,21 @@ void OverGrowth::setActiveType(const vc71::string& name)
 // live regeneration, armed only once postLoadResources has set +0xA4 (100CD7AA). Every getter
 // without an active type answers 0.0f (flt_101DDE64), "" or (1, 1).
 
-void OverGrowth::setTypeGeometry(const vc71::string& geometry)
+void OverGrowth::setTypeGeometry(const std::string& geometry)
 {
     OverGrowthType* const type = activeType(this);
     if (!type)
         return;
     type->geometry = geometry;
-    if (field<unsigned char>(this, 0xA4))
+    if (m_loaded)
         reload();
 }
-vc71::string OverGrowth::getTypeGeometry() const
+std::string OverGrowth::getTypeGeometry() const
 {
     const OverGrowthType* const type = activeType(this);
     if (type)
         return type->geometry;
-    return vc71::string("");
+    return std::string("");
 }
 
 void OverGrowth::setTypeDensity(float value)
@@ -781,7 +658,7 @@ void OverGrowth::setTypeDensity(float value)
     if (!type)
         return;
     type->density = value;
-    if (field<unsigned char>(this, 0xA4))
+    if (m_loaded)
         reload();
 }
 float OverGrowth::getTypeDensity() const
@@ -796,7 +673,7 @@ void OverGrowth::setTypeNormalScale(float value)
     if (!type)
         return;
     type->normalScale = value;
-    if (field<unsigned char>(this, 0xA4))
+    if (m_loaded)
         reload();
 }
 float OverGrowth::getTypeNormalScale() const
@@ -811,7 +688,7 @@ void OverGrowth::setTypeRotationScale(float value)
     if (!type)
         return;
     type->rotationScale = value;
-    if (field<unsigned char>(this, 0xA4))
+    if (m_loaded)
         reload();
 }
 float OverGrowth::getTypeRotationScale() const
@@ -826,7 +703,7 @@ void OverGrowth::setTypeMinRadiusToSame(float value)
     if (!type)
         return;
     type->minRadiusToSame = value;
-    if (field<unsigned char>(this, 0xA4))
+    if (m_loaded)
         reload();
 }
 float OverGrowth::getTypeMinRadiusToSame() const
@@ -841,7 +718,7 @@ void OverGrowth::setTypeMinRadiusToOthers(float value)
     if (!type)
         return;
     type->minRadiusToOthers = value;
-    if (field<unsigned char>(this, 0xA4))
+    if (m_loaded)
         reload();
 }
 float OverGrowth::getTypeMinRadiusToOthers() const
@@ -857,7 +734,7 @@ void OverGrowth::setTypeRandomScale(Vec2 value)                            // 10
         return;
     type->randomScale.x = value.x;                                         // +0x44
     type->randomScale.y = value.y;                                         // +0x48
-    if (field<unsigned char>(this, 0xA4))
+    if (m_loaded)
         reload();
 }
 Vec2 OverGrowth::getTypeRandomScale() const
@@ -873,46 +750,47 @@ Vec2 OverGrowth::getTypeRandomScale() const
 
 // plain fields and small accessors
 
-float OverGrowth::getViewDistanceScale() const { return field<float>(this, 0x28); }    // exec 100C60A7
-void  OverGrowth::setViewDistanceScale(float scale) { field<float>(this, 0x28) = scale; }
-float OverGrowth::getCloseDistPercentage() const { return field<float>(this, 0xC8); }  // exec 100C680A
-void  OverGrowth::setCloseDistPercentage(float value) { field<float>(this, 0xC8) = value; }
-float OverGrowth::getCloseDistFade() const { return field<float>(this, 0xCC); }        // exec 100C690E
-void  OverGrowth::setCloseDistFade(float value) { field<float>(this, 0xCC) = value; }
-float OverGrowth::getLodTimer() const { return field<float>(this, 0xF8); }             // exec 100C6A12
-void  OverGrowth::setLodTimer(float value) { field<float>(this, 0xF8) = value; }
+float OverGrowth::getViewDistanceScale() const { return m_viewDistanceScale; }         // exec 100C60A7
+void  OverGrowth::setViewDistanceScale(float scale) { m_viewDistanceScale = scale; }
+float OverGrowth::getCloseDistPercentage() const { return m_closeDistPercentage; }     // exec 100C680A
+void  OverGrowth::setCloseDistPercentage(float value) { m_closeDistPercentage = value; }
+float OverGrowth::getCloseDistFade() const { return m_closeDistFade; }                 // exec 100C690E
+void  OverGrowth::setCloseDistFade(float value) { m_closeDistFade = value; }
+float OverGrowth::getLodTimer() const { return m_lodTimer; }                           // exec 100C6A12
+void  OverGrowth::setLodTimer(float value) { m_lodTimer = value; }
+float OverGrowth::getQualityScale() const { return m_qualityScale; }
+void  OverGrowth::setQualityScale(float scale) { m_qualityScale = scale; }
 
 // 100C8C40 (13 B) / the editor byte +0xF0. When set, preLoadResources skips the
 // isOvergrowth-object adoption (100CC683 -> 100CBC80), the atlas texture collection 100CC1F0 adds
 // those objects' "_lod" templates (100CC282), and rebuildCells branches on it (100CAF2A).
-void OverGrowth::setEditorEnable(bool enable) { field<unsigned char>(this, 0xF0) = enable; }
-bool OverGrowth::getEditorEnable() const { return field<unsigned char>(this, 0xF0) != 0; }
+void OverGrowth::setEditorEnable(bool enable) { m_editorEnable = enable; }
+bool OverGrowth::getEditorEnable() const { return m_editorEnable != 0; }
 
 // 100C92E0 (16 B): +0xF4 (VideoOptions' scale) * +0xC8 (closeDistPercentage) * +0x24 (viewDistance),
 // multiplied left to right.
 float OverGrowth::getLodDistance() const
 {
-    return field<float>(this, 0xF4) * field<float>(this, 0xC8) * field<float>(this, 0x24);
+    return m_qualityScale * m_closeDistPercentage * m_viewDistance;
 }
 
 // 100CDC20 (407 B), read in full: a std::set<std::string> of every NON-empty type geometry name
 // over every material (index loops), then the set's names in order, backslash-separated.
-vc71::string OverGrowth::getGeometryList() const
+std::string OverGrowth::getGeometryList() const
 {
     std::set<std::string> names;                                           // 100CDC2A sub_100CE890
-    const OverGrowthVector<OverGrowthMaterial>& materials = materialTable(this);
-    for (unsigned int m = 0; materials.first && m < overGrowthVectorSize(materials); ++m)
+    const std::vector<OverGrowthMaterial>& materials = materialTable(this);
+    for (unsigned int m = 0; m < materials.size(); ++m)
     {
-        const OverGrowthMaterial& material = materials.first[m];
-        for (unsigned int t = 0;
-             material.types.first && t < overGrowthVectorSize(material.types); ++t)
+        const OverGrowthMaterial& material = materials[m];
+        for (unsigned int t = 0; t < material.types.size(); ++t)
         {
-            const OverGrowthType& type = material.types.first[t];
+            const OverGrowthType& type = material.types[t];
             if (!type.geometry.empty())                                    // type +0x30, _Mysize
                 names.insert(std::string(type.geometry.c_str(), type.geometry.size()));
         }
     }
-    vc71::string list;
+    std::string list;
     for (std::set<std::string>::const_iterator it = names.begin(); it != names.end(); ++it)
     {
         if (list.size())
@@ -983,11 +861,11 @@ void OverGrowth::paintMaterial(float x, float z, float radius, unsigned char mat
 {
     if (material != 0)                                                                   // `cmp byte ptr`
     {
-        const OverGrowthVector<OverGrowthMaterial>& materials = materialTable(this);
+        const std::vector<OverGrowthMaterial>& materials = materialTable(this);
         bool missing = true;
-        for (unsigned int i = 0; i < overGrowthVectorSize(materials); ++i)
+        for (unsigned int i = 0; i < materials.size(); ++i)
         {
-            if (materials.first[i].id == material)                                       // movzx
+            if (materials[i].id == material)                                             // movzx
             {
                 missing = false;
                 break;
@@ -1020,7 +898,7 @@ void OverGrowth::paintMaterial(float x, float z, float radius, unsigned char mat
         {
             const float dz = differenceAsFloat(iz, centreZf);
             if (!(std::sqrt(dz * dz + dx2) > gridRadius))                                 // test ah, 41h
-                field<unsigned char*>(this, 0x80)[iz * sizeX + ix] = material;
+                m_densityMap[iz * sizeX + ix] = material;
         }
     }
 
@@ -1058,7 +936,7 @@ void OverGrowth::paintShadowmap(float x, float z, float radius, unsigned char va
         {
             const float dz = differenceAsFloat(iz, centreZf);
             if (!(std::sqrt(dz * dz + dx2) > gridRadius))
-                field<unsigned char*>(this, 0x84)[iz * sizeX + ix] = value;
+                m_shadowMap[iz * sizeX + ix] = value;
         }
     }
 
@@ -1101,7 +979,7 @@ void OverGrowth::exportMaterialRectToTerrainTexture(unsigned int x0, unsigned in
         static_cast<ITerrainEditable*>(terrain->queryInterface(kIID_ITerrainEditable));
     if (editable->getShaderTechnique() != 5)                                                  // E+0x8C
         return;
-    if (!field<unsigned char*>(this, 0x80))
+    if (!m_densityMap)
     {
         editable->setShaderTechnique(0);                                                      // E+0x88
         return;
@@ -1139,7 +1017,7 @@ void OverGrowth::exportMaterialRectToTerrainTexture(unsigned int x0, unsigned in
                 unsigned int* texel = column;
                 for (unsigned int i = 0; i < patchSize; ++i, texel += patchSize)
                 {
-                    const unsigned int value = field<unsigned char*>(this, 0x80)[
+                    const unsigned int value = m_densityMap[
                         (texelZ + i) * static_cast<unsigned int>(sizeX) + texelX + j
                         + static_cast<unsigned int>(g_materialOverlayIndexBias)];
                     *texel = value <= 15 ? kMaterialOverlayPalette[value] : value * 0x010101u;
@@ -1161,7 +1039,7 @@ void OverGrowth::exportShadowmapRectToTerrainTexture(unsigned int x0, unsigned i
         static_cast<ITerrainEditable*>(terrain->queryInterface(kIID_ITerrainEditable));
     if (editable->getShaderTechnique() != 6)
         return;
-    if (!field<unsigned char*>(this, 0x84))
+    if (!m_shadowMap)
     {
         editable->setShaderTechnique(0);
         return;
@@ -1199,7 +1077,7 @@ void OverGrowth::exportShadowmapRectToTerrainTexture(unsigned int x0, unsigned i
                 unsigned int* texel = column;
                 for (unsigned int i = 0; i < patchSize; ++i, texel += patchSize)
                 {
-                    const unsigned int value = field<unsigned char*>(this, 0x84)[
+                    const unsigned int value = m_shadowMap[
                         (texelZ + i) * static_cast<unsigned int>(sizeX) + texelX + j
                         + static_cast<unsigned int>(g_shadowOverlayIndexBias)];
                     *texel = value * 0x010101u;

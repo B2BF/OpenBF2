@@ -140,6 +140,8 @@ bool ObjectCollection::writeObjects(System* system, OStream* output)
     object = nullptr;
     return writeObject(system, object, output); // Always emit the null terminator.
 }
+#if defined(_M_IX86)
 static_assert(sizeof(ObjectCollection) == 4, "BFMeme collection base layout");
+#endif
 } }
 #endif

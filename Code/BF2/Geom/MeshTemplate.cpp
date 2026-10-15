@@ -31,7 +31,7 @@ namespace dx9rend {
 extern void* g_bufferManager;                                            // dword_1023B978
 
 void* createVertexBuffer(void* bufferManager, unsigned int count, unsigned int stride,
-                         const vc71::string& name, unsigned int usage);
+                         const std::string& name, unsigned int usage);
 void* vertexBufferLock(void* wrapper, unsigned int offsetVerts, unsigned int countVerts,
                        unsigned int flags);
 bool  vertexBufferUnlock(void* wrapper);
@@ -72,7 +72,7 @@ const unsigned int kCID_MeshTemplate = 0x870CA650u;
 // PE this is a file-scope `const std::string` at 0x10263DD4, constructed by the static initialiser
 // at 0x101D5760 and shared with at least SkinnedMeshTemplate::load (0x1010E840) and three other
 // bodies; the concatenation there is `path + <this> + name`. Held as a literal rather than as a
-// namespace-scope vc71::string because only the bytes are observable and a dynamically initialised
+// namespace-scope std::string because only the bytes are observable and a dynamically initialised
 // string object in a DLL would add a static-init ordering dependency this file does not need.
 const char kMeshesSubDirectory[] = "Meshes/";
 
@@ -87,147 +87,6 @@ const Vec3& unitScale()
     return value;
 }
 
-
-// std::vector<int>::resize(n, value) - sub_10192790, plus the _Insert_n it tail-calls (sub_1003A450)
-// reduced to the append case, which is the only one resize reaches. This is the instantiation the
-// MeshTemplate.cpp translation unit itself emits, so it lives here rather than in Vc71Vector.h
-// (which models the host's vector as a NON-owning view and has no resize).
-
-// The layout is the VC7.1 four-pointer shape: +0 allocator, +4 _First, +8 _Last, +12 _End.
-
-unsigned int vectorIntSize(const vc71::vector_layout& v)
-{
-    return v.first ? static_cast<unsigned int>((v.last - v.first) >> 2) : 0u;
-}
-
-unsigned int vectorIntCapacity(const vc71::vector_layout& v)
-{
-    return v.first ? static_cast<unsigned int>((v.end - v.first) >> 2) : 0u;
-}
-
-// sub_1003A450, the `_Where == end()` arm. The two 0x3FFFFFFF tests are the shipped _Xlen guards
-// (sub_100EFD60); VC7.1's _Xlen throws std::length_error, so this one does too.
-void vectorIntAppendN(vc71::vector_layout& v, unsigned int count, int value)
-{
-    if (!count)
-        return;
-
-    const unsigned int size = vectorIntSize(v);
-    if (0x3FFFFFFFu - size < count)
-        throw std::length_error("vector<T> too long");
-
-    const unsigned int capacity = vectorIntCapacity(v);
-    if (capacity >= count + size)
-    {
-        // Room already reserved: construct in place and publish.
-        int* const at = reinterpret_cast<int*>(v.last);
-        for (unsigned int i = 0; i < count; ++i)
-            at[i] = value;
-        v.last += 4 * count;
-        return;
-    }
-
-    // Grow: half again, clamped up to what was actually asked for.
-    unsigned int newCapacity = (0x3FFFFFFFu - (capacity >> 1) >= capacity)
-                                   ? capacity + (capacity >> 1)
-                                   : 0u;
-    if (newCapacity < count + size)
-        newCapacity = count + size;
-
-    char* const buffer = static_cast<char*>(::renddx9abi::engineAlloc(4 * newCapacity));
-    if (size)
-        ::memcpy(buffer, v.first, 4 * size);
-    int* const tail = reinterpret_cast<int*>(buffer) + size;
-    for (unsigned int i = 0; i < count; ++i)
-        tail[i] = value;
-
-    if (v.first)
-        ::renddx9abi::engineFree(v.first);
-
-    v.end   = buffer + 4 * newCapacity;
-    v.last  = buffer + 4 * (size + count);
-    v.first = buffer;
-}
-
-// sub_10192790 itself. The shrink arm's `memmove(first + n, last, 0)` moves zero bytes - it is the
-// std::copy inside erase(begin() + n, end()) for a trivial element - so all it does is retract _Last.
-void vectorIntResize(vc71::vector_layout& v, unsigned int n, int value)
-{
-    const unsigned int size = vectorIntSize(v);
-    if (size >= n)
-    {
-        if (v.first && n < static_cast<unsigned int>((v.last - v.first) >> 2))
-            v.last = v.first + 4 * n;
-        return;
-    }
-    vectorIntAppendN(v, n - size, value);
-}
-
-
-// Material-map nodes are 24 bytes: links, unsigned/float pair, color, then nil flag.
-// Construction leaves sentinel value bytes and the allocator word untouched.
-
-const unsigned int kMaterialNodeSize = 0x18u;
-
-bool materialNodeIsNil(const vc71::map_node* node)
-{
-    return reinterpret_cast<const unsigned char*>(node)[kMaterialNodeSize - 3] != 0;
-}
-
-// sub_100EB100 (_Buynode) followed by the five stores the constructor makes on its result. The
-// `if (p)` / `if (p != -4)` / `if (p != -8)` tests in the PE are MSVC's placement-new null guards
-// around _Alptr.construct(&_Left/_Parent/_Right, 0); they are unreachable in practice and the null
-// link stores below are the whole of their effect.
-void materialMapInit(vc71::map_layout& m)
-{
-    unsigned char* const raw =
-        static_cast<unsigned char*>(::renddx9abi::engineAlloc(kMaterialNodeSize));
-    vc71::map_node* const node = reinterpret_cast<vc71::map_node*>(raw);
-
-    node->left   = 0;
-    node->parent = 0;
-    node->right  = 0;
-    raw[kMaterialNodeSize - 4] = 1;   // _Color = _Black
-    raw[kMaterialNodeSize - 3] = 0;   // _Isnil = false ... which the constructor then overrides:
-
-    m.head = node;
-    raw[kMaterialNodeSize - 3] = 1;   // the header IS the nil node
-    node->parent = node;
-    node->left   = node;
-    node->right  = node;
-    m.size = 0;
-}
-
-// sub_100EB1A0 - VC7.1 _Tree::_Erase(_Root): recurse into the right subtree, free this node, then
-// continue down the left side. The node being freed is the one the loop entered with, which is why
-// the retail loop carries two cursors.
-void materialEraseSubtree(vc71::map_node* root)
-{
-    vc71::map_node* doomed = root;
-    for (vc71::map_node* node = root; !materialNodeIsNil(node); doomed = node)
-    {
-        materialEraseSubtree(node->right);
-        node = node->left;
-        ::renddx9abi::engineFree(doomed);
-    }
-}
-
-
-// sub_100ED1C0 - _Destroy(_First, _Last) for the vector<vector<float>> at +0x60: free each inner
-// vector's buffer and blank its _First/_Last/_End. The inner allocator word is left alone, matching
-// the outer object's own constructor.
-
-void destroyInnerVectors(vc71::vector_layout* first, vc71::vector_layout* last)
-{
-    for (vc71::vector_layout* v = first; v != last; ++v)
-    {
-        if (v->first)
-            ::renddx9abi::engineFree(v->first);
-        v->first = 0;
-        v->last  = 0;
-        v->end   = 0;
-    }
-}
 
 
 // sub_100E7180 - corner `index` of the axis-aligned box, as three separate float stores into the
@@ -354,29 +213,18 @@ void meshBoundsCopy(MeshBounds& dst, const MeshBounds& src)
 
 
 // Initializes ownership and container state. keepData is assigned by the factory;
-// file-header fields remain unset until loading, and container allocator words are untouched.
+// file-header fields remain unset until loading, and the VC7.1 vectors' allocator words are
+// untouched.
 
 MeshTemplate::MeshTemplate()
 {
     m_dword08 = 0;
     m_refCount = 1;
-    // m_name (+0x14) and m_path (+0x30) are default-constructed by the compiler here, in exactly
-    // the shipped order; the retail body calls std::string::string() on the two in the same places.
+    // m_name (+0x14), m_path (+0x30), the three per-geom vectors (+0x50, +0x60, +0x70) and the
+    // material-value map (+0x80) are default-constructed by the compiler here; the retail body
+    // calls std::string::string() on the two strings in the same places, zeroes the vectors and
+    // builds the map's head node (sub_100EB100) after them.
     m_loaded = 0;
-
-    m_lodCounts.first = 0;
-    m_lodCounts.last  = 0;
-    m_lodCounts.end   = 0;
-
-    m_lodDistances.first = 0;
-    m_lodDistances.last  = 0;
-    m_lodDistances.end   = 0;
-
-    m_geomInts.first = 0;
-    m_geomInts.last  = 0;
-    m_geomInts.end   = 0;
-
-    materialMapInit(m_materialValues);
 
     m_maxSkip3pLods    = 1;
     m_maxSkipWreckLods = 1;
@@ -392,8 +240,9 @@ MeshTemplate::MeshTemplate()
 
 
 // Releases wrappers, material map, containers, and strings in that order.
-// The map head must exist and wrapper references must be valid. Staging vertex/index
-// buffers are released by their build steps, not here. Called through the destroy slot.
+// Wrapper references must be valid. Staging vertex/index buffers are released by their build
+// steps, not here. Called through the destroy slot, which then frees the storage without running
+// a C++ destructor - so the std members are destroyed explicitly here.
 
 void MeshTemplate::destroyMembers()
 {
@@ -407,45 +256,17 @@ void MeshTemplate::destroyMembers()
     if (m_vertexDeclaration)
         dx9rend::vertexDeclarationRelease(m_vertexDeclaration);
 
-    // ~_Tree: erase [begin(), end()) - which sub_100EBD80 recognises as the whole range and
-    // services by destroying the root subtree and relinking the header - then free the header.
-    {
-        vc71::map_node* const head = m_materialValues.head;
-        materialEraseSubtree(head->parent);
-        head->parent = head;
-        m_materialValues.size = 0;
-        head->left  = head;
-        head->right = head;
+    // ~_Tree: erase [begin(), end()) (sub_100EBD80), then free the header.
+    m_materialValues.~MaterialValueMap();
 
-        ::renddx9abi::engineFree(head);
-        m_materialValues.head = 0;
-        m_materialValues.size = 0;
-    }
+    // The three vectors, last first; the lod-distance vector's inner vectors go before its buffer
+    // (sub_100ED1C0).
+    m_geomInts.~GeomIntVector();
+    m_lodDistances.~LodDistanceVector();
+    m_lodCounts.~GeomIntVector();
 
-    if (m_geomInts.first)
-        ::renddx9abi::engineFree(m_geomInts.first);
-    m_geomInts.first = 0;
-    m_geomInts.last  = 0;
-    m_geomInts.end   = 0;
-
-    if (m_lodDistances.first)
-    {
-        destroyInnerVectors(reinterpret_cast<vc71::vector_layout*>(m_lodDistances.first),
-                            reinterpret_cast<vc71::vector_layout*>(m_lodDistances.last));
-        ::renddx9abi::engineFree(m_lodDistances.first);
-    }
-    m_lodDistances.first = 0;
-    m_lodDistances.last  = 0;
-    m_lodDistances.end   = 0;
-
-    if (m_lodCounts.first)
-        ::renddx9abi::engineFree(m_lodCounts.first);
-    m_lodCounts.first = 0;
-    m_lodCounts.last  = 0;
-    m_lodCounts.end   = 0;
-
-    m_path.~string();
-    m_name.~string();
+    m_path.~basic_string();
+    m_name.~basic_string();
 }
 
 // the deleting destructor in vtable slot +0xB0: run the body, then free the object
@@ -508,22 +329,22 @@ unsigned int MeshTemplate::getClassId() const
 }
 
 // four one-line accessors over the two strings.
-void MeshTemplate::setName(const vc71::string& name)
+void MeshTemplate::setName(const std::string& name)
 {
     m_name = name;
 }
 
-const vc71::string& MeshTemplate::getName() const
+const std::string& MeshTemplate::getName() const
 {
     return m_name;
 }
 
-void MeshTemplate::setPath(const vc71::string& path)
+void MeshTemplate::setPath(const std::string& path)
 {
     m_path = path;
 }
 
-const vc71::string& MeshTemplate::getPath() const
+const std::string& MeshTemplate::getPath() const
 {
     return m_path;
 }
@@ -655,7 +476,7 @@ bool MeshTemplate::readHeader(renddx9abi::HostNonlinearStream* stream)
 
     // `std::string(m_path) += "Meshes/"` then `+= m_name` - two operator+ temporaries in the PE,
     // one string here; the bytes are identical.
-    vc71::string full(m_path);
+    std::string full(m_path);
     full += kMeshesSubDirectory;
     full += m_name;
 
@@ -674,13 +495,13 @@ void MeshTemplate::readGeometry(renddx9abi::HostNonlinearStream* stream)
     unsigned int geomCount = 0;
     stream->read(&geomCount, 4);
 
-    vectorIntResize(m_lodCounts, geomCount, 0);
-    vectorIntResize(m_geomInts, geomCount, 0);
+    m_lodCounts.resize(geomCount, 0);                                 // sub_10192790
+    m_geomInts.resize(geomCount, 0);
 
     for (unsigned int geom = 0; geom < geomCount; ++geom)
     {
-        stream->read(reinterpret_cast<int*>(m_lodCounts.first) + geom, 4);
-        reinterpret_cast<int*>(m_geomInts.first)[geom] = 0;
+        stream->read(&m_lodCounts[geom], 4);
+        m_geomInts[geom] = 0;
     }
 
     unsigned int attributeCount = 0;
@@ -732,7 +553,7 @@ void MeshTemplate::buildVertexBuffers()
 {
     m_vertexBuffer = dx9rend::createVertexBuffer(dx9rend::g_bufferManager,
                                                  m_vertexCount, m_vertexStride,
-                                                 vc71::string("MeshTemplate"), 8);
+                                                 std::string("MeshTemplate"), 8);
 
     void* const locked = dx9rend::vertexBufferLock(m_vertexBuffer, 0, m_vertexCount, 0);
     if (locked)

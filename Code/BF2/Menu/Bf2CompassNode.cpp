@@ -65,7 +65,7 @@ bool Bf2CompassNode::setSnapOffsetForHud(int a, int b, int c, int d)
     m_snapOffset[3] = d;
     return true;
 }
-bool Bf2CompassNode::setSnapTextureForHud(bool primary, int texture)
+bool Bf2CompassNode::setSnapTextureForHud(bool primary, TextureHandle texture)
 {
     if (primary) m_snapTexturePrimary = texture;
     else m_snapTextureSecondary = texture;
@@ -88,7 +88,7 @@ void Bf2CompassNode::paintSelf(System* system, const NodeState* state,
     strip.height = m_textureRect.height;
     strip.z = 0.0f;
     int shift = 0;
-    int texture = m_texture;
+    TextureHandle texture = m_texture;
 
     if (m_direction == 0) {
         const float travel = (m_textureRect.height - static_cast<float>(m_fillBottom))
@@ -155,8 +155,10 @@ void Bf2CompassNode::paintSelf(System* system, const NodeState* state,
     }
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2CompassNode) == 196, "native Bf2CompassNode storage");
 static_assert(sizeof(ClassTypeDescriptor<Bf2CompassNode, Bf2BarNode>) == 16,
     "Bf2CompassNode metadata");
+#endif
 } }
 #endif

@@ -90,10 +90,11 @@ public:
     virtual std::wstring toWideString(const std::string& text);   // +0x54
     virtual std::wstring replaceWideInputKeys(std::wstring text); // +0x58
     virtual std::string replaceInputKeys(std::string text);       // +0x5C
-    virtual int getPlayerVehicleIcon(world::IPlayer*, bool typeIcon);
-    virtual int getPlayerKitIcon(world::IPlayer*, bool mapIcon, bool spotted);
-    virtual int getPlayerRankIcon(world::IPlayer*);    // +68 0x74F8D0; root texture dependency
-    virtual int getVehicleTypeIcon(int type);         // +6C 0x74F980; root texture dependency
+    // Icon getters answer meme texture handles (meme::TextureHandle, int on x86).
+    virtual std::intptr_t getPlayerVehicleIcon(world::IPlayer*, bool typeIcon);
+    virtual std::intptr_t getPlayerKitIcon(world::IPlayer*, bool mapIcon, bool spotted);
+    virtual std::intptr_t getPlayerRankIcon(world::IPlayer*); // +68 0x74F8D0; root texture dependency
+    virtual std::intptr_t getVehicleTypeIcon(int type); // +6C 0x74F980; root texture dependency
     virtual world::ICameraObject* getCameraObject(int team);
     virtual int getPlayerVehicleType(world::IPlayer*);
     virtual void showRankUpIcon(std::string path, float seconds);
@@ -166,7 +167,7 @@ public:
     virtual void callForAmmo();
     virtual void callForRepair();
     virtual bool isPointerEnabled();
-    virtual void enablePointer(int texture, int mode); // +16C 7510C0; picture/descriptor dependencies remain
+    virtual void enablePointer(std::intptr_t texture, int mode); // +16C 7510C0; picture/descriptor dependencies remain
     virtual void disablePointer();
     virtual bool setPointerSize(int width, int height);
     virtual bool setMouseTextureEmpty(std::string);
@@ -390,11 +391,12 @@ private:
     float m_field154, m_field158;
     bool m_field15c;
     std::uint32_t m_field160;                          // untouched
-    std::uint32_t m_field164, m_field168, m_field16c, m_field170, m_field174;
-    std::uint32_t m_field178;                          // untouched
+    // Pointer texture handles; uintptr_t is uint32_t on x86.
+    std::uintptr_t m_field164, m_field168, m_field16c, m_field170, m_field174;
+    std::uintptr_t m_field178;                         // untouched by the constructor
     int m_field17c, m_field180;
-    std::uint32_t m_field184, m_field188;
-    int m_field18c[22];                               // rank texture handles, 0x74F8D0
+    std::uintptr_t m_field184, m_field188;             // faded/death icon handles
+    std::intptr_t m_field18c[22];                     // rank texture handles, 0x74F8D0
     unsigned short m_field1e4;                        // networkable id, setter751B20
     Vec3 m_field1e8;                                  // spotted position, setter751F50
     float m_field1f4;

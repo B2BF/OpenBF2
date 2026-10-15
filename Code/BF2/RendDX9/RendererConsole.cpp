@@ -5,7 +5,6 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 #include "../../RendDX9Abi/PluginAbi.h"
-#if BF2_PLUGIN_ABI_NATIVE
 #include "../Core/ConsoleObjectMacro.h"
 #include "../Core/ConsoleObjects.h"
 #include "../../RendDX9Abi/PluginEntry.h"
@@ -132,5 +131,4 @@ bool unregisterRendererConsoleObjects()
 } // namespace hfe
 } // namespace dice
 
-#endif // BF2_PLUGIN_ABI_NATIVE
 #endif // BF2_IMAGE_RENDDX9

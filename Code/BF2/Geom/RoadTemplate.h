@@ -8,13 +8,12 @@
 #define BF2_GEOM_ROADTEMPLATE_H
 
 #include "IRoadTemplate.h"             // IRoadTemplate (table 0x1021D610), shared with the editor
-#include "UndergrowthSystem.h"        // Vc71Vec<T>
-#include "Vc71BoolVector.h"
 #include "../Math/Vec3.h"             // Vec2
 #include "../../RendDX9Abi/HfeAbi.h"
 #include "../../RendDX9Abi/PluginAbi.h"   // renddx9abi::HostString
 
 #include <stddef.h>
+#include <vector>
 
 namespace dice {
 namespace hfe {
@@ -62,10 +61,10 @@ public:
 
     // data, in shipped order
     int                                   m_refCount;              // +0x04
-    Vc71Vec< ::renddx9abi::HostString>    m_textureFiles;          // +0x08
-    Vc71Vec<Vec2>                         m_textureScales;         // +0x18
-    Vc71BoolVector                        m_mirrors;               // +0x28
-    Vc71Vec<float>                        m_maxTesselatedErrors;   // +0x3C
+    std::vector< ::renddx9abi::HostString> m_textureFiles;         // +0x08
+    std::vector<Vec2>                     m_textureScales;         // +0x18
+    std::vector<bool>                     m_mirrors;               // +0x28
+    std::vector<float>                    m_maxTesselatedErrors;   // +0x3C
     float                                 m_blendFactor;           // +0x4C
     Vec2                                  m_fadeOffDistance;       // +0x50
     float                                 m_width;                 // +0x58
@@ -80,23 +79,7 @@ private:
     RoadTemplate& operator=(const RoadTemplate&);
 };
 
-// The retail flavour's layout is the shipped one. In the native flavour HostString is the host's
-// std::string, so the name (and the texture-file elements) take that type's size instead - the
-// object never crosses the boundary by layout, only through its slots.
-#if defined(_M_IX86) && !BF2_PLUGIN_ABI_NATIVE
-static_assert(offsetof(RoadTemplate, m_refCount) == 0x04, "refCount at +0x04");
-static_assert(offsetof(RoadTemplate, m_textureFiles) == 0x08, "texture files at +0x08");
-static_assert(offsetof(RoadTemplate, m_textureScales) == 0x18, "texture scales at +0x18");
-static_assert(offsetof(RoadTemplate, m_mirrors) == 0x28, "mirror flags at +0x28");
-static_assert(offsetof(RoadTemplate, m_maxTesselatedErrors) == 0x3C, "max errors at +0x3C");
-static_assert(offsetof(RoadTemplate, m_blendFactor) == 0x4C, "blend factor at +0x4C");
-static_assert(offsetof(RoadTemplate, m_fadeOffDistance) == 0x50, "fade-off at +0x50");
-static_assert(offsetof(RoadTemplate, m_width) == 0x58, "width at +0x58");
-static_assert(offsetof(RoadTemplate, m_material) == 0x64, "material at +0x64");
-static_assert(offsetof(RoadTemplate, m_name) == 0x68, "name at +0x68");
-static_assert(offsetof(RoadTemplate, m_priority) == 0x84, "priority at +0x84");
-static_assert(sizeof(RoadTemplate) == 0x88, "the factory 0x100B099A allocates 0x88");
-#endif
+// The object never crosses the boundary by layout, only through its slots.
 
 // RefFactory published by ModuleGeom::getClassList.
 IBase* __fastcall createRoadTemplate(unsigned int iid, IBase* outer);

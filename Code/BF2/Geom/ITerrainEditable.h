@@ -2,8 +2,7 @@
 // [CHOSEN, not recovered] shared header usable by renderer and editor images.
 // Method names and getter constness are [INFERRED]; const getters must remain distinct from
 // Terrain's primary-interface getters. Preserve the 90-slot 1.50 virtual order.
-// [CHOSEN, not recovered] native base-name getters return HostString by value because the
-// Terrain base retains VC7.1 strings. Compatibility builds return references to that storage.
+// [CHOSEN, not recovered] base-name getters return HostString by value.
 #ifndef BF2_GEOM_ITERRAINEDITABLE_H
 #define BF2_GEOM_ITERRAINEDITABLE_H
 
@@ -31,11 +30,7 @@ typedef std::string TerrainEditableString;
 #endif
 
 // The base-name getters' result (see the above).
-#if defined(BF2_IMAGE_RENDDX9) && !BF2_PLUGIN_ABI_NATIVE
-typedef const TerrainEditableString& TerrainEditableNameResult;   // retail: const std::string&
-#else
 typedef TerrainEditableString TerrainEditableNameResult;          // [CHOSEN] native: by value
-#endif
 
 // IID_ITerrainEditable (Core/Ids.h) - dword_1021AE1C, the id TerrainEditable::queryInterface answers
 // with this + 0x768.

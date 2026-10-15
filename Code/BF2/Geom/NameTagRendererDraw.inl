@@ -27,10 +27,7 @@
 // the retail (compat) host ABI, HfeAbi.h already supplies ClassManager's VC7.1 registration carriers,
 // so the engine's own ClassManager header is kept out while these interfaces come in. Only virtual
 // dispatch and scalar/pointer fields cross the boundary below; the one host container (getPcos) is
-// bridged per flavour at ntCopySeats.
-#if !BF2_PLUGIN_ABI_NATIVE
-#define CORE_CLASSMANAGER_H
-#endif
+// copied at ntCopySeats.
 #include "../Game/SingletonServer.h"     // INametagManager - needs the integrator's +0x60..+0x68
 #include "../Game/Objects/IObject.h"
 #include "../Game/Objects/IObjectTemplate.h"
@@ -42,9 +39,6 @@
 #include "../Game/Objects/Game/Kit.h"
 #include "../Scene/Object/PlayerManager.h"
 #include "../Scene/Object/ObjectTypes/Game/IPlayerControlObject.h"
-#if !BF2_PLUGIN_ABI_NATIVE
-#undef CORE_CLASSMANAGER_H
-#endif
 
 #include <cmath>
 #include <cstring>
@@ -85,153 +79,58 @@ namespace geom {
 extern IBase* g_NametagManager;
 
 // [CHOSEN, not recovered] integration helpers for tag drawing.
-// Draw paths borrow the manager's item map, pulse value and maximum call distance.
-// Preserve the host interface slots and the VC7.1 map/node layout used by the views below.
+// Draw paths borrow the manager's item map, pulse value and maximum call distance through the
+// INametagManager slots the image calls.
 
 namespace {
 
 
-// Seam 3: the item fields this closure reads (the owning instructions quoted per field). Offsets
-// +0x08/+0x0C/+0x10/+0x60/+0x64/+0x70/+0xB8/+0xBC are nt_renderer's (bufferItem) and agree.
-
-struct TouchItemDrawFields
-{
-    unsigned char opaque00[0x08];
-    int           slot;                // +0x08  every draw: `mov ecx,[esi+8]; shl ecx,4` (the Vec4 index)
-    int           rendererType;        // +0x0C  `cmp [esi+0Ch], m_type` (arrows, icons) / `cmp [esi+0Ch],0`
-    vc71::string  name;                // +0x10  bufferItem's; not read here
-    unsigned char opaque2C[0x54 - 0x2C];
-    int           distance;            // +0x54  [INFERRED] rounded metres to the local player's vehicle
-                                       //        (update 0x1012CE93..0x1012CEB3 fistp); drawIcons
-                                       //        0x101B2059 `fild [esi+54h]`
-    double        fadeDistance;        // +0x58  [INFERRED] the item's own fade END; 0.0 = use the
-                                       //        renderer's pair. `fld qword [esi+58h]` in every FadeOut
-    int           rankIcon;            // +0x60  bufferItem's; not read here
-    int           colorIndex1;         // +0x64  `mov cx, word [esi+64h]` (arrows), `movzx edx, word
-                                       //        [esi+64h]` (bars), `mov ebx,[esi+64h]` (icons)
-    int           iconKey;             // +0x68  drawIcons the s_icons key of the icon
-    int           flashIconKey;        // +0x6C  drawIcons 0x101B1CE0 (TEXLAYER1 icon, -1 = the icon
-                                       //        itself); vehicle icons 0x101B39DB (a dead lookup)
-    int           colorIndex2;         // +0x70  `mov edx,[esi+70h]; cmp edx,-1` - -1 = colorIndex1
-    unsigned char opaque74[0x78 - 0x74];
-    int           elevationIconKey;    // +0x78  [INFERRED] update writes 48 (above) / 49 / -1
-                                       //        (0x1012CDF8, 0x1012CE13); drawIcons 0x101B1D24 draws it
-                                       //        as a second quad
-    float         iconRotation;        // +0x7C  radians; drawIcons 0x101B1FDD, when flags bit 9
-    int           team;                // +0x80  `cmp [esi+80h], eax` against the viewer's getTeam()
-    unsigned char opaque84[0xB8 - 0x84];
-    unsigned int  flags;               // +0xB8  bits read here: 3, 4, 5, 9, 11, 12, 14, 16 (the byte
-                                       //        test `test byte [esi+0BAh],1`), 17 - see the bodies
-    unsigned char arrowMode;           // +0xBC  nonzero: drawn as the off-screen arrow
-    unsigned char rebuffer;            // +0xBD  update's re-buffer request; NOT read by this closure
-    unsigned char inView;              // +0xBE  [INFERRED] update the render view's frustum
-                                       //        test of the item's +0x90 position
-    unsigned char pad0BF;              // +0xBF
-    WeakPtr<world::IPlayer> player;    // +0xC0  the player a renderer-0 (player) item tags - what
-                                       //        0x10131540 returns. (Renderer-2 items keep an object
-                                       //        here: update 0x101305A8 reads its +0x14 template.)
-};
-
-static_assert(offsetof(TouchItemDrawFields, slot) == 0x08, "item +0x08");
-static_assert(offsetof(TouchItemDrawFields, rendererType) == 0x0C, "item +0x0C");
-static_assert(offsetof(TouchItemDrawFields, name) == 0x10, "item +0x10");
-static_assert(offsetof(TouchItemDrawFields, distance) == 0x54, "item +0x54");
-static_assert(offsetof(TouchItemDrawFields, fadeDistance) == 0x58, "item +0x58");
-static_assert(offsetof(TouchItemDrawFields, rankIcon) == 0x60, "item +0x60");
-static_assert(offsetof(TouchItemDrawFields, colorIndex1) == 0x64, "item +0x64");
-static_assert(offsetof(TouchItemDrawFields, iconKey) == 0x68, "item +0x68");
-static_assert(offsetof(TouchItemDrawFields, flashIconKey) == 0x6C, "item +0x6C");
-static_assert(offsetof(TouchItemDrawFields, colorIndex2) == 0x70, "item +0x70");
-static_assert(offsetof(TouchItemDrawFields, elevationIconKey) == 0x78, "item +0x78");
-static_assert(offsetof(TouchItemDrawFields, iconRotation) == 0x7C, "item +0x7C");
-static_assert(offsetof(TouchItemDrawFields, team) == 0x80, "item +0x80");
-static_assert(offsetof(TouchItemDrawFields, flags) == 0xB8, "item +0xB8");
-static_assert(offsetof(TouchItemDrawFields, arrowMode) == 0xBC, "item +0xBC");
-static_assert(offsetof(TouchItemDrawFields, rebuffer) == 0xBD, "item +0xBD");
-static_assert(offsetof(TouchItemDrawFields, inView) == 0xBE, "item +0xBE");
-static_assert(offsetof(TouchItemDrawFields, player) == 0xC0, "item +0xC0");
-
-inline TouchItemDrawFields& ntItem(NametagItem* item)
-{
-    return *reinterpret_cast<TouchItemDrawFields*>(item);
-}
+// The item fields this closure reads are NametagItem's typed members (NametagManager.h); the
+// shipped instructions per field:
+//   m_slot             +0x08  every draw: `mov ecx,[esi+8]; shl ecx,4` (the Vec4 index)
+//   m_type             +0x0C  `cmp [esi+0Ch], m_type` (arrows, icons) / `cmp [esi+0Ch],0`
+//   m_distance         +0x54  [INFERRED] rounded metres to the local player's vehicle (update
+//                             0x1012CE93..0x1012CEB3 fistp); drawIcons 0x101B2059 `fild [esi+54h]`
+//   m_viewDistance     +0x58  [INFERRED] the item's own fade END; 0.0 = use the renderer's pair.
+//                             `fld qword [esi+58h]` in every FadeOut
+//   m_colorIndex       +0x64  `mov cx, word [esi+64h]` (arrows), `movzx edx, word [esi+64h]` (bars),
+//                             `mov ebx,[esi+64h]` (icons)
+//   m_icon             +0x68  drawIcons: the s_icons key of the icon
+//   m_callIcon         +0x6C  drawIcons 0x101B1CE0 (TEXLAYER1 icon, -1 = the icon itself); vehicle
+//                             icons 0x101B39DB (a dead lookup)
+//   m_flashColorIndex  +0x70  `mov edx,[esi+70h]; cmp edx,-1` - -1 = m_colorIndex
+//   m_elevationIcon    +0x78  [INFERRED] update writes 48 (above) / 49 / -1 (0x1012CDF8, 0x1012CE13);
+//                             drawIcons 0x101B1D24 draws it as a second quad
+//   m_iconRotation     +0x7C  radians; drawIcons 0x101B1FDD, when flags bit 9
+//   m_team             +0x80  `cmp [esi+80h], eax` against the viewer's getTeam()
+//   m_flags            +0xB8  bits read here: 3, 4, 5, 9, 11, 12, 14, 16 (the byte test
+//                             `test byte [esi+0BAh],1`), 17 - see the bodies
+//   m_arrowMode        +0xBC  nonzero: drawn as the off-screen arrow
+//   m_inView           +0xBE  [INFERRED] update's render-view frustum test of the item's +0x90
+//                             position
+//   (m_dirty, +0xBD, is not read by this closure.)
 
 // flags bit n, as the image tests it (`shr reg, n; test reg8, 1`, or a byte test for bit 16).
-inline bool ntFlag(const TouchItemDrawFields& item, unsigned int bit)
+inline bool ntFlag(const NametagItem& item, unsigned int bit)
 {
-    return ((item.flags >> bit) & 1u) != 0;
+    return ((item.m_flags >> bit) & 1u) != 0;
 }
 
 // Seam 5: NametagItem::getPlayer() const, 0x10131540 - `mov eax,[ecx+0C0h]; test eax,eax; je;
-// mov eax,[eax+4]` = the +0xC0 WeakPtr's get(). The image calls it from the three bar draws and
-// inlines it in the vehicle-icon loop; both are this one source-level call.
+// mov eax,[eax+4]` = the +0xC0 WeakPtr's get(), PlayerNametagItem::m_player. The image calls it
+// from the three bar draws and inlines it in the vehicle-icon loop; both are this one source-level
+// call. Every caller has already tested the item's type for 0 (a player item). (Renderer-2 items
+// keep an object there: update 0x101305A8 reads its +0x14 template.)
 inline world::IPlayer* ntItemPlayer(NametagItem* item)
 {
-    return ntItem(item).player.get();
+    return static_cast<PlayerNametagItem*>(item)->m_player.get();
 }
 
 
-// Seam 4: a read-only view of a VC7.1 std::map<int, V> with a four-byte V - 12-byte header
-// {comparator pad, _Myhead, _Mysize}, 0x18-byte nodes, _Isnil at +0x15. The manager's item map is
-// one (the draws walk `[node+10h]` = value and `byte [node+15h]` = _Isnil); so is a VC7.1 host's
-// PlayerControlObject::getPcos() map. Member names match nt_core's vc71::int_map_layout<V>.
-
-template <typename V>
-struct NtIntMapNode
-{
-    NtIntMapNode* left;        // +0x00
-    NtIntMapNode* parent;      // +0x04
-    NtIntMapNode* right;       // +0x08
-    int           key;         // +0x0C
-    V             value;       // +0x10
-    unsigned char color;       // +0x14
-    unsigned char isNil;       // +0x15
-    unsigned char pad[2];      // +0x16
-};
-
-template <typename V>
-struct NtIntMapView
-{
-    typedef NtIntMapNode<V> node;
-
-    void*    comp;             // +0
-    node*    head;             // +4
-    unsigned size;             // +8
-
-    node* begin() const { return head->left; }
-    node* end() const { return head; }
-
-    // The VC7.1 _Tree iterator ++ (_Inc): the inlined walk at 0x101B1174 (drawArrows) and
-    // (drawIcons), the out-of-line 0x100A54F0 elsewhere. end() does not move.
-    static node* next(node* n)
-    {
-        if (n->isNil)
-            return n;
-        if (!n->right->isNil)
-        {
-            n = n->right;
-            while (!n->left->isNil)
-                n = n->left;
-            return n;
-        }
-        node* p = n->parent;
-        while (!p->isNil && n == p->right)
-        {
-            n = p;
-            p = p->parent;
-        }
-        return p;
-    }
-};
-
-typedef NtIntMapView<NametagItem*> NtItemMap;
-
-#if defined(_M_IX86)
-static_assert(sizeof(NtIntMapNode<NametagItem*>) == 0x18, "sub_10131690 allocates 0x18-byte nodes");
-static_assert(offsetof(NtIntMapNode<NametagItem*>, value) == 0x10, "the draws read [node+10h]");
-static_assert(offsetof(NtIntMapNode<NametagItem*>, isNil) == 0x15, "the draws test byte [node+15h]");
-static_assert(sizeof(NtItemMap) == 12, "the VC7.1 std::map header is 12 bytes");
-#endif
+// Seam 4: the manager's item map, std::map<int, NametagItem*> (NametagItemMap). The draws walk it
+// in key order (the shipped _Tree iterator ++: inlined at 0x101B1174 (drawArrows) and in drawIcons,
+// the out-of-line 0x100A54F0 elsewhere).
+typedef NametagItemMap NtItemMap;
 
 
 // The host singletons, re-read at every use as the image does.
@@ -271,7 +170,8 @@ inline const Vec4* ntTransformations(int type)
     return static_cast<const Vec4*>(static_cast<const void*>(ntManager()->getTransformations(type)));
 }
 
-// getItems() - +0x54 - the manager's item map by reference (`call [edx+54h]` then [eax+4]/[eax+8]).
+// getItems() - +0x54 - the manager's item map by reference (`call [edx+54h]` then [eax+4]/[eax+8]:
+// the shipped head and size words). The interface spells the answer const void*; the cast lives here.
 inline const NtItemMap& ntItems()
 {
     return *static_cast<const NtItemMap*>(ntManager()->getItems());
@@ -327,7 +227,7 @@ void ntSetFadeOutA(dx9rend::Effect* effect, double itemFadeDistance, float start
         const double scale = 1.0f / (itemFadeDistance - itemStart);
         fadeOut[0] = static_cast<float>(scale);
         fadeOut[1] = static_cast<float>(-(scale * itemStart));
-        dx9rend::effectGetShaderParameterBorrowedTyped(effect, vc71::string("FadeOut"))
+        dx9rend::effectGetShaderParameterBorrowedTyped(effect, std::string("FadeOut"))
             ->setValue(fadeOut, 0);
     }
     else
@@ -335,7 +235,7 @@ void ntSetFadeOutA(dx9rend::Effect* effect, double itemFadeDistance, float start
         const float scale = 1.0f / (end - start);
         fadeOut[0] = scale;
         fadeOut[1] = -(scale * start);
-        dx9rend::effectGetShaderParameterBorrowedTyped(effect, vc71::string("FadeOut"))
+        dx9rend::effectGetShaderParameterBorrowedTyped(effect, std::string("FadeOut"))
             ->setValue(fadeOut, 0);
     }
 }
@@ -349,7 +249,7 @@ void ntSetFadeOutB(dx9rend::Effect* effect, double itemFadeDistance, float start
         const double range = itemFadeDistance - itemStart;
         fadeOut[0] = static_cast<float>(1.0f / range);
         fadeOut[1] = static_cast<float>(-1.0f / range * itemStart);
-        dx9rend::effectGetShaderParameterBorrowedTyped(effect, vc71::string("FadeOut"))
+        dx9rend::effectGetShaderParameterBorrowedTyped(effect, std::string("FadeOut"))
             ->setValue(fadeOut, 0);
     }
     else
@@ -357,7 +257,7 @@ void ntSetFadeOutB(dx9rend::Effect* effect, double itemFadeDistance, float start
         const float range = end - start;
         fadeOut[0] = 1.0f / range;
         fadeOut[1] = -1.0f / range * start;
-        dx9rend::effectGetShaderParameterBorrowedTyped(effect, vc71::string("FadeOut"))
+        dx9rend::effectGetShaderParameterBorrowedTyped(effect, std::string("FadeOut"))
             ->setValue(fadeOut, 0);
     }
 }
@@ -365,25 +265,14 @@ void ntSetFadeOutB(dx9rend::Effect* effect, double itemFadeDistance, float start
 
 // The by-value copy of `*pco->getPcos()` the vehicle-icon loop walks (0x101B3967: 0x10132860, the
 // map copy constructor, into a local at [ebp-9Ch]; destroyed by 0x10132580 at 0x101B3E18).
-// THE MAP belongs TO THE host. Under a retail BF2.exe it is the VC7.1 std::map<int,
-// IPlayerControlObject*> (0x18-byte nodes, the same shape as the item map); under the native host it
-// is that host's own std::map. The copy is plugin-local and its container shape is unobservable, so
-// both flavours copy into a native std::map in key order.
+// THE MAP belongs TO THE host: its std::map<int, IPlayerControlObject*> (in the image 0x18-byte
+// nodes, the same shape as the item map). The copy is plugin-local and is walked in key order.
 
 typedef std::map<int, world::IPlayerControlObject*> NtSeatMap;
 
 NtSeatMap ntCopySeats(world::IPlayerControlObject* pco)
 {
-#if BF2_PLUGIN_ABI_NATIVE
     return NtSeatMap(*pco->getPcos());                                   // +0x60
-#else
-    typedef NtIntMapView<world::IPlayerControlObject*> HostSeatMap;
-    const HostSeatMap* const host = reinterpret_cast<const HostSeatMap*>(pco->getPcos());   // +0x60
-    NtSeatMap copy;
-    for (HostSeatMap::node* n = host->begin(); n != host->end(); n = HostSeatMap::next(n))
-        copy.insert(copy.end(), NtSeatMap::value_type(n->key, n->value));
-    return copy;
-#endif
 }
 
 // The s_icons / s_bars keys this closure looks up: values of the console enum "NametagItemIDs"
@@ -468,16 +357,16 @@ void NameTagRenderer::uploadSlots()
 
 void NameTagRenderer::drawNames()
 {
-    dx9rend::effectSetTechniqueByName(s_effect, vc71::string("nametag"));   // result dropped
+    dx9rend::effectSetTechniqueByName(s_effect, std::string("nametag"));   // result dropped
     dx9rend::effectBegin(s_effect);
     dx9rend::effectBeginPass(s_effect, 0);
 
     float fadeOut[2];
     fadeOut[0] = 0.001f;
     fadeOut[1] = -2.0f;
-    dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("FadeOut"))
+    dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("FadeOut"))
         ->setValue(fadeOut, 0);
-    dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("CrossFadeValue"))
+    dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("CrossFadeValue"))
         ->setValue(&NametagManager::s_pulse, 0);
 
     s_colorArray->setValue(ntManager()->getColors(m_type),
@@ -502,8 +391,8 @@ void NameTagRenderer::drawNames()
 
 void NameTagRenderer::drawArrows()
 {
-    dx9rend::effectSetTechniqueByName(s_effect, vc71::string("nametag_arrow"));
-    if (ntItems().size == 0)                                         // `cmp [eax+8],0; jbe`
+    dx9rend::effectSetTechniqueByName(s_effect, std::string("nametag_arrow"));
+    if (ntItems().size() == 0)                                       // `cmp [eax+8],0; jbe`
         return;
 
     dx9rend::effectBegin(s_effect);
@@ -519,34 +408,33 @@ void NameTagRenderer::drawArrows()
     aspectMul[0] = static_cast<float>(dx9rend::textureDims(s_arrowTexture)[0]) / widthViewport[2];
     aspectMul[2] = 1.0f;
     aspectMul[3] = 1.0f;
-    dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("AspectMul"))
+    dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("AspectMul"))
         ->setValue(aspectMul, 0);
 
     const NtItemMap& items = ntItems();                              // the second getItems call
-    for (NtItemMap::node* it = items.begin(); it != items.end(); it = NtItemMap::next(it))
+    for (NtItemMap::const_iterator it = items.begin(); it != items.end(); ++it)
     {
-        NametagItem* const touchItem = it->value;
-        TouchItemDrawFields& item = ntItem(touchItem);
-        if (item.rendererType != m_type || !item.arrowMode)
+        NametagItem& item = *it->second;
+        if (item.m_type != m_type || !item.m_arrowMode)
             continue;
 
         const Vec4* const forY = ntTransformations(m_type);
         const Vec4* const forX = ntTransformations(m_type);
         Mat4 rotation;
         D3DXMatrixRotationZ(reinterpret_cast<D3DXMATRIX*>(&rotation),
-                            std::atan2(forX[item.slot].x, forY[item.slot].y) + kHalfPi);
+                            std::atan2(forX[item.m_slot].x, forY[item.m_slot].y) + kHalfPi);
         float arrowRotation[4];
         arrowRotation[0] = rotation.m[0];                            // _11
         arrowRotation[1] = rotation.m[1];                            // _12
         arrowRotation[2] = rotation.m[4];                            // _21
         arrowRotation[3] = rotation.m[5];                            // _22
-        const Vec4 arrowTransformation = ntTransformations(m_type)[item.slot];
+        const Vec4 arrowTransformation = ntTransformations(m_type)[item.m_slot];
 
-        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("ArrowRotation"))
+        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("ArrowRotation"))
             ->setValue(arrowRotation, 0);
-        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("ArrowTransformation"))
+        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("ArrowTransformation"))
             ->setValue(&arrowTransformation, 0);
-        ntSetFadeOutA(s_effect, item.fadeDistance, m_fadeStart, m_fadeEnd);
+        ntSetFadeOutA(s_effect, item.m_viewDistance, m_fadeStart, m_fadeEnd);
 
         NametagVertex* const vertices =
             static_cast<NametagVertex*>(dx9rend::vertexBufferLock(m_arrowVertexBuffer, 0, 0, 0));
@@ -555,11 +443,11 @@ void NameTagRenderer::drawArrows()
             // The item is re-read for every vertex, as the image does.
             for (int i = 0; i < 6; ++i)
             {
-                vertices[i].slot        = static_cast<short>(item.slot);
-                vertices[i].colorIndex1 = static_cast<short>(item.colorIndex1);
-                vertices[i].colorIndex2 = static_cast<short>(item.colorIndex2 != -1
-                                                             ? item.colorIndex2
-                                                             : item.colorIndex1);
+                vertices[i].slot        = static_cast<short>(item.m_slot);
+                vertices[i].colorIndex1 = static_cast<short>(item.m_colorIndex);
+                vertices[i].colorIndex2 = static_cast<short>(item.m_flashColorIndex != -1
+                                                             ? item.m_flashColorIndex
+                                                             : item.m_colorIndex);
             }
         }
         dx9rend::vertexBufferUnlock(m_arrowVertexBuffer);
@@ -598,7 +486,7 @@ void NameTagRenderer::drawHealthBars()
         return;
 
     const NtItemMap& items = ntItems();
-    dx9rend::effectSetTechniqueByName(s_effect, vc71::string("nametag_healthbar"));
+    dx9rend::effectSetTechniqueByName(s_effect, std::string("nametag_healthbar"));
     if (s_bars.size() == 0)                                          // dword_102670B8, `jbe`
         return;
     const BarMap::iterator bar = s_bars.find(kICHealthBar);          // unchecked
@@ -607,24 +495,24 @@ void NameTagRenderer::drawHealthBars()
     dx9rend::effectBeginPass(s_effect, 0);
     s_texLayer0->setValue(bar->second.full.texture, 0);
     s_texLayer1->setValue(bar->second.empty.texture, 0);
-    dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("ColorIndex1"))
+    dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("ColorIndex1"))
         ->setInt(0);
-    dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("ColorIndex2"))
+    dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("ColorIndex2"))
         ->setInt(0);
 
-    for (NtItemMap::node* it = items.begin(); it != items.end(); it = NtItemMap::next(it))
+    for (NtItemMap::const_iterator it = items.begin(); it != items.end(); ++it)
     {
         if (m_type != 0)
             continue;
-        NametagItem* const touchItem = it->value;
-        TouchItemDrawFields& item = ntItem(touchItem);
-        if (item.rendererType != 0)
+        NametagItem* const touchItem = it->second;
+        NametagItem& item = *touchItem;
+        if (item.m_type != 0)
             continue;
-        if (item.team != viewer->getTeam())                          // PE +0xE4
+        if (item.m_team != viewer->getTeam())                        // PE +0xE4
             continue;
-        if (!item.inView)
+        if (!item.m_inView)
             continue;
-        if (item.arrowMode)
+        if (item.m_arrowMode)
             continue;
 
         world::IPlayer* const player = ntItemPlayer(touchItem);
@@ -639,20 +527,20 @@ void NameTagRenderer::drawHealthBars()
         if (!(health < 0.5f))                                        // `fcomp; test ah,5; jp` - NaN skips
             continue;
 
-        Vec4 translation = ntTransformations(m_type)[item.slot];
+        Vec4 translation = ntTransformations(m_type)[item.m_slot];
         const float invHalfHeight =
             1.0f / (ntRenderer()->getRenderView()->getViewport()[3] * 0.5f);     // +0x48, +0x14
         const int fillStart = bar->second.fillStart;
         const int fillRange = bar->second.fillEnd - fillStart;
         translation.y = translation.y - invHalfHeight * 16.0f;
         float healthValue = (fillRange * health + fillStart) / bar->second.width;
-        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("HealthValue"))
+        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("HealthValue"))
             ->setValue(&healthValue, 0);
-        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("HealthBarTrans"))
+        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("HealthBarTrans"))
             ->setValue(&translation, 0);
-        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("CrossFadeValue"))
+        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("CrossFadeValue"))
             ->setValue(&NametagManager::s_pulse, 0);
-        ntSetFadeOutB(s_effect, item.fadeDistance, m_fadeStart, m_fadeEnd);
+        ntSetFadeOutB(s_effect, item.m_viewDistance, m_fadeStart, m_fadeEnd);
 
         NametagVertex* const vertices = static_cast<NametagVertex*>(
             dx9rend::vertexBufferLock(bar->second.full.vertexBuffer, 0, 0, 0));
@@ -660,9 +548,9 @@ void NameTagRenderer::drawHealthBars()
         {
             for (int i = 0; i < 6; ++i)
             {
-                vertices[i].slot        = static_cast<short>(item.slot);
-                vertices[i].colorIndex1 = static_cast<short>(item.colorIndex1);
-                vertices[i].colorIndex2 = static_cast<short>(item.colorIndex1);
+                vertices[i].slot        = static_cast<short>(item.m_slot);
+                vertices[i].colorIndex1 = static_cast<short>(item.m_colorIndex);
+                vertices[i].colorIndex2 = static_cast<short>(item.m_colorIndex);
             }
         }
         dx9rend::vertexBufferUnlock(bar->second.full.vertexBuffer);
@@ -701,7 +589,7 @@ void NameTagRenderer::drawAmmoBars()
         return;
 
     const NtItemMap& items = ntItems();
-    dx9rend::effectSetTechniqueByName(s_effect, vc71::string("nametag_healthbar"));
+    dx9rend::effectSetTechniqueByName(s_effect, std::string("nametag_healthbar"));
     if (s_bars.size() == 0)
         return;
     const BarMap::iterator bar = s_bars.find(kICAmmoBar);            // unchecked
@@ -711,26 +599,26 @@ void NameTagRenderer::drawAmmoBars()
     s_texLayer0->setValue(bar->second.full.texture, 0);
     s_texLayer1->setValue(bar->second.empty.texture, 0);
     float noCrossFade = 0.0f;                                        // [ebp-3Ch]
-    dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("CrossFadeValue"))
+    dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("CrossFadeValue"))
         ->setValue(&noCrossFade, 0);
-    dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("ColorIndex1"))
+    dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("ColorIndex1"))
         ->setInt(0);
-    dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("ColorIndex2"))
+    dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("ColorIndex2"))
         ->setInt(0);
 
-    for (NtItemMap::node* it = items.begin(); it != items.end(); it = NtItemMap::next(it))
+    for (NtItemMap::const_iterator it = items.begin(); it != items.end(); ++it)
     {
         if (m_type != 0)
             continue;
-        NametagItem* const touchItem = it->value;
-        TouchItemDrawFields& item = ntItem(touchItem);
-        if (item.rendererType != 0)
+        NametagItem* const touchItem = it->second;
+        NametagItem& item = *touchItem;
+        if (item.m_type != 0)
             continue;
-        if (item.team != viewer->getTeam())
+        if (item.m_team != viewer->getTeam())
             continue;
-        if (item.arrowMode)
+        if (item.m_arrowMode)
             continue;
-        if (!item.inView)
+        if (!item.m_inView)
             continue;
         if (!ntFlag(item, 16))                                       // `test byte [esi+0BAh],1`
             continue;
@@ -750,19 +638,19 @@ void NameTagRenderer::drawAmmoBars()
         if (!(ammo < 0.5f))
             continue;
 
-        Vec4 translation = ntTransformations(m_type)[item.slot];
+        Vec4 translation = ntTransformations(m_type)[item.m_slot];
         const float invHalfHeight =
             1.0f / (ntRenderer()->getRenderView()->getViewport()[3] * 0.5f);
         translation.y = translation.y - invHalfHeight * 10.0f;       // flt_101E2B00
-        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("HealthBarTrans"))
+        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("HealthBarTrans"))
             ->setValue(&translation, 0);
 
         const int fillStart = bar->second.fillStart;
         float ammoValue = (ntClamp(ammo, 0.0f, 1.0f) * (bar->second.fillEnd - fillStart) + fillStart)
                           / bar->second.width;
-        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("HealthValue"))
+        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("HealthValue"))
             ->setValue(&ammoValue, 0);
-        ntSetFadeOutB(s_effect, item.fadeDistance, m_fadeStart, m_fadeEnd);
+        ntSetFadeOutB(s_effect, item.m_viewDistance, m_fadeStart, m_fadeEnd);
 
         NametagVertex* const vertices = static_cast<NametagVertex*>(
             dx9rend::vertexBufferLock(bar->second.full.vertexBuffer, 0, 0, 0));
@@ -770,11 +658,11 @@ void NameTagRenderer::drawAmmoBars()
         {
             for (int i = 0; i < 6; ++i)
             {
-                vertices[i].slot        = static_cast<short>(item.slot);
-                vertices[i].colorIndex1 = static_cast<short>(item.colorIndex1);
-                vertices[i].colorIndex2 = static_cast<short>(item.colorIndex2 != -1
-                                                             ? item.colorIndex2
-                                                             : item.colorIndex1);
+                vertices[i].slot        = static_cast<short>(item.m_slot);
+                vertices[i].colorIndex1 = static_cast<short>(item.m_colorIndex);
+                vertices[i].colorIndex2 = static_cast<short>(item.m_flashColorIndex != -1
+                                                             ? item.m_flashColorIndex
+                                                             : item.m_colorIndex);
             }
         }
         dx9rend::vertexBufferUnlock(bar->second.full.vertexBuffer);
@@ -792,33 +680,32 @@ void NameTagRenderer::drawAmmoBars()
 void NameTagRenderer::drawIcons()
 {
     const NtItemMap& items = ntItems();
-    if (items.size == 0)
+    if (items.size() == 0)
         return;
 
-    dx9rend::effectSetTechniqueByName(s_effect, vc71::string("nametag_vehicleIcons"));
+    dx9rend::effectSetTechniqueByName(s_effect, std::string("nametag_vehicleIcons"));
     dx9rend::effectBegin(s_effect);
     dx9rend::effectBeginPass(s_effect, 0);
 
-    for (NtItemMap::node* it = items.begin(); it != items.end(); it = NtItemMap::next(it))
+    for (NtItemMap::const_iterator it = items.begin(); it != items.end(); ++it)
     {
-        NametagItem* const touchItem = it->value;
-        TouchItemDrawFields& item = ntItem(touchItem);
-        if (item.rendererType != m_type)
+        NametagItem& item = *it->second;
+        if (item.m_type != m_type)
             continue;
         if (!ntFlag(item, 4))
             continue;
         if (!ntManager()->get3dMapOn() && !ntFlag(item, 17)
-            && !(ntFlag(item, 14) && item.arrowMode))
+            && !(ntFlag(item, 14) && item.m_arrowMode))
             continue;
-        if (!item.inView && !(ntFlag(item, 5) && ntFlag(item, 14)))
+        if (!item.m_inView && !(ntFlag(item, 5) && ntFlag(item, 14)))
             continue;
         if (!ntFlag(item, 16))
             continue;
 
-        const IconMap::iterator icon = s_icons.find(item.iconKey);
+        const IconMap::iterator icon = s_icons.find(item.m_icon);
         IconMap::iterator flashIcon = icon;
-        if (item.flashIconKey != -1)
-            flashIcon = s_icons.find(item.flashIconKey);
+        if (item.m_callIcon != -1)
+            flashIcon = s_icons.find(item.m_callIcon);
         if (icon == s_icons.end())
             continue;
 
@@ -826,9 +713,9 @@ void NameTagRenderer::drawIcons()
         const NametagIcon* second = 0;                               // [ebp-0Ch]
         if (flashIcon != s_icons.end())
             flash = &flashIcon->second;
-        if (item.elevationIconKey != -1)
+        if (item.m_elevationIcon != -1)
         {
-            const IconMap::iterator elevation = s_icons.find(item.elevationIconKey);
+            const IconMap::iterator elevation = s_icons.find(item.m_elevationIcon);
             if (elevation != s_icons.end())
             {
                 second = &elevation->second;
@@ -838,14 +725,14 @@ void NameTagRenderer::drawIcons()
         s_texLayer0->setValue(icon->second.texture, 0);
         s_texLayer1->setValue(flash ? flash->texture : 0, 0);
 
-        Vec4 translation = ntTransformations(m_type)[item.slot];     // copied inline here
+        Vec4 translation = ntTransformations(m_type)[item.m_slot];   // copied inline here
         const float invHalfHeight =
             1.0f / (ntRenderer()->getRenderView()->getViewport()[3] * 0.5f);
         const unsigned int iconWidth  = dx9rend::textureDims(icon->second.texture)[0];
         const unsigned int iconHeight = dx9rend::textureDims(icon->second.texture)[1];
-        if (!item.arrowMode || ntFlag(item, 3))
+        if (!item.m_arrowMode || ntFlag(item, 3))
             translation.y = static_cast<float>(iconHeight) * invHalfHeight + translation.y;
-        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("HealthBarTrans"))
+        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("HealthBarTrans"))
             ->setValue(&translation, 0);
 
         const float iconInvWidth  = 1.0f / static_cast<float>(iconWidth);
@@ -855,26 +742,26 @@ void NameTagRenderer::drawIcons()
         iconTexOffset[3] = 0.0f;
         iconTexOffset[0] = icon->second.left * iconInvWidth;
         iconTexOffset[1] = icon->second.top * iconInvHeight;
-        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("IconTexOffset"))
+        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("IconTexOffset"))
             ->setValue(iconTexOffset, 0);
 
-        ntSetFadeOutA(s_effect, item.fadeDistance, m_fadeStart, m_fadeEnd);
+        ntSetFadeOutA(s_effect, item.m_viewDistance, m_fadeStart, m_fadeEnd);
 
         static Mat4 s_iconRotation;                                  // ds:102670C0 (guard ds:10267100)
         D3DXMatrixRotationZ(reinterpret_cast<D3DXMATRIX*>(&s_iconRotation),
-                            ntFlag(item, 9) ? item.iconRotation : 0.0f);
+                            ntFlag(item, 9) ? item.m_iconRotation : 0.0f);
         float iconRotation[4];
         iconRotation[0] = s_iconRotation.m[0];                       // _11
         iconRotation[1] = s_iconRotation.m[1];                       // _12
         iconRotation[2] = s_iconRotation.m[4];                       // _21
         iconRotation[3] = s_iconRotation.m[5];                       // _22
-        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("IconRotation"))
+        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("IconRotation"))
             ->setValue(iconRotation, 0);
 
-        float crossFade = (1.0f - ntClamp(static_cast<float>(item.distance) /
+        float crossFade = (1.0f - ntClamp(static_cast<float>(item.m_distance) /
                                               NametagManager::s_maxCallDistance, 0.0f, 1.0f) * 0.5f)
                           * NametagManager::s_pulse;
-        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("CrossFadeValue"))
+        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("CrossFadeValue"))
             ->setValue(&crossFade, 0);
 
         if (flash)
@@ -889,21 +776,21 @@ void NameTagRenderer::drawIcons()
             flashScaleOffset[2] = flash->left * flashInvWidth;
             flashScaleOffset[3] = flash->top * flashInvHeight;
             dx9rend::effectGetShaderParameterBorrowedTyped(s_effect,
-                                                           vc71::string("IconFlashTexScaleOffset"))
+                                                           std::string("IconFlashTexScaleOffset"))
                 ->setValue(flashScaleOffset, 0);
         }
 
-        const int colorIndex1 = ntFlag(item, 12) ? 0 : item.colorIndex1;
-        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("ColorIndex1"))
+        const int colorIndex1 = ntFlag(item, 12) ? 0 : item.m_colorIndex;
+        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("ColorIndex1"))
             ->setInt(colorIndex1);
-        if (ntFlag(item, 11) || item.colorIndex2 == -1)
-            dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("ColorIndex2"))
+        if (ntFlag(item, 11) || item.m_flashColorIndex == -1)
+            dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("ColorIndex2"))
                 ->setInt(colorIndex1);
-        else if (item.flashIconKey == -1)
-            dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("ColorIndex2"))
-                ->setInt(item.colorIndex2);
+        else if (item.m_callIcon == -1)
+            dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("ColorIndex2"))
+                ->setInt(item.m_flashColorIndex);
         else
-            dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("ColorIndex2"))
+            dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("ColorIndex2"))
                 ->setInt(0);
 
         dx9rend::vertexBufferBindStream(icon->second.vertexBuffer, 0);
@@ -928,7 +815,7 @@ void NameTagRenderer::drawArmorBarsAndVehicleIcons()
         return;
 
     const NtItemMap& items = ntItems();
-    dx9rend::effectSetTechniqueByName(s_effect, vc71::string("nametag_healthbar"));
+    dx9rend::effectSetTechniqueByName(s_effect, std::string("nametag_healthbar"));
 
     // part 1: armour bars
     if (s_bars.size() != 0 && viewer->getKit() == kKitEngineer)                 // PE +0x16C
@@ -939,24 +826,24 @@ void NameTagRenderer::drawArmorBarsAndVehicleIcons()
         s_texLayer0->setValue(bar->second.full.texture, 0);
         s_texLayer1->setValue(bar->second.empty.texture, 0);
         float noCrossFade = 0.0f;                                    // [ebp-18h]
-        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("CrossFadeValue"))
+        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("CrossFadeValue"))
             ->setValue(&noCrossFade, 0);
-        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("ColorIndex1"))
+        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("ColorIndex1"))
             ->setInt(0);
-        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("ColorIndex2"))
+        dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("ColorIndex2"))
             ->setInt(0);
 
-        for (NtItemMap::node* it = items.begin(); it != items.end(); it = NtItemMap::next(it))
+        for (NtItemMap::const_iterator it = items.begin(); it != items.end(); ++it)
         {
             if (m_type != 0)
                 continue;
-            NametagItem* const touchItem = it->value;
-            TouchItemDrawFields& item = ntItem(touchItem);
-            if (item.rendererType != 0)
+            NametagItem* const touchItem = it->second;
+            NametagItem& item = *touchItem;
+            if (item.m_type != 0)
                 continue;
-            if (item.team != viewer->getTeam())
+            if (item.m_team != viewer->getTeam())
                 continue;
-            if (!item.inView)
+            if (!item.m_inView)
                 continue;
             if (!ntFlag(item, 16))
                 continue;
@@ -975,18 +862,18 @@ void NameTagRenderer::drawArmorBarsAndVehicleIcons()
             if (!(armour < 0.5f))
                 continue;
 
-            Vec4 translation = ntTransformations(m_type)[item.slot];
+            Vec4 translation = ntTransformations(m_type)[item.m_slot];
             const float invHalfHeight =
                 1.0f / (ntRenderer()->getRenderView()->getViewport()[3] * 0.5f);
             const int fillStart = bar->second.fillStart;
             const int fillRange = bar->second.fillEnd - fillStart;
             translation.y = translation.y - invHalfHeight * 16.0f;
             float armourValue = (fillRange * armour + fillStart) / bar->second.width;
-            dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("HealthValue"))
+            dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("HealthValue"))
                 ->setValue(&armourValue, 0);
-            dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("HealthBarTrans"))
+            dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("HealthBarTrans"))
                 ->setValue(&translation, 0);
-            ntSetFadeOutA(s_effect, item.fadeDistance, m_fadeStart, m_fadeEnd);
+            ntSetFadeOutA(s_effect, item.m_viewDistance, m_fadeStart, m_fadeEnd);
             dx9rend::vertexBufferBindStream(bar->second.full.vertexBuffer, 0);
             dx9rend::rendererDrawPrimitive(2, D3DPT_TRIANGLELIST, 0);
         }
@@ -1000,22 +887,22 @@ void NameTagRenderer::drawArmorBarsAndVehicleIcons()
     const IconMap::iterator medicIcon  = s_icons.find(kICVehicleMedic);    // [ebp-50h]
     const IconMap::iterator repairIcon = s_icons.find(kICVehicleRepair);   // [ebp-64h]
     const IconMap::iterator ammoIcon   = s_icons.find(kICVehicleAmmo);     // [ebp-60h]
-    dx9rend::effectSetTechniqueByName(s_effect, vc71::string("nametag_vehicleIcons"));
+    dx9rend::effectSetTechniqueByName(s_effect, std::string("nametag_vehicleIcons"));
     dx9rend::effectBegin(s_effect);
     dx9rend::effectBeginPass(s_effect, 0);
 
-    for (NtItemMap::node* it = items.begin(); it != items.end(); it = NtItemMap::next(it))
+    for (NtItemMap::const_iterator it = items.begin(); it != items.end(); ++it)
     {
         if (m_type != 0)
             continue;
-        NametagItem* const touchItem = it->value;
-        TouchItemDrawFields& item = ntItem(touchItem);
-        if (item.rendererType != 0)
+        NametagItem* const touchItem = it->second;
+        NametagItem& item = *touchItem;
+        if (item.m_type != 0)
             continue;
-        if (!item.inView)
+        if (!item.m_inView)
             continue;
         world::IPlayer* const teamViewer = ntViewingPlayer();        // inlined per item
-        if (teamViewer && item.team != teamViewer->getTeam())
+        if (teamViewer && item.m_team != teamViewer->getTeam())
             continue;
 
         world::IPlayer* const player = ntItemPlayer(touchItem);      // inlined here in the image
@@ -1058,8 +945,8 @@ void NameTagRenderer::drawArmorBarsAndVehicleIcons()
             bool repair = false;                                     // [ebp-9]
             bool ammo = false;                                       // [ebp-1]
             IconMap::iterator icon;
-            if (item.flashIconKey != -1)
-                icon = s_icons.find(item.flashIconKey);              // dead - overwritten below
+            if (item.m_callIcon != -1)
+                icon = s_icons.find(item.m_callIcon);                // dead - overwritten below
             switch (occupantSoldier->getKitType())                   // ISoldier +0x58
             {
             case kKitSupport:
@@ -1084,7 +971,7 @@ void NameTagRenderer::drawArmorBarsAndVehicleIcons()
             s_texLayer0->setValue(icon->second.texture, 0);
             s_texLayer1->setValue(0, 0);
 
-            Vec4 translation = ntTransformations(m_type)[item.slot];
+            Vec4 translation = ntTransformations(m_type)[item.m_slot];
             const float invHalfHeight =
                 1.0f / (ntRenderer()->getRenderView()->getViewport()[3] * 0.5f);
             const unsigned int iconWidth = dx9rend::textureDims(icon->second.texture)[0];
@@ -1095,7 +982,7 @@ void NameTagRenderer::drawArmorBarsAndVehicleIcons()
                 translation.x = invHalfHeight * 0.0f + translation.x;   // adds zero
             else if (ammo)
                 translation.x = invHalfHeight * 16.0f + translation.x;
-            dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("HealthBarTrans"))
+            dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("HealthBarTrans"))
                 ->setValue(&translation, 0);
 
             float iconRotation[4];                                   // see the guard note above
@@ -1103,16 +990,16 @@ void NameTagRenderer::drawArmorBarsAndVehicleIcons()
             iconRotation[1] = 0.0f;
             iconRotation[2] = 0.0f;
             iconRotation[3] = 1.0f;
-            dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("IconRotation"))
+            dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("IconRotation"))
                 ->setValue(iconRotation, 0);
             float noCrossFade = 0.0f;                                // [ebp-5Ch]
-            dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("CrossFadeValue"))
+            dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("CrossFadeValue"))
                 ->setValue(&noCrossFade, 0);
-            dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("ColorIndex1"))
+            dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("ColorIndex1"))
                 ->setInt(0);
-            dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("ColorIndex2"))
+            dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("ColorIndex2"))
                 ->setInt(0);
-            ntSetFadeOutA(s_effect, item.fadeDistance, m_fadeStart, m_fadeEnd);
+            ntSetFadeOutA(s_effect, item.m_viewDistance, m_fadeStart, m_fadeEnd);
 
             const unsigned int iconHeight = dx9rend::textureDims(icon->second.texture)[1];
             float iconTexOffset[4];
@@ -1120,7 +1007,7 @@ void NameTagRenderer::drawArmorBarsAndVehicleIcons()
             iconTexOffset[3] = 0.0f;
             iconTexOffset[0] = 1.0f / static_cast<float>(iconWidth) * icon->second.left;
             iconTexOffset[1] = 1.0f / static_cast<float>(iconHeight) * icon->second.top;
-            dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, vc71::string("IconTexOffset"))
+            dx9rend::effectGetShaderParameterBorrowedTyped(s_effect, std::string("IconTexOffset"))
                 ->setValue(iconTexOffset, 0);
 
             dx9rend::vertexBufferBindStream(icon->second.vertexBuffer, 0);

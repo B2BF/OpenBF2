@@ -2,17 +2,15 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
+#include "../../RendDX9Abi/ThunkAbi.h"
 #include "../../RendDX9Abi/HfeAbi.h"
 #include "../../RendDX9Abi/BfMemory.h"
 #include "../../RendDX9Abi/PluginEntry.h"
 #include "../../RendDX9Abi/ModuleCommon.h"
-#include "../../RendDX9Abi/Vc71Map.h"
 #include "../../RendDX9Abi/Frontier.h"
 #include "../../RendDX9Abi/EngineFile.h"
 #include "../Core/EventManager.h"
-#if BF2_PLUGIN_ABI_NATIVE
 #include "../Menu/BF2HudManager.h"    // atlasCacheLoadAtlases: getAtlasList (+0x374), typed (RW-266)
-#endif
 #include "RendDX9Base.h"
 #include "Texture.h"
 #include "TextureAtlas/TextureAtlas.h"
@@ -21,9 +19,12 @@
 #include <windows.h>
 #include <d3d9.h>
 #include "../../RendDX9Abi/D3dx9Sdk.h"
+#include <stddef.h>
 #include <string.h>
 #include <list>
+#include <map>
 #include <new>
+#include <vector>
 
 
 // D3DXGetImageInfoFromFileInMemory (the call at 0x10018842) and D3DXSaveTextureToFileA
@@ -57,10 +58,10 @@ static void* g_atlasCache = 0;
 // cases exist because MSVCR71's tolower under the "C" locale leaves high-bit characters alone:
 //     0xC5 Å -> 0xE5 å      0xC4 Ä -> 0xE4 ä      0xD6 Ö -> 0xF6 ö
 //     0xDC Ü -> 0xFC ü      0xC9 É -> 0xE9 é
-void pathToLower(vc71::string& s)
+void pathToLower(std::string& s)
 {
     char* p = const_cast<char*>(s.c_str());
-    const unsigned int n = s.size();
+    const unsigned int n = static_cast<unsigned int>(s.size());
     for (unsigned int i = 0; i < n; ++i)
     {
         const unsigned char c = static_cast<unsigned char>(p[i]);
@@ -74,7 +75,7 @@ void pathToLower(vc71::string& s)
 }
 
 // The substring builder the two helpers below need - see RendDX9Base.h for why it exists.
-void pathAssignSubstring(vc71::string& out, const char* s, unsigned int len)
+void pathAssignSubstring(std::string& out, const char* s, unsigned int len)
 {
     char* tmp = static_cast<char*>(::renddx9abi::engineAlloc(len + 1));
     if (!tmp)
@@ -89,10 +90,10 @@ void pathAssignSubstring(vc71::string& out, const char* s, unsigned int len)
 }
 
 // sub_10075730 (and its thunk sub_100751C0) - every '/' OR '\\' becomes `with`.
-void pathReplaceSeparators(vc71::string& s, char with)
+void pathReplaceSeparators(std::string& s, char with)
 {
     char* p = const_cast<char*>(s.c_str());
-    const unsigned int n = s.size();
+    const unsigned int n = static_cast<unsigned int>(s.size());
     for (unsigned int i = 0; i < n; ++i)
         if (p[i] == '/' || p[i] == '\\')
             p[i] = with;
@@ -100,9 +101,9 @@ void pathReplaceSeparators(vc71::string& s, char with)
 
 // sub_100753D0 -> sub_10075A50 - normalise separators to '/', then cut at the last '.'. A name with
 // no '.' passes through whole (separators still normalised).
-void pathStripExtension(vc71::string& out, const vc71::string& in)
+void pathStripExtension(std::string& out, const std::string& in)
 {
-    vc71::string work(in);
+    std::string work(in);
     pathReplaceSeparators(work, '/');
 
     const char* s = work.c_str();
@@ -119,7 +120,7 @@ void pathStripExtension(vc71::string& out, const vc71::string& in)
 // sub_10075180 -> sub_10075580 - the substring after the last '.'. Empty when there is no '.', and
 // empty when the character before the last '.' is also '.' (the ".." path-segment guard, with the
 // shipped `pos > 1` bound reproduced as-is).
-void pathGetExtension(vc71::string& out, const vc71::string& in)
+void pathGetExtension(std::string& out, const std::string& in)
 {
     const char* s = in.c_str();
     int dot = -1;
@@ -131,7 +132,8 @@ void pathGetExtension(vc71::string& out, const vc71::string& in)
         out = "";
         return;
     }
-    pathAssignSubstring(out, s + dot + 1, in.size() - static_cast<unsigned int>(dot) - 1);
+    pathAssignSubstring(out, s + dot + 1,
+                        static_cast<unsigned int>(in.size() - static_cast<unsigned int>(dot) - 1));
 }
 
 namespace {
@@ -140,7 +142,7 @@ namespace {
 // Distinct from the stream's +0x1C (getAvailableBytes) - different objects.
 // in both flavours through HostFileAbi.h, whose two forms both put
 // fileExists at +0x1C (the native IFileManager, and the retail mirror with HostString carriers).
-bool fileManagerExists(const vc71::string& name)
+bool fileManagerExists(const std::string& name)
 {
     if (!::dice::hfe::fileManager)
         return false;
@@ -173,15 +175,15 @@ public:
     bool init();     // sub_10017BA0, RendDX9Init.cpp:272
 
     // The loader makes its own name copy; the binary entry point takes the string by value.
-    EngineTexture* getTexture(const vc71::string& name);
+    EngineTexture* getTexture(const std::string& name);
 
     // TextureManager_loadTextureFromFile, 0x10018580.
-    EngineTexture* loadTextureFromFile(const vc71::string& name, EngineTexture* tex,
+    EngineTexture* loadTextureFromFile(const std::string& name, EngineTexture* tex,
                                        bool skipChangeWatch, bool useFallback);
 
     // sub_10017E70 - resolve `name` to an openable path: as-is if it has an extension and exists,
     // else "<base>.dds", else "<base>" bare, else empty.
-    void findTexturePath(vc71::string& out, const vc71::string& name);
+    void findTexturePath(std::string& out, const std::string& name);
 
     // The accessor family the Texture constructor and the consumers use.
     int           defaultMipClass() const        { return m_defaultMipClass; }
@@ -189,7 +191,7 @@ public:
     int           managedFlag() const            { return m_managedTextures; }
     int           swapManaged(int v)             { const int o = m_managedTextures; m_managedTextures = v; return o; }
     unsigned char recreateMode() const           { return m_recreateFromStoredParams; }
-    const vc71::string& originLabel() const      { return m_originLabel; }
+    const std::string& originLabel() const      { return m_originLabel; }
 
     // The two walks of sub_10018FD0 - see textureManagerSweep for the orchestration and the two
     // ECCore load-progress events posted between them.
@@ -197,7 +199,7 @@ public:
     void     sweepPass2();   // re-upload every survivor that is still not resident
 
     // sub_10018C50 - re-upload one texture (or, with tex null, look it up by name first).
-    bool reupload(const vc71::string& name, EngineTexture* tex);
+    bool reupload(const std::string& name, EngineTexture* tex);
     void refreshFileSuffix();
 
     // sub_10018550 - the code-created-texture entry (a thunk onto the 2D create with depth 1).
@@ -240,26 +242,40 @@ public:
     // when their own decrement left other holders.
     void evictFromCache(EngineTexture* tex)
     {
-        for (vc71::map_node* node = vc71::mapFirst(m_textures); node;
-             node = vc71::mapNext(m_textures, node))
+        for (TextureCache::iterator it = m_textures.begin(); it != m_textures.end(); ++it)
         {
-            if (vc71::mapNodeValue(node) == tex)
+            if (it->second == tex)
             {
                 if (!--tex->refCount)
                 {
                     textureDtor(tex);
                     ::renddx9abi::engineFree(tex);
                 }
-                vc71::mapErase(m_textures, node);
+                m_textures.erase(it);
                 return;
             }
         }
     }
 
-    unsigned cacheSize() const { return m_textures.size; }
+    unsigned cacheSize() const { return static_cast<unsigned>(m_textures.size()); }
+
+    // VideoOptions::apply's two stores into the mip-class records (see RendDX9Base.h).
+    void setEnabledMipClassValues(int value)
+    {
+        for (int i = 0; i < 14; ++i)
+        {
+            if (m_mipClasses[i].enabled)
+                m_mipClasses[i].value = value;
+        }
+    }
+    void setMipClassValue(int index, int value) { m_mipClasses[index].value = value; }
 
     void addRef() { ++m_refCount; }
     int  getRef() const { return m_refCount; }
+
+    // The DeviceLostResetListener subobject (+0x04) and the manager that owns one.
+    void* listenerSubobject() { return &m_listenerVptr; }
+    static TextureManager* fromListener(void* listener);
 
     // Device listener methods preserve cached wrappers across reset.
     void onDeviceLost();
@@ -275,28 +291,37 @@ private:
     bool seekPastHeaderAndSkippedMips(::renddx9abi::EngineStream& stream,
                                       D3DXIMAGE_INFO& info, int mipSkip);
 
+    // The texture cache: normalised name -> texture, in strcmp order (sub_10019920 builds it).
+    typedef std::map<std::string, EngineTexture*> TextureCache;
+
     void*             m_vptr;             // +0x00
     void*             m_listenerVptr;     // +0x04
     int               m_refCount;         // +0x08
     IDirect3DDevice9* m_device;           // +0x0C
-    vc71::map_layout  m_textures;         // +0x10
+    TextureCache      m_textures;         // +0x10
     int               m_smallestMipSide;  // +0x1C
     int               m_managedTextures;  // +0x20
     unsigned char     m_recreateFromStoredParams; // +0x24
     unsigned char     m_pad25[3];
     MipClassRecord    m_mipClasses[14];   // +0x28 .. +0x97
     int               m_defaultMipClass;  // +0x98
-    vc71::string      m_originLabel;      // +0x9C  "Created from code." at rest
+    std::string      m_originLabel;      // +0x9C  "Created from code." at rest
     unsigned char     m_detailedInfo;     // +0xB8  GSLoadedTextureDetailedInfo
     unsigned char     m_padB9[3];
-    vc71::string      m_fileSuffix;       // +0xBC  the "<base>_<suffix>.dds" probe
+    std::string      m_fileSuffix;       // +0xBC  the "<base>_<suffix>.dds" probe
     unsigned char     m_byteD8;           // +0xD8, pending file-suffix refresh
     unsigned char     m_padD9[3];
-    vc71::string      m_loadingFileName;  // +0xDC  the file mid-load
+    std::string      m_loadingFileName;  // +0xDC  the file mid-load
 };
 
-static_assert(sizeof(TextureManager) == 0xF8,
-              "RendDX9Init.cpp:267 allocates 248 - see the bf_malloc at 0x1000B4E9");
+TextureManager* TextureManager::fromListener(void* listener)
+{
+#if defined(_M_IX86)
+    static_assert(offsetof(TextureManager, m_listenerVptr) == 4, "listener subobject at +0x04");
+#endif
+    return reinterpret_cast<TextureManager*>(static_cast<unsigned char*>(listener)
+                                             - offsetof(TextureManager, m_listenerVptr));
+}
 
 namespace {
 
@@ -305,19 +330,19 @@ namespace {
 // an unused EDX - the same convention for slots whose arguments are all stack-passed after `this`.
 
 
-void __fastcall tm_addRef(void* self, void*) { static_cast<TextureManager*>(self)->addRef(); }
-int  __fastcall tm_getRef(void* self, void*) { return static_cast<TextureManager*>(self)->getRef(); }
+void RD9_THUNK tm_addRef(void* self RD9_THUNK_EDX) { static_cast<TextureManager*>(self)->addRef(); }
+int  RD9_THUNK tm_getRef(void* self RD9_THUNK_EDX) { return static_cast<TextureManager*>(self)->getRef(); }
 
 // +0x0C, 0x10025930. A comdat-folded body shared with SkinnedMeshRenderer, which is why the
 // database names it after that class - the same three instructions serve both. It accepts exactly
 // one interface id: `return iid != 1 ? 0 : this`, so IID_IBase and nothing else.
-void* __fastcall tm_queryInterface(void* self, void*, unsigned int iid)
+void* RD9_THUNK tm_queryInterface(void* self RD9_THUNK_EDX, unsigned int iid)
 {
     return iid == RD9_IID_IBASE ? self : 0;
 }
 
 #define RD9_TM_SLOT(name, qualified, slotOffset)                                    \
-    void __fastcall name(void* self, void*)                                         \
+    void RD9_THUNK name(void* self RD9_THUNK_EDX)                                         \
     {                                                                               \
         RD9_FRONTIER_AT("dice::hfe::dx9rend::TextureManager::" qualified,            \
                         self, slotOffset);                                          \
@@ -332,12 +357,12 @@ RD9_TM_SLOT(tm_slot14,    "slot_0x14 (0x1001A040)",            0x14)
 // Recovers the texture manager from its listener subobject at +0x04.
 inline TextureManager* tmFromListener(void* listener)
 {
-    return reinterpret_cast<TextureManager*>(static_cast<unsigned char*>(listener) - 4);
+    return TextureManager::fromListener(listener);
 }
 
-void __fastcall tm_onDeviceLost(void* listener, void*)   { tmFromListener(listener)->onDeviceLost(); }
-void __fastcall tm_onDeviceReset(void* listener, void*)  { tmFromListener(listener)->onDeviceReset(); }
-void __fastcall tm_listenerSlot08(void* listener, void*) { tmFromListener(listener)->onDeviceDestroy(); }
+void RD9_THUNK tm_onDeviceLost(void* listener RD9_THUNK_EDX)   { tmFromListener(listener)->onDeviceLost(); }
+void RD9_THUNK tm_onDeviceReset(void* listener RD9_THUNK_EDX)  { tmFromListener(listener)->onDeviceReset(); }
+void RD9_THUNK tm_listenerSlot08(void* listener RD9_THUNK_EDX) { tmFromListener(listener)->onDeviceDestroy(); }
 
 void* const kTextureManagerVtable[6] =
 {
@@ -389,8 +414,6 @@ TextureManager::TextureManager(IDirect3DDevice9* device)
     m_padB9[0] = 0; m_padB9[1] = 0; m_padB9[2] = 0;
     m_padD9[0] = 0; m_padD9[1] = 0; m_padD9[2] = 0;
 
-    m_textures.construct();          // sub_10019920 - the same 0x30 node as the GTM's maps
-
     for (int i = 0; i < 14; ++i)
     {
         m_mipClasses[i].enabled = 1;
@@ -441,13 +464,13 @@ bool TextureManager::init()
 //   2. try "<base>" + each of the TWO entries of off_10238058 - ".dds", then "" - first hit wins
 //   3. nothing found -> empty string
 
-void TextureManager::findTexturePath(vc71::string& out, const vc71::string& name)
+void TextureManager::findTexturePath(std::string& out, const std::string& name)
 {
     out = "";
 
-    vc71::string base(name);
+    std::string base(name);
 
-    vc71::string ext;
+    std::string ext;
     pathGetExtension(ext, name);
     if (!ext.empty())
     {
@@ -456,7 +479,7 @@ void TextureManager::findTexturePath(vc71::string& out, const vc71::string& name
             out = name;
             return;
         }
-        vc71::string stripped;
+        std::string stripped;
         pathStripExtension(stripped, name);
         base = stripped;
     }
@@ -464,7 +487,7 @@ void TextureManager::findTexturePath(vc71::string& out, const vc71::string& name
     static const char* const kProbeExtensions[2] = { ".dds", "" };
     for (int i = 0; i < 2; ++i)
     {
-        vc71::string candidate(base);
+        std::string candidate(base);
         candidate += kProbeExtensions[i];
         if (fileManagerExists(candidate))
         {
@@ -651,7 +674,7 @@ EngineTexture* TextureManager::create2DOrVolumeTexture(unsigned int w, unsigned 
 
     if (!tex)
     {
-        void* storage = ::renddx9abi::engineAlloc(0x7C);
+        void* storage = ::renddx9abi::engineAlloc(sizeof(EngineTexture));   // retail: 0x7C
         tex = storage ? textureCtor(storage) : 0;
     }
 
@@ -699,7 +722,7 @@ EngineTexture* TextureManager::createCubeTexture(unsigned int w, unsigned int fo
 {
     if (!tex)
     {
-        void* storage = ::renddx9abi::engineAlloc(0x7C);
+        void* storage = ::renddx9abi::engineAlloc(sizeof(EngineTexture));   // retail: 0x7C
         tex = storage ? textureCtor(storage) : 0;
     }
 
@@ -736,25 +759,25 @@ EngineTexture* TextureManager::createCubeTexture(unsigned int w, unsigned int fo
 // [RETIRE-WHEN: RW-78] Implement and verify the notification/reload slots before registering
 // this owner with FileChangeManager.
 
-EngineTexture* TextureManager::loadTextureFromFile(const vc71::string& name, EngineTexture* tex,
+EngineTexture* TextureManager::loadTextureFromFile(const std::string& name, EngineTexture* tex,
                                                    bool skipChangeWatch, bool useFallback)
 {
-    vc71::string path;
+    std::string path;
     findTexturePath(path, name);
 
-    vc71::string prefixedName(name);
+    std::string prefixedName(name);
 
     if (path.empty())
     {
-        vc71::string level, levelDir;
+        std::string level, levelDir;
         readStringSetting("GSLoadLevel", level);
         readStringSetting("GSLevelDirectory", levelDir);
 
-        vc71::string prefix(levelDir);
+        std::string prefix(levelDir);
         prefix += level;
         prefix += "\\";
 
-        vc71::string prefixed(prefix);
+        std::string prefixed(prefix);
         prefixed += prefixedName;
         prefixedName = prefixed;
 
@@ -897,45 +920,44 @@ EngineTexture* TextureManager::loadTextureFromFile(const vc71::string& name, Eng
 // May substitute the configured suffix. Resource initialization defers file loading until
 // the cache sweep; new wrappers retain separate cache and caller references.
 
-EngineTexture* TextureManager::getTexture(const vc71::string& nameIn)
+EngineTexture* TextureManager::getTexture(const std::string& nameIn)
 {
-    vc71::string name(nameIn);                             // the by-value parameter
+    std::string name(nameIn);                             // the by-value parameter
 
     {
         const char* s = name.c_str();
         const char* hit = ::strstr(s, "@@ABSOLUTE@@");
         if (hit)
         {
-            vc71::string tail(hit + 12);
+            std::string tail(hit + 12);
             name = tail;                                   // erase(0, pos + 12)
         }
     }
 
-    vc71::string key;
+    std::string key;
     pathStripExtension(key, name);                         // sub_100753D0 (separators + strip)
     pathToLower(key);
 
-    vc71::map_node* node = vc71::mapFind(m_textures, key.c_str());
-    if (node)
+    TextureCache::const_iterator hit = m_textures.find(key);
+    if (hit != m_textures.end())
     {
-        EngineTexture* cached =
-            static_cast<EngineTexture*>(vc71::mapNodeValue(node));
+        EngineTexture* cached = hit->second;
         textureAddRef(cached);                             // vslot +0x08 on the hit
         return cached;
     }
 
-    vc71::string loadName(key);
+    std::string loadName(key);
     bool usedSuffix = false;
 
     if (!m_fileSuffix.empty())                             // the +0xD0 _Mysize test
     {
-        vc71::string probe;
+        std::string probe;
         pathStripExtension(probe, name);
         probe += "_";
         probe += m_fileSuffix;
         probe += ".dds";
 
-        vc71::string resolved;
+        std::string resolved;
         findTexturePath(resolved, probe);
         if (!resolved.empty())
         {
@@ -946,12 +968,10 @@ EngineTexture* TextureManager::getTexture(const vc71::string& nameIn)
 
     m_originLabel = name;
 
-    void* storage = ::renddx9abi::engineAlloc(0x7C);
+    void* storage = ::renddx9abi::engineAlloc(sizeof(EngineTexture));       // retail: 0x7C
     EngineTexture* tex = storage ? textureCtor(storage) : 0;
 
-    vc71::map_node* inserted = vc71::mapInsert(m_textures, 0x30, key.c_str());
-    if (inserted)
-        vc71::mapNodeValueRef(inserted) = tex;
+    m_textures[key] = tex;
 
     textureAddRef(tex);
     tex->usedSuffixedFile = usedSuffix ? 1 : 0;
@@ -975,11 +995,12 @@ unsigned TextureManager::sweepPass1()
 {
     unsigned notResident = 0;
 
-    vc71::map_node* node = vc71::mapFirst(m_textures);
-    while (node)
+    TextureCache::iterator node = m_textures.begin();
+    while (node != m_textures.end())
     {
-        vc71::map_node* next = vc71::mapNext(m_textures, node);
-        EngineTexture*  tex  = static_cast<EngineTexture*>(vc71::mapNodeValue(node));
+        TextureCache::iterator next = node;
+        ++next;
+        EngineTexture*  tex  = node->second;
 
         if (tex->refCount == 1)                            // the vslot +0x00 getRef call
         {
@@ -988,7 +1009,7 @@ unsigned TextureManager::sweepPass1()
                 textureDtor(tex);
                 ::renddx9abi::engineFree(tex);
             }
-            vc71::mapErase(m_textures, node);              // sub_100436D0, after the advance
+            m_textures.erase(node);                        // sub_100436D0, after the advance
         }
         else if (!tex->baseTexture)
         {
@@ -1003,15 +1024,11 @@ unsigned TextureManager::sweepPass1()
 // by the node's own cache key (the shipped call passes node+12).
 void TextureManager::sweepPass2()
 {
-    for (vc71::map_node* node = vc71::mapFirst(m_textures); node;
-         node = vc71::mapNext(m_textures, node))
+    for (TextureCache::iterator node = m_textures.begin(); node != m_textures.end(); ++node)
     {
-        EngineTexture* tex = static_cast<EngineTexture*>(vc71::mapNodeValue(node));
+        EngineTexture* tex = node->second;
         if (!tex->baseTexture)
-        {
-            const vc71::string* key = reinterpret_cast<const vc71::string*>(node->value);
-            reupload(*key, tex);
-        }
+            reupload(node->first, tex);
     }
 }
 
@@ -1020,18 +1037,18 @@ void TextureManager::sweepPass2()
 // Cache lookup can retry without the mod prefix; absolute-path misses fail.
 // Preserves the existing file watch and allows fallback textures during reload.
 
-bool TextureManager::reupload(const vc71::string& name, EngineTexture* tex)
+bool TextureManager::reupload(const std::string& name, EngineTexture* tex)
 {
-    vc71::string key;
+    std::string key;
     pathStripExtension(key, name);
     pathToLower(key);
 
     if (!tex)
     {
-        vc71::map_node* node = vc71::mapFind(m_textures, key.c_str());
-        if (!node)
+        TextureCache::const_iterator node = m_textures.find(key);
+        if (node == m_textures.end())
         {
-            vc71::string modDir;
+            std::string modDir;
             readStringSetting("GSModDirectory", modDir);   // shipped default: "(unknown)"
             if (modDir.empty())
                 modDir = "(unknown)";
@@ -1043,24 +1060,26 @@ bool TextureManager::reupload(const vc71::string& name, EngineTexture* tex)
             // the shipped strip is BY length, not by match position: substr(modDirLen, ...) -
             // it assumes the hit was a prefix and drops that many leading characters wherever the
             // match actually sat. Reproduced as-is.
-            const unsigned int len = (modDir.size() < key.size()) ? modDir.size() : key.size();
-            vc71::string stripped;
-            pathAssignSubstring(stripped, key.c_str() + len, key.size() - len);
+            const unsigned int len = static_cast<unsigned int>(
+                (modDir.size() < key.size()) ? modDir.size() : key.size());
+            std::string stripped;
+            pathAssignSubstring(stripped, key.c_str() + len,
+                                static_cast<unsigned int>(key.size() - len));
             key = stripped;
 
-            node = vc71::mapFind(m_textures, key.c_str());
-            if (!node)
+            node = m_textures.find(key);
+            if (node == m_textures.end())
                 return false;
         }
-        tex = static_cast<EngineTexture*>(vc71::mapNodeValue(node));
+        tex = node->second;
     }
 
     m_originLabel = name;
 
-    vc71::string loadName(name);
+    std::string loadName(name);
     if (tex->usedSuffixedFile && !m_fileSuffix.empty())
     {
-        vc71::string base;
+        std::string base;
         pathStripExtension(base, loadName);
         base += "_";
         base += m_fileSuffix;
@@ -1078,10 +1097,9 @@ bool TextureManager::reupload(const vc71::string& name, EngineTexture* tex)
 // Code-created textures belong to their owners' listeners. Cached pointers must be nonnull.
 void TextureManager::onDeviceLost()
 {
-    for (vc71::map_node* node = vc71::mapFirst(m_textures); node;
-         node = vc71::mapNext(m_textures, node))
+    for (TextureCache::iterator node = m_textures.begin(); node != m_textures.end(); ++node)
     {
-        EngineTexture* const tex = static_cast<EngineTexture*>(vc71::mapNodeValue(node));
+        EngineTexture* const tex = node->second;
         if (tex->pool == 0)
             textureReleaseD3DResource(tex);
     }
@@ -1094,15 +1112,11 @@ void TextureManager::onDeviceLost()
 // uses again, so the texture comes back in the default pool it was created in.
 void TextureManager::onDeviceReset()
 {
-    for (vc71::map_node* node = vc71::mapFirst(m_textures); node;
-         node = vc71::mapNext(m_textures, node))
+    for (TextureCache::iterator node = m_textures.begin(); node != m_textures.end(); ++node)
     {
-        EngineTexture* const tex = static_cast<EngineTexture*>(vc71::mapNodeValue(node));
+        EngineTexture* const tex = node->second;
         if (tex->pool == 0)
-        {
-            const vc71::string* key = reinterpret_cast<const vc71::string*>(node->value);
-            reupload(*key, 0);                             // sub_10018C50(key, 0)
-        }
+            reupload(node->first, 0);                      // sub_10018C50(key, 0)
     }
 }
 
@@ -1110,10 +1124,9 @@ void TextureManager::onDeviceReset()
 // Nodes are left with dangling values until manager teardown; do not reuse the cache afterward.
 void TextureManager::onDeviceDestroy()
 {
-    for (vc71::map_node* node = vc71::mapFirst(m_textures); node;
-         node = vc71::mapNext(m_textures, node))
+    for (TextureCache::iterator node = m_textures.begin(); node != m_textures.end(); ++node)
     {
-        EngineTexture* const tex = static_cast<EngineTexture*>(vc71::mapNodeValue(node));
+        EngineTexture* const tex = node->second;
         const int remaining = --tex->refCount;
         if (!remaining)
         {
@@ -1122,10 +1135,9 @@ void TextureManager::onDeviceDestroy()
         }
         if (remaining > 0)
         {
-            EngineTexture* const survivor =
-                static_cast<EngineTexture*>(vc71::mapNodeValue(node));   // re-read, as shipped
-            typedef void (__fastcall* SlotFn)(void*, void*);
-            reinterpret_cast<SlotFn>((*reinterpret_cast<void***>(survivor))[1])(survivor, 0);
+            EngineTexture* const survivor = node->second;                // re-read, as shipped
+            typedef void (__thiscall* SlotFn)(void*);
+            reinterpret_cast<SlotFn>((*reinterpret_cast<void***>(survivor))[1])(survivor);
         }
     }
 }
@@ -1134,7 +1146,8 @@ void TextureManager::onDeviceDestroy()
 // `dword_1023B974 ? dword_1023B974 + 4 : 0` (the listener subobject). The null arm is shipped.
 void* textureManagerDeviceLostListener()
 {
-    return g_textureManager ? static_cast<unsigned char*>(g_textureManager) + 4 : 0;
+    return g_textureManager
+        ? static_cast<TextureManager*>(g_textureManager)->listenerSubobject() : 0;
 }
 
 // PE 0x100196B0, reached through 0x10019890 after ResourceManager clears its defer flag.
@@ -1143,17 +1156,16 @@ void TextureManager::refreshFileSuffix()
 {
     if (!m_byteD8)
         return;
-    for (vc71::map_node* node = vc71::mapFirst(m_textures); node;
-         node = vc71::mapNext(m_textures, node))
+    for (TextureCache::iterator node = m_textures.begin(); node != m_textures.end(); ++node)
     {
-        EngineTexture* const texture = static_cast<EngineTexture*>(vc71::mapNodeValue(node));
+        EngineTexture* const texture = node->second;
         if (!texture)
             continue;
-        const vc71::string name(vc71::mapNodeKey(node));
+        const std::string name(node->first.c_str());
         TextureManager* const published = static_cast<TextureManager*>(g_textureManager);
         if (!m_fileSuffix.empty())
         {
-            vc71::string suffixed;
+            std::string suffixed;
             pathStripExtension(suffixed, name);
             suffixed += "_";
             suffixed += m_fileSuffix;
@@ -1187,51 +1199,30 @@ namespace {
 // Source operation std::list<std::string> copy; helper name/path split inferred.
 std::list<renddx9abi::HostString> copyAtlasNames(const renddx9abi::HostStringList& source)
 {
-#if BF2_PLUGIN_ABI_NATIVE
     return source;
-#else
-    std::list<renddx9abi::HostString> result;
-    for (renddx9abi::HostStringListNode* node = source.head->next;
-         node != source.head; node = node->next)
-        result.push_back(node->value);
-    return result;
-#endif
 }
 
-struct AtlasNameNode                                       // the VC7.1 list node: links + string
-{
-    AtlasNameNode* next;
-    AtlasNameNode* prev;
-    vc71::string   name;
-};
-
+// The cache object (retail: sub_10088EA0 allocates 0x2C for it).
 struct AtlasCache
 {
-    void*          vptr;         // +0x00
-    int            refCount;     // +0x04
-    void*          vecAlloc;     // +0x08  unwritten by the shipped ctor
-    TextureAtlas** vecFirst;     // +0x0C
-    TextureAtlas** vecLast;      // +0x10
-    TextureAtlas** vecEnd;       // +0x14
-    unsigned char  hasAtlases;   // +0x18
-    unsigned char  pad19[3];
-    void*          listAlloc;    // +0x1C
-    AtlasNameNode* listHead;     // +0x20  self-linked sentinel
-    unsigned int   listSize;     // +0x24
-    void*          hudManager;   // +0x28
+    void*                      vptr;         // +0x00
+    int                        refCount;     // +0x04
+    std::vector<TextureAtlas*> atlases;      // +0x08  retail allocator word unwritten by the ctor
+    unsigned char              hasAtlases;   // +0x18
+    unsigned char              pad19[3];
+    std::list<std::string>    names;        // +0x1C  the loaded atlas names, for deduplication
+    void*                      hudManager;   // +0x28
 };
 
-static_assert(sizeof(AtlasCache) == 0x2C, "sub_10088EA0 allocates 0x2C for it");
+void RD9_THUNK ac_addRef(void* self RD9_THUNK_EDX) { ++static_cast<AtlasCache*>(self)->refCount; }
+int  RD9_THUNK ac_getRef(void* self RD9_THUNK_EDX) { return static_cast<AtlasCache*>(self)->refCount; }
 
-void __fastcall ac_addRef(void* self, void*) { ++static_cast<AtlasCache*>(self)->refCount; }
-int  __fastcall ac_getRef(void* self, void*) { return static_cast<AtlasCache*>(self)->refCount; }
-
-void __fastcall ac_slot08(void* self, void*)
+void RD9_THUNK ac_slot08(void* self RD9_THUNK_EDX)
 {
     RD9_FRONTIER_AT("dice::hfe::dx9rend::AtlasCache::slot_0x08 (0x10017B50, unread)", self, 0x08);
 }
 
-void* __fastcall ac_queryInterface(void* self, void*, unsigned int iid)
+void* RD9_THUNK ac_queryInterface(void* self RD9_THUNK_EDX, unsigned int iid)
 {
     return iid == RD9_IID_IBASE ? self : 0;
 }
@@ -1245,50 +1236,15 @@ void* const kAtlasCacheVtable[4] =
 };
 
 // sub_10017470, read in full: vptr, refcount, the empty vector, the flag, and the list head
-// (sub_1000E410 - a self-linked sentinel node).
+// (sub_1000E410 - a self-linked sentinel node). The placement default-initialization constructs
+// the vector and the list and writes nothing else; atlasCacheRelease destroys them.
 AtlasCache* atlasCacheCtor(void* storage)
 {
-    AtlasCache* c = static_cast<AtlasCache*>(storage);
+    AtlasCache* c = new (storage) AtlasCache;
     c->vptr       = const_cast<void**>(kAtlasCacheVtable);
     c->refCount   = 1;
-    c->vecFirst   = 0;
-    c->vecLast    = 0;
-    c->vecEnd     = 0;
     c->hasAtlases = 0;
-
-    AtlasNameNode* head =
-        static_cast<AtlasNameNode*>(::renddx9abi::engineAlloc(sizeof(AtlasNameNode)));
-    if (head)
-    {
-        head->next = head;
-        head->prev = head;
-        // the head's string is never constructed and never read - the same deliberate
-        // non-construction Vc71Map.h records for the map head's key.
-    }
-    c->listHead = head;
-    c->listSize = 0;
     return c;
-}
-
-void atlasCacheVectorPushBack(AtlasCache* c, TextureAtlas* atlas)
-{
-    if (c->vecLast != c->vecEnd)
-    {
-        *c->vecLast++ = atlas;
-        return;
-    }
-    const unsigned int count = static_cast<unsigned int>(c->vecLast - c->vecFirst);
-    const unsigned int grow  = count ? count * 2 : 1;
-    TextureAtlas** fresh =
-        static_cast<TextureAtlas**>(::renddx9abi::engineAlloc(grow * sizeof(TextureAtlas*)));
-    for (unsigned int i = 0; i < count; ++i)
-        fresh[i] = c->vecFirst[i];
-    if (c->vecFirst)
-        ::renddx9abi::engineFree(c->vecFirst);
-    c->vecFirst = fresh;
-    c->vecLast  = fresh + count;
-    c->vecEnd   = fresh + grow;
-    *c->vecLast++ = atlas;
 }
 
 } // anonymous namespace
@@ -1325,7 +1281,7 @@ bool atlasCacheHasAtlases()
 // failed atlas loads retain their allocation. Requires class and HUD managers.
 
 
-bool atlasCacheLoadAtlases(const vc71::string& prefix)
+bool atlasCacheLoadAtlases(const std::string& prefix)
 {
     AtlasCache* c = static_cast<AtlasCache*>(atlasCacheEnsure());
     if (!c)
@@ -1341,50 +1297,33 @@ bool atlasCacheLoadAtlases(const vc71::string& prefix)
         // hudManager->vslot+0x374() -> the atlas-name list. Typed in the native flavour (RW-266):
         // BF2HudManager::getAtlasList is its primary table's slot 221 (+0x374), and HostStringList
         // IS its std::list<std::string> there. The retail-ABI flavour keeps the raw slot.
-#if BF2_PLUGIN_ABI_NATIVE
         const renddx9abi::HostStringList& names =
             static_cast<hud::BF2HudManager*>(c->hudManager)->getAtlasList();
-#else
-        void** vtbl = *reinterpret_cast<void***>(c->hudManager);
-        typedef const renddx9abi::HostStringList& (__thiscall* GetAtlasNamesFn)(void*);
-        const renddx9abi::HostStringList& names =
-            reinterpret_cast<GetAtlasNamesFn>(vtbl[0x374 / 4])(c->hudManager);
-#endif
         const std::list<renddx9abi::HostString> snapshot = copyAtlasNames(names);
         for (const renddx9abi::HostString& atlasName : snapshot)
             {
-                vc71::string full(prefix);
+                std::string full(prefix);
                 full += atlasName.c_str();
 
-                // the dedup walk over the list at +0x20
+                // the dedup walk over the name list
                 bool seen = false;
-                for (AtlasNameNode* d = c->listHead->next; d != c->listHead; d = d->next)
+                for (std::list<std::string>::const_iterator d = c->names.begin();
+                     d != c->names.end(); ++d)
                 {
-                    if (d->name.size() == full.size() &&
-                        ::memcmp(d->name.c_str(), full.c_str(), full.size()) == 0)
+                    if (d->size() == full.size() &&
+                        ::memcmp(d->c_str(), full.c_str(), full.size()) == 0)
                         seen = true;
                 }
                 if (seen)
                     continue;
 
-                // push_back onto the dedup list (insert before the sentinel)
-                AtlasNameNode* fresh =
-                    static_cast<AtlasNameNode*>(::renddx9abi::engineAlloc(sizeof(AtlasNameNode)));
-                if (fresh)
-                {
-                    new (&fresh->name) vc71::string(full);
-                    fresh->next = c->listHead;
-                    fresh->prev = c->listHead->prev;
-                    c->listHead->prev->next = fresh;
-                    c->listHead->prev       = fresh;
-                    ++c->listSize;
-                }
+                c->names.push_back(full);
 
-                void* storage = ::renddx9abi::engineAlloc(0x14);
+                void* storage = ::renddx9abi::engineAlloc(sizeof(TextureAtlas));   // retail: 0x14
                 TextureAtlas* atlas = storage ? textureAtlasCtor(storage) : 0;
                 if (atlas && textureAtlasLoadTAI(atlas, full))
                 {
-                    atlasCacheVectorPushBack(c, atlas);
+                    c->atlases.push_back(atlas);
                     anyParsed     = true;
                     c->hasAtlases = 1;
                 }
@@ -1396,14 +1335,15 @@ bool atlasCacheLoadAtlases(const vc71::string& prefix)
     return anyParsed;
 }
 
-TextureAtlasEntry* atlasCacheFind(const vc71::string& name)
+TextureAtlasEntry* atlasCacheFind(const std::string& name)
 {
     AtlasCache* c = static_cast<AtlasCache*>(g_atlasCache);
-    if (!c || c->vecFirst == c->vecLast)
+    if (!c || c->atlases.empty())
         return 0;
 
     // sub_10017440 - first atlas that answers. The walk is by direct call, not through a vtable.
-    for (TextureAtlas** it = c->vecFirst; it != c->vecLast; ++it)
+    for (std::vector<TextureAtlas*>::const_iterator it = c->atlases.begin();
+         it != c->atlases.end(); ++it)
     {
         TextureAtlasEntry* entry = textureAtlasFind(*it, name);
         if (entry)
@@ -1427,7 +1367,8 @@ int atlasCacheRelease()
     {
         c->vptr = const_cast<void**>(kAtlasCacheVtable);   // the dtor's vptr restore
 
-        for (TextureAtlas** it = c->vecFirst; it != c->vecLast; ++it)
+        for (std::vector<TextureAtlas*>::iterator it = c->atlases.begin();
+             it != c->atlases.end(); ++it)
         {
             if (*it)
             {
@@ -1437,26 +1378,8 @@ int atlasCacheRelease()
             }
         }
 
-        if (c->listHead)
-        {
-            AtlasNameNode* n = c->listHead->next;
-            while (n != c->listHead)
-            {
-                AtlasNameNode* next = n->next;
-                n->name.~string();
-                ::renddx9abi::engineFree(n);
-                n = next;
-            }
-            ::renddx9abi::engineFree(c->listHead);
-            c->listHead = 0;
-        }
-        c->listSize = 0;
-
-        if (c->vecFirst)
-            ::renddx9abi::engineFree(c->vecFirst);
-        c->vecFirst = 0;
-        c->vecLast  = 0;
-        c->vecEnd   = 0;
+        // The reverse member order destroys the name list, then frees the vector's buffer.
+        c->~AtlasCache();
 
         ::renddx9abi::engineFree(c);
         g_atlasCache = 0;
@@ -1469,7 +1392,7 @@ int atlasCacheRelease()
 // on dword_1023B974; these carry the identical behaviour for our other translation units.
 
 
-void* textureManagerGetTexture(const vc71::string& name)
+void* textureManagerGetTexture(const std::string& name)
 {
     TextureManager* tm = static_cast<TextureManager*>(g_textureManager);
     if (!tm)
@@ -1493,6 +1416,17 @@ int textureManagerSwapRecreateMode(int value)
 {
     TextureManager* tm = static_cast<TextureManager*>(g_textureManager);
     return tm ? tm->swapRecreateMode(static_cast<unsigned char>(value)) : 0;
+}
+
+// VideoOptions::apply tests the manager for null before each of these.
+void textureManagerSetEnabledMipClassValues(int value)
+{
+    static_cast<TextureManager*>(g_textureManager)->setEnabledMipClassValues(value);
+}
+
+void textureManagerSetMipClassValue(int index, int value)
+{
+    static_cast<TextureManager*>(g_textureManager)->setMipClassValue(index, value);
 }
 
 void* textureManagerCreateEmpty(unsigned int w, unsigned int h, unsigned int format,
@@ -1523,9 +1457,9 @@ void textureManagerEvictFromCache(void* tex)
 }
 
 // A manager member in the image, reached through the global manager without a null test.
-// A null `source` reads the renderer's current swap chain back buffer (the base+0xE0 vector's
-// first entry at +0xE4, indexed by +0xF0 - RendDX9Init.cpp's swapChainVectorPushBack); the source
-// surface is fetched before the destination's, and both references are released afterwards.
+// A null `source` reads the renderer's current swap chain back buffer (the base's swap-chain list
+// indexed by its current index - RendDX9Init.cpp's swapChainVectorPushBack); the source surface is
+// fetched before the destination's, and both references are released afterwards.
 bool textureManagerCopyRenderTarget(EngineTexture* source, EngineTexture* destination,
                                     unsigned int level, unsigned int face)
 {
@@ -1535,10 +1469,9 @@ bool textureManagerCopyRenderTarget(EngineTexture* source, EngineTexture* destin
     IDirect3DSurface9* sourceSurface = 0;
     if (!source)
     {
-        unsigned char* const base = static_cast<unsigned char*>(g_rendererBase);
-        IDirect3DSwapChain9* const* const chains =
-            *reinterpret_cast<IDirect3DSwapChain9* const* const*>(base + 0xE4);
-        const unsigned int current = *reinterpret_cast<const unsigned int*>(base + 0xF0);
+        RendDX9Base* const base = static_cast<RendDX9Base*>(g_rendererBase);
+        IDirect3DSwapChain9* const* const chains = base->swapChains.data();
+        const unsigned int current = base->currentSwapChain;
         chains[current]->GetBackBuffer(0, D3DBACKBUFFER_TYPE_MONO, &sourceSurface);
     }
     else
@@ -1556,12 +1489,12 @@ bool textureManagerCopyRenderTarget(EngineTexture* source, EngineTexture* destin
 // Saves texture to name + ".dds" through the host write-path mapping.
 // Requires a valid wrapper and returns true only for D3D_OK.
 
-bool textureManagerSaveTexture(EngineTexture* texture, const vc71::string& name)
+bool textureManagerSaveTexture(EngineTexture* texture, const std::string& name)
 {
-    vc71::string path(name);
+    std::string path(name);
     path += ".dds";
     ::renddx9abi::engineFilePrepareWrite(path);                              // FileManager +0x18 (3, 2, 0), release
-    vc71::string writePath;
+    std::string writePath;
     ::renddx9abi::engineFileGetWritePath(path, writePath);                   // FileManager +0xA4
     return D3DXSaveTextureToFileA(writePath.c_str(), D3DXIFF_DDS, texture->baseTexture, 0) == 0;
 }
@@ -1585,9 +1518,9 @@ unsigned char textureManagerRecreateMode()
     return tm ? tm->recreateMode() : 0;
 }
 
-const vc71::string& textureManagerOriginLabel()
+const std::string& textureManagerOriginLabel()
 {
-    static vc71::string empty;
+    static std::string empty;
     TextureManager* tm = static_cast<TextureManager*>(g_textureManager);
     return tm ? tm->originLabel() : empty;
 }

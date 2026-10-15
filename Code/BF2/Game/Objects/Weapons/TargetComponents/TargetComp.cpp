@@ -44,14 +44,15 @@ IPlayerControlObject* findPlayerControlObject(IObject* object)
 
 // IGeometry is not reconstructed far enough to name this slot yet. Both shipped x86 tables were
 // read: the same operation is ELF +0xD8 and PE +0xD4 (the Itanium destructor-pair shift).
+// The slot follows the compiler's destructor ABI, so native MSVC x64 takes the PE arm too.
 void geometrySetConnectionEffect(void* geometry, int enabled)
 {
-#if defined(_MSC_VER) && defined(_M_IX86)
+#if defined(_MSC_VER)
     typedef void (__thiscall *Method)(void*, int);
-    const unsigned int slot = 0xD4 / sizeof(void*);
+    const unsigned int slot = 0xD4 / 4;
 #else
     typedef void (*Method)(void*, int);
-    const unsigned int slot = 0xD8 / sizeof(void*);
+    const unsigned int slot = 0xD8 / 4;
 #endif
     void** const vtable = *reinterpret_cast<void***>(geometry);
     reinterpret_cast<Method>(vtable[slot])(geometry, enabled);

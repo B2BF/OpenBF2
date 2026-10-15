@@ -12,6 +12,8 @@ TypeDescriptor* Action::getClassType()
 TypeDescriptor* Action::getType() { return getClassType(); }
 unsigned int Action::getObjectSize() { return sizeof(Action); }
 bool Action::execute(System*, const Rect*, const NodeState*, const NodeInputEvent*) { return false; }
+#if defined(_M_IX86)
 static_assert(sizeof(Action) == 4, "BFMeme Action layout");
+#endif
 } }
 #endif

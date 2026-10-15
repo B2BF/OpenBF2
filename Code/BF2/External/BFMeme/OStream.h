@@ -22,8 +22,8 @@ public:
     bool streamString(char**, const char*) override;
     bool streamWideString(wchar_t**, const char*) override;
     bool streamCharacter(wchar_t*, const char*) override;
-    bool streamTexture(System*, int*, const char*) override;
-    bool streamFont(System*, int*, const char*) override;
+    bool streamTexture(System*, TextureHandle*, const char*) override;
+    bool streamFont(System*, FontHandle*, const char*) override;
     bool streamSound(System*, int*, const char*) override;
     bool streamCollection(System*, ObjectCollection*, const char*) override;
     bool streamEnum(int*, EnumNext, EnumName, const char*) override;

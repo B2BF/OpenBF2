@@ -1,0 +1,9 @@
+; [CHOSEN, not recovered] - the x64 twin of TextureAtlasBuilder.def (issue #7, the native x64 client):
+; input to `lib /def: /machine:x64` in Code\Build\renddx9.cmd x64 so the x64 RendDX9.dll imports the two
+; creates of the x64 TextureAtlasBuilder.dll by name. The names are the x64 MSVC decorations of the same
+; ITextureAtlas.h declarations: 64-bit pointers (PEA) and no __fastcall on x64 (the static creates
+; mangle as __cdecl, SA). Code\Build\textureatlasbuilder.cmd x64 checks its exports against them.
+LIBRARY TextureAtlasBuilder
+EXPORTS
+    ?create@ITextureAtlas@textureatlas@@SAPEAV12@PEAUIDirect3DDevice9@@@Z
+    ?create@ITextureAtlasConfiguration@textureatlas@@SAPEAV12@XZ

@@ -9,15 +9,15 @@
 #include "RendDX9Base.h"
 #include "Texture.h"                   // textureGetLevelSurface (sub_10014950)
 #include "../RendMisc/IRenderView.h"   // the transparency-AA probe's getViewport
-#if BF2_PLUGIN_ABI_NATIVE
 #include "../Core/SettingsRepostitory.h"
-#endif
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <d3d9.h>
 #include "../../RendDX9Abi/D3dx9Sdk.h"
 #include <string.h>                    // strlen / memcpy - the display-mode probes
+#include <new>                         // the base storage's std containers, constructed in place
+#include <vector>
 
 namespace dice {
 namespace hfe {
@@ -60,14 +60,7 @@ int readIntSetting(const char* name, int defaultValue)
 
     int          def   = defaultValue;
     renddx9abi::HostString key(name);
-#if BF2_PLUGIN_ABI_NATIVE
     const int* result = &settings->intGet(key, def);
-#else
-    void**       vtbl  = *reinterpret_cast<void***>(settings);
-    typedef int* (__thiscall* GetIntFn)(void*, const renddx9abi::HostString&, int*);
-    GetIntFn     fn    = reinterpret_cast<GetIntFn>(vtbl[4]);      // +0x10
-    const int*   result = fn(settings, key, &def);
-#endif
     return result ? *result : defaultValue;
 }
 
@@ -80,13 +73,7 @@ void writeIntSetting(const char* name, int value)
 
     int          v    = value;
     renddx9abi::HostString key(name);
-#if BF2_PLUGIN_ABI_NATIVE
     settings->intSet(key, v);
-#else
-    void**       vtbl = *reinterpret_cast<void***>(settings);
-    typedef void (__thiscall* SetIntFn)(void*, const renddx9abi::HostString&, int*);
-    reinterpret_cast<SetIntFn>(vtbl[5])(settings, key, &v);      // +0x14
-#endif
 }
 
 // +0x50, the bool twin of readIntSetting. Same shape: returns a pointer, caller dereferences.
@@ -98,14 +85,7 @@ bool readBoolSetting(const char* name, bool defaultValue)
 
     bool          def = defaultValue;
     renddx9abi::HostString key(name);
-#if BF2_PLUGIN_ABI_NATIVE
     const bool* result = &settings->boolGet(key, def);
-#else
-    void**        vtbl = *reinterpret_cast<void***>(settings);
-    typedef bool* (__thiscall* GetBoolFn)(void*, const renddx9abi::HostString&, bool*);
-    GetBoolFn     fn = reinterpret_cast<GetBoolFn>(vtbl[20]);      // +0x50
-    const bool*   result = fn(settings, key, &def);
-#endif
     return result ? *result : defaultValue;
 }
 
@@ -113,12 +93,12 @@ bool readBoolSetting(const char* name, bool defaultValue)
 // fallback (0x1001860C / 0x10018627): TWO string arguments - name, then a default the caller
 // builds as "" - and the return value in EAX is a string the caller copy-constructs from, i.e. a
 // reference to the stored value. Same pointer-return shape as the int/bool getters.
-void readStringSetting(const char* name, vc71::string& out)
+void readStringSetting(const char* name, std::string& out)
 {
     readStringSettingDefault(name, "", out);
 }
 
-void readStringSettingDefault(const char* name, const char* defaultValue, vc71::string& out)
+void readStringSettingDefault(const char* name, const char* defaultValue, std::string& out)
 {
     out = defaultValue;
     if (!settings)
@@ -126,32 +106,44 @@ void readStringSettingDefault(const char* name, const char* defaultValue, vc71::
 
     renddx9abi::HostString key(name);
     renddx9abi::HostString def(defaultValue);
-#if BF2_PLUGIN_ABI_NATIVE
     const renddx9abi::HostString* result = &settings->stringGet(key, def);
-#else
-    void**       vtbl = *reinterpret_cast<void***>(settings);
-    typedef const renddx9abi::HostString* (__thiscall* GetStringFn)(
-        void*, const renddx9abi::HostString&, const renddx9abi::HostString&);
-    const renddx9abi::HostString* result =
-        reinterpret_cast<GetStringFn>(vtbl[16])(settings, key, def); // +0x40
-#endif
     if (result)
-#if BF2_PLUGIN_ABI_NATIVE
         out = result->c_str();
-#else
-        out = *result;
-#endif
 }
 
-extern void* g_deviceCaps;   // defined below, next to the DeviceCaps struct
+extern void* g_deviceCaps;   // defined below, next to the createDeviceCaps body
+
+// The device-caps object (dword_1023B980). Other TUs still read its D3DCAPS9 head by offset, which
+// is pointer-free and identical on x64; everything past the caps is reached by member here.
+struct DeviceCaps
+{
+    D3DCAPS9               caps;        // +0x000
+    D3DADAPTER_IDENTIFIER9 adapter;     // +0x130
+    int                    gpuFamily;   // +0x57C
+    IDirect3D9*            d3d9;        // +0x580
+    unsigned int           unknown584;  // +0x584
+};
+
+static_assert(sizeof(D3DCAPS9) == 304, "D3DCAPS9 is 304 bytes; GetDeviceCaps writes it at +0");
+// Retail x86 layout evidence. createDeviceCaps allocates sizeof(DeviceCaps), and the x64 object
+// (8-aligned adapter identifier, 8-byte d3d9) is reached only through these members (issue #7).
+#if defined(_M_IX86)
+static_assert(sizeof(DeviceCaps) == 1416,
+              "initializeD3DSubsystems allocates 1416 for it - see RendDX9Init.cpp:218");
+static_assert(offsetof(DeviceCaps, adapter) == 0x130 && offsetof(DeviceCaps, d3d9) == 0x580 &&
+              offsetof(DeviceCaps, unknown584) == 0x584, "the DeviceCaps tail");
+#endif
+
+namespace {
+inline const DeviceCaps* deviceCaps() { return static_cast<const DeviceCaps*>(g_deviceCaps); }
+}
 
 // Returns the pixel-shader major version, or zero when device caps are unavailable.
 int deviceCapsPixelShaderMajor()
 {
     if (!g_deviceCaps)
         return 0;
-    const unsigned int psVersion =
-        *reinterpret_cast<const unsigned int*>(static_cast<const unsigned char*>(g_deviceCaps) + 0xCC);
+    const unsigned int psVersion = deviceCaps()->caps.PixelShaderVersion;           // +0xCC
     return static_cast<int>((psVersion >> 8) & 0xFF);
 }
 
@@ -160,8 +152,7 @@ int deviceCapsVertexShaderMajor()
 {
     if (!g_deviceCaps)
         return 0;
-    const unsigned int vsVersion =
-        *reinterpret_cast<const unsigned int*>(static_cast<const unsigned char*>(g_deviceCaps) + 0xC4);
+    const unsigned int vsVersion = deviceCaps()->caps.VertexShaderVersion;          // +0xC4
     return static_cast<int>((vsVersion >> 8) & 0xFF);
 }
 
@@ -169,16 +160,14 @@ int deviceCapsVertexShaderMajor()
 // DeviceCaps object has been published.
 bool deviceCapsIsAti()
 {
-    return *reinterpret_cast<const unsigned int*>(
-               static_cast<const unsigned char*>(g_deviceCaps) + 0x558) == 0x1002u;
+    return deviceCaps()->adapter.VendorId == 0x1002u;                                 // +0x558
 }
 
 bool deviceCapsIsNvidia()
 {
     if (!g_deviceCaps)
         return false;
-    return *reinterpret_cast<const unsigned int*>(
-               static_cast<const unsigned char*>(g_deviceCaps) + 0x558) == 0x10DEu;
+    return deviceCaps()->adapter.VendorId == 0x10DEu;                                 // +0x558
 }
 
 // CheckDeviceFormat(0, HAL, X8R8G8B8, rendertarget, texture, format).
@@ -186,8 +175,7 @@ bool deviceCapsSupportsTextureFormat(unsigned int format)
 {
     if (!g_deviceCaps)
         return false;
-    IDirect3D9* const d3d = *reinterpret_cast<IDirect3D9**>(
-        static_cast<unsigned char*>(g_deviceCaps) + 0x580);
+    IDirect3D9* const d3d = deviceCaps()->d3d9;                                       // +0x580
     return d3d && SUCCEEDED(d3d->CheckDeviceFormat(
         0, D3DDEVTYPE_HAL, D3DFMT_X8R8G8B8, D3DUSAGE_RENDERTARGET,
         D3DRTYPE_TEXTURE, static_cast<D3DFORMAT>(format)));
@@ -199,10 +187,15 @@ bool deviceCapsSupportsFullSizeRenderTargets()
 {
     if (!g_deviceCaps)
         return false;
-    const unsigned int textureCaps = *reinterpret_cast<const unsigned int*>(
-        static_cast<const unsigned char*>(g_deviceCaps) + 0x3C);
+    const unsigned int textureCaps = deviceCaps()->caps.TextureCaps;                  // +0x3C
     return (textureCaps & D3DPTEXTURECAPS_POW2) == 0
         || (textureCaps & D3DPTEXTURECAPS_NONPOW2CONDITIONAL) != 0;
+}
+
+// The dword at +0x584 (unknown584). Requires the published DeviceCaps object.
+unsigned int deviceCapsUnknown584()
+{
+    return deviceCaps()->unknown584;
 }
 
 namespace {
@@ -215,93 +208,39 @@ inline RendDX9Base* baseOf(void* renderer)
 }
 
 // [CHOSEN, not recovered] - a redundant handle to the primary swap chain.
-// the real store is the vector at base+0xE0 (see swapChainVectorPushBack); this global is kept only
-// as a convenience/debug handle. RW-55 is retired - the offset is read.
+// the real store is the base's swapChains vector (see swapChainVectorPushBack); this global is kept
+// only as a convenience/debug handle. RW-55 is retired - the offset is read.
 IDirect3DSwapChain9* g_primarySwapChain = 0;
 
 
-// Engine-heap swap-chain vector with the VC7.1 allocator-prefixed layout.
-
-struct SwapChainVec
+// sub_1000C630 - push_back onto the base's swap-chain list.
+void swapChainVectorPushBack(RendDX9Base* b, IDirect3DSwapChain9* chain)
 {
-    void*      alloc;   // +0x00
-    IUnknown** first;   // +0x04  what present reads at base+0xE4
-    IUnknown** last;    // +0x08
-    IUnknown** end;     // +0x0C
-};
+    b->swapChains.push_back(chain);
 
-void swapChainVectorPushBack(void* base, IDirect3DSwapChain9* chain)
-{
-    SwapChainVec* v = reinterpret_cast<SwapChainVec*>(
-        static_cast<unsigned char*>(base) + 0xE0);
-
-    if (v->first && v->last < v->end)
-    {
-        *v->last++ = chain;
-    }
-    else
-    {
-        const unsigned int oldCount =
-            v->first ? static_cast<unsigned int>(v->last - v->first) : 0u;
-        const unsigned int newCap = v->first
-            ? static_cast<unsigned int>(v->end - v->first) * 2u
-            : 4u;
-        IUnknown** grown = static_cast<IUnknown**>(
-            ::renddx9abi::engineAlloc(newCap * sizeof(IUnknown*)));
-        if (!grown)
-            return;
-        for (unsigned int i = 0; i < oldCount; ++i)
-            grown[i] = v->first[i];
-        if (v->first)
-            ::renddx9abi::engineFree(v->first);
-        v->alloc = grown;
-        v->first = grown;
-        v->last  = grown + oldCount;
-        v->end   = grown + newCap;
-        *v->last++ = chain;
-    }
-
-    // base+0xF0 - the current swap-chain index present indexes by. The base ctor leaves it 0; make
-    // that explicit so present's chains[index] lands on the primary chain regardless.
-    *reinterpret_cast<unsigned int*>(static_cast<unsigned char*>(base) + 0xF0) = 0;
+    // the current swap-chain index present indexes by. The base ctor leaves it 0; make that
+    // explicit so present's chains[index] lands on the primary chain regardless.
+    b->currentSwapChain = 0;
 }
 
 } // anonymous namespace
 
 
-// Frees the renderer's deep copies of host display-mode ranges.
+// Clears the renderer's deep copies of host display-mode ranges.
 
 void clearDisplayModeCopies(void* renderer)
 {
     RendDX9Base* b = baseOf(renderer);
-    vc71::vector_layout& depth =
-        *reinterpret_cast<vc71::vector_layout*>(&b->depthFormatsAlloc);
-    vc71::vector_layout& multiSample =
-        *reinterpret_cast<vc71::vector_layout*>(&b->multiSampleAlloc);
-    vc71::vector_layout& windows =
-        *reinterpret_cast<vc71::vector_layout*>(&b->hwndAlloc);
 
     // sub_1000C9B0, the display subobject's destructor, uses this exact reverse member order.
-    renddx9abi::clearOwnedDisplayModeVectors(depth, multiSample, windows);
+    b->windows.clear();
+    clearMultiSampleList(b);
+    b->depthFormats.clear();
 }
 
 void copyDisplayModeFrom(void* renderer, const HWndBf2TempSlt* src)
 {
     RendDX9Base* b = baseOf(renderer);
-
-#if !BF2_PLUGIN_ABI_NATIVE
-    // Self-copy must preserve the display-mode lists; clearing before copying would
-    // destroy the source. Native carriers use the separate reapply path.
-    if (src == reinterpret_cast<const HWndBf2TempSlt*>(&b->fullscreen))
-        return;
-#endif
-
-    vc71::vector_layout& depth =
-        *reinterpret_cast<vc71::vector_layout*>(&b->depthFormatsAlloc);
-    vc71::vector_layout& multiSample =
-        *reinterpret_cast<vc71::vector_layout*>(&b->multiSampleAlloc);
-    vc71::vector_layout& windows =
-        *reinterpret_cast<vc71::vector_layout*>(&b->hwndAlloc);
 
     clearDisplayModeCopies(renderer);
 
@@ -325,28 +264,27 @@ void copyDisplayModeFrom(void* renderer, const HWndBf2TempSlt* src)
     b->modeBpp     = src->bpp;
     b->vsync       = src->vsync;
 
-    renddx9abi::assignOwnedDisplayModeVectors(depth, multiSample, windows, *src);
+    b->depthFormats.assign(src->depthFormats.begin(), src->depthFormats.end());
+    assignMultiSampleList(b, renddx9abi::hostMultiSampleFirst(*src),
+                          renddx9abi::hostMultiSampleLast(*src));
+    b->windows.assign(src->windows.begin(), src->windows.end());
 
-    const unsigned int depthCount =
-        b->depthFormatsFirst ? static_cast<unsigned int>(b->depthFormatsLast - b->depthFormatsFirst) : 0u;
-    const unsigned int hwndCount =
-        b->hwndFirst ? static_cast<unsigned int>(b->hwndLast - b->hwndFirst) : 0u;
+    const unsigned int depthCount = static_cast<unsigned int>(b->depthFormats.size());
+    const unsigned int hwndCount  = static_cast<unsigned int>(b->windows.size());
 
-    const unsigned int multiSampleCount =
-        b->multiSampleFirst
-            ? static_cast<unsigned int>((b->multiSampleLast - b->multiSampleFirst) / 2) : 0u;
+    const unsigned int multiSampleCount = static_cast<unsigned int>(b->multiSamples.size());
 
     ::renddx9abi::logf("copyDisplayModeFrom: %ux%u @%uHz %ubpp fullscreen=%u vsync=%u "
                        "depthFormats=%u (first=%d) multisample=%u hwnds=%u",
                        b->modeWidth, b->modeHeight, b->modeRefresh, b->modeBpp,
                        b->fullscreen, b->vsync, depthCount,
-                       depthCount ? static_cast<int>(*b->depthFormatsFirst) : -1,
+                       depthCount ? static_cast<int>(b->depthFormats[0]) : -1,
                        multiSampleCount,
                        hwndCount);
 }
 
 
-// Render-path listeners form a sentinel list and receive each active-path change.
+// Render-path listeners form a list and receive each active-path change.
 
 namespace {
 
@@ -355,74 +293,30 @@ namespace {
 // Loss and destruction traverse backward; reset traverses forward. Loss is notified once
 // until a reset clears the flag, while reset notifications are unconditional.
 
-struct DeviceLostResetNode
-{
-    DeviceLostResetNode* next;
-    DeviceLostResetNode* prev;
-    int                  priority;     // the value's first half; compared unsigned by the sort
-    DeviceLostResetListener* listener; // the value's second half; slot +0x00/+0x04/+0x08 targets
-};
+typedef std::list<DeviceLostResetEntry> DeviceLostResetEntries;
 
-struct DeviceLostResetList
+// PE 0x10002490, the list constructor: empty, both bytes clear.
+void deviceLostResetListCtor(DeviceLostResetList* storage)
 {
-    void*                nodeOwner;
-    DeviceLostResetNode* head;
-    unsigned int         size;
-    unsigned char        deviceLost;
-    unsigned char        dirty;
-    unsigned char        pad0E[2];
-};
-
-#if defined(_M_IX86)
-static_assert(sizeof(DeviceLostResetNode) == 0x10,
-              "DeviceLostResetListenerList node layout drift");
-static_assert(sizeof(DeviceLostResetList) == 0x10,
-              "DeviceLostResetListenerList header layout drift");
-#endif
-
-void deviceLostResetListCtor(void* storage)
-{
-    DeviceLostResetList* const list = static_cast<DeviceLostResetList*>(storage);
-    DeviceLostResetNode* const head = static_cast<DeviceLostResetNode*>(
-        ::renddx9abi::engineAlloc(sizeof(DeviceLostResetNode)));
-    // The shipped constructor writes through this allocation without a null guard.
-    head->next = head;
-    head->prev = head;
-    head->priority = 0;
-    head->listener = 0;
-    list->nodeOwner = 0;
-    list->head = head;
-    list->size = 0;
-    list->deviceLost = 0;
-    list->dirty = 0;
-    list->pad0E[0] = list->pad0E[1] = 0;
+    new (storage) DeviceLostResetList();
 }
 
-// Sorts ascending by priority, retaining registration order for ties.
-// [CHOSEN, not recovered] Relinks nodes rather than moving their values.
+// unsigned, as 0x10002CF3's `jae` compares. Every shipped priority is a small positive immediate
+// (1..5), so the signedness never shows; it is kept for the record.
+struct DeviceLostResetPriorityLess
+{
+    bool operator()(const DeviceLostResetEntry& a, const DeviceLostResetEntry& b) const
+    {
+        return static_cast<unsigned int>(a.priority) < static_cast<unsigned int>(b.priority);
+    }
+};
+
+// Sorts ascending by priority, retaining registration order for ties (std::list::sort is stable).
 void sortDeviceLostResetList(DeviceLostResetList& list)
 {
     if (!list.dirty)
         return;
-
-    DeviceLostResetNode* const head = list.head;
-    DeviceLostResetNode* node = head->next;
-    head->next = head->prev = head;
-    while (node != head)
-    {
-        DeviceLostResetNode* const next = node->next;
-        DeviceLostResetNode* before = head->next;
-        // unsigned, as 0x10002CF3's `jae` compares. Every shipped priority is a small positive
-        // immediate (1..5), so the signedness never shows; it is kept for the record.
-        while (before != head &&
-               static_cast<unsigned int>(before->priority) <= static_cast<unsigned int>(node->priority))
-            before = before->next;
-        node->next = before;
-        node->prev = before->prev;
-        before->prev->next = node;
-        before->prev = node;
-        node = next;
-    }
+    list.entries.sort(DeviceLostResetPriorityLess());
     list.dirty = 0;
 }
 
@@ -444,85 +338,61 @@ void logDeviceLostResetWalk(const char* what, const DeviceLostResetList& list, b
                             unsigned int& hits)
 {
     ++hits;
+    const unsigned int size = static_cast<unsigned int>(list.entries.size());
     if (hits > 2u)
     {
         if ((hits & (hits - 1u)) == 0u)
             ::renddx9abi::logf("DeviceLostResetListenerList: %s broadcast #%u over %u listener(s)",
-                               what, hits, list.size);
+                               what, hits, size);
         return;
     }
     ::renddx9abi::logf("DeviceLostResetListenerList: %s broadcast #%u over %u listener(s)",
-                       what, hits, list.size);
-    const DeviceLostResetNode* node = reverse ? list.head->prev : list.head->next;
-    while (node != list.head)
+                       what, hits, size);
+    struct Local
     {
-        ::renddx9abi::logf("    priority %d  listener 0x%08X  vtable 0x%08X", node->priority,
-                           ::renddx9abi::addr(node->listener),
-                           node->listener
-                               ? ::renddx9abi::addr(*reinterpret_cast<void* const*>(node->listener))
-                               : 0u);
-        node = reverse ? node->prev : node->next;
-    }
+        static void line(const DeviceLostResetEntry& entry)
+        {
+            ::renddx9abi::logf("    priority %d  listener 0x%08X  vtable 0x%08X", entry.priority,
+                               ::renddx9abi::addr(entry.listener),
+                               entry.listener
+                                   ? ::renddx9abi::addr(*reinterpret_cast<void* const*>(entry.listener))
+                                   : 0u);
+        }
+    };
+    if (reverse)
+        for (DeviceLostResetEntries::const_reverse_iterator it = list.entries.rbegin();
+             it != list.entries.rend(); ++it)
+            Local::line(*it);
+    else
+        for (DeviceLostResetEntries::const_iterator it = list.entries.begin();
+             it != list.entries.end(); ++it)
+            Local::line(*it);
 }
 
 DeviceLostResetList& deviceLostResetList()
 {
-    RendDX9Base* const base = static_cast<RendDX9Base*>(g_rendererBase);
-    return *reinterpret_cast<DeviceLostResetList*>(base->deviceLostList);
+    return static_cast<RendDX9Base*>(g_rendererBase)->deviceLostList;
 }
-
-struct RenderPathList
-{
-    int           activeRenderPath;   // +0x00
-    void*         nodeOwner;          // +0x04
-    struct RenderPathNode* head;       // +0x08
-    unsigned int  size;               // +0x0C
-    unsigned char changed;            // +0x10
-};
-
-struct RenderPathNode
-{
-    RenderPathNode*    next;
-    RenderPathNode*    prev;
-    RenderPathListener* listener;
-};
-
-#if defined(_M_IX86)
-static_assert(sizeof(RenderPathNode) == 0x0C, "render-path list node layout drift");
-static_assert(sizeof(RenderPathList) == 0x14, "render-path list header layout drift");
-#endif
 
 } // anonymous namespace
 
 void registerDeviceLostResetListener(DeviceLostResetListener* listener, int priority)
 {
     DeviceLostResetList& list = deviceLostResetList();
-    DeviceLostResetNode* const head = list.head;
-    DeviceLostResetNode* const node = static_cast<DeviceLostResetNode*>(
-        ::renddx9abi::engineAlloc(sizeof(DeviceLostResetNode)));
-    // PE 0x100024B0 appends, increments the list size and marks the ordering dirty.  It likewise
-    // has no allocation-failure arm.
-    node->next = head;
-    node->prev = head->prev;
-    node->priority = priority;
-    node->listener = listener;
-    head->prev->next = node;
-    head->prev = node;
-    ++list.size;
+    // PE 0x100024B0 appends and marks the ordering dirty.
+    const DeviceLostResetEntry entry = { priority, listener };
+    list.entries.push_back(entry);
     list.dirty = 1;
 }
 
 void unregisterDeviceLostResetListener(DeviceLostResetListener* listener)
 {
     DeviceLostResetList& list = deviceLostResetList();
-    for (DeviceLostResetNode* node = list.head->next; node != list.head; node = node->next)
+    for (DeviceLostResetEntries::iterator it = list.entries.begin(); it != list.entries.end(); ++it)
     {
-        if (node->listener != listener)
+        if (it->listener != listener)
             continue;
-        node->prev->next = node->next;
-        node->next->prev = node->prev;
-        ::renddx9abi::engineFree(node);
-        --list.size;
+        list.entries.erase(it);
         return;
     }
 }
@@ -551,8 +421,9 @@ void listBroadcastLost(DeviceLostResetList& list)
     sortDeviceLostResetList(list);
     static unsigned int lostHits = 0;                                            // [CHOSEN] diagnostics
     logDeviceLostResetWalk("onDeviceLost (descending priority)", list, true, lostHits);
-    for (DeviceLostResetNode* node = list.head->prev; node != list.head; node = node->prev)
-        node->listener->onDeviceLost();
+    for (DeviceLostResetEntries::reverse_iterator it = list.entries.rbegin();
+         it != list.entries.rend(); ++it)
+        it->listener->onDeviceLost();
     list.deviceLost = 1;
 }
 
@@ -563,8 +434,8 @@ void listBroadcastReset(DeviceLostResetList& list)
     sortDeviceLostResetList(list);
     static unsigned int resetHits = 0;                                           // [CHOSEN] diagnostics
     logDeviceLostResetWalk("onDeviceReset (ascending priority)", list, false, resetHits);
-    for (DeviceLostResetNode* node = list.head->next; node != list.head; node = node->next)
-        node->listener->onDeviceReset();
+    for (DeviceLostResetEntries::iterator it = list.entries.begin(); it != list.entries.end(); ++it)
+        it->listener->onDeviceReset();
     setLoadStatDeviceLostByte(0);
     list.deviceLost = 0;
 }
@@ -589,51 +460,31 @@ void notifyDeviceLostResetListenersDestroy()
 {
     DeviceLostResetList& list = deviceLostResetList();
     sortDeviceLostResetList(list);
-    for (DeviceLostResetNode* node = list.head->prev; node != list.head; node = node->prev)
-        node->listener->onDeviceDestroy();
+    for (DeviceLostResetEntries::reverse_iterator it = list.entries.rbegin();
+         it != list.entries.rend(); ++it)
+        it->listener->onDeviceDestroy();
 }
 
 void renderPathListCtor(void* list)
 {
-    RenderPathList* l = static_cast<RenderPathList*>(list);
-
-    l->activeRenderPath = 0;
-    l->nodeOwner        = 0;
-
-    // next, prev, payload
-    RenderPathNode* sentinel = static_cast<RenderPathNode*>(
-        ::renddx9abi::engineAlloc(sizeof(RenderPathNode)));
-    if (sentinel)
-    {
-        sentinel->next = sentinel;
-        sentinel->prev = sentinel;
-        sentinel->listener = 0;
-    }
-    l->head    = sentinel;
-    l->size    = 0;
-    l->changed = 0;
+    new (list) RenderPathList();
 }
 
-void setActiveRenderPath(void* list, int path)
+void setActiveRenderPath(RenderPathList& list, int path)
 {
-    RenderPathList* l = static_cast<RenderPathList*>(list);
-
-    if (!l->head)
+    if (!list.constructed)
     {
         RD9_FRONTIER_AT("dice::hfe::dx9rend::RenderPathListenerList::setActiveRenderPath "
-                        "(the list was never constructed - no sentinel node)", list, 0x00);
+                        "(the list was never constructed)", &list, 0x00);
         return;
     }
 
-    RenderPathNode* node = l->head->next;
-    while (node != l->head)
-    {
-        node->listener->onRenderPathActivated(path);
-        node = node->next;
-    }
+    for (std::list<RenderPathListener*>::iterator it = list.listeners.begin();
+         it != list.listeners.end(); ++it)
+        (*it)->onRenderPathActivated(path);
 
-    l->activeRenderPath = path;
-    l->changed          = 1;
+    list.activeRenderPath = path;
+    list.changed          = 1;
 }
 
 // PE 0x1000D170 + 0x10009D80.  Insert immediately before the circular sentinel; if a render path
@@ -642,37 +493,21 @@ void setActiveRenderPath(void* list, int path)
 // shipped Renderer and LightManager implementations make that +0x08 callback a nullsub.
 void registerRenderPathListener(RenderPathListener* listener)
 {
-    RendDX9Base* const base = static_cast<RendDX9Base*>(g_rendererBase);
-    RenderPathList* const l = reinterpret_cast<RenderPathList*>(base->renderPathList);
-    if (!l->head)
+    RenderPathList& list = static_cast<RendDX9Base*>(g_rendererBase)->renderPathList;
+    if (!list.constructed)
     {
         RD9_FRONTIER_AT("dice::hfe::dx9rend::RendDX9_registerRenderPathListener "
-                        "(render-path list has no sentinel)", listener, 0x00);
+                        "(render-path list was never constructed)", listener, 0x00);
         return;
     }
 
-    RenderPathNode* const head = l->head;
-    RenderPathNode* const before = head->prev;
-    RenderPathNode* const node = static_cast<RenderPathNode*>(
-        ::renddx9abi::engineAlloc(sizeof(RenderPathNode)));
-    if (!node)
-    {
-        RD9_FRONTIER_AT("dice::hfe::dx9rend::RendDX9_registerRenderPathListener "
-                        "(list-node allocation failed)", listener, 0x00);
-        return;
-    }
-    node->next = head;
-    node->prev = before;
-    node->listener = listener;
-    before->next = node;
-    head->prev = node;
-    ++l->size;
+    list.listeners.push_back(listener);
 
-    if (l->changed)
-        listener->onRenderPathActivated(l->activeRenderPath);
+    if (list.changed)
+        listener->onRenderPathActivated(list.activeRenderPath);
 
-    RenderPathListener* const rendererListener = reinterpret_cast<RenderPathListener*>(
-        static_cast<unsigned char*>(g_rendererBase) + 0x540);
+    // The Renderer's +0x540 subobject, named by its owner TU (issue #7).
+    RenderPathListener* const rendererListener = rendererRenderPathListener();
     listener->onRenderPathChanged(rendererListener->getCurrentRenderPath());
 }
 
@@ -681,24 +516,18 @@ void registerRenderPathListener(RenderPathListener* listener)
 // a nullsub, but preserving the dispatch matters for the shared listener contract.
 void unregisterRenderPathListener(RenderPathListener* listener)
 {
-    RendDX9Base* const base = static_cast<RendDX9Base*>(g_rendererBase);
-    RenderPathList* const list = reinterpret_cast<RenderPathList*>(base->renderPathList);
-    RenderPathNode* const head = list->head;
-    RenderPathNode* node = head->next;
-    while (node != head && node->listener != listener)
-        node = node->next;
-
-    if (node != head)
+    RenderPathList& list = static_cast<RendDX9Base*>(g_rendererBase)->renderPathList;
+    for (std::list<RenderPathListener*>::iterator it = list.listeners.begin();
+         it != list.listeners.end(); ++it)
     {
-        RenderPathNode* const next = node->next;
-        RenderPathNode* const previous = node->prev;
-        previous->next = next;
-        next->prev = previous;
-        ::renddx9abi::engineFree(node);
-        --list->size;
+        if (*it == listener)
+        {
+            list.listeners.erase(it);
+            break;
+        }
     }
 
-    if (list->changed)
+    if (list.changed)
         listener->onRenderPathDeactivated();
 }
 
@@ -716,8 +545,7 @@ void unregisterRenderPathListener(void* listener)
 // range check; all recovered callers pass a literal in [0, 20].
 bool rendererPerformanceFlag(unsigned int bit)
 {
-    const unsigned int flags = *reinterpret_cast<const unsigned int*>(
-        static_cast<const unsigned char*>(g_rendererBase) + 0x518);
+    const unsigned int flags = static_cast<const RendDX9Base*>(g_rendererBase)->performanceFlags;
     const unsigned int mask = 1u << bit;
     return (flags & mask) == mask;
 }
@@ -736,9 +564,9 @@ void buildPresentParameters(void* renderer)
     b->pp.EnableAutoDepthStencil = TRUE;
 
     // *(this+76) = *v3, where v3 = *(this+176) - the depth vector's _First, dereferenced unguarded.
-    if (b->depthFormatsFirst)
+    if (!b->depthFormats.empty())
     {
-        b->pp.AutoDepthStencilFormat = static_cast<D3DFORMAT>(*b->depthFormatsFirst);
+        b->pp.AutoDepthStencilFormat = static_cast<D3DFORMAT>(b->depthFormats[0]);
     }
     else
     {
@@ -752,10 +580,10 @@ void buildPresentParameters(void* renderer)
     }
 
     // The multisample pair, 8 bytes, only if the vector is non-empty.
-    if (b->multiSampleFirst && (b->multiSampleLast - b->multiSampleFirst) >= 2)
+    if (!b->multiSamples.empty())
     {
-        b->pp.MultiSampleType    = static_cast<D3DMULTISAMPLE_TYPE>(b->multiSampleFirst[0]);
-        b->pp.MultiSampleQuality = b->multiSampleFirst[1];
+        b->pp.MultiSampleType    = static_cast<D3DMULTISAMPLE_TYPE>(b->multiSamples[0].type);
+        b->pp.MultiSampleQuality = b->multiSamples[0].quality;
     }
 
     b->pp.SwapEffect      = D3DSWAPEFFECT_DISCARD;   // 1
@@ -784,7 +612,7 @@ void buildPresentParameters(void* renderer)
     }
 
     // hDeviceWindow = *_First of the hwnd vector - the window BF2 pushed in at 0x45468A.
-    b->pp.hDeviceWindow = b->hwndFirst ? reinterpret_cast<HWND>(*b->hwndFirst) : 0;
+    b->pp.hDeviceWindow = !b->windows.empty() ? reinterpret_cast<HWND>(b->windows[0]) : 0;
 
     ::renddx9abi::logf("presentParameters: %ux%u fmt=%d depth=%d windowed=%d refresh=%u "
                        "interval=0x%08X hWnd=0x%08X",
@@ -803,10 +631,10 @@ bool createPrimaryD3DDevice(void* renderer)
 {
     RendDX9Base* b = baseOf(renderer);
 
-    if (!b->d3d9 || !b->hwndFirst)
+    if (!b->d3d9 || b->windows.empty())
         return false;
 
-    HWND hwnd = reinterpret_cast<HWND>(*b->hwndFirst);
+    HWND hwnd = reinterpret_cast<HWND>(b->windows[0]);
 
     // Keep the window-info query even though the result is unused.
     WINDOWINFO pwi;
@@ -860,10 +688,10 @@ bool createPrimaryD3DDevice(void* renderer)
         return false;
     }
 
-    // sub_1000C630(&swapChain) - a vc71 vector<IUnknown*>::push_back onto the
-    // member at base+0xE0 (the shipped caller does `lea ecx,[esi+0E0h]`). Renderer::present reads
-    // this vector's _First at base+0xE4 and indexes it by base+0xF0, so leaving it empty is a null
-    // dereference the first time the menu presents - which is exactly the crash a retail run hit.
+    // sub_1000C630(&swapChain) - push_back onto the swap-chain list (retail base+0xE0; the shipped
+    // caller does `lea ecx,[esi+0E0h]`). Renderer::present indexes this list by currentSwapChain,
+    // so leaving it empty is a null dereference the first time the menu presents - which is
+    // exactly the crash a retail run hit.
     swapChainVectorPushBack(b, swapChain);
     g_primarySwapChain = swapChain;
 
@@ -880,7 +708,7 @@ bool createD3DDeviceAndSwapChains(void* renderer)
 {
     RendDX9Base* b = baseOf(renderer);
 
-    if (!b->d3d9 || !b->hwndFirst)
+    if (!b->d3d9 || b->windows.empty())
         return false;
 
     // IDirect3D9::GetAdapterDisplayMode - vtable +32, slot 8.
@@ -915,7 +743,7 @@ bool createD3DDeviceAndSwapChains(void* renderer)
         return false;
     }
 
-    HWND hwnd = reinterpret_cast<HWND>(*b->hwndFirst);
+    HWND hwnd = reinterpret_cast<HWND>(b->windows[0]);
 
     // The same CreateDevice and the same single puredevice retry as the fullscreen path, with its
     // own pair of line numbers.
@@ -958,7 +786,7 @@ bool createD3DDeviceAndSwapChains(void* renderer)
         ::renddx9abi::logf("RendDX9Init.cpp:557 Failed to get swap chain 0 ptr.");
         return false;
     }
-    swapChainVectorPushBack(b, swapChain0);     // base+0xE0 - see createPrimaryD3DDevice's note
+    swapChainVectorPushBack(b, swapChain0);     // see createPrimaryD3DDevice's note
     g_primarySwapChain = swapChain0;
 
     ::renddx9abi::logf("createD3DDeviceAndSwapChains: device=0x%08X swapChain0=0x%08X "
@@ -968,12 +796,11 @@ bool createD3DDeviceAndSwapChains(void* renderer)
 
     // One additional swap chain per remaining window. i starts at 1 - swap chain 0 belongs to the
     // window the device was created against.
-    const unsigned int windowCount =
-        static_cast<unsigned int>(b->hwndLast - b->hwndFirst);
+    const unsigned int windowCount = static_cast<unsigned int>(b->windows.size());
 
     for (unsigned int i = 1; i < windowCount; ++i)
     {
-        b->pp.hDeviceWindow = reinterpret_cast<HWND>(b->hwndFirst[i]);
+        b->pp.hDeviceWindow = reinterpret_cast<HWND>(b->windows[i]);
 
         // IDirect3DDevice9::CreateAdditionalSwapChain - vtable +52, slot 13.
         IDirect3DSwapChain9* extra = 0;
@@ -986,7 +813,7 @@ bool createD3DDeviceAndSwapChains(void* renderer)
             return false;
         }
 
-        // sub_1000C630 again - push the extra chain into the same vector at base+0xE0.
+        // sub_1000C630 again - push the extra chain onto the same list.
         swapChainVectorPushBack(b, extra);
         ::renddx9abi::logf("createD3DDeviceAndSwapChains: additional swap chain %u = 0x%08X",
                            i, ::renddx9abi::addr(extra));
@@ -1060,19 +887,6 @@ int classifyGpu(const D3DADAPTER_IDENTIFIER9& id)
 
 } // anonymous namespace
 
-struct DeviceCaps
-{
-    D3DCAPS9               caps;        // +0x000
-    D3DADAPTER_IDENTIFIER9 adapter;     // +0x130
-    int                    gpuFamily;   // +0x57C
-    IDirect3D9*            d3d9;        // +0x580
-    unsigned int           unknown584;  // +0x584
-};
-
-static_assert(sizeof(D3DCAPS9) == 304, "D3DCAPS9 is 304 bytes; GetDeviceCaps writes it at +0");
-static_assert(sizeof(DeviceCaps) == 1416,
-              "initializeD3DSubsystems allocates 1416 for it - see RendDX9Init.cpp:218");
-
 // dword_1023B980 in the shipped image. ShaderManager and Ra::EffectManager read it directly.
 void* g_deviceCaps = 0;
 
@@ -1105,9 +919,9 @@ bool createDeviceCaps(void* renderer)
     g_deviceCaps = dc;
 
     // qmemcpy(this + 304, base[232], 0x44C) - the first adapter's identifier, copied whole.
-    if (b->adapterInfoFirst)
+    if (!b->adapterInfo.empty())
     {
-        dc->adapter = b->adapterInfoFirst[0];
+        dc->adapter = b->adapterInfo[0];
     }
     else
     {
@@ -1148,29 +962,21 @@ bool createD3DDevice(void* renderer)
     {
         const UINT count = b->d3d9->GetAdapterCount();
 
-        // Capture complete adapter identifiers for subsequent DeviceCaps reads.
+        // Capture complete adapter identifiers for subsequent DeviceCaps reads; only the
+        // identifiers that were read are kept.
         if (count)
         {
-            D3DADAPTER_IDENTIFIER9* list = static_cast<D3DADAPTER_IDENTIFIER9*>(
-                ::renddx9abi::engineAlloc(count * sizeof(D3DADAPTER_IDENTIFIER9)));
+            b->adapterInfo.reserve(count);
 
-            if (list)
+            for (UINT i = 0; i < count; ++i)
             {
-                ::memset(list, 0, count * sizeof(D3DADAPTER_IDENTIFIER9));
-                b->adapterInfoAlloc = list;
-                b->adapterInfoFirst = list;
-                b->adapterInfoLast  = list;
-                b->adapterInfoEnd   = list + count;
-
-                for (UINT i = 0; i < count; ++i)
+                D3DADAPTER_IDENTIFIER9 identifier;
+                ::memset(&identifier, 0, sizeof(identifier));
+                if (SUCCEEDED(b->d3d9->GetAdapterIdentifier(i, 0, &identifier)))
                 {
-                    if (SUCCEEDED(b->d3d9->GetAdapterIdentifier(i, 0, b->adapterInfoLast)))
-                    {
-                        ::renddx9abi::logf("adapter %u: %s / %s", i,
-                                           b->adapterInfoLast->Description,
-                                           b->adapterInfoLast->Driver);
-                        ++b->adapterInfoLast;
-                    }
+                    ::renddx9abi::logf("adapter %u: %s / %s", i,
+                                       identifier.Description, identifier.Driver);
+                    b->adapterInfo.push_back(identifier);
                 }
             }
         }
@@ -1374,7 +1180,7 @@ bool resetDevice(void* renderer)
 bool handleLostDevice(void* renderer)
 {
     RendDX9Base* const b = baseOf(renderer);
-    DeviceLostResetList& list = *reinterpret_cast<DeviceLostResetList*>(b->deviceLostList);
+    DeviceLostResetList& list = b->deviceLostList;
 
     bool lostSent  = false;     // bl
     bool resetDone = false;     // [ebp-1]
@@ -1581,8 +1387,7 @@ bool rendererRenderProbe(void* renderer, const char* vertexShader, const char* p
         textureGetLevelSurface(rendererGetHemiScratchTexture(), 0, 0x7FFFFFFFu);      // edi
     // the source is the Renderer's back-buffer reference, also read
     // through dword_1023D098 (the Renderer's reset listener fills +0x76C with GetBackBuffer).
-    IDirect3DSurface9* const backBuffer = *reinterpret_cast<IDirect3DSurface9**>(
-        reinterpret_cast<unsigned char*>(g_Renderer) + 0x76C);
+    IDirect3DSurface9* const backBuffer = rendererBackBufferSurface();             // +0x76C
     b->device->StretchRect(backBuffer, 0, target, 0, D3DTEXF_NONE);     // +0x88
 
     D3DSURFACE_DESC desc;                                               // [ebp-4Ch]
@@ -1712,7 +1517,8 @@ void rendererProbeMultisample(void* renderer)
                                            0xFFFBFBFBu, 0xFFFFFFFFu, 0, 0);
     stateManagerPop();
 
-    const bool requested = *reinterpret_cast<const int*>(b->multiSampleFirst) > 0;
+    // Unguarded, as shipped: the list's first type is read even when it holds no storage.
+    const bool requested = *reinterpret_cast<const int*>(b->multiSamples.data()) > 0;
     if (!requested)
     {
         if (found)
@@ -1732,12 +1538,22 @@ void constructD3DHalf(void* renderer)
 {
     RendDX9Base* b = baseOf(renderer);
 
+    // [CHOSEN, not recovered] The base storage's std containers (issue #7) are constructed first,
+    // the way a C++ constructor builds its members before its body; destructD3DHalf destroys them.
+    // The embedded VideoOptions builds its own below.
+    new (&b->modeList) std::vector<Mode40>();
+    new (&b->depthFormats) std::vector<unsigned int>();
+    new (&b->multiSamples) std::vector<MultiSample8>();
+    new (&b->windows) std::vector<void*>();
+    new (&b->swapChains) std::vector<IDirect3DSwapChain9*>();
+    new (&b->adapterInfo) std::vector<D3DADAPTER_IDENTIFIER9>();
+
     // DeviceLostResetListenerList_ctor(this + 92), PE 0x10002490.
-    deviceLostResetListCtor(b->deviceLostList);
+    deviceLostResetListCtor(&b->deviceLostList);
 
     // RenderPathListenerList_ctor(this + 108). Built here because Renderer::initialize step 5
     // pushes the GSRenderPath setting into it.
-    renderPathListCtor(b->renderPathList);
+    renderPathListCtor(&b->renderPathList);
 
     // two of the base constructor's scalar stores the frame bracket and the
     // device-loss core read (the Renderer constructor has already zeroed the whole base storage, so
@@ -1803,6 +1619,31 @@ void constructD3DHalf(void* renderer)
     }
 
     initializeD3DSubsystems(renderer);   // result discarded, as shipped
+}
+
+// Runs the destructors of the std containers in the base storage, in reverse member order. The
+// shipped base destructor (beyond its sub_1000C9B0 display-copy part, clearDisplayModeCopies)
+// remains unrecovered; this only ends the containers' lifetimes before the object is freed.
+void destructD3DHalf(void* renderer)
+{
+    typedef std::vector<Mode40>                  ModeList;
+    typedef std::vector<unsigned int>            DepthFormatList;
+    typedef std::vector<void*>                   WindowList;
+    typedef std::vector<IDirect3DSwapChain9*>    SwapChainList;
+    typedef std::vector<D3DADAPTER_IDENTIFIER9>  AdapterList;
+    typedef std::vector<MultiSample8>            MultiSampleList;
+
+    // Reverse declaration order.
+    RendDX9Base* b = baseOf(renderer);
+    b->videoOptions.~VideoOptions();
+    b->adapterInfo.~AdapterList();
+    b->swapChains.~SwapChainList();
+    b->windows.~WindowList();
+    b->multiSamples.~MultiSampleList();
+    b->depthFormats.~DepthFormatList();
+    b->modeList.~ModeList();
+    b->renderPathList.~RenderPathList();
+    b->deviceLostList.~DeviceLostResetList();
 }
 
 } // namespace dx9rend

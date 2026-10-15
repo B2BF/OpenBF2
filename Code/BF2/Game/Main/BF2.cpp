@@ -88,7 +88,14 @@ namespace io { extern IBase* inputManager; }        // ds:0x8AC8CA4 - Core/Globa
 static void allowAccessibilityShortcutKeys(bool allow);
 static void restoreDesktopSettings();
 #  if !DEDICATED
-static BOOL CALLBACK lockLoadedModule(PCSTR moduleName, ULONG moduleBase, ULONG moduleSize, PVOID userContext);
+#    if defined(_M_IX86)
+typedef ULONG LoadedModuleBase;
+#    else
+// [CHOSEN, not recovered] x64 (https://github.com/B2BF/OpenBF2/issues/7): dbghelp maps
+// EnumerateLoadedModules to EnumerateLoadedModules64, whose callback takes a 64-bit base.
+typedef DWORD64 LoadedModuleBase;
+#    endif
+static BOOL CALLBACK lockLoadedModule(PCSTR moduleName, LoadedModuleBase moduleBase, ULONG moduleSize, PVOID userContext);
 static void trimOtherProcessesAndFileCache();
 static int  bf2MessageHandler(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 #  endif
@@ -295,9 +302,9 @@ static void restoreDesktopSettings()
 // the memory-locking trio of BF2::init (client only)
 
 // . The IDB named it after its use: every loaded module's pages get locked.
-static BOOL CALLBACK lockLoadedModule(PCSTR /*moduleName*/, ULONG moduleBase, ULONG moduleSize, PVOID /*userContext*/)
+static BOOL CALLBACK lockLoadedModule(PCSTR /*moduleName*/, LoadedModuleBase moduleBase, ULONG moduleSize, PVOID /*userContext*/)
 {
-    VirtualLock(reinterpret_cast<LPVOID>(moduleBase), moduleSize);
+    VirtualLock(reinterpret_cast<LPVOID>(static_cast<ULONG_PTR>(moduleBase)), moduleSize);
     return TRUE;
 }
 

@@ -6,25 +6,21 @@
 #ifdef BF2_IMAGE_RENDDX9
 
 #include "../../RendDX9Abi/ModuleCommon.h"
-#include "../../RendDX9Abi/Vc71Map.h"
-#include "../../RendDX9Abi/Vc71String.h"
-#include "../../RendDX9Abi/Vc71Vector.h"
+#include <string>
 #include "../../RendDX9Abi/PluginEntry.h"
 #include "../../RendDX9Abi/BfMemory.h"
 #include "../../RendDX9Abi/Frontier.h"
 #include "../Core/EventManager.h"
 #include "../RendDX9/RendDX9Base.h"
-#if BF2_PLUGIN_ABI_NATIVE
 #include "../IO/Console/Console.h"          // getConsoleWorkingPath: typed (RW-266)
-#endif
 #include "MeshTemplate.h"
+#include "GeometryTemplateManager.h"
 
 #include <new>
+#include <string.h>
 
-#if BF2_PLUGIN_ABI_NATIVE
 #include "../Core/ConsoleObjectMacro.h"
 #include "../Core/ConsoleObjects.h"
-#endif
 
 namespace dice {
 namespace hfe {
@@ -36,6 +32,11 @@ extern const unsigned int IID_IGeometryTemplateManager = 0xAD9665BCu;
 extern const unsigned int CID_GeometryTemplateManager  = 0x870CA329u;
 
 extern IBase* g_GeometryTemplateManager;
+
+bool GeometryTemplateNameLess::operator()(const std::string& a, const std::string& b) const
+{
+    return ::_stricmp(a.c_str(), b.c_str()) < 0;
+}
 
 // Slot +0x10 on the interface prefix is still unknown.  Do not invent a declaration merely to
 // reach the instruction-proven +0x14/+0x1C setters: keep the owner opaque and isolate those two
@@ -49,95 +50,76 @@ IBase* templateBase(IGeometryTemplate* value)
     return reinterpret_cast<IBase*>(value);
 }
 
-void setTemplateName(IGeometryTemplate* value, const vc71::string& name)
+void setTemplateName(IGeometryTemplate* value, const std::string& name)
 {
-    typedef void (__thiscall *Fn)(void*, const vc71::string&);
-    void* target = (*reinterpret_cast<void***>(value))[0x14 / sizeof(void*)];
+    typedef void (__thiscall *Fn)(void*, const std::string&);
+    void* target = (*reinterpret_cast<void***>(value))[0x14 / 4];
     reinterpret_cast<Fn>(target)(value, name);
 }
 
-void setTemplatePath(IGeometryTemplate* value, const vc71::string& path)
+void setTemplatePath(IGeometryTemplate* value, const std::string& path)
 {
-    typedef void (__thiscall *Fn)(void*, const vc71::string&);
-    void* target = (*reinterpret_cast<void***>(value))[0x1C / sizeof(void*)];
+    typedef void (__thiscall *Fn)(void*, const std::string&);
+    void* target = (*reinterpret_cast<void***>(value))[0x1C / 4];
     reinterpret_cast<Fn>(target)(value, path);
 }
 
 // The owning map's pair destructor at 0x100B1174 releases its interface value first and destroys
-// its key second.  mapEraseWithValueDestroy invokes this hook only after the node has been unlinked,
-// matching the observable re-entrant ordering of PE 0x100C7371.
-void releaseMappedInterface(vc71::map_node* node)
+// its key second.
+void releaseMappedInterface(IGeometryTemplate* value)
 {
-    IBase* value = static_cast<IBase*>(vc71::mapNodeValue(node));
-    if (value)
-        value->release();
+    IBase* const base = templateBase(value);
+    if (base)
+        base->release();
 }
 
-// recurse through the right subtree, destroy the current node, then
-// continue down the left side.  The tree stays linked during value release just as retail's
-// std::map::_Erase does; this deliberately preserves its awkward re-entrant view while clearing.
-// The traversal algorithm is recovered, but the node shape remains Vc71Map's unbalanced
-// [CHOSEN, not recovered] RW-74 tree; destruction order can therefore differ after insertions.
-void clearOwnedSubtree(vc71::map_node* node, vc71::map_node* head)
+// Unlinks one entry, then releases its interface - the observable re-entrant ordering of
+// PE 0x100C7371: a re-entrant lookup during the release no longer finds the entry.
+void eraseOwnedEntry(GeometryTemplateRegistry& map, GeometryTemplateRegistry::iterator entry)
 {
-    while (node && node != head)
-    {
-        clearOwnedSubtree(node->right, head);
-        vc71::map_node* left = node->left;
-        releaseMappedInterface(node);
-        reinterpret_cast<vc71::string*>(node->value)->~string();
-        ::renddx9abi::engineFree(node);
-        node = left;
-    }
+    IGeometryTemplate* const value = entry->second;
+    map.erase(entry);
+    releaseMappedInterface(value);
 }
 
-void clearOwnedMap(vc71::map_layout& map)
+// std::map::_Erase from the root: right subtree, node, left subtree - descending key order -
+// with the tree still linked while each interface is released; then the map is relinked empty.
+void clearOwnedMap(GeometryTemplateRegistry& map)
 {
-    if (!map.head)
-        return;
-    clearOwnedSubtree(map.head->parent, map.head);
-    map.relinkEmpty();
+    for (GeometryTemplateRegistry::reverse_iterator it = map.rbegin(); it != map.rend(); ++it)
+        releaseMappedInterface(it->second);
+    map.clear();
 }
 
-void destroyOwnedMap(vc71::map_layout& map)
+// clear, then the head node. The owner frees its storage afterwards without running a C++
+// destructor, so the map is destroyed here.
+void destroyOwnedMap(GeometryTemplateRegistry& map)
 {
     clearOwnedMap(map);
-    if (map.head)
-        ::renddx9abi::engineFree(map.head);
-    map.comp = 0;
-    map.head = 0;
-    map.size = 0;
+    map.~GeometryTemplateRegistry();
 }
 
 // A non-owning, manually-lived slot lets release() reproduce retail's exact member teardown order:
 // optimizer map, vector, string, active reference, template map.  A normal C++ string member would
 // be destroyed after the destructor body and therefore move it past the active release.
-union Vc71StringStorage
+union ManualStringStorage
 {
-    char  bytes[sizeof(vc71::string)];
+    char  bytes[sizeof(std::string)];
     void* alignment;
 
-    Vc71StringStorage() {}
-    ~Vc71StringStorage() {}
+    ManualStringStorage() {}
+    ~ManualStringStorage() {}
 
-    vc71::string& get() { return *reinterpret_cast<vc71::string*>(bytes); }
+    std::string& get() { return *reinterpret_cast<std::string*>(bytes); }
 };
 
-static_assert(sizeof(Vc71StringStorage) == sizeof(vc71::string),
-              "manual VC7.1 string storage must remain 28 bytes");
+static_assert(sizeof(ManualStringStorage) == sizeof(std::string),
+              "manual string storage must match the string");
 
 const renddx9abi::HostString& getConsoleWorkingPath()
 {
-    // HostString selects the native or VC7.1 return type across the console boundary.
     // The published pointer addresses the Console object even though it has no IBase base.
-#if BF2_PLUGIN_ABI_NATIVE
     return reinterpret_cast<io::Console*>(mainConsole)->getWorkingPath();
-#else
-    typedef const renddx9abi::HostString& (__thiscall *Fn)(void*);
-    void* console = static_cast<void*>(mainConsole);
-    void* target = (*reinterpret_cast<void***>(console))[0x84 / sizeof(void*)];
-    return reinterpret_cast<Fn>(target)(console);
-#endif
 }
 
 } // anonymous namespace
@@ -172,40 +154,36 @@ public:
     virtual int getUsedTemplateCount();                                      // +0x44
     virtual void slot_0x48();
     virtual void slot_0x4C();
-    virtual bool registerOptimizer(const vc71::string& className,
-                                   const vc71::string& key);                   // +0x50
+    virtual bool registerOptimizer(const std::string& className,
+                                   const std::string& key);                   // +0x50
     virtual void runOptimizers();                                               // +0x54
     virtual void clearOptimizers();                                             // +0x58
     virtual void slot_0x5C();
-    virtual vc71::map_layout* getTemplateRegistry();                            // +0x60
+    virtual GeometryTemplateRegistry* getTemplateRegistry();                    // +0x60
 
 private:
     void destroyOwnedMembers();
-    IGeometryTemplate* createQualified(const vc71::string& typeName,
-                                       const vc71::string& fullName);
+    IGeometryTemplate* createQualified(const std::string& typeName,
+                                       const std::string& fullName);
 
     int                 m_refCount;        // +0x04
-    vc71::map_layout    m_templates;       // +0x08, no-case string -> owning template pointer
+    GeometryTemplateRegistry m_templates;  // +0x08, no-case string -> owning template pointer
     IGeometryTemplate*  m_active;          // +0x14, owning
-    Vc71StringStorage   m_string18;        // +0x18, purpose unresolved
-    vc71::vector_layout m_vector34;        // +0x34
-    vc71::map_layout    m_optimizers;      // +0x44, owning optimizer pointer
+    ManualStringStorage m_string18;        // +0x18, purpose unresolved
+    // [UNRESOLVED] element type: nothing recovered reads or fills it.
+    std::vector<unsigned char> m_vector34; // +0x34
+    // Owning optimizer pointers. Nothing inserts yet (registerOptimizer's insertion is a frontier),
+    // so its comparator is unobserved; it shares the registry's type. [CHOSEN, not recovered]
+    GeometryTemplateRegistry m_optimizers; // +0x44
 };
 
-static_assert(sizeof(GeometryTemplateManager) == 0x50,
-              "RefFactory_geom_GeometryTemplateManager allocates 0x50");
-
+// Retail allocation (RefFactory_geom_GeometryTemplateManager) is 0x50 bytes. Both maps are
+// default-constructed; the string slot is built in place.
 GeometryTemplateManager::GeometryTemplateManager()
     : m_refCount(1)
     , m_active(0)
 {
-    m_templates.construct();
-    new (m_string18.bytes) vc71::string();
-    m_vector34.alloc = 0;
-    m_vector34.first = 0;
-    m_vector34.last  = 0;
-    m_vector34.end   = 0;
-    m_optimizers.construct();
+    new (m_string18.bytes) std::string();
 }
 
 void GeometryTemplateManager::addRef()
@@ -223,13 +201,10 @@ void GeometryTemplateManager::destroyOwnedMembers()
     // PE 0x100C8751, in this exact order.
     destroyOwnedMap(m_optimizers);
 
-    if (m_vector34.first)
-        ::renddx9abi::engineFree(m_vector34.first);
-    m_vector34.first = 0;
-    m_vector34.last = 0;
-    m_vector34.end = 0;
+    typedef std::vector<unsigned char> UnresolvedVector;
+    m_vector34.~UnresolvedVector();
 
-    m_string18.get().~string();
+    m_string18.get().~basic_string();
 
     if (m_active)
         templateBase(m_active)->release();
@@ -281,24 +256,22 @@ void GeometryTemplateManager::registerTemplate(IGeometryTemplate* value,
     if (!value)
         return;
 
-    // The registry is keyed by vc71 strings; convert once here.  Identity in the compat flavour.
-    const vc71::string& name = ::renddx9abi::toVc71String(hostName);
+    // The registry's own key copy of the host string.
+    const std::string& name = ::renddx9abi::fromHostString(hostName);
 
-    vc71::map_node* node = vc71::mapInsertInsensitive(m_templates, 0x30, name);
-    if (!node)
-    {
-        RD9_FRONTIER("dice::hfe::geom::GeometryTemplateManager::registerTemplate "
-                     "(VC7.1 map allocation failed)", 0x10);
-    }
+    // operator[]: the existing entry, or a fresh one holding null.
+    const GeometryTemplateRegistry::iterator node =
+        m_templates.insert(
+            GeometryTemplateRegistry::value_type(name, static_cast<IGeometryTemplate*>(0))).first;
 
-    IBase* old = static_cast<IBase*>(vc71::mapNodeValue(node));
+    IBase* old = templateBase(node->second);
     if (old)
     {
         old->release();
-        vc71::mapNodeValueRef(node) = 0;
+        node->second = 0;
     }
 
-    vc71::mapNodeValueRef(node) = value;
+    node->second = value;
     templateBase(value)->addRef();
     setTemplateName(value, name);
     setActive(value);
@@ -307,13 +280,12 @@ void GeometryTemplateManager::registerTemplate(IGeometryTemplate* value,
 IGeometryTemplate* GeometryTemplateManager::createTemplate(unsigned int classId,
                                                            const ::renddx9abi::HostString& hostName)
 {
-    const vc71::string& name = ::renddx9abi::toVc71String(hostName);
+    const std::string& name = ::renddx9abi::fromHostString(hostName);
 
-    vc71::map_node* found = vc71::mapFindInsensitive(m_templates, name);
-    if (found)
+    const GeometryTemplateRegistry::iterator found = m_templates.find(name);
+    if (found != m_templates.end())
     {
-        IGeometryTemplate* value =
-            static_cast<IGeometryTemplate*>(vc71::mapNodeValue(found));
+        IGeometryTemplate* value = found->second;
         setActive(value);
         return value;
     }
@@ -326,52 +298,46 @@ IGeometryTemplate* GeometryTemplateManager::createTemplate(unsigned int classId,
         return 0;
     }
 
-    vc71::map_node* node = vc71::mapInsertInsensitive(m_templates, 0x30, name);
-    if (!node)
-    {
-        RD9_FRONTIER("dice::hfe::geom::GeometryTemplateManager::createTemplate "
-                     "(VC7.1 map allocation failed)", 0x14);
-    }
+    // operator[] again: the factory may have registered the name in the meantime.
+    const GeometryTemplateRegistry::iterator node =
+        m_templates.insert(
+            GeometryTemplateRegistry::value_type(name, static_cast<IGeometryTemplate*>(0))).first;
 
-    vc71::mapNodeValueRef(node) = value;
-    reinterpret_cast<unsigned char*>(value)[4] = 0; // GeometryTemplate's shipped load/keep byte.
+    node->second = value;
+    reinterpret_cast<GeometryTemplate*>(value)->m_keepData = 0; // the shipped load/keep byte, +4
     templateBase(value)->addRef();                  // registry ownership
     setTemplateName(value, name);
 
     const renddx9abi::HostString& hostPath = getConsoleWorkingPath();
-#if BF2_PLUGIN_ABI_NATIVE
-    const vc71::string templatePath(hostPath.data(),
+    const std::string templatePath(hostPath.data(),
                                     static_cast<unsigned int>(hostPath.size()));
     setTemplatePath(value, templatePath);
-#else
-    setTemplatePath(value, hostPath);
-#endif
 
     setActive(value);
     templateBase(value)->release();                 // drop the factory reference
     return value;                                   // borrowed from registry/active
 }
 
-IGeometryTemplate* GeometryTemplateManager::createQualified(const vc71::string& typeName,
-                                                            const vc71::string& fullName)
+IGeometryTemplate* GeometryTemplateManager::createQualified(const std::string& typeName,
+                                                            const std::string& fullName)
 {
-    vc71::string className("dice.hfe.geom.GeometryTemplate.");
+    std::string className("dice.hfe.geom.GeometryTemplate.");
     className += typeName;
 
     unsigned int classId = 0;
     if (!classManager->getClassID(renddx9abi::HostString(className.c_str()), &classId))
         return 0;
-    // createTemplate is a host-typed slot, so an internal vc71 caller converts on the way in.
+    // createTemplate is a host-typed slot; the internal caller passes a host string.
     return createTemplate(classId, ::renddx9abi::toHostString(fullName));
 }
 
 IGeometryTemplate* GeometryTemplateManager::getTemplate(const ::renddx9abi::HostString& hostName)
 {
-    const vc71::string& name = ::renddx9abi::toVc71String(hostName);
+    const std::string& name = ::renddx9abi::fromHostString(hostName);
 
-    vc71::map_node* found = vc71::mapFindInsensitive(m_templates, name);
-    if (found)
-        return static_cast<IGeometryTemplate*>(vc71::mapNodeValue(found));
+    const GeometryTemplateRegistry::iterator found = m_templates.find(name);
+    if (found != m_templates.end())
+        return found->second;
 
     unsigned int colon = 0;
     while (colon != name.size() && name.c_str()[colon] != ':')
@@ -379,8 +345,8 @@ IGeometryTemplate* GeometryTemplateManager::getTemplate(const ::renddx9abi::Host
     if (colon == name.size())
         return 0;
 
-    const vc71::string prefix(name.c_str(), colon);
-    const vc71::string suffix(name.c_str() + colon + 1, name.size() - colon - 1);
+    const std::string prefix(name.c_str(), colon);
+    const std::string suffix(name.c_str() + colon + 1, name.size() - colon - 1);
     (void)suffix; // Constructed and destroyed by retail, but never read (shipped quirk).
     return createQualified(prefix, name); // The full `type:name`, not the suffix, is the map key.
                                           // (createQualified re-enters createTemplate, which is
@@ -389,11 +355,11 @@ IGeometryTemplate* GeometryTemplateManager::getTemplate(const ::renddx9abi::Host
 
 void GeometryTemplateManager::removeTemplate(const ::renddx9abi::HostString& hostName)
 {
-    const vc71::string& name = ::renddx9abi::toVc71String(hostName);
+    const std::string& name = ::renddx9abi::fromHostString(hostName);
 
-    vc71::map_node* node = vc71::mapFindInsensitive(m_templates, name);
-    if (node)
-        vc71::mapEraseWithValueDestroy(m_templates, node, &releaseMappedInterface);
+    const GeometryTemplateRegistry::iterator node = m_templates.find(name);
+    if (node != m_templates.end())
+        eraseOwnedEntry(m_templates, node);
 }
 
 void GeometryTemplateManager::clear()
@@ -425,9 +391,9 @@ RD9_GTM_FRONTIER(slot_0x5C, 0x5C)
 // clear each template's use byte without changing registry ownership.
 void GeometryTemplateManager::resetTemplateUse()
 {
-    for (vc71::map_node* node = vc71::mapFirst(m_templates); node;
-         node = vc71::mapNext(m_templates, node))
-        reinterpret_cast<GeometryTemplate*>(vc71::mapNodeValue(node))->m_keepData = 0;
+    for (GeometryTemplateRegistry::iterator node = m_templates.begin();
+         node != m_templates.end(); ++node)
+        reinterpret_cast<GeometryTemplate*>(node->second)->m_keepData = 0;
 }
 
 // The ResourceManager gate precedes the walk; loaded state is not tested.
@@ -436,9 +402,9 @@ int GeometryTemplateManager::getUsedTemplateCount()
     if (!dx9rend::resourceManagerIsReady())
         return 0;
     int count = 0;
-    for (vc71::map_node* node = vc71::mapFirst(m_templates); node;
-         node = vc71::mapNext(m_templates, node))
-        if (reinterpret_cast<GeometryTemplate*>(vc71::mapNodeValue(node))->m_keepData)
+    for (GeometryTemplateRegistry::iterator node = m_templates.begin();
+         node != m_templates.end(); ++node)
+        if (reinterpret_cast<GeometryTemplate*>(node->second)->m_keepData)
             ++count;
     return count;
 }
@@ -463,13 +429,13 @@ void GeometryTemplateManager::loadUsedTemplates()
     }
     if (!dx9rend::readLevelLoadBoolSetting("GSKeepTemplates", false))
     {
-        vc71::map_node* node = vc71::mapFirst(m_templates);
-        while (node)
+        GeometryTemplateRegistry::iterator node = m_templates.begin();
+        while (node != m_templates.end())
         {
-            vc71::map_node* const current = node;
-            node = vc71::mapNext(m_templates, node);
-            if (!reinterpret_cast<GeometryTemplate*>(vc71::mapNodeValue(current))->m_keepData)
-                vc71::mapEraseWithValueDestroy(m_templates, current, releaseMappedInterface);
+            const GeometryTemplateRegistry::iterator current = node;
+            ++node;
+            if (!reinterpret_cast<GeometryTemplate*>(current->second)->m_keepData)
+                eraseOwnedEntry(m_templates, current);
         }
     }
     else
@@ -478,11 +444,10 @@ void GeometryTemplateManager::loadUsedTemplates()
         ::renddx9abi::logf("GeometryTemplateManager.cpp:309: Do not keep geom templates");
     }
 
-    for (vc71::map_node* node = vc71::mapFirst(m_templates); node;
-         node = vc71::mapNext(m_templates, node))
+    for (GeometryTemplateRegistry::iterator node = m_templates.begin();
+         node != m_templates.end(); ++node)
     {
-        GeometryTemplate* const value =
-            reinterpret_cast<GeometryTemplate*>(vc71::mapNodeValue(node));
+        GeometryTemplate* const value = reinterpret_cast<GeometryTemplate*>(node->second);
         if (value->m_keepData && !value->isLoaded())
             value->load();
         value->m_keepData = 0;
@@ -525,7 +490,7 @@ void GeometryTemplateManager::slot_0x48()
                                "rebuilds the static-mesh technique tables", hits);
     }
 
-    if (m_templates.size == 0)             // cmp [esi+10h], 0 / jbe loc_1015D652 - unsigned
+    if (m_templates.size() == 0)           // cmp [esi+10h], 0 / jbe loc_1015D652 - unsigned
         return;                            // `result` is still the 1 loaded at 1015D536
 
     RD9_FRONTIER("dice::hfe::geom::GeometryTemplateManager::slot_0x48 "
@@ -533,10 +498,10 @@ void GeometryTemplateManager::slot_0x48()
                  "initTechniques bodies are unrecovered)", 0x48);
 }
 
-bool GeometryTemplateManager::registerOptimizer(const vc71::string& className,
-                                                const vc71::string& key)
+bool GeometryTemplateManager::registerOptimizer(const std::string& className,
+                                                const std::string& key)
 {
-    vc71::string full("dice.hfe.geom.GeometryOptimizer.");
+    std::string full("dice.hfe.geom.GeometryOptimizer.");
     full += className;
 
     unsigned int classId = 0;
@@ -562,7 +527,7 @@ void GeometryTemplateManager::clearOptimizers()
     clearOwnedMap(m_optimizers);
 }
 
-vc71::map_layout* GeometryTemplateManager::getTemplateRegistry()
+GeometryTemplateRegistry* GeometryTemplateManager::getTemplateRegistry()
 {
     return &m_templates;
 }
@@ -579,7 +544,6 @@ IBase* __fastcall createGeometryTemplateManager(unsigned int iid, IBase* outer)
     return static_cast<IBase*>(itf);
 }
 
-#if BF2_PLUGIN_ABI_NATIVE
 
 namespace {
 
@@ -601,7 +565,7 @@ IGeometryTemplate* activeGeometryTemplate()
 
 void* templateVirtual(IGeometryTemplate* value, unsigned int byteOffset)
 {
-    return (*reinterpret_cast<void***>(value))[byteOffset / sizeof(void*)];
+    return (*reinterpret_cast<void***>(value))[byteOffset / 4];
 }
 
 bool getTemplateBool(unsigned int byteOffset)
@@ -634,13 +598,13 @@ void setTemplateInt(unsigned int byteOffset, int setting)
 
 IGeometryTemplate* consoleCreateTemplate(const std::string& type, const std::string& name)
 {
-    vc71::string className("dice.hfe.geom.GeometryTemplate.");
+    std::string className("dice.hfe.geom.GeometryTemplate.");
     className += type.c_str();
 
     unsigned int classId = 0;
     if (classManager->getClassID(renddx9abi::HostString(className.c_str()), &classId))
     {
-        const vc71::string templateName(name.c_str());
+        const std::string templateName(name.c_str());
         templateManager()->createTemplate(classId, ::renddx9abi::toHostString(templateName));
     }
 
@@ -745,7 +709,7 @@ public:
         if (index == 1)
         {
             static IGeometryTemplate* resolved = 0;
-            const vc71::string templateName(value.c_str());
+            const std::string templateName(value.c_str());
             resolved = templateManager()->getTemplate(::renddx9abi::toHostString(templateName));
             m_args[0] = reinterpret_cast<std::string*>(&resolved);
         }
@@ -808,7 +772,6 @@ bool unregisterGeometryTemplateConsoleObjects()
         consoleBindingList(kGeometryTemplateConsoleTag));
 }
 
-#endif // BF2_PLUGIN_ABI_NATIVE
 
 } // namespace geom
 } // namespace hfe

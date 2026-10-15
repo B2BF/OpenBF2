@@ -279,7 +279,7 @@ IBase* __fastcall createPerlinNoise(unsigned int iid, IBase* outer)
     if (outer)
         return 0;
 
-    void* const storage = ::renddx9abi::engineAlloc(0x30);
+    void* const storage = ::renddx9abi::engineAlloc(sizeof(PerlinNoise));    // 0x30 on x86
     PerlinNoise* self = 0;
     if (storage)
         self = new (storage) PerlinNoise();

@@ -31,7 +31,9 @@ protected:
     friend struct Bf2FixedSliderNodeFixture;
     char* m_name;                                         // +58, owned clone, never freed
 };
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2FixedSliderNode) == 92, "retail and native Bf2FixedSliderNode storage");
+#endif
 } }
 #endif
 #endif

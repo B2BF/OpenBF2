@@ -66,7 +66,9 @@ int IntData::getCharacter(System*, int character)
     return static_cast<signed char>(m_text[character]);
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(IntData) == 20, "client BFMeme IntData");
 static_assert(sizeof(ClassTypeDescriptor<IntData, Data>) == 16, "IntData metadata");
+#endif
 } }
 #endif

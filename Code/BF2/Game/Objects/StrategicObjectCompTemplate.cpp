@@ -60,7 +60,8 @@ const std::string& StrategicObjectCompTemplate::getStrategicObjectName() { retur
 namespace {
 // [INFERRED] helper name. BF2.exe 65A2F0 takes the string by value, calls
 // getSystem twice and resolves with loadTexture(name, true). ELF inlines null.
-int resolveStrategicIcon(std::string name)
+// The handle is std::intptr_t: int on x86, the full texture address on native x64.
+std::intptr_t resolveStrategicIcon(std::string name)
 {
 #if !DEDICATED
     if (hudManager && hudManager->getSystem())
@@ -81,8 +82,8 @@ void StrategicObjectCompTemplate::setIntactIcon(std::string value)
 }
 const std::string& StrategicObjectCompTemplate::getDestroyedIcon() { return m_destroyedIcon; }
 const std::string& StrategicObjectCompTemplate::getIntactIcon() { return m_intactIcon; }
-int StrategicObjectCompTemplate::getDestroyedIconPtr() { return m_destroyedIconPtr; }
-int StrategicObjectCompTemplate::getIntactIconPtr() { return m_intactIconPtr; }
+std::intptr_t StrategicObjectCompTemplate::getDestroyedIconPtr() { return m_destroyedIconPtr; }
+std::intptr_t StrategicObjectCompTemplate::getIntactIconPtr() { return m_intactIconPtr; }
 void StrategicObjectCompTemplate::setPart(int value) { m_part = value; }
 int StrategicObjectCompTemplate::getPart() { return m_part; }
 void StrategicObjectCompTemplate::set3dMapIcon(int value) { m_mapIcon3D = value; }

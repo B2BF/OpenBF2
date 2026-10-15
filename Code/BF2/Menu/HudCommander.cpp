@@ -71,6 +71,7 @@ namespace {
 // subtraction before its separate float store, not the rounded remaining field.
 void updateCooldown(float deadline, double now, float duration, float& remaining, float& fraction)
 {
+#if defined(_M_IX86)
     float* remainingValue = &remaining;
     float* fractionValue = &fraction;
     __asm {
@@ -82,6 +83,13 @@ void updateCooldown(float deadline, double now, float duration, float& remaining
         mov eax, fractionValue
         fstp dword ptr [eax]
     }
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    // The fraction divides the unrounded difference, not the stored remaining value.
+    const double left = static_cast<double>(deadline) - now;
+    remaining = static_cast<float>(left);
+    fraction = static_cast<float>(left / duration);
+#endif
 }
 }
 HudCommander::HudCommander(meme::System* system)
@@ -264,9 +272,9 @@ void HudCommander::appendMemberCells(world::IPlayer* player, int slot, int squad
 {
     const int sel = isSquadSelected(squad);                                       // +0x30
     meme::Color text = commanderIconColors[sel];                                  // A1C6B8, copied now
-    int frame = m_textures[3];                                                    // +FC iconframe
+    meme::TextureHandle frame = m_textures[3];                                    // +FC iconframe
     if (player && world::playerManager->getNrOfPlayersInSquad(m_team, squad) > 0) {   // PE +0x9C
-        int icon = hudManager->getPlayerVehicleIcon(player, true);                // +0x60
+        meme::TextureHandle icon = hudManager->getPlayerVehicleIcon(player, true); // +0x60
         if (!icon) {
             icon = hudManager->getPlayerKitIcon(player, false, false);            // +0x64
             if (!icon)
@@ -358,9 +366,9 @@ void HudCommander::appendLeaderVoipCells(int squad)
                 mutedLocally = true;
                 break;
             }
-    int icon;
+    meme::TextureHandle icon;
     if (mutedLocally)
-        icon = m_textures[4];                                                     // +100 voipMuteGreyCommander
+        icon = m_textures[4];                                                    // +100 voipMuteGreyCommander
     else if (leader->getIsMuted())                                                // PE +0x274
         icon = m_textures[5];                                                     // +104 voipMuteCommander
     else if (leader->getIsTalking()) {                                            // PE +0x278
@@ -395,7 +403,7 @@ void HudCommander::appendLeaderVoipCells(int squad)
 // Appends the pending request indicators.
 void HudCommander::appendRequestCells(int squad)
 {
-    int icon = m_textures[8];                                                     // +110 empty.tga
+    meme::TextureHandle icon = m_textures[8];                                     // +110 empty.tga
     const int sel = isSquadSelected(squad);
     static_cast<ISquadManager*>(squadManager)->getSquadInfo(m_team, squad);       // +0x28, dropped
     if (world::playerManager->getNrOfPlayersInSquad(m_team, squad) == 0) {

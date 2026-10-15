@@ -128,7 +128,7 @@ void HudVoip::paintRow(meme::BfListBoxData* list, world::IPlayer* player)
         }
     }
 
-    int icon = m_emptyTexture;
+    std::intptr_t icon = m_emptyTexture;
     if (!talking) {
         list->appendCell(0, std::string(), 1.0f, 1.0f, 1.0f, 1.0f, 0);
         list->appendCell(1, std::string(), 1.0f, 1.0f, 1.0f, 1.0f, 0);

@@ -10,8 +10,7 @@
 #include "../../RendDX9Abi/BfMemory.h"
 #include "../../RendDX9Abi/PluginAbi.h"
 #include "../../RendDX9Abi/PluginEntry.h"
-#include "../../RendDX9Abi/Vc71String.h"
-#include "../../RendDX9Abi/Vc71Vector.h"
+#include <string>
 #include "Terrain.h"
 #include "MeshTemplate.h"
 #include "StaticMesh.h"
@@ -19,14 +18,8 @@
 // The host (BF2.exe) light interfaces render dispatches into - typed in both flavours (RW-266); the
 // retail-ABI flavour takes HfeAbi's ClassManager carriers in place of Core/ClassManager.h, exactly as
 // SkinnedMesh.cpp includes the same two headers.
-#if !BF2_PLUGIN_ABI_NATIVE
-#define CORE_CLASSMANAGER_H
-#endif
 #include "../Game/Objects/Visual/LightSource.h"
 #include "../Game/Objects/Visual/LightSourceTemplate.h"
-#if !BF2_PLUGIN_ABI_NATIVE
-#undef CORE_CLASSMANAGER_H
-#endif
 #include "../Math/Frustum.h"
 #include "../Math/Mat4.h"
 #include "../Math/Vec3.h"
@@ -212,38 +205,6 @@ struct UndergrowthCellDistanceLess
 };
 
 
-// [CHOSEN, not recovered] Typed access to compatibility-layout vectors on the engine heap.
-// Growth uses capacity + capacity/2, matching the corresponding deallocation ownership.
-
-template <typename T>
-inline unsigned int vcCount(const vc71::vector_layout& v)                 // VC7.1 size(): 0 when null
-{
-    return v.first ? static_cast<unsigned int>(v.last - v.first) / static_cast<unsigned int>(sizeof(T))
-                   : 0u;
-}
-
-template <typename T>
-inline T* vcAt(const vc71::vector_layout& v, unsigned int index)
-{
-    return reinterpret_cast<T*>(v.first) + index;
-}
-
-template <typename T>
-inline void vcPushBack(vc71::vector_layout& v, const T& value)            // push_back
-{
-    vc71::vectorRef<T>(&v).push_back(value);
-}
-
-// resize(0) - VC7.1's `if (0 < size()) erase(begin(), end())`, which on trivially destructible
-// elements is `last = first`; capacity is kept.
-template <typename T>
-inline void vcResizeToZero(vc71::vector_layout& v)
-{
-    if (vcCount<T>(v) != 0 && v.first != v.last)
-        v.last = v.first;
-}
-
-
 // UndergrowthVertex::texCoord - two shorts - as the ONE dword buildPatch copies into the patch vertex
 // (`mov ecx, [eax+0Ch]; mov [edx+8], ecx`).
 inline unsigned int packedTexCoord(const UndergrowthVertex& v)
@@ -361,24 +322,24 @@ void mat4ScaleColumns3x3(Mat4& m, const Vec3& s)
 // file-local probe TerrainDraw.cpp and FSQuadDrawer.cpp carry.
 bool isMultisampleActive()
 {
-    unsigned char* const base = static_cast<unsigned char*>(dx9rend::g_rendererBase);
-    if (base[0x514])
+    const dx9rend::RendDX9Base* const base =
+        static_cast<const dx9rend::RendDX9Base*>(dx9rend::g_rendererBase);
+    if (base->forceMultisample)
         return true;
-    if (base[0x515])
+    if (base->disableMultisample)
         return false;
-    unsigned int* const first = *reinterpret_cast<unsigned int**>(base + 0xC0);
-    unsigned int* const last  = *reinterpret_cast<unsigned int**>(base + 0xC4);
-    return first && ((last - first) >> 1) && *reinterpret_cast<int*>(first) > 0;
+    return dx9rend::multiSampleListActive(base);
 }
 
-inline unsigned char* raConstants()
+// The Ra constants block (g_raShaderConstants) words, by their retail x86 byte offsets.
+inline unsigned char* raConstantAt(unsigned int byteOffset)
 {
-    return static_cast<unsigned char*>(dx9rend::g_raShaderConstants);
+    return dx9rend::raShaderConstantsAt(byteOffset);
 }
 
 inline float raConstantF(unsigned int byteOffset)
 {
-    return *reinterpret_cast<const float*>(raConstants() + byteOffset);
+    return *reinterpret_cast<const float*>(raConstantAt(byteOffset));
 }
 
 // The "HeightmapCluster" singleton by name - rebuildPatches and buildPatch look it up on every call
@@ -407,21 +368,16 @@ void resetBounds(MeshBounds& bounds)
 // so native builds use the accessor while plugin builds read the fixed retail offset.
 const world::LightSourceTemplate* lightSourceTemplate(world::LightSource* light)
 {
-#if BF2_PLUGIN_ABI_NATIVE
     return static_cast<const world::LightSourceTemplate*>(light->getTemplate());
-#else
-    return *reinterpret_cast<const world::LightSourceTemplate* const*>(
-        reinterpret_cast<unsigned char*>(light) + 0x144);
-#endif
 }
 
 // Queries drawer occlusion; dirty bounds may be finalized in place.
 // Requires a live drawer and a compatibility-layout MeshBounds.
 inline bool objectDrawerOccludesBounds(IBase* drawer, MeshBounds* bounds)
 {
-    typedef bool (__fastcall* OccludedFn)(void*, void*, MeshBounds*);
+    typedef bool (__thiscall* OccludedFn)(void*, MeshBounds*);
     void** const table = *reinterpret_cast<void***>(drawer);
-    return reinterpret_cast<OccludedFn>(table[0x3C / sizeof(void*)])(drawer, 0, bounds);
+    return reinterpret_cast<OccludedFn>(table[0x3C / 4])(drawer, bounds);
 }
 
 
@@ -511,12 +467,18 @@ void lerpColor(unsigned int* out, const unsigned int* a, const unsigned int* b, 
 
 // The address of block `index` of a DXT1 image, in retail's 32-bit arithmetic: the index is formed
 // unsigned and scaled by 8 with wrap-around, so the bilinear arm's (x - 2) >> 2 for x < 2 (0x3FFFFFFF)
-// lands 8 bytes before the row it names - an out-of-bounds read at the top-left, shipped. This image is
-// x86-only (agents.md), where uintptr_t arithmetic wraps exactly like retail's `lea`.
+// lands 8 bytes before the row it names - an out-of-bounds read at the top-left, shipped. On x86 the
+// uintptr_t arithmetic wraps exactly like retail's `lea`.
 inline const unsigned char* dxt1BlockAt(const unsigned char* bits, unsigned int index)
 {
+#if defined(_M_IX86)
     return reinterpret_cast<const unsigned char*>(
         reinterpret_cast<std::uintptr_t>(bits) + static_cast<std::uintptr_t>(index * 8u));
+#else
+    // [PLATFORM] x64: the wrapped 32-bit byte offset is sign-extended, so the underflowed index still
+    // lands 8 bytes before its row as on x86, not 4 GiB past the image.
+    return bits + static_cast<std::ptrdiff_t>(static_cast<int>(index * 8u));
+#endif
 }
 
 // (ecx = the locked bits, edx = width; stack: height, uv, out; retn 0Ch) - the terrain map
@@ -636,7 +598,7 @@ void UndergrowthSystem::rebuildPatches(bool force, float viewDistance)
     world::IHeightmapCluster* const cluster = heightmapClusterByName();
     (void)cluster->getPrimaryHeightmap();                                            // +0x40 (host)
 
-    vcResizeToZero<UndergrowthCell*>(m_visibleCells);                                // (0, 0)
+    m_visibleCells.resize(0);                                                        // (0, 0)
 
     // the camera's cell, x by division and z by the reciprocal.
     const Mat4* const cameraForX = view->getViewMatrixPtr();                         // +0x64
@@ -662,7 +624,7 @@ void UndergrowthSystem::rebuildPatches(bool force, float viewDistance)
             {
                 UndergrowthCell* const cell = m_cells + (m_cellsPerSide * static_cast<unsigned int>(z)
                                                          + static_cast<unsigned int>(x));
-                vcPushBack(m_visibleCells, cell);
+                m_visibleCells.push_back(cell);
             }
         }
     }
@@ -676,9 +638,9 @@ void UndergrowthSystem::rebuildPatches(bool force, float viewDistance)
         if (!cell)
             continue;
         bool listed = false;
-        for (unsigned int k = 0; k < vcCount<UndergrowthCell*>(m_visibleCells); ++k)
+        for (unsigned int k = 0; k < m_visibleCells.size(); ++k)
         {
-            if (*vcAt<UndergrowthCell*>(m_visibleCells, k) == cell)
+            if (m_visibleCells[k] == cell)
             {
                 listed = true;
                 break;
@@ -692,9 +654,9 @@ void UndergrowthSystem::rebuildPatches(bool force, float viewDistance)
     }
 
     // give each newly listed cell the least recently drawn free entry.
-    for (unsigned int k = 0; k < vcCount<UndergrowthCell*>(m_visibleCells); ++k)
+    for (unsigned int k = 0; k < m_visibleCells.size(); ++k)
     {
-        UndergrowthCell* const cell = *vcAt<UndergrowthCell*>(m_visibleCells, k);
+        UndergrowthCell* const cell = m_visibleCells[k];
         if (cell->patch)
             continue;
         UndergrowthPatch* best = 0;
@@ -735,7 +697,7 @@ void UndergrowthSystem::rebuildPatches(bool force, float viewDistance)
 
     // m_drawOrder.resize(0), inlined here (the out-of-line instantiation
     // 0x1014FE60 is what render calls for the same statement).
-    vcResizeToZero<UndergrowthCellDistance>(m_drawOrder);
+    m_drawOrder.resize(0);
 
     // the view frustum at viewDistance, copy-constructed (0x100F58A0) into a
     // local while the far plane is swapped, then the far plane restored.
@@ -787,18 +749,16 @@ void UndergrowthSystem::rebuildPatches(bool force, float viewDistance)
         UndergrowthCellDistance entry;
         entry.key = key;
         entry.cell = patch.cell;
-        vcPushBack(m_drawOrder, entry);          // inlined push_back (_Ufill 0x1014E460 / 0x1014EC90)
+        m_drawOrder.push_back(entry);            // inlined push_back (_Ufill 0x1014E460 / 0x1014EC90)
     }
 
     // std::sort(begin, end) nearest first, unconditionally (VC7.1 _Sort 0x10150100:
     // _ISORT_MAX 32, introsort; an empty or one-element range is a no-op there as here).
-    std::sort(reinterpret_cast<UndergrowthCellDistance*>(m_drawOrder.first),
-              reinterpret_cast<UndergrowthCellDistance*>(m_drawOrder.last),
-              UndergrowthCellDistanceLess());
+    std::sort(m_drawOrder.begin(), m_drawOrder.end(), UndergrowthCellDistanceLess());
 
     // stream in the nearest one.
-    if (vcCount<UndergrowthCellDistance>(m_drawOrder) != 0)
-        buildPatch(vcAt<UndergrowthCellDistance>(m_drawOrder, 0)->cell, false);
+    if (m_drawOrder.size() != 0)
+        buildPatch(m_drawOrder[0].cell, false);
 }
 
 // Builds a cell's cached grass geometry from density, slope and mesh settings.
@@ -1197,7 +1157,7 @@ void UndergrowthSystem::render(float time)
     }
 
     // the visible, built entries, keyed by squared camera distance.
-    vcResizeToZero<UndergrowthCellDistance>(m_drawOrder);                   // (0, {0, 0})
+    m_drawOrder.resize(0);                                                   // (0, {0, 0})
     for (unsigned int i = 0; i < m_patchCount; ++i)
     {
         UndergrowthPatch& patch = m_patches[i];
@@ -1219,14 +1179,14 @@ void UndergrowthSystem::render(float time)
         entry.key = distanceSquaredBetween(bounds.center,
                                            *reinterpret_cast<const Vec3*>(&camera->m[12]));
         entry.cell = patch.cell;
-        vcPushBack(m_drawOrder, entry);
+        m_drawOrder.push_back(entry);
     }
 
-    const unsigned int drawCount = vcCount<UndergrowthCellDistance>(m_drawOrder);
+    const unsigned int drawCount = static_cast<unsigned int>(m_drawOrder.size());
     if (drawCount == 0)
         return;
     {
-        UndergrowthCellDistance* const first = vcAt<UndergrowthCellDistance>(m_drawOrder, 0);
+        UndergrowthCellDistance* const first = m_drawOrder.data();
         std::sort(first, first + drawCount, UndergrowthCellDistanceLess());
     }
 
@@ -1234,13 +1194,14 @@ void UndergrowthSystem::render(float time)
     // the first dynamic-shadow record (LightManager +0x79C, 1176 bytes each),
     // NOT gated on dynamicShadowsEnable; the record vector is fetched three times, as shipped.
     {
-        const vc71::vector_layout& records = terrainShadowRecords();
-        if (records.first && (records.last - records.first) / 1176 != 0)
+        const std::vector<LightShadowRecord>& records = lightManagerShadowRecords(g_LightManager);
+        if (records.size() != 0)
         {
-            m_paramShadowMap->setValue(*reinterpret_cast<void* const*>(
-                reinterpret_cast<unsigned char*>(g_LightManager) + 0x21C), 0);
-            m_paramShadowProjMatrix->setValue(terrainShadowRecords().first + 0x2F8, 0);
-            m_paramShadowTrapMatrix->setValue(terrainShadowRecords().first + 0x3B8, 0);
+            m_paramShadowMap->setValue(lightManagerShadowMapTexture(g_LightManager), 0);   // +0x21C
+            m_paramShadowProjMatrix->setValue(
+                &lightManagerShadowRecords(g_LightManager)[0].matrices[4], 0);            // +0x2F8
+            m_paramShadowTrapMatrix->setValue(
+                &lightManagerShadowRecords(g_LightManager)[0].matrices[7], 0);            // +0x3B8
         }
     }
 
@@ -1274,7 +1235,7 @@ void UndergrowthSystem::render(float time)
     color.z = rgb.z;
     m_paramStaticPointColor->setValue(&color, 0);
 
-    m_paramFogRange->setValue(raConstants() + 0xA8, 0);                     // FogRange holder
+    m_paramFogRange->setValue(raConstantAt(0xA8), 0);                     // FogRange holder
 
     Vec4 fogColor;                                                           // [ebp-18h], a copy
     fogColor.x = raConstantF(0xBC);
@@ -1292,7 +1253,7 @@ void UndergrowthSystem::render(float time)
 
     dx9rend::postProductionUpdateFog(dx9rend::underwaterDepth());           // sub_1004FDA0(sub_100F7B00())
 
-    m_paramWaterFogRange->setValue(raConstants() + 0xF8, 0);
+    m_paramWaterFogRange->setValue(raConstantAt(0xF8), 0);
     m_paramTexLayer0->setValue(m_atlasTexture, 0);
     m_paramWorldViewProjection->setValue(view->getViewProjectionMatrixPtr(), 0);   // +0x84
     m_paramWorldView->setValue(view->getInverseViewMatrixPtr(), 0);                // +0x68
@@ -1331,7 +1292,7 @@ void UndergrowthSystem::render(float time)
     {
         dx9rend::stateManagerPush();
         dx9rend::effectSetTechniqueByName(m_effect,
-            vc71::string(m_simpleShaderEnable ? "ZOnly_Simple" : "ZOnly"));
+            std::string(m_simpleShaderEnable ? "ZOnly_Simple" : "ZOnly"));
         dx9rend::effectBegin(m_effect);
         dx9rend::effectBeginPass(m_effect, 0);
         if (dx9rend::deviceCapsIsNvidia())
@@ -1344,9 +1305,9 @@ void UndergrowthSystem::render(float time)
             dx9rend::stateManagerSetRenderState(D3DRS_STENCILFAIL, D3DSTENCILOP_KEEP);
         }
         for (unsigned int i = 0;
-             i < vcCount<UndergrowthCellDistance>(m_drawOrder) && i < m_zPassPatchCount; ++i)
+             i < m_drawOrder.size() && i < m_zPassPatchCount; ++i)
         {
-            UndergrowthCell* const cell = vcAt<UndergrowthCellDistance>(m_drawOrder, i)->cell;
+            UndergrowthCell* const cell = m_drawOrder[i].cell;
             MeshBounds bounds;
             resetBounds(bounds);
             cellBounds(cell, &bounds, false);
@@ -1373,11 +1334,11 @@ void UndergrowthSystem::render(float time)
     // 8. classify every sorted entry into the draw list
     dx9rend::stateManagerPush();
     UndergrowthDrawList drawList;                                            // 0x1014E370 head node
-    for (unsigned int i = 0; i < vcCount<UndergrowthCellDistance>(m_drawOrder); ++i)
+    for (unsigned int i = 0; i < m_drawOrder.size(); ++i)
     {
         const bool zPrepassed = i < m_zPassPatchCount;                      // `setb`
-        vc71::vector_layout lights = { 0, 0, 0, 0 };                         // [ebp-104h]
-        UndergrowthCell* const cell = vcAt<UndergrowthCellDistance>(m_drawOrder, i)->cell;
+        std::vector<world::LightSource*> lights;                             // [ebp-104h]
+        UndergrowthCell* const cell = m_drawOrder[i].cell;
         MeshBounds bounds;                                                   // [ebp-0F0h]
         resetBounds(bounds);
         cellBounds(cell, &bounds, false);
@@ -1390,19 +1351,17 @@ void UndergrowthSystem::render(float time)
             meshBoundsFinalize(bounds);
         g_LightManager->gatherLights(bounds.center, gatherRadius, lights, 4u, 0xB09u, 0u, true);  // +0x1C
 
-        const unsigned int gathered = vcCount<world::LightSource*>(lights);
+        const unsigned int gathered = static_cast<unsigned int>(lights.size());
         const unsigned int lightCount = gathered >= 4u ? 4u : gathered;      // [ebp-0F4h]
 
         bool shadowed = false;                                               // [ebp-0B0h]
         if (m_dynamicShadowsEnable)
         {
-            const vc71::vector_layout& records = terrainShadowRecords();    // sub_1015C550, once
-            for (unsigned int k = 0;
-                 records.first && k < static_cast<unsigned int>((records.last - records.first) / 1176);
-                 ++k)
+            const std::vector<LightShadowRecord>& records =
+                lightManagerShadowRecords(g_LightManager);                   // sub_1015C550, once
+            for (unsigned int k = 0; k < records.size(); ++k)
             {
-                const Frustum* const shadowFrustum =
-                    reinterpret_cast<const Frustum*>(records.first + k * 1176u + 0x10);
+                const Frustum* const shadowFrustum = &records[k].frustum;
                 if (terrainFrustumIntersectsBox(shadowFrustum, &bounds.min.x))
                 {
                     shadowed = true;
@@ -1420,14 +1379,9 @@ void UndergrowthSystem::render(float time)
             technique,
             UndergrowthDrawItem{ cell,
                                  std::vector<world::LightSource*>(
-                                     vcAt<world::LightSource*>(lights, 0),
-                                     vcAt<world::LightSource*>(lights, 0) + gathered),
+                                     lights.data(), lights.data() + gathered),
                                  lightCount, bounds, technique, shadowed, zPrepassed });
         drawList.insert(entry);
-
-        // gatherLights grows the vector with vc71::vectorPushBackIn (the engine heap).
-        if (lights.first)
-            ::renddx9abi::engineFree(lights.first);
     }
 
     // 9. draw, grouped by technique
@@ -1490,7 +1444,7 @@ void UndergrowthSystem::render(float time)
         {
             if (currentTechnique)
                 dx9rend::effectEnd(m_effect);
-            dx9rend::effectSetTechniqueByName(m_effect, vc71::string(item.technique));
+            dx9rend::effectSetTechniqueByName(m_effect, std::string(item.technique));
             dx9rend::effectBegin(m_effect);
             dx9rend::effectBeginPass(m_effect, 0);
             stencilState = -1;

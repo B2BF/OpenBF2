@@ -26,8 +26,6 @@ template<class Return,class... Args> Return call(void* self,unsigned int offset,
 namespace renddx9abi {
 void* engineAlloc(unsigned int size){++allocations;return failAllocation?0:std::malloc(size);}
 void engineFree(void* p){std::free(p);}
-void* crtMalloc(size_t size){return std::malloc(size);}
-void crtFree(void* p){std::free(p);}
 void logf(const char* format,...)
 {
     ++diagnostics;char message[256];va_list args;va_start(args,format);
@@ -49,12 +47,12 @@ void EnvMapManager::removeEntry(EnvMapEntry* entry)
 int main()
 {
     managerTable[0x18/4]=reinterpret_cast<void*>(&queue);
-    vc71::string name("env_fixture_name_longer_than_inline_buffer");
+    std::string name("env_fixture_name_longer_than_inline_buffer");
     alignas(EnvMapObjectTemplate) unsigned char templateBytes[sizeof(EnvMapObjectTemplate)];
     std::memset(templateBytes,0xA5,sizeof(templateBytes));
     EnvMapObjectTemplate* t=new(templateBytes) EnvMapObjectTemplate(name);
     check(call<float>(t,8)==1&&call<bool>(t,0x10),"template slot defaults size one/static true");
-    const vc71::string& actual=call<const vc71::string&>(t,0);
+    const std::string& actual=call<const std::string&>(t,0);
     check(actual.size()==name.size()&&std::strcmp(actual.c_str(),name.c_str())==0,"template owns copied name");
     check(templateBytes[9]==0xA5&&templateBytes[10]==0xA5&&templateBytes[11]==0xA5,"template padding remains untouched");
     call<void>(t,4,-3.25f);call<void>(t,0xC,false);

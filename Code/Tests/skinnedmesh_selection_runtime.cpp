@@ -38,40 +38,49 @@ __declspec(noreturn) void unexpected(const char* name)
 
 struct TemplateFixture
 {
-    // [TEMP] A file-loader fixture, not a reconstructed template. Only the
-    // scalar loaded flag and two nested vectors used by selection are modeled.
-    alignas(dice::hfe::geom::SkinnedMeshTemplate) unsigned char storage[
-        sizeof(dice::hfe::geom::SkinnedMeshTemplate)];
-    vc71::vector_layout geoms[4]; // two pairs: lod vector + distance vector
-    vc71::vector_layout companions[2];
-    alignas(4) unsigned char lods[2][2][132];
-    vc71::vector_layout materials[2][2];
+    // [TEMP] A file-loader fixture, not a reconstructed template. Only the scalar loaded flag,
+    // the two nested tables selection reads and the instance set the destructor visits are
+    // constructed; the rest of the storage stays zero.
+    typedef dice::hfe::geom::SkinnedMeshTemplate Template;
+    typedef std::set<dice::hfe::geom::SkinnedMesh*> InstanceSet;
+    alignas(Template) unsigned char storage[sizeof(Template)];
 
-    TemplateFixture() { std::memset(this, 0, sizeof(*this)); }
-    dice::hfe::geom::SkinnedMeshTemplate* get()
-    { return reinterpret_cast<dice::hfe::geom::SkinnedMeshTemplate*>(storage); }
+    TemplateFixture()
+    {
+        std::memset(storage, 0, sizeof(storage));
+        new (&get()->m_materials) Template::MaterialTable();
+        new (&get()->m_geoms) Template::GeomTable();
+        new (&get()->m_instances) InstanceSet();
+    }
+    ~TemplateFixture()
+    {
+        destroy(get()->m_instances);
+        destroy(get()->m_geoms);
+        destroy(get()->m_materials);
+    }
+    template<class T> static void destroy(T& member) { member.~T(); }
+    Template* get() { return reinterpret_cast<Template*>(storage); }
+    dice::hfe::geom::SkinnedMeshLod* lod(unsigned int geom, unsigned int lod)
+    { return &get()->m_geoms[geom].lods[lod]; }
+    Template::LodMaterials* materials(unsigned int geom, unsigned int lod)
+    { return &get()->m_materials[geom][lod]; }
 
     void load()
     {
+        // Two geoms of two lods each, plus each lod's (empty) material list.
+        get()->m_geoms.resize(2);
+        get()->m_materials.resize(2);
         for (unsigned int geom = 0; geom != 2; ++geom)
         {
-            geoms[geom * 2].first = reinterpret_cast<char*>(&lods[geom][0][0]);
-            geoms[geom * 2].last = geoms[geom * 2].end = geoms[geom * 2].first + 264;
-            companions[geom].first = reinterpret_cast<char*>(&materials[geom][0]);
-            companions[geom].last = companions[geom].end = companions[geom].first + 32;
+            get()->m_geoms[geom].lods.resize(2);
+            get()->m_materials[geom].resize(2);
             for (unsigned int lod = 0; lod != 2; ++lod)
             {
                 // A finalized file bounds record. No geometry bounds calculation
                 // is replaced: the production getter reads the fixture radius.
-                dice::hfe::geom::MeshBounds* b =
-                    reinterpret_cast<dice::hfe::geom::MeshBounds*>(lods[geom][lod]);
-                b->radius = 6.25f + geom * 10.0f + lod;
+                this->lod(geom, lod)->bounds.radius = 6.25f + geom * 10.0f + lod;
             }
         }
-        get()->m_vector0DC.first = reinterpret_cast<char*>(geoms);
-        get()->m_vector0DC.last = get()->m_vector0DC.end = get()->m_vector0DC.first + 64;
-        get()->m_vector0CC.first = reinterpret_cast<char*>(companions);
-        get()->m_vector0CC.last = get()->m_vector0CC.end = get()->m_vector0CC.first + 32;
         get()->m_loaded = 1;
     }
 };
@@ -114,8 +123,6 @@ void* engineAlloc(unsigned int size)
     return std::malloc(size);
 }
 void engineFree(void* value) { ++frees; std::free(value); }
-void* crtMalloc(size_t size) { return std::malloc(size); }
-void crtFree(void* value) { std::free(value); }
 void logf(const char* format, ...)
 {
     va_list args; va_start(args, format); std::vfprintf(stderr, format, args); va_end(args);
@@ -135,9 +142,9 @@ IBase* g_Renderer = 0;
 unsigned int rendererFrameOrdinal() { unexpected("rendererFrameOrdinal"); }
 bool deviceCapsIsNvidia() { unexpected("deviceCapsIsNvidia"); }
 void* shaderManagerGetEffect(void*, const char*) { unexpected("shaderManagerGetEffect"); }
-ShaderParameter* effectGetShaderParameterTyped(Effect*, const vc71::string&)
+ShaderParameter* effectGetShaderParameterTyped(Effect*, const std::string&)
 { unexpected("effectGetShaderParameterTyped"); }
-bool effectSetTechniqueByName(void*, const vc71::string&) { unexpected("effectSetTechniqueByName"); }
+bool effectSetTechniqueByName(void*, const std::string&) { unexpected("effectSetTechniqueByName"); }
 IRenderView* rendererGetRenderViewDup() { unexpected("rendererGetRenderViewDup"); }
 RenderQueueEntry* renderEntryPoolAcquire() { unexpected("renderEntryPoolAcquire"); }
 void renderQueueEnqueue(RenderQueueEntry*, bool, bool, bool) { unexpected("renderQueueEnqueue"); }
@@ -147,11 +154,12 @@ void vertexDeclarationBind(void*) { unexpected("vertexDeclarationBind"); }
 void rendererDrawIndexedPrimitive(unsigned int, unsigned int, int, unsigned int, unsigned int, unsigned int)
 { unexpected("rendererDrawIndexedPrimitive"); }
 namespace Ra {
-RaShader* getShader(RaShaderTable*, const vc71::string&, bool) { unexpected("getShader"); }
-// Record this unrelated embedded block's lifecycle only. No Ra field is read by
-// the exercised methods, so constructing GPU-backed parameter holders is omitted.
-void raObjectParametersConstruct(void*) { ++parameterConstructions; parametersReady = true; }
-void raObjectParametersDestroy(void*) { ++parameterDestructions; }
+RaShader* getShader(RaShaderTable*, const std::string&, bool) { unexpected("getShader"); }
+// Record this unrelated embedded block's lifecycle only. No Ra field is read by the exercised
+// methods, so its holders are not initialized; the userData vector member is still constructed
+// and destroyed by these bodies.
+RaObjectParameters::RaObjectParameters() { ++parameterConstructions; parametersReady = true; }
+RaObjectParameters::~RaObjectParameters() { ++parameterDestructions; }
 }
 }
 namespace geom {
@@ -159,15 +167,22 @@ LightManager* g_LightManager = 0;
 IBase* g_SkinnedMeshRenderer = 0;
 unsigned char g_skinnedMeshTechniquesPending = 0;
 void meshBoundsFinalize(MeshBounds&) { unexpected("meshBoundsFinalize (fixture supplies clean bounds)"); }
-void instanceSetErase(vc71::set_layout& set, void*)
+void instanceSetErase(std::set<SkinnedMesh*>& set, SkinnedMesh*)
 {
     // This fixture never registers an instance. Model only erase from its empty set.
-    if (set.size) unexpected("instanceSetErase (nonempty fixture set)");
+    if (!set.empty()) unexpected("instanceSetErase (nonempty fixture set)");
     ++instanceErases;
 }
 void* staticMeshRootParent(void*) { unexpected("staticMeshRootParent"); }
-bool meshBuildTechniqueMasks(const vc71::string&, const vc71::string&, const char* const*,
-    std::map<unsigned int, dx9rend::Ra::RaShader*>&, vc71::vector_layout&)
+// Draw-path and material-teardown dependencies outside the selection boundary. The fixture's
+// material lists stay empty, so no SkinnedMeshMaterial is ever destroyed.
+int skinnedMeshRendererMode() { unexpected("skinnedMeshRendererMode"); }
+void skinnedMeshRendererSubmitA(SkinnedMesh*) { unexpected("skinnedMeshRendererSubmitA"); }
+void skinnedMeshRendererSubmitB(SkinnedMesh*) { unexpected("skinnedMeshRendererSubmitB"); }
+double lightManagerShadowFadeDuration(const LightManager*) { unexpected("lightManagerShadowFadeDuration"); }
+SkinnedMeshMaterial::~SkinnedMeshMaterial() { unexpected("SkinnedMeshMaterial::~SkinnedMeshMaterial"); }
+bool meshBuildTechniqueMasks(const std::string&, const std::string&, const char* const*,
+    std::map<unsigned int, dx9rend::Ra::RaShader*>&, std::vector<unsigned int>&)
 { unexpected("meshBuildTechniqueMasks"); }
 }
 } }
@@ -185,20 +200,20 @@ int main()
         check(mesh.getBoundingRadius() == 0.0f, "unloaded unselected radius is shipped zero");
         t.load();
         mesh.refreshSelection();
-        check(mesh.m_lodRecord == t.lods[0][0], "load refresh selects geom 0 lod 0 bounds");
-        check(mesh.m_lodMaterials == &t.materials[0][0], "load refresh selects geom 0 lod 0 materials");
+        check(mesh.m_lodRecord == t.lod(0, 0), "load refresh selects geom 0 lod 0 bounds");
+        check(mesh.m_lodMaterials == t.materials(0, 0), "load refresh selects geom 0 lod 0 materials");
         check(mesh.getBoundingRadius() == 6.25f, "load refresh exposes positive flag-like bounds");
         mesh.m_geomIndex = 1;
         mesh.m_lodIndex = 1;
         mesh.refreshSelection();
-        check(mesh.m_lodRecord == t.lods[1][1], "refresh preserves current geom and lod for bounds");
-        check(mesh.m_lodMaterials == &t.materials[1][1], "refresh preserves current geom and lod for materials");
+        check(mesh.m_lodRecord == t.lod(1, 1), "refresh preserves current geom and lod for bounds");
+        check(mesh.m_lodMaterials == t.materials(1, 1), "refresh preserves current geom and lod for materials");
         check(mesh.getBoundingRadius() == 17.25f, "refresh reads the current lod radius");
         for (unsigned int i = 0; i != 2; ++i)
         {
             InstanceFixture later(t);
-            check(later.mesh->m_lodRecord == t.lods[0][0], "already-loaded constructor immediately selects bounds");
-            check(later.mesh->m_lodMaterials == &t.materials[0][0], "already-loaded constructor immediately selects materials");
+            check(later.mesh->m_lodRecord == t.lod(0, 0), "already-loaded constructor immediately selects bounds");
+            check(later.mesh->m_lodMaterials == t.materials(0, 0), "already-loaded constructor immediately selects materials");
             check(later.mesh->m_geomIndex == 0 && later.mesh->m_lodIndex == 0,
                   "each later instance starts with its own geom 0 lod 0 selection");
             check(later.mesh->getBoundingRadius() == 6.25f,
@@ -212,3 +227,4 @@ int main()
         checks-failures, checks, BF2_PLUGIN_ABI_NATIVE);
     return failures ? 1 : 0;
 }
+#include "renderer_accessor_fixture_support.h"   // RendDX9Base.h Renderer accessors (x86 identity)

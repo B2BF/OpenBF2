@@ -30,6 +30,9 @@
 #include "../Scene/Object/ObjectPredicator.h"
 #include "../Core/System.h"
 #include "../Core/SettingsRepostitory.h"
+#if !defined(_M_IX86)
+#include <cmath>
+#endif
 
 namespace dice { namespace hfe {
 class IMenuLogic;
@@ -42,6 +45,7 @@ namespace {
 // rounding. Inclusive expiry uses ordered <=0; icon expiry uses ordered <0.
 bool subtractTimer(float& timer, float delta, bool inclusive)
 {
+#if defined(_M_IX86)
     bool expired;
     __asm {
         mov ecx, timer
@@ -62,10 +66,18 @@ bool subtractTimer(float& timer, float delta, bool inclusive)
     expiry_done:
     }
     return expired;
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    // setnp: inclusive expiry is an ordered <= 0, strict expiry an ordered < 0.
+    const double remaining = static_cast<double>(timer) - delta;
+    timer = static_cast<float>(remaining);
+    return inclusive ? remaining <= 0.0 : remaining < 0.0;
+#endif
 }
 bool addDemoTimer(float& timer, float delta)
 {
     const float threshold = 10.0f;
+#if defined(_M_IX86)
     bool due;
     __asm {
         mov ecx, timer
@@ -78,6 +90,13 @@ bool addDemoTimer(float& timer, float delta)
         setz due
     }
     return due;
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    // C0 clear means an ordered sum at or above the threshold.
+    const double elapsed = static_cast<double>(delta) + timer;
+    timer = static_cast<float>(elapsed);
+    return elapsed >= threshold;
+#endif
 }
 std::string requestInUseMessage(int type)
 {
@@ -271,6 +290,7 @@ void BF2HudManager::updateMapPosition(world::IPlayer* player, Vec3 direction)
     float heading;
     if (player->getIsAlive()) {
         const float x = direction.x, z = direction.z;
+#if defined(_M_IX86)
         __asm {
             fld x
             fld z
@@ -287,8 +307,16 @@ void BF2HudManager::updateMapPosition(world::IPlayer* player, Vec3 direction)
             fmul scaleZ
             fstp position.y
         }
+#else
+        // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates); the CRT atan2
+        // replaces fpatan (st1 = x over st0 = z) and agrees after the float store.
+        heading = static_cast<float>(std::atan2(static_cast<double>(x), static_cast<double>(z)));
+        position.x = static_cast<float>((static_cast<double>(worldX) * half + cameraX) * scaleX);
+        position.y = static_cast<float>((static_cast<double>(worldZ) * half + cameraZ) * scaleZ);
+#endif
     } else {
         heading = 0.0f;
+#if defined(_M_IX86)
         __asm {
             fld worldX
             fmul half
@@ -299,6 +327,11 @@ void BF2HudManager::updateMapPosition(world::IPlayer* player, Vec3 direction)
             fmul scaleZ
             fstp position.y
         }
+#else
+        // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+        position.x = static_cast<float>(static_cast<double>(worldX) * half * scaleX);
+        position.y = static_cast<float>(static_cast<double>(worldZ) * half * scaleZ);
+#endif
     }
     hudMap->setPlayerPosition(position, heading);
 }

@@ -68,7 +68,9 @@ namespace {
 // original eager initializer sets its guard before the base constructor.
 TypeDescriptor* const registeredBf2SplitNodeType = Bf2SplitNode::getClassType();
 }
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2SplitNodeTypeDescriptor) == 16, "client BF2 split metadata");
 static_assert(sizeof(Bf2SplitNode) == 16, "client BF2 named SplitNode");
+#endif
 } }
 #endif

@@ -42,7 +42,9 @@ private:
     static int instanceCount;
 };
 int SystemTypeDescriptor::instanceCount = 0;
+#if defined(_M_IX86)
 static_assert(sizeof(SystemTypeDescriptor) == 16, "System metadata stores its counter separately");
+#endif
 
 // A3970C is a plain dword whose bit zero is set before construction. Retail has no lock and no
 // exception rollback here; avoid the compiler's C++11 thread-safe function-static guard.
@@ -164,19 +166,19 @@ OStream* System::createOutputStream(const char*) { return nullptr; }
 void System::deleteOutputStream(OStream* stream) { delete stream; }
 void System::deleteInputStream(IStream* stream) { delete stream; }
 bool System::pointerPositionChanged(float*, float*) { return true; }
-bool System::drawCharacter(int, int, Quad*) { return false; }
-bool System::getGlyphMetrics(int, int, GlyphMetrics*) { return false; }
-float System::getKerning(int, int, int) { return 0.0f; }
-float System::getFontHeight(int) { return 0.0f; }
-int System::loadFont(const char*) { return 0; }
-const char* System::getFontName(int) { return nullptr; }
-bool System::drawTexture(int, Quad*) { return false; }
-int System::loadTexture(const char*, bool) { return 0; }
-void System::releaseTexture(int) {} // 5AB2A0, real empty default
-const char* System::getTextureName(int) { return nullptr; }
-float System::getTextureWidth(int) { return 0.0f; }
-float System::getTextureHeight(int) { return 0.0f; }
-void System::setDefaultTexture(int texture) { m_field054 = texture; }
+bool System::drawCharacter(int, FontHandle, Quad*) { return false; }
+bool System::getGlyphMetrics(int, FontHandle, GlyphMetrics*) { return false; }
+float System::getKerning(int, int, FontHandle) { return 0.0f; }
+float System::getFontHeight(FontHandle) { return 0.0f; }
+FontHandle System::loadFont(const char*) { return 0; }
+const char* System::getFontName(FontHandle) { return nullptr; }
+bool System::drawTexture(TextureHandle, Quad*) { return false; }
+TextureHandle System::loadTexture(const char*, bool) { return 0; }
+void System::releaseTexture(TextureHandle) {} // 5AB2A0, real empty default
+const char* System::getTextureName(TextureHandle) { return nullptr; }
+float System::getTextureWidth(TextureHandle) { return 0.0f; }
+float System::getTextureHeight(TextureHandle) { return 0.0f; }
+void System::setDefaultTexture(TextureHandle texture) { m_field054 = texture; }
 bool System::playSound(int, float) { return false; } // 455420, real default
 int System::loadSound(const char*) { return 0; }
 const char* System::getSoundName(int) { return nullptr; }
@@ -255,7 +257,9 @@ public:
 private:
     NodeInputEvent m_event;
 };
+#if defined(_M_IX86)
 static_assert(sizeof(EventNodeVisitor) == 28, "client generic event visitor");
+#endif
 
 Node* castMenuNode(Object* object)
 {
@@ -355,9 +359,11 @@ void systemPrintf(System* system, const char* format, ...)
     }
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(Object) == 4, "BF2 client Object prefix size");
 static_assert(sizeof(OStream) == 4, "Ref2System embeds a four-byte OStream");
 static_assert(sizeof(System) == 0x58, "System has no STL-dependent members");
+#endif
 
 } }
 #endif

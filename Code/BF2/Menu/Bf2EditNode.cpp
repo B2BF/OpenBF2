@@ -62,7 +62,7 @@ bool Bf2EditNode::setEditDataForHud(BfEditData* data)     // 7CDFC0, +C8
 bool Bf2EditNode::setStringForHud(Data* string)           // 7CE250, +CC
 { m_string = string; return true; }
 // Two members from one call, and the flag is the outline bit at +3D.
-bool Bf2EditNode::setFontForHud(int font, bool outline)
+bool Bf2EditNode::setFontForHud(FontHandle font, bool outline)
 { m_font = font; m_outline = outline; return true; }
 bool Bf2EditNode::setMaxLengthForHud(int characters)      // 7C21D0, +D4
 { m_maxCharacters = characters; return true; }

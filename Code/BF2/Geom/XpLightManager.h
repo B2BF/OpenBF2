@@ -10,25 +10,26 @@
 #if defined(BF2_IMAGE_RENDDX9)
 #include "../../RendDX9Abi/HfeAbi.h"
 #include "../../RendDX9Abi/ModuleCommon.h"
-#include "../../RendDX9Abi/Vc71Vector.h"
+#include "../Math/Frustum.h"
+#include "../Math/Mat4.h"
+#include <set>
 #else
 #include "../Core/IBase.h"
 #include <string>
 #endif
 
 #include "../Math/Vec3.h"
+#include <vector>
 
-// The three light-gather slots take the DLL's own VC7.1 vector layout by reference.  The type is
-// only ever named by reference here, so the dedicated build - which never includes the RendDX9Abi
-// headers and never calls those slots - needs no more than this declaration. The ground-hemi getter
-// (+0x48) returns the renderer's own VC7.1 string by reference on the same terms.
-namespace vc71 { struct vector_layout; class string; }
+// The light-gather slots fill a std::vector of LightSource pointers. The ground-hemi getter (+0x48)
+// returns the renderer's own string by reference.
+#include <string>
 struct IDirect3DSurface9;   // lightManagerSetDepthStencil
 
 namespace dice {
 namespace hfe {
 
-namespace world { class LightSource; }
+namespace world { class IObject; class LightSource; }
 namespace dx9rend { class Effect; struct EngineTexture; }
 
 namespace geom {
@@ -58,24 +59,27 @@ public:
     // +0x014  PE 0x100F2E60.  Every owned light (the +0x1B8 set, in key order) that satisfies
     // every bit of `required` and violates none of `forbidden` (lightMatchesMask in the .cpp),
     // appended to `out`.
-    virtual void getLightsByMask(vc71::vector_layout& out, unsigned int required,
+    virtual void getLightsByMask(std::vector<world::LightSource*>& out, unsigned int required,
                                  unsigned int forbidden);                   // +0x014
     // [INFERRED] Appends visible lights in frame order. required == 0x7FFFFFFF ignores forbidden
     // and selects enabled, nondirectional lights whose templates support emitters.
-    virtual void getVisibleLightsByMask(vc71::vector_layout& out, unsigned int required,
+    virtual void getVisibleLightsByMask(std::vector<world::LightSource*>& out,
+                                        unsigned int required,
                                         unsigned int forbidden);            // +0x018
     // +0x01C  PE 0x100F3890.  The lights of this frame's scratch list (+0x1D0) within `radius` of
     // `position` - each light's bounding radius widening the test - filtered by the two masks,
     // sorted nearest first, ray-tested against the world when `occlusionTest`, and appended to
     // `out` until it holds `maxLights`.
-    virtual void gatherLights(const Vec3& position, float radius, vc71::vector_layout& out,
+    virtual void gatherLights(const Vec3& position, float radius,
+                              std::vector<world::LightSource*>& out,
                               unsigned int maxLights, unsigned int required,
                               unsigned int forbidden, bool occlusionTest);  // +0x01C
     // +0x020  PE 0x100F1750.  gatherLights at a geometry instance's transform translation with
     // that instance's bounding radius.  The StaticMesh draw's entry point.
-    virtual void gatherLightsForGeometry(void* geometry, vc71::vector_layout& out,
+    virtual void gatherLightsForGeometry(void* geometry, std::vector<world::LightSource*>& out,
                                          unsigned int maxLights, unsigned int required,
                                          unsigned int forbidden, bool occlusionTest); // +0x020
+
     virtual void setSkyLight(world::LightSource* light);                   // +0x024
     virtual world::LightSource* getSkyLight() const;                       // +0x028
     virtual void setSkyColor(const Vec3& color);                           // +0x02C
@@ -90,7 +94,7 @@ public:
     virtual void setGroundHemi(const LightManagerHostString& name);        // +0x044
     // +0x048  the base hemi map's name (HemiMap +0x18), or a function-local static
     // empty string while there is none. `LightManager.groundHemi` GET. Constness [INFERRED].
-    virtual const vc71::string& getGroundHemi() const;                     // +0x048
+    virtual const std::string& getGroundHemi() const;                     // +0x048
 
     // Both bodies ignore this and call the published HemiMapManager
     // singleton without a null guard. ModuleGeom publication order is therefore observable.
@@ -262,6 +266,56 @@ inline LightManager* asLightManager(IBase* base)
 
 extern const unsigned int CID_LightManager;
 extern const unsigned int IID_ILightManager;
+
+// One shadow-map render record (0x498 bytes in the PE; the `// +0xNN` comments keep those offsets).
+// The LightManager keeps four vectors of them (directional +0x79C, secondary +0x7AC, spot +0x7CC,
+// point +0x7DC); a mesh's caster pointer (geometry slot +0x24) addresses one, and the mesh, decal and
+// terrain draws read its matrices and tail flags. Field names are [INFERRED].
+struct LightShadowRecord
+{
+    LightShadowRecord();
+    // The prefix up to `casters` is copied byte for byte (frustum, nine matrices, flags and
+    // pointers), then the caster set and the tail.
+    LightShadowRecord(const LightShadowRecord& other);
+    ~LightShadowRecord();
+
+    float                     atlasScaleOffset[4];  // +0x000  u, v, scale, scale
+    Frustum                   frustum;              // +0x010
+    // +0x1F8 - [0] +0x1F8 the caster view-projection, [1] +0x238 the light view, [2] +0x278 the
+    // light projection / TSM matrix, [3] +0x2B8, [4] +0x2F8 the receiver projection
+    // (lightviewprojortho), [5] +0x338, [6] +0x378, [7] +0x3B8 the trapezoid (lightviewproj),
+    // [8] +0x3F8 the atlas transform.
+    Mat4                      matrices[9];
+    float                     atlasBounds[4];       // +0x438
+    unsigned char             flags448[8];          // +0x448  [0] the first-person caster flag
+    void*                     geometry;             // +0x450  the directional record's root geometry
+    world::LightSource*       source;               // +0x454
+    unsigned char             pad458[0x30];         // +0x458
+    std::set<world::IObject*> casters;              // +0x488  the objects drawn into this record
+    // +0x494 - [0] the decal draw's record test, [1] the mesh draws' light-matrix selector (set by
+    // the point/spot records). [UNRESOLVED] roles.
+    unsigned char             tail494[4];
+
+private:
+    LightShadowRecord& operator=(const LightShadowRecord&);
+};
+
+// Typed reads of LightManager state other draws need. [CHOSEN, not recovered] accessors for fields
+// those draws read by offset (issue #7); each answers the live member.
+// +0x79C - the directional shadow records this frame (empty when no record was built).
+std::vector<LightShadowRecord>& lightManagerShadowRecords(LightManager* manager);
+// +0x278 - the light-space frustum the directional pass fits over the camera frustum.
+const Frustum& lightManagerShadowFrustum(const LightManager* manager);
+// +0x16C - the distance the directional pass pulls a frustum back toward the light (200).
+float lightManagerShadowPullbackDistance(const LightManager* manager);
+// +0x21C - the directional shadow map.
+dx9rend::EngineTexture* lightManagerShadowMapTexture(const LightManager* manager);
+// +0x230 - the point/spot shadow atlas.
+dx9rend::EngineTexture* lightManagerPointShadowMapTexture(const LightManager* manager);
+// +0x248 - the black 8 x 8 cube texture the constructor builds.
+dx9rend::EngineTexture* lightManagerBlackCubeTexture(const LightManager* manager);
+// +0x838 - the shadow fade duration the mesh draws divide their elapsed fade time by (1.0).
+double lightManagerShadowFadeDuration(const LightManager* manager);
 
 // Direct XpLightManager.cpp frame coordinator at PE 0x100EFB50.  Renderer calls this against a
 // TU-static coordinator rather than through LightManager; keeping it a free seam preserves that

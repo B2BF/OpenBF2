@@ -31,7 +31,9 @@ public:
     int getInstanceCount() override { return cullVariableActionNodeInstances; }
     unsigned int getInstanceSize() override { return sizeof(CullVariableActionNode); }
 };
+#if defined(_M_IX86)
 static_assert(sizeof(CullVariableActionNodeTypeDescriptor) == 16, "CullVariableActionNode metadata storage");
+#endif
 }
 
 CullVariableActionNode::CullVariableActionNode() : m_variable(nullptr) {}
@@ -65,6 +67,8 @@ bool CullVariableActionNode::dispatchEvent(System* system, const Rect* bounds,
     return m_action->execute(system, bounds, state, event);
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(CullVariableActionNode) == 16, "client BFMeme CullVariableActionNode");
+#endif
 } }
 #endif

@@ -13,17 +13,20 @@ rem    overwriting it would destroy the only copy this rebuild reads from.
 rem    Testing against the real client is a DELIBERATE, SEPARATE act - see
 rem    docs\building.md for host ABI and runtime setup.
 rem
-rem   usage:  renddx9.cmd [native]   rebuilt host ABI (/MD, no Memory.dll)
+rem   usage:  renddx9.cmd [native]   rebuilt host ABI (/MD, no Memory.dll), x86
+rem           renddx9.cmd x64        the native x64 client's RendDX9.dll (no Bink: x64 skips movies)
 rem [CHOSEN, not recovered] Native-only builds: https://github.com/B2BF/OpenBF2/issues/7
 rem ===========================================================================
 if not "%~2"=="" goto :usage
-if not "%~1"=="" if /i not "%~1"=="native" goto :usage
-call "%~dp0vsdevcmd.cmd" x86
+set "ARCH=x86"
+if /i "%~1"=="x64" set "ARCH=x64"
+if not "%~1"=="" if /i not "%~1"=="native" if /i not "%~1"=="x64" goto :usage
+call "%~dp0vsdevcmd.cmd" %ARCH%
 if errorlevel 1 exit /b 1
 rem The D3DX headers and import library come from the installed April 2005 DirectX SDK, the
 rem generation whose d3dx9.lib binds d3dx9_25.dll as retail RendDX9 does. dxsdk.cmd refuses any
 rem other SDK and appends it to INCLUDE/LIB after the Windows SDK.
-call "%~dp0dxsdk.cmd" x86
+call "%~dp0dxsdk.cmd" %ARCH%
 if errorlevel 1 exit /b 1
 
 for %%I in ("%~dp0..") do set CODE=%%~fI
@@ -31,6 +34,8 @@ set ABI=%CODE%\RendDX9Abi
 set BF2=%CODE%\BF2
 set OUT=%~dp0obj_renddx9_native
 set BIN=%~dp0bin_renddx9_native
+if "%ARCH%"=="x64" set OUT=%~dp0obj_renddx9_x64
+if "%ARCH%"=="x64" set BIN=%~dp0bin_renddx9_x64
 set CRT=/MD
 set PLUGIN_ABI=/DBF2_PLUGIN_ABI_NATIVE=1 /D_ITERATOR_DEBUG_LEVEL=0
 rem Agent/CI isolation keeps builds out of another contributor's directories.
@@ -56,6 +61,8 @@ rem BF2_RENDDX9_EDITOR=1 (set only by Code\Tools\BF2Editor\renddx9_for_editor.cm
 rem flavour. /DBF2_IMAGE_EDITOR=1 admits the editor-only regions of shared RendDX9 TUs (AGENTS.md, Editor
 rem front: editor-only needs in shared code go behind the editor image define, never into game behaviour).
 if "%BF2_RENDDX9_EDITOR%"=="1" set FLAGS=%FLAGS% /DBF2_IMAGE_EDITOR=1
+rem x64: a pointer truncated into a 32-bit integer is an error, as for the x64 dedicated server.
+if "%ARCH%"=="x64" set FLAGS=%FLAGS% /we4311 /we4312
 
 if not exist "%OUT%" mkdir "%OUT%"
 if not exist "%BIN%" mkdir "%BIN%"
@@ -71,14 +78,21 @@ rem ---------------------------------------------------------------------------
 set LIB_BAD=0
 >"%OUT%\lib.log" echo [D3DX] DirectX SDK import library: "%D3DX25_LIB%"
 echo [1/4] import libraries - native ABI, no Memory.dll
-lib /nologo /def:"%ABI%\binkw32.def" /machine:x86 /out:"%OUT%\binkw32.lib" >>"%OUT%\lib.log" 2>&1
-if errorlevel 1 set LIB_BAD=1
+rem binkw32.dll exists only as a 32-bit DLL: the x64 image has no Bink import (movies are skipped).
+set "BINK_LIB="
+if "%ARCH%"=="x86" (
+    lib /nologo /def:"%ABI%\binkw32.def" /machine:x86 /out:"%OUT%\binkw32.lib" >>"%OUT%\lib.log" 2>&1
+    if errorlevel 1 set LIB_BAD=1
+    set "BINK_LIB=%OUT%\binkw32.lib"
+)
 rem TextureAtlasBuilder.dll: RendDX9.dll 1.50 carries a STATIC import
 rem descriptor for it with the two exported creates (RendDX9Abi\TextureAtlasBuilder.def), which
 rem TextureAtlas\TextureAtlas.cpp's atlas generator calls. Static, as in retail: without the DLL on
 rem the search path RendDX9.dll does not load. Stage the rebuilt atlas DLL beside the executable;
 rem Code\Build\textureatlasbuilder.cmd builds it and CMake stages it with the client.
-lib /nologo /def:"%ABI%\TextureAtlasBuilder.def" /machine:x86 /out:"%OUT%\TextureAtlasBuilder.lib" >>"%OUT%\lib.log" 2>&1
+set "TAB_DEF=%ABI%\TextureAtlasBuilder.def"
+if "%ARCH%"=="x64" set "TAB_DEF=%ABI%\TextureAtlasBuilder_x64.def"
+lib /nologo /def:"%TAB_DEF%" /machine:%ARCH% /out:"%OUT%\TextureAtlasBuilder.lib" >>"%OUT%\lib.log" 2>&1
 if errorlevel 1 set LIB_BAD=1
 if not "%LIB_BAD%"=="0" (
     echo   FAILED - see "%OUT%\lib.log"
@@ -97,8 +111,6 @@ rem ---------------------------------------------------------------------------
 echo [2/4] compiling
 set SOURCES=^
  "%ABI%\BfMemory.cpp" ^
- "%ABI%\Msvcr71Heap.cpp" ^
- "%ABI%\Vc71String.cpp" ^
  "%ABI%\Frontier.cpp" ^
  "%ABI%\CrashReport.cpp" ^
  "%ABI%\EngineFile.cpp" ^
@@ -269,13 +281,16 @@ rem /BASE:0x10000000 matches the shipped image base. Cosmetic under ASLR, and ke
 rem   side-by-side dumpbin of the two DLLs is a check this rebuild will want to keep running.
 rem ---------------------------------------------------------------------------
 echo [3/4] linking
-link /nologo /DLL /MACHINE:X86 /BASE:0x10000000 /DEBUG ^
+rem /BASE:0x10000000 is the shipped x86 image base; the x64 image takes the linker's default.
+set "LINK_BASE=/BASE:0x10000000"
+if "%ARCH%"=="x64" set "LINK_BASE="
+link /nologo /DLL /MACHINE:%ARCH% %LINK_BASE% /DEBUG ^
      /DEF:"%ABI%\RendDX9.def" ^
      /OUT:"%BIN%\RendDX9.dll" ^
      /PDB:"%BIN%\RendDX9.pdb" ^
      /IMPLIB:"%OUT%\RendDX9.lib" ^
      /MAP:"%OUT%\RendDX9.map" ^
-     "%OUT%\*.obj" "%D3DX25_LIB%" "%OUT%\binkw32.lib" "%OUT%\TextureAtlasBuilder.lib" kernel32.lib user32.lib d3d9.lib > "%OUT%\link.log" 2>&1
+     "%OUT%\*.obj" "%D3DX25_LIB%" %BINK_LIB% "%OUT%\TextureAtlasBuilder.lib" kernel32.lib user32.lib d3d9.lib > "%OUT%\link.log" 2>&1
 if errorlevel 1 (
     echo   LINK FAILED - see "%OUT%\link.log"
     type "%OUT%\link.log"
@@ -341,9 +356,13 @@ rem TextureAtlasBuilder.dll (2026-10-01): the shipped image imports exactly its 
 rem A miss stops the script (a generator that cannot bind is a broken image).
 dumpbin /nologo /imports:TextureAtlasBuilder.dll "%BIN%\RendDX9.dll" > "%OUT%\imports_tab.txt"
 set TAB_BAD=0
-findstr /l /c:"?create@ITextureAtlas@textureatlas@@SIPAV12@PAUIDirect3DDevice9@@@Z" "%OUT%\imports_tab.txt" >nul
+set "TAB_CREATE=?create@ITextureAtlas@textureatlas@@SIPAV12@PAUIDirect3DDevice9@@@Z"
+set "TAB_CONFIG=?create@ITextureAtlasConfiguration@textureatlas@@SIPAV12@XZ"
+if "%ARCH%"=="x64" set "TAB_CREATE=?create@ITextureAtlas@textureatlas@@SAPEAV12@PEAUIDirect3DDevice9@@@Z"
+if "%ARCH%"=="x64" set "TAB_CONFIG=?create@ITextureAtlasConfiguration@textureatlas@@SAPEAV12@XZ"
+findstr /l /c:"%TAB_CREATE%" "%OUT%\imports_tab.txt" >nul
 if errorlevel 1 set TAB_BAD=1
-findstr /l /c:"?create@ITextureAtlasConfiguration@textureatlas@@SIPAV12@XZ" "%OUT%\imports_tab.txt" >nul
+findstr /l /c:"%TAB_CONFIG%" "%OUT%\imports_tab.txt" >nul
 if errorlevel 1 set TAB_BAD=1
 if "%TAB_BAD%"=="0" (echo   imports:      TextureAtlasBuilder.dll  OK - its two creates, by name, as the shipped image) else (echo   imports:      TextureAtlasBuilder.dll creates MISSING - the atlas generator cannot bind)
 if "%TAB_BAD%"=="1" exit /b 1
@@ -354,5 +373,5 @@ echo   NOTE: this is NOT installed anywhere. See docs\building.md before using t
 exit /b 0
 
 :usage
-echo Usage: renddx9.cmd [native]
+echo Usage: renddx9.cmd [native^|x64]
 exit /b 2

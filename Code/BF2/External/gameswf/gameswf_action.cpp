@@ -4263,8 +4263,11 @@ namespace gameswf
 				// "[object Object]" - which is what makes the shipped operator== tell two clips
 				// apart. The function arms format "<c_function 0x%X>" / "<as_function 0x%X>" the
 				// same way there; they are not on any measured path and stay stock here.
+				// [CHOSEN, not recovered] x64 (https://github.com/B2BF/OpenBF2/issues/7): %zX prints the
+				// whole address, so two objects never alias through their low 32 bits; on x86 it is
+				// the shipped %X of the 32-bit address. The three function/object arms share this.
 				char	buf[52];
-				_snprintf(buf, 50, "<object 0x%X>", (unsigned int) (uintptr_t) m_object_value);
+				_snprintf(buf, 50, "<object 0x%zX>", (size_t) (uintptr_t) m_object_value);
 				buf[50] = 0;
 				m_string_value = buf;
 			}
@@ -4272,13 +4275,13 @@ namespace gameswf
 		else if (m_type == C_FUNCTION)
 		{
 			char buffer[50];
-			snprintf(buffer, 50, "<c_function 0x%X>", (unsigned) m_c_function_value);
+			snprintf(buffer, 50, "<c_function 0x%zX>", (size_t) (uintptr_t) m_c_function_value);
 			m_string_value = buffer;
 		}
 		else if (m_type == AS_FUNCTION)
 		{
 			char buffer[50];
-			snprintf(buffer, 50, "<as_function 0x%X>", (unsigned) m_as_function_value);
+			snprintf(buffer, 50, "<as_function 0x%zX>", (size_t) (uintptr_t) m_as_function_value);
 			m_string_value = buffer;
 		}
 		else

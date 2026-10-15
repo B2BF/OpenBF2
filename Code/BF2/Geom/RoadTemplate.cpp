@@ -11,7 +11,7 @@
 #include "../../RendDX9Abi/ModuleCommon.h"
 #include "../../RendDX9Abi/PluginAbi.h"
 #include "../../RendDX9Abi/PluginEntry.h"   // dice::hfe::fileManager
-#include "../../RendDX9Abi/Vc71String.h"
+#include <string>
 
 #include <new>
 
@@ -67,8 +67,8 @@ RoadTemplate::RoadTemplate()
     m_maxTesselatedErrors.push_back(0.25f);                                  // inline; _Insert_n 0x1004E420
 }
 
-// the members in reverse: the name, the error vector, the mirror flags (size zeroed, then
-// the words), the scales, the texture files (sub_100111E0). The C++ member order is the shipped one.
+// the members in reverse: the name, the error vector, the mirror flags, the scales, the texture
+// files (sub_100111E0). The C++ member order is the shipped one.
 RoadTemplate::~RoadTemplate()
 {
 }
@@ -112,7 +112,7 @@ void* RoadTemplate::queryInterface(unsigned int iid) const
 // The accessors. None checks its index (shipped).
 
 
-// std::string::operator= on the element (index * 28 bytes from _Myfirst).
+// std::string::operator= on the element.
 void RoadTemplate::setTextureFile(int index, const ::renddx9abi::HostString& file)
 {
     m_textureFiles[static_cast<unsigned int>(index)] = file;
@@ -141,13 +141,13 @@ const Vec2& RoadTemplate::getTextureScale(int index)
 // the inline bit or / and-not on the word `index >> 5` (unsigned `shr`).
 void RoadTemplate::setMirror(unsigned int index, bool mirror)
 {
-    m_mirrors.set(index, mirror);
+    m_mirrors[index] = mirror;
 }
 
 // the inline bit test, answered as 0 / 1 (`neg / sbb / neg`).
 bool RoadTemplate::getMirror(unsigned int index)
 {
-    return m_mirrors.test(index);
+    return m_mirrors[index];
 }
 
 void  RoadTemplate::setWidth(float width)           { m_width = width; }
@@ -234,13 +234,13 @@ bool RoadTemplate::compile(const ::renddx9abi::HostString& path)
     stream->release();                                                       // +0x08
 
     TerrainRawReader raw;
-    raw.open(::renddx9abi::toVc71String(datFile), 0, 2, 0);
+    raw.open(::renddx9abi::fromHostString(datFile), 0, 2, 0);
 
-    vc71::string line0(::renddx9abi::toVc71String(m_textureFiles[0u]));
+    std::string line0(::renddx9abi::fromHostString(m_textureFiles[0u]));
     line0 += "\n";                                                           // operator+=(char) 0x0A
     raw.writeString(line0);
 
-    vc71::string line1(::renddx9abi::toVc71String(m_textureFiles[1u]));
+    std::string line1(::renddx9abi::fromHostString(m_textureFiles[1u]));
     line1 += "\n";
     raw.writeString(line1);
 
@@ -252,17 +252,15 @@ bool RoadTemplate::compile(const ::renddx9abi::HostString& path)
 }
 
 
-// RefFactory refuse aggregation, 0x88 bytes, construct, QI with NO null test on the
-// object (shipped), release on refusal. (The native flavour's object is smaller - its HostString is
-// the host's std::string - and still fits the shipped block.)
+// RefFactory refuse aggregation, the object (retail 0x88 bytes), construct, QI with NO null
+// test on the object (shipped), release on refusal.
 
 IBase* __fastcall createRoadTemplate(unsigned int iid, IBase* outer)
 {
     if (outer)
         return 0;
 
-    static_assert(sizeof(RoadTemplate) <= 0x88, "the shipped 0x88-byte block must hold the object");
-    void* const storage = ::renddx9abi::engineAlloc(0x88);
+    void* const storage = ::renddx9abi::engineAlloc(sizeof(RoadTemplate));
     RoadTemplate* self = 0;
     if (storage)
         self = new (storage) RoadTemplate();

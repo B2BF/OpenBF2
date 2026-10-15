@@ -10,9 +10,9 @@
 
 #include "LightmapGeneration/ILightSampling.h"
 #include "QuadPatch.h"
-#include "../../RendDX9Abi/Vc71Vector.h"
 
 #include <stddef.h>
+#include <vector>
 
 namespace dice {
 namespace hfe {
@@ -73,7 +73,7 @@ public:
 
     // data, in shipped order (the vptr is +0x00)
     int                      m_refCount;            // +0x04  1
-    vc71::vector_layout      m_blocks;              // +0x08  TerrainLightBlock (first at +0x0C)
+    std::vector<TerrainLightBlock> m_blocks;        // +0x08
     dx9rend::EngineTexture*  m_texture;             // +0x18  the current block's lock texture
     float                    m_resolutionModifier;  // +0x1C  1.0; createLightSampler stores its argument
     int                      m_currentBlock;        // +0x20  -1 = none
@@ -97,11 +97,6 @@ static_assert(offsetof(TerrainLightBlock, width) == 0x3C, "width at +0x3C");
 static_assert(offsetof(TerrainLightBlock, patchX) == 0x44, "patch x at +0x44");
 static_assert(offsetof(TerrainLightBlock, written) == 0x4C, "written flag at +0x4C");
 static_assert(offsetof(TerrainLightSampler, m_blocks) == 0x08, "block list at +0x08");
-static_assert(offsetof(TerrainLightSampler, m_texture) == 0x18, "texture at +0x18");
-static_assert(offsetof(TerrainLightSampler, m_resolutionModifier) == 0x1C, "resolution at +0x1C - see 0x10107C49");
-static_assert(offsetof(TerrainLightSampler, m_batch) == 0x3C, "batch at +0x3C");
-static_assert(offsetof(TerrainLightSampler, m_terrain) == 0x40, "terrain at +0x40");
-static_assert(sizeof(TerrainLightSampler) == 0x44, "createLightSampler allocates 0x44 - see 0x10107C24");
 #endif
 
 } // namespace geom

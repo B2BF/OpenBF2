@@ -5,8 +5,10 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
+#include "../../../RendDX9Abi/ThunkAbi.h"
 #include "RaShader.h"
 #include "../Texture.h"                    // EngineTexture - the engine-texture holder apply
+#include "../../Geom/MeshTemplate.h"       // geom::RaMaterialParameters - the constructor's temporary
 
 #include "../../../RendDX9Abi/BfMemory.h"
 #include "../../../RendDX9Abi/D3dx9Sdk.h"
@@ -17,6 +19,7 @@
 
 #include <new>
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -41,7 +44,7 @@ namespace {
 // [RETIRE-WHEN: the Ra parameter/holder translation unit is recovered.]
 // Replace diagnostic tables after holder signatures and behavior are implemented and validated.
 
-void __fastcall raHolderFrontier(void* self, void*)
+void RD9_THUNK raHolderFrontier(void* self RD9_THUNK_EDX)
 {
     RD9_FRONTIER_AT("dice::hfe::dx9rend::Ra parameter holder "
                     "(off_101DD3FC / 1E1480 / 1E1488 / 1E148C / 1E1494 / 1E14A8 / 1E1E80 / "
@@ -66,7 +69,7 @@ void* raHolder() { return const_cast<void*>(static_cast<const void*>(kRaHolderVt
 // Releases lighting texture references on device loss so default-pool resources can reset.
 // The next draw binds new textures; reset itself does not recreate them.
 
-void __fastcall raLightingOnDeviceLost(void* self, void*)
+void RD9_THUNK raLightingOnDeviceLost(void* self RD9_THUNK_EDX)
 {
     RaLightingParameters* const p = static_cast<RaLightingParameters*>(self);
     if (p->terrainLightMap.value)
@@ -81,13 +84,13 @@ void __fastcall raLightingOnDeviceLost(void* self, void*)
     }
 }
 
-void __fastcall raLightingListenerNullsub(void*, void*)
+void RD9_THUNK raLightingListenerNullsub(void* RD9_THUNK_EDX)
 {
     // 0x10037D40 - `ret`, empty in the original too.
 }
 
 // Destroys lighting parameters and frees storage when flags bit zero is set.
-void* __fastcall raLightingScalarDeletingDtor(void* self, void*, unsigned int flags)
+void* RD9_THUNK raLightingScalarDeletingDtor(void* self RD9_THUNK_EDX, unsigned int flags)
 {
     raLightingParametersDestroy(self);
     if (flags & 1u)
@@ -126,130 +129,92 @@ void raMat4Identity(float* m)
     m[0] = m[5] = m[10] = m[15] = 1.0f;
 }
 
-// sub_10046780 / sub_100EAF70 / the inlined body of sub_10046AC0 are all MSVC's vector `_Buy(n)`:
-// clear the three pointers, and allocate only when n is non-zero.  Every call this file reproduces
-// passes a source whose _First is null, i.e. n == 0, so the whole copy-construct collapses to the
-// clear.  Recorded as a function so the shape is visible rather than implied.
-void raVectorBuyEmpty(vc71::vector_layout& v)
-{
-    v.first = 0;
-    v.last  = 0;
-    v.end   = 0;
-}
-
-
 // Four {offsets, names} vector pairs on a 0x20 stride; this file owns three of them (the fourth,
 // 0x1023E7B0/0x1023E7C0, belongs to the material block in Geom/StaticMeshMaterial.cpp and is NOT
 // redefined here).  The guard every tail uses is "the OFFSET vector is still empty"; the names
 // vector is never consulted.
+// The offset registries hold each named holder's byte offset inside its block; every block keeps
+// its registry's address at the word after its vptr (RaShader::applyParameterVector).
 
-vc71::vector_layout g_raLightArrayOffsets = { 0, 0, 0, 0 };   // unk_1023E770
-vc71::vector_layout g_raLightArrayNames   = { 0, 0, 0, 0 };   // dword_1023E780
-vc71::vector_layout g_raLightingOffsets   = { 0, 0, 0, 0 };   // unk_1023E790
-vc71::vector_layout g_raLightingNames     = { 0, 0, 0, 0 };   // dword_1023E7A0
-vc71::vector_layout g_raObjectOffsets     = { 0, 0, 0, 0 };   // unk_1023E7D0
-vc71::vector_layout g_raObjectNames       = { 0, 0, 0, 0 };   // dword_1023E7E0
-
-// sub_1003A450 / sub_1004CD70 / sub_10011160 - the three `_Insert_n(where, 1, value)` grow paths in
-// this family, all the same VC7.1 shape: half again, clamped up to what was asked for, engine heap.
-// Written once over a byte stride instead of three times over three element types.  This is the
-// same helper Geom/StaticMeshMaterial.cpp carries as raRegistryPush; that copy is file-local there.
-typedef void (*RaCopyFn)(void* destination, const void* source);
-
-void raRegistryPush(vc71::vector_layout& v, const void* element, unsigned int stride,
-                    RaCopyFn copyConstruct)
-{
-    const unsigned int size  = v.first ? static_cast<unsigned int>((v.last - v.first) / stride) : 0u;
-    const unsigned int capac = v.first ? static_cast<unsigned int>((v.end  - v.first) / stride) : 0u;
-    if (!v.first || size >= capac)
-    {
-        unsigned int grown = capac + (capac >> 1);
-        if (grown < size + 1u)
-            grown = size + 1u;
-        char* const buffer = static_cast<char*>(::renddx9abi::engineAlloc(grown * stride));
-        if (!buffer)
-            return;
-        if (size)
-            ::memcpy(buffer, v.first, size * stride);
-        if (v.first)
-            ::renddx9abi::engineFree(v.first);
-        v.first = buffer;
-        v.last  = buffer + size * stride;
-        v.end   = buffer + grown * stride;
-    }
-    copyConstruct(v.last, element);
-    v.last += stride;
-}
-
-void raCopyString(void* destination, const void* source)
-{
-    new (destination) vc71::string(*static_cast<const vc71::string*>(source));
-}
-
-void raCopyPointer(void* destination, const void* source)
-{
-    *static_cast<const void**>(destination) = *static_cast<const void* const*>(source);
-}
-
-void raCopyInt(void* destination, const void* source)
-{
-    *static_cast<int*>(destination) = *static_cast<const int*>(source);
-}
+std::vector<int>          g_raLightArrayOffsets;                    // unk_1023E770
+std::vector<std::string> g_raLightArrayNames;                      // dword_1023E780
+std::vector<int>          g_raLightingOffsets;                      // unk_1023E790
+std::vector<std::string> g_raLightingNames;                        // dword_1023E7A0
+std::vector<int>          g_raObjectOffsets;                        // unk_1023E7D0
+std::vector<std::string> g_raObjectNames;                          // dword_1023E7E0
 
 struct RaParameterName { const char* name; int offset; };
 
 // Register while offsets is empty, including when it has reserved but unused capacity.
-void raRegisterNames(vc71::vector_layout& offsets, vc71::vector_layout& names,
+void raRegisterNames(std::vector<int>& offsets, std::vector<std::string>& names,
                      const RaParameterName* table, unsigned int count)
 {
-    if (offsets.first &&
-        static_cast<unsigned int>((offsets.last - offsets.first) >> 2) != 0u)
+    if (!offsets.empty())
         return;
 
     for (unsigned int i = 0; i < count; ++i)
     {
         // Each iteration builds the std::string, pushes it, pushes the offset, and destroys the
         // string - in that order, which is why the temporary is scoped this tightly.
-        vc71::string name(table[i].name);
-        raRegistryPush(names, &name, sizeof(vc71::string), &raCopyString);
-        raRegistryPush(offsets, &table[i].offset, 4, &raCopyInt);
+        std::string name(table[i].name);
+        names.push_back(name);
+        offsets.push_back(table[i].offset);
     }
 }
 
 
-// Registry of shader-visible lighting-block parameter offsets.
+// Registry of shader-visible lighting-block parameter offsets. The retail offsets are the
+// RaShader.h member comments (28, 36, 44, 64, 76, 96, 164, 184, 204, 224, 244).
 
+#define RA_LIGHTING_OFFSET(member) static_cast<int>(offsetof(RaLightingParameters, member))
 const RaParameterName kRaLightingNames[11] =
 {
-    { "TerrainLightMap",      28 }, { "LightMap",             36 },
-    { "LightMapOffset",       44 }, { "MatBones",             64 },
-    { "OverGrowthAmbient",    76 }, { "ShadowViewProj",       96 },
-    { "ShadowViewProjArray", 164 }, { "ClampViewProjArray",  184 },
-    { "ShadowPosArray",      204 }, { "ShadowSizeArray",     224 },
-    { "ShadowCount",         244 }
+    { "TerrainLightMap",     RA_LIGHTING_OFFSET(terrainLightMap)     },
+    { "LightMap",            RA_LIGHTING_OFFSET(lightMap)            },
+    { "LightMapOffset",      RA_LIGHTING_OFFSET(lightMapOffset)      },
+    { "MatBones",            RA_LIGHTING_OFFSET(matBones)            },
+    { "OverGrowthAmbient",   RA_LIGHTING_OFFSET(overGrowthAmbient)   },
+    { "ShadowViewProj",      RA_LIGHTING_OFFSET(shadowViewProj)      },
+    { "ShadowViewProjArray", RA_LIGHTING_OFFSET(shadowViewProjArray) },
+    { "ClampViewProjArray",  RA_LIGHTING_OFFSET(clampViewProjArray)  },
+    { "ShadowPosArray",      RA_LIGHTING_OFFSET(shadowPosArray)      },
+    { "ShadowSizeArray",     RA_LIGHTING_OFFSET(shadowSizeArray)     },
+    { "ShadowCount",         RA_LIGHTING_OFFSET(shadowCount)         }
 };
+#undef RA_LIGHTING_OFFSET
 
 
-// Registry of object transform, wind, and hemi-light parameter offsets.
+// Registry of object transform, wind, and hemi-light parameter offsets. The retail offsets are
+// the RaShader.h member comments (8 .. 528).
 
+#define RA_OBJECT_OFFSET(member) static_cast<int>(offsetof(RaObjectParameters, member))
 const RaParameterName kRaObjectNames[15] =
 {
-    { "World",                 8 }, { "ViewProjection",       76 },
-    { "WorldViewProjection", 144 }, { "ShadowProjMat",       212 },
-    { "ShadowOccProjMat",    280 }, { "ShadowTrapMat",       348 },
-    { "GeomBones",           416 }, { "Transparency",        428 },
-    { "ObjectSpaceCamPos",   436 }, { "WindSpeed",           456 },
-    { "WindDir",             464 }, { "UserData",            480 },
-    { "HeightOverTerrain",   500 }, { "HemiMapSkyColor",     508 },
-    { "ObjectSpaceWorldUp",  528 }
+    { "World",               RA_OBJECT_OFFSET(world)               },
+    { "ViewProjection",      RA_OBJECT_OFFSET(viewProjection)      },
+    { "WorldViewProjection", RA_OBJECT_OFFSET(worldViewProjection) },
+    { "ShadowProjMat",       RA_OBJECT_OFFSET(shadowProjMat)       },
+    { "ShadowOccProjMat",    RA_OBJECT_OFFSET(shadowOccProjMat)    },
+    { "ShadowTrapMat",       RA_OBJECT_OFFSET(shadowTrapMat)       },
+    { "GeomBones",           RA_OBJECT_OFFSET(geomBones)           },
+    { "Transparency",        RA_OBJECT_OFFSET(transparency)        },
+    { "ObjectSpaceCamPos",   RA_OBJECT_OFFSET(objectSpaceCamPos)   },
+    { "WindSpeed",           RA_OBJECT_OFFSET(windSpeed)           },
+    { "WindDir",             RA_OBJECT_OFFSET(windDir)             },
+    { "UserData",            RA_OBJECT_OFFSET(userData)            },
+    { "HeightOverTerrain",   RA_OBJECT_OFFSET(heightOverTerrain)   },
+    { "HemiMapSkyColor",     RA_OBJECT_OFFSET(hemiMapSkyColor)     },
+    { "ObjectSpaceWorldUp",  RA_OBJECT_OFFSET(objectSpaceWorldUp)  }
 };
+#undef RA_OBJECT_OFFSET
 
 
-// Registry for the light-array parameter block and its lazy resolver.
+// Registry for the light-array parameter block and its lazy resolver (retail offsets 8 and 16).
 
 const RaParameterName kRaLightArrayNames[2] =
 {
-    { "Lights", 8 }, { "Lights_1X", 16 }
+    { "Lights",    static_cast<int>(offsetof(RaLightArrayParameters, lights))       },
+    { "Lights_1X", static_cast<int>(offsetof(RaLightArrayParameters, lights1xVptr)) }
 };
 
 
@@ -262,13 +227,14 @@ const RaParameterName kRaLightArrayNames[2] =
 
 namespace {
 
+// The value after the holder's binder-table pointer (+0x04 on x86).
 inline unsigned char* holderPayload(void* self)
 {
-    return static_cast<unsigned char*>(self) + 4;
+    return static_cast<unsigned char*>(self) + sizeof(void*);
 }
 
 // off_101E1480 slot 0 - sub_10037E20: SetVector(handle, &value).
-int __fastcall raApplyVec4(void* self, void*, void* effect, void* handle)
+int RD9_THUNK raApplyVec4(void* self RD9_THUNK_EDX, void* effect, void* handle)
 {
     return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetVector(
         ::renddx9abi::d3dxHandle(handle),
@@ -276,7 +242,7 @@ int __fastcall raApplyVec4(void* self, void*, void* effect, void* handle)
 }
 
 // off_101E1488 slot 0 - sub_10037E40: SetTexture(handle, value) - the value IS the D3D base texture.
-int __fastcall raApplyTexture(void* self, void*, void* effect, void* handle)
+int RD9_THUNK raApplyTexture(void* self RD9_THUNK_EDX, void* effect, void* handle)
 {
     return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetTexture(
         ::renddx9abi::d3dxHandle(handle),
@@ -284,14 +250,14 @@ int __fastcall raApplyTexture(void* self, void*, void* effect, void* handle)
 }
 
 // off_101E148C slot 0 - sub_1003A170: SetFloat(handle, value).
-int __fastcall raApplyFloat(void* self, void*, void* effect, void* handle)
+int RD9_THUNK raApplyFloat(void* self RD9_THUNK_EDX, void* effect, void* handle)
 {
     return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetFloat(
         ::renddx9abi::d3dxHandle(handle), *reinterpret_cast<const float*>(holderPayload(self))));
 }
 
 // off_101E1494 slot 0 - sub_1003A1A0: SetFloatArray(handle, value, 3).
-int __fastcall raApplyVec3(void* self, void*, void* effect, void* handle)
+int RD9_THUNK raApplyVec3(void* self RD9_THUNK_EDX, void* effect, void* handle)
 {
     return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetFloatArray(
         ::renddx9abi::d3dxHandle(handle), reinterpret_cast<const float*>(holderPayload(self)), 3u));
@@ -299,14 +265,14 @@ int __fastcall raApplyVec3(void* self, void*, void* effect, void* handle)
 
 // off_101E149C slot 0 - sub_1003A1C0: SetFloatArray(handle, value, 2).  This is the table the
 // material block installs at its +0x140 ("NormalUnpack"), so that holder is a TWO-float one.
-int __fastcall raApplyVec2(void* self, void*, void* effect, void* handle)
+int RD9_THUNK raApplyVec2(void* self RD9_THUNK_EDX, void* effect, void* handle)
 {
     return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetFloatArray(
         ::renddx9abi::d3dxHandle(handle), reinterpret_cast<const float*>(holderPayload(self)), 2u));
 }
 
 // off_101E14A8 slot 0 - sub_1003A1E0: SetInt(handle, value).
-int __fastcall raApplyInt(void* self, void*, void* effect, void* handle)
+int RD9_THUNK raApplyInt(void* self RD9_THUNK_EDX, void* effect, void* handle)
 {
     return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetInt(
         ::renddx9abi::d3dxHandle(handle), *reinterpret_cast<const int*>(holderPayload(self))));
@@ -314,7 +280,7 @@ int __fastcall raApplyInt(void* self, void*, void* effect, void* handle)
 
 // off_101E14BC slot 0 - sub_1003A140: nothing (and 0) for a null texture, else SetTexture(handle,
 // sub_10014930(texture)) - the engine texture's D3D base object.
-int __fastcall raApplyEngineTexture(void* self, void*, void* effect, void* handle)
+int RD9_THUNK raApplyEngineTexture(void* self RD9_THUNK_EDX, void* effect, void* handle)
 {
     EngineTexture* const texture = *reinterpret_cast<EngineTexture**>(holderPayload(self));
     if (!texture)
@@ -324,14 +290,14 @@ int __fastcall raApplyEngineTexture(void* self, void*, void* effect, void* handl
 }
 
 // off_101E1E78 slot 0 - sub_10046580: SetBool(handle, byte).
-int __fastcall raApplyBool(void* self, void*, void* effect, void* handle)
+int RD9_THUNK raApplyBool(void* self RD9_THUNK_EDX, void* effect, void* handle)
 {
     return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetBool(
         ::renddx9abi::d3dxHandle(handle), static_cast<BOOL>(*holderPayload(self))));
 }
 
 // off_101E1E80 slot 0 - sub_100465A0 -> sub_100465C0: SetVector(handle, {f, f, f, f}).
-int __fastcall raApplyFloatSplat(void* self, void*, void* effect, void* handle)
+int RD9_THUNK raApplyFloatSplat(void* self RD9_THUNK_EDX, void* effect, void* handle)
 {
     const float f = *reinterpret_cast<const float*>(holderPayload(self));
     const float splat[4] = { f, f, f, f };
@@ -342,27 +308,27 @@ int __fastcall raApplyFloatSplat(void* self, void*, void* effect, void* handle)
 // off_101E1E88 slot 0 - sub_10046450.  The holder is {vptr, lightsHolder, resolver}: the resolver
 // (raLightArrayUpdate) runs with ecx = &lightsHolder->value and answers the record handed to
 // SetValue(handle, record, 68).
-int __fastcall raApplyLightRecordResolved(void* self, void*, void* effect, void* handle)
+int RD9_THUNK raApplyLightRecordResolved(void* self RD9_THUNK_EDX, void* effect, void* handle)
 {
-    typedef void* (__fastcall* ResolveFn)(void*, void*);
+    typedef void* (__thiscall* ResolveFn)(void*);
     void** const words = static_cast<void**>(self);
     void* const record = reinterpret_cast<ResolveFn>(words[2])(
-        static_cast<unsigned char*>(words[1]) + 4, 0);
+        static_cast<unsigned char*>(words[1]) + offsetof(RaParamRef, value));   // +0x04
     return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetValue(
         ::renddx9abi::d3dxHandle(handle), record, 68u));
 }
 
-// off_101E1E8C slot 0 - sub_100465F0: SetMatrixPointerArray(handle, pointers, count).
-int __fastcall raApplyMatrixPointerArray(void* self, void*, void* effect, void* handle)
+// off_101E1E8C slot 0 - sub_100465F0: SetMatrixPointerArray(handle, pointers, count), the pair's
+// +0x04 and +0x08.
+int RD9_THUNK raApplyMatrixPointerArray(void* self RD9_THUNK_EDX, void* effect, void* handle)
 {
-    void** const words = static_cast<void**>(self);
+    const RaParamPair* const pair = static_cast<const RaParamPair*>(self);
     return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetMatrixPointerArray(
-        ::renddx9abi::d3dxHandle(handle), static_cast<const D3DXMATRIX**>(words[1]),
-        static_cast<unsigned int>(reinterpret_cast<size_t>(words[2]))));
+        ::renddx9abi::d3dxHandle(handle), reinterpret_cast<const D3DXMATRIX**>(pair->a), pair->b));
 }
 
 // off_101E1E94 slot 0 - sub_10046620: SetMatrix(handle, &value).
-int __fastcall raApplyMat4(void* self, void*, void* effect, void* handle)
+int RD9_THUNK raApplyMat4(void* self RD9_THUNK_EDX, void* effect, void* handle)
 {
     return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetMatrix(
         ::renddx9abi::d3dxHandle(handle),
@@ -371,40 +337,37 @@ int __fastcall raApplyMat4(void* self, void*, void* effect, void* handle)
 
 // off_101E1E9C slot 0 - sub_100469F0 -> sub_10046A10: SetValue(handle, bytes, count), and
 // SetValue(handle, 0, 0) for an empty vector - the call is made either way.
-int __fastcall raApplyBytes(void* self, void*, void* effect, void* handle)
+int RD9_THUNK raApplyBytes(void* self RD9_THUNK_EDX, void* effect, void* handle)
 {
-    const vc71::vector_layout& v =
-        *reinterpret_cast<const vc71::vector_layout*>(holderPayload(self));
-    if (v.first)
+    const std::vector<unsigned char>& v = static_cast<const RaParamVector*>(self)->value;
+    if (v.data())
         return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetValue(
-            ::renddx9abi::d3dxHandle(handle), v.first,
-            static_cast<unsigned int>(v.last - v.first)));
+            ::renddx9abi::d3dxHandle(handle), v.data(),
+            static_cast<unsigned int>(v.size())));
     return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetValue(
         ::renddx9abi::d3dxHandle(handle), 0, 0u));
 }
 
 // off_101E1EA4 slot 0 - sub_10046BC0: SetMatrixArray(handle, first, bytes / 64) (sub_10046410).
-int __fastcall raApplyMat4Array(void* self, void*, void* effect, void* handle)
+int RD9_THUNK raApplyMat4Array(void* self RD9_THUNK_EDX, void* effect, void* handle)
 {
-    const vc71::vector_layout& v =
-        *reinterpret_cast<const vc71::vector_layout*>(holderPayload(self));
-    const unsigned int count = v.first ? static_cast<unsigned int>(v.last - v.first) >> 6 : 0u;
+    const std::vector<unsigned char>& v = static_cast<const RaParamVector*>(self)->value;
+    const unsigned int count = static_cast<unsigned int>(v.size()) >> 6;
     return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetMatrixArray(
-        ::renddx9abi::d3dxHandle(handle), reinterpret_cast<const D3DXMATRIX*>(v.first), count));
+        ::renddx9abi::d3dxHandle(handle), reinterpret_cast<const D3DXMATRIX*>(v.data()), count));
 }
 
 // off_101E1EAC slot 0 - sub_10046BF0: SetVectorArray(handle, first, bytes / 16) (sub_10046430).
-int __fastcall raApplyVec4Array(void* self, void*, void* effect, void* handle)
+int RD9_THUNK raApplyVec4Array(void* self RD9_THUNK_EDX, void* effect, void* handle)
 {
-    const vc71::vector_layout& v =
-        *reinterpret_cast<const vc71::vector_layout*>(holderPayload(self));
-    const unsigned int count = v.first ? static_cast<unsigned int>(v.last - v.first) >> 4 : 0u;
+    const std::vector<unsigned char>& v = static_cast<const RaParamVector*>(self)->value;
+    const unsigned int count = static_cast<unsigned int>(v.size()) >> 4;
     return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetVectorArray(
-        ::renddx9abi::d3dxHandle(handle), reinterpret_cast<const D3DXVECTOR4*>(v.first), count));
+        ::renddx9abi::d3dxHandle(handle), reinterpret_cast<const D3DXVECTOR4*>(v.data()), count));
 }
 
 // off_101DD3FC slot 0 - sub_1000BE00: SetValue(handle, pointer, 68) - the pointed-at RaLightRecord.
-int __fastcall raApplyLightRecordPointer(void* self, void*, void* effect, void* handle)
+int RD9_THUNK raApplyLightRecordPointer(void* self RD9_THUNK_EDX, void* effect, void* handle)
 {
     return static_cast<int>(static_cast<ID3DXEffect*>(effect)->SetValue(
         ::renddx9abi::d3dxHandle(handle), *reinterpret_cast<void**>(holderPayload(self)), 68u));
@@ -465,7 +428,7 @@ void* raHolderLightRecordPointer()  { return holderTable(kRaHolderLightRecordPoi
 
 // Copies the selected light into shared scratch storage and halves its color/intensity words.
 // Returns borrowed static storage, overwritten by the next call.
-void* __fastcall raLightArrayUpdate(void* lightsValue, void*)
+void* RD9_THUNK raLightArrayUpdate(void* lightsValue RD9_THUNK_EDX)
 {
     static float s_lights1x[17] =
     {
@@ -551,18 +514,17 @@ const RaVertexElementEntry kRaVertexElements[26] =
 
 const unsigned int kRaVertexElementSplit = 20;   // rows [0,20) run before the blocks, [20,26) after
 
-// sub_10011220 (PE 0x10011220) - push_back on the 28-byte name vector.  The `0x92492493` multiply
-// in the shipped body is the compiler's division by 28, i.e. sizeof(std::string).
-void raPushName(vc71::vector_layout& v, const vc71::string& name)
+// sub_10011220 (PE 0x10011220) - push_back on the name vector.  The `0x92492493` multiply in the
+// shipped body is the compiler's division by 28, i.e. VC7.1's sizeof(std::string).
+void raPushName(std::vector<std::string>& v, const std::string& name)
 {
-    raRegistryPush(v, &name, sizeof(vc71::string), &raCopyString);
+    v.push_back(name);
 }
 
 // sub_1004D3E0 (PE 0x1004D3E0) and its seventeen inlined copies - push_back of one dword.
-void raPushDescriptor(vc71::vector_layout& v, const RaVertexElementDesc* desc)
+void raPushDescriptor(std::vector<const RaVertexElementDesc*>& v, const RaVertexElementDesc* desc)
 {
-    const void* value = desc;
-    raRegistryPush(v, &value, 4, &raCopyPointer);
+    v.push_back(desc);
 }
 
 
@@ -570,7 +532,7 @@ void raPushDescriptor(vc71::vector_layout& v, const RaVertexElementDesc* desc)
 // Preserve the seven-slot table and its trailing null entry.
 
 #define RD9_RASHADER_FRONTIER(fn, slotOffset, addr)                                   \
-    void __fastcall fn(void* self, void*)                                             \
+    void RD9_THUNK fn(void* self RD9_THUNK_EDX)                                             \
     {                                                                                 \
         RD9_FRONTIER_AT("dice::hfe::dx9rend::Ra::RaShader::slot_" #slotOffset          \
                         " (" #addr ")", self, slotOffset);                            \
@@ -581,23 +543,23 @@ RD9_RASHADER_FRONTIER(ras_slot00, 0x00, 0x1004DB40)
 // +0x08 .. +0x18 - ; thin __fastcall adapters over the typed members below, as
 // slot +0x04's is.  +0x08 and +0x10 .. +0x18 take the entry on the stack (`retn 4`); +0x0C takes
 // nothing.
-unsigned int __fastcall ras_slot08(void* self, void*, RenderQueueEntry* entry)
+unsigned int RD9_THUNK ras_slot08(void* self RD9_THUNK_EDX, RenderQueueEntry* entry)
 {
     return static_cast<RaShader*>(self)->begin(entry);
 }
-void __fastcall ras_slot0C(void* self, void*)
+void RD9_THUNK ras_slot0C(void* self RD9_THUNK_EDX)
 {
     static_cast<RaShader*>(self)->end();
 }
-void __fastcall ras_slot10(void* self, void*, RenderQueueEntry* entry)
+void RD9_THUNK ras_slot10(void* self RD9_THUNK_EDX, RenderQueueEntry* entry)
 {
     static_cast<RaShader*>(self)->applyInstanceParameters(entry);
 }
-void __fastcall ras_slot14(void* self, void*, RenderQueueEntry* entry)
+void RD9_THUNK ras_slot14(void* self RD9_THUNK_EDX, RenderQueueEntry* entry)
 {
     static_cast<RaShader*>(self)->applyTemplateParameters(entry);
 }
-void __fastcall ras_slot18(void* self, void*, RenderQueueEntry* entry)
+void RD9_THUNK ras_slot18(void* self RD9_THUNK_EDX, RenderQueueEntry* entry)
 {
     static_cast<RaShader*>(self)->draw(entry);
 }
@@ -607,7 +569,7 @@ void __fastcall ras_slot18(void* self, void*, RenderQueueEntry* entry)
 // +0x04, sub_1004B4E0.  `__thiscall`, no stack arguments (the body's terminator is a bare `retn`),
 // the result in al.  Written as the table's other entries are: a thin __fastcall adapter over the
 // typed member, so nothing in the table is a raw seam with an invented signature.
-unsigned char __fastcall ras_slot04(void* self, void*)
+unsigned char RD9_THUNK ras_slot04(void* self RD9_THUNK_EDX)
 {
     return static_cast<RaShader*>(self)->build() ? 1u : 0u;
 }
@@ -626,21 +588,8 @@ void* const kRaShaderVtable[8] =
 
 // Compatibility FileInfo storage must include its live string and all 64 bytes.
 // Existence checks discard the fields, but the file manager still writes the whole record.
-#if !BF2_PLUGIN_ABI_NATIVE
-struct RaShaderPeFileInfo
-{
-    vc71::string  name;          // +0x00
-    unsigned char isDirectory;   // +0x1C
-    unsigned char pad1[3];
-    unsigned int  size;          // +0x20
-    unsigned int  pad2;          // +0x24  MSVC 8-aligns the filetime block that follows
-    unsigned int  times[6];      // +0x28  creation / last access / last write, low dword first
-};
 
-static_assert(sizeof(RaShaderPeFileInfo) == 64, "the PE io::FileInfo the shipped frame reserves");
-#endif
-
-bool fileManagerResolves(const vc71::string& path)
+bool fileManagerResolves(const std::string& path)
 {
     // [CHOSEN, not recovered] Permit loading before the host publishes FileManager.
     if (!::dice::hfe::fileManager)
@@ -648,22 +597,13 @@ bool fileManagerResolves(const vc71::string& path)
 
     const ::renddx9abi::HostString hostPath = ::renddx9abi::makeHostString(path);
 
-#if BF2_PLUGIN_ABI_NATIVE
     ::dice::hfe::io::FileInfo info;
     return ::dice::hfe::fileManager->getFileInfo(hostPath, info);
-#else
-    RaShaderPeFileInfo info;
-    void** const vtbl = *reinterpret_cast<void***>(::dice::hfe::fileManager);
-    typedef unsigned char (__thiscall* GetFileInfoFn)(void*, const ::renddx9abi::HostString&,
-                                                      RaShaderPeFileInfo&);
-    return reinterpret_cast<GetFileInfoFn>(vtbl[0x38 / 4])(
-               ::dice::hfe::fileManager, hostPath, info) != 0;
-#endif
 }
 
 // sub_10074E80, PE 0x10074E80 - `std::string lowered(in); pathToLower(lowered); return lowered;`.
 // pathToLower is sub_10074D10, which RendDX9Base.h already publishes.
-void raToLower(vc71::string& out, const vc71::string& in)
+void raToLower(std::string& out, const std::string& in)
 {
     out = in.c_str();
     pathToLower(out);
@@ -672,10 +612,10 @@ void raToLower(vc71::string& out, const vc71::string& in)
 // sub_10075110, case-insensitive find, reproduced here rather than reached because
 // Geom/StaticMeshTemplate.cpp's copy of it is file-local to that translation unit.  Both lower a
 // copy of each string with pathToLower and run std::string::find on the lowered pair.
-bool raContainsInsensitive(const vc71::string& haystack, const vc71::string& needle)
+bool raContainsInsensitive(const std::string& haystack, const std::string& needle)
 {
-    vc71::string loweredHaystack(haystack.c_str());
-    vc71::string loweredNeedle(needle.c_str());
+    std::string loweredHaystack(haystack.c_str());
+    std::string loweredNeedle(needle.c_str());
     pathToLower(loweredHaystack);
     pathToLower(loweredNeedle);
     return ::strstr(loweredHaystack.c_str(), loweredNeedle.c_str()) != 0;
@@ -685,7 +625,7 @@ bool raContainsInsensitive(const vc71::string& haystack, const vc71::string& nee
 // Shared formatting buffer; overflow replaces the message with a fixed warning.
 char g_raFormatBuffer[0x1000];
 
-void raFormatString(vc71::string& out, const char* format, ...)
+void raFormatString(std::string& out, const char* format, ...)
 {
     va_list args;
     va_start(args, format);
@@ -701,41 +641,42 @@ void raFormatString(vc71::string& out, const char* format, ...)
     out = g_raFormatBuffer;
 }
 
-// std::operator==<char>(const string&, const string&) - size first, then a byte compare.  Written
-// out because vc71::string is an ABI carrier and deliberately carries no relational operators.
-bool raStringEqual(const vc71::string& a, const vc71::string& b)
+// std::operator==<char>(const string&, const string&) - size first, then a byte compare, as the
+// shipped inline expansion does.
+bool raStringEqual(const std::string& a, const std::string& b)
 {
     return a.size() == b.size() && ::memcmp(a.c_str(), b.c_str(), a.size()) == 0;
 }
 
-// sub_1004C990, std::find over a vc71::string array.  Returns the element index or
+// sub_1004C990, std::find over a std::string array.  Returns the element index or
 // -1.  The shipped body returns the iterator through a hidden ecx return slot and every caller then
 // does the same `(found - _First) / 28` division; folding that in here changes nothing observable.
-int raFindString(const vc71::vector_layout& names, const vc71::string& wanted)
+int raFindString(const std::vector<std::string>& names, const std::string& wanted)
 {
-    const char* it = names.first;
-    for (; it != names.last; it += sizeof(vc71::string))
-        if (raStringEqual(*reinterpret_cast<const vc71::string*>(it), wanted))
+    std::vector<std::string>::const_iterator it = names.begin();
+    for (; it != names.end(); ++it)
+        if (raStringEqual(*it, wanted))
             break;
-    if (it == names.last)
+    if (it == names.end())
         return -1;
-    return static_cast<int>((it - names.first) / static_cast<int>(sizeof(vc71::string)));
+    return static_cast<int>(it - names.begin());
 }
 
 // sub_1004CA60, the plain-name lookup, `retn 4`.
-int raRegistryIndexOfPlain(const vc71::vector_layout& names, const vc71::string& parameter)
+template <typename Names>
+int raRegistryIndexOfPlain(const Names& names, const std::string& parameter)
 {
     return raFindString(names, parameter);
 }
 
 // Returns the name-registry index, trying the shader-model suffix before the plain name.
 // The result is an index into the parallel offset table, not a byte offset.
-int raRegistryIndexOf(const vc71::vector_layout& names, const vc71::string& parameter,
-                      int shaderModel)
+template <typename Names>
+int raRegistryIndexOf(const Names& names, const std::string& parameter, int shaderModel)
 {
     int index = -1;
     {
-        vc71::string versioned;
+        std::string versioned;
         raFormatString(versioned, "%s_%iX", parameter.c_str(), shaderModel);
         index = raFindString(names, versioned);
     }
@@ -744,51 +685,23 @@ int raRegistryIndexOf(const vc71::vector_layout& names, const vc71::string& para
     return index;
 }
 
-// Copies a bound parameter, including its owned string, for compatibility-vector insertion.
-void raCopyBoundParameter(void* destination, const void* source)
-{
-    const RaBoundParameter* const s = static_cast<const RaBoundParameter*>(source);
-    unsigned char* const          d = static_cast<unsigned char*>(destination);
-    ::memcpy(d, s, offsetof(RaBoundParameter, name));      // handle + desc + offset, all POD
-    new (d + offsetof(RaBoundParameter, name)) vc71::string(s->name);
-}
-
-void raPushBoundParameter(vc71::vector_layout& v, const RaBoundParameter& record)
-{
-    raRegistryPush(v, &record, sizeof(RaBoundParameter), &raCopyBoundParameter);
-}
-
-// The clear half of the same loop: destroy every element's std::string at +0x34, free the buffer,
-// null the triple.  sub_1004B4E0 runs it over all fifteen vectors before it re-binds anything.
-void raClearBoundParameters(vc71::vector_layout& v)
-{
-    if (v.first)
-    {
-        for (char* p = v.first; p != v.last; p += sizeof(RaBoundParameter))
-            reinterpret_cast<RaBoundParameter*>(p)->name.~string();
-        ::renddx9abi::engineFree(v.first);
-    }
-    v.first = 0;
-    v.last  = 0;
-    v.end   = 0;
-}
-
 // One registry probe, written the way the shipped body writes it: build a temporary std::string,
 // ask, destroy the temporary; and on a hit build a second temporary and ask again for the value.
 // Two calls and two temporaries per hit - folded into one lookup it would still answer the same,
 // but the doubling is what the instruction stream does.
-void raProbeRegistry(const vc71::vector_layout& names, unsigned int blockIndex,
+template <typename Names>
+void raProbeRegistry(const Names& names, unsigned int blockIndex,
                      const char* parameter, int shaderModel,
                      RaBoundParameter& record, unsigned int& block)
 {
     {
-        const vc71::string probe(parameter);
+        const std::string probe(parameter);
         if (raRegistryIndexOf(names, probe, shaderModel) == -1)
             return;
     }
     block = blockIndex;
     {
-        const vc71::string fetch(parameter);
+        const std::string fetch(parameter);
         record.offset = raRegistryIndexOf(names, fetch, shaderModel);
     }
     record.name = parameter;
@@ -802,9 +715,9 @@ unsigned int g_raShaderBuildSerial = 0;
 
 // sub_10045240, PE 0x10045240.
 
-void raLightingParametersConstruct(void* storage)
+RaLightingParameters::RaLightingParameters()
 {
-    RaLightingParameters* const p = static_cast<RaLightingParameters*>(storage);
+    RaLightingParameters* const p = this;
 
     p->registry = &g_raLightingOffsets;      // &unk_1023E790 - see the file header
     p->vptr     = raLightingParametersVtable();   // off_101E1EB4 - the listener table (dc_core)
@@ -838,26 +751,17 @@ void raLightingParametersConstruct(void* storage)
         raMat4Assign(p->shadowViewProj.value, identity);
     }
 
-    // The four array holders.  Each shipped call copy-constructs the member vector from an empty
-    // stack vector ({_First, _Last, _End} all zero), so `_Buy(0)` clears the three pointers and
-    // returns false and nothing is copied.  The 64/16-byte strides are the `sar 6` / `sar 4` in
-    // sub_10046CC0 and sub_10046D60 and are recorded only in this comment - no element is moved.
+    // The four array holders, each copy-constructed from an empty vector: they start empty. The
+    // 64/16-byte strides are the `sar 6` / `sar 4` in sub_10046CC0 and sub_10046D60.
     p->shadowViewProjArray.vptr = raHolderMat4Array();    // off_101E1EA4, stride 64
-    raVectorBuyEmpty(p->shadowViewProjArray.value);
     p->clampViewProjArray.vptr  = raHolderMat4Array();    // off_101E1EA4, stride 64
-    raVectorBuyEmpty(p->clampViewProjArray.value);
     p->shadowPosArray.vptr      = raHolderVec4Array();    // off_101E1EAC, stride 16
-    raVectorBuyEmpty(p->shadowPosArray.value);
     p->shadowSizeArray.vptr     = raHolderVec4Array();    // off_101E1EAC, stride 16
-    raVectorBuyEmpty(p->shadowSizeArray.value);
 
     p->shadowCount.vptr  = raHolderInt();
     p->shadowCount.value = 0;
 
-    p->tail0FC.first = 0;
-    p->tail0FC.last  = 0;
-    p->tail0FC.end   = 0;
-    p->tail10C       = 0;
+    p->tail10C       = 0;                                  // tail0FC starts empty
 
     raRegisterNames(g_raLightingOffsets, g_raLightingNames, kRaLightingNames, 11);
 
@@ -867,45 +771,39 @@ void raLightingParametersConstruct(void* storage)
     registerDeviceLostResetListener(static_cast<void*>(p), 3);
 }
 
+void raLightingParametersConstruct(void* storage)
+{
+    new (storage) RaLightingParameters();
+}
+
 
 // sub_10044120, PE 0x10044120.  An ordinary VC7.1 destructor: detach, free the owned buffers,
 // republish each member's vptr on the way out, and release the two reference holders through their
 // own vtable slot +0x08.
 
-void raLightingParametersDestroy(void* storage)
+// The vectors' storage is released at the shipped points; their destructors then find them empty.
+RaLightingParameters::~RaLightingParameters()
 {
-    RaLightingParameters* const p = static_cast<RaLightingParameters*>(storage);
+    RaLightingParameters* const p = this;
 
     p->vptr = raLightingParametersVtable();             // off_101E1EB4, republished first
     unregisterDeviceLostResetListener(static_cast<void*>(p));
 
-    if (p->tail0FC.first)
-        ::renddx9abi::engineFree(p->tail0FC.first);
-    p->tail0FC.first = 0;
-    p->tail0FC.last  = 0;
-    p->tail0FC.end   = 0;
+    std::vector<unsigned char>().swap(p->tail0FC);
 
     p->shadowCount.vptr = raHolderInt();
 
     p->shadowSizeArray.vptr = raHolderVec4Array();
-    if (p->shadowSizeArray.value.first)
-        ::renddx9abi::engineFree(p->shadowSizeArray.value.first);
-    raVectorBuyEmpty(p->shadowSizeArray.value);
+    std::vector<unsigned char>().swap(p->shadowSizeArray.value);
 
     p->shadowPosArray.vptr = raHolderVec4Array();
-    if (p->shadowPosArray.value.first)
-        ::renddx9abi::engineFree(p->shadowPosArray.value.first);
-    raVectorBuyEmpty(p->shadowPosArray.value);
+    std::vector<unsigned char>().swap(p->shadowPosArray.value);
 
     p->clampViewProjArray.vptr = raHolderMat4Array();
-    if (p->clampViewProjArray.value.first)
-        ::renddx9abi::engineFree(p->clampViewProjArray.value.first);
-    raVectorBuyEmpty(p->clampViewProjArray.value);
+    std::vector<unsigned char>().swap(p->clampViewProjArray.value);
 
     p->shadowViewProjArray.vptr = raHolderMat4Array();
-    if (p->shadowViewProjArray.value.first)
-        ::renddx9abi::engineFree(p->shadowViewProjArray.value.first);
-    raVectorBuyEmpty(p->shadowViewProjArray.value);
+    std::vector<unsigned char>().swap(p->shadowViewProjArray.value);
 
     p->shadowViewProj.vptr    = raHolderMat4();
     p->overGrowthAmbient.vptr = raHolderVec4();
@@ -935,12 +833,17 @@ void raLightingParametersDestroy(void* storage)
     p->unnamed008.vptr = raHolderVec4();
 }
 
+void raLightingParametersDestroy(void* storage)
+{
+    static_cast<RaLightingParameters*>(storage)->~RaLightingParameters();
+}
+
 
 // sub_100458E0, PE 0x100458E0.
 
-void raObjectParametersConstruct(void* storage)
+RaObjectParameters::RaObjectParameters()
 {
-    RaObjectParameters* const p = static_cast<RaObjectParameters*>(storage);
+    RaObjectParameters* const p = this;
     void* const holder = raHolder();
 
     p->registry = &g_raObjectOffsets;        // &unk_1023E7D0
@@ -994,8 +897,7 @@ void raObjectParametersConstruct(void* storage)
     p->windDir.vptr = raHolderVec3();
     p->windDir.value[0] = 0.0f; p->windDir.value[1] = 0.0f; p->windDir.value[2] = 0.0f;
 
-    p->userData.vptr = raHolderBytes();               // off_101E1E9C - a byte vector, no element stride
-    raVectorBuyEmpty(p->userData.value);
+    p->userData.vptr = raHolderBytes();               // off_101E1E9C - a byte vector, empty
 
     p->heightOverTerrain.vptr  = raHolderFloat();
     p->heightOverTerrain.value = 0.0f;
@@ -1013,24 +915,26 @@ void raObjectParametersConstruct(void* storage)
     raRegisterNames(g_raObjectOffsets, g_raObjectNames, kRaObjectNames, 15);
 }
 
+void raObjectParametersConstruct(void* storage)
+{
+    new (storage) RaObjectParameters();
+}
+
 
 // sub_1004D900, PE 0x1004D900.  A pure teardown: republish thirteen member vptrs in reverse
 // declaration order and free the one owned buffer.  It does NOT detach a device-lost listener,
 // because sub_100458E0 never registers one.
 
-void raObjectParametersDestroy(void* storage)
+RaObjectParameters::~RaObjectParameters()
 {
-    RaObjectParameters* const p = static_cast<RaObjectParameters*>(storage);
-    void* const holder = raHolder();
+    RaObjectParameters* const p = this;
 
     p->objectSpaceWorldUp.vptr = raHolderVec3();
     p->hemiMapSkyColor.vptr    = raHolderVec4();
     p->heightOverTerrain.vptr  = raHolderFloat();
 
     p->userData.vptr = raHolderBytes();
-    if (p->userData.value.first)
-        ::renddx9abi::engineFree(p->userData.value.first);
-    raVectorBuyEmpty(p->userData.value);
+    std::vector<unsigned char>().swap(p->userData.value);   // freed here; its destructor finds it empty
 
     p->windDir.vptr           = raHolderVec3();
     p->windSpeed.vptr         = raHolderFloat();
@@ -1044,6 +948,11 @@ void raObjectParametersDestroy(void* storage)
     p->worldViewProjection.vptr = raHolderMat4();
     p->viewProjection.vptr      = raHolderMat4();
     p->world.vptr               = raHolderMat4();
+}
+
+void raObjectParametersDestroy(void* storage)
+{
+    static_cast<RaObjectParameters*>(storage)->~RaObjectParameters();
 }
 
 
@@ -1098,7 +1007,7 @@ unsigned int raLightArrayParametersSize() { return sizeof(RaLightArrayParameters
 
 // sub_1004BDC0, the 0x178-byte shader's constructor.
 
-RaShader::RaShader(const vc71::string& shaderName, void* renderQueue)
+RaShader::RaShader(const std::string& shaderName, void* renderQueue)
     : m_name(shaderName)     // +0x118 - a copy of the caller's lowered name.  The shipped body
                              // builds it between the seventeen vector clears and the +0x134 byte;
                              // a member initialiser is the only way to say that in source without
@@ -1107,58 +1016,16 @@ RaShader::RaShader(const vc71::string& shaderName, void* renderQueue)
     m_queue = renderQueue;                       // +0x04, written before the vptr
     m_vptr  = const_cast<void*>(static_cast<const void*>(kRaShaderVtable));
 
-    // Seventeen vectors at +0x08 .. +0x108.  The constructor zeroes _First/_Last/_End of each and
-    // never touches the empty allocator dword at the base - the VC7.1 shape Vc71Vector.h records.
-    vc71::vector_layout* const vectors[17] =
-    {
-        &m_instanceParameters[0], &m_instanceParameters[1], &m_instanceParameters[2],
-        &m_instanceParameters[3], &m_instanceParameters[4],
-        &m_globalParameters[0],   &m_globalParameters[1],   &m_globalParameters[2],
-        &m_globalParameters[3],   &m_globalParameters[4],
-        &m_templateParameters[0], &m_templateParameters[1], &m_templateParameters[2],
-        &m_templateParameters[3], &m_templateParameters[4],
-        &m_vertexElementDescriptors, &m_vertexElementNames
-    };
-    for (int i = 0; i < 17; ++i)
-    {
-        vectors[i]->first = 0;
-        vectors[i]->last  = 0;
-        vectors[i]->end   = 0;
-    }
+    // The seventeen vectors at +0x08 .. +0x108 are constructed empty, which is what the shipped
+    // constructor's _First/_Last/_End clears amount to.
 
     m_byte134  = 1;
     m_pad135[0] = m_pad135[1] = m_pad135[2] = 0;
     m_dword138 = 0;
-    m_requiredVertexElements.first = 0;
-    m_requiredVertexElements.last  = 0;
-    m_requiredVertexElements.end   = 0;
     m_float150 = 1.0f;
     m_queueProfiler = 0;
 
-    // Allocate the 24-byte technique-map sentinel, with color/nil bytes at +0x14/+0x15.
-    {
-        unsigned char* const raw = static_cast<unsigned char*>(::renddx9abi::engineAlloc(0x18));
-        RaTechniqueNode* node = 0;
-        if (raw)
-        {
-            for (unsigned int i = 0; i < 0x18; ++i)
-                raw[i] = 0;
-            node = reinterpret_cast<RaTechniqueNode*>(raw);
-            node->color = 1;                     // _Color = black
-            node->isNil = 0;                     // sub_1004CAF0 leaves it 0 ...
-        }
-        m_techniques.comp = 0;
-        m_techniques.head = node;
-        // [CHOSEN, not recovered] Guard allocation failure because this allocator may return null.
-        if (node)
-        {
-            node->isNil  = 1;
-            node->parent = node;
-            node->left   = node;
-            node->right  = node;
-        }
-        m_techniques.size = 0;
-    }
+    // The technique map at +0x158 is constructed empty too (sub_1004CAF0's 24-byte sentinel).
 
     m_activeTechnique = 0;
     m_technique = 0;
@@ -1175,14 +1042,13 @@ RaShader::RaShader(const vc71::string& shaderName, void* renderQueue)
     m_device = 0;
     if (g_rendererBase)
     {
-        m_device = *reinterpret_cast<IDirect3DDevice9* const*>(
-            static_cast<const unsigned char*>(g_rendererBase) + 0x0C);
+        m_device = static_cast<const RendDX9Base*>(g_rendererBase)->device;
     }
 
     // Rows 1..20 of the vertex-element table.
     for (unsigned int i = 0; i < kRaVertexElementSplit; ++i)
     {
-        vc71::string name(kRaVertexElements[i].name);
+        std::string name(kRaVertexElements[i].name);
         raPushName(m_vertexElementNames, name);
         raPushDescriptor(m_vertexElementDescriptors, kRaVertexElements[i].desc);
     }
@@ -1190,34 +1056,38 @@ RaShader::RaShader(const vc71::string& shaderName, void* renderQueue)
 
     // Temporary parameter blocks trigger one-time registry initialization.
     // Preserve construction and destruction order, including light-array teardown first.
-    unsigned int materialStorage[0x150 / 4];
-    unsigned int constantsStorage[0xAFC / 4];
-    RaLightingParameters   lightingStorage;
-    RaObjectParameters     objectStorage;
+    // The material block is 0x150 bytes and the constants block 0xAFC on x86; both are native
+    // sizes on x64 (issue #7).
+    alignas(geom::RaMaterialParameters)
+        unsigned char materialStorage[sizeof(geom::RaMaterialParameters)];
+    alignas(void*) unsigned char constantsStorage[kRaShaderConstantsSize];
+    alignas(RaLightingParameters) unsigned char lightingStorage[sizeof(RaLightingParameters)];
+    alignas(RaObjectParameters) unsigned char   objectStorage[sizeof(RaObjectParameters)];
     RaLightArrayParameters lightArrayStorage;
 
     raMaterialParametersConstruct(materialStorage);
-    raLightingParametersConstruct(&lightingStorage);
-    raObjectParametersConstruct(&objectStorage);
+    raLightingParametersConstruct(lightingStorage);
+    raObjectParametersConstruct(objectStorage);
 
     // sub_10038BF0(stack, 0xFFFFFFFF) - a whole RaShaderConstants built on this frame with the
-    // device argument -1.  Not a typo in the transcription: `push 0FFFFFFFFh`.
-    raShaderConstantsConstructInPlace(constantsStorage, reinterpret_cast<void*>(~0u));
+    // device argument -1.  Not a typo in the transcription: `push 0FFFFFFFFh`.  All ones on x64.
+    raShaderConstantsConstructInPlace(constantsStorage,
+                                      reinterpret_cast<void*>(~static_cast<uintptr_t>(0)));
 
     raLightArrayParametersConstruct(&lightArrayStorage);
 
     // Rows 21..26 of the vertex-element table, with the blocks alive.
     for (unsigned int i = kRaVertexElementSplit; i < 26; ++i)
     {
-        vc71::string name(kRaVertexElements[i].name);
+        std::string name(kRaVertexElements[i].name);
         raPushName(m_vertexElementNames, name);
         raPushDescriptor(m_vertexElementDescriptors, kRaVertexElements[i].desc);
     }
 
     raLightArrayParametersDestroyInline(&lightArrayStorage);  // the one inlined store
     raShaderConstantsDestroyInPlace(constantsStorage);
-    raObjectParametersDestroy(&objectStorage);
-    raLightingParametersDestroy(&lightingStorage);
+    raObjectParametersDestroy(objectStorage);
+    raLightingParametersDestroy(lightingStorage);
     raMaterialParametersDestroy(materialStorage);
 }
 
@@ -1225,68 +1095,6 @@ RaShader::RaShader(const vc71::string& shaderName, void* renderQueue)
 // Render-queue shader application helpers.
 
 namespace {
-
-// VC7.1 map::operator[] on the 24-byte technique tree: sub_1004D9C0 for the descent and the
-// equal-key hit, sub_1004D460 for the insert.  The descent is the shipped one - `node->key >= key`
-// goes left, the hit test is `key >= parent->key` on the lower bound, keys unsigned - and so are
-// the link and the leftmost/rightmost maintenance; the inserted node's red-black recolouring is
-// [CHOSEN, not recovered], exactly as Vc71Map.h's mapInsertU32 is (RW-74).
-void*& raTechniqueMapAt(RaTechniqueMap& map, unsigned int key)
-{
-    RaTechniqueNode* const head = map.head;
-    RaTechniqueNode* parent = head;
-    for (RaTechniqueNode* cur = head->parent; !cur->isNil; )
-    {
-        if (cur->key >= key)
-        {
-            parent = cur;
-            cur = cur->left;
-        }
-        else
-        {
-            cur = cur->right;
-        }
-    }
-    if (parent != head && key >= parent->key)
-        return parent->value;
-
-    // sub_1004D460 - _Insert({key, 0}) under the lower bound; the node is sub_1004CAF0's 0x18 bytes.
-    unsigned char* const raw = static_cast<unsigned char*>(::renddx9abi::engineAlloc(0x18));
-    for (unsigned int i = 0; i < 0x18; ++i)
-        raw[i] = 0;
-    RaTechniqueNode* const node = reinterpret_cast<RaTechniqueNode*>(raw);
-    node->key   = key;
-    node->value = 0;
-    node->left  = head;
-    node->right = head;
-    node->color = 0;
-    node->isNil = 0;
-    if (parent == head)
-    {
-        node->parent = head;
-        head->parent = node;
-        head->left   = node;
-        head->right  = node;
-    }
-    else
-    {
-        node->parent = parent;
-        if (key < parent->key)
-        {
-            parent->left = node;
-            if (head->left == parent)
-                head->left = node;
-        }
-        else
-        {
-            parent->right = node;
-            if (head->right == parent)
-                head->right = node;
-        }
-    }
-    ++map.size;
-    return node->value;
-}
 
 // dword_1023F3D4 - read by sub_1004B340 alone and written by nothing in the image: the entry's
 // clip planes are never released after use in retail.  Kept as the word it is.
@@ -1308,8 +1116,8 @@ void RaShader::fillTechniqueMap()
             break;
         D3DXTECHNIQUE_DESC desc = { 0, 0, 0 };
         effect->GetTechniqueDesc(handle, &desc);
-        const unsigned int key = raHashString(vc71::string(desc.Name));
-        raTechniqueMapAt(m_techniques, key) = ::renddx9abi::d3dxHandleValue(handle);
+        const unsigned int key = raHashString(std::string(desc.Name));
+        m_techniques[key] = ::renddx9abi::d3dxHandleValue(handle);   // sub_1004D9C0 / sub_1004D460
     }
 }
 
@@ -1317,9 +1125,9 @@ void RaShader::fillTechniqueMap()
 // the key (operator[] semantics, as shipped) and answers false with nothing else changed.
 bool RaShader::selectTechnique(unsigned int key)
 {
-    if (m_techniques.size == 0)
+    if (m_techniques.empty())
         fillTechniqueMap();
-    void* const handle = raTechniqueMapAt(m_techniques, key);
+    void* const handle = m_techniques[key];
     if (!handle)
         return false;
     m_activeTechnique = handle;
@@ -1385,19 +1193,13 @@ void RaShader::applyInstanceParameters(RenderQueueEntry* entry)
     if (m_effect)
         applyParameterSet(m_instanceParameters, entry);           // sub_1004B210(this + 0x08)
 
-    vc71::vector_layout& planes = entry->lighting.tail0FC;
-    unsigned int index = 0;
-    for (const char* plane = planes.first; plane != planes.last; plane += 16, ++index)
-        m_device->SetClipPlane(index, reinterpret_cast<const float*>(plane));   // device +0xDC
+    std::vector<unsigned char>& planes = entry->lighting.tail0FC;
+    const unsigned int planeCount = static_cast<unsigned int>(planes.size()) / 16;
+    for (unsigned int index = 0; index < planeCount; ++index)
+        m_device->SetClipPlane(index, reinterpret_cast<const float*>(&planes[16 * index]));   // device +0xDC
 
     if (g_raReleaseClipPlanesAfterUse)                            // dword_1023F3D4, never set
-    {
-        if (planes.first)
-            ::renddx9abi::engineFree(planes.first);
-        planes.first = 0;
-        planes.last  = 0;
-        planes.end   = 0;
-    }
+        std::vector<unsigned char>().swap(planes);
 }
 
 // +0x14, sub_1004B280.
@@ -1410,7 +1212,7 @@ void RaShader::applyTemplateParameters(RenderQueueEntry* entry)
 // sub_1004B210, PE 0x1004B210.  One five-vector set against the entry's blocks, in the shipped
 // order: the material block, the object block, the process-wide RaShaderConstants, the light
 // array, the lighting block.
-void RaShader::applyParameterSet(vc71::vector_layout* set, RenderQueueEntry* entry)
+void RaShader::applyParameterSet(std::vector<RaBoundParameter>* set, RenderQueueEntry* entry)
 {
     applyParameterVector(entry->materialParameters, set[0]);
     applyParameterVector(entry->objectParameters,   set[1]);
@@ -1420,29 +1222,25 @@ void RaShader::applyParameterSet(vc71::vector_layout* set, RenderQueueEntry* ent
 }
 
 // sub_1004D280, PE 0x1004D280.  For every 80-byte bound parameter: its registry index, through the
-// block's own offset vector (block + 4 -> vector, ->first[index]), names the byte offset of the
-// holder inside the block; the holder's slot 0 applies it to this shader's effect under the bound
-// D3DXHANDLE.  No null test on the block, the registry or the holder, as shipped.
-void RaShader::applyParameterVector(void* block, const vc71::vector_layout& parameters)
+// block's own offset vector (the word after the block's vptr -> std::vector<int>), names the byte
+// offset of the holder inside the block; the holder's slot 0 applies it to this shader's effect
+// under the bound D3DXHANDLE.  No null test on the block, the registry or the holder, as shipped.
+void RaShader::applyParameterVector(void* block, const std::vector<RaBoundParameter>& parameters)
 {
-    const unsigned int count = parameters.first
-        ? static_cast<unsigned int>(parameters.last - parameters.first) / sizeof(RaBoundParameter)
-        : 0u;
+    const unsigned int count = static_cast<unsigned int>(parameters.size());
     if (!count)
         return;
 
-    typedef int (__fastcall* ApplyFn)(void*, void*, void*, void*);
+    typedef int (__thiscall* ApplyFn)(void*, void*, void*);
+    struct BlockHeader { void* vptr; const std::vector<int>* registry; };
     unsigned char* const bytes = static_cast<unsigned char*>(block);
-    const vc71::vector_layout* const registry =
-        *reinterpret_cast<const vc71::vector_layout* const*>(bytes + 4);
-    const unsigned int* const offsets = reinterpret_cast<const unsigned int*>(registry->first);
+    const std::vector<int>& offsets = *reinterpret_cast<const BlockHeader*>(bytes)->registry;
     for (unsigned int i = 0; i < count; ++i)
     {
-        const RaBoundParameter& bound =
-            reinterpret_cast<const RaBoundParameter*>(parameters.first)[i];
+        const RaBoundParameter& bound = parameters[i];
         unsigned char* const holder = bytes + offsets[bound.offset];
         reinterpret_cast<ApplyFn>((*reinterpret_cast<void***>(holder))[0])(
-            holder, 0, m_effect, bound.handle);
+            holder, m_effect, bound.handle);
     }
 }
 
@@ -1454,23 +1252,23 @@ void RaShader::applyParameterVector(void* block, const vc71::vector_layout& para
 // index start, +0x1C the zero slot, +0x18 vertex start, +0x14 the primitive type word.
 void RaShader::draw(RenderQueueEntry* entry)
 {
-    typedef int (__fastcall* IntSlotFn)(void*, void*);
+    typedef int (__thiscall* IntSlotFn)(void*);
     void* const material = entry->material;
     void** const slots = *static_cast<void***>(material);
 
-    const int primitiveCount = reinterpret_cast<IntSlotFn>(slots[0x10 / 4])(material, 0);
-    (void)reinterpret_cast<IntSlotFn>(slots[0x08 / 4])(material, 0);
+    const int primitiveCount = reinterpret_cast<IntSlotFn>(slots[0x10 / 4])(material);
+    (void)reinterpret_cast<IntSlotFn>(slots[0x08 / 4])(material);
     if (!primitiveCount)
         return;
 
     stateManagerPreDrawApply();
 
-    const int startIndex  = reinterpret_cast<IntSlotFn>(slots[0x20 / 4])(material, 0)
+    const int startIndex  = reinterpret_cast<IntSlotFn>(slots[0x20 / 4])(material)
                           + static_cast<int>(entry->lighting.tail10C);
-    const int numVertices = reinterpret_cast<IntSlotFn>(slots[0x08 / 4])(material, 0);
-    const int minIndex    = reinterpret_cast<IntSlotFn>(slots[0x1C / 4])(material, 0);
-    const int baseVertex  = reinterpret_cast<IntSlotFn>(slots[0x18 / 4])(material, 0);
-    const int type        = reinterpret_cast<IntSlotFn>(slots[0x14 / 4])(material, 0);
+    const int numVertices = reinterpret_cast<IntSlotFn>(slots[0x08 / 4])(material);
+    const int minIndex    = reinterpret_cast<IntSlotFn>(slots[0x1C / 4])(material);
+    const int baseVertex  = reinterpret_cast<IntSlotFn>(slots[0x18 / 4])(material);
+    const int type        = reinterpret_cast<IntSlotFn>(slots[0x14 / 4])(material);
     m_device->DrawIndexedPrimitive(static_cast<D3DPRIMITIVETYPE>(type), baseVertex,
                                    static_cast<UINT>(minIndex), static_cast<UINT>(numVertices),
                                    static_cast<UINT>(startIndex),
@@ -1515,7 +1313,7 @@ int* RaShader::shaderVersion()
 bool RaShader::slot04()
 {
     void** const vtbl = *reinterpret_cast<void***>(this);
-    return reinterpret_cast<unsigned char (__fastcall*)(void*, void*)>(vtbl[1])(this, 0) != 0;
+    return reinterpret_cast<unsigned char (__thiscall*)(void*)>(vtbl[1])(this) != 0;
 }
 
 
@@ -1528,14 +1326,14 @@ void* RaShader::loadEffect()
     // dword_1023F3D0 plus an atexit() per string; a function-local static is the same lazy
     // construct-once with the same lifetime, and the destructor registration differs only in which
     // mechanism runs it.
-    static const vc71::string s_prefix("shaders/rashader");
-    static const vc71::string s_modPrefix("mods/bf2/");      // constructed, never read
-    static const vc71::string s_extension(".fx");
+    static const std::string s_prefix("shaders/rashader");
+    static const std::string s_modPrefix("mods/bf2/");      // constructed, never read
+    static const std::string s_extension(".fx");
     (void)s_modPrefix;
 
     // `s_prefix + m_name + s_extension`.  MSVC expanded that expression into four extra
     // copy-constructed temporaries in the shipped body; the bytes it produces are these.
-    vc71::string path(s_prefix);
+    std::string path(s_prefix);
     path += m_name;
     path += s_extension;
 
@@ -1597,12 +1395,8 @@ bool RaShader::build()
     }
     stateManagerPop();
 
-    // Elements are borrowed pointers, so only the old backing storage is freed.
-    if (m_requiredVertexElements.first)
-        ::renddx9abi::engineFree(m_requiredVertexElements.first);
-    m_requiredVertexElements.first = 0;
-    m_requiredVertexElements.last  = 0;
-    m_requiredVertexElements.end   = 0;
+    // Elements are borrowed pointers, so emptying the vector releases nothing else.
+    m_requiredVertexElements.clear();
 
     const D3DXHANDLE required = effect->GetParameterByName(0, "reqVertexElement");
     if (required)
@@ -1618,40 +1412,37 @@ bool RaShader::build()
 
             int index = -1;
             {
-                const vc71::string wanted(value);
+                const std::string wanted(value);
                 index = raFindString(m_vertexElementNames, wanted);
             }
             if (index != -1)
             {
-                raPushDescriptor(
-                    m_requiredVertexElements,
-                    reinterpret_cast<const RaVertexElementDesc* const*>(
-                        m_vertexElementDescriptors.first)[index]);
+                raPushDescriptor(m_requiredVertexElements, m_vertexElementDescriptors[index]);
             }
         }
     }
 
-    // -- 5a. drop the previous binding, all fifteen vectors
+    // -- 5a. drop the previous binding, all fifteen vectors (each element's name string with it)
     for (int slot = 0; slot < 5; ++slot)
     {
-        raClearBoundParameters(m_instanceParameters[slot]);
-        raClearBoundParameters(m_globalParameters[slot]);
-        raClearBoundParameters(m_templateParameters[slot]);
+        m_instanceParameters[slot].clear();
+        m_globalParameters[slot].clear();
+        m_templateParameters[slot].clear();
     }
 
     // -- 5b. re-bind
     // The shipped body builds a local vector<std::string> of the three struct names and walks it;
     // the order it pushes them in is Instance, Template, Global, and that is the order the effect is
     // interrogated in.
-    vc71::vector_layout blockNames = { 0, 0, 0, 0 };
-    { const vc71::string n("InstanceParameters"); raPushName(blockNames, n); }
-    { const vc71::string n("TemplateParameters"); raPushName(blockNames, n); }
-    { const vc71::string n("GlobalParameters");   raPushName(blockNames, n); }
+    std::vector<std::string> blockNames;
+    { const std::string n("InstanceParameters"); raPushName(blockNames, n); }
+    { const std::string n("TemplateParameters"); raPushName(blockNames, n); }
+    { const std::string n("GlobalParameters");   raPushName(blockNames, n); }
 
-    for (char* cursor = blockNames.first; cursor != blockNames.last;
-         cursor += sizeof(vc71::string))
+    for (std::vector<std::string>::const_iterator cursor = blockNames.begin();
+         cursor != blockNames.end(); ++cursor)
     {
-        const vc71::string& blockName = *reinterpret_cast<const vc71::string*>(cursor);
+        const std::string& blockName = *cursor;
 
         const D3DXHANDLE block = effect->GetParameterByName(0, blockName.c_str());
         if (!block)
@@ -1661,7 +1452,7 @@ bool RaShader::build()
         // three literals the vector holds, so the target can only be one of the three - but nothing
         // guards the case where it is none, and the shipped body would then index off address zero.
         // The missing guard is preserved.
-        vc71::vector_layout* scope = 0;
+        std::vector<RaBoundParameter>* scope = 0;
         if (!::_stricmp(blockName.c_str(), "InstanceParameters")) scope = m_instanceParameters;
         if (!::_stricmp(blockName.c_str(), "TemplateParameters")) scope = m_templateParameters;
         if (!::_stricmp(blockName.c_str(), "GlobalParameters"))   scope = m_globalParameters;
@@ -1719,22 +1510,18 @@ bool RaShader::build()
                 // `ecx = scope + blockIndex * 16` - written as the byte arithmetic the image does,
                 // so that a null `scope` faults the way the shipped body would instead of being
                 // folded away as undefined array indexing.
-                vc71::vector_layout* const target = reinterpret_cast<vc71::vector_layout*>(
-                    reinterpret_cast<char*>(scope) + blockIndex * sizeof(vc71::vector_layout));
-                raPushBoundParameter(*target, record);
+                std::vector<RaBoundParameter>* const target =
+                    reinterpret_cast<std::vector<RaBoundParameter>*>(
+                        reinterpret_cast<char*>(scope)
+                        + blockIndex * sizeof(std::vector<RaBoundParameter>));
+                target->push_back(record);
             }
         }
     }
 
-    // Publish the built flag and serial before destroying the local vector.
+    // Publish the built flag and serial before the local vector is destroyed on return.
     m_built       = 1;                                                   // +0x170
     m_buildSerial = static_cast<int>(g_raShaderBuildSerial++);           // dword_1023F078
-
-    for (char* cursor = blockNames.first; cursor != blockNames.last;
-         cursor += sizeof(vc71::string))
-        reinterpret_cast<vc71::string*>(cursor)->~string();
-    if (blockNames.first)
-        ::renddx9abi::engineFree(blockNames.first);
 
     return true;
 }
@@ -1742,22 +1529,21 @@ bool RaShader::build()
 
 // sub_10041C70, find-or-create.
 
-RaShader* findOrCreateShader(RaShaderTable* table, const vc71::string& name, bool skipFileCheck)
+RaShader* findOrCreateShader(RaShaderTable* table, const std::string& name, bool skipFileCheck)
 {
-    vc71::string lowered;
+    std::string lowered;
     raToLower(lowered, name);
 
-    // sub_101C0AD0 is lower_bound on the 0x30-node map at +0x88; the caller then applies the second
-    // half of std::map::find by hand - "not end, and not (key < node->key)".  Vc71Map.h's mapFind
-    // is that pair written once, over the same node shape and the same strcmp ordering.
-    vc71::map_node* const found = vc71::mapFind(table->shaders, lowered.c_str());
-    if (found)
-        return static_cast<RaShader*>(vc71::mapNodeValue(found));   // node+40
+    // sub_101C0AD0 is lower_bound on the map at +0x88; the caller then applies the second half of
+    // std::map::find by hand - "not end, and not (key < node->key)".  std::map::find is that pair.
+    const std::map<std::string, RaShader*>::const_iterator found = table->shaders.find(lowered);
+    if (found != table->shaders.end())
+        return found->second;
 
     if (!skipFileCheck)
     {
         // The name supplies the separator after "shaders/rashader".
-        vc71::string path("shaders/rashader");
+        std::string path("shaders/rashader");
         path += lowered;
         path += ".fx";
         if (!fileManagerResolves(path))
@@ -1769,16 +1555,15 @@ RaShader* findOrCreateShader(RaShaderTable* table, const vc71::string& name, boo
 
     // Queue creation is not null-checked before setting its flag.
     void* const queue = renderQueueCreateNamed(lowered);
-    *reinterpret_cast<unsigned int*>(static_cast<unsigned char*>(queue) + 0x08) = 1u;
+    renderQueueSetDrawMode(queue, 1u);
 
     // sub_10075110 against "pointlight", then push_back into ONE of the two collections.
     {
-        const vc71::string needle("pointlight");
-        vc71::vector_layout& collection = raContainsInsensitive(lowered, needle)
+        const std::string needle("pointlight");
+        std::vector<void*>& collection = raContainsInsensitive(lowered, needle)
             ? table->pointLightQueues      // +0xA4
             : table->worldQueues;          // +0x94
-        const void* value = queue;
-        raRegistryPush(collection, &value, 4, &raCopyPointer);
+        collection.push_back(queue);
     }
 
     void* const storage = ::renddx9abi::engineAlloc(sizeof(RaShader));   // sub_1005F320(0x178)
@@ -1788,19 +1573,15 @@ RaShader* findOrCreateShader(RaShaderTable* table, const vc71::string& name, boo
 
     // sub_10043600 - map::insert(value_type(lowered, shader)).  The shipped body builds the pair
     // through three copy-constructed temporaries; the observable result is one node keyed by the
-    // lowered name whose value word is the shader.
-    {
-        vc71::map_node* const node = vc71::mapInsert(table->shaders, 0x30, lowered.c_str());
-        if (node)
-            vc71::mapNodeValueRef(node) = shader;
-    }
+    // lowered name whose value is the shader.  The find above guarantees the key is new.
+    table->shaders.insert(std::make_pair(lowered, shader));
 
     // Creation tests the renderer base's [UNRESOLVED] flag at +0x102;
     // lookup of an existing shader instead tests that shader's built flag.
     if (!readBoolSetting("GSDeferredShaderPermutation", false))
     {
-        const unsigned char* const base = static_cast<const unsigned char*>(g_rendererBase);
-        if (base && base[0x102] == 0)
+        const RendDX9Base* const base = static_cast<const RendDX9Base*>(g_rendererBase);
+        if (base && base->flag102 == 0)                          // +0x102
         {
             if (shader)
                 shader->slot04();
@@ -1813,9 +1594,9 @@ RaShader* findOrCreateShader(RaShaderTable* table, const vc71::string& name, boo
 
 // sub_10041F20, the outer entry.
 
-RaShader* getShader(RaShaderTable* table, const vc71::string& name, bool skipFileCheck)
+RaShader* getShader(RaShaderTable* table, const std::string& name, bool skipFileCheck)
 {
-    vc71::string lowered;
+    std::string lowered;
     raToLower(lowered, name);
 
     // Empty names and failed creation return the default shader.
@@ -1824,8 +1605,9 @@ RaShader* getShader(RaShaderTable* table, const vc71::string& name, bool skipFil
     if (!lowered.empty())                                       // std::operator!=(lowered, "")
     {
         // sub_10036410 - the map's own find on the 0x88 map, compared against the +0x8C end.
-        vc71::map_node* const node = vc71::mapFind(table->shaders, lowered.c_str());
-        if (!node)
+        const std::map<std::string, RaShader*>::const_iterator node =
+            table->shaders.find(lowered);
+        if (node == table->shaders.end())
         {
             // Preserve the repeated lookup after the successful creation test.
             if (findOrCreateShader(table, lowered, skipFileCheck))
@@ -1833,7 +1615,7 @@ RaShader* getShader(RaShaderTable* table, const vc71::string& name, bool skipFil
         }
         else
         {
-            result = static_cast<RaShader*>(vc71::mapNodeValue(node));   // node+40
+            result = node->second;
 
             // The found arm's gate: the setting, then the shader's own byte at +0x170.
             if (!readBoolSetting("GSDeferredShaderPermutation", false))

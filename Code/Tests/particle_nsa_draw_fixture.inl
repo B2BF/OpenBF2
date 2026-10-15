@@ -74,7 +74,7 @@ void verifyNsaParticles()
     }
     instance[0x14C] = 1;
     IParticleSystemInstance* item = reinterpret_cast<IParticleSystemInstance*>(instance);
-    ParticleSystemInstanceList list = {0,&item,&item+1,&item+1};
+    ParticleSystemInstanceList list(1,item);
     psmPrepareNsaParticleRenderer(renderer,view,&list,0.25f,false);
     CHECK(psmDrawField<unsigned int>(renderer,0x428)==3 && psmDrawField<int>(renderer,8)==2);
     CHECK(table[0]==particles[0] && table[1]==particles[2] && table[2]==particles[1]);
@@ -92,7 +92,7 @@ void verifyNsaParticles()
     CHECK(hemiReads==2 && renderer[0x518]==1 && renderer[0x520]==0);
     CHECK(psmDrawField<int>(renderer,8)==-1 && psmDrawField<unsigned int>(renderer,0x428)==0);
     CHECK(psmDrawField<unsigned int>(renderer,0x420)==3 && psmDrawField<unsigned int>(renderer,0x444)==18);
-    CHECK(psmDrawField<unsigned int>(reinterpret_cast<unsigned char*>(&manager),0x8C48)==1);
+    CHECK(manager.m_drawCounters[1]==1); // retail +0x8C48, the NSA draw counter
     const unsigned int cornerOrder[] = {0,1,3,3,1,2};
     for (unsigned int i=0;i<6;++i)
     {
@@ -174,7 +174,7 @@ void verifyNsaParticles()
     CHECK(std::find(gpuEvents.begin(),gpuEvents.end(),"end")==gpuEvents.end());
     failGpuLockAt=0;
     g_templatesById.clear();
-    ::operator delete(reinterpret_cast<vc71::vector_layout*>(renderer+0xC)->first);
+    std::vector<unsigned char*>().swap(particleRendererList<unsigned char*>(renderer,0xC));
     allowGpu=false; gpuStride=64;
     g_HemiMapManager=0; g_ParticleSystemManager=0; g_LightManager=0;
 }

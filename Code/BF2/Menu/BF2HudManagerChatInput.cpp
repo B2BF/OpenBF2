@@ -15,12 +15,16 @@
 #include "../IO/Input/GameInput.h"
 #include "../Scene/Object/PlayerManager.h"
 #include <cstring>
+#if !defined(_M_IX86)
+#include <emmintrin.h>
+#endif
 namespace dice { namespace hfe { extern IBase* squadManager; namespace hud {
 namespace {
 // Expression helper for PE7B371D..373A /7B3980..399D, not a separate retail
 // method. Keep the x87 subtraction, truncation and saved rounding control.
 int chatSecondsRemaining(double deadline, double now)
 {
+#if defined(_M_IX86)
     unsigned short original, truncating;
     int result;
     __asm {
@@ -35,6 +39,11 @@ int chatSecondsRemaining(double deadline, double now)
         fldcw original
     }
     return result;
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates). cvttsd2si truncates
+    // like the chopped fistp, including the 0x80000000 indefinite result.
+    return _mm_cvttsd_si32(_mm_set_sd(deadline - now));
+#endif
 }
 
 // Identical spam-display arms in sendSayAll7B36C4 and sendSayTeam7B3926.

@@ -6,6 +6,7 @@
 #else
 #include "../BF2/Geom/ParticleSystem/ParticleSystemManager.cpp"
 #endif
+#include <cstddef>
 #include <cstdio>
 #include <vector>
 #include <string>
@@ -18,7 +19,12 @@ namespace {
 int checks = 0, failures = 0;
 #define CHECK(e) do { ++checks; if (!(e)) { ++failures; std::printf("FAIL %d: %s\n", __LINE__, #e); } } while (0)
 ParticleSystemManager* currentManager = 0;
-ParticleSystemManager frontierSnapshot;
+// A byte image of a manager. Each std container's bytes are its storage pointers and size, so an
+// unchanged image also means every runtime vector kept its backing storage and capacity.
+struct ManagerImage { unsigned char bytes[sizeof(ParticleSystemManager)]; };
+void capture(ManagerImage& image, const ParticleSystemManager& manager)
+{ std::memcpy(image.bytes, &manager, sizeof(image.bytes)); }
+ManagerImage frontierSnapshot;
 std::vector<std::string> calls;
 std::vector<void*> allocations;
 std::vector<unsigned int> allocationSizes;
@@ -41,8 +47,8 @@ float fromBits(unsigned int value)
 void observe(const char* name)
 {
     CHECK(bits(currentManager->m_deltaTime) == previousDeltaBits);
-    CHECK(currentManager->m_pendingClassification.first == currentManager->m_pendingClassification.last);
-    CHECK(currentManager->m_pendingDestroy.first == currentManager->m_pendingDestroy.last);
+    CHECK(currentManager->m_pendingClassification.empty());
+    CHECK(currentManager->m_pendingDestroy.empty());
     calls.push_back(name);
 }
 Mat4* __fastcall matrixRead(void* self, void*)
@@ -56,24 +62,26 @@ float __fastcall aspectRead(void* self, void*)
 { CHECK(self == &viewObject); observe("aspect"); return aspectValue; }
 float __fastcall lightRead(void*, void*) { return 0.5f; }
 
-void setEmptyCapacity(ParticleSystemInstanceList& v, IParticleSystemInstance** storage)
-{ v.allocator = reinterpret_cast<void*>(0xA7A7A7A7); v.first = v.last = storage; v.endStorage = storage + 2; }
+// An empty runtime vector that already owns storage, so a reallocation or release shows up.
+void setEmptyCapacity(ParticleSystemInstanceVector& v) { v.reserve(2); }
 
 void verifyUpdate(ParticleSystemManager& manager, float dt)
 {
     currentManager = &manager;
     previousDeltaBits = bits(manager.m_deltaTime);
     calls.clear(); fovReads = 0;
-    const ParticleSystemManager before = manager;
+    static ManagerImage before, comparable;
+    capture(before, manager);
     reinterpret_cast<IParticleSystemManager*>(&manager)->update(dt);
     const char* expected[] = {"view", "matrix", "fov", "fov", "aspect", "fov", "fov"};
     CHECK(calls == std::vector<std::string>(expected, expected + 7));
     CHECK(fovReads == 4 && bits(manager.m_deltaTime) == bits(dt));
-    // All runtime vectors retain their allocator/backing/capacity. Pool bytes, initialization
+    // All runtime vectors retain their backing/capacity. Pool bytes, initialization
     // flag, paused flag and the unused matrix cells must not become frame-loop scratch storage.
-    ParticleSystemManager comparable = manager;
-    comparable.m_deltaTime = before.m_deltaTime;
-    CHECK(std::memcmp(&comparable, &before, sizeof(before)) == 0);
+    capture(comparable, manager);
+    std::memcpy(comparable.bytes + offsetof(ParticleSystemManager, m_deltaTime),
+                before.bytes + offsetof(ParticleSystemManager, m_deltaTime), sizeof(float));
+    CHECK(std::memcmp(comparable.bytes, before.bytes, sizeof(before.bytes)) == 0);
 }
 
 void cleanup()
@@ -93,8 +101,6 @@ void engineFree(void* p)
         if (allocations[i] == p) { allocations[i] = 0; break; }
     std::free(p);
 }
-void* crtMalloc(size_t size) { return std::malloc(size); }
-void crtFree(void* p) { std::free(p); }
 void logf(const char*, ...) {}
 unsigned int addr(const void* p) { return reinterpret_cast<unsigned int>(p); }
 void frontier(const char* name, const void* self, unsigned int slot)
@@ -108,7 +114,8 @@ void frontier(const char* name, const void* self, unsigned int slot)
     // Exit 86 is accepted only for a correctly named, mutation-free, pre-camera frontier.
     const bool correct = expectedFrontier && self == currentManager && slot == 0x28 &&
         std::strcmp(name, "dice::hfe::geom::ParticleSystemManager::update (non-empty runtime state)") == 0 &&
-        calls.empty() && std::memcmp(currentManager, &frontierSnapshot, sizeof(frontierSnapshot)) == 0;
+        calls.empty() &&
+        std::memcmp(currentManager, frontierSnapshot.bytes, sizeof(frontierSnapshot.bytes)) == 0;
     std::printf("%s [FRONTIER] %s\n", correct ? "EXPECTED" : "UNEXPECTED", name);
     std::fflush(stdout);
     std::_Exit(correct ? 86 : 87);
@@ -154,8 +161,9 @@ void* indexBufferLock(void* raw, unsigned int offset, unsigned int count, unsign
 bool indexBufferUnlock(void*) { return true; }
 bool readBoolSetting(const char* name, bool fallback)
 { CHECK(std::strcmp(name, "GSUseEffectTextureAtlas") == 0 && !fallback); return false; }
-bool textureAtlasLoadTAI(TextureAtlas*, const vc71::string&) { std::abort(); }
-TextureAtlasEntry* textureAtlasFind(TextureAtlas*, const vc71::string&) { std::abort(); }
+bool textureAtlasLoadTAI(TextureAtlas*, const std::string&) { std::abort(); }
+TextureAtlasEntry* textureAtlasFind(TextureAtlas*, const std::string&) { std::abort(); }
+unsigned int textureAtlasEntryCount(const TextureAtlas*) { std::abort(); }
 }
 } }
 
@@ -195,8 +203,8 @@ IParticleSystemInstance* initializeTest(TestParticle& raw, int type, int id, boo
     psmRuntimeField<int>(&raw, 0x22C) = id;
     return reinterpret_cast<IParticleSystemInstance*>(&raw);
 }
-void freeList(ParticleSystemInstanceList& list)
-{ ::operator delete(list.first); list = {}; }
+// Releases a runtime vector's storage, leaving it empty.
+void freeList(ParticleSystemInstanceVector& list) { ParticleSystemInstanceVector().swap(list); }
 void verifyScheduler()
 {
     testParticleTable[0] = reinterpret_cast<void*>(&testDelete);
@@ -211,7 +219,6 @@ void verifyScheduler()
     testParticleTable[50] = reinterpret_cast<void*>(&testWater);
     ParticleSystemManager manager = {};
     manager.m_vptr = const_cast<const void**>(kVtable);
-    psmReclassification(&manager).construct();
     manager.m_poolsInitialized = 1;
     TestParticle raw[20];
     IParticleSystemInstance* buckets[10][2];
@@ -219,8 +226,7 @@ void verifyScheduler()
     {
         const int type = bucket == 0 || bucket == 8 ? 4 : bucket == 3 || bucket == 4 || bucket == 9 ? 1 : bucket == 5 || bucket == 6 ? 2 : 0;
         for (int i = 0; i < 2; ++i) buckets[bucket][i] = initializeTest(raw[bucket * 2 + i], type, bucket * 10 + i);
-        manager.m_renderBuckets[bucket].first = buckets[bucket];
-        manager.m_renderBuckets[bucket].last = manager.m_renderBuckets[bucket].endStorage = buckets[bucket] + 2;
+        manager.m_renderBuckets[bucket].assign(buckets[bucket], buckets[bucket] + 2);
     }
     psmRuntimeField<unsigned char>(buckets[7][1], 5) = 1;
     currentManager = &manager; previousDeltaBits = bits(manager.m_deltaTime);
@@ -229,21 +235,21 @@ void verifyScheduler()
     const int expected[] = {70,91,90,81,80,1,0,11,10,31,30,51,50,21,20,41,40,61,60};
     CHECK(particleCalls == std::vector<int>(expected, expected + 19));
     CHECK(fovReads == 4 && manager.m_deltaTime == 0.25f);
-    for (int bucket = 0; bucket < 10; ++bucket) manager.m_renderBuckets[bucket] = {};
+    for (int bucket = 0; bucket < 10; ++bucket) freeList(manager.m_renderBuckets[bucket]);
 
     TestParticle one;
     IParticleSystemInstance* instance = initializeTest(one, 0, 111, true);
     TestController controller;
     psmRuntimeField<world::IEffectController*>(instance, 12) = &controller;
     psmAddActive(&manager, instance, true);
-    CHECK(controller.starts == 1 && manager.m_renderBuckets[7].first[0] == instance);
+    CHECK(controller.starts == 1 && manager.m_renderBuckets[7][0] == instance);
     CHECK(psmRuntimeField<unsigned char>(instance, 4) == 1);
     psmRuntimeField<unsigned char>(instance, 7) = 0;
-    psmReclassification(&manager).insert(reinterpret_cast<unsigned int>(instance));
+    psmReclassification(&manager).insert(instance);
     psmReclassify(&manager);
     CHECK(controller.stops == 1 && controller.starts == 2);
     CHECK(manager.m_renderBuckets[7].size() == 0 && manager.m_renderBuckets[2].size() == 1);
-    CHECK(psmReclassification(&manager).size == 0);
+    CHECK(psmReclassification(&manager).empty());
     psmRuntimeField<int>(instance, 0x228) = 2;
     particleCalls.clear(); psm_removeInstance(&manager, 0, instance);
     const int referenced[] = {49,49,8,4};
@@ -261,7 +267,6 @@ void verifyScheduler()
     CHECK(particleCalls.size() == 1 && particleCalls[0] == 1111 && manager.m_instances.size() == 0);
     freeList(manager.m_instances); freeList(manager.m_pendingDestroy); freeList(manager.m_pendingClassification);
     for (int i = 0; i < 10; ++i) freeList(manager.m_renderBuckets[i]);
-    psmReclassification(&manager).destroy();
 }
 }
 
@@ -274,11 +279,10 @@ int main(int argc, char** argv)
     manager.m_vptr = const_cast<const void**>(kVtable);
     manager.m_deltaTime = -123.0f;
     currentManager = &manager;
-    IParticleSystemInstance* retained[13][2] = {};
-    setEmptyCapacity(manager.m_instances, retained[0]);
-    setEmptyCapacity(manager.m_pendingDestroy, retained[1]);
-    setEmptyCapacity(manager.m_pendingClassification, retained[2]);
-    for (int i = 0; i < 10; ++i) setEmptyCapacity(manager.m_renderBuckets[i], retained[i + 3]);
+    setEmptyCapacity(manager.m_instances);
+    setEmptyCapacity(manager.m_pendingDestroy);
+    setEmptyCapacity(manager.m_pendingClassification);
+    for (int i = 0; i < 10; ++i) setEmptyCapacity(manager.m_renderBuckets[i]);
     verifyUpdate(manager, 0.125f);
     manager.m_poolsInitialized = 1;
     manager.m_paused = 1; // update has no global pause or pool-initialization early return.

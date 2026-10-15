@@ -59,6 +59,8 @@ bool DynamicIndexPointer::event2(System* system, int first, int index)
     system->enqueueEvent(2, mapped, static_cast<float>(first), 0.0f, 0);
     return true;
 }
+#if defined(_M_IX86)
 static_assert(sizeof(DynamicIndexPointer) == 60, "client DynamicIndexPointer native layout");
+#endif
 } }
 #endif

@@ -166,8 +166,10 @@ private:
     // unresolved payload word: `setButtonNodeTexture` (798D20) parks the handle
     // it just loaded there on its way to the node, and nothing ever reads it
     // back. The remaining three are still [UNRESOLVED].
-    std::uint32_t m_buttonTexture;                  // retail+8C
-    std::uint32_t m_field090, m_field094, m_field098;
+    // The two handle words are pointer-sized; uintptr_t is uint32_t on x86.
+    std::uintptr_t m_buttonTexture;                 // retail+8C
+    std::uintptr_t m_field090;                      // retail+90, last loaded text-node font
+    std::uint32_t m_field094, m_field098;
 };
 } } }
 #endif

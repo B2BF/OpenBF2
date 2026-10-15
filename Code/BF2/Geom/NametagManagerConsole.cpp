@@ -6,13 +6,12 @@
 
 #include "../../RendDX9Abi/PluginAbi.h"
 
-#if BF2_PLUGIN_ABI_NATIVE
 
 #include "NametagManager.h"
 
 #include "../../RendDX9Abi/HfeAbi.h"
 #include "../../RendDX9Abi/PluginEntry.h"
-#include "../../RendDX9Abi/Vc71String.h"
+#include <string>
 #include "../Core/ConsoleObjectMacro.h"
 #include "../Core/ConsoleObjects.h"
 #include "../Math/Vec3.h"
@@ -151,7 +150,7 @@ void consoleCreateIcon(NametagItemIDs id)
 void consoleSetTexture(int count, const std::string& path, int x, int y, int width, int height)
 {
     const std::string local(path);
-    nametagSingleton()->setTexture(count, vc71::string(local.c_str()), x, y, width, height);
+    nametagSingleton()->setTexture(count, std::string(local.c_str()), x, y, width, height);
 }
 
 Vec2 consoleGetCullDistance(TagType type)
@@ -281,5 +280,4 @@ bool unregisterNametagManagerConsoleObjects()
 } // namespace hfe
 } // namespace dice
 
-#endif // BF2_PLUGIN_ABI_NATIVE
 #endif // BF2_IMAGE_RENDDX9

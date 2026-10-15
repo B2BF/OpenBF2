@@ -39,7 +39,7 @@ bool __fastcall firstCall(void*,void*) { return firstPerson; }
 world::IObject* __fastcall vehicleCall(void*,void*) { return vehicle; }
 MeshTemplate* __fastcall templateCall(void*,void*) { return reinterpret_cast<MeshTemplate*>(templateBytes); }
 unsigned int __fastcall classCall(void*,void*) { return classId; }
-bool __fastcall intersect(void*,void*,world::IObject*& hit,Vec3& point,Vec3& normal,int& part,
+bool __fastcall intersectLineCall(void*,void*,world::IObject*& hit,Vec3& point,Vec3& normal,int& part,
  const Vec3& origin,const Vec3& direction,world::ObjectPredicator* filter,bool a,bool b,bool c,bool d,unsigned int flags)
 {
     const int index=probe++;
@@ -96,7 +96,7 @@ int main()
 {
     meshTable[0xA4/4]=reinterpret_cast<void*>(&rootCall);
     objectTable[0x90/4]=reinterpret_cast<void*>(&radiusCall);
-    managerTable[0x68/4]=reinterpret_cast<void*>(&intersect);
+    managerTable[0x68/4]=reinterpret_cast<void*>(&intersectLineCall);
     lightTable[0x2A0/4]=reinterpret_cast<void*>(&roofCall);lightTable[0x2C0/4]=reinterpret_cast<void*>(&fadeCall);
     pmTable[0x30/4]=reinterpret_cast<void*>(&localCall);
     playerTable[0x184/4]=reinterpret_cast<void*>(&firstCall);playerTable[0x44/4]=reinterpret_cast<void*>(&vehicleCall);

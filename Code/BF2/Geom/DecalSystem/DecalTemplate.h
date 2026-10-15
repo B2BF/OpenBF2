@@ -1,6 +1,6 @@
 // Renderer-side decal appearance and animation settings, owned by DecalManager.
 // [INFERRED] header placement and class name. Texture references release on replacement/destruction.
-// HostString fields cross the engine boundary, so native and compatibility member offsets differ;
+// The two HostString fields are std::string, so the native offsets after +0x3C differ from retail's;
 // callers must use typed accessors. The Vec2 at +0x2C is [UNRESOLVED], zeroed and unread.
 
 #ifndef BF2_GEOM_DECALSYSTEM_DECALTEMPLATE_H
@@ -133,35 +133,10 @@ private:
     friend struct DecalTemplateLayoutCheck;
 };
 
-// The retail-ABI flavour keeps the shipped layout byte for byte (DecalManager::addTemplate's
-// `push 0A8h`, 0x10124C81). The native flavour's two host strings are this toolchain's std::string;
-// see the header note.
+// Retail's object is 0xA8 bytes (DecalManager::addTemplate's `push 0A8h`, 0x10124C81). The native
+// object's two strings are std::string, so no retail size or offset after +0x3C is asserted.
 struct DecalTemplateLayoutCheck
 {
-#if defined(_M_IX86) && !BF2_PLUGIN_ABI_NATIVE
-    static_assert(sizeof(DecalTemplate) == 0xA8, "0x10124C81 allocates 0xA8");
-    static_assert(offsetof(DecalTemplate, m_randomColorIntensity) == 0x04, "+0x04");
-    static_assert(offsetof(DecalTemplate, m_color) == 0x08, "+0x08");
-    static_assert(offsetof(DecalTemplate, m_size) == 0x18, "+0x18");
-    static_assert(offsetof(DecalTemplate, m_isStatic) == 0x20, "+0x20");
-    static_assert(offsetof(DecalTemplate, m_usedOnTransparentMaterials) == 0x21, "+0x21");
-    static_assert(offsetof(DecalTemplate, m_randomRotation) == 0x24, "+0x24");
-    static_assert(offsetof(DecalTemplate, m_vec2C) == 0x2C, "+0x2C");
-    static_assert(offsetof(DecalTemplate, m_uvOffset) == 0x34, "+0x34");
-    static_assert(offsetof(DecalTemplate, m_decalTextureName) == 0x3C, "+0x3C");
-    static_assert(offsetof(DecalTemplate, m_index) == 0x58, "+0x58");
-    static_assert(offsetof(DecalTemplate, m_name) == 0x5C, "+0x5C");
-    static_assert(offsetof(DecalTemplate, m_texture) == 0x78, "+0x78");
-    static_assert(offsetof(DecalTemplate, m_atlasEntry) == 0x7C, "+0x7C");
-    static_assert(offsetof(DecalTemplate, m_animationRandomizedStartFrame) == 0x80, "+0x80");
-    static_assert(offsetof(DecalTemplate, m_animationSpeed) == 0x84, "+0x84");
-    static_assert(offsetof(DecalTemplate, m_animationEnable) == 0x88, "+0x88");
-    static_assert(offsetof(DecalTemplate, m_animationFrameWidthRelative) == 0x8C, "+0x8C");
-    static_assert(offsetof(DecalTemplate, m_animationFrameCount) == 0x94, "+0x94");
-    static_assert(offsetof(DecalTemplate, m_animationFrameCountX) == 0x98, "+0x98");
-    static_assert(offsetof(DecalTemplate, m_frameCountXReciprocal) == 0x9C, "+0x9C");
-    static_assert(offsetof(DecalTemplate, m_uvExtent) == 0xA0, "+0xA0");
-#endif
 };
 
 } // namespace geom

@@ -105,7 +105,7 @@ void BfOccupiedVehicleNode::paintSelf(System* system, const NodeState*,
                                       RenderContext* context)
 {
     if (!m_data) return;
-    const int texture = m_data->getOccupantTexture(system, m_seat);
+    const TextureHandle texture = m_data->getOccupantTexture(system, m_seat);
     Rect placed;
     placed.x = static_cast<float>(*m_positionX) + bounds->x;   // fild then fadd
     placed.y = static_cast<float>(*m_positionY) + bounds->y;
@@ -138,7 +138,9 @@ TypeDescriptor* const registeredBfOccupiedVehicleNodeType =
     BfOccupiedVehicleNode::getClassType();
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(BfOccupiedVehicleNodeTypeDescriptor) == 16, "client BF2 occupied metadata");
 static_assert(sizeof(BfOccupiedVehicleNode) == 44, "native BfOccupiedVehicleNode storage");
+#endif
 } }
 #endif

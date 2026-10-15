@@ -2,6 +2,7 @@
 #ifndef MENU_ISWIFFRENDER_H
 #define MENU_ISWIFFRENDER_H
 #include "../Core/IBase.h"
+#include <stdint.h>
 #include <string>
 #if !DEDICATED
 namespace dice { namespace hfe { namespace ui {
@@ -57,8 +58,8 @@ struct ISwiffRender : public IBase
     virtual void  setMouseState(int x, int y, int buttons) = 0;                            // +0xB8
     virtual int   slot47(int a) = 0;                                                       // +0xBC
     virtual void  nullsub48(int a) = 0;                                                    // 48 +0xC0  0x10153380 retn 4
-    virtual char  slot49(int a) = 0;                                                       // +0xC4
-    virtual char  slot50(int a) = 0;                                                       // +0xC8
+    virtual char  slot49(intptr_t a) = 0;                                                  // +0xC4
+    virtual char  slot50(intptr_t a) = 0;                                                  // +0xC8
     virtual int   beginFrame() = 0;                                                        // 51 +0xCC  BF2.exe 0x4A2C26's call
     virtual int   endFrame() = 0;                                                          // 52 +0xD0  MainMenuLogic::endFrame
     virtual void* setTextureTechnique(const std::string& name, int index) = 0;            // 53 +0xD4

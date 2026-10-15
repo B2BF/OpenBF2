@@ -37,18 +37,19 @@ public:
     meme::OStream* getOutputStream() override;
     meme::IStream* createInputStream(const char*) override; // +5C 7AD510
     meme::OStream* createOutputStream(const char*) override;
-    bool drawCharacter(int, int, meme::Quad*) override;
-    bool getGlyphMetrics(int, int, meme::GlyphMetrics*) override;
-    float getKerning(int, int, int) override;
-    float getFontHeight(int) override;            // +7C 7AE8E0
-    int loadFont(const char*) override;
-    const char* getFontName(int) override;
-    bool drawTexture(int, meme::Quad*) override;
-    int loadTexture(const char*, bool) override;   // +8C 7AD240
-    void releaseTexture(int) override;
-    const char* getTextureName(int) override;
-    float getTextureWidth(int) override;
-    float getTextureHeight(int) override;          // +9C 7AD300
+    // Font handles are Font*, texture handles IMemeTexture* (pointer-sized meme handles).
+    bool drawCharacter(int, meme::FontHandle, meme::Quad*) override;
+    bool getGlyphMetrics(int, meme::FontHandle, meme::GlyphMetrics*) override;
+    float getKerning(int, int, meme::FontHandle) override;
+    float getFontHeight(meme::FontHandle) override; // +7C 7AE8E0
+    meme::FontHandle loadFont(const char*) override;
+    const char* getFontName(meme::FontHandle) override;
+    bool drawTexture(meme::TextureHandle, meme::Quad*) override;
+    meme::TextureHandle loadTexture(const char*, bool) override; // +8C 7AD240
+    void releaseTexture(meme::TextureHandle) override;
+    const char* getTextureName(meme::TextureHandle) override;
+    float getTextureWidth(meme::TextureHandle) override;
+    float getTextureHeight(meme::TextureHandle) override; // +9C 7AD300
     void beginPaint() override;                   // +B0 7AE6B0
     void endPaint() override;                     // +B4 7AD3B0
     bool preUpdate(float delta) override;         // +B8 7AD8B0

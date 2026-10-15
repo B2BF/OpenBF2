@@ -34,6 +34,7 @@ public:
 
 float decodedState(float value) // 7D2FBD..7D2FFC /838F40, binary32 store
 {
+#if defined(_M_IX86)
     float result;
     __asm {
         fld value
@@ -48,6 +49,13 @@ float decodedState(float value) // 7D2FBD..7D2FFC /838F40, binary32 store
         fstp result
     }
     return result;
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    // Only an ordered negative value is decoded; zero, positive and NaN pass through the
+    // double round trip, which quiets a signalling NaN as fld/fstp does.
+    const double loaded = value;
+    return static_cast<float>(value < 0.0f ? -(loaded + 1.0) : loaded);
+#endif
 }
 float stateRate(const NodeState& state) // 838F40 ->82BD30; unused receivers
 {
@@ -59,6 +67,7 @@ float stateRate(const NodeState& state) // 838F40 ->82BD30; unused receivers
 }
 bool sumNotLess(float first, float second, float limit)
 {
+#if defined(_M_IX86)
     bool result;
     __asm {
         fld first
@@ -69,9 +78,16 @@ bool sumNotLess(float first, float second, float limit)
         setp result
     }
     return result;
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    // setp after test ah,5: false only for an ordered sum below the limit.
+    const double sum = static_cast<double>(first) + second;
+    return !(sum < limit);
+#endif
 }
 bool stateEnabled(float value) // 7D3230..7D325E; no float spill before comparison
 {
+#if defined(_M_IX86)
     const float one = 1.0f;
     bool result;
     __asm {
@@ -90,6 +106,12 @@ bool stateEnabled(float value) // 7D3230..7D325E; no float spill before comparis
         setp result
     }
     return result;
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    // The decoded value is compared unrounded; unordered compares pass.
+    const double decoded = value < 0.0f ? -(static_cast<double>(value) + 1.0) : value;
+    return !(decoded < 1.0);
+#endif
 }
 }
 
@@ -194,6 +216,8 @@ bool BfTransformNode::updateSelf(System* system, const NodeState*, const Rect*, 
     sampleData(system);
     return true;
 }
+#if defined(_M_IX86)
 static_assert(sizeof(BfTransformNode) == 80, "client BfTransformNode layout");
+#endif
 } }
 #endif

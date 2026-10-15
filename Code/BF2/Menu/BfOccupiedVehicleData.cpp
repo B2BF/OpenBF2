@@ -41,7 +41,7 @@ bool BfOccupiedVehicleData::setOccupantIcon(int position, int icon)
     else found->second = icon;
     return true;
 }
-int BfOccupiedVehicleData::getOccupantTexture(System*, int position)
+TextureHandle BfOccupiedVehicleData::getOccupantTexture(System*, int position)
 {
     auto found = m_occupantIcons.find(position);
     if (found == m_occupantIcons.end()) return 0;

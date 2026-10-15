@@ -13,14 +13,14 @@
 namespace dice { namespace hfe { namespace geom {
 
 // Manager an atlas-owned region, with no added reference for the caller.
-dx9rend::TextureAtlasEntry* particleSystemFindTextureRegion(const vc71::string& name);
+dx9rend::TextureAtlasEntry* particleSystemFindTextureRegion(const std::string& name);
 
 // [CHOSEN helper factoring, recovered body] Both retail loaders reject an empty name before
 // releasing the old direct texture or replacing the region. The atlas success arm leaves the
 // direct texture null: the region's page owns the texture used by rendering.
 inline bool particleTemplateLoadTexture(dx9rend::EngineTexture*& texture,
                                        dx9rend::TextureAtlasEntry*& region,
-                                       const vc71::string& name,
+                                       const std::string& name,
                                        const char* qualifiedName, unsigned int diagnosticLine)
 {
     if (name.empty())
@@ -31,7 +31,7 @@ inline bool particleTemplateLoadTexture(dx9rend::EngineTexture*& texture,
     if (region)
         return true;
 
-    vc71::string path(name);
+    std::string path(name);
     path += ".dds";
     if (::renddx9abi::engineFileExists(path))
     {

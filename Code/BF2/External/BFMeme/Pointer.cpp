@@ -80,6 +80,8 @@ bool updatePointer(System* s, Pointer* p, float d) { return p && p->isEnabled() 
 bool positionPointer(System* s, Pointer* p, float x, float y) { return p && p->isEnabled() ? p->setPosition(s, x, y) : true; }
 bool pointerEvent1(System* s, Pointer* p, int a, int i, int b) { return p && p->isEnabled() ? p->event1(s, a, i, b) : true; }
 bool pointerEvent2(System* s, Pointer* p, int a, int i) { return p && p->isEnabled() ? p->event2(s, a, i) : true; }
+#if defined(_M_IX86)
 static_assert(sizeof(Pointer) == 20, "Pointer has no STL-dependent members");
+#endif
 } }
 #endif

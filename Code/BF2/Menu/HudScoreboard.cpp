@@ -440,8 +440,8 @@ void HudScoreboard::paintRow(meme::BfListBoxData* list, world::IPlayer* player, 
 {
     if (!player) return;
 
-    const int kitIcon = hudManager->getPlayerKitIcon(player, false, false);   // PE +0x64
-    const int rankIcon = hudManager->getPlayerRankIcon(player);               // PE +0x68
+    const meme::TextureHandle kitIcon = hudManager->getPlayerKitIcon(player, false, false); // PE +0x64
+    const meme::TextureHandle rankIcon = hudManager->getPlayerRankIcon(player);             // PE +0x68
     const bool ownSide = m_team == team;
     const int side = ownSide ? 2 : 1;
 
@@ -455,7 +455,7 @@ void HudScoreboard::paintRow(meme::BfListBoxData* list, world::IPlayer* player, 
         text = scoreboardNameColors[side];
 
     // the VoIP column's icon ------------------------------------------------------------
-    int voipIcon = m_textures[1];                                 // checkbox_empty
+    meme::TextureHandle voipIcon = m_textures[1];                 // checkbox_empty
     if (player->getVoipEnabled())                                 // PE +0x268
     {
         bool decided = false;
@@ -478,7 +478,7 @@ void HudScoreboard::paintRow(meme::BfListBoxData* list, world::IPlayer* player, 
     }
 
     // the kick-vote column's icon -------------------------------------------------------
-    int voteIcon = 0;
+    meme::TextureHandle voteIcon = 0;
     bool voteTarget = false;
     if (ClientVoteManager::getInstance()->votingEnabled() && !player->getIsAIPlayer())
     {

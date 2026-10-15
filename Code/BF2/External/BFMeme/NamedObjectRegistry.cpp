@@ -314,9 +314,11 @@ bool NameTreeObjectEntry::stream(System* system, Stream* output)
 }
 // [FRONTIER] saveNamedObject82AB60 and specialized visitor descriptor defaults
 // are still deeper dependencies. No registry/System factory is published.
+#if defined(_M_IX86)
 static_assert(sizeof(NameTreeNode) == 8, "name-tree node layout");
 static_assert(sizeof(NameTreeContainer) == 16, "name-tree container layout");
 static_assert(sizeof(NameTreeRoot) == 16, "name-tree root layout");
 static_assert(sizeof(NameTreeObjectEntry) == 12, "name-tree object entry layout");
+#endif
 } }
 #endif

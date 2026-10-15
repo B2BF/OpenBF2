@@ -1,7 +1,7 @@
 // [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: RW-52]
 // Renderer-plugin registration harness with a stand-in class manager.
 // Checks module order, factories, singleton lookup, cross-image allocation, and clean unload.
-// Retail ABI mode compares records and strings with MSVCP71; native mode uses shared-CRT STL records.
+// It uses the native ABI's shared-CRT STL records.
 // Shared typedefs cannot independently validate calling conventions. No device, renderer initialization, or client boot is exercised.
 // Retire once end-to-end client coverage makes this harness redundant.
 
@@ -11,18 +11,10 @@
 #include <string.h>
 
 #include "../../RendDX9Abi/HfeAbi.h"
-#include "../../RendDX9Abi/DisplayModeAbi.h"
-#if !BF2_PLUGIN_ABI_NATIVE
-#include "../../RendDX9Abi/Vc71Vector.h"
-#include "../../RendDX9Abi/BfMemory.h"
-#endif
 
 using namespace dice::hfe;
 using renddx9abi::HostString;
 
-#if !BF2_PLUGIN_ABI_NATIVE
-static const char* kGameDir = "D:\\B2BF Launcher\\Battlefield2";
-#endif
 
 static int g_failures = 0;
 
@@ -31,88 +23,6 @@ static void check(bool ok, const char* what)
     printf("  [%s] %s\n", ok ? " OK " : "FAIL", what);
     if (!ok)
         ++g_failures;
-}
-
-// [TEMP]
-// Copies display-mode ranges through the production helper, destroys the producer, then checks independent ownership and repeated cleanup.
-static void testDisplayModeOwnership()
-{
-    vc71::vector_layout ownedDepth   = { 0, 0, 0, 0 };
-    vc71::vector_layout ownedMulti   = { 0, 0, 0, 0 };
-    vc71::vector_layout ownedWindows = { 0, 0, 0, 0 };
-
-    const void* sourceDepthAddress = 0;
-    const void* sourceMultiAddress = 0;
-    const void* sourceWindowAddress = 0;
-
-    {
-#if BF2_PLUGIN_ABI_NATIVE
-        renddx9abi::HostDisplayMode source;
-        source.depthFormats.push_back(75u);       // D3DFMT_D24S8
-        renddx9abi::DisplayModeMultiSample sample = { 2u, 7u };
-        source.multiSamples.push_back(sample);
-        source.windows.push_back(reinterpret_cast<void*>(0x12345678u));
-#else
-        renddx9abi::HostDisplayMode source = {};
-        vc71::vectorRef<unsigned int>(&source.depthFormats).push_back(75u);
-        renddx9abi::DisplayModeMultiSample sample = { 2u, 7u };
-        vc71::vectorRef<renddx9abi::DisplayModeMultiSample>(&source.multiSamples).push_back(sample);
-        vc71::vectorRef<void*>(&source.windows).push_back(reinterpret_cast<void*>(0x12345678u));
-#endif
-
-        sourceDepthAddress  = renddx9abi::hostDepthFirst(source);
-        sourceMultiAddress  = renddx9abi::hostMultiSampleFirst(source);
-        sourceWindowAddress = renddx9abi::hostWindowFirst(source);
-
-        renddx9abi::assignOwnedDisplayModeVectors(ownedDepth, ownedMulti, ownedWindows, source);
-
-        check(ownedDepth.first != sourceDepthAddress,
-              "display depth range is a renderer-owned copy, not a producer alias");
-        check(ownedMulti.first != sourceMultiAddress,
-              "display multisample range is a renderer-owned copy, not a producer alias");
-        check(ownedWindows.first != sourceWindowAddress,
-              "display HWND range is a renderer-owned copy, not a producer alias");
-
-#if BF2_PLUGIN_ABI_NATIVE
-        source.depthFormats[0] = 21u;
-        source.multiSamples[0].type = 9u;
-        source.multiSamples[0].quality = 10u;
-        source.windows[0] = reinterpret_cast<void*>(0x87654321u);
-#else
-        *reinterpret_cast<unsigned int*>(source.depthFormats.first) = 21u;
-        renddx9abi::DisplayModeMultiSample* sourceSample =
-            reinterpret_cast<renddx9abi::DisplayModeMultiSample*>(source.multiSamples.first);
-        sourceSample->type = 9u;
-        sourceSample->quality = 10u;
-        *reinterpret_cast<void**>(source.windows.first) = reinterpret_cast<void*>(0x87654321u);
-
-        renddx9abi::clearOwnedDisplayModeVectors(source.depthFormats,
-                                                  source.multiSamples,
-                                                  source.windows);
-#endif
-    }
-
-    const unsigned int* depth = reinterpret_cast<const unsigned int*>(ownedDepth.first);
-    const renddx9abi::DisplayModeMultiSample* multi =
-        reinterpret_cast<const renddx9abi::DisplayModeMultiSample*>(ownedMulti.first);
-    void* const* windows = reinterpret_cast<void* const*>(ownedWindows.first);
-
-    check(depth && depth[0] == 75u,
-          "owned depth range survives producer mutation and destruction");
-    check(multi && multi[0].type == 2u && multi[0].quality == 7u,
-          "owned multisample range survives producer mutation and destruction");
-    check(windows && windows[0] == reinterpret_cast<void*>(0x12345678u),
-          "owned HWND range survives producer mutation and destruction");
-
-    renddx9abi::clearOwnedDisplayModeVectors(ownedDepth, ownedMulti, ownedWindows);
-    check(!ownedDepth.first && !ownedDepth.last && !ownedDepth.end &&
-          !ownedMulti.first && !ownedMulti.last && !ownedMulti.end &&
-          !ownedWindows.first && !ownedWindows.last && !ownedWindows.end,
-          "owned display ranges release and reset every published pointer");
-
-    // The recovered sub_1000C9B0 destructor is null-safe; keep that property explicit.
-    renddx9abi::clearOwnedDisplayModeVectors(ownedDepth, ownedMulti, ownedWindows);
-    check(true, "owned display cleanup is idempotent on empty ranges");
 }
 
 
@@ -327,17 +237,11 @@ public:
         if (m_serverCount < 8)
             m_servers[m_serverCount++] = server;
 
-#if BF2_PLUGIN_ABI_NATIVE
         std::vector<ClassRegInfo> classes;
         std::vector<SingletonRegInfo> singles;
-#else
-        vc71::vector_layout classes   = { 0, 0, 0, 0 };
-        vc71::vector_layout singles   = { 0, 0, 0, 0 };
-#endif
 
         server->addRef();                       // ClassManager::addServer addRefs - 1 -> 2
 
-#if BF2_PLUGIN_ABI_NATIVE
         server->getClassList(classes);
         server->getSingletonList(singles);
 
@@ -358,42 +262,6 @@ public:
         for (std::vector<SingletonRegInfo>::const_iterator it = singles.begin();
              it != singles.end(); ++it)
             registerSingleton(*it);
-#else
-        server->getClassList(&classes);
-        server->getSingletonList(&singles);
-
-        {
-            ClassRegInfo* first = reinterpret_cast<ClassRegInfo*>(classes.first);
-            ClassRegInfo* last  = reinterpret_cast<ClassRegInfo*>(classes.last);
-            for (ClassRegInfo* c = first; c != last; ++c)
-            {
-                if (m_classCount < 64)
-                {
-                    m_classIds[m_classCount]     = c->classId;
-                    m_classCreate[m_classCount]  = c->create;
-                    // The name is kept so getClassID can answer by name. [TEMP] harness storage.
-                    {
-                        const char* n = c->name.c_str();
-                        unsigned k = 0;
-                        for (; n[k] && k < sizeof(m_classNames[0]) - 1; ++k)
-                            m_classNames[m_classCount][k] = n[k];
-                        m_classNames[m_classCount][k] = 0;
-                    }
-                    ++m_classCount;
-                }
-                printf("      class    cid=%-12u %s\n", c->classId, c->name.c_str());
-            }
-        }
-        {
-            SingletonRegInfo* first = reinterpret_cast<SingletonRegInfo*>(singles.first);
-            SingletonRegInfo* last  = reinterpret_cast<SingletonRegInfo*>(singles.last);
-            for (SingletonRegInfo* s = first; s != last; ++s)
-                registerSingleton(*s);
-        }
-
-        destroyVector<ClassRegInfo>(classes);
-        destroyVector<SingletonRegInfo>(singles);
-#endif
     }
 
     virtual void unregisterServer(IClassServer* server)
@@ -419,14 +287,7 @@ public:
     {
         for (int i = 0; i < m_classCount; ++i)
         {
-#if BF2_PLUGIN_ABI_NATIVE
             if (m_classNames[i] == name)
-#else
-            const char* a = m_classNames[i];
-            const char* b = name.c_str();
-            while (*a && *a == *b) { ++a; ++b; }
-            if (*a == 0 && *b == 0)
-#endif
             {
                 if (classIdOut)
                     *classIdOut = m_classIds[i];
@@ -463,12 +324,7 @@ public:
 
         if (m_singletonCount < 64)
         {
-#if BF2_PLUGIN_ABI_NATIVE
             m_singletonNames[m_singletonCount] = info.name;
-#else
-            strncpy_s(m_singletonNames[m_singletonCount],
-                      sizeof(m_singletonNames[0]), info.name.c_str(), _TRUNCATE);
-#endif
             m_singletonSlots[m_singletonCount] = info.instance;
             ++m_singletonCount;
         }
@@ -482,29 +338,17 @@ public:
     virtual void unregisterSingleton(const HostString& name)
     {
         for (int i = 0; i < m_singletonCount; ++i)
-#if BF2_PLUGIN_ABI_NATIVE
             if (m_singletonNames[i] == name)
             {
                 m_singletonNames[i].clear();
                 return;
             }
-#else
-            if (strcmp(m_singletonNames[i], name.c_str()) == 0)
-            {
-                m_singletonNames[i][0] = '\0';
-                return;
-            }
-#endif
     }
 
     virtual IBase* getSingleton(const HostString& name)
     {
         for (int i = 0; i < m_singletonCount; ++i)
-#if BF2_PLUGIN_ABI_NATIVE
             if (m_singletonNames[i] == name)
-#else
-            if (strcmp(m_singletonNames[i], name.c_str()) == 0)
-#endif
                 return m_singletonSlots[i] ? *m_singletonSlots[i] : 0;
         return 0;
     }
@@ -520,12 +364,7 @@ public:
     // Publish a singleton the host itself owns - the 16 initDll requires.
     void publish(const char* name, IBase** slot)
     {
-#if BF2_PLUGIN_ABI_NATIVE
         m_singletonNames[m_singletonCount] = name;
-#else
-        strncpy_s(m_singletonNames[m_singletonCount],
-                  sizeof(m_singletonNames[0]), name, _TRUNCATE);
-#endif
         m_singletonSlots[m_singletonCount] = slot;
         ++m_singletonCount;
     }
@@ -547,29 +386,12 @@ private:
         ++g_failures;
     }
 
-#if !BF2_PLUGIN_ABI_NATIVE
-    template <typename T>
-    static void destroyVector(vc71::vector_layout& v)
-    {
-        T* first = reinterpret_cast<T*>(v.first);
-        T* last  = reinterpret_cast<T*>(v.last);
-        for (T* p = first; p != last; ++p)
-            p->~T();
-        if (v.first)
-            ::operator delete(v.first);         // -> bf_free. The block came from the DLL.
-        v.first = v.last = v.end = 0;
-    }
-#endif
 
     IClassServer* m_servers[8];
     int           m_serverCount;
 
     unsigned int  m_classIds[64];
-#if BF2_PLUGIN_ABI_NATIVE
     HostString    m_classNames[64];       // [TEMP] native registry storage; no fixed-size truncation
-#else
-    char          m_classNames[64][96];   // [TEMP] see getClassID
-#endif
     // It must match ClassRegInfo::create exactly: __fastcall for the retail PE record and the
     // ordinary Core factory type for the rebuilt-client ABI. The first harness spelled __cdecl on
     // both retail sides, passed 20/20, and then failed in BF2. decltype keeps this consumer tied to
@@ -577,96 +399,11 @@ private:
     decltype(ClassRegInfo::create) m_classCreate[64];
     int           m_classCount;
 
-#if BF2_PLUGIN_ABI_NATIVE
     HostString    m_singletonNames[64];   // [TEMP] exercises the shared native std::string ABI
-#else
-    char          m_singletonNames[64][64];
-#endif
     IBase**       m_singletonSlots[64];
     int           m_singletonCount;
 };
 
-// Compares vc71::string with strings constructed by MSVCP71's exported constructor.
-#if !BF2_PLUGIN_ABI_NATIVE
-typedef void (__thiscall* P71StringCtor)(void* self, const char* s);
-typedef void (__thiscall* P71StringDtor)(void* self);
-
-static void dumpBytes(const char* label, const unsigned char* p)
-{
-    printf("      %-8s", label);
-    for (int i = 0; i < 28; ++i)
-        printf("%02X%s", p[i], ((i % 4) == 3) ? " " : "");
-    printf("\n");
-}
-
-static void testStringAbi(HMODULE p71)
-{
-    P71StringCtor ctor = reinterpret_cast<P71StringCtor>(::GetProcAddress(p71,
-        "??0?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAE@PBD@Z"));
-    P71StringDtor dtor = reinterpret_cast<P71StringDtor>(::GetProcAddress(p71,
-        "??1?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAE@XZ"));
-
-    if (!ctor || !dtor)
-    {
-        check(false, "msvcp71.dll basic_string ctor/dtor resolved");
-        return;
-    }
-
-    // short: "Renderer", 8 chars, must live in the SSO buffer
-    {
-        unsigned char theirs[28];
-        memset(theirs, 0xCD, sizeof(theirs));
-        ctor(theirs, "Renderer");
-
-        vc71::string ours("Renderer");
-        const unsigned char* oursBytes = reinterpret_cast<const unsigned char*>(&ours);
-
-        dumpBytes("MSVCP71", theirs);
-        dumpBytes("ours",    oursBytes);
-
-        // Compare characters, terminator, size, and capacity only.
-        // Allocator bytes and unused SSO tail bytes are unspecified and must be excluded.
-        const size_t len = strlen("Renderer");
-        check(memcmp(theirs + 4, oursBytes + 4, len + 1) == 0,
-              "short string \"Renderer\": characters + terminator identical to MSVCP71's");
-        check(memcmp(theirs + 20, oursBytes + 20, 8) == 0,
-              "short string \"Renderer\": _Mysize and _Myres identical to MSVCP71's");
-        check(*reinterpret_cast<const unsigned int*>(theirs + 24) < 16,
-              "short string \"Renderer\": MSVCP71 leaves _Myres < 16, i.e. data is IN the object");
-        dtor(theirs);
-    }
-
-    // long: "GeometryTemplateManager", 23 chars, must go to the CRT heap
-    {
-        unsigned char theirs[28];
-        memset(theirs, 0xCD, sizeof(theirs));
-        ctor(theirs, "GeometryTemplateManager");
-
-        vc71::string ours("GeometryTemplateManager");
-        const unsigned char* oursBytes = reinterpret_cast<const unsigned char*>(&ours);
-
-        dumpBytes("MSVCP71", theirs);
-        dumpBytes("ours",    oursBytes);
-
-        const unsigned int theirSize = *reinterpret_cast<const unsigned int*>(theirs + 20);
-        const unsigned int theirRes  = *reinterpret_cast<const unsigned int*>(theirs + 24);
-        const unsigned int ourSize   = *reinterpret_cast<const unsigned int*>(oursBytes + 20);
-        const unsigned int ourRes    = *reinterpret_cast<const unsigned int*>(oursBytes + 24);
-        const char* theirPtr = *reinterpret_cast<char* const*>(theirs + 4);
-
-        printf("      MSVCP71  _Mysize=%u _Myres=%u   ours _Mysize=%u _Myres=%u\n",
-               theirSize, theirRes, ourSize, ourRes);
-
-        check(theirSize == 23 && ourSize == 23, "long string: _Mysize == 23 on both sides");
-        check(theirRes >= 16 && ourRes >= 16,   "long string: _Myres >= 16, so both are heap, not SSO");
-        // This settles the [UNRESOLVED] capacity rounding noted in Vc71String.h. If it fails, our
-        // value is wrong but harmless - MSVCP71's deallocate discards the count.
-        check(theirRes == ourRes,               "long string: _Myres matches MSVCP71's rounding exactly");
-        check(strcmp(theirPtr, "GeometryTemplateManager") == 0, "long string: MSVCP71 stores via _Ptr at +4");
-        dtor(theirs);
-    }
-}
-#else
 // The native rebuilt-client boundary shares the compiler's std::string and CRT across both images.
 // Exercise a name longer than both MSVC's small-string buffer and the legacy harness's fixed
 // singleton-name buffer, then prove that the manager receives it intact in both directions.
@@ -689,7 +426,6 @@ static void testNativeStringRegistry()
     check(manager.getSingleton(name) == 0,
           "native HostString unregisterSingleton removes the exact long name");
 }
-#endif
 
 
 int main()
@@ -697,29 +433,9 @@ int main()
     printf("=== RendDX9 replacement host harness ===\n\n");
 
     char path[MAX_PATH];
-#if BF2_PLUGIN_ABI_NATIVE
     printf("[setup] native rebuilt-client plugin ABI (shared /MD CRT)\n");
     printf("\n[TEST 0] native HostString registry round trip\n");
     testNativeStringRegistry();
-#else
-    // Memory.dll and msvcr71.dll must be resolvable exactly as they are inside BF2's process.
-    ::SetDllDirectoryA(kGameDir);
-
-    sprintf_s(path, "%s\\msvcr71.dll", kGameDir);
-    HMODULE r71 = ::LoadLibraryA(path);
-    sprintf_s(path, "%s\\msvcp71.dll", kGameDir);
-    HMODULE p71 = ::LoadLibraryA(path);
-    printf("[setup] msvcr71=%p msvcp71=%p\n", (void*)r71, (void*)p71);
-    check(r71 != 0, "msvcr71.dll loaded (the DLL resolves malloc/free from it by GetModuleHandle)");
-    check(p71 != 0, "msvcp71.dll loaded");
-
-    printf("\n[TEST 0] std::string ABI vs the real MSVCP71\n");
-    if (p71)
-        testStringAbi(p71);
-#endif
-
-    printf("\n[TEST 0B] display-mode carrier ownership\n");
-    testDisplayModeOwnership();
 
     // the host's own singletons: the 16 initDll requires, plus the 3 it tolerates missing
     printf("\n[TEST 1] initDll\n");

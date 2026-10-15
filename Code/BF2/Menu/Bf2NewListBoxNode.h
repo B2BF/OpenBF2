@@ -24,7 +24,7 @@ public:
     void bindDataToSelfForHud();                         // 7CDD70, +D4
     // Refuses an index of 5 or more but not a negative one, and answers with
     // the index's low byte rather than a flag - so index 0 reports false.
-    bool setFontForHud(int font, int index);             // 7CDD80, +D8
+    bool setFontForHud(FontHandle font, int index);             // 7CDD80, +D8
     bool setSelectActionForHud(Action* action);          // 7CDDA0, +DC -> +48
     bool setFieldE0ForHud(Action* action);               // 7CDDB0, +E0 -> +4C
     bool setFocusActionForHud(Action* action);           // 7CDDC0, +E4 -> +50
@@ -70,7 +70,9 @@ protected:
     friend struct Bf2NewListBoxNodeFixture;
     char* m_name;                                        // retail+12C, owned clone
 };
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2NewListBoxNode) == 300, "native Bf2NewListBoxNode storage");
+#endif
 } }
 #endif
 #endif

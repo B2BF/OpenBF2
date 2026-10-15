@@ -1,7 +1,8 @@
 // Path: [INFERRED] header beside DecalManager.cpp, attested at RendDX9 0x1021CA40.
 // Decal lifetime, template registry and rendering owner, recovered from RendDX9.dll 1.50.
-// Retail layout: 0x2CC bytes in both plugin flavours; constructor 0x101251F0.
-// VideoOptions writes enabled at +0x2A6 directly; preserve that offset.
+// Retail layout: 0x2CC bytes; constructor 0x101251F0. The native object holds std containers, so
+// its size and every offset from +0x34 on differ from retail; the `// +0xNN` comments are retail's.
+// Callers outside this class reach the decals-enabled byte (retail +0x2A6) through setEnabledField.
 
 #ifndef BF2_GEOM_DECALSYSTEM_DECALMANAGER_H
 #define BF2_GEOM_DECALSYSTEM_DECALMANAGER_H
@@ -14,9 +15,11 @@
 #include "DecalRenderer.h"
 #include "../../RendDX9/RendDX9Base.h"                // dx9rend::RenderPathListener
 #include "../../../RendDX9Abi/BfMemory.h"
-#include "../../../RendDX9Abi/Vc71String.h"
+#include <string>
 
+#include <map>
 #include <stddef.h>
+#include <vector>
 
 namespace dice {
 namespace hfe {
@@ -41,19 +44,17 @@ extern IBase* g_DecalManager;
 
 // The two maps the image only constructs / clears / destroys: +0x78 has a 0x38-byte node (a 28-byte
 // std::string key destroyed per node in sub_10126BD0, a 12-byte trivially destructible value);
-// +0x84 a 0x18-byte node (4-byte key and value). [UNRESOLVED] types; see DecalContainers.h.
+// +0x84 a 0x18-byte node (4-byte key and value). [UNRESOLVED] types; their comparators are never
+// instantiated in the shipped image, so std::less stands in and nothing calls it.
 struct DecalUnreadValue12
 {
     unsigned int words[3];
 };
 
-typedef decalvc71::Map<vc71::string, DecalTemplate*, decalvc71::NoCaseLess>  DecalTemplateMap;
-typedef decalvc71::Map<unsigned short, DecalTemplate*,
-                       decalvc71::UnsignedLess<unsigned short> >               DecalTemplateIndexMap;
-typedef decalvc71::Map<vc71::string, DecalUnreadValue12, decalvc71::UnreadStringLess>
-                                                                               DecalUnreadStringMap;
-typedef decalvc71::Map<unsigned int, unsigned int, decalvc71::UnsignedLess<unsigned int> >
-                                                                               DecalUnreadMap;
+typedef std::map<std::string, DecalTemplate*, DecalTemplateNameLess> DecalTemplateMap;
+typedef std::map<unsigned short, DecalTemplate*>                     DecalTemplateIndexMap;
+typedef std::map<std::string, DecalUnreadValue12>                   DecalUnreadStringMap;
+typedef std::map<unsigned int, unsigned int>                         DecalUnreadMap;
 
 // Owns decal clients, templates, the pooled records and the embedded renderer.
 // update() drains deferred removal/deletion queues; release() on a client is not immediate.
@@ -97,7 +98,7 @@ public:
     // Draws the current frame's decals; unused is ignored.
     virtual void onRenderPathNotification(int unused) override;
     virtual int  getCurrentRenderPath() const override;                      // +0x10
-    virtual vc71::string getRenderPathListenerName() const override;         // +0x14
+    virtual std::string getRenderPathListenerName() const override;         // +0x14
 
     // non-virtual, in the image's order
     void renderDecals(dx9rend::IRenderView* view);                           // (unref)
@@ -106,15 +107,15 @@ public:
     bool getDrawStats() const { return m_drawStats; }
     void recomputeFades();                                                   // (unref;
                                                                              //   inlined in 5 slots)
-    dx9rend::TextureAtlasEntry* getAtlasEntry(const vc71::string& textureName);
-    bool loadAtlas(const vc71::string& fileName);
+    dx9rend::TextureAtlasEntry* getAtlasEntry(const std::string& textureName);
+    bool loadAtlas(const std::string& fileName);
     void initPool();
     void collectDecals(dx9rend::IRenderView& view);                          // (unref)
     void flushDeletes();
     void flushRemovals();
     void clear();
     DecalTemplate* getTemplateByIndex(unsigned short index);                 // (unref)
-    bool generateTexture(const vc71::string& atlasName);                     // (console)
+    bool generateTexture(const std::string& atlasName);                     // (console)
 
     // the inline surface DecalObject.cpp (D1) and DecalRenderer.cpp use
     // The pool pop DecalObject::add inlines (0x101AE555..0x101AE56B): the head, and the head's link
@@ -139,8 +140,8 @@ public:
     }
     bool  isEnabled() const          { return m_enabled; }                   // +0x2A6
     // VideoOptions::apply's store (sub_1000FCB0, 0x1001032A: `setnle cl; mov [eax+2A6h], cl` -
-    // (videoOptions +0x3C) > 1). VideoOptions.cpp writes byte 678 raw today; this is the typed form
-    // the integrator can switch it to - the offset is asserted either way.
+    // (videoOptions +0x3C) > 1). The native m_enabled is not at +0x2A6, so the store must come
+    // through here.
     void  setEnabledField(bool enabled) { m_enabled = enabled; }
     float decalNormalOffset() const  { return m_decalNormalOffset; }         // +0x2C0
     float decalGeomClipAngle() const { return m_decalGeomClipAngle; }        // +0x2C4
@@ -169,8 +170,8 @@ private:
     DecalObjectMap                   m_clients;                             // +0x028
     DecalObjectMap                   m_activeInstances;                     // +0x034
     DecalTemplateMap                 m_templates;                           // +0x040
-    decalvc71::Vector<DecalObject*>  m_deleteQueue;                         // +0x04C
-    decalvc71::Vector<DecalObject*>  m_removeQueue;                         // +0x05C
+    std::vector<DecalObject*>        m_deleteQueue;                         // +0x04C
+    std::vector<DecalObject*>        m_removeQueue;                         // +0x05C
     DecalTemplateIndexMap            m_templatesByIndex;                    // +0x06C
     DecalUnreadStringMap             m_map78;                               // +0x078
     DecalUnreadMap                   m_map84;                               // +0x084
@@ -197,38 +198,16 @@ private:
     friend struct DecalManagerLayoutCheck;
 };
 
-// Asserted in both flavours (x86): the object is the renderer's own, and VideoOptions::apply's raw
-// write at +0x2A6 has to land on m_enabled whichever flavour is built.
+// The prefix before the first std container keeps its retail offsets on x86 (BF2Render.cpp reaches
+// the listener subobject at +0x04). Everything from m_activeInstances on is native.
 struct DecalManagerLayoutCheck
 {
 #if defined(_M_IX86)
-    static_assert(sizeof(DecalManager) == 0x2CC, "RefFactory_geom_DecalManager allocates 0x2CC");
     static_assert(offsetof(DecalManager, m_renderPath) == 0x08, "listener +0x10 reads subobject+4");
     static_assert(offsetof(DecalManager, m_refCount) == 0x0C, "ICF_incrementDwordAt0xC");
     static_assert(offsetof(DecalManager, m_timeToLive) == 0x10, "+0x10");
     static_assert(offsetof(DecalManager, m_lastDeltaTime) == 0x20, "+0x20");
     static_assert(offsetof(DecalManager, m_clients) == 0x28, "+0x28");
-    static_assert(offsetof(DecalManager, m_activeInstances) == 0x34, "+0x34");
-    static_assert(offsetof(DecalManager, m_templates) == 0x40, "+0x40");
-    static_assert(offsetof(DecalManager, m_deleteQueue) == 0x4C, "+0x4C");
-    static_assert(offsetof(DecalManager, m_removeQueue) == 0x5C, "+0x5C");
-    static_assert(offsetof(DecalManager, m_templatesByIndex) == 0x6C, "+0x6C");
-    static_assert(offsetof(DecalManager, m_map78) == 0x78, "+0x78");
-    static_assert(offsetof(DecalManager, m_map84) == 0x84, "+0x84");
-    static_assert(offsetof(DecalManager, m_pool) == 0x90, "+0x90");
-    static_assert(offsetof(DecalManager, m_renderer) == 0x94, "+0x94");
-    static_assert(offsetof(DecalManager, m_freeList) == 0x290, "+0x290");
-    static_assert(offsetof(DecalManager, m_poolSize) == 0x294, "+0x294");
-    static_assert(offsetof(DecalManager, m_templateCount) == 0x298, "+0x298");
-    static_assert(offsetof(DecalManager, m_dword29C) == 0x29C, "+0x29C");
-    static_assert(offsetof(DecalManager, m_clearing) == 0x2A4, "+0x2A4");
-    static_assert(offsetof(DecalManager, m_drawStats) == 0x2A5, "+0x2A5");
-    static_assert(offsetof(DecalManager, m_enabled) == 0x2A6, "VideoOptions::apply writes +0x2A6");
-    static_assert(offsetof(DecalManager, m_fadeDistance) == 0x2B0, "+0x2B0");
-    static_assert(offsetof(DecalManager, m_minimumAlpha) == 0x2B8, "+0x2B8");
-    static_assert(offsetof(DecalManager, m_decalNormalOffset) == 0x2C0, "+0x2C0");
-    static_assert(offsetof(DecalManager, m_decalGeomClipAngle) == 0x2C4, "+0x2C4");
-    static_assert(offsetof(DecalManager, m_atlas) == 0x2C8, "+0x2C8");
 #endif
 };
 

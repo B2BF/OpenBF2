@@ -5,6 +5,7 @@
 #include "GameClient.h"
 #if !DEDICATED
 
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -2115,6 +2116,18 @@ bool GameClient::getPause()               { return m_paused; }                 /
 bool GameClient::getDisconnectRequested() { return m_disconnectRequested; }    // : +0x120
 bool GameClient::getIsReady()             { return m_isReady; }                // : +0x158
 
+namespace {
+// The payload pointer a PostRemoteEvent stores in its notification node (PE node +0x2C). The named
+// member keeps the retail x86 offset and follows the native layout elsewhere.
+#if defined(_M_IX86)
+static_assert(offsetof(NotificationEventNode, m_data) == 0x2C, "retail PE notification payload");
+#endif
+inline void* remoteEventPayload(EventNode* node)
+{
+    return static_cast<NotificationEventNode*>(node)->m_data;
+}
+} // namespace
+
 // Dispatches client core/network events for join progress, player state, chat and object removal.
 // Database acknowledgements preserve network-ID regression order; mismatched IDs are fatal.
 // Event-specific node and data payloads must match the selected ID.
@@ -2177,7 +2190,7 @@ void GameClient::handleEvent(EventCategory category, unsigned int id, EventNode*
         // Rewind the id allocator before comparing the highest used network id with the
         // server's watermark. The rewind result is discarded; the separate query can return -1.
         io::networkManager->regressNetworkableIds();                    // discarded
-        const int theirs = **reinterpret_cast<int**>(reinterpret_cast<char*>(node) + 0x2C);
+        const int theirs = *static_cast<const int*>(remoteEventPayload(node));   // node +0x2C
         const int ours   = io::networkManager->getHighestUsedNetID();
         if (theirs != ours)
             Debug(DEBUGTYPE_7, GAMECLIENT_FILE, 1404, "")
@@ -2194,7 +2207,7 @@ void GameClient::handleEvent(EventCategory category, unsigned int id, EventNode*
         break;
     case 9:
     {
-        const int playerId = **reinterpret_cast<int**>(reinterpret_cast<char*>(node) + 0x2C);
+        const int playerId = *static_cast<const int*>(remoteEventPayload(node));   // node +0x2C
         if (world::IPlayer* player = world::playerManager->getPlayerFromId(playerId))
         {
             player->setIsAlive(true);                // PE +0x64
@@ -2204,7 +2217,7 @@ void GameClient::handleEvent(EventCategory category, unsigned int id, EventNode*
     }
     case 10:
     {
-        const char* const payload = *reinterpret_cast<const char**>(reinterpret_cast<char*>(node) + 0x2C);
+        const char* const payload = static_cast<const char*>(remoteEventPayload(node));   // node +0x2C
         const int  playerId = *reinterpret_cast<const int*>(payload);
         const bool flag     = payload[4] != 0;
         world::IPlayer* const player = world::playerManager->getPlayerFromId(playerId);

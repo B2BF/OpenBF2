@@ -17,7 +17,7 @@
 #include "../../../Geom/DecalSystem/DecalObjectAccess.h"  // ~SimpleObject's DecalObject slot 10 (release)
 #include "../../../Geom/DecalSystem/IDecalManager.h"      // the ctor's object decal (createClient +0x14)
 #include "../../../Geom/IGeometryTemplate.h"
-#if !DEDICATED && BF2_PLUGIN_ABI_NATIVE && defined(_M_IX86)
+#if !DEDICATED && defined(_MSC_VER)
 #include "../../../Geom/GeometryTemplateManager.h"
 #endif
 #include "../../../Physics/CollisionManager.h"
@@ -144,7 +144,7 @@ bool setGeometry(IObject* object, const std::string& geometry)
     if (!::dice::hfe::g_geometryTemplateManager)
         return false;
 
-#if BF2_PLUGIN_ABI_NATIVE && defined(_M_IX86)
+#if !DEDICATED && defined(_MSC_VER)
     geom::IGeometryTemplate* const geometryTemplate =
         static_cast<geom::IGeometryTemplateManager*>(
             ::dice::hfe::g_geometryTemplateManager)->getTemplate(geometry);
@@ -175,7 +175,7 @@ bool setGeometry(IObject* object, const std::string& geometry)
     // same policy as ObjectDrawer's +0x18 and +0xCC.
     typedef void (__thiscall* SetGeometryOwnerFn)(void*, IObject*);
     reinterpret_cast<SetGeometryOwnerFn>(
-        (*reinterpret_cast<void***>(instance))[0x9C / sizeof(void*)])(instance, object);
+        (*reinterpret_cast<void***>(instance))[0x9C / 4])(instance, object);
 
     instance->release();
     return true;

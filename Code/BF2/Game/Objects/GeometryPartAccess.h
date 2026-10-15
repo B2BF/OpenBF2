@@ -9,7 +9,6 @@
 #include <cstring>
 #include <string>
 #if defined(_MSC_VER) && defined(_M_IX86)
-#include "../../../RendDX9Abi/Vc71String.h"
 #define BF2_GEOMETRY_PART_CALL __thiscall
 #else
 #define BF2_GEOMETRY_PART_CALL
@@ -69,17 +68,10 @@ inline void* getTemplate(void* geometry)
 
 inline bool templateNameEquals(void* objectTemplate, const char* name)
 {
-#if defined(_MSC_VER) && defined(_M_IX86)
-    // MeshTemplate::getName returns vc71::string even in the native renderer. Read its
-    // borrowed view without creating/destroying a string or importing the renderer allocator.
-    typedef const vc71::string& (BF2_GEOMETRY_PART_CALL* Function)(void*);
-    const vc71::string& actual = slot<Function>(objectTemplate, 0x18, 0x18)(objectTemplate);
-    const std::size_t length = std::strlen(name);
-    return actual.size() == length && std::memcmp(actual.c_str(), name, length) == 0;
-#else
-    typedef const std::string& (*Function)(void*);
+    // MeshTemplate::getName (+0x18) returns the renderer's std::string: the client and its
+    // plugins share one STL (issue #7).
+    typedef const std::string& (BF2_GEOMETRY_PART_CALL* Function)(void*);
     return slot<Function>(objectTemplate, 0x18, 0x18)(objectTemplate) == name;
-#endif
 }
 
 } } } }

@@ -30,7 +30,9 @@ public:
     int getInstanceCount() override { return effectNodeInstances; }
     unsigned int getInstanceSize() override { return sizeof(EffectNode); }
 };
+#if defined(_M_IX86)
 static_assert(sizeof(EffectNodeTypeDescriptor) == 16, "EffectNode metadata storage");
+#endif
 }
 
 EffectNode::EffectNode(Effect* effect) : Node(), m_effect(effect) {}
@@ -82,6 +84,8 @@ bool EffectNode::updateSelf(System* system, const NodeState*, const Rect*, float
     return updateEffect(system, m_effect, delta);
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(EffectNode) == 12, "client BFMeme EffectNode");
+#endif
 } }
 #endif

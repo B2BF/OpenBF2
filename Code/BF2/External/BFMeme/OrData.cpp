@@ -28,7 +28,9 @@ float OrData::getFloat(System* system)
     return m_second->getFloat(system) != 0.0f ? 1.0f : 0.0f;
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(OrData) == 16, "client BFMeme OrData");
 static_assert(sizeof(ClassTypeDescriptor<OrData, LogicalData>) == 16, "OrData metadata");
+#endif
 } }
 #endif

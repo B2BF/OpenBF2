@@ -95,7 +95,7 @@ void verifyTrailParticles(int fault)
         psmDrawField<float>(p,0x88) = 0.8f;
     }
     IParticleSystemInstance* item = reinterpret_cast<IParticleSystemInstance*>(instance);
-    ParticleSystemInstanceList list = {0,&item,&item+1,&item+1};
+    ParticleSystemInstanceList list(1,item);
     if (fault==3) renderer[0x886]=1;
     psmPrepareTrailRenderer(renderer,view,&list,0.25f);
     CHECK(psmDrawField<unsigned int>(renderer,0x31C)==3 && psmDrawField<unsigned int>(renderer,0x320)==1);
@@ -123,7 +123,7 @@ void verifyTrailParticles(int fault)
     CHECK(activeProjectionReads==2 && activeInverseReads==3 && activeViewReads==3);
     CHECK(psmDrawField<unsigned int>(renderer,0x24)==0 && psmDrawField<unsigned int>(renderer,0x20)==0xFFFFFFFFu);
     CHECK(psmDrawField<unsigned int>(renderer,0x724)==3 && psmDrawField<unsigned int>(renderer,0x8B0)==18);
-    CHECK(psmDrawField<unsigned int>(reinterpret_cast<unsigned char*>(&manager),0x8C50)==1);
+    CHECK(manager.m_drawCounters[3]==1); // retail +0x8C50, the trail draw counter
     CHECK(fresnel.scalar==0);
     for (unsigned int i=0;i<18;++i)
     {

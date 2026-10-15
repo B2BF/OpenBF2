@@ -981,7 +981,7 @@ float BfSound::evaluate(ISound* sound, const Math::Vec3* position)
         if (cached && (cached >> 16))
         {
             const unsigned int next = (((cached >> 16) - 1) << 16) | (cached & 0xFFFFu);
-            sound->setUserData(2, reinterpret_cast<void*>(next));
+            sound->setUserData(2, reinterpret_cast<void*>(static_cast<size_t>(next)));
             return static_cast<float>(next & 0xFFFFu) * 1.5259022e-05f;    // 1 / 65535
         }
     }
@@ -1024,7 +1024,7 @@ float BfSound::evaluate(ISound* sound, const Math::Vec3* position)
                                                  from[ray], dir[ray], &predicator,
                                                  near, true, false, true, 0))
         {
-            sound->setUserData(1, reinterpret_cast<void*>(ray));
+            sound->setUserData(1, reinterpret_cast<void*>(static_cast<size_t>(ray)));
             break;
         }
     }
@@ -1054,7 +1054,7 @@ float BfSound::evaluate(ISound* sound, const Math::Vec3* position)
             reuse = static_cast<unsigned int>(*s_obstructionMaxReuseFrames);
         const unsigned int packed =
             (reuse << 16) | (static_cast<unsigned int>(static_cast<int>(obstruction * 65535.0f)) & 0xFFFFu);
-        sound->setUserData(2, reinterpret_cast<void*>(packed));
+        sound->setUserData(2, reinterpret_cast<void*>(static_cast<size_t>(packed)));
     }
     return obstruction;
 }

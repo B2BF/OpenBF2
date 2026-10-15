@@ -26,33 +26,35 @@ bool updateEffect(System* system, Effect* effect, float delta)
 }
 
 bool drawContextCharacter(RenderContext* context, System* system, int character,
-                          int font, int elementIndex, Quad* quad)
+                          FontHandle font, int elementIndex, Quad* quad)
 {
     while (context && !context->effect) context = context->parent;
     if (!context) return system->drawCharacter(character, font, quad);
     return context->effect->drawCharacter(system, character, font, elementIndex, quad, context);
 }
-bool drawContextTexture(RenderContext* context, System* system, int texture,
+bool drawContextTexture(RenderContext* context, System* system, TextureHandle texture,
                         Quad* quad)
 {
     while (context && !context->effect) context = context->parent;
     if (!context) return system->drawTexture(texture, quad);
     return context->effect->drawTexture(system, texture, quad, context);
 }
-bool Effect::drawCharacter(System* system, int character, int font, int elementIndex,
+bool Effect::drawCharacter(System* system, int character, FontHandle font, int elementIndex,
                            Quad* quad, RenderContext* context)
 {
     // Retail requires a context and dereferences it even when its parent is null.
     return drawContextCharacter(context->parent, system, character, font, elementIndex, quad);
 }
-bool Effect::drawTexture(System* system, int texture, Quad* quad,
+bool Effect::drawTexture(System* system, TextureHandle texture, Quad* quad,
                          RenderContext* context)
 {
     return drawContextTexture(context->parent, system, texture, quad);
 }
 TypeDescriptor* getEffectClassType() { return Effect::getClassType(); }
 
+#if defined(_M_IX86)
 static_assert(sizeof(Effect) == 4, "PE Effect allocation");
 static_assert(sizeof(RenderContext) == 28, "seven-word Effect context");
+#endif
 } }
 #endif

@@ -16,6 +16,9 @@
 #include "HudSquad.h"
 #include "../Game/GeneralSettings.h"   // getOutOfVoting, the +0x80 bridge (was HudQuestionSettings.h's seam)
 #include <cmath>
+#if !defined(_M_IX86)
+#include <emmintrin.h>
+#endif
 
 namespace dice { namespace hfe {
 extern IBase* squadManager;
@@ -45,12 +48,18 @@ int voteMinutes(float seconds)
     // the final x87 conversion truncates and preserves the caller's control word.
     const float fraction = 0.01666666753590107f;
     float minutes;
+#if defined(_M_IX86)
     __asm {
         fld seconds
         fmul fraction
         fstp minutes
     }
+#else
+    // The product of two floats is exact in double; the float store is the only rounding.
+    minutes = static_cast<float>(static_cast<double>(seconds) * fraction);
+#endif
     const double rounded = std::ceil(static_cast<double>(minutes));
+#if defined(_M_IX86)
     unsigned short saved, truncated;
     int result;
     __asm { fnstcw saved }
@@ -62,6 +71,10 @@ int voteMinutes(float seconds)
         fldcw saved
     }
     return result;
+#else
+    // cvttsd2si truncates like the chopped fistp, including the 0x80000000 indefinite result.
+    return _mm_cvttsd_si32(_mm_set_sd(rounded));
+#endif
 }
 }
 

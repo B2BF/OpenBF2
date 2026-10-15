@@ -422,7 +422,7 @@ int SwiffHost::getCurrentMapMaxPlayers() { return game ? game->getCurrentMapMaxP
 int SwiffHost::getCurrentMapSize()       { return game ? game->getCurrentMapSize() : 0; }
 
 // SwiffPlayer +0x60, then the window stops hiding the cursor (+0x3B).
-bool SwiffHost::setPlayerRenderCapability0(int value)
+bool SwiffHost::setPlayerRenderCapability0(intptr_t value)
 {
     IBase* player = classManager->getSingleton(std::string("SwiffPlayer"));
     if (!player || !static_cast<ui::ISwiffPlayer*>(player)->renderCapability0(value))
@@ -446,7 +446,7 @@ void* SwiffHost::getCursor(int which)
     return m_cursors[which];
 }
 
-bool SwiffHost::setPlayerRenderCapability1(int value)
+bool SwiffHost::setPlayerRenderCapability1(intptr_t value)
 {
     IBase* player = classManager->getSingleton(std::string("SwiffPlayer"));
     return player && static_cast<ui::ISwiffPlayer*>(player)->renderCapability1(value) != 0;

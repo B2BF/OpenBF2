@@ -230,48 +230,42 @@ void testAccumulationProjection()
     g_raShaderConstants = 0;
 }
 
-void prepareQueue(dice::hfe::dx9rend::RenderQueue* queue,
-                  unsigned char enabled,
-                  unsigned int* first,
-                  unsigned int* last)
+// A value-initialized queue (zeroed words, empty entry list and name) holding `count` fake
+// entry pointers. Only `enabled` and the entry list are read by the world-pass walk.
+dice::hfe::dx9rend::RenderQueue* prepareQueue(unsigned char* storage,
+                                              unsigned char enabled,
+                                              unsigned int* first,
+                                              unsigned int count)
 {
-    std::memset(queue, 0, sizeof(*queue));
+    using namespace dice::hfe::dx9rend;
+    RenderQueue* const queue = new (storage) RenderQueue();
     queue->enabled = enabled;
-    queue->entriesFirst = first;
-    queue->entriesLast = last;
+    for (unsigned int i = 0; i != count; ++i)
+        queue->entries.push_back(reinterpret_cast<RenderQueueEntry*>(first + i));
+    return queue;
 }
 
 void testWorldQueueCollections()
 {
     using namespace dice::hfe::dx9rend;
 
-    alignas(4) unsigned char tableStorage[sizeof(RenderQueueTable)];
-    RenderQueueTable* const table =
-        zeroObject<RenderQueueTable>(tableStorage, sizeof(tableStorage));
+    // Value-initialized: zeroed words, empty shader map and queue collections.
+    alignas(RenderQueueTable) unsigned char tableStorage[sizeof(RenderQueueTable)];
+    RenderQueueTable* const table = new (tableStorage) RenderQueueTable();
 
-    alignas(4) unsigned char queueStorage[5][sizeof(RenderQueue)];
+    alignas(RenderQueue) unsigned char queueStorage[5][sizeof(RenderQueue)];
     RenderQueue* queues[5];
-    for (unsigned int i = 0; i != 5; ++i)
-        queues[i] = reinterpret_cast<RenderQueue*>(queueStorage[i]);
 
     unsigned int entries[3] = { 11u, 22u, 33u };
-    prepareQueue(queues[0], 0, entries, entries + 1); // disabled, but non-empty
-    prepareQueue(queues[1], 1, 0, entries + 1);       // null first
-    prepareQueue(queues[2], 1, entries, entries);     // empty
-    prepareQueue(queues[3], 1, entries, entries + 1); // enabled and non-empty
-    prepareQueue(queues[4], 1, entries + 1, entries + 3); // second collection
+    queues[0] = prepareQueue(queueStorage[0], 0, entries, 1);     // disabled, but non-empty
+    queues[1] = prepareQueue(queueStorage[1], 1, entries, 0);     // empty (the VC7.1 null-first shape)
+    queues[2] = prepareQueue(queueStorage[2], 1, entries, 0);     // empty
+    queues[3] = prepareQueue(queueStorage[3], 1, entries, 1);     // enabled and non-empty
+    queues[4] = prepareQueue(queueStorage[4], 1, entries + 1, 2); // second collection
 
-    RenderQueue* firstCollection[] = {
-        queues[0], queues[1], queues[2], queues[3]
-    };
-    RenderQueue* secondCollection[] = { queues[4] };
-    table->worldCollections[0].first = firstCollection;
-    table->worldCollections[0].last = firstCollection + 4;
-    table->worldCollections[0].end = firstCollection + 4;
-    table->worldCollections[1].first = secondCollection;
-    table->worldCollections[1].last = secondCollection + 1;
-    table->worldCollections[1].end = secondCollection + 1;
-    table->worldQueueOwner = 0;
+    table->worldQueues.assign(queues, queues + 4);
+    table->pointLightQueues.assign(queues + 4, queues + 5);
+    table->defaultShader = 0;
 
     g_frontierHitCount = 0;
     g_renderQueues = table;
@@ -287,18 +281,19 @@ void testWorldQueueCollections()
               && std::strstr(g_frontierHits[1].name, "NON-EMPTY queue flush") != 0,
           "both observations stop at the named unrecovered draw walk");
 
-    // Empty collection ranges are legal no-ops, including the all-zero shape
+    // Empty collections are legal no-ops, including the never-filled shape
     // installed by createRenderQueues.
-    table->worldCollections[0].first = firstCollection;
-    table->worldCollections[0].last = firstCollection;
-    table->worldCollections[1].first = 0;
-    table->worldCollections[1].last = 0;
+    table->worldQueues.clear();
+    std::vector<void*>().swap(table->pointLightQueues);
     g_frontierHitCount = 0;
     renderQueuesFlushWorldPass();
     check(g_frontierHitCount == 0,
-          "empty and null collection ranges perform no queue flushes");
+          "empty and never-filled collections perform no queue flushes");
 
     g_renderQueues = 0;
+    for (unsigned int i = 0; i != 5; ++i)
+        queues[i]->~RenderQueue();
+    table->~RenderQueueTable();
 }
 
 } // anonymous namespace

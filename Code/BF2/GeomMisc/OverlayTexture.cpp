@@ -86,7 +86,7 @@ public:
     virtual void slot_0x20();
     virtual void slot_0x24();
     virtual void setAlpha(float alpha);                       // +0x28  0x100880E0   read
-    virtual void setTexture(const vc71::string& name);        // +0x2C  0x10088100   read
+    virtual void setTexture(const std::string& name);        // +0x2C  0x10088100   read
     virtual void slot_0x30();                                 // 0x10088150   the last slot
 
     // The DeviceLostResetListener at +0x04 (vtable 0x1020B110). .
@@ -109,7 +109,7 @@ private:
     void*                     m_vertexBuffer;   // +0x24  ctor: 0, built by the rebuild
     void*                     m_texture;        // +0x28  ctor: 0, setTexture writes this (EngineTexture*)
     dx9rend::Effect*          m_effect;         // +0x2C  the PortedFontShader effect
-    vc71::string              m_textureName;    // +0x30  setTexture compares and assigns this
+    std::string              m_textureName;    // +0x30  setTexture compares and assigns this
     dx9rend::ShaderParameter* m_paramTexLayer0; // +0x4C  the "TEXLAYER0" handle
     dx9rend::ShaderParameter* m_paramBlendAlpha;// +0x50  the "BLENDALPHA" handle
     unsigned char             m_alphaDirty;     // +0x54  ctor: 1, setAlpha sets it; no reader found
@@ -124,8 +124,7 @@ private:
     unsigned int              m_cachedH;        // +0x68
 };
 
-static_assert(sizeof(OverlayTexture) == 0x6C,
-              "RefFactory_geom_OverlayTexture allocates 0x6C - see 0x1007C860");
+
 
 
 // Creates the overlay buffer and shader parameters, retains the texture, and registers for device resets.
@@ -162,11 +161,11 @@ OverlayTexture::OverlayTexture()
         dx9rend::g_shaderManager, "mods/xpack/Shaders/PortedFontShader"));
 
     m_paramTexLayer0 =
-        dx9rend::effectGetShaderParameterBorrowedTyped(m_effect, vc71::string("TEXLAYER0"));
+        dx9rend::effectGetShaderParameterBorrowedTyped(m_effect, std::string("TEXLAYER0"));
     m_paramTexLayer0->addRef();
 
     m_paramBlendAlpha =
-        dx9rend::effectGetShaderParameterBorrowedTyped(m_effect, vc71::string("BLENDALPHA"));
+        dx9rend::effectGetShaderParameterBorrowedTyped(m_effect, std::string("BLENDALPHA"));
     m_paramBlendAlpha->addRef();
 
     dx9rend::registerDeviceLostResetListener(static_cast<dx9rend::DeviceLostResetListener*>(this), 4);
@@ -295,7 +294,7 @@ bool OverlayTexture::rebuild(bool force)
 void OverlayTexture::draw()
 {
     dx9rend::stateManagerPush();
-    dx9rend::effectSetTechniqueByName(m_effect, vc71::string("Overlay"));
+    dx9rend::effectSetTechniqueByName(m_effect, std::string("Overlay"));
     m_paramTexLayer0->setValue(m_texture, 0);
 
     float blendAlpha[4];
@@ -349,7 +348,7 @@ void OverlayTexture::setAlpha(float alpha)
 // Loads a texture when the name changes, using the manager's current class and pool.
 // Replacing the texture does not release the previous reference.
 
-void OverlayTexture::setTexture(const vc71::string& name)
+void OverlayTexture::setTexture(const std::string& name)
 {
     RD9_TRACE("dice::hfe::geom::OverlayTexture::setTexture", 0x2C);
 
@@ -359,8 +358,8 @@ void OverlayTexture::setTexture(const vc71::string& name)
         m_textureDirty = 1;
         m_texture      = dx9rend::textureManagerGetTexture(name);
 
-        ::renddx9abi::logf("OverlayTexture::setTexture(\"%s\"): loaded -> 0x%08X",
-                           name.c_str(), ::renddx9abi::addr(m_texture));
+        ::renddx9abi::logf("OverlayTexture::setTexture(\"%s\"): loaded -> 0x%p",
+                           name.c_str(), m_texture);
     }
 }
 

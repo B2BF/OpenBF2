@@ -39,14 +39,14 @@ protected:
     friend struct Bf2MiniMenuMapNodeFixture;
     // Updates blink state and timed markers, then records world time.
     void update(float delta) override;                                 // +E0 7CE340
-    int timedMarkerTexture(unsigned int id) override;                  // +E4 4553E0
+    TextureHandle timedMarkerTexture(unsigned int id) override;                // +E4 4553E0
     hfe::Vec2 timedMarkerSize(unsigned int id) override;               // +E8 7CF690
     bool populateNetworkIcon(int id, MapIconRecord* icon,
                              bool asPlayer) override;                  // +EC 7CF660
-    int getSmallSquadIcon(int squadId) override;                       // +FC 4553E0
+    TextureHandle getSmallSquadIcon(int squadId) override;                     // +FC 4553E0
     // +110, the third slot this class points at the shared "return 0" 4553E0: the
     // map's support-request icon getter answers no texture on a mini-map.
-    int getSupportRequestTexture(int eventId) override;
+    TextureHandle getSupportRequestTexture(int eventId) override;
     // Adds commander minimap order icons without squad numbers. Order lines require flag2C; requests always draw their marker.
     bool addOrderIcons(hfe::SquadOrder* order, int squad, int leaderNetworkId,
                        int kind, const Rect* bounds) override;
@@ -60,7 +60,7 @@ protected:
                                      bool cachePresent,
                                      bool localCaptureActive) override; // +13C 7CF5A0
     void paintMapIcon(hfe::Vec2 position, float rotation, hfe::Vec2 size,
-                      unsigned int texture, System* system, const Rect* adjusted,
+                      std::uintptr_t texture, System* system, const Rect* adjusted,
                       const Rect* bounds, const Color* color,
                       RenderContext* context) override;
     void collectLocalPlayerIcon() override;                              // +12C 7CEDD0, 583 B
@@ -79,7 +79,9 @@ protected:
     // World time of the last update. The constructor leaves it unset, so update must precede meaningful paint timing.
     double m_lastUpdateTime;                                             // retail +C80
 };
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2MiniMenuMapNode) == 3008, "native Bf2MiniMenuMapNode storage");
+#endif
 } }
 #endif
 #endif

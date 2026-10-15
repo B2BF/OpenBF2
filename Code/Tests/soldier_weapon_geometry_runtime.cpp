@@ -1,7 +1,7 @@
 // [TEMP] [CHOSEN, not recovered] observers around unchanged production weapon-geometry blocks.
 // The fixture does not construct a Soldier, load a mesh or render a frame.
 #define private public
-#include "../RendDX9Abi/Vc71String.h"
+#include <string>
 #undef private
 #include "../BF2/Game/Objects/GeometryPartAccess.h"
 #include "../BF2/Game/Objects/IWeaponObject.h"
@@ -26,14 +26,14 @@ void check(bool ok, const char* name) {
 }
 struct Receiver { void** table; } geometry, weapon, objectTemplate;
 void* templateResult;
-alignas(vc71::string) unsigned char nameBytes[sizeof(vc71::string)] = {};
-vc71::string& name = *reinterpret_cast<vc71::string*>(nameBytes);
+alignas(std::string) unsigned char nameBytes[sizeof(std::string)] = {};
+std::string& name = *reinterpret_cast<std::string*>(nameBytes);
 int __fastcall getAmmo(void*, void*) { note('A'); return ammo; }
 int __fastcall getParts(void*, void*) { note('E'); return parts; }
 int __fastcall getLod(void*, void*) { note('L'); return lod; }
 int __fastcall getLodCount(void*, void*) { note('C'); return lodCount; }
 void* __fastcall getTemplate(void*, void*) { note('T'); return templateResult; }
-const vc71::string& __fastcall getName(void*, void*) { note('N'); return name; }
+const std::string& __fastcall getName(void*, void*) { note('N'); return name; }
 void __fastcall setLod(void*, void*, int n) { note('D'); setLodValue = n; }
 void __fastcall setGeom(void*, void*, int n) { note('S'); geomIndex = n; }
 void __fastcall setPart(void*, void*, const Mat4* transform, int part) {

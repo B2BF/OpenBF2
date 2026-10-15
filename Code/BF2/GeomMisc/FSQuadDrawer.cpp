@@ -9,12 +9,12 @@
 #include "../RendDX9/Texture.h"
 #include "../../RendDX9Abi/BfMemory.h"
 #include "../../RendDX9Abi/Frontier.h"
-#include "../../RendDX9Abi/Vc71Map.h"
-#include "../../RendDX9Abi/Vc71String.h"
+#include <string>
 
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <map>
 #include <new>
 
 namespace dice {
@@ -23,7 +23,6 @@ namespace hfe {
 namespace dx9rend {
 
 extern void* g_shaderManager;  // dword_1023B97C
-extern void* g_stateManager;   // dword_1023B984
 extern void* g_rendererBase;   // dword_1023B970
 
 // BufferManager.cpp.  These are the exact wrappers used by the PE bodies above.
@@ -47,7 +46,7 @@ void  vertexDeclarationBind(void* wrapper);
 
 // Effect.cpp.  stencilpass is deliberately the one borrowed parameter; every other parameter is
 // obtained through the caller-reference-taking wrapper and released by FSQuadDrawer::~FSQuadDrawer.
-bool         effectHasTechnique(void* effect, const vc71::string& name);
+bool         effectHasTechnique(void* effect, const std::string& name);
 unsigned int effectCurrentPassCount(void* effect);
 
 // StateManager.cpp / BF2Render.cpp.
@@ -60,10 +59,6 @@ void rendererDrawIndexedPrimitive(unsigned int primCount, unsigned int type, int
 namespace geom {
 
 namespace {
-
-static const unsigned int kCacheNodeSize = 0x6E8;
-static const unsigned int kCacheColorOffset = kCacheNodeSize - 4;
-static const unsigned int kCacheNilOffset = kCacheNodeSize - 3;
 
 struct QuadVertex
 {
@@ -82,52 +77,31 @@ struct DrawRecord
 static_assert(sizeof(QuadVertex) == 24, "FSQuadDrawer creates a stride-24 vertex buffer");
 static_assert(sizeof(DrawRecord) == 16, "FSQuadDrawer cache draw records are four dwords");
 
-inline unsigned char* cacheRaw(vc71::map_node* node)
+// The per-dimension value of the cache at +0x08: the image's 0x6E8-byte node carries the key and
+// 1748 value bytes. Only the draw records at value +0x20 are read (HemiMapManager uses record 0);
+// the rest is [UNRESOLVED]. A new value starts zeroed, as the shipped insert leaves it.
+struct DimensionCacheValue
 {
-    return reinterpret_cast<unsigned char*>(node);
-}
+    unsigned char unresolved000[0x20];
+    DrawRecord    records[2];                       // value +0x20 (node +48)
+    unsigned char unresolved040[0x6D4 - 0x40];
+};
 
-inline vc71::map_node* cacheNode(unsigned char* node)
-{
-    return reinterpret_cast<vc71::map_node*>(node);
-}
+static_assert(sizeof(DimensionCacheValue) == 0x6D4, "the 1748-byte per-dimension value");
 
-inline unsigned char*& cacheLink(unsigned char* node, unsigned int index)
-{
-    return reinterpret_cast<unsigned char**>(node)[index];
-}
-
-inline unsigned int& cacheKey(unsigned char* node)
-{
-    return *reinterpret_cast<unsigned int*>(node + 12);
-}
-
-inline bool cacheIsNil(const unsigned char* node)
-{
-    return node[kCacheNilOffset] != 0;
-}
-
-void destroyCacheBranch(unsigned char* node, unsigned char* head)
-{
-    if (!node || node == head || cacheIsNil(node))
-        return;
-    destroyCacheBranch(cacheLink(node, 0), head);
-    destroyCacheBranch(cacheLink(node, 2), head);
-    ::renddx9abi::engineFree(node);
-}
+typedef std::map<unsigned int, DimensionCacheValue> DimensionCache;   // width | height << 16
 
 bool multisampleActive()
 {
     // PE sub_1000A6B0.  Renderer forced-on byte +0x514 wins, then forced-off +0x515; otherwise
-    // inspect the first two-dword mode in the base's VC7 vector at +0xC0.
-    unsigned char* const base = static_cast<unsigned char*>(dx9rend::g_rendererBase);
-    if (base[0x514])
+    // inspect the first two-dword mode in the base's multisample list (retail +0xC0).
+    const dx9rend::RendDX9Base* const base =
+        static_cast<const dx9rend::RendDX9Base*>(dx9rend::g_rendererBase);
+    if (base->forceMultisample)
         return true;
-    if (base[0x515])
+    if (base->disableMultisample)
         return false;
-    unsigned int* const first = *reinterpret_cast<unsigned int**>(base + 0xC0);
-    unsigned int* const last = *reinterpret_cast<unsigned int**>(base + 0xC4);
-    return first && ((last - first) >> 1) && *reinterpret_cast<int*>(first) > 0;
+    return dx9rend::multiSampleListActive(base);
 }
 
 [[noreturn]] void noValidTechnique()
@@ -163,18 +137,16 @@ public:
     virtual void onRenderPathChanged(int path);
     virtual void onRenderPathNotification(int path);
     virtual int getCurrentRenderPath() const;
-    virtual vc71::string getRenderPathListenerName() const;
+    virtual std::string getRenderPathListenerName() const;
     void drawHemiMap(dx9rend::EngineTexture* source,
                      dx9rend::EngineTexture* destination);
 
 private:
-    unsigned char* findCacheNode(unsigned int key) const;
-    unsigned char* insertCacheNode(unsigned int key);
     DrawRecord* ensureHemiQuad(unsigned short width, unsigned short height);
     void buildHemiQuad(unsigned short width, unsigned short height, DrawRecord* record);
 
     /* 0x004 */ unsigned int       m_listenerState; // base ctor leaves this word unwritten
-    /* 0x008 */ vc71::map_layout   m_dimensionCache;
+    /* 0x008 */ DimensionCache     m_dimensionCache;
     /* 0x014 */ float              m_weights[18];
     /* 0x05C */ float              m_highPassGate;
     /* 0x060 */ float              m_blurStrength;
@@ -188,14 +160,9 @@ private:
     /* 0x0E0 */ dx9rend::EngineTexture* m_depthComplexityTexture; // set by path activation
 };
 
-static_assert(sizeof(FSQuadDrawer) == 0xE4,
-              "ModuleGeomMisc::init allocates 228 bytes at PE 0x1007D0AF");
-
 FSQuadDrawer::FSQuadDrawer()
 {
-    // VC7.1 std::map header at +0x08 and its 0x6E8-byte sentinel.  The comparator word at +0x08,
-    // head at +0x0C and count at +0x10 are the exact retail layout.
-    m_dimensionCache.construct(kCacheNodeSize);
+    // The +0x08 dimension cache (its 0x6E8-byte sentinel in the image) is constructed empty.
 
     m_blurStrength = 0.0f;
     m_vertexCursor = 0;
@@ -218,51 +185,51 @@ FSQuadDrawer::FSQuadDrawer()
         dx9rend::g_shaderManager, "mods/xpack/Shaders/FSQuadDrawer"));
 
     dx9rend::Effect* const effect = m_effect;
-    m_parameters[0] = dx9rend::effectGetShaderParameterTyped(effect, vc71::string("TEXLAYER0"));
-    m_parameters[1] = dx9rend::effectGetShaderParameterTyped(effect, vc71::string("TEXLAYER1"));
-    m_parameters[2] = dx9rend::effectGetShaderParameterTyped(effect, vc71::string("STENCILREF"));
+    m_parameters[0] = dx9rend::effectGetShaderParameterTyped(effect, std::string("TEXLAYER0"));
+    m_parameters[1] = dx9rend::effectGetShaderParameterTyped(effect, std::string("TEXLAYER1"));
+    m_parameters[2] = dx9rend::effectGetShaderParameterTyped(effect, std::string("STENCILREF"));
     m_parameters[3] = dx9rend::effectGetShaderParameterBorrowedTyped(
-        effect, vc71::string("STENCILPASS"));
+        effect, std::string("STENCILPASS"));
     m_parameters[4] = dx9rend::effectGetShaderParameterTyped(
-        effect, vc71::string("CONVERTPOSTO8BITMAT"));
+        effect, std::string("CONVERTPOSTO8BITMAT"));
     m_parameters[5] = dx9rend::effectGetShaderParameterTyped(
-        effect, vc71::string("SCALEDOWN2X2SAMPLEOFFSETS"));
+        effect, std::string("SCALEDOWN2X2SAMPLEOFFSETS"));
     m_parameters[6] = dx9rend::effectGetShaderParameterTyped(
-        effect, vc71::string("SCALEDOWN4X4SAMPLEOFFSETS"));
+        effect, std::string("SCALEDOWN4X4SAMPLEOFFSETS"));
     m_parameters[7] = dx9rend::effectGetShaderParameterTyped(
-        effect, vc71::string("SCALEDOWN4X4LINEARSAMPLEOFFSETS"));
+        effect, std::string("SCALEDOWN4X4LINEARSAMPLEOFFSETS"));
     m_parameters[8] = dx9rend::effectGetShaderParameterTyped(
-        effect, vc71::string("GAUSSIANBLUR5X5CHEAPSAMPLEOFFSETS"));
+        effect, std::string("GAUSSIANBLUR5X5CHEAPSAMPLEOFFSETS"));
     m_parameters[9] = dx9rend::effectGetShaderParameterTyped(
-        effect, vc71::string("GAUSSIANBLUR5X5CHEAPSAMPLEWEIGHTS"));
+        effect, std::string("GAUSSIANBLUR5X5CHEAPSAMPLEWEIGHTS"));
     m_parameters[10] = dx9rend::effectGetShaderParameterTyped(
-        effect, vc71::string("GAUSSIANBLUR15X15HORIZONTALSAMPLEOFFSETS"));
+        effect, std::string("GAUSSIANBLUR15X15HORIZONTALSAMPLEOFFSETS"));
     m_parameters[11] = dx9rend::effectGetShaderParameterTyped(
-        effect, vc71::string("GAUSSIANBLUR15X15HORIZONTALSAMPLEWEIGHTS"));
+        effect, std::string("GAUSSIANBLUR15X15HORIZONTALSAMPLEWEIGHTS"));
     m_parameters[12] = dx9rend::effectGetShaderParameterTyped(
-        effect, vc71::string("GAUSSIANBLUR15X15VERTICALSAMPLEOFFSETS"));
+        effect, std::string("GAUSSIANBLUR15X15VERTICALSAMPLEOFFSETS"));
     m_parameters[13] = dx9rend::effectGetShaderParameterTyped(
-        effect, vc71::string("GAUSSIANBLUR15X15VERTICALSAMPLEWEIGHTS"));
+        effect, std::string("GAUSSIANBLUR15X15VERTICALSAMPLEWEIGHTS"));
     m_parameters[14] = dx9rend::effectGetShaderParameterTyped(
-        effect, vc71::string("GROWABLEPOISSON13SAMPLEOFFSETS"));
+        effect, std::string("GROWABLEPOISSON13SAMPLEOFFSETS"));
 
     // texelsize is fetched here in retail, before the glow/bloom group, even though it is stored at
     // the final object slot (+0xDC).  Preserve that observable effect-map lookup order.
-    m_parameters[24] = dx9rend::effectGetShaderParameterTyped(effect, vc71::string("TEXELSIZE"));
-    m_parameters[15] = dx9rend::effectGetShaderParameterTyped(effect, vc71::string("GLOWHORIZOFFSETS"));
-    m_parameters[16] = dx9rend::effectGetShaderParameterTyped(effect, vc71::string("GLOWHORIZWEIGHTS"));
-    m_parameters[17] = dx9rend::effectGetShaderParameterTyped(effect, vc71::string("GLOWVERTOFFSETS"));
-    m_parameters[18] = dx9rend::effectGetShaderParameterTyped(effect, vc71::string("GLOWVERTWEIGHTS"));
-    m_parameters[19] = dx9rend::effectGetShaderParameterTyped(effect, vc71::string("HIGHPASSGATE"));
-    m_parameters[20] = dx9rend::effectGetShaderParameterTyped(effect, vc71::string("BLOOMHORIZOFFSETS"));
-    m_parameters[21] = dx9rend::effectGetShaderParameterTyped(effect, vc71::string("BLOOMVERTOFFSETS"));
-    m_parameters[22] = dx9rend::effectGetShaderParameterTyped(effect, vc71::string("BLURSTRENGTH"));
-    m_parameters[23] = dx9rend::effectGetShaderParameterTyped(effect, vc71::string("CUSTOMMTX"));
+    m_parameters[24] = dx9rend::effectGetShaderParameterTyped(effect, std::string("TEXELSIZE"));
+    m_parameters[15] = dx9rend::effectGetShaderParameterTyped(effect, std::string("GLOWHORIZOFFSETS"));
+    m_parameters[16] = dx9rend::effectGetShaderParameterTyped(effect, std::string("GLOWHORIZWEIGHTS"));
+    m_parameters[17] = dx9rend::effectGetShaderParameterTyped(effect, std::string("GLOWVERTOFFSETS"));
+    m_parameters[18] = dx9rend::effectGetShaderParameterTyped(effect, std::string("GLOWVERTWEIGHTS"));
+    m_parameters[19] = dx9rend::effectGetShaderParameterTyped(effect, std::string("HIGHPASSGATE"));
+    m_parameters[20] = dx9rend::effectGetShaderParameterTyped(effect, std::string("BLOOMHORIZOFFSETS"));
+    m_parameters[21] = dx9rend::effectGetShaderParameterTyped(effect, std::string("BLOOMVERTOFFSETS"));
+    m_parameters[22] = dx9rend::effectGetShaderParameterTyped(effect, std::string("BLURSTRENGTH"));
+    m_parameters[23] = dx9rend::effectGetShaderParameterTyped(effect, std::string("CUSTOMMTX"));
 
-    if (dx9rend::effectHasTechnique(m_effect, vc71::string("Blit")))
-        dx9rend::effectSetTechniqueByName(m_effect, vc71::string("Blit"));
-    else if (dx9rend::effectHasTechnique(m_effect, vc71::string("Blit_1_4")))
-        dx9rend::effectSetTechniqueByName(m_effect, vc71::string("Blit_1_4"));
+    if (dx9rend::effectHasTechnique(m_effect, std::string("Blit")))
+        dx9rend::effectSetTechniqueByName(m_effect, std::string("Blit"));
+    else if (dx9rend::effectHasTechnique(m_effect, std::string("Blit_1_4")))
+        dx9rend::effectSetTechniqueByName(m_effect, std::string("Blit_1_4"));
     else
         noValidTechnique();
 
@@ -304,14 +271,7 @@ FSQuadDrawer::~FSQuadDrawer()
     dx9rend::vertexDeclarationRelease(m_vertexDeclaration);
     dx9rend::unregisterRenderPathListener(static_cast<dx9rend::RenderPathListener*>(this));
 
-    unsigned char* const head = cacheRaw(m_dimensionCache.head);
-    if (head)
-    {
-        destroyCacheBranch(cacheLink(head, 1), head);
-        ::renddx9abi::engineFree(head);
-    }
-    m_dimensionCache.head = 0;
-    m_dimensionCache.size = 0;
+    // The dimension cache's nodes and head are released by its own destructor, which runs next.
 }
 
 void FSQuadDrawer::onRenderPathActivated(int path)
@@ -319,7 +279,7 @@ void FSQuadDrawer::onRenderPathActivated(int path)
     (void)path;
     // The shipped body does not release the prior value on repeated activation.
     m_depthComplexityTexture = static_cast<dx9rend::EngineTexture*>(
-        dx9rend::textureManagerGetTexture(vc71::string("Common/Textures/DepthComplex2")));
+        dx9rend::textureManagerGetTexture(std::string("Common/Textures/DepthComplex2")));
 }
 
 void FSQuadDrawer::onRenderPathDeactivated()
@@ -343,80 +303,23 @@ int FSQuadDrawer::getCurrentRenderPath() const
     return static_cast<int>(m_listenerState);
 }
 
-vc71::string FSQuadDrawer::getRenderPathListenerName() const
+std::string FSQuadDrawer::getRenderPathListenerName() const
 {
     // The retail table points at the shared DebugTextDrawer name body (0x10098150).
-    return vc71::string("DebugTextDrawer");
-}
-
-unsigned char* FSQuadDrawer::findCacheNode(unsigned int key) const
-{
-    unsigned char* const head = cacheRaw(m_dimensionCache.head);
-    unsigned char* node = cacheLink(head, 1); // sentinel parent is the root
-    while (!cacheIsNil(node))
-    {
-        const unsigned int nodeKey = cacheKey(node);
-        if (key == nodeKey)
-            return node;
-        node = cacheLink(node, key < nodeKey ? 0u : 2u);
-    }
-    return head;
-}
-
-unsigned char* FSQuadDrawer::insertCacheNode(unsigned int key)
-{
-    // [CHOSEN, not recovered] Preserves node ABI, key ordering, stable addresses, and sentinel links without red-black rebalancing.
-    // [RETIRE-WHEN: RW-74] Replace with the shared exact VC7 tree insertion/rebalance helper.
-    unsigned char* const head = cacheRaw(m_dimensionCache.head);
-    unsigned char* parent = head;
-    unsigned char* node = cacheLink(head, 1);
-    bool goesLeft = true;
-    while (!cacheIsNil(node))
-    {
-        parent = node;
-        goesLeft = key < cacheKey(node);
-        node = cacheLink(node, goesLeft ? 0u : 2u);
-    }
-
-    unsigned char* inserted = static_cast<unsigned char*>(
-        ::renddx9abi::engineAlloc(kCacheNodeSize));
-    std::memset(inserted, 0, kCacheNodeSize);
-    cacheLink(inserted, 0) = head;
-    cacheLink(inserted, 1) = parent;
-    cacheLink(inserted, 2) = head;
-    cacheKey(inserted) = key;
-    inserted[kCacheColorOffset] = 1; // black; no balancing is needed for the private lookup tree
-    inserted[kCacheNilOffset] = 0;
-
-    if (parent == head)
-    {
-        cacheLink(head, 0) = inserted;
-        cacheLink(head, 1) = inserted;
-        cacheLink(head, 2) = inserted;
-    }
-    else
-    {
-        cacheLink(parent, goesLeft ? 0u : 2u) = inserted;
-        if (key < cacheKey(cacheLink(head, 0)))
-            cacheLink(head, 0) = inserted;
-        if (key > cacheKey(cacheLink(head, 2)))
-            cacheLink(head, 2) = inserted;
-    }
-    ++m_dimensionCache.size;
-    return inserted;
+    return std::string("DebugTextDrawer");
 }
 
 DrawRecord* FSQuadDrawer::ensureHemiQuad(unsigned short width, unsigned short height)
 {
     const unsigned int key = static_cast<unsigned int>(width)
                            | (static_cast<unsigned int>(height) << 16);
-    unsigned char* node = findCacheNode(key);
-    if (node == cacheRaw(m_dimensionCache.head))
-        node = insertCacheNode(key);
+    DimensionCache::iterator node = m_dimensionCache.find(key);
+    if (node == m_dimensionCache.end())
+        node = m_dimensionCache.insert(std::make_pair(key, DimensionCacheValue())).first;
 
-    // node+16 begins the 1748-byte per-dimension value; its two 16-byte draw records begin at
-    // node+48.  HemiMapManager uses only grid index zero, so no other post-process record is exposed.
-    DrawRecord* const record = reinterpret_cast<DrawRecord*>(node + 48);
+    // The value's two 16-byte draw records begin at its +0x20 (node+48).  HemiMapManager uses only
+    // grid index zero, so no other post-process record is exposed.
+    DrawRecord* const record = &node->second.records[0];
     if (!record->primitiveCount)
         buildHemiQuad(width, height, record);
     return record;
@@ -473,8 +376,7 @@ void FSQuadDrawer::drawHemiMap(dx9rend::EngineTexture* source,
     dx9rend::stateManagerPush();
 
     // sub_10025A70(0): StateManager's ref-counted desired RT0 at +0x1E90.
-    IDirect3DSurface9* savedRenderTarget = *reinterpret_cast<IDirect3DSurface9**>(
-        static_cast<unsigned char*>(dx9rend::g_stateManager) + 0x1E90);
+    IDirect3DSurface9* savedRenderTarget = dx9rend::stateManagerRenderTarget0();
     if (savedRenderTarget)
         savedRenderTarget->AddRef();
 
@@ -501,8 +403,8 @@ void FSQuadDrawer::drawHemiMap(dx9rend::EngineTexture* source,
 
     if (multisampleActive())
     {
-        IDirect3DSurface9* const rendererDepth = *reinterpret_cast<IDirect3DSurface9**>(
-            static_cast<unsigned char*>(dx9rend::g_rendererBase) + 0x770);
+        // The Renderer's depth-stencil reference, retail +0x770.
+        IDirect3DSurface9* const rendererDepth = dx9rend::rendererDepthStencilSurface();
         dx9rend::stateManagerSetDepthStencilSurface(rendererDepth);
     }
 

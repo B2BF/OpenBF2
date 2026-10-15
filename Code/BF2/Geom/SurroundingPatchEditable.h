@@ -59,7 +59,7 @@ public:
     void saveLowDetailMap();
     void compileLowDetailMap();
     void saveEditedColormap();
-    void burnColormap(const vc71::string& base);                            // (`retn 4`; `base` read only when not ready)
+    void burnColormap(const std::string& base);                            // (`retn 4`; `base` read only when not ready)
 
     // Owned editable textures; destruction releases low-detail/overlay resources before colormaps.
     dx9rend::EngineTexture* m_colormapEdit;        // +0x168  the brushes' edit copy (makeColormapEditCopy), committed by alpha

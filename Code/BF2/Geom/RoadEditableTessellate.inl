@@ -1085,7 +1085,7 @@ void RoadEditable::splitAndTriangulate(std::vector<RoadEditableVertex>& vertices
     PolygonCut cut;
     cut.x = 0.0f;
     cut.z = 0.0f;                                    // the axis word is not initialised (shipped)
-    while (m_pendingPolygons.size != 0)
+    while (!m_pendingPolygons.empty())
     {
         RoadPolygon& polygon = m_pendingPolygons.front();
         if (polygon.size() >= 3)
@@ -1144,7 +1144,7 @@ void RoadEditable::splitAndTriangulate(std::vector<RoadEditableVertex>& vertices
         m_pendingPolygons.pop_front();
     }
 
-    while (m_readyPolygons.size != 0)
+    while (!m_readyPolygons.empty())
     {
         RoadPolygon& polygon = m_readyPolygons.front();
         if (polygon.size() >= 3)

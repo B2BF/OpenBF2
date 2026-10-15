@@ -18,11 +18,11 @@ cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" /FAs /Fa"%BF2_BUILD_OUT%
 if errorlevel 1 (type "%BF2_BUILD_OUT%\compile.log" & exit /b 1)
 cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%BF2_BUILD_OUT%\ShaderParameter.cpp" /Fo"%BF2_BUILD_OUT%\ShaderParameter.obj" >>"%BF2_BUILD_OUT%\compile.log" 2>&1
 if errorlevel 1 (type "%BF2_BUILD_OUT%\compile.log" & exit /b 1)
-for %%F in (BfMemory Vc71String Msvcr71Heap) do (
+for %%F in (BfMemory) do (
     cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\RendDX9Abi\%%F.cpp" /Fo"%BF2_BUILD_OUT%\%%F.obj" >>"%BF2_BUILD_OUT%\compile.log" 2>&1
     if errorlevel 1 (type "%BF2_BUILD_OUT%\compile.log" & exit /b 1)
 )
-link /nologo /MACHINE:X86 /OPT:REF /INCREMENTAL:NO /DEBUG /SUBSYSTEM:CONSOLE /OUT:"%BF2_BUILD_OUT%\fsmovie_runtime.exe" /PDB:"%BF2_BUILD_OUT%\fixture.pdb" /MAP:"%BF2_BUILD_OUT%\fixture.map" "%BF2_BUILD_OUT%\fixture.obj" "%BF2_BUILD_OUT%\ShaderParameter.obj" "%BF2_BUILD_OUT%\BfMemory.obj" "%BF2_BUILD_OUT%\Vc71String.obj" "%BF2_BUILD_OUT%\Msvcr71Heap.obj" >"%BF2_BUILD_OUT%\link.log" 2>&1
+link /nologo /MACHINE:X86 /OPT:REF /INCREMENTAL:NO /DEBUG /SUBSYSTEM:CONSOLE /OUT:"%BF2_BUILD_OUT%\fsmovie_runtime.exe" /PDB:"%BF2_BUILD_OUT%\fixture.pdb" /MAP:"%BF2_BUILD_OUT%\fixture.map" "%BF2_BUILD_OUT%\fixture.obj" "%BF2_BUILD_OUT%\ShaderParameter.obj" "%BF2_BUILD_OUT%\BfMemory.obj" >"%BF2_BUILD_OUT%\link.log" 2>&1
 if errorlevel 1 (type "%BF2_BUILD_OUT%\link.log" & exit /b 1)
 pushd "%BF2_BUILD_OUT%"
 .\fsmovie_runtime.exe >runtime.log 2>&1

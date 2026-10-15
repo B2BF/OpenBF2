@@ -37,6 +37,8 @@ bool Function::call(System* system)
     if (m_name) systemPrintf(system, "Meme: FunctionCall: %s\r\n", m_name);
     return true;
 }
+#if defined(_M_IX86)
 static_assert(sizeof(Function) == 8, "BFMeme Function layout");
+#endif
 } }
 #endif

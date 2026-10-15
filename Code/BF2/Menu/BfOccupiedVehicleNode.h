@@ -42,7 +42,9 @@ protected:
     int* m_positionY;                    // +20, starts &m_zero
     float m_width, m_height;             // +24/+28, both fild'd from the ctor
 };
+#if defined(_M_IX86)
 static_assert(sizeof(BfOccupiedVehicleNode) == 44, "native BfOccupiedVehicleNode storage");
+#endif
 } }
 #endif
 #endif

@@ -4,7 +4,9 @@
 #ifndef GAME_OBJECTS_ISTRATEGICOBJECTCOMP_H     // [INFERRED] guard style
 #define GAME_OBJECTS_ISTRATEGICOBJECTCOMP_H
 
+#include <cstdint>
 #include <string>
+#include <type_traits>
 
 #include "IObjectComponent.h"
 #include "../../Math/Vec3.h"
@@ -12,6 +14,11 @@
 namespace dice {
 namespace hfe {
 namespace world {
+
+#if defined(_M_IX86)
+static_assert(std::is_same<std::intptr_t, int>::value,
+              "x86 strategic icon handles keep the retail int signatures");
+#endif
 
 class IStrategicObjectComp : public IObjectComponent
 {
@@ -21,9 +28,10 @@ public:
     virtual const std::string& getIntactIconName() = 0;           // +0x3C
     virtual const std::string& getDestroyedIconName() = 0;        // +0x40
     // 77E500 signed-compares both results with zero and stores the same dword directly into
-    // MapIconRecord::texture. They are integer texture handles, despite the historical Ptr names.
-    virtual int   getIntactIconPtr() = 0;                         // +0x44
-    virtual int   getDestroyedIconPtr() = 0;                      // +0x48
+    // MapIconRecord::texture. They are integer texture handles, despite the historical Ptr names;
+    // std::intptr_t is int on x86 (unchanged mangling) and pointer-wide on native x64.
+    virtual std::intptr_t getIntactIconPtr() = 0;                 // +0x44
+    virtual std::intptr_t getDestroyedIconPtr() = 0;              // +0x48
     virtual int   getPart() = 0;                                  // +0x4C
     // Index of the holder assigned by GameLogic.
     virtual int   getIndex() = 0;                                 // +0x50

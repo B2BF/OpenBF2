@@ -37,6 +37,9 @@
 #include <cstring>
 #include <cwchar>
 #include <windows.h>
+#if !defined(_M_IX86)
+#include <cmath>
+#endif
 
 namespace dice { namespace hfe { extern ClassManager* classManager; extern IBase* squadManager; } }
 namespace dice { namespace hfe { namespace hud {
@@ -689,6 +692,7 @@ void HudVehicleInformation::setMouseLook(bool active)
         const float tolerance = 0.01f;
         const float first = m_playerAngle, second = m_vehicleAngle;
         bool aligned;
+#if defined(_M_IX86)
         __asm {
             fld first
             fsub second
@@ -698,6 +702,11 @@ void HudVehicleInformation::setMouseLook(bool active)
             test ah, 41h
             setnp aligned
         }
+#else
+        // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+        // setnp after test ah,41h: an ordered difference at or below the tolerance.
+        aligned = std::fabs(static_cast<double>(first) - second) <= tolerance;
+#endif
         if (aligned) m_guiIndex = m_field0a4;
     }
 }

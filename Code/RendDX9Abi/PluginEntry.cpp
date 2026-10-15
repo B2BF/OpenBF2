@@ -14,11 +14,7 @@ namespace hfe {
 // Native mode uses typed interfaces where available.
 IClassManager* classManager           = 0;
 
-#if BF2_PLUGIN_ABI_NATIVE
 SettingsRepostitory* settings         = 0;   // 0x10244A90  "SettingsRepostitory"  (dice's typo)
-#else
-IBase* settings                       = 0;   // legacy host's unadjusted primary pointer
-#endif
 ConsoleObjects* mainConsoleObjects    = 0;
 IBase* mainConsole                    = 0;
 ::renddx9abi::HostFileManager* fileManager = 0;
@@ -80,8 +76,8 @@ extern "C" bool initDll(IClassManager* pClsMgr)
     // dies without saying where is worth nothing, and this is the earliest point at which the log
     // can exist.
     renddx9abi::logOpen();
-    renddx9abi::logf("initDll(classManager=0x%08X) - replacement RendDX9",
-                     renddx9abi::addr(pClsMgr));
+    renddx9abi::logf("initDll(classManager=0x%p) - replacement RendDX9",
+                     static_cast<const void*>(pClsMgr));
 
     // Ours too, and for the same reason: BF2's own handler and the WER minidump both arrive after
     // the stack that explains the fault has been overwritten. See CrashReport.cpp. Report-only.

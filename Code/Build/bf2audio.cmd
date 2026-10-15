@@ -19,7 +19,8 @@ rem   syntaxcheck.cmd passes no image define; the DLL-side ISoundEngine table
 rem   (slot 54 = the virtual destructor) only exists under BF2_IMAGE_BF2AUDIO.
 rem   Git-Bash `cmd /c` returns 0 without building.
 rem
-rem   usage:  bf2audio.cmd [native]   rebuilt host ABI (/MD, no Memory.dll)
+rem   usage:  bf2audio.cmd [native]   rebuilt host ABI (/MD, no Memory.dll), x86
+rem           bf2audio.cmd x64        the native x64 client's BF2Audio.dll
 rem   BF2_BF2AUDIO_OUT and BF2_BF2AUDIO_BIN override the output paths.
 rem [CHOSEN, not recovered] Native-only builds: https://github.com/B2BF/OpenBF2/issues/7
 rem
@@ -29,8 +30,10 @@ rem     doc). Without it the .ogg paths (streams, music) are [FRONTIER] reports
 rem     through the trace sink and .wav playback is everything the DLL does.
 rem ===========================================================================
 if not "%~2"=="" goto :usage
-if not "%~1"=="" if /i not "%~1"=="native" goto :usage
-call "%~dp0vsdevcmd.cmd" x86
+set "ARCH=x86"
+if /i "%~1"=="x64" set "ARCH=x64"
+if not "%~1"=="" if /i not "%~1"=="native" if /i not "%~1"=="x64" goto :usage
+call "%~dp0vsdevcmd.cmd" %ARCH%
 if errorlevel 1 exit /b 1
 
 for %%I in ("%~dp0..") do set CODE=%%~fI
@@ -40,6 +43,8 @@ set BF2=%CODE%\BF2
 set SND=%CODE%\BF2\Sound\SoundEngine
 set OUT=%~dp0obj_bf2audio_native
 set BIN=%~dp0bin_bf2audio_native
+if "%ARCH%"=="x64" set OUT=%~dp0obj_bf2audio_x64
+if "%ARCH%"=="x64" set BIN=%~dp0bin_bf2audio_x64
 set CRT=/MD
 set PLUGIN_ABI=/DBF2_PLUGIN_ABI_NATIVE=1 /D_ITERATOR_DEBUG_LEVEL=0
 rem Preserve agent/CI output isolation.
@@ -73,6 +78,8 @@ set FLAGS=/nologo /c %CRT% /std:c++14 /permissive /EHsc /W3 /FS /Zi ^
  %VORBIS_INC% ^
  /DBF2_IMAGE_BF2AUDIO %PLUGIN_ABI% %VORBIS_DEF% /DDEDICATED=0 /FI"%BF2%\Core\BuildConfig.h" /DWIN32 /D_WINDOWS /DNDEBUG /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE ^
  /wd4100 /wd4127 /wd4244 /wd4267 /wd4291 /wd4305 /wd4996 /Fd"%OUT%\BF2Audio.pdb"
+rem x64: a pointer truncated into a 32-bit integer is an error, as for the x64 dedicated server.
+if "%ARCH%"=="x64" set FLAGS=%FLAGS% /we4311 /we4312
 
 echo   Native host ABI, CRT=%CRT%
 echo   CODE=%CODE%
@@ -94,7 +101,7 @@ rem ---------------------------------------------------------------------------
 rem STEP 2 - compile. Explicit manifest, numbered objects (flat output dir).
 rem
 rem   the shared RendDX9Abi kit: BfMemory (operator new/delete -> shared CRT, engineAlloc/engineFree
-rem     for the PCM buffers), Msvcr71Heap; Frontier.cpp compiled separately with this DLL's log
+rem     for the PCM buffers); Frontier.cpp compiled separately with this DLL's log
 rem     defines. NOT DllMain.cpp: Win32System.cpp IS this image's DllMain (attested).
 rem   Sound\NullSound.cpp: the null Sound / SoundTemplate pair getSoundEngine creates.
 rem   the fifteen SoundEngine TUs (ten attested by __FILE__, five placed by link order).
@@ -102,7 +109,6 @@ rem ---------------------------------------------------------------------------
 echo [2/4] compiling
 set SOURCES=^
  "%RD9ABI%\BfMemory.cpp" ^
- "%RD9ABI%\Msvcr71Heap.cpp" ^
  "%BF2%\Sound\NullSound.cpp" ^
  "%SND%\Ambient.cpp" ^
  "%SND%\BfOpenAL.cpp" ^
@@ -171,7 +177,10 @@ rem   ONLY DSOUND import). OpenAL is never linked: BfOpenAL.cpp loads BF2OpenAL.
 rem   by name at provider open, exactly as shipped.
 rem ---------------------------------------------------------------------------
 echo [3/4] linking
-link /nologo /DLL /MACHINE:X86 /BASE:0x10000000 /DEBUG /OPT:REF /OPT:ICF ^
+rem /BASE:0x10000000 is the shipped x86 image base; the x64 image takes the linker's default.
+set "LINK_BASE=/BASE:0x10000000"
+if "%ARCH%"=="x64" set "LINK_BASE="
+link /nologo /DLL /MACHINE:%ARCH% %LINK_BASE% /DEBUG /OPT:REF /OPT:ICF ^
      /DEF:"%ABI%\BF2Audio.def" ^
      /OUT:"%BIN%\BF2Audio.dll" ^
      /PDB:"%BIN%\BF2Audio.pdb" ^
@@ -235,5 +244,5 @@ echo   NOTE: this is NOT installed anywhere. See docs\building.md before using t
 exit /b 0
 
 :usage
-echo Usage: bf2audio.cmd [native]
+echo Usage: bf2audio.cmd [native^|x64]
 exit /b 2

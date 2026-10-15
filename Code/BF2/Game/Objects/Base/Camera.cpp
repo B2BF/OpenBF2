@@ -766,10 +766,11 @@ const Mat4& Camera::getTransformationCVMChase(float deltaTime, bool frontChase)
         float radius = root->getPhysicBoundingRadius();
         if (radius <= 2.0f)
             radius = 2.0f;
-#if defined(_MSC_VER) && defined(_M_IX86)
+#if defined(_MSC_VER)
         else
             // [PLATFORM] PE 0x5F0A36/0x5F0A56 repeats this virtual call on the >2 or unordered
             // arm. ELF 0x81DCAD0 caches its sole call, so the non-Win32 source path does too.
+            // Every Windows image (x86 and the native x64, issue #7) takes the PE arm.
             radius = root->getPhysicBoundingRadius();
 #endif
         desiredDistance = radius * s_chaseDistanceScale;
@@ -788,9 +789,9 @@ const Mat4& Camera::getTransformationCVMChase(float deltaTime, bool frontChase)
         desiredDirection.x, desiredDirection.y, desiredDirection.z, 1.0f
     };
     float blend = deltaTime * cameraTemplate->getFollowStiffness();
-#if defined(_MSC_VER) && defined(_M_IX86)
+#if defined(_MSC_VER)
     // [PLATFORM] PE's clamp helper returns zero for unordered/NaN; the ELF's inlined comparisons
-    // leave NaN untouched.
+    // leave NaN untouched. Every Windows image (x86 and the native x64, issue #7) takes the PE arm.
     if (!(blend >= 0.0f))
         blend = 0.0f;
 #else

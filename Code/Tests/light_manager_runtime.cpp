@@ -71,7 +71,7 @@ extern "C" D3DXMATRIX* WINAPI D3DXMatrixOrthoLH(D3DXMATRIX*, FLOAT, FLOAT, FLOAT
 namespace dice { namespace hfe {
 namespace dx9rend {
 void* g_OverGrowth = 0;
-bool effectSetTechniqueByName(void*, const vc71::string&)
+bool effectSetTechniqueByName(void*, const std::string&)
 {
     g3FixtureRefusal("dice::hfe::dx9rend::effectSetTechniqueByName");
 }
@@ -2160,7 +2160,7 @@ void* textureManagerCreateCube(unsigned int side, unsigned int format,
     return texture;
 }
 
-void* textureManagerGetTexture(const vc71::string& name)
+void* textureManagerGetTexture(const std::string& name)
 {
     g_loadedTextureNames.push_back(name.c_str());
     return createFakeTexture(4, 4, D3DFMT_A8R8G8B8, false);
@@ -2248,7 +2248,7 @@ void* shaderManagerGetEffect(void*, const char*)
     return createFakeEffectObject(false);
 }
 
-void* effectGetShaderParameter(Effect*, const vc71::string& name)
+void* effectGetShaderParameter(Effect*, const std::string& name)
 {
     g_parameterNames.push_back(name.c_str());
     return createFakeEffectObject(true);

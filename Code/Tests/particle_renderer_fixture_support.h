@@ -41,6 +41,11 @@ void vertexBufferRelease(void*) { std::abort(); }
 void indexBufferRelease(void*) { std::abort(); }
 void* g_rendererBase = 0;
 void* g_raShaderConstants = 0;
+// The x86 mapping of RenderQueues.cpp's accessor: the retail offset into the constants block.
+unsigned char* raShaderConstantsAt(unsigned int retailByteOffset)
+{
+    return static_cast<unsigned char*>(g_raShaderConstants) + retailByteOffset;
+}
 void* g_shaderManager = reinterpret_cast<void*>(0x51515151u);
 void* vertexDeclarationCreate(const void* input)
 {
@@ -64,7 +69,7 @@ void* shaderManagerGetEffect(void* manager, const char* path)
     constructionEvents.push_back(std::string("effect:") + path);
     return reinterpret_cast<void*>(0x62000000u + 0x100u * constructionEvents.size());
 }
-ShaderParameter* effectGetShaderParameterTyped(Effect* effect, const vc71::string& name)
+ShaderParameter* effectGetShaderParameterTyped(Effect* effect, const std::string& name)
 {
     using namespace particle_renderer_fixture;
     requireConstruction(); if (!effect) std::abort();
@@ -84,7 +89,7 @@ void stateManagerSetRenderState(unsigned int state, unsigned int value)
     particle_renderer_fixture::requireGpu();
     particle_renderer_fixture::gpuStates.push_back(std::make_pair(state,value));
 }
-bool effectSetTechniqueByName(void*, const vc71::string& name)
+bool effectSetTechniqueByName(void*, const std::string& name)
 {
     particle_renderer_fixture::requireGpu();
     particle_renderer_fixture::gpuEvents.push_back(std::string("technique:")+name.c_str()); return true;
@@ -136,7 +141,7 @@ namespace particle_renderer_fixture {
 }
 namespace dice { namespace hfe {
 namespace dx9rend {
-ShaderParameter* effectGetShaderParameterBorrowedTyped(Effect*, const vc71::string&)
+ShaderParameter* effectGetShaderParameterBorrowedTyped(Effect*, const std::string&)
 { particle_renderer_fixture::meshParticleUnreached("dx9rend::effectGetShaderParameterBorrowedTyped"); }
 }
 namespace geom {

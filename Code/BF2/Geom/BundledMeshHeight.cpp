@@ -6,20 +6,12 @@
 #include "BundledMeshTemplate.h"
 #include "StaticMesh.h"
 #include "XpLightManager.h"
-#if !BF2_PLUGIN_ABI_NATIVE
-#define CORE_IBASE_H
-#define CORE_CLASSMANAGER_H
-#endif
 #include "../Game/Objects/IObject.h"
 #include "../Game/Objects/IPlayer.h"
 #include "../Game/Objects/ObjectLayoutAccess.h"
 #include "../Scene/Object/ObjectManager.h"
 #include "../Scene/Object/ObjectPredicator.h"
 #include "../Scene/Object/PlayerManager.h"
-#if !BF2_PLUGIN_ABI_NATIVE
-#undef CORE_CLASSMANAGER_H
-#undef CORE_IBASE_H
-#endif
 
 namespace dice { namespace hfe {
 extern IBase* objectManager;

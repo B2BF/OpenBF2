@@ -14,50 +14,13 @@
 #include "../Geom/GeometryTemplateManager.h"
 #include "../Geom/ParticleSystem/ParticleSystemManager.h"
 #include "../Geom/XpLightManager.h"
-#if BF2_PLUGIN_ABI_NATIVE
 #include "../Core/SettingsRepostitory.h"
-#endif
 
 #include <new>
 #include <list>
 #include <string>
 #include <cstring>
 
-#if !BF2_PLUGIN_ABI_NATIVE
-namespace renddx9abi {
-// [PLATFORM] PE FileInfo is 64 bytes; its list nodes are 72 (1000E4A0).
-// The modern native host uses io::FileInfo and its own STL instead.
-struct HostFileInfo {
-    HostString name;
-    bool isDirectory;
-    unsigned char pad[3];
-    unsigned int size, reserved;
-    unsigned int times[6];
-};
-struct HostFileInfoList {
-    struct Node { Node* next; Node* prev; HostFileInfo value; };
-    unsigned int allocator;
-    Node* head;
-    unsigned int size;
-    HostFileInfoList() : allocator(0), size(0) {
-        head = static_cast<Node*>(engineAlloc(sizeof(Node)));
-        head->next = head->prev = head;
-    }
-    ~HostFileInfoList() {
-        Node* n = head->next;
-        while (n != head) {
-            Node* next = n->next;
-            n->value.~HostFileInfo();
-            engineFree(n);
-            n = next;
-        }
-        engineFree(head);
-    }
-};
-static_assert(sizeof(HostFileInfo) == 64, "retail FileInfo ABI");
-static_assert(sizeof(HostFileInfoList) == 12, "retail list ABI");
-}
-#endif
 
 namespace dice {
 namespace hfe {
@@ -72,21 +35,14 @@ void textureManagerSweep();
 void textureManagerRefreshFileSuffix();
 void overGrowthPreLoadResources();
 void overGrowthPostLoadResources();
-void pathGetExtension(vc71::string&, const vc71::string&);
-void pathToLower(vc71::string&);
+void pathGetExtension(std::string&, const std::string&);
+void pathToLower(std::string&);
 
 // Source-level adapter for the load callbacks' unguarded SettingsRepostitory::boolGet.
 // No fabricated default for an absent manager/result.
 bool readLevelLoadBoolSetting(const char* name, bool fallback)
 {
-#if BF2_PLUGIN_ABI_NATIVE
     return settings->boolGet(std::string(name), fallback);
-#else
-    const renddx9abi::HostString key(name);
-    typedef const bool& (__thiscall *GetBool)(void*, const renddx9abi::HostString&, const bool&);
-    return reinterpret_cast<GetBool>((*reinterpret_cast<void***>(settings))[0x50 / 4])(
-        settings, key, fallback);
-#endif
 }
 
 // dword_1023B988. The texture sweep loads it directly to read the flag.
@@ -132,8 +88,12 @@ private:
     int           m_defaultTexturePriority; // +0x10  ctor: 0 - see defaultPriority() above
 };
 
+// Retail x86 evidence. createResourceManager allocates sizeof(ResourceManager) and other TUs use the
+// resourceManager* seams, so the x64 object is native (issue #7).
+#if defined(_M_IX86)
 static_assert(sizeof(ResourceManager) == 0x14,
               "initializeD3DSubsystems allocates 20 - see the push 14h at 0x1000B4D0");
+#endif
 
 ResourceManager::ResourceManager()
     : m_ready(0), m_dword08(0), m_reservedSurface(0), m_defaultTexturePriority(0)
@@ -177,27 +137,19 @@ void ResourceManager::loadAtlases(const std::string& path, bool recursive)
 {
     // Keep enumeration order; atlas-named DDS files suppress the fallback DDS list.
     std::list<std::pair<std::string, bool> > entries;
-#if BF2_PLUGIN_ABI_NATIVE
     std::list<io::FileInfo> files;
     fileManager->findFiles(path, false, files);
     for (const io::FileInfo& file : files)
         entries.emplace_back(file.name, file.isDirectory);
-#else
-    ::renddx9abi::HostFileInfoList files;
-    fileManager->findFiles(::renddx9abi::HostString(path.c_str()), false, files);
-    for (::renddx9abi::HostFileInfoList::Node* n = files.head->next;
-         n != files.head; n = n->next)
-        entries.emplace_back(n->value.name.c_str(), n->value.isDirectory);
-#endif
     std::list<std::string> directories, atlases;
     for (const auto& file : entries) {
         if (file.second) {
             directories.push_back(file.first);
         } else {
-            vc71::string extension;
-            pathGetExtension(extension, vc71::string(file.first.c_str()));
+            std::string extension;
+            pathGetExtension(extension, std::string(file.first.c_str()));
             if (std::strcmp(extension.c_str(), "dds") != 0) continue;
-            vc71::string lower(file.first.c_str());
+            std::string lower(file.first.c_str());
             // PE 10075110 -> the five Latin-1 substitutions precede CRT tolower.
             pathToLower(lower);
             if (std::string(lower.c_str(), lower.size()).find("atlas") != std::string::npos)
@@ -211,14 +163,14 @@ void ResourceManager::loadAtlases(const std::string& path, bool recursive)
         const std::string::size_type dot = name.rfind('.');
         if (dot != std::string::npos) name.erase(dot);
         EngineTexture* texture = static_cast<EngineTexture*>(
-            textureManagerGetTexture(vc71::string((path + name).c_str())));
+            textureManagerGetTexture(std::string((path + name).c_str())));
         textureReleaseRef(texture);
     };
     if (atlases.empty()) {
         // Retail does not repeat the directory test in this fallback pass.
         for (const auto& file : entries) {
-            vc71::string extension;
-            pathGetExtension(extension, vc71::string(file.first.c_str()));
+            std::string extension;
+            pathGetExtension(extension, std::string(file.first.c_str()));
             if (std::strcmp(extension.c_str(), "dds") == 0) acquire(file.first);
         }
     } else {

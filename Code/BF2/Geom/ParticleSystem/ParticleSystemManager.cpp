@@ -3,6 +3,7 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
+#include "../../../RendDX9Abi/ThunkAbi.h"
 #include "ParticleSystemManager.h"
 #include "../XpLightManager.h"
 #include "../StaticMesh.h"
@@ -15,16 +16,10 @@
 #include "MeshParticleMesh/MeshParticleMesh.h"          // G1: the mesh renderer draws through it
 #include "MeshParticleMesh/MeshParticleMeshTemplate.h"  // G1: g_meshParticleMeshEffectState
 #include "../../Game/Objects/Fx/IEffectController.h"
-#if !BF2_PLUGIN_ABI_NATIVE
-#define CORE_CLASSMANAGER_H
-#endif
 #include "../../Game/Objects/IObject.h"
 #include "../../Game/Objects/ObjectLayoutAccess.h"   // psmOwnerRootDisabled - typed (RW-266)
 #include "../../Scene/Object/WindManager.h"
 #include "../../Physics/HeightmapCluster.h"
-#if !BF2_PLUGIN_ABI_NATIVE
-#undef CORE_CLASSMANAGER_H
-#endif
 
 #include "../../Game/Main/IVideoOptions.h"
 #include "../../RendDX9/RendDX9Base.h"
@@ -34,8 +29,7 @@
 #include "../../../RendDX9Abi/BfMemory.h"
 #include "../../../RendDX9Abi/Frontier.h"
 #include "../../../RendDX9Abi/PluginEntry.h"
-#include "../../../RendDX9Abi/Vc71String.h"
-#include "../../../RendDX9Abi/Vc71Vector.h"
+#include <string>
 #include "../../RendMisc/IRenderView.h"
 #include "../../RendMisc/IRenderer.h"
 
@@ -46,7 +40,12 @@
 #include <new>
 #include <string.h>
 #include <map>
+#include <set>
 #include <string>
+#include <vector>
+#if !defined(_M_IX86)
+#include <xmmintrin.h>
+#endif
 
 namespace dice {
 namespace hfe {
@@ -87,13 +86,18 @@ extern IBase* g_ParticleSystemManager;               // ModuleGeom.cpp, dword_10
 extern const unsigned int CID_ParticleSystemManager  = 821017u;
 extern const unsigned int IID_IParticleSystemManager = 820016u;
 
-// The shipped object size, from the factory's engine-alloc (push 8CB8h; 0x100B070F).
-static const unsigned int kParticleSystemManagerSize = 0x8CB8u;
+// The retail object is 0x8CB8 bytes (the factory's engine-alloc, push 8CB8h; 0x100B070F). The
+// native object holds std containers, so it is allocated at sizeof and placement-constructed.
 
-// Faithfully-sized layout. The thirteen VC7.1 vectors, three 12-byte tree headers, four embedded
-// particle renderers and every scalar are placed from the constructor/destructor and public-body
-// accesses. Renderer/tree internals stay opaque: their concrete element classes remain separate
-// recovery work, but no member after them is allowed to float to a guessed offset.
+// The manager's internal instance lists: the render buckets and the two pending queues.
+typedef std::vector<IParticleSystemInstance*> ParticleSystemInstanceVector;
+
+// Members in shipped order, placed from the constructor/destructor and public-body accesses; the
+// `+0xNN` comments are the retail offsets. The active-instance list is the std::vector that
+// getInstances (+0x38) hands to BF2.exe. The two template registries the retail
+// object embeds at +0xC0 and +0xF8 are the file-scope maps below. The four embedded renderers stay
+// opaque byte spans in their recovered layout (x64 placement: ParticleRawLayout.h); their pointer
+// lists are std::vectors constructed in place (particleRendererList).
 struct ParticleSystemManager
 {
     int release();
@@ -105,33 +109,32 @@ struct ParticleSystemManager
     /* +0x0C */ unsigned char             m_paused;
     /* +0x0D */ unsigned char             m_pad0D[3];
     /* +0x10 */ ParticleSystemInstanceList m_instances;
-    /* +0x20 */ ParticleSystemInstanceList m_renderBuckets[10];
-    /* +0xC0 */ unsigned char              m_templatesByNameTree[12];
-    /* +0xCC */ ParticleSystemInstanceList m_pendingDestroy;
-    /* +0xDC */ ParticleSystemInstanceList m_pendingClassification;
-    /* +0xEC */ unsigned char              m_pendingReclassificationTree[12];
-    /* +0xF8 */ unsigned char              m_templatesByIdTree[12];
+    /* +0x20 */ ParticleSystemInstanceVector m_renderBuckets[10];
+    /* +0xCC */ ParticleSystemInstanceVector m_pendingDestroy;
+    /* +0xDC */ ParticleSystemInstanceVector m_pendingClassification;
+    /* +0xEC */ std::set<IParticleSystemInstance*> m_pendingReclassification;
     /* +0x104 */ void*                     m_type0PoolBacking;
-    /* +0x108 */ unsigned char             m_particleSystemRenderer[0x5E18];
+    /* +0x108 */ alignas(void*) unsigned char m_particleSystemRenderer[kPsmSpriteRendererSize];
     /* +0x5F20 */ void*                     m_type0FreeList;
     /* +0x5F24 */ int                       m_type0PoolCount;
-    /* +0x5F28 */ unsigned char             m_pad5F28[4];
+    /* +0x5F28 */ unsigned int              m_type0LiveCount;    // [INFERRED] name: pool items in use
     /* +0x5F2C */ void*                     m_type1PoolBacking;
-    /* +0x5F30 */ unsigned char             m_meshParticlesRenderer[0x1D90];
+    /* +0x5F30 */ alignas(void*) unsigned char m_meshParticlesRenderer[kPsmMeshRendererSize];
     /* +0x7CC0 */ void*                     m_type1FreeList;
     /* +0x7CC4 */ int                       m_type1PoolCount;
     /* +0x7CC8 */ void*                     m_type2PoolBacking;
-    /* +0x7CCC */ unsigned char             m_trailRenderer[0x0914];
+    /* +0x7CCC */ alignas(void*) unsigned char m_trailRenderer[kPsmTrailRendererSize];
     /* +0x85E0 */ void*                     m_type2FreeList;
     /* +0x85E4 */ int                       m_type2PoolCount;
     /* +0x85E8 */ void*                     m_type3PoolBacking;
     /* +0x85EC */ void*                     m_type3FreeList;
     /* +0x85F0 */ int                       m_type3PoolCount;
     /* +0x85F4 */ void*                     m_type4PoolBacking;
-    /* +0x85F8 */ unsigned char             m_nsaParticleSystemRenderer[0x05A0];
+    /* +0x85F8 */ alignas(void*) unsigned char m_nsaParticleSystemRenderer[kPsmNsaRendererSize];
     /* +0x8B98 */ void*                     m_type4FreeList;
     /* +0x8B9C */ int                       m_type4PoolCount;
-    /* +0x8BA0 */ unsigned char             m_opaque8BA0[8];
+    /* +0x8BA0 */ unsigned int              m_type4LiveCount;    // [INFERRED] name: pool items in use
+    /* +0x8BA4 */ int                       m_poolCount8BA4;     // applySettings: profile poolCount30
     /* +0x8BA8 */ unsigned char            m_forceSortedParticleType;
     /* +0x8BA9 */ unsigned char            m_pad8BA9;
     /* +0x8BAA */ unsigned short           m_nextTemplateId;
@@ -149,7 +152,11 @@ struct ParticleSystemManager
     /* +0x8C10 */ unsigned char            m_windEnabled;
     /* +0x8C11 */ unsigned char            m_pad8C11[3];
     /* +0x8C14 */ IBase*                   m_heightmapCluster;
-    /* +0x8C18 */ unsigned char            m_opaque8C18[0x70];
+    /* +0x8C18 */ unsigned char            m_opaque8C18[0x2C];
+    // [INFERRED] names: per-renderer draw-call counters (+0x8C44 sorted sprites, +0x8C48 NSA,
+    // +0x8C4C additive sprites, +0x8C50 trails), each incremented by psmCountParticleDraw.
+    /* +0x8C44 */ unsigned int             m_drawCounters[4];
+    /* +0x8C54 */ unsigned char            m_opaque8C54[0x34];
     /* +0x8C88 */ unsigned int             m_value8C88;
     /* +0x8C8C */ unsigned int             m_value8C8C;
     /* +0x8C90 */ unsigned char            m_tearingDown;
@@ -166,56 +173,25 @@ struct ParticleSystemManager
     /* +0x8CB4 */ void*                    m_textureAtlasHelper;
 };
 
-static_assert(offsetof(ParticleSystemManager, m_deltaTime) == 0x08,
-              "ParticleSystemManager delta time moved");
-static_assert(offsetof(ParticleSystemManager, m_paused) == 0x0C,
-              "ParticleSystemManager pause byte moved");
-static_assert(offsetof(ParticleSystemManager, m_instances) == 0x10,
-              "ParticleSystemManager active-instance vector moved");
-static_assert(offsetof(ParticleSystemManager, m_templatesByNameTree) == 0xC0,
-              "ParticleSystemManager name registry moved");
-static_assert(offsetof(ParticleSystemManager, m_particleSystemRenderer) == 0x108,
-              "ParticleSystemManager ParticleSystemRenderer moved");
-static_assert(offsetof(ParticleSystemManager, m_meshParticlesRenderer) == 0x5F30,
-              "ParticleSystemManager MeshParticles renderer moved");
-static_assert(offsetof(ParticleSystemManager, m_trailRenderer) == 0x7CCC,
-              "ParticleSystemManager TrailRenderer moved");
-static_assert(offsetof(ParticleSystemManager, m_nsaParticleSystemRenderer) == 0x85F8,
-              "ParticleSystemManager NSA renderer moved");
-static_assert(offsetof(ParticleSystemManager, m_type0FreeList) == 0x5F20,
-              "ParticleSystemManager type-0 free list moved");
-static_assert(offsetof(ParticleSystemManager, m_type1FreeList) == 0x7CC0,
-              "ParticleSystemManager type-1 free list moved");
-static_assert(offsetof(ParticleSystemManager, m_type2FreeList) == 0x85E0,
-              "ParticleSystemManager type-2 free list moved");
-static_assert(offsetof(ParticleSystemManager, m_type3PoolBacking) == 0x85E8,
-              "ParticleSystemManager type-3 pool backing moved");
-static_assert(offsetof(ParticleSystemManager, m_type4FreeList) == 0x8B98,
-              "ParticleSystemManager type-4 free list moved");
-static_assert(offsetof(ParticleSystemManager, m_nextTemplateId) == 0x8BAA,
-              "ParticleSystemManager template id counter moved");
-static_assert(offsetof(ParticleSystemManager, m_windManager) == 0x8C0C,
-              "ParticleSystemManager WindManager pointer moved");
-static_assert(offsetof(ParticleSystemManager, m_heightmapCluster) == 0x8C14,
-              "ParticleSystemManager HeightmapCluster pointer moved");
-static_assert(offsetof(ParticleSystemManager, m_poolsInitialized) == 0x8C92,
-              "ParticleSystemManager initialized flag moved");
-static_assert(offsetof(ParticleSystemManager, m_cachedLightValue) == 0x8C9C,
-              "ParticleSystemManager cached light value moved");
-static_assert(offsetof(ParticleSystemManager, m_textureAtlasHelper) == 0x8CB4,
-              "ParticleSystemManager atlas helper moved");
-static_assert(sizeof(ParticleSystemManager) == kParticleSystemManagerSize,
-              "ParticleSystemManager must retain its shipped 0x8CB8-byte size");
-
 namespace {
 
 // PE .CRT initializer 0x101D23D0 / destructor 0x101D8FC0, global 0x10258F3C. Every
 // observed use copies this string; its source-level name remains [INFERRED].
-const vc71::string g_particleAtlasPrefix("Objects/Effects/Textures/Atlas/");
+const std::string g_particleAtlasPrefix("Objects/Effects/Textures/Atlas/");
 
+// Native-offset renderer helpers (the x86 source fixtures address fields through them); this TU
+// reaches renderer fields through the per-renderer layouts of ParticleRawLayout.h.
 inline unsigned int& psmRendererDword(unsigned char* renderer, unsigned int offset)
 {
     return *reinterpret_cast<unsigned int*>(renderer + offset);
+}
+
+// Ends the lifetime of a renderer pointer list the renderer constructor built in place.
+template<class T>
+void psmDestroyRendererList(unsigned char* renderer, unsigned int offset)
+{
+    typedef std::vector<T> List;
+    particleRendererList<T>(renderer, offset).~List();
 }
 
 // Both retail end helpers temporarily set x87 rounding to truncate before fistp.  Renderer counts
@@ -240,12 +216,12 @@ void particleSystemManagerBeginFrame(IParticleSystemManager* managerInterface)
     // 0x100D2E80 -> 0x1016F6C0, then tail-call 0x1016D580.  All seven writes are
     // unconditional in retail, including before the manager's pool initializer has run.
     particles[0x0000] = 1;
-    psmRendererDword(particles, 0x1C2C) = 0;
-    psmRendererDword(particles, 0x1C30) = 0;
-    psmRendererDword(particles, 0x5E14) = 0;
+    psmSpriteField<unsigned int>(particles, 0x1C2C) = 0;
+    psmSpriteField<unsigned int>(particles, 0x1C30) = 0;
+    psmSpriteField<unsigned int>(particles, 0x5E14) = 0;
     nsa[0x0000] = 1;
-    psmRendererDword(nsa, 0x0420) = 0;
-    psmRendererDword(nsa, 0x0444) = 0;
+    psmNsaField<unsigned int>(nsa, 0x0420) = 0;
+    psmNsaField<unsigned int>(nsa, 0x0444) = 0;
 }
 
 void particleSystemManagerEndFrame(IParticleSystemManager* managerInterface)
@@ -261,19 +237,19 @@ void particleSystemManagerEndFrame(IParticleSystemManager* managerInterface)
     unsigned char* const particles = manager->m_particleSystemRenderer;
     particles[0x0000] = 0;
     const unsigned int particleLimit =
-        psmScaledLimit(psmRendererDword(particles, 0x1E10), factor);
+        psmScaledLimit(psmSpriteField<unsigned int>(particles, 0x1E10), factor);
     const unsigned int particleCount =
-        psmRendererDword(particles, 0x1C2C) + psmRendererDword(particles, 0x1C30);
+        psmSpriteField<unsigned int>(particles, 0x1C2C) + psmSpriteField<unsigned int>(particles, 0x1C30);
     particles[0x1C34] = particleCount > particleLimit;
 
     unsigned char* const nsa = manager->m_nsaParticleSystemRenderer;
     nsa[0x0000] = 0;
-    const unsigned int nsaLimit = psmScaledLimit(psmRendererDword(nsa, 0x0004), factor);
-    nsa[0x0424] = psmRendererDword(nsa, 0x0420) > nsaLimit;
+    const unsigned int nsaLimit = psmScaledLimit(psmNsaField<unsigned int>(nsa, 0x0004), factor);
+    nsa[0x0424] = psmNsaField<unsigned int>(nsa, 0x0420) > nsaLimit;
 }
 
 // Defined in the emitter-type .cpp files: the recovered per-type constructors. Each takes the
-// pre-allocated block (type-specific size) and the template-name std::string (vc71::string*),
+// pre-allocated block (type-specific size) and the template-name std::string (std::string*),
 // installs the vtable + defaults, and returns the object.
 void* constructParticleSystemTemplateType0(void* mem, const void* nameString);   // 0x2A4, sub_10177010
 void* constructParticleSystemType1(void* mem, const void* nameString);           // 0x238, sub_10179B70
@@ -286,28 +262,22 @@ void* constructParticleSystemType4(void* mem, const void* nameString);          
 
 namespace {
 
-template <typename T>
-T& psmField(ParticleSystemManager* self, unsigned int offset)
-{
-    return *reinterpret_cast<T*>(reinterpret_cast<unsigned char*>(self) + offset);
-}
-
 // The complete 18-slot primary vtable (0x10219978). Slots 0-3 are the reference spine and slot 17
 // is the deleting destructor. Known-signature frontiers below retain their real argument lists so
 // even the diagnostic continue mode cannot corrupt ESP.
 
 // +0x00 addRef, +0x04 getRefCount - the shared reference-count thunks (0x1000CB20 / 0x101A9A10).
-int __fastcall psm_addRef(void* self, void*) { return ++static_cast<ParticleSystemManager*>(self)->m_refCount; }
-int __fastcall psm_getRc (void* self, void*) { return   static_cast<ParticleSystemManager*>(self)->m_refCount; }
+int RD9_THUNK psm_addRef(void* self RD9_THUNK_EDX) { return ++static_cast<ParticleSystemManager*>(self)->m_refCount; }
+int RD9_THUNK psm_getRc (void* self RD9_THUNK_EDX) { return   static_cast<ParticleSystemManager*>(self)->m_refCount; }
 
 // +0x08 release (0x100D7480): decrement, and at zero invoke the deleting destructor (slot 17).
-int __fastcall psm_release(void* self, void*)
+int RD9_THUNK psm_release(void* self RD9_THUNK_EDX)
 {
     return static_cast<ParticleSystemManager*>(self)->release();
 }
 
 // +0x0C queryInterface (0x100D7440): accepts iid 1 (IBase) and 820016.
-void* __fastcall psm_qi(void* self, void*, unsigned int iid)
+void* RD9_THUNK psm_qi(void* self RD9_THUNK_EDX, unsigned int iid)
 {
     if (iid == RD9_IID_IBASE || iid == IID_IParticleSystemManager)
         return self;
@@ -316,22 +286,22 @@ void* __fastcall psm_qi(void* self, void*, unsigned int iid)
 
 // +0x20, the BF2 build deliberately does nothing, but it does consume the template
 // pointer (`retn 4`). The old stand-in used a no-argument ret and was ABI-wrong.
-void __fastcall psm_removeParticleSystem(void*, void*, IParticleSystemTemplate*) { }
+void RD9_THUNK psm_removeParticleSystem(void* RD9_THUNK_EDX, IParticleSystemTemplate*) { }
 
 // +0x30 resetStats(), the BF2 build's genuine no-argument nullsub. The Editor body
 // clears counters and its console registration supplies the exact name.
-void __fastcall psm_resetStats(void*, void*) { }
+void RD9_THUNK psm_resetStats(void* RD9_THUNK_EDX) { }
 
 // +0x10, virtual-call resetStats(), then reacquire WindManager. `postLoadLevel` is NOT
 // this slot: Editor ResourceManager::postLoadLevel names and directly calls the 0x101C3470 twin of
 // BF2 0x100D2FD0, which only reacquires HeightmapCluster at +0x8C14. The ctor invokes this +0x10
 // behavior inline, so `init` is the supported interpretation; the exact source spelling remains
 // unresolved. BF2 0x100D38D0 is instead the unnamed lazy pool/atlas initializer.
-void __fastcall psm_reserved10(void* self, void*)
+void RD9_THUNK psm_reserved10(void* self RD9_THUNK_EDX)
 {
     reinterpret_cast<IParticleSystemManager*>(self)->resetStats();
     renddx9abi::HostString name("WindManager");
-    *reinterpret_cast<IBase**>(static_cast<unsigned char*>(self) + 0x8C0C) =
+    static_cast<ParticleSystemManager*>(self)->m_windManager =                // +0x8C0C
         classManager->getSingleton(name);
 }
 
@@ -342,8 +312,7 @@ IParticleSystemInstance* psmCreateType2Instance(IParticleSystemTemplate* descrip
 IParticleSystemInstance* psmCreateType3Instance(IParticleSystemTemplate* descriptor);
 IParticleSystemInstance* psmCreateType4Instance(IParticleSystemTemplate* descriptor);
 const char* psmRegisteredTemplateName(IParticleSystemTemplate* descriptor);
-IParticleSystemInstance* __fastcall psm_createInstance(
-    void* self, void*, IParticleSystemTemplate* systemTemplate)
+IParticleSystemInstance* RD9_THUNK psm_createInstance(void* self RD9_THUNK_EDX, IParticleSystemTemplate* systemTemplate)
 {
     ParticleSystemManager* const manager = static_cast<ParticleSystemManager*>(self);
     if (!manager->m_poolsInitialized)
@@ -364,8 +333,8 @@ IParticleSystemInstance* __fastcall psm_createInstance(
             ? psmCreateType3Instance(systemTemplate) : psmCreateType4Instance(systemTemplate);
         if (instance)
         {
-            reinterpret_cast<unsigned char*>(instance)[5] = 0;
-            vc71::vectorRef<IParticleSystemInstance*>(&manager->m_instances).push_back(instance);
+            psmInstance<unsigned char>(instance, 5) = 0;
+            manager->m_instances.push_back(instance);
         }
         return instance;
     }
@@ -406,7 +375,7 @@ inline bool psmOwnerRootDisabled(void* owner)
 
 // +0x18, 0x100D4F40. Instances with live particles stop emitting and detach from their owner.
 // Otherwise detach the controller before queuing inactive removal and destruction.
-void __fastcall psm_removeInstance(void* self, void*, IParticleSystemInstance* instance)
+void RD9_THUNK psm_removeInstance(void* self RD9_THUNK_EDX, IParticleSystemInstance* instance)
 {
     ParticleSystemManager* const manager = static_cast<ParticleSystemManager*>(self);
     if (!manager->m_poolsInitialized || manager->m_tearingDown)
@@ -422,21 +391,21 @@ void __fastcall psm_removeInstance(void* self, void*, IParticleSystemInstance* i
     else
     {
         instance->setEffectController(0);
-        if (psmRuntimeField<unsigned char>(instance, 4)) psmQueueInactive(manager, instance);
+        if (psmInstance<unsigned char>(instance, 4)) psmQueueInactive(manager, instance);
         psmPush(manager->m_pendingDestroy, instance);
     }
 }
 
 // +0x24, stop/release every instance, advance each by 0.1, drain twice, then assert
 // that the active list is empty. Both loops retain the same initial instance-count snapshot.
-void __fastcall psm_reserved24(void* self, void*)
+void RD9_THUNK psm_reserved24(void* self RD9_THUNK_EDX)
 {
     ParticleSystemManager* const manager = static_cast<ParticleSystemManager*>(self);
     psmRemoveActive(manager, false);
     psmDrainDestroy(manager);
-    const unsigned int count = manager->m_instances.size();
-    for (unsigned int i = 0; i < count; ++i) manager->m_instances.first[i]->reserved02();
-    for (unsigned int i = 0; i < count; ++i) manager->m_instances.first[i]->reserved41(0.1f);
+    const unsigned int count = static_cast<unsigned int>(manager->m_instances.size());
+    for (unsigned int i = 0; i < count; ++i) manager->m_instances[i]->reserved02();
+    for (unsigned int i = 0; i < count; ++i) manager->m_instances[i]->reserved41(0.1f);
     psmRemoveActive(manager, false);
     psmDrainDestroy(manager);
     if (manager->m_instances.size())
@@ -444,26 +413,25 @@ void __fastcall psm_reserved24(void* self, void*)
                                 "(Debug: All particle systems have not been released!)");
 }
 
-void __fastcall psm_onPathDraw(void* self, void*, bool firstPerson, bool secondPass);
+void RD9_THUNK psm_onPathDraw(void* self RD9_THUNK_EDX, bool firstPerson, bool secondPass);
 
 // +0x34, flip byte +0x0C, then broadcast it to active instances in vector order.
-void __fastcall psm_togglePause(void* self, void*)
+void RD9_THUNK psm_togglePause(void* self RD9_THUNK_EDX)
 {
     ParticleSystemManager* manager = static_cast<ParticleSystemManager*>(self);
     manager->m_paused = manager->m_paused ? 0 : 1;
 
-    const unsigned int count = manager->m_instances.size();
+    const unsigned int count = static_cast<unsigned int>(manager->m_instances.size());
     for (unsigned int i = 0; i < count; ++i)
-        manager->m_instances.first[i]->setPaused(manager->m_paused != 0);
+        manager->m_instances[i]->setPaused(manager->m_paused != 0);
 }
 
-// +0x40, 0x100D74A0: `vector@this+0x7CB0.resize(0, 0)`. Its elements are pointer-sized and have
-// trivial destruction, so the exact observable effect is to retain storage and set last=first.
-void __fastcall psm_reserved40(void* self, void*)
+// +0x40, 0x100D74A0: `vector@this+0x7CB0.resize(0, 0)` - the MeshParticles renderer's retained
+// mesh list (renderer +0x1D80). Its elements are pointer-sized and have trivial destruction, so the
+// exact observable effect is to retain storage and empty the list.
+void RD9_THUNK psm_reserved40(void* self RD9_THUNK_EDX)
 {
-    ParticleSystemInstanceList* const values = reinterpret_cast<ParticleSystemInstanceList*>(
-        static_cast<unsigned char*>(self) + 0x7CB0);
-    values->last = values->first;
+    meshParticlesRendererMeshes(static_cast<ParticleSystemManager*>(self)->m_meshParticlesRenderer).clear();
 }
 
 // The two template registries. The retail object embeds a std::map<std::string,ParticleSystem*>
@@ -484,8 +452,8 @@ typedef std::map<std::string, IParticleSystemTemplate*, ParticleSystemNameLess>
 
 ParticleSystemNameMap g_templatesByName;
 
-// [CHOSEN, not recovered] diagnostic identity only. Unsupported descriptor types still expose
-// VC7.1 name storage in native builds, so do not interpret their getName result as HostString.
+// [CHOSEN, not recovered] diagnostic identity only, read from the registry key rather than through
+// a descriptor's getName.
 const char* psmRegisteredTemplateName(IParticleSystemTemplate* descriptor)
 {
     for (ParticleSystemNameMap::const_iterator it = g_templatesByName.begin();
@@ -499,14 +467,15 @@ std::map<unsigned short, IParticleSystemTemplate*> g_templatesById;
 
 // +0x44, scalar deleting destructor 0x100D7880. Its scalar wrapper is simple, but the complete
 // destructor it calls (0x100D5610) owns the three trees, thirteen vectors, four embedded renderers,
-// five pool buffers and TextureAtlas. Running that body over this replacement's intentionally
-// zero-filled, unconstructed subobjects would itself be fabricated behavior. Free the inert object
-// only while no deferred owner exists; otherwise stop exactly at the first missing teardown use.
-bool psmHasUnrecoveredOwnedState(const ParticleSystemManager* self)
+// five pool buffers and TextureAtlas. Running that body over this replacement's
+// value-initialised, partly unconstructed subobjects would itself be fabricated behavior. Free the
+// inert object only while no deferred owner exists; otherwise stop exactly at the first missing
+// teardown use. A list "owns storage" when its capacity is non-zero.
+bool psmHasUnrecoveredOwnedState(ParticleSystemManager* self)
 {
     if (!g_templatesByName.empty() || !g_templatesById.empty()
-        || self->m_instances.first || self->m_pendingDestroy.first
-        || self->m_pendingClassification.first || self->m_poolsInitialized
+        || self->m_instances.capacity() || self->m_pendingDestroy.capacity()
+        || self->m_pendingClassification.capacity() || self->m_poolsInitialized
         || self->m_type0PoolBacking || self->m_type1PoolBacking
         || self->m_type2PoolBacking || self->m_type3PoolBacking
         || self->m_type4PoolBacking || self->m_type0FreeList
@@ -518,30 +487,28 @@ bool psmHasUnrecoveredOwnedState(const ParticleSystemManager* self)
     // Constructed renderers own allocations, declaration/effect handles and Trail's registered
     // listener even before pool allocation. They must reach the existing teardown frontier too.
     if (*reinterpret_cast<void* const*>(self->m_trailRenderer)
-        || *reinterpret_cast<void* const*>(self->m_particleSystemRenderer + 0x0C)
-        || *reinterpret_cast<void* const*>(self->m_particleSystemRenderer + 0x1DC0)
-        || *reinterpret_cast<void* const*>(self->m_particleSystemRenderer + 0x1DC8)
-        || *reinterpret_cast<void* const*>(self->m_particleSystemRenderer + 0x1E0C)
-        || *reinterpret_cast<void* const*>(self->m_particleSystemRenderer + 0x1DD0)
-        || *reinterpret_cast<void* const*>(self->m_nsaParticleSystemRenderer + 0x10)
-        || *reinterpret_cast<void* const*>(self->m_nsaParticleSystemRenderer + 0x55C)
-        || *reinterpret_cast<void* const*>(self->m_nsaParticleSystemRenderer + 0x564)
-        || *reinterpret_cast<void* const*>(self->m_nsaParticleSystemRenderer + 0x59C)
-        || *reinterpret_cast<void* const*>(self->m_nsaParticleSystemRenderer + 0x56C))
+        || particleRendererList<unsigned char*>(self->m_particleSystemRenderer, psmSpriteRendererOffset(0x08)).capacity()
+        || psmSpriteField<void*>(self->m_particleSystemRenderer, 0x1DC0)
+        || psmSpriteField<void*>(self->m_particleSystemRenderer, 0x1DC8)
+        || psmSpriteField<void*>(self->m_particleSystemRenderer, 0x1E0C)
+        || psmSpriteField<void*>(self->m_particleSystemRenderer, 0x1DD0)
+        || particleRendererList<unsigned char*>(self->m_nsaParticleSystemRenderer, psmNsaRendererOffset(0x0C)).capacity()
+        || psmNsaField<void*>(self->m_nsaParticleSystemRenderer, 0x55C)
+        || psmNsaField<void*>(self->m_nsaParticleSystemRenderer, 0x564)
+        || psmNsaField<void*>(self->m_nsaParticleSystemRenderer, 0x59C)
+        || psmNsaField<void*>(self->m_nsaParticleSystemRenderer, 0x56C))
         return true;
 
     for (unsigned int i = 0; i < 10; ++i)
-        if (self->m_renderBuckets[i].first)
+        if (self->m_renderBuckets[i].capacity())
             return true;
 
-    // A non-null VC7.1 tree head means one of the omitted tree constructors ran and therefore its
-    // sentinel must be destroyed, even when the logical tree is empty.
-    return *reinterpret_cast<void* const*>(self->m_templatesByNameTree + 4)
-        || *reinterpret_cast<void* const*>(self->m_pendingReclassificationTree + 4)
-        || *reinterpret_cast<void* const*>(self->m_templatesByIdTree + 4);
+    // The pending-reclassification set is constructed with the manager and owns its sentinel even
+    // when the logical tree is empty, so a constructed manager always reaches the frontier.
+    return true;
 }
 
-void* __fastcall psm_deletingDtor(void* rawSelf, void*, int flags)
+void* RD9_THUNK psm_deletingDtor(void* rawSelf RD9_THUNK_EDX, int flags)
 {
     return static_cast<ParticleSystemManager*>(rawSelf)->deletingDestructor(flags);
 }
@@ -566,6 +533,7 @@ void psmRecomputeDerivedSettings(ParticleSystemManager* self)
         // PE 100D3468..100D357A uses FST, not fstp: the products remain at the
         // caller's x87 precision even though rounded copies are published to the fields.
         // The inverse denominators reload the rounded base and subtract the retained product.
+#if defined(_M_IX86)
         __asm {
             fld lodScale
             fmul view
@@ -591,6 +559,18 @@ void psmRecomputeDerivedSettings(ParticleSystemManager* self)
             fstp dword ptr [edx]
             fstp st(0)
         }
+#else
+        // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates). The products stay
+        // unrounded doubles; only the published copies are rounded to float, as with FST.
+        const double product = static_cast<double>(lodScale) * view;
+        *base = static_cast<float>(product);
+        const double nearProduct = product * nearRatio;
+        *nearDistance = static_cast<float>(nearProduct);
+        *inverseNear = static_cast<float>(one / (static_cast<double>(*base) - nearProduct));
+        const double farProduct = static_cast<double>(farRatio) * *base;
+        *farDistance = static_cast<float>(farProduct);
+        *inverseFar = static_cast<float>(one / (static_cast<double>(*base) - farProduct));
+#endif
     }
 
     if (!g_LightManager)
@@ -618,10 +598,10 @@ void psmRecomputeDerivedSettings(ParticleSystemManager* self)
 // through Renderer +0x74 / VideoOptions +0x28, conditionally updates the five pool capacities, then
 // runs 0x100D3460 above and sets +0x8C93. A missing LightManager stops at the named dependency;
 // retail has no null guard there either.
-void __fastcall psm_applySettings(void* rawSelf, void*, const ParticleSystemSettings* config)
+void RD9_THUNK psm_applySettings(void* rawSelf RD9_THUNK_EDX, const ParticleSystemSettings* config)
 {
     ParticleSystemManager* const self = static_cast<ParticleSystemManager*>(rawSelf);
-    psmField<float>(self, 0x8CA8) = config->distanceFactor;
+    self->m_distanceFactor = config->distanceFactor;                       // +0x8CA8
 
     const int gsViewDistance = dx9rend::readIntSetting("GSViewDistance", 500);
     IVideoOptions* const videoOptions = dx9rend::rendererGetVideoOptions();
@@ -630,29 +610,29 @@ void __fastcall psm_applySettings(void* rawSelf, void*, const ParticleSystemSett
                            config->distanceFactor;
     if (effectiveView <= 200.0)
         effectiveView = 200.0;
-    psmField<float>(self, 0x8CA0) = static_cast<float>(effectiveView);
+    self->m_effectiveViewDistance = static_cast<float>(effectiveView);   // +0x8CA0
 
     for (unsigned int i = 0; i < 3; ++i)
     {
-        psmField<float>(self, 0x8BFC + i * 4) = config->tierThresholds[i];
-        psmField<float>(self, 0x8BAC + i * 4) = config->lodScales[i];
+        self->m_tierThresholds[i] = config->tierThresholds[i];             // +0x8BFC
+        self->m_lodScales[i] = config->lodScales[i];                       // +0x8BAC
     }
-    psmField<float>(self, 0x8BDC) = config->nearRatio;
-    psmField<float>(self, 0x8BF8) = config->farRatio;
+    self->m_nearRatio = config->nearRatio;                                 // +0x8BDC
+    self->m_farRatio = config->farRatio;                                   // +0x8BF8
 
-    if (!psmField<unsigned char>(self, 0x8C92))
+    if (!self->m_poolsInitialized)                                         // +0x8C92
     {
-        psmField<int>(self, 0x5F24) = config->poolCount04;
-        psmField<int>(self, 0x85E4) = config->poolCount0C;
-        psmField<int>(self, 0x8B9C) = config->poolCount04;
-        psmField<int>(self, 0x7CC4) = config->poolCount08;
-        psmField<int>(self, 0x8BA4) = config->poolCount30;
+        self->m_type0PoolCount = config->poolCount04;                      // +0x5F24
+        self->m_type2PoolCount = config->poolCount0C;                      // +0x85E4
+        self->m_type4PoolCount = config->poolCount04;                      // +0x8B9C
+        self->m_type1PoolCount = config->poolCount08;                      // +0x7CC4
+        self->m_poolCount8BA4 = config->poolCount30;                       // +0x8BA4
     }
 
-    psmField<int>(self, 0x8CAC) = config->shaderQuality;
-    psmField<int>(self, 0x8CB0) = config->qualityLevel;
+    self->m_shaderQuality = config->shaderQuality;                         // +0x8CAC
+    self->m_qualityLevel = config->qualityLevel;                           // +0x8CB0
     psmRecomputeDerivedSettings(self);
-    psmField<unsigned char>(self, 0x8C93) = 1;
+    self->m_settingsApplied = 1;                                           // +0x8C93
 }
 
 
@@ -697,9 +677,12 @@ void psmConstructPoolRecord(unsigned int* item, unsigned int type)
 
 // new Record[count], followed by the shipped unsigned count-1 free-chain loop. There is no
 // allocation-failure or zero-count guard in PE 0x100D38D0; neither is manufactured here.
+// `retailStride` is the type's retail record size (148/192/168/176/200); x64 uses the native stride
+// and free-chain link slot of ParticleRawLayout.h instead.
 void psmAllocatePool(void*& backing, void*& freeList, int& count,
-                     unsigned int stride, unsigned int type)
+                     unsigned int retailStride, unsigned int type)
 {
+    const unsigned int stride = sizeof(void*) == 4 ? retailStride : psmRecordStride(type);
     unsigned char* const items = static_cast<unsigned char*>(
         ::renddx9abi::engineAlloc(stride * static_cast<unsigned int>(count)));
     if (items)
@@ -707,8 +690,8 @@ void psmAllocatePool(void*& backing, void*& freeList, int& count,
             psmConstructPoolRecord(reinterpret_cast<unsigned int*>(items + stride * i), type);
     backing = items;
     for (unsigned int i = 0; i < static_cast<unsigned int>(count) - 1u; ++i)
-        *reinterpret_cast<void**>(items + stride * i) = items + stride * (i + 1u);
-    *reinterpret_cast<void**>(items + stride * static_cast<unsigned int>(count) - stride) = 0;
+        psmRecordLink(items + stride * i, type) = items + stride * (i + 1u);
+    psmRecordLink(items + stride * static_cast<unsigned int>(count) - stride, type) = 0;
     freeList = backing;
 }
 
@@ -722,8 +705,8 @@ T& psmRendererField(unsigned char* renderer, unsigned int offset)
 // null gate, failed-lock behavior and unconditional unlock after a lock attempt are shipped.
 void psmFillTrailIndices(unsigned char* renderer, unsigned int sides)
 {
-    const unsigned int count = psmRendererDword(renderer, 0x8AC);
-    void* const buffer = psmRendererField<void*>(renderer, 0x8B8 + 4u * sides);
+    const unsigned int count = psmTrailField<unsigned int>(renderer, 0x8AC);
+    void* const buffer = psmTrailField<void*>(renderer, 0x8B8 + 4u * sides);
     if (!count || !buffer)
         return;
     unsigned short* const indices = static_cast<unsigned short*>(
@@ -758,9 +741,9 @@ void psmFillTrailIndices(unsigned char* renderer, unsigned int sides)
 void psmCreateTrailSide(unsigned char* renderer, unsigned int sides)
 {
     const int oldPool = dx9rend::bufferManagerSwapPool(0);
-    psmRendererField<void*>(renderer, 0x8B8 + 4u * sides) =
+    psmTrailField<void*>(renderer, 0x8B8 + 4u * sides) =
         dx9rend::bufferManagerCreateIndexBuffer(
-            6u * sides * (psmRendererDword(renderer, 0x8AC) - 1u), 8u, 101u);
+            6u * sides * (psmTrailField<unsigned int>(renderer, 0x8AC) - 1u), 8u, 101u);
     dx9rend::bufferManagerSwapPool(oldPool);
     psmFillTrailIndices(renderer, sides);
 
@@ -768,7 +751,7 @@ void psmCreateTrailSide(unsigned char* renderer, unsigned int sides)
     if (vertices)
         for (unsigned int i = 0; i < 2u * sides; ++i)
             new (vertices + i) Vec3{ 0.0f, 0.0f, 0.0f };
-    psmRendererField<Vec3*>(renderer, 0x8C8 + 4u * sides) = vertices;
+    psmTrailField<Vec3*>(renderer, 0x8C8 + 4u * sides) = vertices;
     if (!vertices)
     {
         // TrailRenderer.cpp:233, DebugTypeWarning; the caller discards the false result.
@@ -793,80 +776,87 @@ void psmCreateTrailSide(unsigned char* renderer, unsigned int sides)
 void psmCreateTrailBuffers(unsigned char* renderer)
 {
     const int oldPool = dx9rend::bufferManagerSwapPool(0);
-    psmRendererDword(renderer, 0x898) = 6u * psmRendererDword(renderer, 0x8AC);
-    psmRendererDword(renderer, 0x894) = 68;
-    psmRendererDword(renderer, 0x89C) = 68u * psmRendererDword(renderer, 0x898);
-    psmRendererField<void*>(renderer, 0x8B4) = dx9rend::bufferManagerCreateVertexBuffer(
-        psmRendererDword(renderer, 0x898), 68, 0x208, "TrailRenderer");
+    psmTrailField<unsigned int>(renderer, 0x898) = 6u * psmTrailField<unsigned int>(renderer, 0x8AC);
+    psmTrailField<unsigned int>(renderer, 0x894) = 68;
+    psmTrailField<unsigned int>(renderer, 0x89C) = 68u * psmTrailField<unsigned int>(renderer, 0x898);
+    psmTrailField<void*>(renderer, 0x8B4) = dx9rend::bufferManagerCreateVertexBuffer(
+        psmTrailField<unsigned int>(renderer, 0x898), 68, 0x208, "TrailRenderer");
     for (unsigned int sides = 1; sides <= 3; ++sides)
         psmCreateTrailSide(renderer, sides);
     dx9rend::bufferManagerSwapPool(oldPool);
+}
+
+// A field of the sprite renderer, or of the NSA renderer when `nsa`, by retail offset.
+template <typename T>
+T& psmParticleOrNsaField(unsigned char* renderer, bool nsa, unsigned int offset)
+{
+    return psmRawField<T>(renderer, nsa ? psmNsaRendererOffset(offset) : psmSpriteRendererOffset(offset));
 }
 
 // Allocation/reset helpers 0x1016F990, 0x1016D7C0, 0x10174AA0 and 0x10172ED0.
 // They do not construct the embedded renderers or use their still-unrecovered shader state.
 void psmInitializeParticleRenderer(unsigned char* renderer, int count, bool nsa)
 {
-    psmRendererDword(renderer, nsa ? 0x004 : 0x1E10) = count;
-    psmRendererField<void*>(renderer, nsa ? 0x01C : 0x018) =
-        ::renddx9abi::engineAlloc(4u * static_cast<unsigned int>(count));
+    psmParticleOrNsaField<unsigned int>(renderer, nsa, nsa ? 0x004 : 0x1E10) = count;
+    psmParticleOrNsaField<void*>(renderer, nsa, nsa ? 0x01C : 0x018) =
+        ::renddx9abi::engineAlloc(kPsmPointerSize * static_cast<unsigned int>(count));
     if (!nsa)
-        psmRendererField<void*>(renderer, 0x01C) =
-            ::renddx9abi::engineAlloc(4u * static_cast<unsigned int>(count));
+        psmParticleOrNsaField<void*>(renderer, nsa, 0x01C) =
+            ::renddx9abi::engineAlloc(kPsmPointerSize * static_cast<unsigned int>(count));
     const int oldPool = dx9rend::bufferManagerSwapPool(0);
     const unsigned int stride = nsa ? 72u : 64u;
     const unsigned int descriptor = nsa ? 0x550u : 0x1DB4u;
-    psmRendererDword(renderer, descriptor + 4) = 6u * static_cast<unsigned int>(count);
-    psmRendererDword(renderer, descriptor) = stride;
-    psmRendererDword(renderer, descriptor + 8) = stride * 6u * static_cast<unsigned int>(count);
-    psmRendererField<void*>(renderer, nsa ? 0x568 : 0x1DCC) =
+    psmParticleOrNsaField<unsigned int>(renderer, nsa, descriptor + 4) = 6u * static_cast<unsigned int>(count);
+    psmParticleOrNsaField<unsigned int>(renderer, nsa, descriptor) = stride;
+    psmParticleOrNsaField<unsigned int>(renderer, nsa, descriptor + 8) = stride * 6u * static_cast<unsigned int>(count);
+    psmParticleOrNsaField<void*>(renderer, nsa, nsa ? 0x568 : 0x1DCC) =
         dx9rend::bufferManagerCreateVertexBuffer(6u * static_cast<unsigned int>(count),
             stride, 0x208, nsa ? "NSAParticleSystemRenderer" : "ParticleSystemRenderer");
     dx9rend::bufferManagerSwapPool(oldPool);
     const unsigned int counters = nsa ? 0x528u : 0x1D80u;
-    psmRendererDword(renderer, counters) = 0;
-    psmRendererDword(renderer, counters + 4) = 0;
+    psmParticleOrNsaField<unsigned int>(renderer, nsa, counters) = 0;
+    psmParticleOrNsaField<unsigned int>(renderer, nsa, counters + 4) = 0;
     for (unsigned int i = 0; i < 4; ++i)
-        psmRendererField<float>(renderer, counters + 12 + i * 4) = 0.5f;
-    psmRendererDword(renderer, nsa ? 0x54C : 0x1DA4) = 0;
+        psmParticleOrNsaField<float>(renderer, nsa, counters + 12 + i * 4) = 0.5f;
+    psmParticleOrNsaField<unsigned int>(renderer, nsa, nsa ? 0x54C : 0x1DA4) = 0;
 }
 
 void psmInitializeMeshRenderer(unsigned char* renderer, int count)
 {
-    psmRendererDword(renderer, 0x1D78) = count;
-    psmRendererField<void*>(renderer, 4) =
-        ::renddx9abi::engineAlloc(4u * static_cast<unsigned int>(count));
-    psmRendererDword(renderer, 0x1D50) = 0;
-    psmRendererDword(renderer, 0x1D54) = 0;
+    psmMeshField<unsigned int>(renderer, 0x1D78) = count;
+    psmMeshField<void*>(renderer, 4) =
+        ::renddx9abi::engineAlloc(kPsmPointerSize * static_cast<unsigned int>(count));
+    psmMeshField<unsigned int>(renderer, 0x1D50) = 0;
+    psmMeshField<unsigned int>(renderer, 0x1D54) = 0;
     for (unsigned int i = 0; i < 4; ++i)
-        psmRendererField<float>(renderer, 0x1D5C + i * 4) = 0.5f;
-    psmRendererDword(renderer, 0x1D7C) = 0;
+        psmMeshField<float>(renderer, 0x1D5C + i * 4) = 0.5f;
+    psmMeshField<unsigned int>(renderer, 0x1D7C) = 0;
 }
 
 void psmInitializeTrailRenderer(unsigned char* renderer, int count)
 {
-    psmRendererDword(renderer, 0x8AC) = count;
-    psmRendererField<void*>(renderer, 24) =
-        ::renddx9abi::engineAlloc(4u * static_cast<unsigned int>(count));
+    psmTrailField<unsigned int>(renderer, 0x8AC) = count;
+    psmTrailField<void*>(renderer, 24) =
+        ::renddx9abi::engineAlloc(kPsmPointerSize * static_cast<unsigned int>(count));
     psmCreateTrailBuffers(renderer);
-    psmRendererField<float>(renderer, 0x868) = 300.0f;
-    psmRendererDword(renderer, 0x860) = 0;
-    psmRendererDword(renderer, 0x864) = 0;
+    psmTrailField<float>(renderer, 0x868) = 300.0f;
+    psmTrailField<unsigned int>(renderer, 0x860) = 0;
+    psmTrailField<unsigned int>(renderer, 0x864) = 0;
     for (unsigned int i = 0; i < 4; ++i)
-        psmRendererField<float>(renderer, 0x874 + i * 4) = 0.5f;
-    psmRendererDword(renderer, 0x890) = 0;
-    psmRendererField<float>(renderer, 0x86C) =
-        psmRendererField<float>(renderer, 0x868) * psmRendererField<float>(renderer, 0x868);
+        psmTrailField<float>(renderer, 0x874 + i * 4) = 0.5f;
+    psmTrailField<unsigned int>(renderer, 0x890) = 0;
+    psmTrailField<float>(renderer, 0x86C) =
+        psmTrailField<float>(renderer, 0x868) * psmTrailField<float>(renderer, 0x868);
 }
 
 // Direct PE 0x100D38D0. The image allocates fresh backing without deleting the old backing;
 // preserve that ordering and leak on repeated calls. Names here are [INFERRED] from the caller.
-vc71::string psmAtlasPath(const vc71::string& filename)
+std::string psmAtlasPath(const std::string& filename)
 {
-    // vc71::string has no operator+; preserve its copy/append/result-copy sequence from
+    // The shipped operator+ expansion: preserve its copy/append/result-copy sequence from
     // 0x100D3D03..0x100D3D26, with the intermediate destroyed before loadTAI.
-    vc71::string prefix(g_particleAtlasPrefix);
-    return vc71::string(prefix += filename);
+    std::string prefix(g_particleAtlasPrefix);
+    return std::string(prefix += filename);
 }
 
 void psmPreLoadLevel(ParticleSystemManager* self)
@@ -894,10 +884,10 @@ void psmPreLoadLevel(ParticleSystemManager* self)
 
     if (dx9rend::readBoolSetting("GSUseEffectTextureAtlas", false))
     {
-        const vc71::string filename("ParticleAtlas.tai");
+        const std::string filename("ParticleAtlas.tai");
         if (!filename.empty())
         {
-            const vc71::string path = psmAtlasPath(filename);
+            const std::string path = psmAtlasPath(filename);
             dx9rend::textureAtlasLoadTAI(
                 static_cast<dx9rend::TextureAtlas*>(self->m_textureAtlasHelper), path);
         }
@@ -911,8 +901,7 @@ void psmPreLoadLevel(ParticleSystemManager* self)
 // 16-bit id, and register it in both maps. Type 0 is dice::hfe::geom::ParticleSystemTemplate
 // (0x2A4 bytes); the other four emitter types are reconstructed as they are first reached.
 // Returns the template pointer.
-IParticleSystemTemplate* __fastcall psm_createParticleSystem(
-    void* self, void*, int type, const ParticleSystemName* name)
+IParticleSystemTemplate* RD9_THUNK psm_createParticleSystem(void* self RD9_THUNK_EDX, int type, const ParticleSystemName* name)
 {
     ParticleSystemManager* const manager = static_cast<ParticleSystemManager*>(self);
     const char* const rawName = name->c_str();
@@ -930,36 +919,31 @@ IParticleSystemTemplate* __fastcall psm_createParticleSystem(
         std::abort();
     }
 
-    // The host-facing name follows PluginAbi (VC7.1 for retail, native std::string for the rebuilt
-    // client), while every render descriptor below is an internal recovered VC7.1-layout object.
-    // Compatibility passes the original retail object; native converts at that boundary.
-#if BF2_PLUGIN_ABI_NATIVE
-    const vc71::string internalName(rawName);
+    // Every descriptor constructor below takes the name as the renderer's own string, converted
+    // once here from the host-facing name.
+    const std::string internalName(rawName);
     const void* const renderName = &internalName;
-#else
-    const void* const renderName = name;
-#endif
     void* mem = 0;
     switch (type)
     {
     case 0:
-        mem = ::renddx9abi::engineAlloc(0x2A4u);
+        mem = ::renddx9abi::engineAlloc(PSM_DESCRIPTOR_SIZE(0x2A4u));
         if (mem) constructParticleSystemTemplateType0(mem, renderName);
         break;
     case 1:
-        mem = ::renddx9abi::engineAlloc(0x238u);
+        mem = ::renddx9abi::engineAlloc(PSM_DESCRIPTOR_SIZE(0x238u));
         if (mem) constructParticleSystemType1(mem, renderName);
         break;
     case 2:
-        mem = ::renddx9abi::engineAlloc(0x250u);
+        mem = ::renddx9abi::engineAlloc(PSM_DESCRIPTOR_SIZE(0x250u));
         if (mem) constructParticleSystemType2(mem, renderName);
         break;
     case 3:
-        mem = ::renddx9abi::engineAlloc(0x1A8u);
+        mem = ::renddx9abi::engineAlloc(PSM_DESCRIPTOR_SIZE(0x1A8u));
         if (mem) constructParticleSystemType3(mem, renderName);
         break;
     case 4:
-        mem = ::renddx9abi::engineAlloc(0x27Cu);
+        mem = ::renddx9abi::engineAlloc(PSM_DESCRIPTOR_SIZE(0x27Cu));
         if (mem) constructParticleSystemType4(mem, renderName);
         break;
     default:
@@ -973,7 +957,7 @@ IParticleSystemTemplate* __fastcall psm_createParticleSystem(
     g_templatesByName[key] = system;
 
     const unsigned short id = manager->m_nextTemplateId;
-    *reinterpret_cast<unsigned short*>(static_cast<char*>(mem) + 4) = id;
+    psmDescriptor<unsigned short>(mem, 4) = id;
     ++manager->m_nextTemplateId;
     g_templatesById[id]    = system;
 
@@ -983,15 +967,16 @@ IParticleSystemTemplate* __fastcall psm_createParticleSystem(
 }
 
 // +0x38 getter (0x100D7470). The shipped body is literally `return this + 16`: a reference/pointer
-// ABI return to the active VC7.1 instance vector at byte +0x10.
-ParticleSystemInstanceList* __fastcall psm_getInstances(void* self, void*)
+// ABI return to the active-instance list (retail byte +0x10), the std::vector ParticleSystemManager.h
+// declares.
+ParticleSystemInstanceList* RD9_THUNK psm_getInstances(void* self RD9_THUNK_EDX)
 {
     return &static_cast<ParticleSystemManager*>(self)->m_instances;
 }
 
 // +0x28 update(dt), PE 100D5150. No pool-initialized or paused manager guard exists here.
 // Queue draining, preparation and all ten bucket walks retain their shipped order.
-void __fastcall psm_update(void* rawSelf, void*, float dt)
+void RD9_THUNK psm_update(void* rawSelf RD9_THUNK_EDX, float dt)
 {
     ParticleSystemManager* const self = static_cast<ParticleSystemManager*>(rawSelf);
     psmRemoveActive(self, false);
@@ -1014,8 +999,7 @@ bool psmCameraIsUnderWater()
     dx9rend::IRenderView* const view =
         static_cast<dx9rend::IRenderer*>(dx9rend::g_rendererBase)->getRenderView();
     const float* const matrix = reinterpret_cast<const float*>(view->getViewMatrixPtr());
-    return matrix[13] < *reinterpret_cast<const float*>(
-        static_cast<const unsigned char*>(dx9rend::g_raShaderConstants) + 0x1BC);
+    return matrix[13] < *reinterpret_cast<const float*>(dx9rend::raShaderConstantsAt(0x1BC));
 }
 
 // Each preparation updates the derived settings and temporarily expands the
@@ -1035,8 +1019,7 @@ void psmPreparePath(ParticleSystemManager* self, dx9rend::IRenderView* view,
 
         const unsigned int waterSide = secondPass != underwater ? 1u : 0u;
         // PE 100F7B50 writes the shared particle-pass sign even when every bucket is empty.
-        *reinterpret_cast<float*>(static_cast<unsigned char*>(dx9rend::g_raShaderConstants)
-                                  + 0x1E0) = waterSide ? -1.0f : 1.0f;
+        *reinterpret_cast<float*>(dx9rend::raShaderConstantsAt(0x1E0)) = waterSide ? -1.0f : 1.0f;
         psmPrepareParticleRenderer(self->m_particleSystemRenderer, view,
             &self->m_renderBuckets[1 + waterSide], self->m_deltaTime, false);
         psmPrepareMeshParticleRenderer(self->m_meshParticlesRenderer, view,
@@ -1080,19 +1063,21 @@ void psmDrawPath(ParticleSystemManager* self, dx9rend::IRenderView* view, bool f
 
 // +0x2C, PE 100D4920. Both bool arguments follow the three BF2Render call sites. Only the
 // uninitialized-pools return is shipped; initialized empty state takes the complete CPU path.
-void __fastcall psm_onPathDraw(void* rawSelf, void*, bool firstPerson, bool secondPass)
+void RD9_THUNK psm_onPathDraw(void* rawSelf RD9_THUNK_EDX, bool firstPerson, bool secondPass)
 {
     ParticleSystemManager* const self = static_cast<ParticleSystemManager*>(rawSelf);
     if (!self->m_poolsInitialized)
         return;
 
-    psmField<unsigned int>(self, 0x1E78) = 0;
-    psmField<unsigned int>(self, 0x1E7C) = 0;
-    psmField<unsigned int>(self, 0x8B14) = 0;
-    psmField<unsigned int>(self, 0x7C70) = 0;
-    psmField<unsigned int>(self, 0x7C74) = 0;
-    psmField<unsigned int>(self, 0x851C) = 0;
-    psmField<unsigned int>(self, 0x8520) = 0;
+    // Retail manager +0x1E78/+0x1E7C, +0x8B14, +0x7C70/+0x7C74 and +0x851C/+0x8520: counters
+    // inside the four embedded renderers.
+    psmSpriteField<unsigned int>(self->m_particleSystemRenderer, 0x1D70) = 0;
+    psmSpriteField<unsigned int>(self->m_particleSystemRenderer, 0x1D74) = 0;
+    psmNsaField<unsigned int>(self->m_nsaParticleSystemRenderer, 0x51C) = 0;
+    psmMeshField<unsigned int>(self->m_meshParticlesRenderer, 0x1D40) = 0;
+    psmMeshField<unsigned int>(self->m_meshParticlesRenderer, 0x1D44) = 0;
+    psmTrailField<unsigned int>(self->m_trailRenderer, 0x850) = 0;
+    psmTrailField<unsigned int>(self->m_trailRenderer, 0x854) = 0;
 
     dx9rend::IRenderView* view =
         static_cast<dx9rend::IRenderer*>(dx9rend::g_rendererBase)->getRenderViewDup();
@@ -1106,6 +1091,7 @@ void __fastcall psm_onPathDraw(void* rawSelf, void*, bool firstPerson, bool seco
     float effective;
     // PE 100D49B9..100D49DA keeps both products at the current x87 precision and
     // selects 200 for unordered as well as <=200. Do not spill an intermediate to double.
+#if defined(_M_IX86)
     __asm {
         fld rendererDistance
         fmul globalViewDistance
@@ -1120,6 +1106,13 @@ void __fastcall psm_onPathDraw(void* rawSelf, void*, bool firstPerson, bool seco
     psm_distance_selected:
         fstp effective
     }
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates). Only an ordered
+    // 200 < product keeps the product; NaN selects 200, as the C0/C2 parity test does.
+    const double product = static_cast<double>(rendererDistance) * globalViewDistance * distanceFactor;
+    effective = static_cast<double>(minimumDistance) < product ? static_cast<float>(product)
+                                                                : minimumDistance;
+#endif
     self->m_effectiveViewDistance = effective;
 
     bool underwater = psmCameraIsUnderWater();
@@ -1180,6 +1173,21 @@ void particleSystemManagerPostLoadLevel(IParticleSystemManager* manager)
     self->m_heightmapCluster = classManager->getSingleton(name);
 }
 
+IBase* particleSystemManagerHeightmapCluster(IBase* manager)
+{
+    return reinterpret_cast<ParticleSystemManager*>(manager)->m_heightmapCluster;   // +0x8C14
+}
+
+unsigned char* particleSystemManagerMeshParticlesRenderer(IBase* manager)
+{
+    return reinterpret_cast<ParticleSystemManager*>(manager)->m_meshParticlesRenderer; // +0x5F30
+}
+
+unsigned char particleSystemManagerForceSortedParticles(IBase* manager)
+{
+    return reinterpret_cast<ParticleSystemManager*>(manager)->m_forceSortedParticleType; // +0x8BA8
+}
+
 // Releases level resources allocated by psmPreLoadLevel.
 // Both level unload and the manager destructor must run this sweep.
 namespace {
@@ -1192,8 +1200,8 @@ namespace {
 //     last reference (the store sits after the refcount branch's join).
 void psmReleaseParticleRenderer(unsigned char* renderer)
 {
-    void*& first  = psmRendererField<void*>(renderer, 0x018);
-    void*& second = psmRendererField<void*>(renderer, 0x01C);
+    void*& first  = psmSpriteField<void*>(renderer, 0x018);
+    void*& second = psmSpriteField<void*>(renderer, 0x01C);
     if (first)
     {
         ::renddx9abi::engineFree(first);
@@ -1201,7 +1209,7 @@ void psmReleaseParticleRenderer(unsigned char* renderer)
         first  = 0;
         second = 0;
     }
-    void*& vertexBuffer = psmRendererField<void*>(renderer, 0x1DCC);
+    void*& vertexBuffer = psmSpriteField<void*>(renderer, 0x1DCC);
     if (vertexBuffer)
     {
         dx9rend::vertexBufferRelease(vertexBuffer);                        // --[+4]; 10014510; free
@@ -1213,7 +1221,7 @@ void psmReleaseParticleRenderer(unsigned char* renderer)
 // psmInitializeMeshRenderer: the one pointer array at +0x04.
 void psmReleaseMeshRenderer(unsigned char* renderer)
 {
-    void*& items = psmRendererField<void*>(renderer, 0x04);
+    void*& items = psmMeshField<void*>(renderer, 0x04);
     if (items)
     {
         ::renddx9abi::engineFree(items);
@@ -1225,13 +1233,13 @@ void psmReleaseMeshRenderer(unsigned char* renderer)
 // Vertex arrays are freed only when the corresponding index buffer exists; their slots stay dangling.
 void psmReleaseTrailRenderer(unsigned char* renderer)
 {
-    void*& items = psmRendererField<void*>(renderer, 0x018);
+    void*& items = psmTrailField<void*>(renderer, 0x018);
     if (items)
     {
         ::renddx9abi::engineFree(items);
         items = 0;
     }
-    void*& vertexBuffer = psmRendererField<void*>(renderer, 0x8B4);
+    void*& vertexBuffer = psmTrailField<void*>(renderer, 0x8B4);
     if (vertexBuffer)
     {
         dx9rend::vertexBufferRelease(vertexBuffer);                        // --[+4]; 10014510; free
@@ -1239,29 +1247,29 @@ void psmReleaseTrailRenderer(unsigned char* renderer)
     }
     for (unsigned int side = 0; side < 3u; ++side)                         // [ebp-4] = 3, counted down
     {
-        void*& indexBuffer = psmRendererField<void*>(renderer, 0x8BC + 4u * side);
+        void*& indexBuffer = psmTrailField<void*>(renderer, 0x8BC + 4u * side);
         if (indexBuffer)
         {
             dx9rend::indexBufferRelease(indexBuffer);                      // --[+4]; 10014300; free
-            void* const vertices = psmRendererField<void*>(renderer, 0x8CC + 4u * side);
+            void* const vertices = psmTrailField<void*>(renderer, 0x8CC + 4u * side);
             indexBuffer = 0;                                               // 10172FC8, before the free
             ::renddx9abi::engineFree(vertices);                            // sub_1005F370 - NOT nulled
         }
     }
-    psmRendererDword(renderer, 0x8AC) = 0;
+    psmTrailField<unsigned int>(renderer, 0x8AC) = 0;
 }
 
 // sub_1016D8A0 (76 B), on the NSAParticleSystemRenderer at manager+0x85F8. The inverse of
 // psmInitializeParticleRenderer(nsa = true): the +0x1C array and the +0x568 vertex buffer.
 void psmReleaseNsaParticleRenderer(unsigned char* renderer)
 {
-    void*& items = psmRendererField<void*>(renderer, 0x01C);
+    void*& items = psmNsaField<void*>(renderer, 0x01C);
     if (items)
     {
         ::renddx9abi::engineFree(items);
         items = 0;
     }
-    void*& vertexBuffer = psmRendererField<void*>(renderer, 0x568);
+    void*& vertexBuffer = psmNsaField<void*>(renderer, 0x568);
     if (vertexBuffer)
     {
         dx9rend::vertexBufferRelease(vertexBuffer);                        // --[+4]; 10014510; free
@@ -1294,30 +1302,27 @@ void particleSystemManagerUnloadLevel(IParticleSystemManager* manager)
             it->second->destroy();                                         // +0x00 (1)
     }
 
-    for (IParticleSystemInstance** cursor = self->m_instances.first;
-         cursor != self->m_instances.last; ++cursor)
+    for (ParticleSystemInstanceList::iterator cursor = self->m_instances.begin();
+         cursor != self->m_instances.end(); ++cursor)
     {
         if (*cursor)
             (*cursor)->destroy();                                          // +0x00 (1)
     }
 
-    // sub_100D6B90(0, 0) = resize(0) on a vector of raw pointers: last = first, storage kept.
-    self->m_pendingDestroy.last = self->m_pendingDestroy.first;            // +0xCC
+    // sub_100D6B90(0, 0) = resize(0) on a vector of raw pointers: emptied, storage kept.
+    self->m_pendingDestroy.clear();                                        // +0xCC
     static const unsigned int kBucketOrder[10] = { 0, 1, 3, 5, 2, 4, 6, 7, 9, 8 };
     for (unsigned int i = 0; i < 10u; ++i)
     {
-        ParticleSystemInstanceList& bucket = self->m_renderBuckets[kBucketOrder[i]];
-        bucket.last = bucket.first;                                        // +0x20 + 0x10 * bucket
+        ParticleSystemInstanceVector& bucket = self->m_renderBuckets[kBucketOrder[i]];
+        bucket.clear();                                                    // +0x20 + 0x10 * bucket
     }
 
     g_templatesByName.clear();                                             // sub_100D6C20 + relink
     g_templatesById.clear();                                               // sub_100D5F40 walk + relink
 
-    if (self->m_instances.first)
-        ::renddx9abi::engineFree(self->m_instances.first);
-    self->m_instances.first      = 0;
-    self->m_instances.last       = 0;
-    self->m_instances.endStorage = 0;
+    // The shipped body frees the active list's storage and zeroes its three words.
+    ParticleSystemInstanceList().swap(self->m_instances);
     self->m_nextTemplateId       = 0;                                      // +0x8BAA
 
     psmReleaseParticleRenderer(self->m_particleSystemRenderer);
@@ -1338,25 +1343,25 @@ void particleSystemManagerUnloadLevel(IParticleSystemManager* manager)
 
 // the atlas is borrowed and deliberately not null-checked. Its empty entry map
 // returns no region; otherwise the descriptor's extensionless resource name gains ".dds".
-dx9rend::TextureAtlasEntry* particleSystemFindTextureRegion(const vc71::string& name)
+dx9rend::TextureAtlasEntry* particleSystemFindTextureRegion(const std::string& name)
 {
     ParticleSystemManager* const self = reinterpret_cast<ParticleSystemManager*>(g_ParticleSystemManager);
     dx9rend::TextureAtlas* const atlas = static_cast<dx9rend::TextureAtlas*>(self->m_textureAtlasHelper);
-    if (atlas->entries.size == 0)
+    if (dx9rend::textureAtlasEntryCount(atlas) == 0)
         return 0;
-    vc71::string path(name);
+    std::string path(name);
     path += ".dds";
     return dx9rend::textureAtlasFind(atlas, path);
 }
 
-void __fastcall particleRendererCollectSorted(void* self, void*, dx9rend::IRenderView* view,
+void RD9_THUNK particleRendererCollectSorted(void* self RD9_THUNK_EDX, dx9rend::IRenderView* view,
     IParticleSystemInstance* instance, IParticleSystemTemplate* descriptor)
 {
     psmCollectSortedParticles(static_cast<unsigned char*>(self), view,
         reinterpret_cast<unsigned char*>(instance), reinterpret_cast<unsigned char*>(descriptor));
 }
 
-void __fastcall particleRendererCollectAdditive(void* self, void*, dx9rend::IRenderView* view,
+void RD9_THUNK particleRendererCollectAdditive(void* self RD9_THUNK_EDX, dx9rend::IRenderView* view,
     IParticleSystemInstance* instance, IParticleSystemTemplate* descriptor)
 {
     psmCollectAdditiveParticles(static_cast<unsigned char*>(self), view,
@@ -1380,6 +1385,13 @@ void* ParticleSystemManager::deletingDestructor(int flags)
         std::abort();
     }
 
+    // Native lifetime of what this rebuild constructs: the renderers' in-place lists, then the
+    // std members.
+    psmDestroyRendererList<unsigned char*>(m_particleSystemRenderer, psmSpriteRendererOffset(0x08));
+    psmDestroyRendererList<MeshParticleMesh*>(m_meshParticlesRenderer, psmMeshRendererOffset(0x1D80));
+    psmDestroyRendererList<unsigned char*>(m_trailRenderer, psmTrailRendererOffset(0x08));
+    psmDestroyRendererList<unsigned char*>(m_nsaParticleSystemRenderer, psmNsaRendererOffset(0x0C));
+    this->~ParticleSystemManager();
     if (flags & 1)
         ::renddx9abi::engineFree(this);
     return this;
@@ -1388,7 +1400,8 @@ void* ParticleSystemManager::deletingDestructor(int flags)
 
 // geom_ParticleSystemManager_ctor, 0x100D5870. The vtable/refcount, frame/pause fields, scalar
 // defaults, four embedded renderer constructors, no-op hook and WindManager lookup are recovered.
-// Thirteen vector headers start empty; three trees retain the chosen representation below.
+// The vectors and the pending-reclassification set (PE 100D594B..100D598D) are constructed with
+// the object; the two template registries are the file-scope maps above.
 
 namespace {
 void constructParticleSystemManager(ParticleSystemManager* self)
@@ -1397,9 +1410,6 @@ void constructParticleSystemManager(ParticleSystemManager* self)
     self->m_refCount = 1;
     self->m_deltaTime = 0.0f;
     self->m_paused = 0;
-    // PE 100D594B..100D598D constructs the embedded ordered pointer set. Container balancing
-    // retains the existing VC7.1 adapter policy (RW-74); key ordering and set semantics are exact.
-    psmReclassification(self).construct();
 
     // Construction includes shader/declaration requests and Trail's
     // device listener; allocating the pools later is a separate operation.
@@ -1407,7 +1417,7 @@ void constructParticleSystemManager(ParticleSystemManager* self)
     psmConstructParticleRenderer(self->m_particleSystemRenderer);
     self->m_type0FreeList = 0;
     self->m_type0PoolCount = 0;
-    psmField<unsigned int>(self, 0x5F28) = 0;
+    self->m_type0LiveCount = 0;                                            // +0x5F28
     self->m_type1PoolBacking = 0;
     psmConstructMeshParticleRenderer(self->m_meshParticlesRenderer);
     self->m_type1FreeList = 0;
@@ -1423,35 +1433,35 @@ void constructParticleSystemManager(ParticleSystemManager* self)
     psmConstructNsaParticleRenderer(self->m_nsaParticleSystemRenderer);
     self->m_type4FreeList = 0;
     self->m_type4PoolCount = 0;
-    psmField<unsigned int>(self, 0x8BA0) = 0;
-    psmField<unsigned int>(self, 0x8BA4) = 0;
+    self->m_type4LiveCount = 0;                                            // +0x8BA0
+    self->m_poolCount8BA4 = 0;                                             // +0x8BA4
 
-    // Scalar defaults from 0x100D5870. The factory still zero-fills the unrecovered tree headers
-    // and padding; that representation is [CHOSEN, not recovered], not a retail memset.
-    psmField<unsigned char>(self, 0x8BA8) = 0;
-    psmField<unsigned short>(self, 0x8BAA) = 0;
-    psmField<float>(self, 0x8BAC) = 0.3f;
-    psmField<float>(self, 0x8BB0) = 0.6f;
-    psmField<float>(self, 0x8BB4) = 1.0f;
-    psmField<float>(self, 0x8BDC) = 0.7f;
-    psmField<float>(self, 0x8BF8) = 0.85f;
-    psmField<float>(self, 0x8BFC) = 0.4f;
-    psmField<float>(self, 0x8C00) = 0.55f;
-    psmField<float>(self, 0x8C04) = 0.7f;
-    psmField<float>(self, 0x8C08) = 0.75f;
-    psmField<IBase*>(self, 0x8C0C) = 0;
-    psmField<unsigned char>(self, 0x8C10) = 1;
-    psmField<unsigned int>(self, 0x8C88) = 1024u;
-    psmField<unsigned int>(self, 0x8C8C) = 1024u;
-    psmField<unsigned char>(self, 0x8C90) = 0;
-    psmField<unsigned char>(self, 0x8C91) = 0;
-    psmField<unsigned char>(self, 0x8C92) = 0;
-    psmField<unsigned char>(self, 0x8C93) = 0;
-    psmField<float>(self, 0x8C9C) = -1.0f;
-    psmField<float>(self, 0x8CA4) = 10.0f;
-    psmField<float>(self, 0x8CA8) = 1.0f;
-    psmField<unsigned int>(self, 0x8CAC) = 3u;
-    psmField<unsigned int>(self, 0x8CB0) = 2u;
+    // Scalar defaults from 0x100D5870. The factory value-initialises the unrecovered opaque spans
+    // and padding; that zero fill is [CHOSEN, not recovered], not a retail memset.
+    self->m_forceSortedParticleType = 0;                                   // +0x8BA8
+    self->m_nextTemplateId = 0;                                            // +0x8BAA
+    self->m_lodScales[0] = 0.3f;                                           // +0x8BAC
+    self->m_lodScales[1] = 0.6f;                                           // +0x8BB0
+    self->m_lodScales[2] = 1.0f;                                           // +0x8BB4
+    self->m_nearRatio = 0.7f;                                              // +0x8BDC
+    self->m_farRatio = 0.85f;                                              // +0x8BF8
+    self->m_tierThresholds[0] = 0.4f;                                      // +0x8BFC
+    self->m_tierThresholds[1] = 0.55f;                                     // +0x8C00
+    self->m_tierThresholds[2] = 0.7f;                                      // +0x8C04
+    self->m_value8C08 = 0.75f;                                             // +0x8C08
+    self->m_windManager = 0;                                               // +0x8C0C
+    self->m_windEnabled = 1;                                               // +0x8C10
+    self->m_value8C88 = 1024u;                                             // +0x8C88
+    self->m_value8C8C = 1024u;                                             // +0x8C8C
+    self->m_tearingDown = 0;                                               // +0x8C90
+    self->m_state8C91 = 0;                                                 // +0x8C91
+    self->m_poolsInitialized = 0;                                          // +0x8C92
+    self->m_settingsApplied = 0;                                           // +0x8C93
+    self->m_cachedLightValue = -1.0f;                                      // +0x8C9C
+    self->m_value8CA4 = 10.0f;                                             // +0x8CA4
+    self->m_distanceFactor = 1.0f;                                         // +0x8CA8
+    self->m_shaderQuality = 3u;                                            // +0x8CAC
+    self->m_qualityLevel = 2u;                                             // +0x8CB0
 
     // PE 0x100D5B7F..0x100D5B9C constructs the real 20-byte TextureAtlas before +0x30 and
     // the WindManager lookup. The preLoadLevel atlas arm consumes this object.
@@ -1464,25 +1474,25 @@ void constructParticleSystemManager(ParticleSystemManager* self)
     // +0x10.
     reinterpret_cast<IParticleSystemManager*>(self)->resetStats();
     renddx9abi::HostString windName("WindManager");
-    psmField<IBase*>(self, 0x8C0C) = classManager->getSingleton(windName);
+    self->m_windManager = classManager->getSingleton(windName);           // +0x8C0C
 }
 } // anonymous namespace
 
-// RefFactory_geom_ParticleSystemManager, 0x100B070F. Retail allocates the shipped size and then its
-// complete ctor constructs every byte-owning subobject. Until those pool/tree constructors land,
-// this rebuild explicitly zeroes the opaque spans before running the recovered ctor subset.
-// [CHOSEN, not recovered] zero-fill; queryInterface/release ordering is recovered.
+// RefFactory_geom_ParticleSystemManager, 0x100B070F. Retail allocates the shipped 0x8CB8 bytes and
+// then its complete ctor constructs every byte-owning subobject. This rebuild allocates the native
+// object, value-initialises it (zero-filling the opaque spans and constructing the std members) and
+// runs the recovered ctor subset. [CHOSEN, not recovered] zero-fill; queryInterface/release
+// ordering is recovered.
 IBase* __fastcall createParticleSystemManager(unsigned int iid, IBase* outer)
 {
     if (outer)
         return 0;
 
-    void* storage = ::renddx9abi::engineAlloc(kParticleSystemManagerSize);
-    ::memset(storage, 0, kParticleSystemManagerSize);
-    ParticleSystemManager* self = static_cast<ParticleSystemManager*>(storage);
+    void* storage = ::renddx9abi::engineAlloc(sizeof(ParticleSystemManager));
+    ParticleSystemManager* self = ::new (storage) ParticleSystemManager();
     constructParticleSystemManager(self);
 
-    void* itf = psm_qi(self, 0, iid);
+    void* itf = psm_qi(self RD9_THUNK_ARG, iid);
     if (!itf)
         self->release();
     return static_cast<IBase*>(itf);

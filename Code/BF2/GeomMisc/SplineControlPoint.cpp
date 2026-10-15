@@ -90,9 +90,9 @@ SplineControlPoint::SplineControlPoint(const Vec3& position)
         s_effect = static_cast<dx9rend::Effect*>(
             dx9rend::shaderManagerGetEffect(dx9rend::g_shaderManager, "Shaders/SplineShader"));
         s_worldViewProjection =
-            dx9rend::effectGetShaderParameterTyped(s_effect, vc71::string("WorldViewProjection"));
+            dx9rend::effectGetShaderParameterTyped(s_effect, std::string("WorldViewProjection"));
         s_diffuseColor =
-            dx9rend::effectGetShaderParameterTyped(s_effect, vc71::string("DiffuseColor"));
+            dx9rend::effectGetShaderParameterTyped(s_effect, std::string("DiffuseColor"));
     }
     else
     {
@@ -172,7 +172,7 @@ void SplineControlPoint::draw()
     vertices->Release();
     indices->Release();
 
-    dx9rend::effectSetTechniqueByName(s_effect, vc71::string("controlpoint"));
+    dx9rend::effectSetTechniqueByName(s_effect, std::string("controlpoint"));
     dx9rend::IRenderView* const view = dx9rend::rendererGetRenderView();    // renderer +0x48
 
     Vec3 scale;

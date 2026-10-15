@@ -36,6 +36,8 @@ bool ActionListAction::execute(System* system, const Rect* bounds, const NodeSta
     }
     return false;
 }
+#if defined(_M_IX86)
 static_assert(sizeof(ActionListAction) == 24, "client ActionListAction");
+#endif
 } }
 #endif

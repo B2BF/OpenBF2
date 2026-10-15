@@ -4,14 +4,11 @@
 
 #include "../../RendDX9Abi/PluginModules.h"
 #include "../../RendDX9Abi/ModuleCommon.h"
-#include "../../RendDX9Abi/Vc71Vector.h"
 #include "../../RendDX9Abi/Frontier.h"
 #include "EnvMapSystem/EnvMapManager.h"
-#if BF2_PLUGIN_ABI_NATIVE
 #include "../Core/ConsoleObjectMacro.h"
 #include "../Core/ConsoleObjects.h"
 #include "../../RendDX9Abi/PluginEntry.h"
-#endif
 
 namespace dice {
 namespace hfe {
@@ -89,7 +86,6 @@ void RendModule::getSingletonList(RD9_HOST_VECTOR_PARAMETER(SingletonRegInfo, ho
     }
 }
 
-#if BF2_PLUGIN_ABI_NATIVE
 
 // Native environment-map console bindings, available while the manager exists.
 // Method results are discarded; ConsoleObject layouts must match the host toolchain.
@@ -103,11 +99,11 @@ inline EnvMapManager* envMapManager()
     return static_cast<EnvMapManager*>(g_EnvMapManager);
 }
 
-// the argument copied, then the manager's +0x34 (loadInfo) - the renderer's own VC7.1
-// string at the call, converted here, once.
+// the argument copied, then the manager's +0x34 (loadInfo) - the renderer's own string at the
+// call, converted here, once.
 void consoleLoadEMIFile(const std::string& path)
 {
-    envMapManager()->loadInfo(vc71::string(path.c_str(), static_cast<unsigned int>(path.size())));
+    envMapManager()->loadInfo(std::string(path.c_str(), static_cast<unsigned int>(path.size())));
 }
 
 void consoleGenerateEnvMaps()
@@ -143,7 +139,6 @@ BF2_CONSOLE_PROPERTY_FN(perPixelEnvironmentMappingEnabled, bool, g_EnvMapManager
                         consoleSetPerPixelEnvironmentMapping, kEnvMapManagerConsoleTag)
 
 } // anonymous namespace
-#endif // BF2_PLUGIN_ABI_NATIVE
 
 // PE 0x101C2013 (19 B), `mov ecx, dword_10244A98; push offset 0x10267A38; call
 // 0x1007B570` - ConsoleObjects::registerConsoleObjects(this TU's list) - then `mov al, 1`. The native
@@ -153,9 +148,7 @@ BF2_CONSOLE_PROPERTY_FN(perPixelEnvironmentMappingEnabled, bool, g_EnvMapManager
 bool RendModule::init()
 {
     RD9_TRACE("dice::hfe::Rend::RendModule::init", 0x18);
-#if BF2_PLUGIN_ABI_NATIVE
     mainConsoleObjects->registerConsoleObjects(consoleBindingList(kEnvMapManagerConsoleTag));
-#endif
     return true;
 }
 
@@ -164,9 +157,7 @@ bool RendModule::init()
 bool RendModule::close()
 {
     RD9_TRACE("dice::hfe::Rend::RendModule::close", 0x1C);
-#if BF2_PLUGIN_ABI_NATIVE
     mainConsoleObjects->unregisterConsoleObjects(consoleBindingList(kEnvMapManagerConsoleTag));
-#endif
     return true;
 }
 

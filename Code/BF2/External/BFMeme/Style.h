@@ -22,7 +22,7 @@ struct Rect
 class Style : public Object
 {
 public:
-    Style(const char* name = 0, int font = 0);
+    Style(const char* name = 0, FontHandle font = 0);
     ~Style() override;
     TypeDescriptor* getType() override;
     unsigned int getObjectSize() override;
@@ -42,8 +42,8 @@ public:
     static TypeDescriptor* getClassType();         // 838C90, descriptor factory838D40
 
 protected:
-    int m_font;                                   // +04, integer handle
-    int m_shadowFont;                             // +08, not written by ctor
+    FontHandle m_font;                            // +04, integer handle
+    FontHandle m_shadowFont;                      // +08, not written by ctor
     char* m_name;                                 // +0C, owned clone
     float m_scale, m_reciprocalScale;              // +10/+14, not written by ctor
 };

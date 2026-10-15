@@ -4,14 +4,16 @@
 #ifndef BF2_GEOM_BUNDLEDMESH_H
 #define BF2_GEOM_BUNDLEDMESH_H
 #ifdef BF2_IMAGE_RENDDX9
-#include "../../RendDX9Abi/Vc71String.h"
-#include "../../RendDX9Abi/Vc71Vector.h"
+#include <string>
 #include "../Math/Mat4.h"
 #include "GeometryInstanceData.h"
 #include "../RendDX9/Ra/RaShader.h"
 #include <cstddef>
+#include <vector>
 
-namespace dice { namespace hfe { namespace geom {
+namespace dice { namespace hfe {
+namespace world { class LightSource; }
+namespace geom {
 class BundledMeshTemplate;
 class BundledMeshMaterial;
 struct BundledMeshLod;
@@ -88,7 +90,7 @@ public:
     void* m_heightmapCluster;                             // +278
     Vec2 m_horizontalForward;                           // +27C
     BundledMeshLod* m_lodRecord;                         // +284
-    vc71::vector_layout* m_lodMaterials;                  // +288 vector<BundledMeshMaterial*>
+    std::vector<BundledMeshMaterial*>* m_lodMaterials;    // +288 the template's selected lod list
     unsigned int m_geomIndex;                            // +28C
     unsigned int m_lodIndex;                             // +290
     int m_animationIndex;                               // +294
@@ -100,8 +102,8 @@ public:
     unsigned int m_shadowCasterFrame;                    // +2B0
     void* m_shadowProjection;                            // +2B4
     void* m_nextGeometry;                                // +2B8
-    vc71::vector_layout m_lights;                        // +2BC
-    vc71::vector_layout m_lightRecords;                  // +2CC dx9rend::Ra::RaLightRecord
+    std::vector<world::LightSource*> m_lights;           // +2BC
+    std::vector<dx9rend::Ra::RaLightRecord> m_lightRecords;   // +2CC
     unsigned char m_castsShadow;                        // +2DC
     unsigned char m_animationExplicit;                   // +2DD
     unsigned char m_lodExplicit;                         // +2DE
@@ -110,27 +112,8 @@ public:
     unsigned int m_heightFrame;                          // +2E4
     float m_shadowFade;                                  // +2E8
     unsigned char m_pad2EC[4];
-    double m_shadowFadeTime;                             // +2F0
+    double m_shadowFadeTime;                             // +2F0, retail allocation 0x2F8 (10104D10)
 };
-static_assert(sizeof(BundledMesh)==0x2F8,"10104D10 allocation");
-#define BF2_BM_OFFSET(member,offset) static_assert(offsetof(BundledMesh,member)==offset,#member)
-BF2_BM_OFFSET(m_name,0x4); BF2_BM_OFFSET(m_refCount,0x30);
-BF2_BM_OFFSET(m_parameters,0x34); BF2_BM_OFFSET(m_template,0x258);
-BF2_BM_OFFSET(m_partTransforms,0x25C); BF2_BM_OFFSET(m_inverseTransform,0x260);
-BF2_BM_OFFSET(m_distanceToCamera,0x264); BF2_BM_OFFSET(m_fov,0x268);
-BF2_BM_OFFSET(m_heightOverTerrain,0x26C); BF2_BM_OFFSET(m_shadowSunHeight,0x270);
-BF2_BM_OFFSET(m_underRoof,0x274); BF2_BM_OFFSET(m_heightmapCluster,0x278);
-BF2_BM_OFFSET(m_horizontalForward,0x27C); BF2_BM_OFFSET(m_lodRecord,0x284);
-BF2_BM_OFFSET(m_lodMaterials,0x288); BF2_BM_OFFSET(m_geomIndex,0x28C);
-BF2_BM_OFFSET(m_lodIndex,0x290); BF2_BM_OFFSET(m_animationIndex,0x294);
-BF2_BM_OFFSET(m_shaderLod,0x298); BF2_BM_OFFSET(m_dword29C,0x29C);
-BF2_BM_OFFSET(m_uvMatrices,0x2A8); BF2_BM_OFFSET(m_ownerObject,0x2AC);
-BF2_BM_OFFSET(m_shadowCasterFrame,0x2B0); BF2_BM_OFFSET(m_shadowProjection,0x2B4);
-BF2_BM_OFFSET(m_nextGeometry,0x2B8); BF2_BM_OFFSET(m_lights,0x2BC);
-BF2_BM_OFFSET(m_lightRecords,0x2CC); BF2_BM_OFFSET(m_castsShadow,0x2DC);
-BF2_BM_OFFSET(m_lodFrame,0x2E0); BF2_BM_OFFSET(m_heightFrame,0x2E4);
-BF2_BM_OFFSET(m_shadowFade,0x2E8); BF2_BM_OFFSET(m_shadowFadeTime,0x2F0);
-#undef BF2_BM_OFFSET
 extern void* const g_bundledMeshVtable[62];
 const Mat4& bundledMeshZeroMatrix();                       // 10079290, shared zero matrix
 bool bundledMeshTraceAdditive(BundledMesh*,const Vec3& origin,const Vec3& direction,

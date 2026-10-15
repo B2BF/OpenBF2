@@ -23,6 +23,10 @@
 #include "../Sound/BfSound.h"
 #include <cfloat>
 #include <new>
+#if !defined(_M_IX86)
+#include <cmath>
+#include <cstring>
+#endif
 
 namespace dice { namespace hfe {
 extern IBase* squadManager;
@@ -34,6 +38,7 @@ bool hasAbilityPosition(const Vec2& position)
 {
     const float sentinel = -4000.0f;
     const float epsilon = FLT_EPSILON;
+#if defined(_M_IX86)
     bool valid;
     __asm {
         mov ecx, position
@@ -50,6 +55,13 @@ bool hasAbilityPosition(const Vec2& position)
         setp valid
     }
     return valid;
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    // Vec2 +4 is y and +0 x. setp after test ah,41h: valid above epsilon or unordered.
+    const double sum = std::fabs(static_cast<double>(position.y) - sentinel)
+                     + std::fabs(static_cast<double>(position.x) - sentinel);
+    return !(sum <= epsilon);
+#endif
 }
 
 // Preserve both the unrounded x87 sum and the two producers' distinct store
@@ -57,6 +69,7 @@ bool hasAbilityPosition(const Vec2& position)
 void beginSupplyCooldown(double now, const float& duration, float& remaining,
                          bool& reloading, float& deadline)
 {
+#if defined(_M_IX86)
     __asm {
         fld now
         mov eax, duration
@@ -69,11 +82,21 @@ void beginSupplyCooldown(double now, const float& duration, float& remaining,
         mov ecx, deadline
         fstp dword ptr [ecx]
     }
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    // Duration is read once, before the raw copy; the shipped store order is kept.
+    const float length = duration;
+    const double sum = now + length;
+    std::memcpy(&remaining, &length, sizeof remaining);
+    reloading = true;
+    deadline = static_cast<float>(sum);
+#endif
 }
 
 void beginVehicleCooldown(double now, const float& duration, float& remaining,
                           float& deadline, bool& reloading)
 {
+#if defined(_M_IX86)
     __asm {
         fld now
         mov eax, duration
@@ -86,6 +109,15 @@ void beginVehicleCooldown(double now, const float& duration, float& remaining,
         mov ecx, reloading
         mov byte ptr [ecx], 1
     }
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    // Duration is read once, before the raw copy; the shipped store order is kept.
+    const float length = duration;
+    const double sum = now + length;
+    std::memcpy(&remaining, &length, sizeof remaining);
+    deadline = static_cast<float>(sum);
+    reloading = true;
+#endif
 }
 }
 

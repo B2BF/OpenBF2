@@ -1,6 +1,6 @@
 // SwiffPlayer lifecycle, movie pipeline, renderer adapter, and ActionScript bindings.
 // [CHOSEN, not recovered] Rebuilt client/plugin ABI only: https://github.com/B2BF/OpenBF2/issues/7.
-// Internal fixed-layout storage and unresolved host frontiers remain in place.
+// Internal records use native std containers; unresolved host frontiers remain in place.
 
 #ifdef BF2_IMAGE_SWIFFPLAYER
 
@@ -8,8 +8,7 @@
 
 #include "../../../../RendDX9Abi/BfMemory.h"
 #include "../../../../RendDX9Abi/HfeAbi.h"
-#include "../../../../RendDX9Abi/Vc71String.h"   // retained fixed-layout internal strings
-#include "../../../../RendDX9Abi/Vc71Vector.h"   // the +1104 queued-mouse vector
+#include <string>
 
 #include "../../../Menu/ISwiffHost.h" // native storage calls share the owner's std::string ABI
 #include "../../../Menu/IServerBrowser.h"  // stopBrowser's list handle (+0x30 stopUpdate)
@@ -34,6 +33,8 @@
 
 #include <new>
 #include <string>
+#include <vector>
+#include <stddef.h>         // offsetof: SwiffRenderHandler::renderContext
 #include <string.h>
 #include <stdio.h>         // memset, memcpy
 #include <time.h>          // time(): the stamp the host records carry
@@ -52,11 +53,6 @@ extern IBase*         fileManager;
 
 namespace ui {
 
-
-// The internal object layout remains fixed while the rebuilt client and gameswf share it.
-// Reject an accidental reorder or added member at compile time.
-
-static_assert(sizeof(SwiffPlayer) == 1120, "SwiffPlayer must be 0x460 bytes (IDB dice_hfe_SwiffPlayer_BF2)");
 
 // dword_100F2F20 in the shipped image - the ctor stores `this` here. Read by the fscommand sink to
 // find the live player. File-scope, one instance, matching the shipped global.
@@ -324,7 +320,7 @@ void as_cursor_setCursor(const gameswf::fn_call& fn)
     SWF_AS_TRACE("as_cursor_setCursor");
     ISwiffHost* h = g_swiffPlayerInstance->getSwiffHost();
     const std::string name(fn.arg(0).to_string());
-    (void) h->setPlayerRenderCapability0(static_cast<int>(reinterpret_cast<intptr_t>(&name)));   // +0x68
+    (void) h->setPlayerRenderCapability0(reinterpret_cast<intptr_t>(&name));   // +0x68
 }
 
 // Requests the cursor name through a preconstructed string. Returns the string, or the
@@ -334,7 +330,7 @@ void as_cursor_getCursor(const gameswf::fn_call& fn)
     SWF_AS_TRACE("as_cursor_getCursor");
     ISwiffHost* h = g_swiffPlayerInstance->getSwiffHost();
     std::string out;
-    const bool ok = h->setPlayerRenderCapability1(static_cast<int>(reinterpret_cast<intptr_t>(&out)));   // +0x70
+    const bool ok = h->setPlayerRenderCapability1(reinterpret_cast<intptr_t>(&out));   // +0x70
     fn.result->set_tu_string(tu_string(ok ? out.c_str() : "undefined"));
 }
 
@@ -484,33 +480,6 @@ void as_profile_getLoginStatus(const gameswf::fn_call& fn)
         status = current ? 1.0 : 0.0;
     }
     fn.result->set_double(status);
-}
-
-// The original VC7.1 LocalProfileManager vector: the allocator word first, then first/last/end
-// (sub_10060030 zeroes the three words after a one-word head and reads the count from them). A
-// three-word layout put the callee's writes one slot off: retail runs R..AA counted 0 profiles and
-// the movie took the first-time "newbie" page instead of "login".
-struct Vc71Vector { int alloc; char* first; char* last; char* end; };
-
-// One local profile record (176 bytes): six VC7.1 std::strings, destroyed in the shipped order by
-// sub_1001DC10 (+140, +112, +84, +56, +28, +0), then the vector buffer goes back to the engine heap
-// (sub_1001FE70 -> bf_free). The retained vc71::string storage now uses the shared native CRT.
-// Fields the original list bodies read: [0] the profile id GlobalSettings compares,
-// [1] profileName, [2] the offline display name, [3] the GameSpy nick (empty = offline), [5] password.
-struct LocalProfileRecord { vc71::string s[6]; char tail[8]; };
-static_assert(sizeof(LocalProfileRecord) == 176, "LocalProfileRecord must be 176 bytes (sub_10015040)");
-
-static void destroyLocalProfiles(Vc71Vector& v)
-{
-    if (!v.first) return;
-    const int n = static_cast<int>((v.last - v.first) / 176);
-    for (int i = 0; i < n; ++i)
-    {
-        LocalProfileRecord* r = reinterpret_cast<LocalProfileRecord*>(v.first + 176 * i);
-        for (int k = 5; k >= 0; --k) r->s[k].~string();
-    }
-    ::renddx9abi::engineFree(v.first);
-    v.first = v.last = v.end = 0;
 }
 
 // unguarded registry lookup; absent singleton -> numeric 0.
@@ -2224,7 +2193,7 @@ void as_general_getListEntries(const gameswf::fn_call& fn)
         int total = 0;
         int greyed = 0, emittedRows = 0;   // diagnostic only, reported under the AS log below
         int gateNoMod = 0, gateVersion = 0, gateNoMap = 0;
-        vc71::string firstMod, firstMap;   // retained internal diagnostic storage
+        std::string firstMod, firstMap;   // retained internal diagnostic storage
         IModInfo* modInfo = static_cast<IModInfo*>(h->getModInfo());                     // +0x120
         const int count = serverRecordCount(h->getServerList(std::string("inet"))->getRecords());
         total = count;
@@ -3021,11 +2990,8 @@ void as_general_getListEntries(const gameswf::fn_call& fn)
 // The callback reads no arguments and leaves the AS result untouched.
 struct SwiffHostRequest
 {
-    int           id;
-    int           alloc;
-    vc71::string* first;
-    vc71::string* last;
-    vc71::string* end;
+    int                       id;     // +0
+    std::vector<std::string> args;   // +4 (retail: a VC7.1 vector of strings)
 };
 extern "C" __declspec(dllimport) void* __stdcall SetCursor(void* cursor);
 void as_profile_logout(const gameswf::fn_call& fn)
@@ -3784,7 +3750,7 @@ static bool hostRankInfo(void* h, int playerId, RankChangeRecord& r)
 
 // ISwiffHost supplies the rank's locale key ("-" when unknown) and next promotion/demotion rank.
 // Copy the native string result into the retained internal key storage.
-static void hostRankKey(void* h, int rankId, vc71::string& key)
+static void hostRankKey(void* h, int rankId, std::string& key)
 {
     if (!h) return;
     key = static_cast<ISwiffHost*>(h)->getRankName(rankId).c_str();
@@ -3797,7 +3763,7 @@ static int hostNextRank(void* h, int rankId)
 
 // Locale.getString through SwiffHost +168 (getLocalizedString) into a wide string - defined with the
 // PlayerStats favourites below, used by every localising row.
-static void hostLocaliseKey(void* h, const vc71::string& key, vc71::wstring& out);
+static void hostLocaliseKey(void* h, const std::string& key, std::wstring& out);
 
 // sub_10059A80 - dice.bf2.PlayerStats.getPromotedRank(): the record's rank when the host filled it
 // and promoted >= 1, else 0.
@@ -3852,10 +3818,10 @@ void as_playerstats_getRankString(const gameswf::fn_call& fn)
     SWF_AS_TRACE("as_playerstats_getRankString");
     void* h = asHost();
     const int rank = fn.nargs >= 1 ? (int) fn.arg(0).to_number() : 0;
-    vc71::wstring text;
+    std::wstring text;
     if (h)
     {
-        vc71::string key;
+        std::string key;
         hostRankKey(h, rank, key);
         hostLocaliseKey(h, key, text);
     }
@@ -3863,118 +3829,143 @@ void as_playerstats_getRankString(const gameswf::fn_call& fn)
         gameswf::create_dice_string_object(reinterpret_cast<const Uint16*>(text.c_str()), (int) text.size()));
 }
 
-// The player stats record SwiffHost +432(playerId, record&) fills: 3720 bytes, laid out by the
-// shipped ctor/dtor pair sub_10020A80 / sub_10020E80 - VC7.1 std::strings at the byte offsets below
-// (14 singles, 19 pairs at 528+68k {+0,+40}, 10 at 1820+40k, 7 pairs at 2224+64k {+0,+36}, 13 pairs
-// at 2676+68k {+0,+36}, 4 singles), a vector at 3688 (allocator word, first/last/end zeroed), the
-// creation time at 3704, every other word zero. Only what the callers read is interpreted: the rank
-// id at +160 (getCurrentRankId). The vector at 3688 holds 40-byte elements with a std::string at
-// +12 (sub_1001F210 destroys each, then bf_frees the buffer).
+// The player stats record SwiffHost +432(playerId, record&) fills, laid out by the shipped
+// ctor/dtor pair sub_10020A80 / sub_10020E80 (the +N comments are the retail offsets of its
+// 3720-byte VC7.1 layout). Construction zeroes every int, leaves every string empty and stamps the
+// creation time. Only what the callers read is interpreted: the rank id at +160
+// (getCurrentRankId), the rows the playerStats lists show, the favourites and the opponent/victim
+// pairs. The map rows (+3688) are 40-byte retail elements with a string at +12.
 struct PlayerStatsRecord
 {
-    enum { SIZE = 3720 };
-    unsigned char bytes[SIZE];
-    static void offsets(int* out, int& n)
+    struct Weapon                          // 68 bytes in retail
     {
-        static const int singles[] = { 4, 44, 72, 192, 220, 248, 276, 304, 344, 372, 400, 428, 456, 492, 3564, 3596, 3628, 3660 };
-        n = 0;
-        for (int i = 0; i < (int) (sizeof(singles) / sizeof(singles[0])); ++i) out[n++] = singles[i];
-        for (int k = 0; k < 19; ++k) { out[n++] = 528 + 68 * k; out[n++] = 528 + 68 * k + 40; }
-        for (int k = 0; k < 10; ++k) { out[n++] = 1820 + 40 * k; }
-        for (int k = 0; k < 7; ++k)  { out[n++] = 2224 + 64 * k; out[n++] = 2224 + 64 * k + 36; }
-        for (int k = 0; k < 13; ++k) { out[n++] = 2676 + 68 * k; out[n++] = 2676 + 68 * k + 36; }
-    }
-    PlayerStatsRecord()
+        std::string time;                 // +0
+        int          kills    = 0;         // +28
+        int          deaths   = 0;         // +32
+        int          accuracy = 0;         // +36
+        std::string kd;                   // +40
+    };
+    struct Army                            // 40 bytes in retail
     {
-        ::memset(bytes, 0, SIZE);
-        int off[128]; int n; offsets(off, n);
-        for (int i = 0; i < n; ++i) new (bytes + off[i]) vc71::string("");
-        *reinterpret_cast<int*>(bytes + 3704) = (int) _time64(0);
-    }
-    ~PlayerStatsRecord()
+        std::string time;                 // +0
+        int          wins      = 0;        // +28
+        int          losses    = 0;        // +32
+        int          bestRound = 0;        // +36
+    };
+    struct Kit                             // 64 bytes in retail
     {
-        int off[128]; int n; offsets(off, n);
-        for (int i = n - 1; i >= 0; --i) reinterpret_cast<vc71::string*>(bytes + off[i])->~string();
-        char* first = *reinterpret_cast<char**>(bytes + 3692);
-        char* last  = *reinterpret_cast<char**>(bytes + 3696);
-        if (first)
-        {
-            for (char* e = first; e != last; e += 40) reinterpret_cast<vc71::string*>(e + 12)->~string();
-            ::renddx9abi::engineFree(first);
-        }
-    }
+        std::string time;                 // +0
+        int          kills  = 0;           // +28
+        int          deaths = 0;           // +32
+        std::string kd;                   // +36
+    };
+    struct Vehicle                         // 68 bytes in retail
+    {
+        std::string time;                 // +0
+        int          kills     = 0;        // +28
+        int          deaths    = 0;        // +32
+        std::string kd;                   // +36
+        int          roadKills = 0;        // +64
+    };
+    struct MapRow                          // 40 bytes in retail
+    {
+        int          id     = 0;           // +0
+        int          wins   = 0;           // +4
+        int          losses = 0;           // +8
+        std::string time;                 // +12
+    };
+
+    int          playerId = 0;                                                    // +0
+    std::string nick;                                                            // +4
+    int          scor = 0, wins = 0, loss = 0;                                    // +32 +36 +40
+    std::string jond, lbtl;                                                      // +44 +72
+    int          twsc = 0, cpcp = 0, cacp = 0, dfcp = 0, kila = 0;                // +100..+116
+    int          heal = 0, rviv = 0, rsup = 0, rpar = 0, tgte = 0;                // +120..+136
+    int          dkas_dsab = 0;                                                   // +140
+    int          unknown144[3] = { 0, 0, 0 };                                     // +144..+152 no reader
+    int          cdsc = 0, rank = 0;                                              // +156 +160
+    int          unknown164 = 0;                                                  // +164 no reader
+    int          cmsc = 0, kick = 0, ban = 0, kill = 0, deth = 0, suic = 0;       // +168..+188
+    std::string ospm, klpm, dtpm, klpr, dtpr;                                    // +192..+304
+    int          bksk = 0, wdsk = 0, bbrs = 0;                                    // +332..+340
+    std::string tcdr, tsql, tsqm, tlwf;                                          // +344..+428
+    std::string mvns;                                                            // +456
+    int          mvks = 0, mvrs = 0;                                              // +484 +488
+    std::string vmns;                                                            // +492
+    int          vmks = 0, vmrs = 0;                                              // +520 +524
+    Weapon       weapons[19];                                                     // +528
+    Army         armies[10];                                                      // +1820
+    int          osaa = 0;                                                        // +2220
+    Kit          kits[7];                                                         // +2224
+    int          vrk = 0;                                                         // +2672
+    Vehicle      vehicles[13];                                                    // +2676
+    int          fkit = 0; std::string fkitTime;                                 // +3560 +3564
+    int          fveh = 0; std::string fvehTime;                                 // +3592 +3596
+    int          fwea = 0; std::string fweaTime;                                 // +3624 +3628
+    int          fmap = 0; std::string fmapTime;                                 // +3656 +3660
+    std::vector<MapRow> maps;                                                     // +3688
+    int          fetchedAt;                                                       // +3704
+    int          de6 = 0, de7 = 0, de8 = 0;                                       // +3708..+3716
+
+    PlayerStatsRecord() : fetchedAt((int) _time64(0)) {}
 };
 
-// The native host's typed SwiffPlayerStatsRecord (Menu/ISwiffHost.h) laid out into the VC7.1 byte
-// image the rows below read: the shipped offsets, each string assigned into the image's
-// pre-constructed vc71::string. The map rows go into the image's vector at +3688 (40-byte
-// {id, wins, losses, time} elements on the engine heap, which the image's destructor frees) since
-// getListEntries("playerStats 16") walks them.
+// The native host's typed SwiffPlayerStatsRecord (Menu/ISwiffHost.h) copied into the record the
+// rows below read, each string assigned from its c_str(). The map rows go into the record's
+// vector since getListEntries("playerStats 16") walks them.
 static void statsRecordToImage(const dice::hfe::SwiffPlayerStatsRecord& r, PlayerStatsRecord& img)
 {
-    unsigned char* b = img.bytes;
-    struct W
-    {
-        static void i(unsigned char* b, int off, int v)                { *reinterpret_cast<int*>(b + off) = v; }
-        static void s(unsigned char* b, int off, const std::string& v) { *reinterpret_cast<vc71::string*>(b + off) = v.c_str(); }
-    };
-    W::i(b, 0, r.playerId); W::s(b, 4, r.nick); W::i(b, 32, r.scor); W::i(b, 36, r.wins); W::i(b, 40, r.loss);
-    W::s(b, 44, r.jond); W::s(b, 72, r.lbtl);
-    W::i(b, 100, r.twsc); W::i(b, 104, r.cpcp); W::i(b, 108, r.cacp); W::i(b, 112, r.dfcp); W::i(b, 116, r.kila);
-    W::i(b, 120, r.heal); W::i(b, 124, r.rviv); W::i(b, 128, r.rsup); W::i(b, 132, r.rpar); W::i(b, 136, r.tgte);
-    W::i(b, 140, r.dkas_dsab); W::i(b, 156, r.cdsc); W::i(b, 160, r.rank); W::i(b, 168, r.cmsc); W::i(b, 172, r.kick);
-    W::i(b, 176, r.ban); W::i(b, 180, r.kill); W::i(b, 184, r.deth); W::i(b, 188, r.suic);
-    W::s(b, 192, r.ospm); W::s(b, 220, r.klpm); W::s(b, 248, r.dtpm); W::s(b, 276, r.klpr); W::s(b, 304, r.dtpr);
-    W::i(b, 332, r.bksk); W::i(b, 336, r.wdsk); W::i(b, 340, r.bbrs);
-    W::s(b, 344, r.tcdr); W::s(b, 372, r.tsql); W::s(b, 400, r.tsqm); W::s(b, 428, r.tlwf);
-    W::s(b, 456, r.mvns); W::i(b, 484, r.mvks); W::i(b, 488, r.mvrs);
-    W::s(b, 492, r.vmns); W::i(b, 520, r.vmks); W::i(b, 524, r.vmrs);
+    img.playerId = r.playerId; img.nick = r.nick.c_str(); img.scor = r.scor; img.wins = r.wins; img.loss = r.loss;
+    img.jond = r.jond.c_str(); img.lbtl = r.lbtl.c_str();
+    img.twsc = r.twsc; img.cpcp = r.cpcp; img.cacp = r.cacp; img.dfcp = r.dfcp; img.kila = r.kila;
+    img.heal = r.heal; img.rviv = r.rviv; img.rsup = r.rsup; img.rpar = r.rpar; img.tgte = r.tgte;
+    img.dkas_dsab = r.dkas_dsab; img.cdsc = r.cdsc; img.rank = r.rank; img.cmsc = r.cmsc; img.kick = r.kick;
+    img.ban = r.ban; img.kill = r.kill; img.deth = r.deth; img.suic = r.suic;
+    img.ospm = r.ospm.c_str(); img.klpm = r.klpm.c_str(); img.dtpm = r.dtpm.c_str(); img.klpr = r.klpr.c_str(); img.dtpr = r.dtpr.c_str();
+    img.bksk = r.bksk; img.wdsk = r.wdsk; img.bbrs = r.bbrs;
+    img.tcdr = r.tcdr.c_str(); img.tsql = r.tsql.c_str(); img.tsqm = r.tsqm.c_str(); img.tlwf = r.tlwf.c_str();
+    img.mvns = r.mvns.c_str(); img.mvks = r.mvks; img.mvrs = r.mvrs;
+    img.vmns = r.vmns.c_str(); img.vmks = r.vmks; img.vmrs = r.vmrs;
     for (int k = 0; k < 19; k++)
     {
-        const int o = 528 + 68 * k;
-        W::s(b, o, r.weapons[k].time); W::i(b, o + 28, r.weapons[k].kills); W::i(b, o + 32, r.weapons[k].deaths);
-        W::i(b, o + 36, r.weapons[k].accuracy); W::s(b, o + 40, r.weapons[k].kd);
+        PlayerStatsRecord::Weapon& o = img.weapons[k];
+        o.time = r.weapons[k].time.c_str(); o.kills = r.weapons[k].kills; o.deaths = r.weapons[k].deaths;
+        o.accuracy = r.weapons[k].accuracy; o.kd = r.weapons[k].kd.c_str();
     }
     for (int k = 0; k < 10; k++)
     {
-        const int o = 1820 + 40 * k;
-        W::s(b, o, r.armies[k].time); W::i(b, o + 28, r.armies[k].wins); W::i(b, o + 32, r.armies[k].losses);
-        W::i(b, o + 36, r.armies[k].bestRound);
+        PlayerStatsRecord::Army& o = img.armies[k];
+        o.time = r.armies[k].time.c_str(); o.wins = r.armies[k].wins; o.losses = r.armies[k].losses;
+        o.bestRound = r.armies[k].bestRound;
     }
-    W::i(b, 2220, r.osaa);
+    img.osaa = r.osaa;
     for (int k = 0; k < 7; k++)
     {
-        const int o = 2224 + 64 * k;
-        W::s(b, o, r.kits[k].time); W::i(b, o + 28, r.kits[k].kills); W::i(b, o + 32, r.kits[k].deaths);
-        W::s(b, o + 36, r.kits[k].kd);
+        PlayerStatsRecord::Kit& o = img.kits[k];
+        o.time = r.kits[k].time.c_str(); o.kills = r.kits[k].kills; o.deaths = r.kits[k].deaths;
+        o.kd = r.kits[k].kd.c_str();
     }
-    W::i(b, 2672, r.vrk);
+    img.vrk = r.vrk;
     for (int k = 0; k < 13; k++)
     {
-        const int o = 2676 + 68 * k;
-        W::s(b, o, r.vehicles[k].time); W::i(b, o + 28, r.vehicles[k].kills); W::i(b, o + 32, r.vehicles[k].deaths);
-        W::s(b, o + 36, r.vehicles[k].kd); W::i(b, o + 64, r.vehicles[k].roadKills);
+        PlayerStatsRecord::Vehicle& o = img.vehicles[k];
+        o.time = r.vehicles[k].time.c_str(); o.kills = r.vehicles[k].kills; o.deaths = r.vehicles[k].deaths;
+        o.kd = r.vehicles[k].kd.c_str(); o.roadKills = r.vehicles[k].roadKills;
     }
-    W::i(b, 3560, r.fkit); W::s(b, 3564, r.fkitTime); W::i(b, 3592, r.fveh); W::s(b, 3596, r.fvehTime);
-    W::i(b, 3624, r.fwea); W::s(b, 3628, r.fweaTime); W::i(b, 3656, r.fmap); W::s(b, 3660, r.fmapTime);
-    W::i(b, 3704, (int) r.fetchedAt); W::i(b, 3708, r.de6); W::i(b, 3712, r.de7); W::i(b, 3716, r.de8);
+    img.fkit = r.fkit; img.fkitTime = r.fkitTime.c_str(); img.fveh = r.fveh; img.fvehTime = r.fvehTime.c_str();
+    img.fwea = r.fwea; img.fweaTime = r.fweaTime.c_str(); img.fmap = r.fmap; img.fmapTime = r.fmapTime.c_str();
+    img.fetchedAt = (int) r.fetchedAt; img.de6 = r.de6; img.de7 = r.de7; img.de8 = r.de8;
     const unsigned int maps = static_cast<unsigned int>(r.maps.size());
     if (maps)
     {
-        char* first = static_cast<char*>(::renddx9abi::engineAlloc(40 * maps));
-        if (first)
+        img.maps.resize(maps);
+        for (unsigned int k = 0; k < maps; ++k)
         {
-            for (unsigned int k = 0; k < maps; ++k)
-            {
-                char* e = first + 40 * k;
-                *reinterpret_cast<int*>(e)     = r.maps[k].id;
-                *reinterpret_cast<int*>(e + 4) = r.maps[k].wins;
-                *reinterpret_cast<int*>(e + 8) = r.maps[k].losses;
-                new (e + 12) vc71::string(r.maps[k].time.c_str());
-            }
-            *reinterpret_cast<char**>(b + 3692) = first;                // {alloc, first, last, end}
-            *reinterpret_cast<char**>(b + 3696) = first + 40 * maps;
-            *reinterpret_cast<char**>(b + 3700) = first + 40 * maps;
+            PlayerStatsRecord::MapRow& e = img.maps[k];
+            e.id     = r.maps[k].id;
+            e.wins   = r.maps[k].wins;
+            e.losses = r.maps[k].losses;
+            e.time   = r.maps[k].time.c_str();
         }
     }
 }
@@ -4008,26 +3999,16 @@ void as_profile_getCurrentRankId(const gameswf::fn_call& fn)
         const int id = hostSelectedPlayerId(h);
         PlayerStatsRecord* rec = new PlayerStatsRecord();
         (void) hostFillStatsRecord(h, id, *rec);
-        v = (double) *reinterpret_cast<int*>(rec->bytes + 160);
+        v = (double) rec->rank;
         delete rec;
     }
     fn.result->set_double(v);
 }
 
-// Retained original message layout: {type, code, text}, with a VC7.1 string.
+// Retained original message record: {type, code, text}.
 // Shipped getLastType/getLastText/getLastCode constructed it before the host filled it.
 // Active native callbacks exchange the typed SwiffHostMessage instead.
-struct HostMessage { int type; int code; vc71::string text; };
-
-// The VC7.1 layout of dice::hfe::ProfileInformation (Game/ProfileManager.h): the profile id, six
-// 28-byte strings and four ints, 188 bytes - what BF2.exe 4A4AD0 reads and the shipped row builds
-// on its stack (sub_1005CEC0 constructs it: id 0, six empty strings; sub_1005D0D0 destroys it).
-struct Vc71ProfileInformation
-{
-    int profileId;
-    vc71::string nick, uniqueNick, email, firstName, lastName, country;
-    int sex, birthYear, birthMonth, birthDay;
-};
+struct HostMessage { int type; int code; std::string text; };
 
 // Creates an online account and local profile from the movie's twelve account arguments.
 // Requires initialized host/profile managers. A missing disc, password mismatch or failed
@@ -4191,7 +4172,7 @@ void as_messagehandler_raiseMessage(const gameswf::fn_call& fn)
 // dice.MessageHandler.getPunkBusterMessage(), and
 // promoted. The global player's host (unguarded), then its +0x354, and the text of the string it
 // answers published as a string - the VC7.1 small-buffer read `cmp [eax+18h],10h` is exactly
-// vc71::string::c_str(). No argument, no check. +0x354 is the slot this tree calls getServerMod
+// std::string::c_str(). No argument, no check. +0x354 is the slot this tree calls getServerMod
 // (BF2.exe 0x489060, `lea eax,[ecx+0F30h]`: the host's +0xF30 string, the one +0x350 assigns);
 // the shipped reads that same field as the PunkBuster message. [INFERRED] which name is the source's.
 void as_messagehandler_getPunkBusterMessage(const gameswf::fn_call& fn)
@@ -4360,7 +4341,7 @@ void as_profile_isMyProfile(const gameswf::fn_call& fn)
 
 // Looks up equipment case-insensitively across teams/kits and copies its localization keys.
 // Copy native host records into the retained internal key storage.
-struct EquipmentKeys { vc71::string name, displayKey, descriptionKey; };
+struct EquipmentKeys { std::string name, displayKey, descriptionKey; };
 static bool findEquipmentByName(const char* name, EquipmentKeys& out)
 {
     if (!classManager) return false;
@@ -4393,9 +4374,9 @@ static bool findEquipmentByName(const char* name, EquipmentKeys& out)
 
 // sub_1005CF10 - the shared tail: Locale.getString through SwiffHost +168 (wide out-param, narrow
 // key) into a dice String object (narrow part empty, as shipped - ledger #38).
-static void setLocalisedStringObject(const gameswf::fn_call& fn, const vc71::string& key)
+static void setLocalisedStringObject(const gameswf::fn_call& fn, const std::string& key)
 {
-    vc71::wstring out;
+    std::wstring out;
     hostLocaliseKey(asHost(), key, out);
     fn.result->set_as_object_interface(gameswf::create_dice_string_object(reinterpret_cast<const unsigned short*>(out.c_str()), (int) out.size()));
 }
@@ -4406,7 +4387,7 @@ static void setLocalisedStringObject(const gameswf::fn_call& fn, const vc71::str
 void as_profile_getEquipmentName(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_profile_getEquipmentName");
-    vc71::string name(fn.nargs >= 1 ? fn.arg(0).to_string() : "");
+    std::string name(fn.nargs >= 1 ? fn.arg(0).to_string() : "");
     EquipmentKeys rec;
     if (!findEquipmentByName(name.c_str(), rec)) { fn.result->set_as_object_interface(gameswf::create_dice_string_object(0, 0)); return; }
     setLocalisedStringObject(fn, rec.displayKey.size() ? rec.displayKey : rec.name);
@@ -4417,7 +4398,7 @@ void as_profile_getEquipmentName(const gameswf::fn_call& fn)
 void as_profile_getEquipmentDescription(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_profile_getEquipmentDescription");
-    vc71::string name(fn.nargs >= 1 ? fn.arg(0).to_string() : "");
+    std::string name(fn.nargs >= 1 ? fn.arg(0).to_string() : "");
     EquipmentKeys rec;
     if (!findEquipmentByName(name.c_str(), rec)) { fn.result->set_as_object_interface(gameswf::create_dice_string_object(0, 0)); return; }
     setLocalisedStringObject(fn, rec.descriptionKey);
@@ -4432,13 +4413,13 @@ void as_multiplay_getBrowser(const gameswf::fn_call& fn)
     fn.result->set_tu_string(tu_string(kind.c_str()));
 }
 
-// Keep the original unlock record fields alongside the native host's typed items.
+// The original unlock record fields with the native host's typed items as its vector.
 // The original 32-byte record held {time(now), int, count, int, a VC7.1 vector}; shipped callers
 // zeroed it, stamped time(), and freed its vector buffer afterwards (sub_1006DBA0 = bf_free).
 struct UnlockRecord
 {
-    int now; int a; int count; int b; Vc71Vector unlocks;
-    std::vector<IPlayerUnlocks::Item> items;   // the typed host's {id, status} list; the legacy field stays empty
+    int now; int a; int count; int b;
+    std::vector<IPlayerUnlocks::Item> items;   // +16: the typed host's {id, status} list
 };
 
 // Read the typed host's unlock entries.
@@ -4452,8 +4433,7 @@ static int unlockIdAt(const UnlockRecord& rec, int i)
 }
 static void releaseUnlockRecord(UnlockRecord& rec)
 {
-    if (rec.unlocks.first) ::renddx9abi::engineFree(rec.unlocks.first);
-    rec.unlocks.first = rec.unlocks.last = rec.unlocks.end = 0;
+    rec.items.clear();
 }
 
 // ISwiffHost +0x1C4 (getUnlocks): the ProfileManager's profile id keys the query;
@@ -4463,7 +4443,6 @@ static void fillUnlockRecord(void* h, UnlockRecord& rec)
 {
     const int id = hostPlayerId();
     rec.now = (int) ::time(0); rec.a = 0; rec.count = 0; rec.b = 0;
-    rec.unlocks.alloc = 0; rec.unlocks.first = rec.unlocks.last = rec.unlocks.end = 0;
     if (!h) return;
     IPlayerUnlocks::UnlockCache cache;
     cache.field0 = rec.now; cache.field4 = 0; cache.available = 0; cache.selected = 0;
@@ -4523,7 +4502,7 @@ static bool fetchPlayerStats(void* h, PlayerStatsRecord& rec)
 }
 
 // sub_100598E0 / sub_1005CF10 - Locale.getString through SwiffHost +168 into a wide string.
-static void hostLocaliseKey(void* h, const vc71::string& key, vc71::wstring& out)
+static void hostLocaliseKey(void* h, const std::string& key, std::wstring& out)
 {
     if (!h) return;
     std::wstring text;
@@ -4535,7 +4514,7 @@ static void hostLocaliseKey(void* h, const vc71::string& key, vc71::wstring& out
 // (getMapFromGameSpyId): {std::string key at +0, std::string name at +28, ...} - getFavouriteId
 // reads the key, getFavouriteName localises the name. Native reads the typed IModInfo::Map
 // (path, name - the same two leading strings).
-static bool hostMapStrings(void* h, int mapId, vc71::string& key, vc71::string& name)
+static bool hostMapStrings(void* h, int mapId, std::string& key, std::string& name)
 {
     if (!h) return false;
     IBase* mm = static_cast<ISwiffHost*>(h)->getModInfo();
@@ -4559,21 +4538,20 @@ void as_playerstats_getFavouriteName(const gameswf::fn_call& fn)
     PlayerStatsRecord* rec = new PlayerStatsRecord();
     if (!fetchPlayerStats(h, *rec)) { fn.result->set_double(0.0); delete rec; return; }
     const int kind = fn.nargs >= 1 ? (int) fn.arg(0).to_number() : -1;
-    vc71::wstring text(L" ");
+    std::wstring text(L" ");
     bool haveText = true;
-    const unsigned char* b = rec->bytes;
     switch (kind)
     {
-    case 0: { const int i = *reinterpret_cast<const int*>(b + 3560); if (i != -1 && i >= 0 && i < 7)  hostLocaliseKey(h, vc71::string(kFavouriteKitKeys[i]), text); break; }
-    case 1: { const int i = *reinterpret_cast<const int*>(b + 3592); if (i != -1 && i >= 0 && i < 7)  hostLocaliseKey(h, vc71::string(kFavouriteVehicleKeys[i]), text); break; }
-    case 2: { const int i = *reinterpret_cast<const int*>(b + 3624); if (i != -1 && i >= 0 && i < 13) hostLocaliseKey(h, vc71::string(kFavouriteWeaponKeys[i]), text); break; }
+    case 0: { const int i = rec->fkit; if (i != -1 && i >= 0 && i < 7)  hostLocaliseKey(h, std::string(kFavouriteKitKeys[i]), text); break; }
+    case 1: { const int i = rec->fveh; if (i != -1 && i >= 0 && i < 7)  hostLocaliseKey(h, std::string(kFavouriteVehicleKeys[i]), text); break; }
+    case 2: { const int i = rec->fwea; if (i != -1 && i >= 0 && i < 13) hostLocaliseKey(h, std::string(kFavouriteWeaponKeys[i]), text); break; }
     case 3: {
-        const int i = *reinterpret_cast<const int*>(b + 3656);
+        const int i = rec->fmap;
         if (i != -1)
         {
-            vc71::string key, mapName;
+            std::string key, mapName;
             if (hostMapStrings(h, i, key, mapName)) hostLocaliseKey(h, mapName, text);
-            else                                    hostLocaliseKey(h, vc71::string("Unknown Map"), text);
+            else                                    hostLocaliseKey(h, std::string("Unknown Map"), text);
         }
         break; }
     default: haveText = false; break;
@@ -4593,15 +4571,14 @@ void as_playerstats_getFavouriteId(const gameswf::fn_call& fn)
     PlayerStatsRecord* rec = new PlayerStatsRecord();
     if (!fetchPlayerStats(h, *rec)) { fn.result->set_double(0.0); delete rec; return; }
     const int kind = fn.nargs >= 1 ? (int) fn.arg(0).to_number() : -1;
-    const unsigned char* b = rec->bytes;
     char num[32]; num[0] = 0;
-    vc71::string out("");
+    std::string out("");
     switch (kind)
     {
-    case 0: ::sprintf_s(num, "%d", *reinterpret_cast<const int*>(b + 3560)); out = num; break;
-    case 1: ::sprintf_s(num, "%d", *reinterpret_cast<const int*>(b + 3592)); out = num; break;
-    case 2: ::sprintf_s(num, "%d", *reinterpret_cast<const int*>(b + 3624)); out = num; break;
-    case 3: { vc71::string key, mapName; if (hostMapStrings(h, *reinterpret_cast<const int*>(b + 3656), key, mapName)) out = key; break; }
+    case 0: ::sprintf_s(num, "%d", rec->fkit); out = num; break;
+    case 1: ::sprintf_s(num, "%d", rec->fveh); out = num; break;
+    case 2: ::sprintf_s(num, "%d", rec->fwea); out = num; break;
+    case 3: { std::string key, mapName; if (hostMapStrings(h, rec->fmap, key, mapName)) out = key; break; }
     default: break;
     }
     delete rec;
@@ -4617,16 +4594,17 @@ void as_playerstats_getFavouriteTime(const gameswf::fn_call& fn)
     PlayerStatsRecord* rec = new PlayerStatsRecord();
     if (!fetchPlayerStats(h, *rec)) { fn.result->set_double(0.0); delete rec; return; }
     const int kind = fn.nargs >= 1 ? (int) fn.arg(0).to_number() : -1;
-    static const int kTimeOffset[4] = { 3564, 3596, 3628, 3660 };
-    vc71::string out("");
-    if (kind >= 0 && kind < 4) out = *reinterpret_cast<const vc71::string*>(rec->bytes + kTimeOffset[kind]);
+    static std::string PlayerStatsRecord::* const kTime[4] = {
+        &PlayerStatsRecord::fkitTime, &PlayerStatsRecord::fvehTime, &PlayerStatsRecord::fweaTime, &PlayerStatsRecord::fmapTime };
+    std::string out("");
+    if (kind >= 0 && kind < 4) out = rec->*kTime[kind];
     delete rec;
     fn.result->set_tu_string(tu_string(out.c_str()));
 }
 
 // The shipped DLL's selected-unlock name (unk_100F8838, a std::string): written by selectFirstUnlock
 // and selectUnlock, read by getCurrentUnlockDescription and unlock.
-static vc71::string s_selectedUnlock("");
+static std::string s_selectedUnlock("");
 
 
 // bfhq statistics and equipment-list bindings for the selected statistics player.
@@ -4637,8 +4615,8 @@ static vc71::string s_selectedUnlock("");
 static int s_equipmentIndex = 0;
 // unk_100F88A8 / unk_100F888C - the equipment names Profile.setSelectedEquipment and
 // Profile.setSelectedUnlockEquipment store; "wpstats" / "wpunlockstats" read them.
-static vc71::string s_selectedEquipment("");
-static vc71::string s_selectedUnlockEquipment("");
+static std::string s_selectedEquipment("");
+static std::string s_selectedUnlockEquipment("");
 
 // sub_10017DC0 - dice.General.setEquipmentIndex(n): arg0 (the trapping accessor) to a number,
 // stored by `fistp` under a control word forced to chop (fnstcw / or ah,0Ch / fldcw at
@@ -4672,9 +4650,6 @@ struct StatsTable
 {
     ListResult& r;
     ListHost h;
-    const unsigned char* b;
-    int         i(int off) const { return *reinterpret_cast<const int*>(b + off); }
-    const char* s(int off) const { return reinterpret_cast<const vc71::string*>(b + off)->c_str(); }
     void label(int id, const char* key)
     {
         r.beginRow(id);
@@ -4682,17 +4657,17 @@ struct StatsTable
         hostLocalise(h, key, w);
         r.pushWide(w.c_str(), (int) w.size());
     }
-    void intRow(const char* key, int off) { label(0, key); r.pushInt(i(off)); }
-    void strRow(const char* key, int off) { label(0, key); r.pushNarrow(s(off)); }
+    void intRow(const char* key, int value) { label(0, key); r.pushInt(value); }
+    void strRow(const char* key, const std::string& value) { label(0, key); r.pushNarrow(value.c_str()); }
     // cases 12..15: the favourite index is the row id, "<kind>_%d" of it, then its time string.
-    void favouriteRow(const char* format, int indexOff, int timeOff)
+    void favouriteRow(const char* format, int index, const std::string& time)
     {
-        r.beginRow(i(indexOff));
+        r.beginRow(index);
         char text[64];
-        ::_snprintf(text, sizeof(text) - 1, format, i(indexOff));
+        ::_snprintf(text, sizeof(text) - 1, format, index);
         text[sizeof(text) - 1] = 0;
         r.pushNarrow(text);
-        r.pushNarrow(s(timeOff));
+        r.pushNarrow(time.c_str());
     }
 };
 
@@ -4704,7 +4679,7 @@ const char* const kArmyFlags[10] = {
 // sub_10003580 - the shipped in-place lowercase "unlockeq" keys its name map with: the five Latin-1
 // capitals Å Ä Ö Ü É become å ä ö ü é explicitly, every other byte goes through tolower() - which
 // under the "C" locale changes A-Z only. [INFERRED] the locale: BF2.exe sets none this DLL sees.
-void shippedLowercase(const char* src, vc71::string& out)
+void shippedLowercase(const char* src, std::string& out)
 {
     const unsigned int n = (unsigned int) ::strlen(src);
     char local[128];
@@ -4742,108 +4717,108 @@ static void listPlayerStats(const gameswf::fn_call& fn, ListResult& r, ListHost 
     const int playerId = hostSelectedPlayerId(h);
     PlayerStatsRecord* rec = new PlayerStatsRecord();
     (void) hostFillStatsRecord(h, playerId, *rec);
-    StatsTable t = { r, h, rec->bytes };
+    StatsTable t = { r, h };
     int total = 0;
     switch (which)
     {
     case 0:                                                   // the overview
-        t.intRow("BFHQ_overallscore",   32);
-        t.intRow("BFHQ_teamworkscore",  100);
-        t.intRow("BFHQ_combatscore",    168);
-        t.intRow("BFHQ_commanderscore", 156);
-        t.strRow("BFHQ_enlisted",       44);
-        t.strRow("BFHQ_lastbattle",     72);
+        t.intRow("BFHQ_overallscore",   rec->scor);           // +32
+        t.intRow("BFHQ_teamworkscore",  rec->twsc);           // +100
+        t.intRow("BFHQ_combatscore",    rec->cmsc);           // +168
+        t.intRow("BFHQ_commanderscore", rec->cdsc);           // +156
+        t.strRow("BFHQ_enlisted",       rec->jond);           // +44
+        t.strRow("BFHQ_lastbattle",     rec->lbtl);           // +72
         total = 6;
         break;
     case 1:                                                   // teamwork
-        t.intRow("BFHQ_teamworkscore",   100);
-        t.intRow("BFHQ_capturecp",       104);
-        t.intRow("BFHQ_capturecpassist", 108);
-        t.intRow("BFHQ_defendcp",        112);
-        t.intRow("BFHQ_killassist",      116);
-        t.intRow("BFHQ_heal",            120);
-        t.intRow("BFHQ_revive",          124);
-        t.intRow("BFHQ_support",         128);
-        t.intRow("BFHQ_repair",          132);
-        t.intRow("BFHQ_driverscore",     140);
+        t.intRow("BFHQ_teamworkscore",   rec->twsc);          // +100
+        t.intRow("BFHQ_capturecp",       rec->cpcp);          // +104
+        t.intRow("BFHQ_capturecpassist", rec->cacp);          // +108
+        t.intRow("BFHQ_defendcp",        rec->dfcp);          // +112
+        t.intRow("BFHQ_killassist",      rec->kila);          // +116
+        t.intRow("BFHQ_heal",            rec->heal);          // +120
+        t.intRow("BFHQ_revive",          rec->rviv);          // +124
+        t.intRow("BFHQ_support",         rec->rsup);          // +128
+        t.intRow("BFHQ_repair",          rec->rpar);          // +132
+        t.intRow("BFHQ_driverscore",     rec->dkas_dsab);     // +140
         total = 10;
         break;
     case 2:                                                   // combat
-        t.intRow("BFHQ_combatscore",     168);
-        t.intRow("BFHQ_kills",           180);
-        t.intRow("BFHQ_deaths",          184);
-        t.strRow("BFHQ_scoreperminute",  192);
-        t.strRow("BFHQ_killsperminute",  220);
-        t.strRow("BFHQ_deathsperminute", 248);
-        t.strRow("BFHQ_killsperround",   276);
-        t.strRow("BFHQ_deathsperround",  304);
-        t.intRow("BFHQ_killstreak",      332);
-        t.intRow("BFHQ_deathstreak",     336);
+        t.intRow("BFHQ_combatscore",     rec->cmsc);          // +168
+        t.intRow("BFHQ_kills",           rec->kill);          // +180
+        t.intRow("BFHQ_deaths",          rec->deth);          // +184
+        t.strRow("BFHQ_scoreperminute",  rec->ospm);          // +192
+        t.strRow("BFHQ_killsperminute",  rec->klpm);          // +220
+        t.strRow("BFHQ_deathsperminute", rec->dtpm);          // +248
+        t.strRow("BFHQ_killsperround",   rec->klpr);          // +276
+        t.strRow("BFHQ_deathsperround",  rec->dtpr);          // +304
+        t.intRow("BFHQ_killstreak",      rec->bksk);          // +332
+        t.intRow("BFHQ_deathstreak",     rec->wdsk);          // +336
         total = 10;
         break;
     case 3:                                                   // the personal panel
-        t.intRow("BFHQ_STATS_PERSONAL_globalscore",      32);
-        t.intRow("BFHQ_STATS_PERSONAL_wins",             36);
-        t.intRow("BFHQ_STATS_PERSONAL_loss",             40);
-        t.strRow("BFHQ_PROFILES_PLAYERINFO_enlisted",    44);
-        t.strRow("BFHQ_PROFILES_PLAYERINFO_lastbattle",  72);
+        t.intRow("BFHQ_STATS_PERSONAL_globalscore",      rec->scor);   // +32
+        t.intRow("BFHQ_STATS_PERSONAL_wins",             rec->wins);   // +36
+        t.intRow("BFHQ_STATS_PERSONAL_loss",             rec->loss);   // +40
+        t.strRow("BFHQ_PROFILES_PLAYERINFO_enlisted",    rec->jond);   // +44
+        t.strRow("BFHQ_PROFILES_PLAYERINFO_lastbattle",  rec->lbtl);   // +72
         total = 5;
         break;
     case 4:                                                   // global scores
-        t.intRow("BFHQ_globalscore",    32);
-        t.intRow("BFHQ_wins",           36);
-        t.intRow("BFHQ_losses",         40);
-        t.intRow("BFHQ_teamworkscore",  100);
-        t.intRow("BFHQ_combatscore",    168);
-        t.intRow("BFHQ_commanderscore", 156);
+        t.intRow("BFHQ_globalscore",    rec->scor);           // +32
+        t.intRow("BFHQ_wins",           rec->wins);           // +36
+        t.intRow("BFHQ_losses",         rec->loss);           // +40
+        t.intRow("BFHQ_teamworkscore",  rec->twsc);           // +100
+        t.intRow("BFHQ_combatscore",    rec->cmsc);           // +168
+        t.intRow("BFHQ_commanderscore", rec->cdsc);           // +156
         total = 6;
         break;
-    case 7:                                                   // weapons, 68-byte entries at +528
+    case 7:                                                   // weapons, 68-byte retail entries at +528
         for (int k = 0; k < 13; ++k)
         {
-            const int w = 528 + 68 * k;
+            const PlayerStatsRecord::Weapon& w = rec->weapons[k];
             t.label(k, kFavouriteWeaponKeys[k]);
-            r.pushInt(t.i(w + 28));                           // kills
-            r.pushInt(t.i(w + 32));                           // deaths
+            r.pushInt(w.kills);                               // kills
+            r.pushInt(w.deaths);                              // deaths
             char accuracy[24];                                // sub_10003320("%d") + "%" (sub_10001AA0)
-            ::_snprintf(accuracy, sizeof(accuracy) - 1, "%d%%", t.i(w + 36));
+            ::_snprintf(accuracy, sizeof(accuracy) - 1, "%d%%", w.accuracy);
             accuracy[sizeof(accuracy) - 1] = 0;
             r.pushNarrow(accuracy);
-            r.pushNarrow(t.s(w + 40));                        // kill/death ratio
-            r.pushNarrow(t.s(w));                             // time
+            r.pushNarrow(w.kd.c_str());                       // kill/death ratio
+            r.pushNarrow(w.time.c_str());                     // time
         }
         total = 9;
         break;
-    case 8:                                                   // vehicles, 68-byte entries at +2676
+    case 8:                                                   // vehicles, 68-byte retail entries at +2676
         for (int k = 0; k < 7; ++k)
         {
             if (k == 5)                                       // `cmp esi, 8Ch` - the sixth is skipped, its id kept
                 continue;
-            const int v = 2676 + 68 * k;
+            const PlayerStatsRecord::Vehicle& v = rec->vehicles[k];
             t.label(k, kFavouriteVehicleKeys[k]);
-            r.pushInt(t.i(v + 28));                           // kills
-            r.pushInt(t.i(v + 64));                           // road kills
-            r.pushInt(t.i(v + 32));                           // deaths
-            r.pushNarrow(t.s(v + 36));                        // kill/death ratio
-            r.pushNarrow(t.s(v));                             // time
+            r.pushInt(v.kills);                               // kills
+            r.pushInt(v.roadKills);                           // road kills
+            r.pushInt(v.deaths);                              // deaths
+            r.pushNarrow(v.kd.c_str());                       // kill/death ratio
+            r.pushNarrow(v.time.c_str());                     // time
         }
         total = 6;
         break;
-    case 9:                                                   // kits, 64-byte entries at +2224
+    case 9:                                                   // kits, 64-byte retail entries at +2224
         for (int k = 0; k < 7; ++k)
         {
-            const int kit = 2224 + 64 * k;
+            const PlayerStatsRecord::Kit& kit = rec->kits[k];
             t.label(k, kFavouriteKitKeys[k]);
-            r.pushInt(t.i(kit + 28));                         // kills
-            r.pushInt(t.i(kit + 32));                         // deaths
-            r.pushNarrow(t.s(kit + 36));                      // kill/death ratio
-            r.pushNarrow(t.s(kit));                           // time
+            r.pushInt(kit.kills);                             // kills
+            r.pushInt(kit.deaths);                            // deaths
+            r.pushNarrow(kit.kd.c_str());                     // kill/death ratio
+            r.pushNarrow(kit.time.c_str());                   // time
         }
         total = 7;
         break;
     case 10:                                                  // armies, per MenuTeamManager team
     {
-        // The count is asked once (var_5C); per team: getTeam, the army's 40-byte entry at
+        // The count is asked once (var_5C); per team: getTeam, the army's 40-byte retail entry at
         // 1820 + 40 * teamId (unchecked), the row keyed by the team id, localise("") (an empty key
         // never reaches the host), host +0x124 getModDirectorySetting asked and dropped, the flag
         // image, localise("") again, the team's name (+8) localised, then time / wins / losses.
@@ -4854,7 +4829,7 @@ static void listPlayerStats(const gameswf::fn_call& fn, ListResult& r, ListHost 
         {
             const MenuTeam* team = tm->getTeam(k);                                          // +0x30
             const int teamId = team->teamId;
-            const int army = 1820 + 40 * teamId;
+            const PlayerStatsRecord::Army& army = rec->armies[teamId];
             r.beginRow(teamId);
             { HostWide w; hostLocalise(h, "", w); r.pushWide(w.c_str(), (int) w.size()); }
             (void) h->getModDirectorySetting();                                             // +0x124
@@ -4864,42 +4839,42 @@ static void listPlayerStats(const gameswf::fn_call& fn, ListResult& r, ListHost 
             r.pushNarrow(flag);
             { HostWide w; hostLocalise(h, "", w); r.pushWide(w.c_str(), (int) w.size()); }
             { HostWide w; hostLocalise(h, team->name.c_str(), w); r.pushWide(w.c_str(), (int) w.size()); }
-            r.pushNarrow(t.s(army));
-            r.pushInt(t.i(army + 28));
-            r.pushInt(t.i(army + 32));
+            r.pushNarrow(army.time.c_str());
+            r.pushInt(army.wins);
+            r.pushInt(army.losses);
         }
         total = (int) teams;
         break;
     }
     case 11:                                                  // current and next rank
     {
-        vc71::string key;
+        std::string key;
         t.label(0, "PROFILE_currentrank");
-        hostRankKey(h, t.i(160), key);                        // +0x1B4 with the record's rank
+        hostRankKey(h, rec->rank, key);                       // +0x1B4 with the record's rank (+160)
         r.pushNarrow(key.c_str());
         t.label(0, "PROFILE_nextrank");
-        hostRankKey(h, t.i(160) + 1, key);
+        hostRankKey(h, rec->rank + 1, key);
         r.pushNarrow(key.c_str());
         total = 2;
         break;
     }
-    case 12: t.favouriteRow("kit_%d",     3560, 3564); total = 1; break;
-    case 13: t.favouriteRow("vehicle_%d", 3592, 3596); total = 1; break;
-    case 14: t.favouriteRow("weapon_%d",  3624, 3628); total = 1; break;
-    case 15: t.favouriteRow("map_%d",     3656, 3660); total = 1; break;
+    case 12: t.favouriteRow("kit_%d",     rec->fkit, rec->fkitTime); total = 1; break;   // +3560 / +3564
+    case 13: t.favouriteRow("vehicle_%d", rec->fveh, rec->fvehTime); total = 1; break;   // +3592 / +3596
+    case 14: t.favouriteRow("weapon_%d",  rec->fwea, rec->fweaTime); total = 1; break;   // +3624 / +3628
+    case 15: t.favouriteRow("map_%d",     rec->fmap, rec->fmapTime); total = 1; break;   // +3656 / +3660
     case 16:                                                  // the record's map rows
     {
-        // Per 40-byte row {id, wins, losses, time} of the vector at +3688 (its size re-read every
+        // Per row {id, wins, losses, time} of the vector at +3688 (its size re-read every
         // pass): host +0x120 getModInfo asked again each time, +0x34 getMapFromGameSpyId(id); rows
         // whose map the mod does not know are skipped uncounted. A known map inside the window
         // gives id = the map's gsid (+0x9C), its name (+0x1C), wins, losses, time - and every known
         // map counts toward totalCount whether shown or not.
-        const Vc71Vector* rows = reinterpret_cast<const Vc71Vector*>(rec->bytes + 3688);
+        const std::vector<PlayerStatsRecord::MapRow>& rows = rec->maps;
         unsigned int known = 0;
-        for (unsigned int k = 0; rows->first && k < (unsigned int) ((rows->last - rows->first) / 40); ++k)
+        for (unsigned int k = 0; k < (unsigned int) rows.size(); ++k)
         {
-            const char* row = rows->first + 40 * k;
-            const int mapId = *reinterpret_cast<const int*>(row);
+            const PlayerStatsRecord::MapRow& row = rows[k];
+            const int mapId = row.id;
             IModInfo* mi = static_cast<IModInfo*>(h->getModInfo());
             const IModInfo::Map* map = mi->getMapFromGameSpyId(mapId);
             if (!map)
@@ -4908,9 +4883,9 @@ static void listPlayerStats(const gameswf::fn_call& fn, ListResult& r, ListHost 
             {
                 r.beginRow(map->gameSpyId);
                 r.pushNarrow(map->name.c_str());
-                r.pushInt(*reinterpret_cast<const int*>(row + 4));
-                r.pushInt(*reinterpret_cast<const int*>(row + 8));
-                r.pushNarrow(reinterpret_cast<const vc71::string*>(row + 12)->c_str());
+                r.pushInt(row.wins);
+                r.pushInt(row.losses);
+                r.pushNarrow(row.time.c_str());
             }
             ++total;
             ++known;
@@ -4918,13 +4893,13 @@ static void listPlayerStats(const gameswf::fn_call& fn, ListResult& r, ListHost 
         break;
     }
     case 17:                                                  // the summary strip
-        t.intRow("BFHQ_globalscore",        32);
-        t.strRow("BFHQ_enlisted",           44);
-        t.strRow("BFHQ_lastbattle",         72);
-        t.strRow("BFHQ_timeascommander",    344);
-        t.strRow("BFHQ_timeassquadleader",  372);
-        t.strRow("BFHQ_timeassquadmember",  400);
-        t.strRow("BFHQ_timeaslonewolf",     428);
+        t.intRow("BFHQ_globalscore",        rec->scor);       // +32
+        t.strRow("BFHQ_enlisted",           rec->jond);       // +44
+        t.strRow("BFHQ_lastbattle",         rec->lbtl);       // +72
+        t.strRow("BFHQ_timeascommander",    rec->tcdr);       // +344
+        t.strRow("BFHQ_timeassquadleader",  rec->tsql);       // +372
+        t.strRow("BFHQ_timeassquadmember",  rec->tsqm);       // +400
+        t.strRow("BFHQ_timeaslonewolf",     rec->tlwf);       // +428
         total = 7;
         break;
     default:                                                  // 5, 6 and out of range: empty
@@ -5137,10 +5112,9 @@ static void listUnlockEquipment(const gameswf::fn_call& fn, ListResult& r, ListH
     TeamManager tm = teamManager();
     UnlockRecord rec;
     rec.now = (int) ::time(0); rec.a = 0; rec.count = 0; rec.b = 0;
-    rec.unlocks.alloc = 0; rec.unlocks.first = rec.unlocks.last = rec.unlocks.end = 0;
     const int teamIdentifier = ::atoi(word1);
     const int kitPosition = ::atoi(word2);
-    struct NameId { vc71::string name; int id; };
+    struct NameId { std::string name; int id; };
     NameId* names = 0;
     unsigned int nameCount = 0;
     {
@@ -5160,7 +5134,7 @@ static void listUnlockEquipment(const gameswf::fn_call& fn, ListResult& r, ListH
         names = new NameId[items.size()];
         for (std::size_t k = 0; k < items.size(); ++k)
         {
-            vc71::string key;
+            std::string key;
             shippedLowercase(items[k].name.c_str(), key);
             unsigned int slot = 0;
             while (slot < nameCount && ::strcmp(names[slot].name.c_str(), key.c_str()) != 0) ++slot;
@@ -5177,7 +5151,7 @@ static void listUnlockEquipment(const gameswf::fn_call& fn, ListResult& r, ListH
             continue;
         if (k >= (unsigned int) start && k < (unsigned int) end)
         {
-            vc71::string key;
+            std::string key;
             shippedLowercase(equipmentTemplate(e), key);
             r.beginRowStr(key.c_str());
             pushLocalised(r, h, equipmentDisplay(e));
@@ -5221,7 +5195,7 @@ static void listWeaponStats(const gameswf::fn_call& fn, ListResult& r, const tu_
 {
     (void) teamManager();                                   // asked and dropped
     r.begin();
-    vc71::string name(s_selectedEquipment.c_str());
+    std::string name(s_selectedEquipment.c_str());
     if (which == "wpunlockstats")
         name = s_selectedUnlockEquipment.c_str();
     else if (which == "wpuunlockstats")
@@ -7159,7 +7133,7 @@ void as_mod_getCurrentModName(const gameswf::fn_call& fn)
 void as_playerstats_getCurrentUnlockDescription(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_playerstats_getCurrentUnlockDescription");
-    vc71::string name(s_selectedUnlock.c_str());
+    std::string name(s_selectedUnlock.c_str());
     EquipmentKeys rec;
     if (!findEquipmentByName(name.c_str(), rec)) { fn.result->set_as_object_interface(gameswf::create_dice_string_object(0, 0)); return; }
     setLocalisedStringObject(fn, rec.descriptionKey);
@@ -7175,11 +7149,11 @@ void as_profile_getCurrentRankString(const gameswf::fn_call& fn)
     if (!h) { fn.result->set_as_object_interface(gameswf::create_dice_string_object(0, 0)); return; }
     PlayerStatsRecord* rec = new PlayerStatsRecord();
     (void) fetchPlayerStats(h, *rec);
-    const int rankId = *reinterpret_cast<const int*>(rec->bytes + 160);
+    const int rankId = rec->rank;
     delete rec;
-    vc71::string key;
+    std::string key;
     hostRankKey(h, rankId, key);
-    vc71::wstring text;
+    std::wstring text;
     hostLocaliseKey(h, key, text);
     fn.result->set_as_object_interface(gameswf::create_dice_string_object(reinterpret_cast<const unsigned short*>(text.c_str()), (int) text.size()));
 }
@@ -7231,12 +7205,12 @@ void as_logic_getTeamsConId(const gameswf::fn_call& fn)
 // keyed by the same bit mask the checkboxes use. setToggleFilter below writes it; its reader is
 // Multiplay.updateFilter (PE 10056020 -> 10055700). The shipped map
 // is constructed and destroyed by the DLL's own static initialiser pair at 100D6290 / 100D6A21.
-// The retained vc71::string values are internal storage; this map never crosses the DLL boundary.
-static std::map<int, vc71::string> s_filterValues;
+// The retained std::string values are internal storage; this map never crosses the DLL boundary.
+static std::map<int, std::string> s_filterValues;
 
 // unk_100F8810 - the DLL-global free-text filter clause, written by Multiplay.setFilter
 // (PE 100519C0, still unregistered here) and read - and rewritten in place - by the builder below.
-static vc71::string s_textFilter;
+static std::string s_textFilter;
 
 // Publishes whether any bit in the supplied filter mask is enabled.
 // Requires GeneralSettings and one numeric argument.
@@ -7258,7 +7232,7 @@ void as_multiplay_setToggleFilter(const gameswf::fn_call& fn)
     IBase* gs = classManager->getSingleton(renddx9abi::HostString("GeneralSettings"));
     const int   mask   = (int) fn.arg(0).to_number();
     const bool  on     = fn.arg(1).to_bool();
-    vc71::string clause(fn.arg(2).to_string());
+    std::string clause(fn.arg(2).to_string());
     const bool  blank  = clause.c_str()[0] == 0 || ::strcmp(clause.c_str(), "%%") == 0;
     static_cast<GeneralSettings*>(static_cast<IGeneralSettings*>(gs))->setToggleFilter(mask, blank ? false : on);
     if (blank)
@@ -7283,12 +7257,12 @@ static bool isMapSizeFilter(int mask)
 {
     return mask == 2048 || mask == 4096 || mask == 8192;
 }
-static void buildFilterString(vc71::string& out)
+static void buildFilterString(std::string& out)
 {
     IBase* gs = classManager->getSingleton(renddx9abi::HostString("GeneralSettings"));
-    vc71::string filter;
+    std::string filter;
 
-    typedef std::map<int, vc71::string>::const_iterator Entry;
+    typedef std::map<int, std::string>::const_iterator Entry;
     unsigned int mapSizeArmed = 0;
     for (Entry it = s_filterValues.begin(); it != s_filterValues.end(); ++it)
         if (filterBitOn(gs, it->first) && it->second.c_str()[0] != 0 && isMapSizeFilter(it->first))
@@ -7299,7 +7273,7 @@ static void buildFilterString(vc71::string& out)
     for (Entry it = s_filterValues.begin(); it != s_filterValues.end(); ++it)
     {
         const int mask = it->first;
-        const vc71::string& clause = it->second;
+        const std::string& clause = it->second;
         if (!filterBitOn(gs, mask) || clause.c_str()[0] == 0)
             continue;
         if (filter.c_str()[0] == 0)
@@ -7349,9 +7323,9 @@ static void buildFilterString(vc71::string& out)
             // would be a wild copy rather than a throw, so the length tests stop one character
             // short of that boundary. Every other input is byte-for-byte the shipped result.
             if (s_textFilter.size() > 4 && ::strncmp(s_textFilter.c_str(), "and", 3) == 0)
-                s_textFilter = vc71::string(s_textFilter.c_str() + 4, s_textFilter.size() - 4);
+                s_textFilter = std::string(s_textFilter.c_str() + 4, s_textFilter.size() - 4);
             if (s_textFilter.size() > 5 && ::strncmp(s_textFilter.c_str(), " and", 4) == 0)
-                s_textFilter = vc71::string(s_textFilter.c_str() + 5, s_textFilter.size() - 5);
+                s_textFilter = std::string(s_textFilter.c_str() + 5, s_textFilter.size() - 5);
             filter = s_textFilter;
         }
         else
@@ -7371,7 +7345,7 @@ void as_multiplay_updateFilter(const gameswf::fn_call& fn)
     ISwiffHost* cursorHost = static_cast<ISwiffHost*>(cursorBase);
     if (cursorHost) { SetCursor(cursorHost->getCursor(1)); cursorHost->setBusy(1); }
     ISwiffHost* h = g_swiffPlayerInstance->getSwiffHost();
-    vc71::string filter;                                   // declared first, so it dies last
+    std::string filter;                                   // declared first, so it dies last
     buildFilterString(filter);
     const std::string kind = h->getServerListKind();       // +0x134
     IServerBrowser* list = h->getServerList(kind);         // +0x7C
@@ -7594,9 +7568,9 @@ static void awardText(const gameswf::fn_call& fn, bool description)
     AwardView award;
     if (findAward(id, level, award))
     {
-        vc71::wstring wide;
+        std::wstring wide;
         hostLocaliseKey(static_cast<void*>(g_swiffPlayerInstance->getSwiffHost()),
-                        vc71::string((description ? award.description : award.name).c_str()), wide);
+                        std::string((description ? award.description : award.name).c_str()), wide);
         gameswf::assign_dice_string_object_wide(text, reinterpret_cast<const Uint16*>(wide.c_str()));
     }
     else
@@ -8015,8 +7989,8 @@ static void leaderboardText(const gameswf::fn_call& fn, bool description)
     const char* entry = (category >= 0 && category <= 3) ? leaderboardKey(category, board) : 0;
     if (entry)
         key = description ? std::string(entry) + "_desc" : std::string(entry);
-    vc71::wstring wide;
-    hostLocaliseKey(static_cast<void*>(g_swiffPlayerInstance->getSwiffHost()), vc71::string(key.c_str()), wide);
+    std::wstring wide;
+    hostLocaliseKey(static_cast<void*>(g_swiffPlayerInstance->getSwiffHost()), std::string(key.c_str()), wide);
     gameswf::as_object_interface* text = gameswf::create_dice_string_object(nullptr, 0);
     gameswf::assign_dice_string_object_wide(text, reinterpret_cast<const Uint16*>(wide.c_str()));
     fn.result->set_as_object_interface(text);
@@ -8418,8 +8392,8 @@ void as_multiplay_getSelectedLeaderboardCategoryId(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_multiplay_getSelectedLeaderboardCategoryId");
     (void) g_swiffPlayerInstance->getSwiffHost();
-    const vc71::string key("BFHQ_leaderboardscores");
-    vc71::wstring text;
+    const std::string key("BFHQ_leaderboardscores");
+    std::wstring text;
     ISwiffHost* h = g_swiffPlayerInstance->getSwiffHost();
     std::wstring wide;
     (void) h->getLocalizedString(wide, std::string(key.c_str()));                 // +0xA8
@@ -8448,12 +8422,12 @@ void as_profile_getNextRankString(const gameswf::fn_call& fn)
     if (!h) { fn.result->set_as_object_interface(gameswf::create_dice_string_object(0, 0)); return; }
     PlayerStatsRecord* rec = new PlayerStatsRecord();
     (void) fetchPlayerStats(h, *rec);
-    const int rankId = *reinterpret_cast<const int*>(rec->bytes + 160);
+    const int rankId = rec->rank;
     delete rec;
     const int next = hostNextRank(h, rankId);
-    vc71::string key;
+    std::string key;
     hostRankKey(h, next, key);
-    vc71::wstring text;
+    std::wstring text;
     hostLocaliseKey(h, key, text);
     fn.result->set_as_object_interface(gameswf::create_dice_string_object(reinterpret_cast<const unsigned short*>(text.c_str()), (int) text.size()));
 }
@@ -8465,7 +8439,7 @@ void as_playerstats_getKitAccuracy(const gameswf::fn_call& fn)
     SWF_AS_TRACE("as_playerstats_getKitAccuracy");
     PlayerStatsRecord* rec = new PlayerStatsRecord();
     const bool ok = fetchPlayerStats(asHost(), *rec);
-    const double v = ok ? (double) *reinterpret_cast<const int*>(rec->bytes + 2220) : 0.0;
+    const double v = ok ? (double) rec->osaa : 0.0;
     delete rec;
     fn.result->set_double(v);
 }
@@ -8473,37 +8447,38 @@ void as_playerstats_getKitAccuracy(const gameswf::fn_call& fn)
 // sub_1005AC60 / sub_1005ADB0 - dice.bf2.PlayerStats.getOpponentName() / getVictimName(): the stats
 // record's std::string at +492 / +456; empty or a single space becomes "-", and so does a record that
 // could not be fetched. string.
-static void statsNameAt(const gameswf::fn_call& fn, int offset)
+static void statsNameAt(const gameswf::fn_call& fn, std::string PlayerStatsRecord::* field)
 {
     PlayerStatsRecord* rec = new PlayerStatsRecord();
-    vc71::string out("-");
+    std::string out("-");
     if (fetchPlayerStats(asHost(), *rec))
     {
-        const vc71::string* name = reinterpret_cast<const vc71::string*>(rec->bytes + offset);
+        const std::string* name = &(rec->*field);
         if (name->size() != 0 && ::strcmp(name->c_str(), " ") != 0) out = *name;
     }
     delete rec;
     fn.result->set_tu_string(tu_string(out.c_str()));
 }
-void as_playerstats_getOpponentName(const gameswf::fn_call& fn) { SWF_AS_TRACE("as_playerstats_getOpponentName"); statsNameAt(fn, 492); }
-void as_playerstats_getVictimName(const gameswf::fn_call& fn)   { SWF_AS_TRACE("as_playerstats_getVictimName");   statsNameAt(fn, 456); }
+void as_playerstats_getOpponentName(const gameswf::fn_call& fn) { SWF_AS_TRACE("as_playerstats_getOpponentName"); statsNameAt(fn, &PlayerStatsRecord::vmns); }
+void as_playerstats_getVictimName(const gameswf::fn_call& fn)   { SWF_AS_TRACE("as_playerstats_getVictimName");   statsNameAt(fn, &PlayerStatsRecord::mvns); }
 
 // sub_1005AF00 / sub_1005AFF0 - getOpponentRankId() / getVictimRankId(): the int beside the name
 // (+524 / +488) as a number; a single-space name or an unfetched record answers -1.
-static void statsRankIdAt(const gameswf::fn_call& fn, int nameOffset, int idOffset)
+static void statsRankIdAt(const gameswf::fn_call& fn, std::string PlayerStatsRecord::* nameField,
+                          int PlayerStatsRecord::* idField)
 {
     PlayerStatsRecord* rec = new PlayerStatsRecord();
     double v = -1.0;
     if (fetchPlayerStats(asHost(), *rec))
     {
-        const vc71::string* name = reinterpret_cast<const vc71::string*>(rec->bytes + nameOffset);
-        if (::strcmp(name->c_str(), " ") != 0) v = (double) *reinterpret_cast<const int*>(rec->bytes + idOffset);
+        const std::string* name = &(rec->*nameField);
+        if (::strcmp(name->c_str(), " ") != 0) v = (double) (rec->*idField);
     }
     delete rec;
     fn.result->set_double(v);
 }
-void as_playerstats_getOpponentRankId(const gameswf::fn_call& fn) { SWF_AS_TRACE("as_playerstats_getOpponentRankId"); statsRankIdAt(fn, 492, 524); }
-void as_playerstats_getVictimRankId(const gameswf::fn_call& fn)   { SWF_AS_TRACE("as_playerstats_getVictimRankId");   statsRankIdAt(fn, 456, 488); }
+void as_playerstats_getOpponentRankId(const gameswf::fn_call& fn) { SWF_AS_TRACE("as_playerstats_getOpponentRankId"); statsRankIdAt(fn, &PlayerStatsRecord::vmns, &PlayerStatsRecord::vmrs); }
+void as_playerstats_getVictimRankId(const gameswf::fn_call& fn)   { SWF_AS_TRACE("as_playerstats_getVictimRankId");   statsRankIdAt(fn, &PlayerStatsRecord::mvns, &PlayerStatsRecord::mvrs); }
 
 static void registerAsMethods(SwiffAsNamespace* general, SwiffAsNamespace** ns,
                               const char* const* names, int count)
@@ -9182,8 +9157,8 @@ inline void rcSetMovieHeight(void* rc, int h)       { reinterpret_cast<void(__th
 inline void rcSetScale(void* rc, float sx, float sy){ reinterpret_cast<void(__thiscall*)(void*,float,float)>(rcVtbl(rc)[0xB0/4])(rc, sx, sy); } // +0xB0 slot 44
 inline void rcSetBackgroundColor(void* rc, unsigned rgb) { reinterpret_cast<void(__thiscall*)(void*,unsigned)>(rcVtbl(rc)[0xB4/4])(rc, rgb); }  // +0xB4 slot 45
 inline void rcSetMouseState(void* rc, int x, int y, int b) { reinterpret_cast<void(__thiscall*)(void*,int,int,int)>(rcVtbl(rc)[0xB8/4])(rc, x, y, b); } // +0xB8 slot 46
-inline char rcCapability0(void* rc, int a)          { return reinterpret_cast<char(__thiscall*)(void*,int)>(rcVtbl(rc)[0xC4/4])(rc, a); } // +0xC4 slot 49
-inline char rcCapability1(void* rc, int a)          { return reinterpret_cast<char(__thiscall*)(void*,int)>(rcVtbl(rc)[0xC8/4])(rc, a); } // +0xC8 slot 50
+inline char rcCapability0(void* rc, intptr_t a)     { return reinterpret_cast<char(__thiscall*)(void*,intptr_t)>(rcVtbl(rc)[0xC4/4])(rc, a); } // +0xC4 slot 49
+inline char rcCapability1(void* rc, intptr_t a)     { return reinterpret_cast<char(__thiscall*)(void*,intptr_t)>(rcVtbl(rc)[0xC8/4])(rc, a); } // +0xC8 slot 50
 inline void rcSetPairState(void* rc, int a, int b)  { reinterpret_cast<void(__thiscall*)(void*,int,int)>(rcVtbl(rc)[0xD4/4])(rc, a, b); } // +0xD4 slot 53
 inline void rcUpdateTime(void* rc, unsigned t, float dt) { reinterpret_cast<void(__thiscall*)(void*,unsigned,float)>(rcVtbl(rc)[0xD8/4])(rc, t, dt); } // +0xD8 slot 54
 
@@ -9241,9 +9216,6 @@ inline void  hostSetJoinPassword(void* h, const void* str)  { reinterpret_cast<v
 inline unsigned char pmHasPendingTransition(void* pm, void* stdStringOut) { return reinterpret_cast<unsigned char(__thiscall*)(void*,void*)>(rcVtbl(pm)[88/4])(pm, stdStringOut); } // +0x58
 inline void pmClear(void* pm) { reinterpret_cast<void(__thiscall*)(void*)>(rcVtbl(pm)[72/4])(pm); }   // +0x48
 
-// A queued mouse sample - 12 bytes, the element of the +1104 vc71-shaped vector.
-struct MouseState { int x; int y; int buttons; };
-
 // Reinterpret a float's bits as a dword (updateTime/line_style_width pass floats through dword slots).
 inline unsigned floatBits(float f) { unsigned d; ::memcpy(&d, &f, 4); return d; }
 
@@ -9284,7 +9256,6 @@ SwiffPlayer::SwiffPlayer()
     swiff_host           = 0;
     elapsed_time         = 0.0f;
     pad_44d[0] = pad_44d[1] = pad_44d[2] = 0;
-    queued_mouse_aux = queued_mouse_begin = queued_mouse_end = queued_mouse_capacity = 0;
 
     g_swiffPlayerInstance = this;
 
@@ -9312,7 +9283,7 @@ SwiffPlayer::SwiffPlayer()
 }
 
 
-// Releases movie state, gameswf globals, and queued mouse storage.
+// Releases movie state and gameswf globals; the queued mouse vector is destroyed as a member.
 
 SwiffPlayer::~SwiffPlayer()
 {
@@ -9321,9 +9292,6 @@ SwiffPlayer::~SwiffPlayer()
     // save. All are movie/voip-state teardown; with both null here they are no-ops. [Stage 3]
 
     voip_update_flag = 0;
-    if (queued_mouse_begin)
-        ::renddx9abi::engineFree(queued_mouse_begin);
-    queued_mouse_begin = queued_mouse_end = queued_mouse_capacity = 0;
 
     if (g_swiffPlayerInstance == this)
         g_swiffPlayerInstance = 0;
@@ -9620,8 +9588,7 @@ void SwiffPlayer::update(float deltaTime)
 
     // Mouse flush: the queued path if there is queued input or the deferred sample is already spent;
     // otherwise apply the deferred position once and mark it spent.
-    const bool haveQueued = queued_mouse_begin &&
-        ((static_cast<char*>(queued_mouse_end) - static_cast<char*>(queued_mouse_begin)) / (int)sizeof(MouseState)) > 0;
+    const bool haveQueued = !queued_mouse.empty();
     if (haveQueued || !deferred_mouse_dirty)
     {
         processQueuedMouseState();     // virtual, exactly as the shipped update dispatches it
@@ -9679,7 +9646,7 @@ void SwiffPlayer::display()
                            s_streamCounts[7]);
 }
 
-// push a mouse sample onto the +1104 vc71-shaped vector (grows on the engine heap).
+// push a mouse sample onto the queued-mouse vector (+1104 in retail).
 void SwiffPlayer::queueMouseState(int x, int y, int buttons)
 {
     // [TEMP] RW-89 queue tracer (BF2_SWIFFPLAYER_ASLOG): every button change the engine queues and the
@@ -9689,15 +9656,14 @@ void SwiffPlayer::queueMouseState(int x, int y, int buttons)
     if (asLogEnabled())
     {
         static int s_lastButtons = 0; static unsigned s_samples = 0;
-        const int depth = queued_mouse_begin ? (int)((static_cast<char*>(queued_mouse_end) - static_cast<char*>(queued_mouse_begin)) / (int)sizeof(MouseState)) : 0;
+        const int depth = (int) queued_mouse.size();
         ++s_samples;
         if (buttons != s_lastButtons || (s_samples % 2000) == 0)
             ::renddx9abi::logf("[mouse] queued buttons %d -> %d at (%d,%d) depth=%d sample#%u", s_lastButtons, buttons, x, y, depth, s_samples);
         s_lastButtons = buttons;
     }
     MouseState ms; ms.x = x; ms.y = y; ms.buttons = buttons;
-    vc71::vectorRef<MouseState> q(&queued_mouse_aux);
-    q.push_back(ms);
+    queued_mouse.push_back(ms);
 }
 
 // text input (Stage 5): these dispatch through the host IME handler + write into a host std::string.
@@ -9782,8 +9748,8 @@ void  SwiffPlayer::getTextInput1(void* outStdString)
 }
 
 // render capability queries, guarded.
-char SwiffPlayer::renderCapability0(int a) { return render_context ? rcCapability0(render_context, a) : 0; }
-char SwiffPlayer::renderCapability1(int a) { return render_context ? rcCapability1(render_context, a) : 0; }
+char SwiffPlayer::renderCapability0(intptr_t a) { return render_context ? rcCapability0(render_context, a) : 0; }
+char SwiffPlayer::renderCapability1(intptr_t a) { return render_context ? rcCapability1(render_context, a) : 0; }
 
 // render pair-state, guarded.
 void SwiffPlayer::renderSetPairState(int a, int b)
@@ -9834,19 +9800,12 @@ void SwiffPlayer::notifyMouse(int x, int y, int buttons)
 // pop the front queued sample and deliver it. No-op when the queue is empty.
 void SwiffPlayer::processQueuedMouseState()
 {
-    if (!queued_mouse_begin)
-        return;
-    MouseState* begin = static_cast<MouseState*>(queued_mouse_begin);
-    MouseState* end   = static_cast<MouseState*>(queued_mouse_end);
-    const int count = static_cast<int>(end - begin);
-    if (count <= 0)
+    if (queued_mouse.empty())
         return;
 
-    const MouseState front = begin[0];
+    const MouseState front = queued_mouse.front();
     // erase-front: shift the rest down one and retract end (the shipped sub_10007370).
-    for (int i = 1; i < count; ++i)
-        begin[i - 1] = begin[i];
-    queued_mouse_end = static_cast<char*>(queued_mouse_end) - sizeof(MouseState);
+    queued_mouse.erase(queued_mouse.begin());
 
     notifyMouse(front.x, front.y, front.buttons);
 }
@@ -9855,9 +9814,17 @@ void SwiffPlayer::processQueuedMouseState()
 // Forwards gameswf rendering callbacks to the matching SwiffRender operations.
 // setRender and loadMovie must supply render_context before any callback; no null guards.
 
+// The handler is always SwiffPlayer::render_handler, so its owner sits that member's offset below it.
+ISwiffRender* SwiffRenderHandler::renderContext()
+{
+    SwiffPlayer* const owner = reinterpret_cast<SwiffPlayer*>(
+        reinterpret_cast<char*>(this) - offsetof(SwiffPlayer, render_handler));
+    return owner->render_context;
+}
+
 namespace {
 inline void* rhRc(SwiffRenderHandler* self)
-{ return *reinterpret_cast<void**>(reinterpret_cast<char*>(self) + 8); }
+{ return self->renderContext(); }
 inline unsigned rgbaDword(const gameswf::rgba& c) { unsigned d; ::memcpy(&d, &c, 4); return d; }
 } // anonymous namespace
 

@@ -54,7 +54,7 @@ bool BlendFuncEffect::streamProperties(System* system, Stream* stream)
                               "Destination blend func");
 }
 
-bool BlendFuncEffect::drawCharacter(System* system, int character, int font,
+bool BlendFuncEffect::drawCharacter(System* system, int character, FontHandle font,
                                     int elementIndex, Quad* quad, RenderContext* context)
 {
     // Both words are stamped before the chain continues; retail inlines
@@ -63,7 +63,7 @@ bool BlendFuncEffect::drawCharacter(System* system, int character, int font,
     quad->state0c = m_destination;
     return Effect::drawCharacter(system, character, font, elementIndex, quad, context);
 }
-bool BlendFuncEffect::drawTexture(System* system, int texture, Quad* quad,
+bool BlendFuncEffect::drawTexture(System* system, TextureHandle texture, Quad* quad,
                                   RenderContext* context)
 {
     quad->state08 = m_source;
@@ -71,6 +71,8 @@ bool BlendFuncEffect::drawTexture(System* system, int texture, Quad* quad,
     return Effect::drawTexture(system, texture, quad, context);
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(BlendFuncEffect) == 12, "PE BlendFuncEffect allocation");
+#endif
 } }
 #endif

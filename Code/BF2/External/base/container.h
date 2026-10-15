@@ -472,8 +472,12 @@ public:
 		assert(m_table);
 		m_table->m_entry_count++;
 
-		unsigned int	hash_value = hash_functor()(key);
-		int	index = hash_value & m_table->m_size_mask;
+		// [CHOSEN, not recovered] x64 (https://github.com/B2BF/OpenBF2/issues/7): the stored hash
+		// keeps the functor's full size_t, as find_index() compares it. The upstream unsigned int,
+		// widened through entry()'s int parameter, sign-extended on x64 and lost every key whose
+		// hash had bit 31 set. Same 32-bit values on x86.
+		size_t	hash_value = hash_functor()(key);
+		int	index = (int) (hash_value & m_table->m_size_mask);
 
 		entry*	natural_entry = &(E(index));
 		
@@ -643,7 +647,7 @@ public:
 			: m_next_in_chain(e.m_next_in_chain), m_hash_value(e.m_hash_value), first(e.first), second(e.second)
 		{
 		}
-		entry(const T& key, const U& value, int next_in_chain, int hash_value)
+		entry(const T& key, const U& value, int next_in_chain, size_t hash_value)	// [CHOSEN, not recovered] x64 (issue 7): was int
 			: m_next_in_chain(next_in_chain), m_hash_value(hash_value), first(key), second(value)
 		{
 		}

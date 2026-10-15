@@ -96,9 +96,9 @@ bool Bf2PictureNode::setTextureNameForHud(const char* name)
     m_requestedTextureName = clonePictureName(name);
     return true;
 }
-bool Bf2PictureNode::setTextureForHud(int texture)
+bool Bf2PictureNode::setTextureForHud(TextureHandle texture)
 { m_texture = texture; return true; }
-bool Bf2PictureNode::setSecondaryTextureForHud(int texture)
+bool Bf2PictureNode::setSecondaryTextureForHud(TextureHandle texture)
 { m_secondaryTexture = texture; return true; }
 bool Bf2PictureNode::setTextureNameBindingForHud(const char** binding)
 {
@@ -134,7 +134,7 @@ bool Bf2PictureNode::setBorderColorForHud(float r, float g, float b, float a)
     m_borderAlpha = a;
     return true;
 }
-bool dispatchPictureTexture(Bf2PictureNode* node, int texture) // 7511C0's callee
+bool dispatchPictureTexture(Bf2PictureNode* node, TextureHandle texture) // 7511C0's callee
 { return node->setTextureForHud(texture); }
 
 // The texture is (re)loaded only when the requested and previously
@@ -245,8 +245,10 @@ void Bf2PictureNode::paintSelf(System* system, const NodeState* state,
         context->effect->setColor(saved.r, saved.g, saved.b, saved.a);
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2PictureNode) == 96, "native Bf2PictureNode storage");
 static_assert(sizeof(ClassTypeDescriptor<Bf2PictureNode, PictureNode>) == 16,
     "Bf2PictureNode metadata");
+#endif
 } }
 #endif

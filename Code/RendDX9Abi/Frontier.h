@@ -33,9 +33,9 @@ bool frontierTrapEnabled();
 void installCrashReporter();
 void removeCrashReporter();
 
-// A pointer as a 32-bit integer, for log lines. This image is 32-bit by construction (the whole
-// rebuild is - see agents.md) so the truncation cannot lose anything; the helper exists so that
-// every caller does not have to reach for <windows.h> just to print a `this`.
+// A pointer as a 32-bit integer for "0x%08X" log lines. On x86 that is the whole pointer. On x64 it
+// is only the low 32 bits: a log-line tag, never converted back to a pointer. New log lines print
+// the pointer itself with "0x%p", which reads identically on x86 and shows all 16 digits on x64.
 unsigned int addr(const void* p);
 
 } // namespace renddx9abi

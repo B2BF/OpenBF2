@@ -80,11 +80,13 @@ void ReleaseStateNodeVisitor::visit(System* system, Node*& node, const Rect* rec
         node->visitChildren(system, state, rect, this);
     }
 }
+#if defined(_M_IX86)
 static_assert(sizeof(Event1NodeVisitor) == 24, "client event1 visitor");
 static_assert(sizeof(Event2NodeVisitor) == 16, "client event2 visitor");
 static_assert(sizeof(Event4NodeVisitor) == 20, "client event4 visitor");
 static_assert(sizeof(Event5NodeVisitor) == 16, "client event5 visitor, including unwritten index");
 static_assert(sizeof(PressStateNodeVisitor) == 8, "client press state visitor");
 static_assert(sizeof(ReleaseStateNodeVisitor) == 8, "client release state visitor");
+#endif
 } }
 #endif

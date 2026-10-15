@@ -434,7 +434,7 @@ void GenericFireArm::updateGeometry()
         typedef void (*SetTransformation)(void*, const Mat4&);
 #endif
         reinterpret_cast<SetTransformation>(
-            (*static_cast<void***>(m_geometry))[0x50 / sizeof(void*)])(
+            (*static_cast<void***>(m_geometry))[0x50 / 4])(
                 m_geometry, Mat4::getZero());
     }
     else

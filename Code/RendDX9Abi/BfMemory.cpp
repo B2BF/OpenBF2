@@ -22,9 +22,24 @@ void engineFree(void* p)
 // Route scalar, array and nothrow allocations through the same heap used by engineFree.
 // All allocations use the shared CRT heap.
 // Throwing new reports allocation failure with bad_alloc even though the original allocator can return null.
+// [CHOSEN, not recovered] engineAlloc takes a 32-bit size; on x64 (issue #7) a larger request is an
+// allocation failure rather than a truncated block.
+
+#if !defined(_M_IX86)
+namespace {
+inline bool exceedsEngineAlloc(size_t size)
+{
+    return size > 0xFFFFFFFFu;
+}
+} // anonymous namespace
+#endif
 
 void* operator new(size_t size)
 {
+#if !defined(_M_IX86)
+    if (exceedsEngineAlloc(size))
+        throw std::bad_alloc();
+#endif
     void* p = renddx9abi::engineAlloc(static_cast<unsigned int>(size ? size : 1));
     if (!p)
         throw std::bad_alloc();
@@ -38,11 +53,19 @@ void* operator new[](size_t size)
 
 void* operator new(size_t size, const std::nothrow_t&) throw()
 {
+#if !defined(_M_IX86)
+    if (exceedsEngineAlloc(size))
+        return 0;
+#endif
     return renddx9abi::engineAlloc(static_cast<unsigned int>(size ? size : 1));
 }
 
 void* operator new[](size_t size, const std::nothrow_t&) throw()
 {
+#if !defined(_M_IX86)
+    if (exceedsEngineAlloc(size))
+        return 0;
+#endif
     return renddx9abi::engineAlloc(static_cast<unsigned int>(size ? size : 1));
 }
 

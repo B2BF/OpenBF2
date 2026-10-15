@@ -64,13 +64,13 @@ struct ListBoxCell
     // stays false and texture stays 0). imageWidth/imageHeight are still zeroed.
     ListBoxCell(std::string, float x, float y, float r, float g, float b, float a, int);
     ListBoxCell(std::wstring, float x, float y, float r, float g, float b, float a, int);
-    ListBoxCell(int texture, float width, float height, float x, float y,
+    ListBoxCell(TextureHandle texture, float width, float height, float x, float y,
         float r, float g, float b, float a);
     std::string narrow;                              // retail+00
     std::wstring wide;                               // +1C
     bool isWide;                                     // +38
     Color color;                                     // +3C
-    int texture;                                     // +4C
+    TextureHandle texture;                           // +4C
     float imageWidth, imageHeight, imageX, imageY;    // +50..5C
     bool isImage;                                    // +60
     int field064, field068;                          // +64/+68
@@ -145,11 +145,11 @@ public:
         float r, float g, float b, float a, int);
     bool appendPositionedWideCell0x7c8470(int column, std::wstring, float x, float y,
         float r, float g, float b, float a, int);
-    bool appendImageCell(int column, int texture, float, float, float, float,
+    bool appendImageCell(int column, TextureHandle texture, float, float, float, float,
         float, float, float, float);
-    bool appendImageCell0x7c8300(int column, int texture, float, float, float, float,
+    bool appendImageCell0x7c8300(int column, TextureHandle texture, float, float, float, float,
         float, float, float, float);
-    bool setImageCell(int column, int row, int texture, float, float, float, float,
+    bool setImageCell(int column, int row, TextureHandle texture, float, float, float, float,
         float, float, float, float, int extra);
     bool setWideCell(int column, int row, std::wstring, float, float, float, float, int, int);
     bool setWideCell0x7c87f0(int, int, std::wstring, float, float, float, float, int, int);

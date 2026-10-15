@@ -164,6 +164,8 @@ int DifFontMetadata::resolutionForWidth(int& width)
     }
 }
 static_assert(sizeof(DifGlyph) == 32, "eight-word scalar glyph record");
+#if defined(_M_IX86)
 static_assert(sizeof(DifFontMetadata) == 100, "native x86 STL metadata");
+#endif
 } } }
 #endif

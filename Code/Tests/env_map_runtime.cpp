@@ -24,7 +24,7 @@ void* viewSlots[26]={},*rendererSlots[19]={};
 void* __fastcall getView(void*,void*) {return &view;}
 const Mat4* __fastcall getTransform(void*,void*) {return reinterpret_cast<const Mat4*>(viewBytes);}
 EnvMapEntry* entry(EnvMapManager& m,const char* key)
-{ return static_cast<EnvMapEntry*>(vc71::mapNodeValue(vc71::mapFind(m.m_maps,key))); }
+{ const auto found=m.m_maps.find(key);return found==m.m_maps.end()?0:found->second; }
 // Capture and writer observers.
 struct FaceCall {unsigned int size;dx9rend::EngineTexture* cube;int face;Vec3 position;};
 std::vector<FaceCall> faceCalls;
@@ -52,22 +52,21 @@ int __fastcall streamRelease(void*,void*) {++streamReleases;return 0;}
 }
 namespace renddx9abi {
 void* engineAlloc(unsigned int n){return std::malloc(n);}void engineFree(void* p){std::free(p);}
-void* crtMalloc(size_t n){return std::malloc(n);}void crtFree(void* p){std::free(p);}
 void logf(const char*,...){++logs;}
-bool EngineStream::open(const vc71::string& path)
+bool EngineStream::open(const std::string& path)
 { openPath=path.c_str();cursor=0;m_stream=files.count(openPath)?reinterpret_cast<HostNonlinearStream*>(1):0;return m_stream!=0; }
 void EngineStream::close(){m_stream=0;}
 unsigned int EngineStream::read(void* out,unsigned int n)
 {const std::string& data=files[openPath];CHECK(cursor+n<=data.size());std::memcpy(out,data.data()+cursor,n);cursor+=n;return n;}
 int EngineStream::getSize(){return static_cast<int>(files[openPath].size());}
-bool engineFileExists(const vc71::string& path){return files.count(path.c_str())!=0;}
+bool engineFileExists(const std::string& path){return files.count(path.c_str())!=0;}
 }
 namespace dice { namespace hfe {
 namespace Rend {IBase* g_EnvMapManager=0;}
 ::renddx9abi::HostFileManager* fileManager=0; // HM1: main points it at the file spy
 namespace dx9rend {
 void* g_rendererBase=&renderer;
-void* textureManagerGetTexture(const vc71::string& name)
+void* textureManagerGetTexture(const std::string& name)
 {
     std::string key=name.c_str();loaded.push_back(key);
     EngineTexture*& t=textures[key];
@@ -82,7 +81,7 @@ void textureManagerEvictFromCache(void* value)
     {EngineTexture* t=i->second;CHECK(t->refCount==1);textureDtor(t);std::free(t);textures.erase(i);return;}
     CHECK(false);
 }
-void readStringSettingDefault(const char* name,const char* fallback,vc71::string& out)
+void readStringSettingDefault(const char* name,const char* fallback,std::string& out)
 {
     settingReads.push_back(name);
     if(!std::strcmp(name,"GSLoadLevel")){CHECK(!std::strcmp(fallback,"lightsPlease"));out="fixture";}
@@ -104,7 +103,7 @@ IDirect3DSurface9* textureGetLevelSurface(EngineTexture* texture,unsigned int mi
     CHECK(!mip);surfaceRequests.push_back(std::make_pair(texture,face));
     return reinterpret_cast<IDirect3DSurface9*>(&surfaceFake);
 }
-bool textureManagerSaveTexture(EngineTexture* texture,const vc71::string& name)
+bool textureManagerSaveTexture(EngineTexture* texture,const std::string& name)
 { savedTextureObjects.push_back(texture);savedTextures.push_back(name.c_str());return true; }
 bool rendererRenderEnvMapFace(unsigned int size,EngineTexture* cube,int face,const Vec3& position)
 { FaceCall call={size,cube,face,position};faceCalls.push_back(call);return false; }
@@ -135,12 +134,12 @@ int main()
     EnvMapManager m;g_EnvMapManager=&m;
     CHECK(m.getRef()==1 && m.getEnabled() && m.getPerPixelEnabled());
     CHECK(m.queryInterface(1)==&m && m.queryInterface(820202)==&m && !m.queryInterface(2));
-    CHECK(!m.m_currentTexture && !m.m_maps.size);
-    CHECK(!m.loadInfo(vc71::string("missing.emi")) && logs==1);
-    files["empty.emi"]="";CHECK(m.loadInfo(vc71::string("empty.emi")) && !m.m_maps.size);
+    CHECK(!m.m_currentTexture && m.m_maps.empty());
+    CHECK(!m.loadInfo(std::string("missing.emi")) && logs==1);
+    files["empty.emi"]="";CHECK(m.loadInfo(std::string("empty.emi")) && m.m_maps.empty());
     files["Levels/fixture/Envmaps/EnvironmentMapInfo.emi"]="# ignored\r\n\nzeta 10/0/0/1\r\nalpha -10/0/0/0\n";
-    m.setEnabled(false);m.onPostLoad();CHECK(!m.m_maps.size);
-    m.setEnabled(true);m.onPostLoad();CHECK(m.m_maps.size==2 && loaded.size()==2);
+    m.setEnabled(false);m.onPostLoad();CHECK(m.m_maps.empty());
+    m.setEnabled(true);m.onPostLoad();CHECK(m.m_maps.size()==2 && loaded.size()==2);
     CHECK(loaded[0]=="Levels/fixture/Envmaps/zeta.dds" && loaded[1]=="Levels/fixture/Envmaps/alpha.dds");
     CHECK(entry(m,"zeta")->position.x==10 && entry(m,"zeta")->flag);
     CHECK(entry(m,"alpha")->position.x==-10 && !entry(m,"alpha")->flag);
@@ -149,21 +148,21 @@ int main()
     reinterpret_cast<float*>(viewBytes)[12]=9;m.update(2);CHECK(m.m_currentTexture==entry(m,"zeta")->texture);
     CHECK(geom::bundledMeshEnvironmentTexture()==m.m_currentTexture);
     m.setPerPixelEnabled(false);CHECK(!m.getPerPixelEnabled());m.reset();
-    CHECK(!m.m_currentTexture && m.getPerPixelEnabled() && m.m_maps.size==2);
-    m.clear();CHECK(!m.m_maps.size && !m.m_currentTexture && destroyed==2 && evictions==2 && textures.empty());
-    files["one.emi"]="only 1/2/3/1\n";CHECK(m.loadInfo(vc71::string("one.emi")));
+    CHECK(!m.m_currentTexture && m.getPerPixelEnabled() && m.m_maps.size()==2);
+    m.clear();CHECK(m.m_maps.empty() && !m.m_currentTexture && destroyed==2 && evictions==2 && textures.empty());
+    files["one.emi"]="only 1/2/3/1\n";CHECK(m.loadInfo(std::string("one.emi")));
     m.update(3);CHECK(m.m_currentTexture==entry(m,"only")->texture && loaded.back()=="only.dds");
-    EnvMapObjectTemplate* t=m.getTemplate(vc71::string("Vehicle"));
-    CHECK(t && m.getTemplate(vc71::string("vehicle"))==t && m.m_templateCount==1);
+    EnvMapObjectTemplate* t=m.getTemplate(std::string("Vehicle"));
+    CHECK(t && m.getTemplate(std::string("vehicle"))==t && m.m_templateCount==1);
     CHECK(t->getSize()==1 && t->getIsStatic());
-    EnvMapObject* object=m.createObject(t);CHECK(object && vc71::vectorSizeIn(m.m_objects,4)==1);
-    m.queueRemoval(object);m.update(4);CHECK(!vc71::vectorSizeIn(m.m_objects,4) && !vc71::vectorSizeIn(m.m_pendingRemoval,4));
-    m.clear();CHECK(!m.m_templates.size && !m.m_templateCount && textures.empty());
+    EnvMapObject* object=m.createObject(t);CHECK(object && m.m_objects.size()==1);
+    m.queueRemoval(object);m.update(4);CHECK(m.m_objects.empty() && m.m_pendingRemoval.empty());
+    m.clear();CHECK(m.m_templates.empty() && !m.m_templateCount && textures.empty());
     // The capture cubes are not cache textures; this fixture leaves the manager undestroyed.
     {
         EnvMapManager* const c=new EnvMapManager;g_EnvMapManager=c;
         CHECK(!c->generateEnvMaps() && !c->save() && !fileOpens && faceCalls.empty() && cubes.empty());
-        EnvMapObjectTemplate* const probe=c->getTemplate(vc71::string("Probe"));
+        EnvMapObjectTemplate* const probe=c->getTemplate(std::string("Probe"));
         EnvMapObject* const first=c->createObject(probe);
         EnvMapObject* const second=c->createObject(probe);
         Mat4 transform;std::memset(&transform,0,sizeof(transform));
@@ -191,9 +190,9 @@ int main()
                 CHECK(surfaceRequests[12*o+2*f+1]==std::make_pair(cubes[2*o],f));   // the target's
             }
         }
-        CHECK(c->m_maps.size==2 && entry(*c,"=10=-3=3")==first->m_entry && entry(*c,"=-4=5=-7")==second->m_entry);
+        CHECK(c->m_maps.size()==2 && entry(*c,"=10=-3=3")==first->m_entry && entry(*c,"=-4=5=-7")==second->m_entry);
         const int logsBefore=logs;filterResult=E_FAIL;
-        CHECK(c->generateEnvMaps() && logs==logsBefore+2 && c->m_maps.size==2); // reported, goes on, rebuilt
+        CHECK(c->generateEnvMaps() && logs==logsBefore+2 && c->m_maps.size()==2); // reported, goes on, rebuilt
         filterResult=0;
         const size_t reads=settingReads.size();
         CHECK(c->save() && settingReads.size()==reads+3 && settingReads[reads]=="GSLoadLevel");

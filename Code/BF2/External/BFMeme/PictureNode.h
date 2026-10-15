@@ -6,16 +6,18 @@
 namespace dice { namespace meme {
 class PictureNode : public Node {
 public:
-    explicit PictureNode(int texture);
+    explicit PictureNode(TextureHandle texture);
     TypeDescriptor* getType() override;
     unsigned int getObjectSize() override;
     bool streamProperties(System*, Stream*) override;
     void paintSelf(System*, const NodeState*, const Rect*, const Rect*, RenderContext*) override;
     static TypeDescriptor* getClassType();                // 836320, factory8362F0
 protected:
-    int m_texture;                                       // +08, signed texture handle
+    TextureHandle m_texture;                             // +08, signed texture handle
 };
+#if defined(_M_IX86)
 static_assert(sizeof(PictureNode)==12, "native PictureNode prefix storage");
+#endif
 } }
 #endif
 #endif

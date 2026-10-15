@@ -10,13 +10,13 @@
 
 #include "IEditorSpline.h"               // IEditorSpline (table 0x1020CE70), shared with the editor
 #include "SplineControlPoint.h"
-#include "../Geom/UndergrowthSystem.h"      // Vc71Vec<T>
 #include "../Math/Vec3.h"
 #include "../../RendDX9Abi/HfeAbi.h"
 #include "../../RendDX9Abi/PluginAbi.h"     // renddx9abi::HostString
-#include "../../RendDX9Abi/Vc71String.h"
+#include <string>
 
 #include <stddef.h>
+#include <vector>
 
 namespace dice {
 namespace hfe {
@@ -95,7 +95,7 @@ public:
     int                          m_refCount;                  // +0x04
     float                        m_stepSize;                  // +0x08
     int                          m_order;                     // +0x0C
-    Vc71Vec<SplineControlPoint>  m_points;                    // +0x10
+    std::vector<SplineControlPoint> m_points;                 // +0x10
     int                          m_snapFlags;                 // +0x20
     dx9rend::Effect*             m_effect;                    // +0x24
     dx9rend::ShaderParameter*    m_paramWorldViewProjection;  // +0x28
@@ -116,7 +116,7 @@ public:
     Vec3                         m_lastSample;                // +0x9C
     Vec3                         m_previousSample;            // +0xA8
     int                          m_endState;                  // +0xB4
-    vc71::string                 m_name;                      // +0xB8
+    std::string                 m_name;                      // +0xB8
 
 private:
     EditorSpline(const EditorSpline&);
@@ -126,21 +126,6 @@ private:
 #if defined(_M_IX86)
 static_assert(offsetof(EditorSpline, m_stepSize) == 0x08, "step at +0x08");
 static_assert(offsetof(EditorSpline, m_points) == 0x10, "control points at +0x10");
-static_assert(offsetof(EditorSpline, m_snapFlags) == 0x20, "snap flags at +0x20");
-static_assert(offsetof(EditorSpline, m_effect) == 0x24, "effect at +0x24");
-static_assert(offsetof(EditorSpline, m_dirty) == 0x30, "dirty byte at +0x30");
-static_assert(offsetof(EditorSpline, m_vertexBuffer) == 0x34, "vertex buffer at +0x34");
-static_assert(offsetof(EditorSpline, m_up) == 0x3C, "up at +0x3C");
-static_assert(offsetof(EditorSpline, m_lineWidth) == 0x48, "width at +0x48");
-static_assert(offsetof(EditorSpline, m_color) == 0x4C, "colour at +0x4C");
-static_assert(offsetof(EditorSpline, m_iteratorState) == 0x5C, "iterator state at +0x5C");
-static_assert(offsetof(EditorSpline, m_segmentPoint) == 0x60, "segment points at +0x60");
-static_assert(offsetof(EditorSpline, m_segment) == 0x90, "segment index at +0x90");
-static_assert(offsetof(EditorSpline, m_lastSample) == 0x9C, "last sample at +0x9C");
-static_assert(offsetof(EditorSpline, m_previousSample) == 0xA8, "previous sample at +0xA8");
-static_assert(offsetof(EditorSpline, m_endState) == 0xB4, "end state at +0xB4");
-static_assert(offsetof(EditorSpline, m_name) == 0xB8, "name at +0xB8");
-static_assert(sizeof(EditorSpline) == 0xD4, "the factory 0x1007CEA0 allocates 0xD4");
 #endif
 
 // RefFactory 0x1007CEA0 - published by ModuleGeomMisc::getClassList.

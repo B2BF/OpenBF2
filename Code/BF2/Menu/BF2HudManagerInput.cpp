@@ -12,6 +12,7 @@ namespace {
 float centeredInputOrigin(float origin, float dimension)
 {
     const float half = 0.5f;
+#if defined(_M_IX86)
     float result;
     __asm {
         fld dimension
@@ -20,6 +21,10 @@ float centeredInputOrigin(float origin, float dimension)
         fstp result
     }
     return result;
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    return static_cast<float>(origin - static_cast<double>(dimension) * half);
+#endif
 }
 
 void moveInputPointer(float* position, float x, float y, int sensitivity,
@@ -27,6 +32,7 @@ void moveInputPointer(float* position, float x, float y, int sensitivity,
 {
     const float half = 0.5f;
     if (absolute) {
+#if defined(_M_IX86)
         __asm {
             mov eax, position
             fld x
@@ -38,8 +44,14 @@ void moveInputPointer(float* position, float x, float y, int sensitivity,
             fmul half
             fstp dword ptr [eax+4]
         }
+#else
+        // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+        position[0] = static_cast<float>(static_cast<double>(x) * width * half);
+        position[1] = static_cast<float>(static_cast<double>(y) * height * half);
+#endif
     } else {
         // fild preserves all bits of the signed sensitivity until multiplication.
+#if defined(_M_IX86)
         __asm {
             mov eax, position
             fild sensitivity
@@ -51,12 +63,20 @@ void moveInputPointer(float* position, float x, float y, int sensitivity,
             fadd dword ptr [eax+4]
             fstp dword ptr [eax+4]
         }
+#else
+        // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates); the int is
+        // exact in double, its product with a float is rounded to 53 bits.
+        const double scale = sensitivity;
+        position[0] = static_cast<float>(x * scale + position[0]);
+        position[1] = static_cast<float>(scale * y + position[1]);
+#endif
     }
 }
 
 void clampInputCoordinate(float& value, float origin, float extent)
 {
     // Keep the unrounded upper-bound sum and the shipped unordered comparisons.
+#if defined(_M_IX86)
     __asm {
         mov edx, value
         fld dword ptr [edx]
@@ -80,6 +100,17 @@ void clampInputCoordinate(float& value, float origin, float extent)
         fstp st(0)
     clamp_done:
     }
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    // Only an ordered value below the origin is raised (raw copy); otherwise only an ordered
+    // unrounded upper bound below the value lowers it. Unordered compares change nothing.
+    if (value < origin) {
+        value = origin;
+    } else {
+        const double upper = static_cast<double>(extent) + origin;
+        if (upper < value) value = static_cast<float>(upper);
+    }
+#endif
 }
 }
 

@@ -32,7 +32,7 @@ extern void* g_shaderManager;       // dword_1023B97C - ShaderManager.cpp
 
 // BufferManager.cpp / StateManager.cpp, declared per TU as every other client does.
 void* createVertexBuffer(void* bufferManager, unsigned int count, unsigned int stride,
-                         const vc71::string& name, unsigned int usage);
+                         const std::string& name, unsigned int usage);
 void* vertexBufferLock(void* wrapper, unsigned int offsetVerts, unsigned int countVerts,
                        unsigned int flags);                                  // sub_10014630
 bool  vertexBufferUnlock(void* wrapper);                                     // sub_10014690
@@ -292,9 +292,9 @@ EditorSpline::EditorSpline(int order)
     m_effect = static_cast<dx9rend::Effect*>(
         dx9rend::shaderManagerGetEffect(dx9rend::g_shaderManager, "Shaders/SplineShader"));
     m_paramWorldViewProjection =
-        dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("WorldViewProjection"));
+        dx9rend::effectGetShaderParameterTyped(m_effect, std::string("WorldViewProjection"));
     m_paramDiffuseColor =
-        dx9rend::effectGetShaderParameterTyped(m_effect, vc71::string("DiffuseColor"));
+        dx9rend::effectGetShaderParameterTyped(m_effect, std::string("DiffuseColor"));
 
     if (!s_heightmapCluster)
     {
@@ -486,7 +486,7 @@ void EditorSpline::addControlPoint(const Vec3& position)
     m_dirty = 1;
 }
 
-// the points' _Tidy (every destructor, the block freed); both dirty bytes.
+// the points' clear (every destructor); both dirty bytes.
 void EditorSpline::clearControlPoints()
 {
     m_points.clear();
@@ -787,7 +787,7 @@ void EditorSpline::draw()
         rebuild();
     if (m_vertexBuffer)
     {
-        dx9rend::effectSetTechniqueByName(m_effect, vc71::string("spline"));
+        dx9rend::effectSetTechniqueByName(m_effect, std::string("spline"));
         dx9rend::effectBegin(m_effect);                                      // sub_1001D780
         dx9rend::effectBeginPass(m_effect, 0);                               // sub_1001DBB0
         dx9rend::vertexBufferBindStream(m_vertexBuffer, 0);                  // sub_100146C0
@@ -841,7 +841,7 @@ void EditorSpline::rebuild()
     if (m_snapFlags & 8)
         s_heightmapCluster->getPrimaryScale();                               // +0x54, unused
 
-    Vc71Vec<Vec3> vertices;
+    std::vector<Vec3> vertices;
     unsigned int vec3Count = 0;
     if (m_order == 1)
     {
@@ -962,7 +962,7 @@ void EditorSpline::rebuild()
         vertices.push_back(capNormal);
 
         m_vertexCount = 0;
-        vec3Count = vertices.size();
+        vec3Count = static_cast<unsigned int>(vertices.size());
     }
     else
     {
@@ -974,7 +974,7 @@ void EditorSpline::rebuild()
     if (m_vertexBuffer)
         dx9rend::vertexBufferRelease(m_vertexBuffer);
     m_vertexBuffer = dx9rend::createVertexBuffer(dx9rend::g_bufferManager, vertexCount, 24u,
-                                                 vc71::string("EditorSpline"), 8u);
+                                                 std::string("EditorSpline"), 8u);
     m_rebuildBuffer = 0;
     void* const destination = dx9rend::vertexBufferLock(m_vertexBuffer, 0u, 0u, 0u);
     std::memcpy(destination, vertices.data(), vertexCount * 24u);
@@ -983,15 +983,15 @@ void EditorSpline::rebuild()
 }
 
 
-// RefFactory 0x1007CEA0: refuse aggregation, 0xD4 bytes, construct with order 1, QI with no null test
-// on the object (shipped), release on refusal.
+// RefFactory 0x1007CEA0: refuse aggregation, the object (retail 0xD4 bytes), construct with order 1,
+// QI with no null test on the object (shipped), release on refusal.
 
 IBase* __fastcall createEditorSpline(unsigned int iid, IBase* outer)
 {
     if (outer)
         return 0;
 
-    void* const storage = ::renddx9abi::engineAlloc(0xD4);
+    void* const storage = ::renddx9abi::engineAlloc(sizeof(EditorSpline));
     EditorSpline* self = 0;
     if (storage)
         self = new (storage) EditorSpline(1);

@@ -27,7 +27,7 @@ protected:
     BfEditData* m_editData;                            // +08, borrowed
     Data* m_string;                                   // +0C, borrowed
     Action* m_selectAction;                           // +10, borrowed
-    int m_font;                                       // +14, opaque font handle
+    FontHandle m_font;                                // +14, opaque font handle
     int m_maxCharacters;                              // +18
     int m_firstVisible, m_cursor;                     // +1C,+20
     float m_blinkTime;                                // +24

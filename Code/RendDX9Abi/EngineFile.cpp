@@ -72,13 +72,13 @@ void freeEngineFile(EngineFileData& file)
     file.size = 0;
 }
 
-bool engineFileExists(const vc71::string& path)
+bool engineFileExists(const std::string& path)
 {
     HostString hostPath = makeHostString(path);
     return ::dice::hfe::fileManager->fileExists(hostPath);
 }
 
-void engineFilePrepareWrite(const vc71::string& path)
+void engineFilePrepareWrite(const std::string& path)
 {
     HostString hostPath = makeHostString(path);
     HostStream* stream = ::dice::hfe::fileManager->open(
@@ -87,7 +87,7 @@ void engineFilePrepareWrite(const vc71::string& path)
         stream->release();
 }
 
-void engineFileGetWritePath(const vc71::string& path, vc71::string& out)
+void engineFileGetWritePath(const std::string& path, std::string& out)
 {
     const HostString hostPath = makeHostString(path);
     HostString hostOut;
@@ -97,7 +97,7 @@ void engineFileGetWritePath(const vc71::string& path, vc71::string& out)
 
 // Closes any held stream before opening the new path through the engine file interface.
 
-bool EngineStream::open(const vc71::string& path)
+bool EngineStream::open(const std::string& path)
 {
     close();
 

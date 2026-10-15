@@ -25,20 +25,53 @@ the `Memory.dll`/MSVCR71 heap adapters, and stages a rebuilt TextureAtlasBuilder
 client. TextureAtlasBuilder retains its static CRT and legacy float formatting because
 those choices preserve `.tai` output, independently of executable compatibility.
 
-The cleanup is staged. Renderer-internal `vc71::*` containers, fixed-offset consumers,
-factory calling-convention thunks, and legacy declarations used by shared code and reference
-fixtures remain until their callers can be migrated together. `BF2_PLUGIN_ABI_NATIVE=0`
-is rejected for renderer, movie, and audio plugin images; its remaining uses do not provide
-a supported retail plugin build. Dedicated/non-x86 alternatives and unresolved native
-frontiers retain their existing behavior.
+The VC7.1 container and string adapters (`vc71::*`, `Msvcr71Heap`) are removed. The renderer,
+movie and audio plugins, the client and the editor hold this toolset's `std::string`,
+`std::vector`, `std::map`, `std::set` and `std::list` directly, and pass them across the image
+boundaries by reference or by value. Objects that embed them are sized with `sizeof` and
+constructed in place; their `// +0xNN` comments keep the retail offsets as evidence only.
+Container element types that no recovered code reads stay marked `[UNRESOLVED]`.
+`RendDX9Abi/PluginAbi.h` enforces the shared contract: `/MD` and `_ITERATOR_DEBUG_LEVEL=0` in
+every image. Recovered `__fastcall` factories are still published through stateless thunks.
+Dedicated/non-x86 alternatives and unresolved native frontiers retain their existing behavior.
+
+### Native x64 client
+
+The client, its four DLLs and the editor also build as native x64 images
+(`[CHOSEN, not recovered]`, [issue #7](https://github.com/B2BF/OpenBF2/issues/7)). The x86
+images are unchanged and stay the fidelity reference. The rules that keep both correct:
+
+- **Hand-built vtables.** Thunks are declared `RD9_THUNK name(void* self RD9_THUNK_EDX, ...)`
+  and called directly as `name(obj RD9_THUNK_ARG, ...)` (`Code/RendDX9Abi/ThunkAbi.h`). On x86
+  this is the `__fastcall` form with its dummy EDX parameter; on x64 the dummy is absent, because
+  it would shift every later argument. Calls through raw function pointers use `__thiscall`
+  pointer types without the dummy, which is the same ABI on x86 and correct on x64.
+- **Raw slots.** A vtable slot named by its retail byte offset is indexed `offset / 4`, never
+  `offset / sizeof(void*)`: MSVC keeps the slot order on x64.
+- **Layouts.** Retail size and offset asserts are gated on `_M_IX86`. Where code reached a field by
+  its retail byte offset, it now uses a named member, `offsetof`, or an accessor keyed by the
+  retail offset that maps to the native field and stops with `[FRONTIER]` on an unmapped offset:
+  `rendererTail*`, `rendererRenderSwitch` and the other Renderer accessors in
+  `RendDX9/RendDX9Base.h`, `raShaderConstantsAt` for the shader-constants block
+  (`RendDX9/RenderQueues.cpp`), and `Geom/ParticleSystem/ParticleRawLayout.h` for the particle
+  descriptors, instances, pools and renderers.
+- **Handles.** Values that carry a pointer are pointer-sized on x64 and keep `int` on x86: the meme
+  font and texture handles (`FontHandle`/`TextureHandle` in `External/BFMeme/Object.h`), the HUD
+  icon handles, and the SwiffPlayer render-capability argument (`intptr_t`).
+- **Platform selection.** A `[PLATFORM]` choice between the PE and ELF behaviour is gated on
+  `_MSC_VER` (Windows images), not `_M_IX86`; `_M_IX86` gates only x86 inline assembly and
+  x86 layouts.
+
+What the x64 client leaves out (movies, the Novint Falcon, the 32-bit OpenAL loader, the AI
+side-DLL) is listed under [Native x64 client](building.md#native-x64-client).
 
 SwiffPlayer's wrapper now contains only its native host paths; the retail-host conditional
 arms have been removed under the same issue. The native ActionScript callback whitelist and
 the `swiff-native-as-host` and `swiff-host-bodies` frontiers remain, along with the RW-88
 callback/tracing, RW-89 crash-tracing, and RW-49 module-consolidation boundaries. The documented
-`voipStopTest` report-and-continue exception is preserved. Its internal `vc71::*` strings, player-stat
-records, and queued-mouse storage still have live consumers and remain for a later migration.
-This removal does not change movie formats, callback behavior, or host interface layouts.
+`voipStopTest` report-and-continue exception is preserved. Its strings, player-stat records and
+queued-mouse storage are std containers. This removal does not change movie formats or callback
+behavior.
 
 ## Source map
 

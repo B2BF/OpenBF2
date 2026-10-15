@@ -10,7 +10,6 @@
 
 #include "../../RendDX9Abi/PluginAbi.h"
 
-#if BF2_PLUGIN_ABI_NATIVE
 
 #include "../Core/ConsoleObjectMacro.h"
 #include "../Core/ConsoleObjects.h"
@@ -82,7 +81,7 @@ void setGroundHemiName(const std::string& name)
 
 std::string getGroundHemiName()
 {
-    const vc71::string& name = lightManager()->getGroundHemi();
+    const std::string& name = lightManager()->getGroundHemi();
     return std::string(name.c_str(), name.size());
 }
 
@@ -168,5 +167,4 @@ bool unregisterShadowManagerConsoleObjects()
 } // namespace hfe
 } // namespace dice
 
-#endif // BF2_PLUGIN_ABI_NATIVE
 #endif // BF2_IMAGE_RENDDX9

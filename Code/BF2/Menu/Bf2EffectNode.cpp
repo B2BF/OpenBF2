@@ -55,8 +55,10 @@ bool Bf2EffectNode::setName(const char* name)
     return true;
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2EffectNode) == 16, "native Bf2EffectNode storage");
 static_assert(sizeof(ClassTypeDescriptor<Bf2EffectNode, EffectNode>) == 16,
     "Bf2EffectNode metadata");
+#endif
 } }
 #endif

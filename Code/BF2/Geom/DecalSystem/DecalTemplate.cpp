@@ -39,11 +39,7 @@ bool equalsNoCase(const char* a, const char* b)
 // std::operator!=(const string&, const string&) (0x101AF9D0, MSVCP71's): the counted compare.
 bool stringsDiffer(const DecalTemplateString& a, const DecalTemplateString& b)
 {
-#if BF2_PLUGIN_ABI_NATIVE
     return a != b;
-#else
-    return a.size() != b.size() || ::memcmp(a.c_str(), b.c_str(), a.size()) != 0;
-#endif
 }
 
 // `name + ".dds"` - the shipped code inlines MSVCP71's operator+: copy-construct, operator+=, copy
@@ -206,7 +202,7 @@ bool DecalTemplate::loadTexture(const DecalTemplateString& name)
     assignTexture(m_texture, 0);
 
     DecalManager* const manager = static_cast<DecalManager*>(g_DecalManager);
-    m_atlasEntry = manager->getAtlasEntry(::renddx9abi::toVc71String(name));
+    m_atlasEntry = manager->getAtlasEntry(::renddx9abi::fromHostString(name));
     if (m_atlasEntry)
         return true;
 
@@ -217,7 +213,7 @@ bool DecalTemplate::loadTexture(const DecalTemplateString& name)
     if (exists)
     {
         assignTexture(m_texture, static_cast<dx9rend::EngineTexture*>(
-            dx9rend::textureManagerGetTexture(::renddx9abi::toVc71String(name))));
+            dx9rend::textureManagerGetTexture(::renddx9abi::fromHostString(name))));
         return m_texture != 0;
     }
 

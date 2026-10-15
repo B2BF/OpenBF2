@@ -6,39 +6,23 @@
 #include "../../RendDX9Abi/BfMemory.h"
 #include "../../RendDX9Abi/Frontier.h"
 #include "../RendDX9/Texture.h"
+#include <algorithm>
 #include <cstring>
 #include <new>
 #include <string>
 
 namespace dice { namespace hfe {
 namespace dx9rend {
-extern IBase* g_Renderer;
-void pathToLower(vc71::string& value);
-void* textureManagerGetTexture(const vc71::string& name);
+void pathToLower(std::string& value);
+void* textureManagerGetTexture(const std::string& name);
+unsigned int rendererRaPath();   // BF2Render.cpp - the Renderer's +0x6CC shader path
 }
 namespace geom {
 
 BundledMeshStateManager* g_bundledMeshStateManager = 0;
 
 namespace {
-unsigned int pointerCount(const vc71::vector_layout& v)
-{
-    return v.first ? static_cast<unsigned int>((v.last - v.first) / 4) : 0;
-}
-
-// Both callers resize a newly constructed vector, with zero as the fill value
-// (0x101930AB and 0x101934A6 -> 0x100EBAD0). The allocator word remains untouched.
-void resizeEmptyTextureVector(vc71::vector_layout& v, unsigned int count)
-{
-    if (count)
-    {
-        v.first = static_cast<char*>(::operator new(count * sizeof(void*)));
-        std::memset(v.first, 0, count * sizeof(void*));
-        v.last = v.end = v.first + count * sizeof(void*);
-    }
-}
-
-bool contains(const vc71::string& value, const char* needle)
+bool contains(const std::string& value, const char* needle)
 {
     return std::strstr(value.c_str(), needle) != 0;
 }
@@ -55,8 +39,7 @@ void addTextureReference(dx9rend::EngineTexture* texture)
 
 BundledMeshState::BundledMeshState() : m_refCount(1)
 {
-    // Inlined in 0x10192FF0 at 0x10192FFF and 0x10193455.
-    m_textures.first = m_textures.last = m_textures.end = 0;
+    // Inlined in 0x10192FF0 at 0x10192FFF and 0x10193455. m_textures is default-constructed empty.
     m_animated = m_normalMap = m_extraMap = m_envMap = m_colorMapGloss = 0;
     m_feature39 = m_alphaTest = m_alphaOne = m_cockpit = m_noHemiLight = 0;
 }
@@ -64,12 +47,12 @@ BundledMeshState::BundledMeshState() : m_refCount(1)
 BundledMeshState::~BundledMeshState()
 {
     // release each texture, unlink from the global cache, free vector,
-    // then destroy the name. The singleton dereference deliberately has no guard.
-    const unsigned int count = pointerCount(m_textures);
+    // then destroy the name. The singleton dereference deliberately has no guard. The vector and
+    // then the name are freed by their member destructors, in that order.
+    const unsigned int count = static_cast<unsigned int>(m_textures.size());
     for (unsigned int i = 0; i < count; ++i)
     {
-        dx9rend::EngineTexture* const texture =
-            reinterpret_cast<dx9rend::EngineTexture**>(m_textures.first)[i];
+        dx9rend::EngineTexture* const texture = m_textures[i];
         if (texture && --texture->refCount == 0)
         {
             dx9rend::textureDtor(texture);
@@ -77,9 +60,6 @@ BundledMeshState::~BundledMeshState()
         }
     }
     g_bundledMeshStateManager->remove(this);
-    if (m_textures.first)
-        ::renddx9abi::engineFree(m_textures.first);
-    m_textures.first = m_textures.last = m_textures.end = 0;
 }
 
 void BundledMeshState::addRef() { ++m_refCount; }
@@ -107,7 +87,7 @@ void BundledMeshState::deriveFeatures()
 {
     // lower a copy only. Feature derivation does not canonicalize the
     // name used by the case-sensitive cache, and only raises bytes already zeroed.
-    vc71::string lowered(m_name);
+    std::string lowered(m_name);
     dx9rend::pathToLower(lowered);
     if (contains(lowered, "animated")) m_animated = 1;
     if (contains(lowered, "envmap")) m_envMap = 1;
@@ -121,8 +101,8 @@ void BundledMeshState::deriveFeatures()
 
 BundledMeshStateManager::BundledMeshStateManager() : m_refCount(1)
 {
-    m_cache.first = m_cache.last = m_cache.end = 0;
-    new (&m_texturePrefix) vc71::string();
+    // m_cache is default-constructed empty; the prefix lives in a union and is built here.
+    new (&m_texturePrefix) std::string();
     m_enabled = m_enabled9 = 1;
     m_texturePrefix = "Textures/";
 }
@@ -130,17 +110,10 @@ BundledMeshStateManager::BundledMeshStateManager() : m_refCount(1)
 BundledMeshStateManager::~BundledMeshStateManager()
 {
     // the cache does NOT own state references. Retail repeatedly erases
-    // its first pointer, then destroys the string, then frees the vector allocation.
-    char* const first = m_cache.first;
-    while (first != m_cache.last)
-    {
-        std::memmove(first, first + 4, m_cache.last - (first + 4));
-        m_cache.last -= 4;
-    }
-    m_texturePrefix.~string();
-    if (m_cache.first)
-        ::renddx9abi::engineFree(m_cache.first);
-    m_cache.first = m_cache.last = m_cache.end = 0;
+    // its first pointer, then destroys the string, then frees the vector allocation - the last
+    // with m_cache's own destructor, after this body.
+    m_cache.clear();
+    m_texturePrefix.~basic_string();
 }
 
 void BundledMeshStateManager::addRef() { ++m_refCount; }
@@ -165,21 +138,20 @@ bool BundledMeshStateManager::getEnabled() const { return m_enabled != 0; }
 BundledMeshState* BundledMeshStateManager::find(const BundledMeshState& state) const
 {
     // identity is name and texture pointers, not the derived flags.
-    const unsigned int count = pointerCount(m_cache);
+    const unsigned int count = static_cast<unsigned int>(m_cache.size());
     for (unsigned int i = 0; i < count; ++i)
     {
-        BundledMeshState* const candidate = reinterpret_cast<BundledMeshState**>(m_cache.first)[i];
+        BundledMeshState* const candidate = m_cache[i];
         if (candidate->m_name.size() != state.m_name.size() ||
             std::memcmp(candidate->m_name.c_str(), state.m_name.c_str(), state.m_name.size()) != 0)
             continue;
-        const unsigned int textures = pointerCount(candidate->m_textures);
-        if (textures != pointerCount(state.m_textures))
+        const unsigned int textures = static_cast<unsigned int>(candidate->m_textures.size());
+        if (textures != state.m_textures.size())
             continue;
         bool same = true;
         for (unsigned int j = 0; j < textures; ++j)
         {
-            if (reinterpret_cast<void**>(candidate->m_textures.first)[j] !=
-                reinterpret_cast<void**>(state.m_textures.first)[j])
+            if (candidate->m_textures[j] != state.m_textures[j])
                 same = false;
         }
         if (same)
@@ -190,26 +162,11 @@ BundledMeshState* BundledMeshStateManager::find(const BundledMeshState& state) c
 
 void BundledMeshStateManager::remove(const BundledMeshState* state)
 {
-    char* cursor = m_cache.first;
-    if (cursor == m_cache.last)
-        return;
-    char* next = cursor + 4;
-    do
-    {
-        if (*reinterpret_cast<BundledMeshState**>(cursor) == state)
-        {
-            std::memmove(cursor, next, m_cache.last - next);
-            m_cache.last -= 4;
-        }
-        else
-        {
-            cursor += 4;
-            next += 4;
-        }
-    } while (cursor != m_cache.last);
+    // every occurrence, the survivors kept in order.
+    m_cache.erase(std::remove(m_cache.begin(), m_cache.end(), state), m_cache.end());
 }
 
-BundledMeshState* BundledMeshStateManager::read(void* effect, const vc71::string& templatePath,
+BundledMeshState* BundledMeshStateManager::read(void* effect, const std::string& templatePath,
     ::renddx9abi::HostNonlinearStream* stream, bool arg4, bool skipTextures)
 {
     (void)effect; // The retail first argument is never read.
@@ -224,7 +181,7 @@ BundledMeshState* BundledMeshStateManager::read(void* effect, const vc71::string
 
     int mapCount;
     stream->read(&mapCount, 4);
-    resizeEmptyTextureVector(temp.m_textures, static_cast<unsigned int>(mapCount));
+    temp.m_textures.resize(static_cast<unsigned int>(mapCount), 0);   // 0x101930AB -> 0x100EBAD0
     for (int i = 0; i < mapCount; ++i)
     {
         stream->read(&length, 4);
@@ -233,8 +190,8 @@ BundledMeshState* BundledMeshStateManager::read(void* effect, const vc71::string
             raw = static_cast<char*>(::renddx9abi::engineAlloc(length + 1));
             stream->read(raw, length);
             raw[length] = 0;
-            vc71::string prefix;
-            vc71::string mapName(raw);
+            std::string prefix;
+            std::string mapName(raw);
             if (!contains(mapName, "/"))
             {
                 prefix = templatePath;
@@ -250,12 +207,13 @@ BundledMeshState* BundledMeshStateManager::read(void* effect, const vc71::string
                 mapName = "@@ABSOLUTE@@Common/Textures/SpecularLUT_pow36.dds";
 
             if (!skipTextures &&
-                (*reinterpret_cast<const int*>(reinterpret_cast<const char*>(dx9rend::g_Renderer) + 0x6CC) == 0 ||
+                (dx9rend::rendererRaPath() == 0 ||                     // Renderer +0x6CC
                  !contains(mapName, "_b.dds")))
             {
-                vc71::string full(prefix);
+                std::string full(prefix);
                 full += mapName;
-                reinterpret_cast<void**>(temp.m_textures.first)[i] = dx9rend::textureManagerGetTexture(full);
+                temp.m_textures[i] =
+                    static_cast<dx9rend::EngineTexture*>(dx9rend::textureManagerGetTexture(full));
                 const std::string original(raw);
                 // Preserve the unsigned size()-6 comparison, including its short-name quirk.
                 if (i == 1 && original.rfind("_b.dds") == original.size() - 6u)
@@ -268,10 +226,11 @@ BundledMeshState* BundledMeshStateManager::read(void* effect, const vc71::string
         else
         {
             // This path deliberately ignores skipTextures and the shader-quality gate.
-            vc71::string full(templatePath);
+            std::string full(templatePath);
             full += m_texturePrefix;
             full += "default";
-            reinterpret_cast<void**>(temp.m_textures.first)[i] = dx9rend::textureManagerGetTexture(full);
+            temp.m_textures[i] =
+                static_cast<dx9rend::EngineTexture*>(dx9rend::textureManagerGetTexture(full));
         }
     }
     temp.deriveFeatures();
@@ -285,12 +244,11 @@ BundledMeshState* BundledMeshStateManager::read(void* effect, const vc71::string
     BundledMeshState* const fresh = storage ? new (storage) BundledMeshState() : 0;
     // Retail dereferences null on allocation failure; no invented success/guard.
     fresh->m_name = temp.m_name;
-    resizeEmptyTextureVector(fresh->m_textures, static_cast<unsigned int>(mapCount));
+    fresh->m_textures.resize(static_cast<unsigned int>(mapCount), 0);   // 0x101934A6 -> 0x100EBAD0
     for (int i = 0; i < mapCount; ++i)
     {
-        dx9rend::EngineTexture* const texture =
-            reinterpret_cast<dx9rend::EngineTexture**>(temp.m_textures.first)[i];
-        reinterpret_cast<dx9rend::EngineTexture**>(fresh->m_textures.first)[i] = texture;
+        dx9rend::EngineTexture* const texture = temp.m_textures[i];
+        fresh->m_textures[i] = texture;
         if (texture)
             addTextureReference(texture);
     }
@@ -299,11 +257,11 @@ BundledMeshState* BundledMeshStateManager::read(void* effect, const vc71::string
     {
         // 0x1019352E..0x1019356A only increments a dead local after the vectors
         // have already been sized. It does NOT add an environment texture slot.
-        vc71::string lowered(temp.m_name);
+        std::string lowered(temp.m_name);
         dx9rend::pathToLower(lowered);
         if (contains(lowered, "envmap")) ++mapCount;
     }
-    vc71::vectorRef<BundledMeshState*>(&m_cache).push_back(fresh);
+    m_cache.push_back(fresh);
     return fresh;
 }
 

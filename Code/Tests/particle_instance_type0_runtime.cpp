@@ -16,7 +16,6 @@ int main()
     ParticleSystemManager manager={}; manager.m_vptr=const_cast<const void**>(kVtable);
     manager.m_poolsInitialized=1; manager.m_qualityLevel=2; manager.m_effectiveViewDistance=1000;
     manager.m_type0PoolCount=8;
-    psmReclassification(&manager).construct();
     psmAllocatePool(manager.m_type0PoolBacking,manager.m_type0FreeList,manager.m_type0PoolCount,148,0);
     g_ParticleSystemManager=reinterpret_cast<IBase*>(&manager);
     unsigned char descriptorBytes[0x2A4]={};
@@ -50,7 +49,7 @@ int main()
     CHECK(instance->reserved05() && controller.starts==1 && manager.m_renderBuckets[7].size()==1);
     CHECK(psmRuntimeField<unsigned char>(instance,0x128)==1);
     float* particle=psmType0NewParticle(instance);
-    CHECK(particle && instance->reserved39()==1 && psmRuntimeField<int>(&manager,0x5F28)==1);
+    CHECK(particle && instance->reserved39()==1 && manager.m_type0LiveCount==1);
     particle[18]=particle[19]=particle[20]=0; particle[24]=4; particle[25]=particle[26]=0;
     particle[27]=0; particle[28]=1; particle[29]=1; particle[9]=0;
     CHECK(psmType0AdvanceParticle(instance,particle,0,0.1f,1)==1);
@@ -91,7 +90,7 @@ int main()
     particle[27]=0.9f;
     CHECK(psmType0AdvanceParticle(instance,particle,0,0.2f,1)==0);
     CHECK(instance->reserved39()==0 && psmRuntimeField<float**>(instance,0x24)[0]==0);
-    CHECK(manager.m_type0FreeList==particle && psmRuntimeField<int>(&manager,0x5F28)==0);
+    CHECK(manager.m_type0FreeList==particle && manager.m_type0LiveCount==0);
     instance->reserved04(); instance->reserved41(0.1f);
     CHECK(manager.m_pendingClassification.size()==1);
     psmRemoveActive(&manager,false); CHECK(controller.stops==1 && manager.m_renderBuckets[7].size()==0);
@@ -99,7 +98,7 @@ int main()
     CHECK(manager.m_instances.size()==0);
     freeList(manager.m_instances); freeList(manager.m_pendingDestroy); freeList(manager.m_pendingClassification);
     for(int i=0;i<10;++i) freeList(manager.m_renderBuckets[i]);
-    psmReclassification(&manager).destroy(); cleanup();
+    cleanup();
     std::printf("Ordinary particle lifecycle/integration: %d/%d checks passed\n",checks-failures,checks);
     return failures?1:0;
 }

@@ -5,7 +5,7 @@
 #include <cstring>
 #include <string>
 #if defined(_M_IX86)
-#include "../RendDX9Abi/Vc71String.h"
+#include <string>
 #endif
 struct IBase { void** table; };
 int checks=0,failures=0,flags=0,names=0,queries=0,binds=0;
@@ -32,7 +32,7 @@ struct EnvMapTemplate
 };
 #include "envmap_bind_body.inc"
 #if defined(_M_IX86)
-void* __fastcall bind(void*,void*,const vc71::string& name)
+void* __fastcall bind(void*,void*,const std::string& name)
 #else
 void* bind(void*,const std::string& name)
 #endif
@@ -42,7 +42,7 @@ void* bind(void*,const std::string& name)
  return target;
 }
 #if defined(_M_IX86)
-void* __fastcall wrongSlot(void*,void*,const vc71::string&)
+void* __fastcall wrongSlot(void*,void*,const std::string&)
 #else
 void* wrongSlot(void*,const std::string&)
 #endif

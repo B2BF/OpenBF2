@@ -1,5 +1,5 @@
 // Shared manager contract for decal clients, templates and frame updates.
-// The implementation must preserve the decals-enabled byte at +0x2A6 for VideoOptions.
+// The decals-enabled flag (retail +0x2A6) is set by VideoOptions through DecalManager::setEnabledField.
 #ifndef BF2_GEOM_DECALSYSTEM_IDECALMANAGER_H
 #define BF2_GEOM_DECALSYSTEM_IDECALMANAGER_H
 

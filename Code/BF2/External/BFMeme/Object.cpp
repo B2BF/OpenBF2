@@ -84,7 +84,9 @@ bool createRuntimeObject(RuntimeObject*& object, TypeDescriptor* type)
     created->getType()->addInstance();
     return true;
 }
+#if defined(_M_IX86)
 static_assert(sizeof(RuntimeObject) == 4, "BFMeme RuntimeObject layout");
 static_assert(sizeof(Object) == 4, "BFMeme Object layout");
+#endif
 } }
 #endif

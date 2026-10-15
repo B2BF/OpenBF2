@@ -69,7 +69,6 @@ int main()
     manager.m_poolsInitialized=1; manager.m_qualityLevel=2; manager.m_effectiveViewDistance=1000;
     manager.m_value8C08=0.75f;
     manager.m_tierThresholds[0]=0.4f; manager.m_tierThresholds[1]=0.55f; manager.m_tierThresholds[2]=0.7f;
-    psmReclassification(&manager).construct();
     manager.m_type1PoolCount=64;
     psmAllocatePool(manager.m_type1PoolBacking,manager.m_type1FreeList,manager.m_type1PoolCount,192,1);
     g_ParticleSystemManager=reinterpret_cast<IBase*>(&manager);
@@ -87,7 +86,7 @@ int main()
     // A real type-1 descriptor: its constructor runs initType1Defaults; four setters then make it a
     // short, non-looping burst - 20 per second (slot 23 caches 1/x at +0x19C), 0.5 s of life (slot 45
     // caches 1/x at +0xA0), 0.2 s of emission (slot 29), speed 1 (slot 25).
-    const vc71::string name("mp_g1_test");
+    const std::string name("mp_g1_test");
     constructParticleSystemType1(t1Descriptor, &name);
     IParticleSystemTemplate* const descriptor=reinterpret_cast<IParticleSystemTemplate*>(t1Descriptor);
     CHECK(descriptor->getSystemType()==1);
@@ -146,7 +145,6 @@ int main()
 
     freeList(manager.m_instances); freeList(manager.m_pendingDestroy); freeList(manager.m_pendingClassification);
     for (int i=0;i<10;++i) freeList(manager.m_renderBuckets[i]);
-    psmReclassification(&manager).destroy();
     cleanup();
     std::printf("G1 type-1 mesh-particle runtime: %d/%d checks passed\n",checks-failures,checks);
     return failures?1:0;

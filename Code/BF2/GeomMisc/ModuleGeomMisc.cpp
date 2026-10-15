@@ -4,7 +4,6 @@
 
 #include "../../RendDX9Abi/PluginModules.h"
 #include "../../RendDX9Abi/ModuleCommon.h"
-#include "../../RendDX9Abi/Vc71Vector.h"
 #include "../../RendDX9Abi/Frontier.h"
 #include "FSQuadDrawer.h"
 

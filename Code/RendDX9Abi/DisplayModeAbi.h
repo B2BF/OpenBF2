@@ -1,6 +1,6 @@
-// [CHOSEN, not recovered] Selects the host display-mode ABI: three VC7.1 vector records
-// in a 0x40-byte retail carrier, or native STL vectors for the rebuilt pair.
-// Renderer-internal VC7.1 storage remains unchanged.
+// [CHOSEN, not recovered] The display-mode records BF2.exe and RendDX9.dll exchange: the host's
+// display-mode carrier (hWndBf2TempSlt) and the mode list Renderer +0x3C returns. Both images are
+// built with one toolset and share its STL (issue #7), so both use std::vector.
 
 #ifndef RENDDX9ABI_DISPLAYMODEABI_H
 #define RENDDX9ABI_DISPLAYMODEABI_H
@@ -8,6 +8,7 @@
 #include "PluginAbi.h"
 
 #include <new>
+#include <vector>
 
 namespace renddx9abi {
 
@@ -20,11 +21,25 @@ struct DisplayModeMultiSample
 static_assert(sizeof(DisplayModeMultiSample) == 8,
               "the display-mode multisample record is two dwords");
 
-#if BF2_PLUGIN_ABI_NATIVE
+// One enumerated display mode: the record Renderer +0x3C returns a std::vector of (retail: the
+// 40-byte record sub_1000CEE0 builds; sub_100091E0 copies it and sub_10009510 frees it). The
+// scalars are copied by BF2.exe's 0x4547F0, which skips the pad byte.
+struct DisplayModeRecord
+{
+    /* +0x00 */ unsigned short width;
+    /* +0x02 */ unsigned short height;
+    /* +0x04 */ unsigned short refresh;
+    /* +0x06 */ unsigned char  bpp;
+    /* +0x07 */ unsigned char  pad;
+    /* +0x08 */ std::vector<unsigned int>           depthFormats;  // CheckDeviceFormat results
+    /* +0x18 */ std::vector<DisplayModeMultiSample> multiSample;   // CheckDeviceMultiSampleType
 
-// [PLATFORM] Native rebuilt-client carrier.  Both images compile this definition with /MD and
-// _ITERATOR_DEBUG_LEVEL=0, as enforced by PluginAbi.h.  It deliberately does not reuse the
-// renderer's internal fixed-layout vectors.
+    DisplayModeRecord() : width(0), height(0), refresh(0), bpp(0), pad(0) {}
+};
+
+
+// The host's display-mode carrier (hWndBf2TempSlt). Both images compile this definition with /MD and
+// _ITERATOR_DEBUG_LEVEL=0, as enforced by PluginAbi.h, so its std::vectors cross directly.
 struct HostDisplayMode
 {
     unsigned char fullscreen;
@@ -49,150 +64,36 @@ struct HostDisplayMode
     }
 };
 
-static_assert(sizeof(void*) == 4, "the native plugin boundary is x86-only");
-static_assert(sizeof(std::vector<unsigned int>) == 12,
-              "native display-mode ABI requires the pinned release MSVC vector layout");
-static_assert(sizeof(HostDisplayMode) == 0x34,
-              "native x86 carrier is scalars plus three 12-byte std::vectors");
 
-#else
-
-// Retail BF2 1.50 carrier, read from BF2.exe 0x454370 and RendDX9.dll 0x1000CA40.
-struct HostDisplayMode
-{
-    /* 0x00 */ unsigned char       fullscreen;
-    /* 0x01 */ unsigned char       pad01[3];
-    /* 0x04 */ unsigned short      width;
-    /* 0x06 */ unsigned short      height;
-    /* 0x08 */ unsigned short      refreshHz;
-    /* 0x0A */ unsigned char       bpp;
-    /* 0x0B */ unsigned char       pad0B;
-    /* 0x0C */ vc71::vector_layout depthFormats;
-    /* 0x1C */ vc71::vector_layout multiSamples;
-    /* 0x2C */ unsigned char       vsync;
-    /* 0x2D */ unsigned char       pad2D[3];
-    /* 0x30 */ vc71::vector_layout windows;
-};
-
-static_assert(sizeof(HostDisplayMode) == 0x40,
-              "BF2Render::init allocates the retail 0x40-byte carrier");
-
-#endif
 
 inline const unsigned int* hostDepthFirst(const HostDisplayMode& mode)
 {
-#if BF2_PLUGIN_ABI_NATIVE
     return mode.depthFormats.empty() ? 0 : &mode.depthFormats[0];
-#else
-    return reinterpret_cast<const unsigned int*>(mode.depthFormats.first);
-#endif
 }
 
 inline const unsigned int* hostDepthLast(const HostDisplayMode& mode)
 {
-#if BF2_PLUGIN_ABI_NATIVE
     return mode.depthFormats.empty() ? 0 : (&mode.depthFormats[0] + mode.depthFormats.size());
-#else
-    return reinterpret_cast<const unsigned int*>(mode.depthFormats.last);
-#endif
 }
 
 inline const DisplayModeMultiSample* hostMultiSampleFirst(const HostDisplayMode& mode)
 {
-#if BF2_PLUGIN_ABI_NATIVE
     return mode.multiSamples.empty() ? 0 : &mode.multiSamples[0];
-#else
-    return reinterpret_cast<const DisplayModeMultiSample*>(mode.multiSamples.first);
-#endif
 }
 
 inline const DisplayModeMultiSample* hostMultiSampleLast(const HostDisplayMode& mode)
 {
-#if BF2_PLUGIN_ABI_NATIVE
     return mode.multiSamples.empty() ? 0 : (&mode.multiSamples[0] + mode.multiSamples.size());
-#else
-    return reinterpret_cast<const DisplayModeMultiSample*>(mode.multiSamples.last);
-#endif
 }
 
 inline void* const* hostWindowFirst(const HostDisplayMode& mode)
 {
-#if BF2_PLUGIN_ABI_NATIVE
     return mode.windows.empty() ? 0 : &mode.windows[0];
-#else
-    return reinterpret_cast<void* const*>(mode.windows.first);
-#endif
 }
 
 inline void* const* hostWindowLast(const HostDisplayMode& mode)
 {
-#if BF2_PLUGIN_ABI_NATIVE
     return mode.windows.empty() ? 0 : (&mode.windows[0] + mode.windows.size());
-#else
-    return reinterpret_cast<void* const*>(mode.windows.last);
-#endif
-}
-
-// The three destination vectors contain only POD records. Their buffers are renderer-owned
-// and use the plugin's operator-new heap, backed by the shared native CRT.
-template <typename T>
-inline void clearOwnedDisplayVector(vc71::vector_layout& dst)
-{
-    if (dst.first)
-        ::operator delete(dst.first);
-    dst.first = 0;
-    dst.last  = 0;
-    dst.end   = 0;
-}
-
-template <typename T>
-inline void assignOwnedDisplayVector(vc71::vector_layout& dst,
-                                     const T* first,
-                                     const T* last)
-{
-    vc71::vector_layout replacement = { 0, 0, 0, 0 };
-    try
-    {
-        vc71::vectorRef<T> writer(&replacement);
-        for (const T* p = first; p != last; ++p)
-            writer.push_back(*p);
-    }
-    catch (...)
-    {
-        clearOwnedDisplayVector<T>(replacement);
-        throw;
-    }
-
-    clearOwnedDisplayVector<T>(dst);
-    dst.first = replacement.first;
-    dst.last  = replacement.last;
-    dst.end   = replacement.end;
-}
-
-inline void assignOwnedDisplayModeVectors(vc71::vector_layout& depth,
-                                          vc71::vector_layout& multiSample,
-                                          vc71::vector_layout& windows,
-                                          const HostDisplayMode& source)
-{
-    assignOwnedDisplayVector<unsigned int>(depth,
-                                            hostDepthFirst(source),
-                                            hostDepthLast(source));
-    assignOwnedDisplayVector<DisplayModeMultiSample>(multiSample,
-                                                      hostMultiSampleFirst(source),
-                                                      hostMultiSampleLast(source));
-    assignOwnedDisplayVector<void*>(windows,
-                                    hostWindowFirst(source),
-                                    hostWindowLast(source));
-}
-
-inline void clearOwnedDisplayModeVectors(vc71::vector_layout& depth,
-                                         vc71::vector_layout& multiSample,
-                                         vc71::vector_layout& windows)
-{
-    // sub_1000C9B0 destroys them in reverse member order.
-    clearOwnedDisplayVector<void*>(windows);
-    clearOwnedDisplayVector<DisplayModeMultiSample>(multiSample);
-    clearOwnedDisplayVector<unsigned int>(depth);
 }
 
 } // namespace renddx9abi

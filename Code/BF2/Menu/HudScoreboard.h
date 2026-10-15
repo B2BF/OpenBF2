@@ -78,7 +78,7 @@ private:
     std::uint32_t m_field048[9]; // +48..68 untouched scalar storage; meanings unresolved
     int m_counters[5][3][11]; // +6C..2FF, five integer totals per team/squad
     int m_columns[9]; // +300..320, initialized after event registration
-    int m_textures[13]; // +324..354, initialized after event registration
+    std::intptr_t m_textures[13]; // +324..354, meme texture handles; initialized after event registration
     std::list<int> m_mutedPlayers; // retail+358, signed player ids, duplicate entries allowed
     bool m_toggleSquads, m_toggleScore, m_toggleManage, m_teamVoteOnly; // +364..367
     meme::BfListBoxData* m_friendlyList; // +368, all five untouched by ctor and not deleted

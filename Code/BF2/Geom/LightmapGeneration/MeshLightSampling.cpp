@@ -1,6 +1,6 @@
 // The mesh light sampler (MeshLightSampling.h), recovered from RendDX9.dll 1.50. The three record
-// vectors are the renderer's VC7.1-layout Vc71Vec (RW-74): the generator reads the triangle vector
-// through LightSampleBlock::triangles.
+// vectors are std::vectors: the generator reads the triangle vector through
+// LightSampleBlock::triangles.
 // Shipped defects kept: storeResults addresses texels by sample index (no pitch); the destructor
 // reads the lightmap format before testing for a texture, leaks both level surfaces of its
 // conversion copy and dereferences a failed conversion texture; the grid halving strides rows by
@@ -356,7 +356,7 @@ void MeshLightSampler::halveSampleGrid()
     m_samples.resize(m_textureSizeX * m_textureSizeY);
 }
 
-bool MeshLightSampler::load(const vc71::string& path, const vc71::string& outputName)
+bool MeshLightSampler::load(const std::string& path, const std::string& outputName)
 {
     m_outputName = outputName;
     ::renddx9abi::EngineStream file;

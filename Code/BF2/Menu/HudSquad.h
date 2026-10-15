@@ -88,9 +88,9 @@ private:
     const char* m_title;                                // +08 owned unless sentinel
     const wchar_t* m_unassignedText;                     // +0C owned unless sentinel
     const wchar_t* m_squadCountText;                     // +10 owned unless sentinel
-    int m_textures[14];                                 // +14..48
+    std::intptr_t m_textures[14];                       // +14..48, meme texture handles
     // Lazy per-squad icon cache. Squad indices are unchecked; failed loads retry on the next paint.
-    int m_squadIcons[10];                               // +4C..70
+    std::intptr_t m_squadIcons[10];                     // +4C..70
     std::uint32_t m_field074;                           // untouched by constructor
     // Current row count and last painted local-player row. The latter can remain stale when its squad is collapsed.
     int m_rowCount, m_localPlayerRow;                    // +78/+7C zero

@@ -26,7 +26,9 @@ public:
 protected:
     char* m_name; // +18, owned clone
 };
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2TextNode) == 28, "native Bf2TextNode storage");
+#endif
 } }
 #endif
 #endif

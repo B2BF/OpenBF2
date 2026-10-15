@@ -6,7 +6,7 @@
 #define BF2_GEOM_STATICMESHRENDERER_H
 
 #include <stddef.h>
-#include "../../RendDX9Abi/Vc71String.h"
+#include <string>
 #include "../RendDX9/RendDX9Base.h"
 #include "../RendDX9/ShaderParameter.h"
 #include "../RendDX9/Texture.h"
@@ -35,7 +35,7 @@ struct StaticMeshRenderer
     const void**  m_vptr;          // +0x00  primary vtable (ABI)
     unsigned char m_enabled;       // +0x04  slots 6/7; the StaticMesh draw's first gate
     unsigned char m_pad05[3];
-    vc71::string  m_name;          // +0x08  slots 8/9 (28 bytes, to +0x23)
+    std::string  m_name;          // +0x08  slots 8/9 (retail 28 bytes, to +0x23)
     const void**  m_ehVptr;        // +0x24  ECCoreEventHandler subobject vtable (ABI, deferred use)
     int           m_refCount;      // +0x28
     void*         m_decl2C;        // +0x2C  ordinary static/shadow declaration
@@ -71,19 +71,6 @@ struct StaticMeshRenderer
     unsigned int  m_dword9C;       // +0x9C  ctor 0 (a byte store)
 };
 
-#if defined(_M_IX86)
-static_assert(sizeof(StaticMeshRenderer) == 0xA0,
-              "StaticMeshRenderer PE layout drift");
-static_assert(offsetof(StaticMeshRenderer, m_shadowEffect) == 0x44,
-              "StaticMeshRenderer shadow-effect offset drift");
-static_assert(offsetof(StaticMeshRenderer, m_culledMaterials) == 0x5C, "+0x5C");
-static_assert(offsetof(StaticMeshRenderer, m_flags60) == 0x60, "+0x60");
-static_assert(offsetof(StaticMeshRenderer, m_lightmapAtlases) == 0x68, "+0x68");
-static_assert(offsetof(StaticMeshRenderer, m_atlasesLoaded) == 0x90, "+0x90");
-static_assert(offsetof(StaticMeshRenderer, m_byte94) == 0x94, "+0x94");
-static_assert(offsetof(StaticMeshRenderer, m_dword98) == 0x98, "+0x98");
-#endif
-
 // StaticMeshRenderer_tryLoadLightmapTexture, PE 0x10121F30 (444 B), attested to
 // StaticMeshRenderer.cpp:355 by its own diagnostic.  Look an object's lightmap up in the level's
 // lightmap atlas: when the first atlas is still empty, parse "<directory>LightmapAtlas.tai" into
@@ -91,8 +78,8 @@ static_assert(offsetof(StaticMeshRenderer, m_dword98) == 0x98, "+0x98");
 // answers false); then find "<directory><objectName>.dds" and hand back the entry's four floats
 // and its page texture, addRef'd.  false when the entry is missing.
 bool staticMeshRendererTryLoadLightmapTexture(StaticMeshRenderer* self,
-                                              const vc71::string& directory,
-                                              const vc71::string& objectName,
+                                              const std::string& directory,
+                                              const std::string& objectName,
                                               float outOffset[4],
                                               dx9rend::EngineTexture** outTexture);
 
@@ -108,15 +95,15 @@ bool staticMeshRendererTryLoadLightmapTexture(StaticMeshRenderer* self,
 // The DLL form packs every file into one atlas and answers the builder's result (false for no
 // files). [INFERRED] names.
 bool staticMeshRendererLoadAllLightMapFilesDll(StaticMeshRenderer* self,
-                                               const vc71::string& directory,
-                                               const vc71::string& extension);
+                                               const std::string& directory,
+                                               const std::string& extension);
 // The batched form packs the files in batches, each sized so that a dice_TextureAtlasTool command
 // line naming them would stay under 32300 characters (the line is built, never run), into
 // "LightmapAtlas<N>" atlases numbered from 0. False when a batch fails, which includes an empty file
 // list; true once the last batch is written. [INFERRED] names.
 bool staticMeshRendererLoadAllLightMapFiles(StaticMeshRenderer* self,
-                                            const vc71::string& directory,
-                                            const vc71::string& extension);
+                                            const std::string& directory,
+                                            const std::string& extension);
 
 } // namespace geom
 } // namespace hfe

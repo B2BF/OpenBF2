@@ -2,19 +2,19 @@
 // Collision history rotates unless the clock is strictly below one third; NaN rotates it.
 void psmType1RememberPlane(void* self)
 {
-    if (psmRuntimeField<float>(self,0x214)<0.33333001f) return;
-    const unsigned char next=psmRuntimeField<unsigned char>(self,0x211);
-    psmRuntimeField<unsigned char>(self,0x210)=next;
-    psmRuntimeField<float>(self,0x214)=static_cast<float>(
-        static_cast<double>(psmRuntimeField<float>(self,0x214))-0.33333001f);
-    const float* const source=&psmRuntimeField<float>(self,0x200);
+    if (psmInstanceB<float>(self,0x214)<0.33333001f) return;
+    const unsigned char next=psmInstanceB<unsigned char>(self,0x211);
+    psmInstanceB<unsigned char>(self,0x210)=next;
+    psmInstanceB<float>(self,0x214)=static_cast<float>(
+        static_cast<double>(psmInstanceB<float>(self,0x214))-0.33333001f);
+    const float* const source=&psmInstanceB<float>(self,0x200);
     const float distance=source[3];
-    float* const target=&psmRuntimeField<float>(self,0x160+16u*next);
+    float* const target=&psmInstanceB<float>(self,0x160+16u*next);
     target[0]=source[0]; target[1]=source[1]; target[2]=source[2];
     psmNormalize3(target);
     target[3]=distance;
-    psmRuntimeField<unsigned char>(self,0x211)=
-        static_cast<unsigned char>((psmRuntimeField<unsigned char>(self,0x211)+1)%10);
+    psmInstanceB<unsigned char>(self,0x211)=
+        static_cast<unsigned char>((psmInstanceB<unsigned char>(self,0x211)+1)%10);
 }
 
 // PE 10184270, __thiscall (particle, index, step, steps), retn 10h. Returns 0 when the particle
@@ -26,42 +26,42 @@ int psmType1AdvanceParticle(void* self,float* particle,int index,float step,unsi
     const double tentativeAge=static_cast<double>(steps)*step+psmRuntimeField<float>(particle,0x90);
     if (tentativeAge>=psmRuntimeField<float>(particle,0x94))
     {
-        float** const array=psmRuntimeField<float**>(self,0x14);
-        const unsigned int last=--psmRuntimeField<unsigned int>(self,0x28);
+        float** const array=psmInstanceB<float**>(self,0x14);
+        const unsigned int last=--psmInstanceB<unsigned int>(self,0x28);
         array[index]=array[last];
-        psmRuntimeField<float**>(self,0x14)[psmRuntimeField<unsigned int>(self,0x28)]=0;
+        psmInstanceB<float**>(self,0x14)[psmInstanceB<unsigned int>(self,0x28)]=0;
         ParticleSystemManager* const manager=reinterpret_cast<ParticleSystemManager*>(g_ParticleSystemManager);
-        psmRuntimeField<void*>(particle,0)=manager->m_type1FreeList;
+        psmRecordLink(particle, 1)=manager->m_type1FreeList;
         manager->m_type1FreeList=particle;
-        ++psmRuntimeField<unsigned int>(self,0x140);
+        ++psmInstanceB<unsigned int>(self,0x140);
         return 0;
     }
 
-    void* descriptor=psmRuntimeField<void*>(self,0x2C);
+    void* descriptor=psmInstanceB<void*>(self,0x2C);
     float windX=0, windY=0, windZ=0;
-    if (!psmRuntimeField<unsigned char>(descriptor,0x1F1) && psmRuntimeField<float>(descriptor,0xCC)>0)
+    if (!psmDescriptor1<unsigned char>(descriptor,0x1F1) && psmDescriptor1<float>(descriptor,0xCC)>0)
     {
         ParticleSystemManager* const manager=reinterpret_cast<ParticleSystemManager*>(g_ParticleSystemManager);
         const Vec3 wind=reinterpret_cast<world::WindManager*>(manager->m_windManager)->getWind(
             psmRuntimeField<Vec3>(particle,0x44));
         windX=wind.x; windY=wind.y; windZ=wind.z;
     }
-    descriptor=psmRuntimeField<void*>(self,0x2C);
+    descriptor=psmInstanceB<void*>(self,0x2C);
     // 10184341..1018436A scale even the zero (no-wind) vector: a NaN or infinite affection
     // factor still turns the wind terms into NaN here, unlike the sprite integrator.
-    const float affection=psmRuntimeField<float>(descriptor,0xCC);
+    const float affection=psmDescriptor1<float>(descriptor,0xCC);
     const float windXScaled=static_cast<float>(static_cast<double>(affection)*windX);
     const float windYScaled=static_cast<float>(static_cast<double>(windY)*affection);
     const float windZScaled=static_cast<float>(static_cast<double>(windZ)*affection);
-    const float gravityStep=static_cast<float>(static_cast<double>(step)*psmRuntimeField<float>(descriptor,0xA4));
+    const float gravityStep=static_cast<float>(static_cast<double>(step)*psmDescriptor1<float>(descriptor,0xA4));
     // Air-resistance graph (+0x11C t^3, +0x120 t^2, +0x124 t, +0x128 constant) at the particle's
     // current age fraction, once per call. t^2/t^3 stay unrounded on the x87 stack.
     const double t=psmRuntimeField<float>(particle,0x5C);
-    const float dragCurve=static_cast<float>(t*t*psmRuntimeField<float>(descriptor,0x120)
-        +t*psmRuntimeField<float>(descriptor,0x124)+t*t*t*psmRuntimeField<float>(descriptor,0x11C)
-        +psmRuntimeField<float>(descriptor,0x128));
+    const float dragCurve=static_cast<float>(t*t*psmDescriptor1<float>(descriptor,0x120)
+        +t*psmDescriptor1<float>(descriptor,0x124)+t*t*t*psmDescriptor1<float>(descriptor,0x11C)
+        +psmDescriptor1<float>(descriptor,0x128));
     const float drag=static_cast<float>(static_cast<double>(psmEmissionClamp(dragCurve))
-        *psmRuntimeField<float>(psmRuntimeField<void*>(self,0x2C),0xA8)*step);
+        *psmDescriptor1<float>(psmInstanceB<void*>(self,0x2C),0xA8)*step);
 
     for (unsigned int remaining=steps;remaining!=0;--remaining)
     {
@@ -71,11 +71,11 @@ int psmType1AdvanceParticle(void* self,float* particle,int index,float step,unsi
         const double fraction=age*psmRuntimeField<float>(particle,0x98);
         psmRuntimeField<float>(particle,0x5C)=static_cast<float>(fraction);
         // Gravity graph (+0x10C t^3, +0x110 t^2, +0x114 t, +0x118 constant), descriptor re-read.
-        void* const graphOwner=psmRuntimeField<void*>(self,0x2C);
-        const float gravityCurve=static_cast<float>(fraction*fraction*psmRuntimeField<float>(graphOwner,0x110)
-            +fraction*psmRuntimeField<float>(graphOwner,0x114)
-            +fraction*fraction*fraction*psmRuntimeField<float>(graphOwner,0x10C)
-            +psmRuntimeField<float>(graphOwner,0x118));
+        void* const graphOwner=psmInstanceB<void*>(self,0x2C);
+        const float gravityCurve=static_cast<float>(fraction*fraction*psmDescriptor1<float>(graphOwner,0x110)
+            +fraction*psmDescriptor1<float>(graphOwner,0x114)
+            +fraction*fraction*fraction*psmDescriptor1<float>(graphOwner,0x10C)
+            +psmDescriptor1<float>(graphOwner,0x118));
         const float gravity=static_cast<float>(static_cast<double>(psmEmissionClamp(gravityCurve))*gravityStep);
         float relative[3]={
             static_cast<float>(static_cast<double>(psmRuntimeField<float>(particle,0x84))-windXScaled),
@@ -107,14 +107,14 @@ int psmType1AdvanceParticle(void* self,float* particle,int index,float step,unsi
         psmRuntimeField<float>(particle,0x8C)=static_cast<float>(accelZ+psmRuntimeField<float>(particle,0x8C));
     }
 
-    descriptor=psmRuntimeField<void*>(self,0x2C);
-    if (psmRuntimeField<unsigned char>(descriptor,0xEC))
+    descriptor=psmInstanceB<void*>(self,0x2C);
+    if (psmDescriptor1<unsigned char>(descriptor,0xEC))
     {
         // 10184551..101845CB. `test ah,1` routes an unordered difference into the negative arm,
         // where fistp yields 0x80000000; the index arithmetic is 32-bit wraparound throughout,
         // including the address (+0x16)<<4. Retail has no range check on the resulting plane.
-        const unsigned char current=psmRuntimeField<unsigned char>(self,0x210);
-        const double difference=static_cast<double>(psmRuntimeField<float>(self,0x214))
+        const unsigned char current=psmInstanceB<unsigned char>(self,0x210);
+        const double difference=static_cast<double>(psmInstanceB<float>(self,0x214))
             -psmRuntimeField<float>(particle,0x90);
         unsigned int selected=current;
         if (!(difference>=0))
@@ -124,8 +124,8 @@ int psmType1AdvanceParticle(void* self,float* particle,int index,float step,unsi
                 selected+=10u*((0xFFFFFFFFu-selected)/10u)+10u;
         }
         const float* const plane=selected==current
-            ? &psmRuntimeField<float>(self,0x200)
-            : reinterpret_cast<const float*>(reinterpret_cast<unsigned int>(self)+((selected+0x16u)<<4));
+            ? &psmInstanceB<float>(self,0x200)
+            : reinterpret_cast<const float*>(reinterpret_cast<uintptr_t>(self)+((selected+0x16u)<<4));
         const double velocityDot=static_cast<double>(psmRuntimeField<float>(particle,0x8C))*plane[2]
             +static_cast<double>(psmRuntimeField<float>(particle,0x88))*plane[1]
             +static_cast<double>(plane[0])*psmRuntimeField<float>(particle,0x84);
@@ -146,8 +146,8 @@ int psmType1AdvanceParticle(void* self,float* particle,int index,float step,unsi
                     +static_cast<double>(plane[0])*psmRuntimeField<float>(particle,0x84);
                 if (reflected<0)
                 {
-                    void* const collision=psmRuntimeField<void*>(self,0x2C);
-                    const float normalFactor=psmRuntimeField<float>(collision,0xF0);
+                    void* const collision=psmInstanceB<void*>(self,0x2C);
+                    const float normalFactor=psmDescriptor1<float>(collision,0xF0);
                     const double normalX=reflected*plane[0], normalY=reflected*plane[1];
                     const float normalZ=static_cast<float>(reflected*plane[2]);
                     const float tangentX=static_cast<float>(psmRuntimeField<float>(particle,0x84)-normalX);
@@ -156,7 +156,7 @@ int psmType1AdvanceParticle(void* self,float* particle,int index,float step,unsi
                     const float bounceX=static_cast<float>(normalX*normalFactor);
                     const float bounceY=static_cast<float>(normalY*normalFactor);
                     const double bounceZ=static_cast<double>(normalZ)*normalFactor;
-                    const float along=psmRuntimeField<float>(collision,0xF4);
+                    const float along=psmDescriptor1<float>(collision,0xF4);
                     const float slideX=static_cast<float>(static_cast<double>(tangentX)*along);
                     const float slideY=static_cast<float>(static_cast<double>(tangentY)*along);
                     const float slideZ=static_cast<float>(static_cast<double>(tangentZ)*along);
@@ -172,9 +172,9 @@ int psmType1AdvanceParticle(void* self,float* particle,int index,float step,unsi
     // the world position.
     reinterpret_cast<unsigned char*>(particle)[0x60]|=0x80;
     psmRuntimeField<Vec3>(particle,0x50)=psmRuntimeField<Vec3>(particle,0x44);
-    if (psmRuntimeField<unsigned char>(psmRuntimeField<void*>(self,0x2C),0x1F1))
+    if (psmDescriptor1<unsigned char>(psmInstanceB<void*>(self,0x2C),0x1F1))
     {
-        const float* const m=&psmRuntimeField<float>(self,0x74);
+        const float* const m=&psmInstanceB<float>(self,0x74);
         const float x=psmRuntimeField<float>(particle,0x50);
         const float y=psmRuntimeField<float>(particle,0x54);
         const float z=psmRuntimeField<float>(particle,0x58);
@@ -186,13 +186,13 @@ int psmType1AdvanceParticle(void* self,float* particle,int index,float step,unsi
         psmRuntimeField<float>(particle,0x58)=static_cast<float>(worldZ);
     }
     ParticleSystemManager* const manager=reinterpret_cast<ParticleSystemManager*>(g_ParticleSystemManager);
-    if (psmRuntimeField<unsigned char>(psmRuntimeField<void*>(self,0x2C),0xD0) && manager->m_heightmapCluster)
+    if (psmDescriptor1<unsigned char>(psmInstanceB<void*>(self,0x2C),0xD0) && manager->m_heightmapCluster)
         psmRuntimeField<float>(particle,0x54)=static_cast<float>(static_cast<double>(
             reinterpret_cast<world::IHeightmapCluster*>(manager->m_heightmapCluster)
                 ->getWaterLevelInWorldCoords(psmRuntimeField<Vec3>(particle,0x50)))
-            +psmRuntimeField<float>(psmRuntimeField<void*>(self,0x2C),0xD4));
+            +psmDescriptor1<float>(psmInstanceB<void*>(self,0x2C),0xD4));
     // ordered extrema, x max/min, then y, then z; NaN updates nothing.
-    float* const bounds=&psmRuntimeField<float>(self,0xFC);
+    float* const bounds=&psmInstanceB<float>(self,0xFC);
     for (int i=0;i<3;++i)
     {
         const float value=psmRuntimeField<float>(particle,0x50+4u*i);
@@ -206,57 +206,57 @@ int psmType1AdvanceParticle(void* self,float* particle,int index,float step,unsi
 void psmType1Update(void* self,float dt)
 {
     IParticleSystemInstance* const instance=static_cast<IParticleSystemInstance*>(self);
-    float elapsed=static_cast<float>(static_cast<double>(dt)*psmRuntimeField<float>(self,0x128));
-    psmRuntimeField<int>(psmRuntimeField<void*>(self,0x2C),8)=-1;
-    if (!psmRuntimeField<unsigned int>(self,0x28) && !psmRuntimeField<unsigned char>(self,0x144))
+    float elapsed=static_cast<float>(static_cast<double>(dt)*psmInstanceB<float>(self,0x128));
+    psmDescriptor1<int>(psmInstanceB<void*>(self,0x2C),8)=-1;
+    if (!psmInstanceB<unsigned int>(self,0x28) && !psmInstanceB<unsigned char>(self,0x144))
     {
         psmQueueInactive(reinterpret_cast<ParticleSystemManager*>(g_ParticleSystemManager),instance);
-        if (psmRuntimeField<unsigned char>(self,0x18))
+        if (psmInstanceB<unsigned char>(self,0x18))
             reinterpret_cast<IParticleSystemManager*>(g_ParticleSystemManager)->removeInstance(instance);
         return;
     }
     // The refusal tests the RAW dt (like type 2), and a NaN dt is not refused (AH&41 parity).
-    if (psmRuntimeField<unsigned char>(self,0x21D) || dt<=0) return;
-    void* descriptor=psmRuntimeField<void*>(self,0x2C);
-    if (psmRuntimeField<unsigned char>(descriptor,0xEC))
+    if (psmInstanceB<unsigned char>(self,0x21D) || dt<=0) return;
+    void* descriptor=psmInstanceB<void*>(self,0x2C);
+    if (psmDescriptor1<unsigned char>(descriptor,0xEC))
     {
         // The history clock advances by the unclamped scaled time.
-        psmRuntimeField<float>(self,0x214)=static_cast<float>(
-            static_cast<double>(elapsed)+psmRuntimeField<float>(self,0x214));
+        psmInstanceB<float>(self,0x214)=static_cast<float>(
+            static_cast<double>(elapsed)+psmInstanceB<float>(self,0x214));
         psmType1RememberPlane(self);
     }
-    if (!psmRuntimeField<unsigned char>(self,0x21F) && psmRuntimeField<unsigned char>(self,0x21E))
-        psmRuntimeField<unsigned char>(self,0x21F)=psmRuntimeField<unsigned char>(self,0x21E);
-    descriptor=psmRuntimeField<void*>(self,0x2C);
-    psmRuntimeField<unsigned int>(self,0x140)=0; psmRuntimeField<unsigned int>(self,0x13C)=0;
-    const double maximum=static_cast<double>(psmRuntimeField<float>(descriptor,0x9C))+psmRuntimeField<float>(descriptor,0x98);
+    if (!psmInstanceB<unsigned char>(self,0x21F) && psmInstanceB<unsigned char>(self,0x21E))
+        psmInstanceB<unsigned char>(self,0x21F)=psmInstanceB<unsigned char>(self,0x21E);
+    descriptor=psmInstanceB<void*>(self,0x2C);
+    psmInstanceB<unsigned int>(self,0x140)=0; psmInstanceB<unsigned int>(self,0x13C)=0;
+    const double maximum=static_cast<double>(psmDescriptor1<float>(descriptor,0x9C))+psmDescriptor1<float>(descriptor,0x98);
     if (elapsed>maximum) elapsed=static_cast<float>(maximum);
     for (int i=0;i<3;++i)
     {
-        psmRuntimeField<unsigned int>(self,0xFC+4*i)=0x4B18967F;   //  9999999.0f
-        psmRuntimeField<unsigned int>(self,0x108+4*i)=0xCB18967F;  // -9999999.0f
+        psmInstanceB<unsigned int>(self,0xFC+4*i)=0x4B18967F;   //  9999999.0f
+        psmInstanceB<unsigned int>(self,0x108+4*i)=0xCB18967F;  // -9999999.0f
     }
-    psmRuntimeField<Vec3>(self,0xC0)=psmRuntimeField<Vec3>(self,0xA4);
+    psmInstanceB<Vec3>(self,0xC0)=psmInstanceB<Vec3>(self,0xA4);
     psmType1RefreshTransform(self);
-    psmRuntimeField<Vec3>(self,0xB4)=psmRuntimeField<Vec3>(self,0xA4);
-    const double total=static_cast<double>(elapsed)+psmRuntimeField<float>(self,0xD0);
+    psmInstanceB<Vec3>(self,0xB4)=psmInstanceB<Vec3>(self,0xA4);
+    const double total=static_cast<double>(elapsed)+psmInstanceB<float>(self,0xD0);
     const unsigned int steps=static_cast<unsigned int>(static_cast<int>(100.0*total));
     const double advanced=static_cast<double>(steps)*psmType1FixedStep;
-    psmRuntimeField<float>(self,0xCC)=psmRuntimeField<float>(self,0xF4);
-    psmRuntimeField<float>(self,0xD0)=static_cast<float>(total-advanced);
-    psmRuntimeField<float>(self,0xF4)=static_cast<float>(advanced+psmRuntimeField<float>(self,0xF4));
-    for (unsigned int i=0;psmRuntimeField<float**>(self,0x14)[i];)
-        i+=psmType1AdvanceParticle(self,psmRuntimeField<float**>(self,0x14)[i],static_cast<int>(i),
+    psmInstanceB<float>(self,0xCC)=psmInstanceB<float>(self,0xF4);
+    psmInstanceB<float>(self,0xD0)=static_cast<float>(total-advanced);
+    psmInstanceB<float>(self,0xF4)=static_cast<float>(advanced+psmInstanceB<float>(self,0xF4));
+    for (unsigned int i=0;psmInstanceB<float**>(self,0x14)[i];)
+        i+=psmType1AdvanceParticle(self,psmInstanceB<float**>(self,0x14)[i],static_cast<int>(i),
             psmType1FixedStep,steps);
-    const double delay=static_cast<double>(psmRuntimeField<float>(self,0xF0))-elapsed;
-    psmRuntimeField<float>(self,0xF0)=static_cast<float>(delay);   // FST: the test keeps x87 precision
-    if (delay>0) { psmRuntimeField<float>(self,0xF8)=psmRuntimeField<float>(self,0xF4); return; }
+    const double delay=static_cast<double>(psmInstanceB<float>(self,0xF0))-elapsed;
+    psmInstanceB<float>(self,0xF0)=static_cast<float>(delay);   // FST: the test keeps x87 precision
+    if (delay>0) { psmInstanceB<float>(self,0xF8)=psmInstanceB<float>(self,0xF4); return; }
     // replay the armed prewarm in 1/60 s virtual updates (the flag word is
     // cleared first, so the recursion cannot re-enter this arm).
-    if (psmRuntimeField<float>(self,0xEC)>0)
+    if (psmInstanceB<float>(self,0xEC)>0)
     {
-        float remaining=psmRuntimeField<float>(self,0xEC);
-        psmRuntimeField<float>(self,0xEC)=0;
+        float remaining=psmInstanceB<float>(self,0xEC);
+        psmInstanceB<float>(self,0xEC)=0;
         if (remaining>0)
             for (;;)
             {
@@ -267,30 +267,30 @@ void psmType1Update(void* self,float dt)
             }
     }
     psmType1Emit(self,elapsed);
-    psmRuntimeField<Vec3>(self,0xA4)=psmRuntimeField<Vec3>(self,0xB4);
-    float* const bounds=&psmRuntimeField<float>(self,0xFC);
-    if (psmRuntimeField<unsigned int>(self,0x28))
+    psmInstanceB<Vec3>(self,0xA4)=psmInstanceB<Vec3>(self,0xB4);
+    float* const bounds=&psmInstanceB<float>(self,0xFC);
+    if (psmInstanceB<unsigned int>(self,0x28))
     {
         // Every term re-reads the descriptor pointer, as 10186041..101860B1 do.
         for (int i=0;i<3;++i)
             bounds[i]=static_cast<float>(static_cast<double>(bounds[i])
-                -psmRuntimeField<float>(psmRuntimeField<void*>(self,0x2C),0x1E8));
+                -psmDescriptor1<float>(psmInstanceB<void*>(self,0x2C),0x1E8));
         for (int i=3;i<6;++i)
-            bounds[i]=static_cast<float>(static_cast<double>(psmRuntimeField<float>(
-                psmRuntimeField<void*>(self,0x2C),0x1E8))+bounds[i]);
+            bounds[i]=static_cast<float>(static_cast<double>(psmDescriptor1<float>(
+                psmInstanceB<void*>(self,0x2C),0x1E8))+bounds[i]);
     }
     else
     {
-        psmRuntimeField<Vec3>(self,0xFC)=psmRuntimeField<Vec3>(self,0xA4);
-        psmRuntimeField<Vec3>(self,0x108)=psmRuntimeField<Vec3>(self,0xA4);
+        psmInstanceB<Vec3>(self,0xFC)=psmInstanceB<Vec3>(self,0xA4);
+        psmInstanceB<Vec3>(self,0x108)=psmInstanceB<Vec3>(self,0xA4);
     }
     // PE 1016EB70 (radius) then 1016EBC0 (centre), in that order.
     const float deltaZ=bounds[5]-bounds[2];
     const float halfX=static_cast<float>((static_cast<double>(bounds[3])-bounds[0])*0.5);
     const double halfY=(static_cast<double>(bounds[4])-bounds[1])*0.5;
-    psmRuntimeField<float>(self,0x120)=static_cast<float>(::sqrt(deltaZ*0.5*(deltaZ*0.5)
+    psmInstanceB<float>(self,0x120)=static_cast<float>(::sqrt(deltaZ*0.5*(deltaZ*0.5)
         +static_cast<double>(halfX)*halfX+halfY*halfY));
     const float sumZ=bounds[5]+bounds[2];
-    psmRuntimeField<Vec3>(self,0x114)={static_cast<float>((static_cast<double>(bounds[3])+bounds[0])*0.5),
+    psmInstanceB<Vec3>(self,0x114)={static_cast<float>((static_cast<double>(bounds[3])+bounds[0])*0.5),
         static_cast<float>((static_cast<double>(bounds[4])+bounds[1])*0.5),sumZ*0.5f};
 }

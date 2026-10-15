@@ -77,7 +77,7 @@ bool Bf2ButtonNode::releasePointerForHud()
 // 7D0650, +EC. A zero texture is refused before the index is even looked at,
 // index 0 and anything above 3 are refused, and the index-1 arm answers with the
 // index's low byte instead of a literal 1 (the same value, reproduced as read).
-bool Bf2ButtonNode::setTextureForHud(int index, int texture)
+bool Bf2ButtonNode::setTextureForHud(int index, TextureHandle texture)
 {
     if (!texture) return false;
     if (index == 1) {

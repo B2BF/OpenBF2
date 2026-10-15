@@ -319,8 +319,9 @@ int main()
                   "the manager interface must remain one primary vptr");
     static_assert(std::is_base_of<IBase, IParticleSystemManager>::value,
                   "the manager must retain the IBase quartet");
-    static_assert(sizeof(ParticleSystemInstanceList) == 16,
-                  "the manager exposes a VC7.1 four-word vector");
+    static_assert(std::is_same<ParticleSystemInstanceList,
+                               std::vector<dice::hfe::geom::IParticleSystemInstance*> >::value,
+                  "the manager exposes the shared std::vector of instances (issue #7)");
     static_assert(sizeof(ParticleSystemSettings) == 60,
                   "the quality profile width is part of the recovered call ABI");
 
@@ -330,10 +331,8 @@ int main()
                 checks - failures, checks,
 #if !defined(BF2_IMAGE_RENDDX9)
                 "engine"
-#elif BF2_PLUGIN_ABI_NATIVE
-                "RendDX9 native"
 #else
-                "RendDX9 compatibility"
+                "RendDX9 native"
 #endif
     );
     return failures ? 1 : 0;

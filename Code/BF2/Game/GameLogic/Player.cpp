@@ -1947,21 +1947,13 @@ void Player::handleGasClouds(float deltaTime)
     if (!particleSystemManager)
         return;
 
-    // [PLATFORM] This plugin boundary uses RendDX9's MSVC 7.1 vector carrier: allocator at +0,
-    // begin at +4, end at +8. Do not cast it to a native std::vector; the ELF container differs.
+    // The renderer's active-instance vector, shared by reference (issue #7).
     const geom::ParticleSystemInstanceList* const systems = particleSystemManager->getInstances();
-    // The PE re-reads the vector words on every iteration and breaks on a null begin; retain
-    // those repeated reads rather than snapshotting a container that instance calls may mutate.
-    for (unsigned int i = 0; ; ++i)
+    // The PE re-reads the vector's size on every iteration; retain that rather than snapshotting
+    // a container that instance calls may mutate.
+    for (unsigned int i = 0; i < static_cast<unsigned int>(systems->size()); ++i)
     {
-        geom::IParticleSystemInstance* const* const first = systems->begin();
-        if (!first)
-            break;
-        geom::IParticleSystemInstance* const* const last = systems->end();
-        if (i >= static_cast<unsigned int>(last - first))
-            break;
-
-        geom::IParticleSystemInstance* const system = systems->begin()[i];
+        geom::IParticleSystemInstance* const system = (*systems)[i];
         if (!system->getTemplate()->getGasCloudType())
             continue;
 

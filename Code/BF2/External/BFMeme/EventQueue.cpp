@@ -140,7 +140,9 @@ bool EventQueue::process(System* system)
     m_last = nullptr;
     return true;
 }
+#if defined(_M_IX86)
 static_assert(sizeof(QueuedEvent) == 24, "client queue record");
 static_assert(sizeof(EventQueue) == 12, "client queue owner");
+#endif
 } }
 #endif

@@ -12,7 +12,7 @@ cl /nologo %BF2_TEST_OPT% /EHsc /std:c++14 /permissive /MD /Gy /Gw /Z7 ^
  /DDEDICATED=0 /DBF2_IMAGE_RENDDX9 /DBF2_PLUGIN_ABI_NATIVE=1 /D_ITERATOR_DEBUG_LEVEL=0 ^
  /FI"%TASK_ROOT%\Code\BF2\Core\BuildConfig.h" /Fo"%BF2_BUILD_OUT%\\" ^
  /Fe"%BF2_BUILD_OUT%\particle_instance_type2_runtime.exe" ^
- "%~dp0particle_instance_type2_runtime.cpp" "%TASK_ROOT%\Code\RendDX9Abi\Vc71String.cpp" ^
+ "%~dp0particle_instance_type2_runtime.cpp" ^
  "%TASK_ROOT%\Code\BF2\Math\Mat4.cpp" "%TASK_ROOT%\Code\BF2\Math\Frustum.cpp" ^
  "%TASK_ROOT%\Code\BF2\Math\Mat4Inverse.cpp" "%TASK_ROOT%\Code\BF2\Math\Vec3.cpp" ^
  "%TASK_ROOT%\Code\BF2\Math\Plane3.cpp" ^

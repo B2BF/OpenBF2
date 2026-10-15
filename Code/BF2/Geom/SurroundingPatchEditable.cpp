@@ -21,7 +21,7 @@
 #include "../../RendDX9Abi/HostFileAbi.h"
 #include "../../RendDX9Abi/PluginAbi.h"
 #include "../../RendDX9Abi/PluginEntry.h"     // classManager, fileManager
-#include "../../RendDX9Abi/Vc71String.h"
+#include <string>
 
 #include <cfloat>
 #include <cmath>
@@ -110,11 +110,11 @@ inline ::dice::hfe::world::IHeightmapCluster* heightmapClusterByName()
 inline dx9rend::ShaderParameter* effectParameter(void* effect, const char* name)
 {
     return dx9rend::effectGetShaderParameterBorrowedTyped(static_cast<dx9rend::Effect*>(effect),
-                                                          vc71::string(name));
+                                                          std::string(name));
 }
 
 // sub_10074AB0 - see QuadPatchEditable.cpp (the same transcription).
-void formatString(vc71::string& out, const char* format, ...)
+void formatString(std::string& out, const char* format, ...)
 {
     char buffer[0x1000];
     va_list args;
@@ -246,25 +246,25 @@ void SurroundingPatchEditable::init(int newSlot)
     else
         setupEditorPlacement();
 
-    vc71::string colormapPath;
+    std::string colormapPath;
     {
-        const vc71::string base = te->getEditorColormapBaseName();            // P+0xFC
-        vc71::string name;
+        const std::string base = te->getEditorColormapBaseName();            // P+0xFC
+        std::string name;
         formatString(name, "%s_s%i", base.c_str(), slot);
-        colormapPath = ::renddx9abi::toVc71String(te->getLevelSavePath());   // E+0x90
+        colormapPath = ::renddx9abi::fromHostString(te->getLevelSavePath());   // E+0x90
         colormapPath += name;
     }
     {
         TerrainEditableNameResult base = te->getColormapBaseName();          // E+0x6C
-        vc71::string name;
-        formatString(name, "%s_s%i", ::renddx9abi::toVc71String(base).c_str(), slot);
-        vc71::string unusedGamePath(::renddx9abi::toVc71String(te->getLevelSavePath()));
+        std::string name;
+        formatString(name, "%s_s%i", ::renddx9abi::fromHostString(base).c_str(), slot);
+        std::string unusedGamePath(::renddx9abi::fromHostString(te->getLevelSavePath()));
         unusedGamePath += name;
     }
     const int savedManaged = dx9rend::textureManagerSwapManaged(1);
 
     {
-        vc71::string dds(colormapPath);
+        std::string dds(colormapPath);
         dds += ".dds";
         if (::dice::hfe::fileManager->fileExists(::renddx9abi::makeHostString(dds)))
         {
@@ -280,16 +280,16 @@ void SurroundingPatchEditable::init(int newSlot)
     }
     m_colormapReady = 1;
 
-    vc71::string lightmapPath;
+    std::string lightmapPath;
     {
-        const vc71::string base = te->getEditorLightmapBaseName();            // P+0x104
-        vc71::string name;
+        const std::string base = te->getEditorLightmapBaseName();            // P+0x104
+        std::string name;
         formatString(name, "%s_s%i", base.c_str(), slot);
-        lightmapPath = ::renddx9abi::toVc71String(te->getLevelSavePath());
+        lightmapPath = ::renddx9abi::fromHostString(te->getLevelSavePath());
         lightmapPath += name;
     }
     {
-        vc71::string dds(lightmapPath);
+        std::string dds(lightmapPath);
         dds += ".dds";
         if (::dice::hfe::fileManager->fileExists(::renddx9abi::makeHostString(dds)))
         {
@@ -307,17 +307,17 @@ void SurroundingPatchEditable::init(int newSlot)
     m_texture178 = 0;
     m_texture17C = 0;
 
-    vc71::string suffix;
+    std::string suffix;
     formatString(suffix, "_s%i", slot);
-    vc71::string lowDetailPath;
+    std::string lowDetailPath;
     {
-        const vc71::string base = te->getEditorLowDetailmapBaseName();        // P+0x10C
-        lowDetailPath = ::renddx9abi::toVc71String(te->getLevelSavePath());  // E+0x90
+        const std::string base = te->getEditorLowDetailmapBaseName();        // P+0x10C
+        lowDetailPath = ::renddx9abi::fromHostString(te->getLevelSavePath());  // E+0x90
         lowDetailPath += base;
         lowDetailPath += suffix;
     }
     {
-        vc71::string dds(lowDetailPath);
+        std::string dds(lowDetailPath);
         dds += ".dds";
         if (::dice::hfe::fileManager->fileExists(::renddx9abi::makeHostString(dds)))
         {
@@ -815,15 +815,15 @@ void SurroundingPatchEditable::reloadLightmap()
         m_lightmap = 0;
     }
     const int savedManaged = dx9rend::textureManagerSwapManaged(1);
-    vc71::string path;
+    std::string path;
     {
-        const vc71::string base = te->getEditorLightmapBaseName();            // P+0x104
-        vc71::string name;
+        const std::string base = te->getEditorLightmapBaseName();            // P+0x104
+        std::string name;
         formatString(name, "%s_s%i", base.c_str(), slot);
-        path = ::renddx9abi::toVc71String(te->getLevelSavePath());           // E+0x90
+        path = ::renddx9abi::fromHostString(te->getLevelSavePath());           // E+0x90
         path += name;
     }
-    vc71::string dds(path);
+    std::string dds(path);
     dds += ".dds";
     if (::dice::hfe::fileManager->fileExists(::renddx9abi::makeHostString(dds)))
     {
@@ -1146,7 +1146,7 @@ void SurroundingPatchEditable::paintColorFromTexture(float x, float z, float rad
     D3DLOCKED_RECT editLocked;
     editSurface->LockRect(&editLocked, 0, 0);
     const TerrainDetailTextureEditable* const record = static_cast<const TerrainDetailTextureEditable*>(
-        reinterpret_cast<TerrainDetailTexture**>(te->m_detailTextures.first)[layer]);
+        te->m_detailTextures.data()[layer]);
     const int textureHeight = static_cast<int>(dx9rend::textureDims(record->colorTexture)[1]);
     const int textureWidth = static_cast<int>(dx9rend::textureDims(record->colorTexture)[0]);
     IDirect3DSurface9* const textureSurface = dx9rend::textureGetLevelSurface(record->colorTexture, 0, 0x7FFFFFFF);
@@ -1223,13 +1223,13 @@ void SurroundingPatchEditable::paintColorFromTexture(float x, float z, float rad
 // suffix formatted first, then P+0x10C, then the save path).
 void SurroundingPatchEditable::saveLowDetailMap()
 {
-    vc71::string suffix;
+    std::string suffix;
     formatString(suffix, "_s%i", slot);
     TerrainEditable* const te = editableTerrain;
-    vc71::string name;
+    std::string name;
     {
-        const vc71::string editorBase = te->getEditorLowDetailmapBaseName();  // P+0x10C
-        name = ::renddx9abi::toVc71String(te->getLevelSavePath());           // E+0x90
+        const std::string editorBase = te->getEditorLowDetailmapBaseName();  // P+0x10C
+        name = ::renddx9abi::fromHostString(te->getLevelSavePath());           // E+0x90
         name += editorBase;
         name += suffix;
     }
@@ -1242,46 +1242,46 @@ void SurroundingPatchEditable::saveLowDetailMap()
 // deleted, "_.dds" moved onto ".dds" and deleted. Nothing is deleted first.
 void SurroundingPatchEditable::compileLowDetailMap()
 {
-    vc71::string suffix;
+    std::string suffix;
     formatString(suffix, "_s%i", slot);
     TerrainEditable* const te = editableTerrain;
-    vc71::string name;
+    std::string name;
     {
         TerrainEditableNameResult lowBase = te->getLowDetailmapBaseName();   // E+0x84
-        name = ::renddx9abi::toVc71String(te->getLevelSavePath());           // E+0x90
-        name += ::renddx9abi::toVc71String(lowBase);
+        name = ::renddx9abi::fromHostString(te->getLevelSavePath());           // E+0x90
+        name += ::renddx9abi::fromHostString(lowBase);
         name += suffix;
     }
-    vc71::string outputDirectory;
+    std::string outputDirectory;
     {
-        const vc71::string directory = te->getLowDetailmapDirectory();
-        outputDirectory = ::renddx9abi::toVc71String(te->getLevelSavePath());
+        const std::string directory = te->getLowDetailmapDirectory();
+        outputDirectory = ::renddx9abi::fromHostString(te->getLevelSavePath());
         outputDirectory += directory;
     }
     dx9rend::textureManagerSaveTexture(engineTexture(lowDetailmap), name);
     {
         // The argument blocks are built right to left: the options, the directory, the file.
         const TerrainEditableString options(te->m_surroundingLowDetailmapSettings);   // +0x838
-        const vc71::string directory(outputDirectory);
-        vc71::string file(name);
+        const std::string directory(outputDirectory);
+        std::string file(name);
         file += ".dds";
         te->runNvdxt(::renddx9abi::toHostString(file), ::renddx9abi::toHostString(directory), options);   // E+0xF4
     }
     {
-        vc71::string input(name);
+        std::string input(name);
         input += ".dds";
         ::dice::hfe::fileManager->deleteFile(::renddx9abi::makeHostString(input));
     }
     {
-        vc71::string target(name);
+        std::string target(name);
         target += ".dds";
-        vc71::string source(name);
+        std::string source(name);
         source += "_.dds";
         ::dice::hfe::fileManager->moveFile(::renddx9abi::makeHostString(source),
                                            ::renddx9abi::makeHostString(target));
     }
     {
-        vc71::string leftover(name);
+        std::string leftover(name);
         leftover += "_.dds";
         ::dice::hfe::fileManager->deleteFile(::renddx9abi::makeHostString(leftover));
     }
@@ -1294,13 +1294,13 @@ void SurroundingPatchEditable::saveEditedColormap()
     if (!m_colormapReady)
         return;
     commitColormapEdit();
-    vc71::string suffix;
+    std::string suffix;
     formatString(suffix, "_s%i", slot);
     TerrainEditable* const te = editableTerrain;
-    vc71::string name;
+    std::string name;
     {
-        const vc71::string editorBase = te->getEditorColormapBaseName();      // P+0xFC
-        name = ::renddx9abi::toVc71String(te->getLevelSavePath());
+        const std::string editorBase = te->getEditorColormapBaseName();      // P+0xFC
+        name = ::renddx9abi::fromHostString(te->getLevelSavePath());
         name += editorBase;
         name += suffix;
     }
@@ -1310,18 +1310,18 @@ void SurroundingPatchEditable::saveEditedColormap()
 // Burns and compiles the surrounding-patch colormap, restoring draw state afterward.
 // Ready patches use the terrain colormap path; otherwise base selects the destination.
 // [CHOSEN, not recovered] Unused render flags are zero-initialized.
-void SurroundingPatchEditable::burnColormap(const vc71::string& base)
+void SurroundingPatchEditable::burnColormap(const std::string& base)
 {
-    vc71::string suffix;
+    std::string suffix;
     formatString(suffix, "_s%i", slot);
     TerrainEditable* const te = editableTerrain;
     const int size = te->m_surroundingTextureSize;                            // +0x50
     if (!m_colormapReady)
     {
-        vc71::string target(::renddx9abi::toVc71String(te->getLevelSavePath()));
+        std::string target(::renddx9abi::fromHostString(te->getLevelSavePath()));
         target += base;
         target += suffix;
-        vc71::string dds(target);
+        std::string dds(target);
         dds += ".dds";
         const bool missing = !::dice::hfe::fileManager->fileExists(::renddx9abi::makeHostString(dds));   // +0x1C
         if (missing)
@@ -1330,35 +1330,34 @@ void SurroundingPatchEditable::burnColormap(const vc71::string& base)
     }
 
     dx9rend::stateManagerPush();
-    unsigned char* const toggles = static_cast<unsigned char*>(static_cast<void*>(dx9rend::g_Renderer));
-    const unsigned char saved1693 = toggles[1693];
-    const unsigned char saved1713 = toggles[1713];
-    const unsigned char saved1705 = toggles[1705];
-    const unsigned char saved1697 = toggles[1697];
-    const unsigned char saved1717 = toggles[1717];
-    const unsigned char saved1702 = toggles[1702];
-    const unsigned char saved1703 = toggles[1703];
-    const unsigned char saved1698 = toggles[1698];
-    const unsigned char saved1714 = toggles[1714];
-    const unsigned char saved1700 = toggles[1700];
+    const unsigned char saved1693 = dx9rend::rendererRenderSwitch(1693);
+    const unsigned char saved1713 = dx9rend::rendererRenderSwitch(1713);
+    const unsigned char saved1705 = dx9rend::rendererRenderSwitch(1705);
+    const unsigned char saved1697 = dx9rend::rendererRenderSwitch(1697);
+    const unsigned char saved1717 = dx9rend::rendererRenderSwitch(1717);
+    const unsigned char saved1702 = dx9rend::rendererRenderSwitch(1702);
+    const unsigned char saved1703 = dx9rend::rendererRenderSwitch(1703);
+    const unsigned char saved1698 = dx9rend::rendererRenderSwitch(1698);
+    const unsigned char saved1714 = dx9rend::rendererRenderSwitch(1714);
+    const unsigned char saved1700 = dx9rend::rendererRenderSwitch(1700);
     const float savedSeaLevel = te->m_primaryHeightmap->getSeaWaterLevel();  // +0x64
     const int savedRenderMode = dx9rend::rendererGetHemiRenderMode();
     const bool savedShadows = g_LightManager->getDynamicShadowsEnabled();     // +0xF0
     const int savedTechnique = te->getShaderTechnique();                      // E+0x8C
     const unsigned char savedPass = m_burnPass;                               // +0x2FB
 
-    toggles[1693] = 1;
-    toggles[1713] = 0;
-    toggles[1705] = 0;
-    toggles[1697] = 0;
+    dx9rend::rendererRenderSwitch(1693) = 1;
+    dx9rend::rendererRenderSwitch(1713) = 0;
+    dx9rend::rendererRenderSwitch(1705) = 0;
+    dx9rend::rendererRenderSwitch(1697) = 0;
     bundledMeshSetHemiEnabled(0);
-    toggles[1717] = 1;
-    toggles[1702] = 0;
-    toggles[1703] = 0;
-    toggles[1698] = 0;
+    dx9rend::rendererRenderSwitch(1717) = 1;
+    dx9rend::rendererRenderSwitch(1702) = 0;
+    dx9rend::rendererRenderSwitch(1703) = 0;
+    dx9rend::rendererRenderSwitch(1698) = 0;
     staticMeshRendererSetHemiEnabled(0);
-    toggles[1714] = 0;
-    toggles[1700] = 1;
+    dx9rend::rendererRenderSwitch(1714) = 0;
+    dx9rend::rendererRenderSwitch(1700) = 1;
     roadCompiledRendererSetHemiEnabled(1);
     te->m_primaryHeightmap->setSeaWaterLevel(-110.0f);
     dx9rend::rendererSetHemiRenderMode(0);
@@ -1384,18 +1383,18 @@ void SurroundingPatchEditable::burnColormap(const vc71::string& base)
     position.z = center.z;                                                    // +0x54
     dx9rend::rendererRenderOrthoTopDown(renderTarget, depthStencil, position, extent, flags);
 
-    toggles[1693] = saved1693;
-    toggles[1713] = saved1713;
-    toggles[1705] = saved1705;
-    toggles[1697] = saved1697;
+    dx9rend::rendererRenderSwitch(1693) = saved1693;
+    dx9rend::rendererRenderSwitch(1713) = saved1713;
+    dx9rend::rendererRenderSwitch(1705) = saved1705;
+    dx9rend::rendererRenderSwitch(1697) = saved1697;
     bundledMeshSetHemiEnabled(saved1697);
-    toggles[1717] = saved1717;
-    toggles[1702] = saved1702;
-    toggles[1703] = saved1703;
-    toggles[1698] = saved1698;
+    dx9rend::rendererRenderSwitch(1717) = saved1717;
+    dx9rend::rendererRenderSwitch(1702) = saved1702;
+    dx9rend::rendererRenderSwitch(1703) = saved1703;
+    dx9rend::rendererRenderSwitch(1698) = saved1698;
     staticMeshRendererSetHemiEnabled(saved1698);
-    toggles[1714] = saved1714;
-    toggles[1700] = saved1700;
+    dx9rend::rendererRenderSwitch(1714) = saved1714;
+    dx9rend::rendererRenderSwitch(1700) = saved1700;
     roadCompiledRendererSetHemiEnabled(saved1700);
     te->m_primaryHeightmap->setSeaWaterLevel(savedSeaLevel);
     dx9rend::rendererSetHemiRenderMode(savedRenderMode);
@@ -1403,13 +1402,13 @@ void SurroundingPatchEditable::burnColormap(const vc71::string& base)
     te->setShaderTechnique(savedTechnique);
     m_burnPass = savedPass;
 
-    vc71::string path;
+    std::string path;
     {
-        vc71::string pathSuffix;
+        std::string pathSuffix;
         formatString(pathSuffix, "_s%i", slot);                               // formatted again
         TerrainEditableNameResult colormapBase = te->getColormapBaseName();  // E+0x6C
-        path = ::renddx9abi::toVc71String(te->getLevelSavePath());           // E+0x90
-        path += ::renddx9abi::toVc71String(colormapBase);
+        path = ::renddx9abi::fromHostString(te->getLevelSavePath());           // E+0x90
+        path += ::renddx9abi::fromHostString(colormapBase);
         path += pathSuffix;
     }
     dx9rend::EngineTexture* const big = engineTexture(dx9rend::textureManagerCreateEmpty(
@@ -1435,43 +1434,43 @@ void SurroundingPatchEditable::burnColormap(const vc71::string& base)
     bigSurface->UnlockRect();
     rotateTexture(&flipped, true);
     {
-        vc71::string name(path);
+        std::string name(path);
         name += "_u8888";
         dx9rend::textureManagerSaveTexture(flipped, name);
     }
     {
         // The argument blocks are built right to left: the options, the directory, the file.
         const TerrainEditableString options(te->m_surroundingColormapSettings);   // +0x81C
-        vc71::string outputDirectory;
+        std::string outputDirectory;
         {
-            const vc71::string directory = te->getColormapDirectory();         // P+0xEC
-            outputDirectory = ::renddx9abi::toVc71String(te->getLevelSavePath());
+            const std::string directory = te->getColormapDirectory();         // P+0xEC
+            outputDirectory = ::renddx9abi::fromHostString(te->getLevelSavePath());
             outputDirectory += directory;
         }
-        vc71::string file(path);
+        std::string file(path);
         file += "_u8888.dds";
         te->runNvdxt(::renddx9abi::toHostString(file), ::renddx9abi::toHostString(outputDirectory), options);   // E+0xF4
     }
     {
-        vc71::string target(path);
+        std::string target(path);
         target += ".dds";
         ::dice::hfe::fileManager->deleteFile(::renddx9abi::makeHostString(target));
     }
     {
-        vc71::string target(path);
+        std::string target(path);
         target += ".dds";
-        vc71::string source(path);
+        std::string source(path);
         source += "_u8888_.dds";
         ::dice::hfe::fileManager->moveFile(::renddx9abi::makeHostString(source),
                                            ::renddx9abi::makeHostString(target));   // +0x24
     }
     {
-        vc71::string input(path);
+        std::string input(path);
         input += "_u8888.dds";
         ::dice::hfe::fileManager->deleteFile(::renddx9abi::makeHostString(input));
     }
     {
-        vc71::string leftover(path);
+        std::string leftover(path);
         leftover += "_u8888_.dds";
         ::dice::hfe::fileManager->deleteFile(::renddx9abi::makeHostString(leftover));
     }

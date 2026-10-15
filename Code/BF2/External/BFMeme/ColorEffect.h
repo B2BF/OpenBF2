@@ -14,9 +14,9 @@ public:
     unsigned int getObjectSize() override;
     bool streamProperties(System*, Stream*) override;
     Color* getColor() override;
-    bool drawCharacter(System*, int character, int font, int elementIndex,
+    bool drawCharacter(System*, int character, FontHandle font, int elementIndex,
                        Quad*, RenderContext*) override;
-    bool drawTexture(System*, int texture, Quad*, RenderContext*) override;
+    bool drawTexture(System*, TextureHandle texture, Quad*, RenderContext*) override;
     static TypeDescriptor* getClassType();
 private:
     Color m_color;

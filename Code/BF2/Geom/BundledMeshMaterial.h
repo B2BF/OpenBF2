@@ -3,30 +3,26 @@
 #ifndef BF2_GEOM_BUNDLEDMESHMATERIAL_H
 #define BF2_GEOM_BUNDLEDMESHMATERIAL_H
 #ifdef BF2_IMAGE_RENDDX9
-#include "../../RendDX9Abi/Vc71Vector.h"
-#include "../../RendDX9Abi/Vc71Map.h"
+#include "MeshTemplate.h"   // RaMaterialParameters
 #include <cstddef>
-namespace dice { namespace hfe { namespace geom {
+#include <map>
+#include <vector>
+struct IDirect3DVertexDeclaration9;
+namespace dice { namespace hfe {
+namespace dx9rend { namespace Ra { struct RaVertexElementDesc; } }   // RendDX9/Ra/RaShader.h
+namespace geom {
 class BundledMeshTemplate;
 class BundledMeshState;
-// The 24-byte unsigned-key node shared by this material's declaration map and the
-// template's value maps. Allocators100493C0/100EB100 prove the flags at+14/+15.
-struct BundledMeshMapNode
-{
-    BundledMeshMapNode *left, *parent, *right;
-    unsigned int key, value;
-    unsigned char color, isNil, pad[2];
-};
-static_assert(sizeof(BundledMeshMapNode)==24, "Bundled map node");
-void bundledMeshMapConstruct(vc71::map_layout& map);
-BundledMeshMapNode* bundledMeshMapFind(const vc71::map_layout& map, unsigned int key);
-unsigned int& bundledMeshMapAt(vc71::map_layout& map, unsigned int key);
-void bundledMeshMapDestroy(vc71::map_layout& map);
-BundledMeshMapNode* bundledMeshMapNext(BundledMeshMapNode* node);
+// Retail allocation 0x1A0; the declaration map's 24-byte nodes come from 0x100493C0.
 class BundledMeshMaterial
 {
 public:
+    typedef std::vector<const ::dice::hfe::dx9rend::Ra::RaVertexElementDesc*> ElementList;
+    typedef std::map<unsigned int, IDirect3DVertexDeclaration9*> DeclarationMap;
+
     BundledMeshMaterial(BundledMeshTemplate* templ, bool hasUv1, bool hasTangent);
+    // The destructor body runs destroyMembers; destroy(flags) runs the destructor.
+    ~BundledMeshMaterial();
     void destroyMembers();
     virtual void* destroy(unsigned char flags);
     virtual bool applyStreams(void* shader);
@@ -40,7 +36,8 @@ public:
     unsigned int m_dword04;                                  // +004
     BundledMeshTemplate* m_template;                          // +008
     BundledMeshState* m_state;                               // +00C
-    unsigned char m_parameters[0x150];                       // +010 Ra material block
+    // +010 Ra material block (RaMaterialParameters; 0x150 bytes on x86)
+    alignas(RaMaterialParameters) unsigned char m_parameters[sizeof(RaMaterialParameters)];
     int m_kind;                                             // +160
     unsigned int m_vertexStart;                             // +164
     unsigned int m_indexStart;                              // +168
@@ -50,13 +47,16 @@ public:
     void* m_vertexBuffer;                                   // +178 native D3D handle
     unsigned int m_vertexStride;                            // +17C
     void* m_indexBuffer;                                    // +180 native D3D handle
-    vc71::vector_layout m_elements;                         // +184 RaVertexElementDesc*
-    vc71::map_layout m_declarations;                        // +194 shader build serial -> declaration
+    ElementList m_elements;                                 // +184
+    DeclarationMap m_declarations;                          // +194 shader build serial -> declaration
 };
-static_assert(sizeof(BundledMeshMaterial)==0x1A0, "material allocation");
+#if defined(_M_IX86)
 static_assert(offsetof(BundledMeshMaterial,m_parameters)==0x10, "material parameters");
 static_assert(offsetof(BundledMeshMaterial,m_kind)==0x160, "material kind");
-static_assert(offsetof(BundledMeshMaterial,m_declarations)==0x194, "declaration map");
+#endif
+// The material's Ra parameter block, typed.
+inline RaMaterialParameters& bundledMeshMaterialParameters(BundledMeshMaterial* material)
+{ return *reinterpret_cast<RaMaterialParameters*>(material->m_parameters); }
 } } }
 #endif
 #endif

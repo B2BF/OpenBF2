@@ -23,13 +23,16 @@ rem            shared RendDX9Abi kit, SwiffPlayerAbi (initDll/deinitDll + memory
 rem            and the wrapper (module, factory, the 1120-byte SwiffPlayer with a
 rem            shape-complete 37-slot vtable). Links to SwiffPlayer.dll.
 rem
-rem   usage:  swiffplayer.cmd [native]   rebuilt host ABI (/MD, no Memory.dll)
+rem   usage:  swiffplayer.cmd [native]   rebuilt host ABI (/MD, no Memory.dll), x86
+rem           swiffplayer.cmd x64        the native x64 client's SwiffPlayer.dll
 rem   BF2_SWIFFPLAYER_OUT and BF2_SWIFFPLAYER_BIN override the output paths.
 rem [CHOSEN, not recovered] Native-only builds: https://github.com/B2BF/OpenBF2/issues/7
 rem ===========================================================================
 if not "%~2"=="" goto :usage
-if not "%~1"=="" if /i not "%~1"=="native" goto :usage
-call "%~dp0vsdevcmd.cmd" x86
+set "ARCH=x86"
+if /i "%~1"=="x64" set "ARCH=x64"
+if not "%~1"=="" if /i not "%~1"=="native" if /i not "%~1"=="x64" goto :usage
+call "%~dp0vsdevcmd.cmd" %ARCH%
 if errorlevel 1 exit /b 1
 
 for %%I in ("%~dp0..") do set CODE=%%~fI
@@ -40,6 +43,8 @@ set EXT=%CODE%\BF2\External
 set SWF=%CODE%\BF2\External\gameswf\SwiffPlayer
 set OUT=%~dp0obj_swiffplayer_native
 set BIN=%~dp0bin_swiffplayer_native
+if "%ARCH%"=="x64" set OUT=%~dp0obj_swiffplayer_x64
+if "%ARCH%"=="x64" set BIN=%~dp0bin_swiffplayer_x64
 set CRT=/MD
 set PLUGIN_ABI=/DBF2_PLUGIN_ABI_NATIVE=1 /D_ITERATOR_DEBUG_LEVEL=0
 rem Preserve agent/CI output isolation.
@@ -69,6 +74,8 @@ set FLAGS=/nologo /c %CRT% /std:c++14 /permissive /EHsc /W3 /FS /Zi ^
  /I "%EXT%" /I "%EXT%\gameswf" ^
  /DBF2_IMAGE_SWIFFPLAYER %PLUGIN_ABI% /DDEDICATED=0 /FI"%BF2%\Core\BuildConfig.h" /DWIN32 /D_WINDOWS /DNDEBUG /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE ^
  /wd4100 /wd4127 /wd4244 /wd4267 /wd4291 /wd4305 /wd4996 /Fd"%OUT%\SwiffPlayer.pdb"
+rem x64: a pointer truncated into a 32-bit integer is an error, as for the x64 dedicated server.
+if "%ARCH%"=="x64" set FLAGS=%FLAGS% /we4311 /we4312
 
 echo   Native host ABI, CRT=%CRT%
 echo   CODE=%CODE%
@@ -90,7 +97,7 @@ rem ---------------------------------------------------------------------------
 rem STEP 2 - compile. Explicit manifest, numbered objects (flat output dir).
 rem
 rem   the vendored gameswf + base drop (35 TUs, per the two upstream Makefiles - see below)
-rem   the shared RendDX9Abi kit (BfMemory/Msvcr71Heap/Vc71String/DllMain; Frontier.cpp compiled
+rem   the shared RendDX9Abi kit (BfMemory/DllMain; Frontier.cpp compiled
 rem     separately with the SwiffPlayer log defines)
 rem   SwiffPlayerAbi (PluginEntry initDll/deinitDll, SwiffMemory tu_* shim)
 rem   the wrapper (SwiffPlayer.cpp, SwiffPlayerModule.cpp)
@@ -141,8 +148,6 @@ set SOURCES=^
  "%EXT%\gameswf\gameswf_types.cpp" ^
  "%EXT%\gameswf\gameswf_xml.cpp" ^
  "%RD9ABI%\BfMemory.cpp" ^
- "%RD9ABI%\Msvcr71Heap.cpp" ^
- "%RD9ABI%\Vc71String.cpp" ^
  "%RD9ABI%\DllMain.cpp" ^
  "%ABI%\PluginEntry.cpp" ^
  "%ABI%\SwiffMemory.cpp" ^
@@ -191,7 +196,10 @@ rem winmm.lib - timeGetTime, used by tu_timer::get_ticks on a LIVE path; the shi
 rem   WINMM for it. dsound/wsock32/advapi32/ole32 are the VoIP/settings surface (Stage 6), not linked
 rem   yet - link demand will name them when that lands.
 echo [3/4] linking
-link /nologo /DLL /MACHINE:X86 /BASE:0x10000000 /DEBUG /OPT:REF /OPT:ICF ^
+rem /BASE:0x10000000 is the shipped x86 image base; the x64 image takes the linker's default.
+set "LINK_BASE=/BASE:0x10000000"
+if "%ARCH%"=="x64" set "LINK_BASE="
+link /nologo /DLL /MACHINE:%ARCH% %LINK_BASE% /DEBUG /OPT:REF /OPT:ICF ^
      /DEF:"%ABI%\SwiffPlayer.def" ^
      /OUT:"%BIN%\SwiffPlayer.dll" ^
      /PDB:"%BIN%\SwiffPlayer.pdb" ^
@@ -257,5 +265,5 @@ echo   NOTE: this is NOT installed anywhere. See docs\building.md before using t
 exit /b 0
 
 :usage
-echo Usage: swiffplayer.cmd [native]
+echo Usage: swiffplayer.cmd [native^|x64]
 exit /b 2

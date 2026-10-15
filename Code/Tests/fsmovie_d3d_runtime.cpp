@@ -165,11 +165,9 @@ int main(int argc,char** argv) {
     if(!check(SUCCEEDED(d3d->CreateDevice(0,D3DDEVTYPE_HAL,window,D3DCREATE_HARDWARE_VERTEXPROCESSING,&pp,&device)),"create actual HAL device and COPY backbuffer"))return 1;
     RendDX9Base base{};base.device=device;base.d3d9=d3d;base.framePresented=1;base.pp=pp;
     g_rendererBase=&base;g_Renderer=reinterpret_cast<IBase*>(&base);
-    // Test-owned sentinel for the actual listener registration/unregistration.
-    struct Node { Node* next;Node* prev;int priority;DeviceLostResetListener* listener; } head{};
-    head.next=head.prev=&head;*reinterpret_cast<Node**>(base.deviceLostList+4)=&head;
+    // The actual listener registration/unregistration uses the base's own constructed std::list.
     IDirect3DSwapChain9* chain=nullptr;device->GetSwapChain(0,&chain);
-    *reinterpret_cast<IDirect3DSwapChain9***>(reinterpret_cast<char*>(&base)+228)=&chain;
+    base.swapChains.push_back(chain);
     if(!check(createStateManager(device) && createBufferManager(device) && createShaderManager(&base,device),"construct actual state, buffer and shader managers"))return 1;
     ID3DXEffect* fx=nullptr;ID3DXBuffer* errors=nullptr;
     const HRESULT compiled=D3DXCreateEffect(device,source.data(),static_cast<unsigned>(source.size()),nullptr,nullptr,0,nullptr,&fx,&errors);
@@ -178,7 +176,7 @@ int main(int argc,char** argv) {
     Effect* effect=createEffectObject();if(!check(effectBind(effect,fx),"actual effect bind registers parameters and installs real StateManager"))return 1;
     fx->Release();
     auto manager=static_cast<ShaderManager*>(g_shaderManager);
-    auto node=vc71::mapInsert(manager->effectCache,0x30,"mods/xpack/shaders/loadingscreen");vc71::mapNodeValueRef(node)=effect;
+    manager->effectCache["mods/xpack/shaders/loadingscreen"]=effect;
     IFSMoviePlayer* movie=reinterpret_cast<IFSMoviePlayer*>(geom::createFSMoviePlayer(80047u,nullptr));
     if(!check(movie && movie->load("Movies/legal.bik"),"actual movie loads stock Bink, cached effect, declaration and vertex buffer"))return 1;
     // The real codec's timing gate may defer the first decode; repeated actual

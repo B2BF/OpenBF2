@@ -27,7 +27,7 @@ namespace dx9rend {
 // BufferManager.cpp - declared per TU, as the other clients do.
 extern void* g_bufferManager;                                              // dword_1023B978
 void* createVertexBuffer(void* bufferManager, unsigned int count, unsigned int stride,
-                         const vc71::string& name, unsigned int usage);
+                         const std::string& name, unsigned int usage);
 void* bufferManagerCreateIndexBuffer(unsigned int count, unsigned int usage,
                                      unsigned int format);
 void  vertexBufferRelease(void* wrapper);                                  // --ref, sub_10014510, free
@@ -128,8 +128,6 @@ UndergrowthSystem::UndergrowthSystem()
     , m_viewDistanceFade(0.2f)
     , m_editorMode(false)
 {
-    m_visibleCells.first = m_visibleCells.last = m_visibleCells.end = 0;     // +0x2D8..+0x2E0
-    m_drawOrder.first = m_drawOrder.last = m_drawOrder.end = 0;              // +0x2E8..+0x2F0
     m_lastRebuildPosition.x = 0.0f;                                          // +0x2F4..+0x2FC
     m_lastRebuildPosition.y = 0.0f;
     m_lastRebuildPosition.z = 0.0f;
@@ -164,12 +162,8 @@ UndergrowthSystem::~UndergrowthSystem()
 
     // sub_10032E40(this + 0x300) - the profiler stat's destructor, not reproduced.
 
-    if (m_drawOrder.first)
-        ::renddx9abi::engineFree(m_drawOrder.first);                         // +0x2E8
-    m_drawOrder.first = m_drawOrder.last = m_drawOrder.end = 0;
-    if (m_visibleCells.first)
-        ::renddx9abi::engineFree(m_visibleCells.first);                      // +0x2D8
-    m_visibleCells.first = m_visibleCells.last = m_visibleCells.end = 0;
+    m_drawOrder.clear();                                                     // +0x2E4
+    m_visibleCells.clear();                                                  // +0x2D4
     m_materials.clear();                                                     // +0xF8: 101518E0 + free
 
     dx9rend::ShaderParameter* const parameters[] =
@@ -458,7 +452,7 @@ void UndergrowthSystem::setSimpleShaderEnable(bool enable)
             dx9rend::indexBufferRelease(patch.indexBuffer);
         patch.vertexBuffer = dx9rend::createVertexBuffer(dx9rend::g_bufferManager,
                                                          m_patchVertexCount, stride,
-                                                         vc71::string("UndergrowthSystem"), 8u);
+                                                         std::string("UndergrowthSystem"), 8u);
         patch.indexBuffer = dx9rend::bufferManagerCreateIndexBuffer(m_patchIndexCount, 8u,
                                                                     101u);  // D3DFMT_INDEX16
         if (patch.cell)
@@ -520,7 +514,7 @@ IBase* __fastcall createUndergrowthSystem(unsigned int iid, IBase* outer)
 {
     if (outer)
         return 0;
-    void* const storage = ::renddx9abi::engineAlloc(0x598);
+    void* const storage = ::renddx9abi::engineAlloc(sizeof(UndergrowthSystem));
     UndergrowthSystem* const self = storage ? new (storage) UndergrowthSystem() : 0;
     void* const itf = self->queryInterface(iid);
     if (!itf)

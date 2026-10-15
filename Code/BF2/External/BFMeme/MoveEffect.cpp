@@ -51,7 +51,7 @@ void computeMoveOffset(MoveEffect* self, System* system, Data* direction, Data* 
 }
 }
 
-bool MoveEffect::drawCharacter(System* system, int character, int font,
+bool MoveEffect::drawCharacter(System* system, int character, FontHandle font,
                                int elementIndex, Quad* quad, RenderContext* context)
 {
     float dx = 0.0f, dy = 0.0f;
@@ -75,7 +75,7 @@ bool MoveEffect::drawCharacter(System* system, int character, int font,
     return drawn;
 }
 
-bool MoveEffect::drawTexture(System* system, int texture, Quad* quad,
+bool MoveEffect::drawTexture(System* system, TextureHandle texture, Quad* quad,
                              RenderContext* context)
 {
     float dx = 0.0f, dy = 0.0f;
@@ -95,6 +95,8 @@ bool MoveEffect::drawTexture(System* system, int texture, Quad* quad,
     return drawn;
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(MoveEffect) == 12, "PE MoveEffect allocation");
+#endif
 } }
 #endif

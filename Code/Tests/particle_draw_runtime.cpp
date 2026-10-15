@@ -24,7 +24,20 @@ float primaryFar = 2222.0f, alternateFar = 3333.0f;
 float videoScale = 0.5f, expectedDistance = 250.0f;
 int globalDistance = 500, waterReads = 0;
 bool waterFirst = false, waterSecond = false;
-const unsigned int counterOffsets[] = {0x1E78,0x1E7C,0x8B14,0x7C70,0x7C74,0x851C,0x8520};
+// The per-frame draw counters inside the embedded renderers (retail manager +0x1E78/+0x1E7C,
+// +0x8B14, +0x7C70/+0x7C74, +0x851C/+0x8520), addressed from each renderer span: the native
+// manager's containers ahead of the spans are not retail-sized, the spans keep their layout.
+const unsigned int kRendererCounters = 7;
+unsigned int& rendererCounter(ParticleSystemManager* manager, unsigned int index)
+{
+    unsigned char* const spans[kRendererCounters] = {
+        manager->m_particleSystemRenderer, manager->m_particleSystemRenderer,
+        manager->m_nsaParticleSystemRenderer,
+        manager->m_meshParticlesRenderer, manager->m_meshParticlesRenderer,
+        manager->m_trailRenderer, manager->m_trailRenderer};
+    const unsigned int offsets[kRendererCounters] = {0x1D70,0x1D74,0x51C,0x1D40,0x1D44,0x850,0x854};
+    return *reinterpret_cast<unsigned int*>(spans[index] + offsets[index]);
+}
 float& ra(unsigned int offset) { return *reinterpret_cast<float*>(raStorage + offset); }
 unsigned int& word(unsigned char* renderer, unsigned int offset)
 { return *reinterpret_cast<unsigned int*>(renderer + offset); }
@@ -33,7 +46,7 @@ void __fastcall forbidden(void*, void*) { std::abort(); }
 IRenderView* __fastcall primaryRead(void* receiver, void*)
 {
     CHECK(receiver == &rendererObject);
-    for (unsigned int offset : counterOffsets) CHECK(psmField<unsigned int>(currentManager, offset) == 0);
+    for (unsigned int i = 0; i < kRendererCounters; ++i) CHECK(rendererCounter(currentManager, i) == 0);
     drawCalls.push_back("primary"); return reinterpret_cast<IRenderView*>(&primaryViewObject);
 }
 IRenderView* __fastcall alternateRead(void* receiver, void*)
@@ -124,8 +137,11 @@ void verifyConstructor(ParticleSystemManager& manager, unsigned short previousCo
     CHECK(declarations.size() == 3 && listeners.size() == 1);
     CHECK(listeners[0] == reinterpret_cast<DeviceLostResetListener*>(manager.m_trailRenderer));
     CHECK(listenerPriorities[0] == 4);
-    const unsigned int expectedAllocations[] = {20,120,0x460,0x800,120,120,0x460,0x800,20};
-    CHECK(allocationSizes == std::vector<unsigned int>(expectedAllocations,expectedAllocations + 9));
+    // Engine-heap blocks only: the primed pointer lists now take their storage from the shared CRT
+    // through std::vector (checked below), and the atlas block is the native TextureAtlas.
+    const unsigned int expectedAllocations[] = {0x460,0x800,0x460,0x800,
+                                                static_cast<unsigned int>(sizeof(TextureAtlas))};
+    CHECK(allocationSizes == std::vector<unsigned int>(expectedAllocations,expectedAllocations + 5));
     CHECK(declarations[0].size() == 9 && declarations[1].size() == 7 && declarations[2].size() == 9);
     const unsigned short ordinaryOffsets[] = {0,12,20,32,40,48,52,60};
     const unsigned short trailOffsets[] = {0,12,24,36,52,60};
@@ -138,12 +154,15 @@ void verifyConstructor(ParticleSystemManager& manager, unsigned short previousCo
         }
         CHECK(declarations[kind].back().Stream == 0xFF && declarations[kind].back().Type == 17);
     }
-    unsigned char* vectorOwners[] = {manager.m_particleSystemRenderer+8,manager.m_trailRenderer+8,
-                                   manager.m_nsaParticleSystemRenderer+12};
-    for (unsigned char* owner : vectorOwners) {
-        const vc71::vector_layout& v = *reinterpret_cast<vc71::vector_layout*>(owner);
-        CHECK(v.first == v.last && v.end-v.first == 120);
-        for (unsigned int i = 0; i < 30; ++i) CHECK(reinterpret_cast<void**>(v.first)[i] == 0);
+    std::vector<unsigned char*>* vectorOwners[] = {
+        &particleRendererList<unsigned char*>(manager.m_particleSystemRenderer, 8),
+        &particleRendererList<unsigned char*>(manager.m_trailRenderer, 8),
+        &particleRendererList<unsigned char*>(manager.m_nsaParticleSystemRenderer, 12)};
+    for (std::vector<unsigned char*>* owner : vectorOwners) {
+        // resize(30, nullptr) then resize(0): empty, capacity 30, the storage still zeroed.
+        CHECK(owner->empty() && owner->capacity() == 30);
+        const unsigned char* const storage = reinterpret_cast<const unsigned char*>(owner->data());
+        for (unsigned int i = 0; i < 30 * sizeof(void*); ++i) CHECK(storage[i] == 0);
     }
     const unsigned int recordsOffsets[] = {0x1DC8,0x564}, scratchOffsets[] = {0x1DC0,0x55C};
     unsigned char* scratchOwners[] = {manager.m_particleSystemRenderer,manager.m_nsaParticleSystemRenderer};
@@ -164,10 +183,11 @@ void verifyConstructor(ParticleSystemManager& manager, unsigned short previousCo
     CHECK(*reinterpret_cast<int*>(manager.m_nsaParticleSystemRenderer+8) == -1);
     CHECK(manager.m_particleSystemRenderer[0x1D9C] == 1 && manager.m_meshParticlesRenderer[0x1D6C] == 1);
     CHECK(manager.m_trailRenderer[0x884] == 1 && manager.m_nsaParticleSystemRenderer[0x544] == 1);
-    // PE byte stores and empty allocators do not blanket-initialize adjacent padding.
-    CHECK(manager.m_particleSystemRenderer[1] == 0xA5 && manager.m_particleSystemRenderer[8] == 0xA5);
+    // PE byte stores and the in-place lists do not blanket-initialize adjacent padding. A list's
+    // std::vector fills the first twelve bytes of its 16-byte span; the fourth word stays as is.
+    CHECK(manager.m_particleSystemRenderer[1] == 0xA5 && manager.m_particleSystemRenderer[0x14] == 0xA5);
     CHECK(manager.m_meshParticlesRenderer[0x1D3D] == 0xA5 && manager.m_trailRenderer[0x84D] == 0xA5);
-    CHECK(manager.m_nsaParticleSystemRenderer[1] == 0xA5 && manager.m_nsaParticleSystemRenderer[12] == 0xA5);
+    CHECK(manager.m_nsaParticleSystemRenderer[1] == 0xA5 && manager.m_nsaParticleSystemRenderer[0x18] == 0xA5);
 }
 
 void verifySelectorsAndEmptyExits()
@@ -225,7 +245,7 @@ int runNegative(const char* value)
     const int kind = std::atoi(value);
     unsigned char renderer[0x5E18] = {};
     IParticleSystemInstance* item = reinterpret_cast<IParticleSystemInstance*>(0xCCCCCCC1u);
-    ParticleSystemInstanceList instances = {0,&item,&item+1,&item+1};
+    ParticleSystemInstanceList instances(1, item);
     std::signal(SIGABRT,&expectedAbort);
     switch (kind) {
     case 1: renderer[0x544]=1; psmPrepareNsaParticleRenderer(renderer,0,&instances,0.25f,false); break;
@@ -250,7 +270,7 @@ void verifyDraw(ParticleSystemManager& manager, bool firstPerson, bool secondPas
     waterFirst = submergedFirst; waterSecond = submergedSecond; waterReads = 0;
     drawCalls.clear(); ra(0x1E0) = 17.0f;
     const float previousDt = manager.m_deltaTime;
-    for (unsigned int offset : counterOffsets) psmField<unsigned int>(&manager, offset) = 99;
+    for (unsigned int i = 0; i < kRendererCounters; ++i) rendererCounter(&manager, i) = 99;
     manager.m_particleSystemRenderer[0x1D78] = manager.m_particleSystemRenderer[0x1D79] = 9;
     manager.m_meshParticlesRenderer[0x1D48] = manager.m_meshParticlesRenderer[0x1D49] = 9;
     reinterpret_cast<IParticleSystemManager*>(&manager)->onPathDraw(firstPerson, secondPass);
@@ -267,15 +287,15 @@ void verifyDraw(ParticleSystemManager& manager, bool firstPerson, bool secondPas
     CHECK(bits(manager.m_effectiveViewDistance) == bits(expectedDistance));
     CHECK(bits(manager.m_deltaTime) == bits(previousDt) && manager.m_poolsInitialized == 1);
     CHECK(ra(0x1E0) == (firstPerson ? 17.0f : secondPass != submergedFirst ? -1.0f : 1.0f));
-    for (unsigned int offset : counterOffsets) CHECK(psmField<unsigned int>(&manager, offset) == 0);
+    for (unsigned int i = 0; i < kRendererCounters; ++i) CHECK(rendererCounter(&manager, i) == 0);
     CHECK(manager.m_particleSystemRenderer[0x1D78] == 0 && manager.m_particleSystemRenderer[0x1D79] == 0);
     CHECK(manager.m_meshParticlesRenderer[0x1D48] == 0 && manager.m_meshParticlesRenderer[0x1D49] == 0);
-    CHECK(manager.m_instances.first == manager.m_instances.last);
-    CHECK(manager.m_pendingClassification.first == manager.m_pendingClassification.last);
-    CHECK(manager.m_pendingDestroy.first == manager.m_pendingDestroy.last);
+    CHECK(manager.m_instances.empty());
+    CHECK(manager.m_pendingClassification.empty());
+    CHECK(manager.m_pendingDestroy.empty());
     for (unsigned int i = 0; i < 10; ++i)
-        CHECK(manager.m_renderBuckets[i].first == manager.m_renderBuckets[i].last);
-    CHECK(psmReclassification(&manager).size == 0);
+        CHECK(manager.m_renderBuckets[i].empty());
+    CHECK(psmReclassification(&manager).empty());
 }
 
 LightManager* replacementLight;
@@ -379,10 +399,11 @@ int main(int argc, char** arguments)
     constructParticleSystemManager(&manager);
     verifyConstructor(manager,controlBefore);
     CHECK(manager.m_poolsInitialized == 0);
-    const ParticleSystemManager before = manager;
+    static ManagerImage before;
+    capture(before, manager);
     drawCalls.clear();
     reinterpret_cast<IParticleSystemManager*>(&manager)->onPathDraw(true,true);
-    CHECK(drawCalls.empty() && std::memcmp(&manager,&before,sizeof(before)) == 0);
+    CHECK(drawCalls.empty() && std::memcmp(&manager,before.bytes,sizeof(before.bytes)) == 0);
 
     manager.m_settingsApplied = 1;
     manager.m_type0PoolCount = manager.m_type1PoolCount = manager.m_type2PoolCount = manager.m_type4PoolCount = 2;

@@ -20,22 +20,22 @@ static float psmType1DegreesToRadians=0.01745329238474369f;
 // parent transform, or the local transform when neither is available.
 void psmType1RefreshTransform(void* self)
 {
-    if (psmRuntimeField<unsigned char>(self,0x18)) return;
-    Mat4& output=psmRuntimeField<Mat4>(self,0x74);
-    const Mat4& local=psmRuntimeField<Mat4>(self,0x34);
-    world::IObject* const owner=psmRuntimeField<world::IObject*>(self,0x10);
+    if (psmInstanceB<unsigned char>(self,0x18)) return;
+    Mat4& output=psmInstanceB<Mat4>(self,0x74);
+    const Mat4& local=psmInstanceB<Mat4>(self,0x34);
+    world::IObject* const owner=psmInstanceB<world::IObject*>(self,0x10);
     if (owner) output.mult(local,owner->getVisualAbsoluteTransformation());
-    else if (psmRuntimeField<const Mat4*>(self,0x30))
-        output.mult(local,*psmRuntimeField<const Mat4*>(self,0x30));
+    else if (psmInstanceB<const Mat4*>(self,0x30))
+        output.mult(local,*psmInstanceB<const Mat4*>(self,0x30));
     else output=local;
 }
 
 class ParticleInstanceType1 : public IParticleSystemInstance
 {
-    unsigned char m_data[0x220];
-    template<class T> T& at(unsigned int offset) { return psmRuntimeField<T>(this,offset); }
+    unsigned char m_data[PSM_INSTANCE_DATA(0x224)];
+    template<class T> T& at(unsigned int offset) { return psmInstanceB<T>(this,offset); }
     template<class T> const T& at(unsigned int offset) const
-    { return *reinterpret_cast<const T*>(reinterpret_cast<const unsigned char*>(this)+offset); }
+    { return psmInstanceB<T>(const_cast<ParticleInstanceType1*>(this), offset); }
 public:
     // Cells it never writes (+0x06/+0x07, +0xCC/+0xD0, +0xE8..+0xF8, +0x13C/+0x140,
     // +0x220, the history planes' distances before the second pass) stay untouched here too.
@@ -62,14 +62,14 @@ public:
         // emission time, unless the emission time is zero or the system loops) + 10, truncated.
         // NaN routing is retail's: an unordered lifetime is kept, an unordered emit time counts as
         // non-zero.
-        const float emitTime=psmRuntimeField<float>(descriptor,0x194);
-        double capacityTime=static_cast<double>(psmRuntimeField<float>(descriptor,0x9C))
-            +psmRuntimeField<float>(descriptor,0x98);
-        if (emitTime!=0 && !psmRuntimeField<unsigned char>(descriptor,0x198) && capacityTime>emitTime)
+        const float emitTime=psmDescriptor1<float>(descriptor,0x194);
+        double capacityTime=static_cast<double>(psmDescriptor1<float>(descriptor,0x9C))
+            +psmDescriptor1<float>(descriptor,0x98);
+        if (emitTime!=0 && !psmDescriptor1<unsigned char>(descriptor,0x198) && capacityTime>emitTime)
             capacityTime=emitTime;
-        at<int>(0x218)=static_cast<int>(capacityTime*psmRuntimeField<float>(descriptor,0x10)+10.0);
+        at<int>(0x218)=static_cast<int>(capacityTime*psmDescriptor1<float>(descriptor,0x10)+10.0);
         // no allocation-failure or capacity guard, exactly as shipped.
-        at<float**>(0x14)=static_cast<float**>(::renddx9abi::engineAlloc(at<int>(0x218)*4+4));
+        at<float**>(0x14)=static_cast<float**>(::renddx9abi::engineAlloc(at<int>(0x218)*kPsmPointerSize+kPsmPointerSize));
         at<float**>(0x14)[0]=0;
         at<Vec3>(0x1C)={0,0,0};
         at<Vec3>(0xFC)={0,0,0}; at<Vec3>(0x108)={0,0,0};
@@ -80,7 +80,7 @@ public:
         { at<Vec3>(offset)={0,1,0}; at<float>(offset+12)=0; }
         // fetch the descriptor's geometry instance on first use (thiscall on the
         // descriptor, PE 10179080; the lookup is retried per instance while +0x8C stays null).
-        if (!psmRuntimeField<void*>(descriptor,0x8C))
+        if (!psmDescriptor1<void*>(descriptor,0x8C))
             particleSystemType1ResolveGeometry(descriptor);
         at<unsigned char>(4)=0;
     }
@@ -96,7 +96,7 @@ public:
                 ParticleSystemManager* const manager=
                     reinterpret_cast<ParticleSystemManager*>(g_ParticleSystemManager);
                 float* const particle=at<float**>(0x14)[index];
-                psmRuntimeField<void*>(particle,0)=manager->m_type1FreeList;
+                psmRecordLink(particle, 1)=manager->m_type1FreeList;
                 manager->m_type1FreeList=particle;
                 ++index;
             } while (at<float**>(0x14)[index]);
@@ -115,7 +115,7 @@ public:
         {
             void* const descriptor=self->at<void*>(0x2C);
             self->reserved41(static_cast<float>(static_cast<double>(
-                psmRuntimeField<float>(descriptor,0x9C))+psmRuntimeField<float>(descriptor,0x98)));
+                psmDescriptor1<float>(descriptor,0x9C))+psmDescriptor1<float>(descriptor,0x98)));
         }
         // No count guard: a non-null head with a zero count underflows the index, as shipped.
         while (self->at<float**>(0x14)[0])
@@ -127,7 +127,7 @@ public:
             self->at<float**>(0x14)[self->at<unsigned int>(0x28)]=0;
             ParticleSystemManager* const manager=
                 reinterpret_cast<ParticleSystemManager*>(g_ParticleSystemManager);
-            psmRuntimeField<void*>(particle,0)=manager->m_type1FreeList;
+            psmRecordLink(particle, 1)=manager->m_type1FreeList;
             manager->m_type1FreeList=particle;
         }
         self->at<float>(0x214)=0;
@@ -151,9 +151,9 @@ public:
         if (at<IParticleSystemTemplate*>(0x2C)->getQualityLevel()>quality) return;
         void* const descriptor=at<void*>(0x2C);
         at<unsigned char>(0x144)=1; at<unsigned char>(0x21C)=1;
-        at<float>(0xE8)=psmRuntimeField<float>(descriptor,0x194);
-        at<float>(0xF0)=psmRuntimeField<float>(descriptor,0x1A4);
-        at<float>(0xEC)=psmRuntimeField<float>(descriptor,0x0C);
+        at<float>(0xE8)=psmDescriptor1<float>(descriptor,0x194);
+        at<float>(0xF0)=psmDescriptor1<float>(descriptor,0x1A4);
+        at<float>(0xEC)=psmDescriptor1<float>(descriptor,0x0C);
         at<float>(0xF4)=0; at<float>(0xF8)=0; at<float>(0xD0)=0;
         at<unsigned char>(0x21E)=1; at<unsigned char>(0x21F)=1;
         at<unsigned int>(0x124)=dx9rend::rendererFrameOrdinal();
@@ -161,7 +161,7 @@ public:
         if (!at<unsigned char>(4))
         {
             // an ordered `position.y < water height`; NaN reads as dry.
-            at<unsigned char>(0x220)=at<float>(0xA8)<psmRuntimeField<float>(dx9rend::g_raShaderConstants,0x1BC);
+            at<unsigned char>(0x220)=at<float>(0xA8)<*reinterpret_cast<const float*>(dx9rend::raShaderConstantsAt(0x1BC));
             psmAddActive(reinterpret_cast<ParticleSystemManager*>(g_ParticleSystemManager),this,firstPerson);
         }
         dx9rend::IRenderView* const view=dx9rend::rendererGetRenderViewDup();
@@ -191,9 +191,9 @@ public:
     void reserved08() override { at<unsigned char>(0x18)=1; at<void*>(0x10)=0; at<void*>(0xC)=0; at<void*>(0x30)=0; }
     void reserved09(bool value) override { psmShared13SetVisible(this,value); }          // 101839F0 shared
     bool reserved10() const override { return psmShared13IsVisible(this); }             // 10183A00 shared
-    void reserved11(int value) override { at<int>(0x10)=value; }                         // 1017A500 (all five)
-    int reserved12() const override { return at<int>(0x10); }                          // 1010DE20 (all five)
-    void reserved13(int value) override { at<int>(0x30)=value; }                         // 1017C200 (all five)
+    void reserved11(intptr_t value) override { at<intptr_t>(0x10)=value; }                         // 1017A500 (all five)
+    intptr_t reserved12() const override { return at<intptr_t>(0x10); }                          // 1010DE20 (all five)
+    void reserved13(intptr_t value) override { at<intptr_t>(0x30)=value; }                         // 1017C200 (all five)
     void* reserved14(const void* value) override
     { at<Mat4>(0x34)=*static_cast<const Mat4*>(value); return &at<Mat4>(0x34); }
     const void* reserved15() const override { return &at<Mat4>(0x34); }                // 10179DD0 (all five)
@@ -240,7 +240,7 @@ public:
         {
             at<unsigned char>(7)=value;
             psmReclassification(reinterpret_cast<ParticleSystemManager*>(g_ParticleSystemManager))
-                .insert(reinterpret_cast<unsigned int>(this));
+                .insert(this);
         }
     }
     // Proven retail shared constant/null bodies: 1017A510 / 100E13B0 / 100ED3B0 / 10082D40.
@@ -251,11 +251,15 @@ public:
     int getMaterial() const override { return -1; }
     // PE 101BB440 / 101BB480, shared by all five tables.
     void setEffectController(world::IEffectController* value) override
-    { at<world::IEffectController*>(0xC)=value; reserved11(reinterpret_cast<int>(value ? value->getObject() : 0)); }
+    { at<world::IEffectController*>(0xC)=value; reserved11(reinterpret_cast<intptr_t>(value ? value->getObject() : 0)); }
     world::IEffectController* getEffectController() const override { return at<world::IEffectController*>(0xC); }
     bool getWaterSide() const override { return at<unsigned char>(0x220)!=0; }
 };
+#if defined(_M_IX86)
 static_assert(sizeof(ParticleInstanceType1)==0x224,"mesh particle instance PE 10184810 layout");
+#else
+static_assert(sizeof(ParticleInstanceType1)==kPsmInstanceSize,"x64 instance layout, ParticleRawLayout.h");
+#endif
 
 // engine alloc 0x224, null returns null, else construct. The shared tail
 // (byte +5 = 0, push into manager +0x10) stays in psm_createInstance.

@@ -26,15 +26,13 @@ cl %TASK_FLAGS% "%~dp0static_mesh_occluders_runtime.cpp" /Fo"%BF2_BUILD_OUT%\fix
 if errorlevel 1 goto failed
 cl %TASK_FLAGS% "%TASK_ROOT%\BF2\Geom\StaticMeshTemplate.cpp" /Fo"%BF2_BUILD_OUT%\StaticMeshTemplate.obj" >>"%BF2_BUILD_OUT%\build.log" 2>&1
 if errorlevel 1 goto failed
-cl %TASK_FLAGS% "%TASK_ROOT%\RendDX9Abi\Vc71String.cpp" /Fo"%BF2_BUILD_OUT%\Vc71String.obj" >>"%BF2_BUILD_OUT%\build.log" 2>&1
-if errorlevel 1 goto failed
 
 rem /FORCE:UNRESOLVED - deliberate, and bounded: loadOccluders reaches engineAlloc, engineFree,
 rem logf and the stream's two slots, all supplied by the fixture. Everything else in the TU
 rem becomes an RVA-0 that this fixture never calls.
 link /nologo /DEBUG /INCREMENTAL:NO /SUBSYSTEM:CONSOLE /FORCE:UNRESOLVED ^
  /OUT:"%BF2_BUILD_OUT%\static_mesh_occluders_runtime.exe" ^
- "%BF2_BUILD_OUT%\fixture.obj" "%BF2_BUILD_OUT%\StaticMeshTemplate.obj" "%BF2_BUILD_OUT%\Vc71String.obj" ^
+ "%BF2_BUILD_OUT%\fixture.obj" "%BF2_BUILD_OUT%\StaticMeshTemplate.obj" ^
  >>"%BF2_BUILD_OUT%\build.log" 2>&1
 if errorlevel 1 goto failed
 

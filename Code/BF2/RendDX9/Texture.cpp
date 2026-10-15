@@ -2,6 +2,7 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
+#include "../../RendDX9Abi/ThunkAbi.h"
 #include "../../RendDX9Abi/HfeAbi.h"
 #include "../../RendDX9Abi/BfMemory.h"
 #include "../../RendDX9Abi/Frontier.h"
@@ -20,7 +21,7 @@ extern void* g_rendererBase;   // dword_1023B970 - RendDX9Init.cpp. The ctor/dto
 int                 textureManagerDefaultMipClass();   // sub_10017DF0 -> TM+0x98
 int                 textureManagerManagedFlag();       // sub_10017E30 -> TM+0x20
 unsigned char       textureManagerRecreateMode();      // sub_10017E50 -> TM+0x24
-const vc71::string& textureManagerOriginLabel();       // TM+0x9C
+const std::string& textureManagerOriginLabel();       // TM+0x9C
 
 namespace {
 
@@ -29,9 +30,9 @@ namespace {
 // this interface has no release slot.
 
 
-int  __fastcall tex_getRef(void* self, void*)  { return static_cast<EngineTexture*>(self)->refCount; }
-void __fastcall tex_nullsub(void*, void*)      { /* nullsub - empty in the original too */ }
-void __fastcall tex_addRef(void* self, void*)  { ++static_cast<EngineTexture*>(self)->refCount; }
+int  RD9_THUNK tex_getRef(void* self RD9_THUNK_EDX)  { return static_cast<EngineTexture*>(self)->refCount; }
+void RD9_THUNK tex_nullsub(void* RD9_THUNK_EDX)      { /* nullsub - empty in the original too */ }
+void RD9_THUNK tex_addRef(void* self RD9_THUNK_EDX)  { ++static_cast<EngineTexture*>(self)->refCount; }
 
 void* const kTextureVtable[3] =
 {
@@ -55,7 +56,8 @@ void bumpTextureCount(int delta)
 {
     if (!g_rendererBase)
         return;
-    int* counter = reinterpret_cast<int*>(static_cast<unsigned char*>(g_rendererBase) + 0x108 + 0x2C);
+    int* counter = reinterpret_cast<int*>(
+        static_cast<RendDX9Base*>(g_rendererBase)->renderStats + 0x2C);
     *counter += delta;
 }
 
@@ -66,10 +68,11 @@ void bumpTextureCount(int delta)
 // shipped ctor writes exactly the fields below and leaves the created-desc block (+0x28..+0x43) and
 // the bytes at +0x52/+0x53 and +0x79..+0x7B as they land. Reproduced field-for-field, in the
 // shipped order where an observer could tell (the string copy and the counter bump come last).
+// The placement default-initialization constructs only the name string (+0x58, empty).
 
 EngineTexture* textureCtor(void* storage)
 {
-    EngineTexture* t = static_cast<EngineTexture*>(storage);
+    EngineTexture* t = new (storage) EngineTexture;
 
     t->vptr        = const_cast<void**>(kTextureVtable);
     t->refCount    = 1;
@@ -77,7 +80,6 @@ EngineTexture* textureCtor(void* storage)
     t->lockCount   = 0;                                    // +0x44
     t->byte51      = 0;                                    // +0x51
     t->priority    = 0;                                    // +0x54
-    new (&t->name) vc71::string();                         // +0x58, empty
     t->totalBytes  = 0;                                    // +0x74
     t->usedSuffixedFile = 0;                               // +0x78
 
@@ -116,7 +118,7 @@ void textureDtor(EngineTexture* tex)
         tex->baseTexture = 0;
     }
     bumpTextureCount(-1);                                  // base vslot +0x6C, then sub_1000D8D0
-    tex->name.~string();
+    tex->~EngineTexture();                                 // destroys the name
 }
 
 void textureAddRef(EngineTexture* tex)

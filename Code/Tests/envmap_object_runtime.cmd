@@ -15,12 +15,7 @@ if errorlevel 1 (
  type "%TASK_OUT%\compile.log"
  exit /b 1
 )
-cl %TASK_FLAGS% "%~dp0..\RendDX9Abi\Vc71String.cpp" /Fo"%TASK_OUT%\Vc71String.obj" >"%TASK_OUT%\strings.log" 2>&1
-if errorlevel 1 (
- type "%TASK_OUT%\strings.log"
- exit /b 1
-)
-link /nologo /OPT:REF /INCREMENTAL:NO /OUT:"%TASK_OUT%\fixture.exe" "%TASK_OUT%\fixture.obj" "%TASK_OUT%\Vc71String.obj" >"%TASK_OUT%\link.log" 2>&1
+link /nologo /OPT:REF /INCREMENTAL:NO /OUT:"%TASK_OUT%\fixture.exe" "%TASK_OUT%\fixture.obj" >"%TASK_OUT%\link.log" 2>&1
 if errorlevel 1 (
  type "%TASK_OUT%\link.log"
  exit /b 1

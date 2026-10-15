@@ -7,25 +7,27 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
+#include "../../RendDX9Abi/ThunkAbi.h"
 #include "../../RendDX9Abi/HfeAbi.h"
 #include "../../RendDX9Abi/PluginEntry.h"
 #include "../../RendDX9Abi/BfMemory.h"
-#include "../../RendDX9Abi/Vc71String.h"
+#include <string>
 #include "../../RendDX9Abi/Frontier.h"
 #include "RendDX9Base.h"
 #include "../RendMisc/IRenderer.h"
-#include "../../RendDX9Abi/Vc71Map.h"
 #include "../../RendDX9Abi/PluginEntry.h"
 #include "../../RendDX9Abi/EngineFile.h"
 #include "../../RendDX9Abi/D3dx9Sdk.h"
 
-#if BF2_PLUGIN_ABI_NATIVE
 #include "../IO/File/FileManager.h"
-#endif
 
+#include <map>
 #include <new>
+#include <set>
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
+#include <vector>
 
 namespace dice {
 namespace hfe {
@@ -33,7 +35,10 @@ namespace dx9rend {
 
 extern void* g_deviceCaps;
 extern void* g_rendererBase;   // RendDX9Init.cpp, dword_1023B970 - the two A2M-mask reads below
-namespace Ra { extern void* g_effectManager; }
+namespace Ra {
+extern void* g_effectManager;
+unsigned char effectManagerFlag40();   // Ra/EffectManager.cpp - its +0x40 byte
+}
 
 namespace {
 
@@ -45,16 +50,7 @@ namespace {
 renddx9abi::HostString stripShaderModPath(const char* path)
 {
     renddx9abi::HostString in(path);
-#if BF2_PLUGIN_ABI_NATIVE
     return static_cast<io::FileManager*>(::dice::hfe::fileManager)->stripModPath(in);
-#else
-    renddx9abi::HostString out;
-    void** v = *reinterpret_cast<void***>(::dice::hfe::fileManager);
-    typedef renddx9abi::HostString* (__thiscall* StripFn)(
-        void*, renddx9abi::HostString*, const renddx9abi::HostString&);
-    reinterpret_cast<StripFn>(v[0x90 / 4])(::dice::hfe::fileManager, &out, in);
-    return out;
-#endif
 }
 
 struct CapsView { D3DCAPS9 caps; D3DADAPTER_IDENTIFIER9 adapter; int gpuFamily; };
@@ -83,11 +79,7 @@ bool isMultisampleActive()
         return true;
     if (base->disableMultisample)
         return false;
-    const unsigned int* const first = base->multiSampleFirst;
-    const unsigned int* const last  = base->multiSampleLast;
-    if (first && ((last - first) >> 1))
-        return *reinterpret_cast<const int*>(first) > 0;
-    return false;
+    return multiSampleListActive(base);
 }
 
 // The transparency-AA code the "%X" formatter reads - the dword at 0x1023D090 / 0x1023D094.
@@ -108,29 +100,43 @@ struct ShaderDefine { const char* name; const char* value; };
 // Shader cache, macro state and include/device-listener interfaces.
 // Preserve the three interface subobjects and retained device reference.
 
+class Effect;
+
 struct ShaderManager
 {
+    // Every scalar starts at zero; the containers start empty.
+    ShaderManager()
+        : vptr(0), vptr2(0), vptrDeviceLost(0), refCount(0), device(0)
+        , flag78(0), flag79(0), flag7A(0), flag7B(0), flag7C(0), flag7D(0), flag7E(0), flag7F(0)
+        , flag80(0), flags84(0), currentEffect98(0), statesEffect9C(0), rawEffectA0(0)
+        , disableStateManagerA4(0)
+    {
+        pad81[0] = pad81[1] = pad81[2] = 0;
+        padA5[0] = padA5[1] = padA5[2] = 0;
+    }
+
     void*         vptr;
     void*         vptr2;
     void*         vptrDeviceLost;
     int           refCount;                     // +0x0C
     void*         device;                       // +0x10
-    // Requires a constructed map sentinel for effect lookup and insertion.
-    vc71::map_layout  effectCache;              // +0x14  node 0x30
-    // the other five containers are constructed now, as 0x10024A40 does
-    // (sub_10024D40 for the four 0x30-node maps, sub_10024E70 for the 0x14-node one, sub_1001BA10
-    // for the 0x48-node one), because the device-lost listener walks +0x48 unguarded. Only +0x14
-    // and +0x48 have a recovered reader; the names below are positional.
-    vc71::map_layout  cache20;                  // +0x20  node 0x30 - getEffect's second map (unwritten)
-    vc71::string  name;                         // +0x2C
+    // The lowered, mod-stripped effect name -> its Effect wrapper (strcmp order).
+    std::map<std::string, Effect*> effectCache;   // +0x14  node 0x30
+    // The other five containers are constructed with it, as 0x10024A40 does (sub_10024D40 for the
+    // four 0x30-node maps, sub_10024E70 for the 0x14-node one, sub_1001BA10 for the 0x48-node one),
+    // because the device-lost listener walks +0x48 unguarded. Only +0x14 and +0x48 have a recovered
+    // reader; the names below are positional and the element types of the unread three are
+    // [INFERRED] from their node sizes.
+    std::map<std::string, void*> cache20;      // +0x20  node 0x30 - getEffect's second map (unwritten)
+    std::string  name;                         // +0x2C
     // +0x48: a map<string, T*> (node 0x30) whose T carries its OWN map of ID3DXEffect* at +0x9C
     // (node 0x1C: value +0x10, _Isnil +0x19). The listener's second walk is the only recovered
     // reader; nothing recovered inserts, so it stays empty here. [UNRESOLVED] what T is (the
     // functions at 0x1001A5A9..0x1001A9D6 read a +0xA0 head - the states-effect code, 0x1001A0A0).
-    vc71::map_layout  map48;                    // +0x48  node 0x30
-    vc71::map_layout  map54;                    // +0x54  node 0x30
-    vc71::map_layout  map60;                    // +0x60  node 0x14
-    vc71::map_layout  map6C;                    // +0x6C  node 0x48
+    std::map<std::string, void*> map48;        // +0x48  node 0x30
+    std::map<std::string, void*> map54;        // +0x54  node 0x30
+    std::set<unsigned int>        map60;        // +0x60  node 0x14 - one dword per node
+    std::map<std::string, std::string> map6C; // +0x6C  node 0x48 - two strings per node
     unsigned char flag78;                       // +0x78  isNvidia, written at the very end
     unsigned char flag79;
     unsigned char flag7A;                       // +0x7A  -> flags |= 0x20
@@ -142,21 +148,16 @@ struct ShaderManager
     unsigned char flag80;                       // ctor: 1
     unsigned char pad81[3];
     unsigned int  flags84;                      // +0x84
-    void*         definesAlloc;                 // +0x88
-    vc71::string* definesFirst;                 // +0x8C
-    vc71::string* definesLast;                  // +0x90
-    vc71::string* definesEnd;                   // +0x94
+    // The flat define list: name, value, name, value, ...
+    std::vector<std::string> defines;          // +0x88
     // Current wrapper, states effect, and raw effect used for pre-draw CommitChanges.
     // A nonzero disable flag bypasses the shared StateManager.
     void*         currentEffect98;
-    unsigned int  statesEffect9C;
-    unsigned int  rawEffectA0;
+    void*         statesEffect9C;
+    void*         rawEffectA0;
     unsigned char disableStateManagerA4;
     unsigned char padA5[3];
 };
-
-static_assert(sizeof(ShaderManager) == 0xA8,
-              "initializeD3DSubsystems allocates 168 for it - RendDX9Init.cpp:293");
 
 void* g_shaderManager = 0;   // dword_1023B97C
 
@@ -167,6 +168,7 @@ class Effect;
 Effect* createEffectObject();
 bool effectBind(Effect* self, void* d3dxEffect);
 void* effectD3dxHandle(void* effect);   // wrapper+0x08, the ID3DXEffect* (the listener walks)
+const std::string& effectName(void* effect);   // wrapper+0x0C, the effect's name
 void deobfuscateShader(unsigned char* buf, unsigned int size);   // the include Open uses it too
 
 namespace {
@@ -174,47 +176,13 @@ namespace {
 // Appends one string to the flat define vector; callers alternate names and values.
 void pushDefine(ShaderManager* sm, const char* text)
 {
-    const unsigned int size = sm->definesFirst
-        ? static_cast<unsigned int>(sm->definesLast - sm->definesFirst) : 0u;
-    const unsigned int cap = sm->definesFirst
-        ? static_cast<unsigned int>(sm->definesEnd - sm->definesFirst) : 0u;
-
-    if (!sm->definesFirst || size >= cap)
-    {
-        unsigned int newCap = cap + (cap >> 1);
-        if (newCap < size + 1) newCap = size + 1;
-        if (newCap < 16)       newCap = 16;
-
-        vc71::string* buffer = static_cast<vc71::string*>(
-            ::operator new(newCap * sizeof(vc71::string)));
-
-        for (unsigned int i = 0; i < size; ++i)
-        {
-            new (buffer + i) vc71::string(sm->definesFirst[i]);
-            sm->definesFirst[i].~string();
-        }
-        if (sm->definesFirst)
-            ::operator delete(sm->definesFirst);
-
-        sm->definesFirst = buffer;
-        sm->definesLast  = buffer + size;
-        sm->definesEnd   = buffer + newCap;
-    }
-
-    new (sm->definesLast) vc71::string(text);
-    ++sm->definesLast;
+    sm->defines.push_back(std::string(text));
 }
 
-// Destroys define strings and frees their vector; leaves the effect cache intact.
+// Destroys the define strings; leaves the effect cache intact.
 void clearDefines(ShaderManager* sm)
 {
-    for (vc71::string* p = sm->definesFirst; p != sm->definesLast; ++p)
-        p->~string();
-    if (sm->definesFirst)
-        ::operator delete(sm->definesFirst);
-    sm->definesFirst = 0;
-    sm->definesLast  = 0;
-    sm->definesEnd   = 0;
+    sm->defines.clear();
 }
 
 } // anonymous namespace
@@ -230,8 +198,7 @@ void updateShaderDefines(void* shaderManager, void* base)
 {
     ShaderManager* sm = static_cast<ShaderManager*>(shaderManager);
     RendDX9Base*   b  = static_cast<RendDX9Base*>(base);
-    const VideoOptions* vo = reinterpret_cast<const VideoOptions*>(
-        reinterpret_cast<const unsigned char*>(b) + 1016);
+    const VideoOptions* vo = &b->videoOptions;                     // base + 1016
 
     clearDefines(sm);
 
@@ -314,8 +281,8 @@ void updateShaderDefines(void* shaderManager, void* base)
 
     // _FORCE_1_4_SHADERS_ indexes a two-entry table of "0" / "1" at off_101E19A8. The guard reads
     //     if (psMajor < 2 || effectManager[64] != 0) -> 1 else 0
-    const unsigned char* em = static_cast<const unsigned char*>(Ra::g_effectManager);
-    const bool force14 = (psMajor() < 2) || (em != 0 && em[64] != 0);
+    const bool force14 =
+        (psMajor() < 2) || (Ra::g_effectManager != 0 && Ra::effectManagerFlag40() != 0);
     pushDefine(sm, "_FORCE_1_4_SHADERS_");
     pushDefine(sm, force14 ? "1" : "0");
     pushDefine(sm, "_FORCE_1_3_SHADERS_");
@@ -400,7 +367,7 @@ void updateShaderDefines(void* shaderManager, void* base)
         pushDefine(sm, "1");
     }
 
-    const unsigned int count = static_cast<unsigned int>(sm->definesLast - sm->definesFirst);
+    const unsigned int count = static_cast<unsigned int>(sm->defines.size());
     ::renddx9abi::logf("ShaderManager::updateShaderDefines: %u entries (%u pairs) - NVIDIA=%d "
                        "ATI=%d SM30=%d IS_NV4X=%d PS2_EXT=%s filterQuality=%d terrain=%d",
                        count, count / 2,
@@ -426,7 +393,7 @@ long __stdcall smIncludeOpen(void* /*self*/, int /*includeType*/, const char* fi
         return (long)-2005529767;
 
     // FileManager +0x90 - stripModPath, string returned by value through the hidden slot.
-    vc71::string path;
+    std::string path;
     if (::dice::hfe::fileManager)
     {
         const renddx9abi::HostString out = stripShaderModPath(fileName);
@@ -445,7 +412,7 @@ long __stdcall smIncludeOpen(void* /*self*/, int /*includeType*/, const char* fi
         {
             xpack = static_cast<IRenderer*>(g_Renderer)->isExpansionPack();
         }
-        vc71::string prefixed(xpack ? "mods/xpack/" : "mods/bf2/");
+        std::string prefixed(xpack ? "mods/xpack/" : "mods/bf2/");
         prefixed += path.c_str();
         path = prefixed;
     }
@@ -501,11 +468,15 @@ typedef HRESULT (STDMETHODCALLTYPE ID3DXEffect::*EffectDeviceNotifyFn)();
 
 inline ShaderManager* smFromListener(void* listener)
 {
-    return reinterpret_cast<ShaderManager*>(static_cast<unsigned char*>(listener) - 8);
+    // The DeviceLostResetListener face is the +0x08 subobject.
+    return reinterpret_cast<ShaderManager*>(
+        static_cast<unsigned char*>(listener) - offsetof(ShaderManager, vptrDeviceLost));
 }
 
 // The value map inside each +0x48 object: {_Left, _Parent, _Right, key, ID3DXEffect*, _Color,
 // _Isnil} = 0x1C bytes. The successor is the VC7.1 one the bodies inline (testing +0x19).
+// x86 only: the +0x48 objects are unrecovered and these are their retail x86 offsets (issue #7).
+#if defined(_M_IX86)
 struct EffectSubNode
 {
     EffectSubNode* left;      // +0x00
@@ -538,36 +509,46 @@ EffectSubNode* effectSubNext(EffectSubNode* node)
     }
     return parent;
 }
+#endif
 
 // The +0x48 value's map at +0x9C: head at +0xA0. `add ebx, 9Ch` then `cmp esi, [ebx+4]`.
 void forEachSubEffect(void* object, EffectDeviceNotifyFn notify)
 {
+#if defined(_M_IX86)
     EffectSubNode* const head = *reinterpret_cast<EffectSubNode**>(
         static_cast<unsigned char*>(object) + 0xA0);
     for (EffectSubNode* node = head->left; node != head; node = effectSubNext(node))
         (node->effect->*notify)();
+#else
+    // [CHOSEN, not recovered] (issue #7): nothing recovered inserts into +0x48, and its objects'
+    // layout is known only as retail x86 offsets, which do not describe a native object. x64 stops
+    // here instead of walking a guessed layout.
+    (void)notify;
+    RD9_FRONTIER_AT("dice::hfe::dx9rend::ShaderManager - the +0x48 object's effect-map walk "
+                    "(unrecovered object, retail x86 offsets only)", object, 0x00);
+#endif
 }
 
 void forEachShaderManagerEffect(ShaderManager* sm, EffectDeviceNotifyFn notify)
 {
-    for (vc71::map_node* node = vc71::mapFirst(sm->effectCache); node;
-         node = vc71::mapNext(sm->effectCache, node))
+    for (std::map<std::string, Effect*>::iterator node = sm->effectCache.begin();
+         node != sm->effectCache.end(); ++node)
     {
         ID3DXEffect* const d3dx = static_cast<ID3DXEffect*>(
-            effectD3dxHandle(vc71::mapNodeValue(node)));                       // wrapper+0x08
+            effectD3dxHandle(node->second));                                    // wrapper+0x08
         (d3dx->*notify)();
     }
-    for (vc71::map_node* node = vc71::mapFirst(sm->map48); node;
-         node = vc71::mapNext(sm->map48, node))
-        forEachSubEffect(vc71::mapNodeValue(node), notify);
+    for (std::map<std::string, void*>::iterator node = sm->map48.begin();
+         node != sm->map48.end(); ++node)
+        forEachSubEffect(node->second, notify);
 }
 
-void __fastcall sm_onDeviceLost(void* listener, void*)
+void RD9_THUNK sm_onDeviceLost(void* listener RD9_THUNK_EDX)
 {
     forEachShaderManagerEffect(smFromListener(listener), &ID3DXEffect::OnLostDevice);
 }
 
-void __fastcall sm_onDeviceReset(void* listener, void*)
+void RD9_THUNK sm_onDeviceReset(void* listener RD9_THUNK_EDX)
 {
     forEachShaderManagerEffect(smFromListener(listener), &ID3DXEffect::OnResetDevice);
 }
@@ -575,21 +556,21 @@ void __fastcall sm_onDeviceReset(void* listener, void*)
 // shutdown only (the destroy broadcast, 0x10002600). The mapped objects' IBase
 // release (`mov ecx, [node+28h]; mov eax, [ecx]; call [eax+8]`) over both maps; the nodes are left
 // in place for the destructor that follows.
-void __fastcall sm_onDeviceDestroy(void* listener, void*)
+void RD9_THUNK sm_onDeviceDestroy(void* listener RD9_THUNK_EDX)
 {
     ShaderManager* const sm = smFromListener(listener);
-    typedef int (__fastcall* ReleaseFn)(void*, void*);
-    for (vc71::map_node* node = vc71::mapFirst(sm->effectCache); node;
-         node = vc71::mapNext(sm->effectCache, node))
+    typedef int (__thiscall* ReleaseFn)(void*);
+    for (std::map<std::string, Effect*>::iterator node = sm->effectCache.begin();
+         node != sm->effectCache.end(); ++node)
     {
-        void* const object = vc71::mapNodeValue(node);
-        reinterpret_cast<ReleaseFn>((*reinterpret_cast<void***>(object))[2])(object, 0);
+        void* const object = node->second;
+        reinterpret_cast<ReleaseFn>((*reinterpret_cast<void***>(object))[2])(object);
     }
-    for (vc71::map_node* node = vc71::mapFirst(sm->map48); node;
-         node = vc71::mapNext(sm->map48, node))
+    for (std::map<std::string, void*>::iterator node = sm->map48.begin();
+         node != sm->map48.end(); ++node)
     {
-        void* const object = vc71::mapNodeValue(node);
-        reinterpret_cast<ReleaseFn>((*reinterpret_cast<void***>(object))[2])(object, 0);
+        void* const object = node->second;
+        reinterpret_cast<ReleaseFn>((*reinterpret_cast<void***>(object))[2])(object);
     }
 }
 
@@ -607,12 +588,16 @@ void* const kShaderManagerListenerVtable[3] =
 
 bool createShaderManager(void* base, IDirect3DDevice9* device)
 {
-    ShaderManager* sm = static_cast<ShaderManager*>(
-        ::renddx9abi::engineAlloc(sizeof(ShaderManager)));
-    if (!sm)
+    void* const storage = ::renddx9abi::engineAlloc(sizeof(ShaderManager));
+    if (!storage)
         return false;
 
-    ::memset(sm, 0, sizeof(ShaderManager));
+    // The six containers, in the constructor's own order (0x10024A66..0x10024B50): sub_10024D40 for
+    // the 0x30-node maps, sub_10024E70 for the 0x14-node one, sub_1001BA10 for the 0x48-node one,
+    // with the std::string at +0x2C default-constructed between the second and third (0x10024AB9).
+    // The member declaration order is that order. The effect cache used to be built by clearDefines,
+    // on every define refresh - see the correction there.
+    ShaderManager* sm = new (storage) ShaderManager;
 
     // Installs include and device-reset interfaces.
     // [FRONTIER] The primary table remains null until release/destruction is implemented.
@@ -620,20 +605,6 @@ bool createShaderManager(void* base, IDirect3DDevice9* device)
     sm->vptrDeviceLost = const_cast<void**>(kShaderManagerListenerVtable);
 
     sm->refCount = 1;
-
-    // the six containers, in the constructor's own order (0x10024A66..
-    // 0x10024B50): each is a _Buyheadnode (sub_10024D40 = 0x30-byte node, sub_10024E70 = 0x14,
-    // sub_1001BA10 = 0x48) with _Isnil = 1, the three links on itself and _Mysize = 0 - exactly what
-    // vc71::map_layout::construct(nodeSize) builds. The std::string at +0x2C is default-constructed
-    // between the second and third (0x10024AB9). The effect cache used to be built by clearDefines,
-    // on every define refresh - see the correction there.
-    sm->effectCache.construct(0x30);          // +0x14
-    sm->cache20.construct(0x30);              // +0x20
-    new (&sm->name) vc71::string();           // +0x2C
-    sm->map48.construct(0x30);                // +0x48
-    sm->map54.construct(0x30);                // +0x54
-    sm->map60.construct(0x14);                // +0x60
-    sm->map6C.construct(0x48);                // +0x6C
 
     sm->flag7E  = 1;
     sm->flag80  = 1;
@@ -664,7 +635,7 @@ bool createShaderManager(void* base, IDirect3DDevice9* device)
 // is shipped (it registers a null listener).
 void* shaderManagerDeviceLostListener()
 {
-    return g_shaderManager ? static_cast<unsigned char*>(g_shaderManager) + 8 : 0;
+    return g_shaderManager ? &static_cast<ShaderManager*>(g_shaderManager)->vptrDeviceLost : 0;
 }
 
 // sub_10024A10 - init. On anything but nvidia it does nothing and returns 1. Reproduced whole.
@@ -693,10 +664,10 @@ ShaderManagerDefines shaderManagerDefines(void* shaderManager)
     out.first = 0;
     out.count = 0;
     ShaderManager* sm = static_cast<ShaderManager*>(shaderManager);
-    if (sm && sm->definesFirst)
+    if (sm && !sm->defines.empty())
     {
-        out.first = sm->definesFirst;
-        out.count = static_cast<unsigned int>(sm->definesLast - sm->definesFirst);
+        out.first = &sm->defines[0];
+        out.count = static_cast<unsigned int>(sm->defines.size());
     }
     return out;
 }
@@ -709,7 +680,14 @@ const char* ShaderManagerDefines::at(unsigned int i) const
 // Returns the embedded ID3DXInclude interface that resolves files through mounted archives.
 void* shaderManagerInclude(void* shaderManager)
 {
-    return shaderManager ? static_cast<unsigned char*>(shaderManager) + 4 : 0;
+    return shaderManager ? &static_cast<ShaderManager*>(shaderManager)->vptr2 : 0;   // +4
+}
+
+// +0xA4: a nonzero byte keeps freshly bound effects off the shared StateManager (Effect.cpp's
+// bind and begin read it).
+unsigned char shaderManagerStateManagerDisabled(void* shaderManager)
+{
+    return static_cast<ShaderManager*>(shaderManager)->disableStateManagerA4;
 }
 
 // +132 == +0x84, the D3DXSHADER_* flag word handed to D3DXCreateEffect.
@@ -756,10 +734,9 @@ void* shaderManagerFindCachedEffect(const char* rawPath)
     ::_snprintf_s(key, sizeof(key), _TRUNCATE, "%s", rawPath);
     toLowerAscii(key);
 
-    vc71::map_layout& cache = *reinterpret_cast<vc71::map_layout*>(
-        reinterpret_cast<unsigned char*>(sm) + 0x14);
-    vc71::map_node* hit = vc71::mapFind(cache, key);
-    return hit ? vc71::mapNodeValueRef(hit) : 0;
+    std::map<std::string, Effect*>& cache = sm->effectCache;      // +0x14
+    const std::map<std::string, Effect*>::iterator hit = cache.find(key);
+    return hit != cache.end() ? hit->second : 0;
 }
 
 void* shaderManagerGetEffect(void* shaderManager, const char* rawPath)
@@ -783,13 +760,12 @@ void* shaderManagerGetEffect(void* shaderManager, const char* rawPath)
     }
     toLowerAscii(key);
 
-    vc71::map_layout& cache = *reinterpret_cast<vc71::map_layout*>(
-        reinterpret_cast<unsigned char*>(sm) + 0x14);
+    std::map<std::string, Effect*>& cache = sm->effectCache;      // +0x14
 
-    vc71::map_node* hit = vc71::mapFind(cache, key);
-    if (hit)
+    const std::map<std::string, Effect*>::iterator hit = cache.find(key);
+    if (hit != cache.end())
     {
-        void* cached = vc71::mapNodeValueRef(hit);
+        void* cached = hit->second;
         if (cached)
         {
             void** v = *reinterpret_cast<void***>(cached);
@@ -836,13 +812,11 @@ void* shaderManagerGetEffect(void* shaderManager, const char* rawPath)
         reinterpret_cast<AddRefFn>(v[0x00 / 4])(effect);
     }
 
-    vc71::map_node* node = vc71::mapInsert(cache, 0x30, key);
-    if (node)
-        vc71::mapNodeValueRef(node) = effect;
+    cache[key] = effect;
 
     ::renddx9abi::logf("ShaderManager::getEffect(\"%s\"): cached as \"%s\" -> effect 0x%08X "
                        "(d3dx 0x%08X), %u entries", file, key, ::renddx9abi::addr(effect),
-                       ::renddx9abi::addr(d3dx), cache.size);
+                       ::renddx9abi::addr(d3dx), static_cast<unsigned int>(cache.size()));
     return effect;
 }
 
@@ -853,10 +827,10 @@ void* shaderManagerGetEffect(void* shaderManager, const char* rawPath)
 void shaderManagerClearEffectTextureBindings(void* shaderManager)
 {
     ShaderManager* const sm = static_cast<ShaderManager*>(shaderManager);
-    for (vc71::map_node* node = vc71::mapFirst(sm->effectCache); node;
-         node = vc71::mapNext(sm->effectCache, node))
+    for (std::map<std::string, Effect*>::iterator node = sm->effectCache.begin();
+         node != sm->effectCache.end(); ++node)
     {
-        effectClearTextureParameters(static_cast<Effect*>(vc71::mapNodeValue(node)));
+        effectClearTextureParameters(node->second);
     }
 }
 
@@ -864,7 +838,7 @@ void shaderManagerClearEffectTextureBindings(void* shaderManager)
 // setCurrentEffect - sub_100227A0, the call Effect::begin makes with the effect and Effect::end
 // makes with null. Replacing a still-current effect with another logs the shipped
 // ShaderManager.cpp:110 nesting complaint (severity 6) and takes the new one anyway; the effect's
-// name string sits at wrapper+0x0C.
+// name string is the wrapper's +0x0C member.
 
 void shaderManagerSetCurrentEffect(void* effect)
 {
@@ -873,10 +847,9 @@ void shaderManagerSetCurrentEffect(void* effect)
         return;
     if (sm->currentEffect98 && effect)
     {
-        const vc71::string* prevName = reinterpret_cast<const vc71::string*>(
-            static_cast<unsigned char*>(sm->currentEffect98) + 0x0C);
+        const std::string& prevName = effectName(sm->currentEffect98);
         ::renddx9abi::logf("ShaderManager.cpp:110 Previous effect: %s not ended.",
-                           prevName->c_str());
+                           prevName.c_str());
     }
     sm->currentEffect98 = effect;
 }
@@ -897,13 +870,13 @@ void shaderManagerCommitCurrentEffects()
 
     if (sm->rawEffectA0)
     {
-        ID3DXEffect* fx = reinterpret_cast<ID3DXEffect*>(sm->rawEffectA0);
+        ID3DXEffect* fx = static_cast<ID3DXEffect*>(sm->rawEffectA0);
         fx->CommitChanges();
     }
     if (sm->currentEffect98)
     {
-        ID3DXEffect* fx = *reinterpret_cast<ID3DXEffect**>(
-            static_cast<unsigned char*>(sm->currentEffect98) + 0x08);
+        ID3DXEffect* fx = static_cast<ID3DXEffect*>(
+            effectD3dxHandle(sm->currentEffect98));                       // wrapper+0x08
         if (fx)
             fx->CommitChanges();
     }
@@ -925,7 +898,7 @@ void shaderManagerSetActiveRaEffect(void* effect)
     ShaderManager* const sm = static_cast<ShaderManager*>(g_shaderManager);
     if (sm->rawEffectA0 && effect)
         ::renddx9abi::logf("ShaderManager.cpp:119 Previous effect not ended in RaShader.");
-    sm->rawEffectA0 = reinterpret_cast<unsigned int>(effect);
+    sm->rawEffectA0 = effect;
 }
 
 } // namespace dx9rend

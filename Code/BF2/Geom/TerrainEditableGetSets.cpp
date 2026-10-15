@@ -11,7 +11,7 @@
 
 #include "../RendDX9/RendDX9Base.h"           // readStringSettingDefault, textureManagerGetTexture
 #include "../../RendDX9Abi/PluginAbi.h"
-#include "../../RendDX9Abi/Vc71String.h"
+#include <string>
 
 #include <cstring>
 
@@ -32,7 +32,7 @@ const unsigned int kTerrainEditableClassId = 821005u;
 const unsigned int kNpos = 0xFFFFFFFFu;
 
 
-// [CHOSEN, not recovered] VC7.1-compatible string operations absent from vc71::string.
+// [CHOSEN, not recovered] VC7.1-compatible string operations absent from std::string.
 
 // basic_string::rfind(const char*, size_type off, size_type count).
 unsigned int stringRFind(const char* s, unsigned int size, const char* pattern,
@@ -71,10 +71,10 @@ unsigned int stringFind(const char* s, unsigned int size, const char* pattern,
 
 // basic_string::substr(0, count).
 template <typename S>
-vc71::string stringPrefix(const S& s, unsigned int count)
+std::string stringPrefix(const S& s, unsigned int count)
 {
     const unsigned int size = static_cast<unsigned int>(s.size());
-    return vc71::string(s.c_str(), count < size ? count : size);
+    return std::string(s.c_str(), count < size ? count : size);
 }
 
 // The base-name -> directory step the directory getters share: everything before the last "tx" (the
@@ -87,14 +87,14 @@ unsigned int lastTx(const S& s)
 
 // The editor-folder step the four editor base-name getters share: "<before>/Editor<folder...>" when
 // `folder` occurs, else the name unchanged (find(folder, 0, length), then insert(at, "/Editor")).
-vc71::string withEditorFolder(const vc71::string& name, const char* folder, unsigned int folderLength)
+std::string withEditorFolder(const std::string& name, const char* folder, unsigned int folderLength)
 {
     const unsigned int at = stringFind(name.c_str(), name.size(), folder, 0, folderLength);
     if (at == kNpos)
         return name;
-    vc71::string out(name.c_str(), at);
+    std::string out(name.c_str(), at);
     out += "/Editor";
-    out += vc71::string(name.c_str() + at, name.size() - at);
+    out += std::string(name.c_str() + at, name.size() - at);
     return out;
 }
 
@@ -141,7 +141,7 @@ int  TerrainEditable::getPatchColormapSize() const { return m_patchColormapSize;
 // ITerrainEditable.h records why).
 void TerrainEditable::setColormapBaseName(const TerrainEditableString& name)
 {
-    m_colormapBaseName = ::renddx9abi::toVc71String(name);
+    m_colormapBaseName = ::renddx9abi::fromHostString(name);
 }
 TerrainEditableNameResult TerrainEditable::getColormapBaseName() const
 {
@@ -149,7 +149,7 @@ TerrainEditableNameResult TerrainEditable::getColormapBaseName() const
 }
 void TerrainEditable::setLightmapBaseName(const TerrainEditableString& name)
 {
-    m_lightmapBaseName = ::renddx9abi::toVc71String(name);
+    m_lightmapBaseName = ::renddx9abi::fromHostString(name);
 }
 TerrainEditableNameResult TerrainEditable::getLightmapBaseName() const
 {
@@ -157,7 +157,7 @@ TerrainEditableNameResult TerrainEditable::getLightmapBaseName() const
 }
 void TerrainEditable::setDetailmapBaseName(const TerrainEditableString& name)
 {
-    m_detailmapBaseName = ::renddx9abi::toVc71String(name);
+    m_detailmapBaseName = ::renddx9abi::fromHostString(name);
 }
 TerrainEditableNameResult TerrainEditable::getDetailmapBaseName() const
 {
@@ -165,7 +165,7 @@ TerrainEditableNameResult TerrainEditable::getDetailmapBaseName() const
 }
 void TerrainEditable::setLowDetailmapBaseName(const TerrainEditableString& name)
 {
-    m_lowDetailmapBaseName = ::renddx9abi::toVc71String(name);
+    m_lowDetailmapBaseName = ::renddx9abi::fromHostString(name);
 }
 TerrainEditableNameResult TerrainEditable::getLowDetailmapBaseName() const
 {
@@ -177,90 +177,90 @@ TerrainEditableNameResult TerrainEditable::getLowDetailmapBaseName() const
 // the last "tx", once for the substring - exactly as shipped; the editor base names copy the base
 // name and insert "/Editor" before its folder.
 
-vc71::string TerrainEditable::getColormapDirectory()                                                // P+0xEC 0x101A6080
+std::string TerrainEditable::getColormapDirectory()                                                // P+0xEC 0x101A6080
 {
     const unsigned int position = lastTx(getColormapBaseName());                                     // E+0x6C
     return stringPrefix(getColormapBaseName(), position);                                            // E+0x6C again
 }
 
-vc71::string TerrainEditable::getDetailmapDirectory()                                               // P+0xF0 0x101A61F0
+std::string TerrainEditable::getDetailmapDirectory()                                               // P+0xF0 0x101A61F0
 {
     const unsigned int position = lastTx(getDetailmapBaseName());                                    // E+0x7C
     return stringPrefix(getDetailmapBaseName(), position);
 }
 
 // (non-virtual; R3's map writers call it).
-vc71::string TerrainEditable::getLowDetailmapDirectory()
+std::string TerrainEditable::getLowDetailmapDirectory()
 {
     const unsigned int position = lastTx(getLowDetailmapBaseName());                                 // E+0x84
     return stringPrefix(getLowDetailmapBaseName(), position);
 }
 
-vc71::string TerrainEditable::getEditorDetailmapBaseName()                                          // P+0xF4 0x101A63A0
+std::string TerrainEditable::getEditorDetailmapBaseName()                                          // P+0xF4 0x101A63A0
 {
-    const vc71::string name(::renddx9abi::toVc71String(getDetailmapBaseName()));                     // E+0x7C
+    const std::string name(::renddx9abi::fromHostString(getDetailmapBaseName()));                     // E+0x7C
     return withEditorFolder(name, "/Detailmaps", 11);
 }
 
-vc71::string TerrainEditable::getEditorDetailmapDirectory()                                         // P+0xF8 0x101A6410
+std::string TerrainEditable::getEditorDetailmapDirectory()                                         // P+0xF8 0x101A6410
 {
     unsigned int position;
     {
-        const vc71::string first = getEditorDetailmapBaseName();                                     // P+0xF4, a temporary
+        const std::string first = getEditorDetailmapBaseName();                                     // P+0xF4, a temporary
         position = lastTx(first);
     }
-    const vc71::string second = getEditorDetailmapBaseName();                                        // P+0xF4 again
+    const std::string second = getEditorDetailmapBaseName();                                        // P+0xF4 again
     return stringPrefix(second, position);
 }
 
-vc71::string TerrainEditable::getEditorColormapBaseName()                                           // P+0xFC 0x101A6480
+std::string TerrainEditable::getEditorColormapBaseName()                                           // P+0xFC 0x101A6480
 {
-    const vc71::string name(::renddx9abi::toVc71String(getColormapBaseName()));                      // E+0x6C
+    const std::string name(::renddx9abi::fromHostString(getColormapBaseName()));                      // E+0x6C
     return withEditorFolder(name, "/Colormaps", 10);
 }
 
-vc71::string TerrainEditable::getEditorColormapDirectory()                                          // P+0x100 0x101A64F0
+std::string TerrainEditable::getEditorColormapDirectory()                                          // P+0x100 0x101A64F0
 {
     unsigned int position;
     {
-        const vc71::string first = getEditorColormapBaseName();                                      // P+0xFC
+        const std::string first = getEditorColormapBaseName();                                      // P+0xFC
         position = lastTx(first);
     }
-    const vc71::string second = getEditorColormapBaseName();
+    const std::string second = getEditorColormapBaseName();
     return stringPrefix(second, position);
 }
 
-vc71::string TerrainEditable::getEditorLightmapBaseName()                                           // P+0x104 0x101A6160
+std::string TerrainEditable::getEditorLightmapBaseName()                                           // P+0x104 0x101A6160
 {
-    const vc71::string name(::renddx9abi::toVc71String(getLightmapBaseName()));                      // E+0x74
+    const std::string name(::renddx9abi::fromHostString(getLightmapBaseName()));                      // E+0x74
     return withEditorFolder(name, "/Lightmap", 9);
 }
 
-vc71::string TerrainEditable::getEditorLightmapDirectory()                                          // P+0x108 0x101A60F0
+std::string TerrainEditable::getEditorLightmapDirectory()                                          // P+0x108 0x101A60F0
 {
     unsigned int position;
     {
-        const vc71::string first = getEditorLightmapBaseName();                                      // P+0x104
+        const std::string first = getEditorLightmapBaseName();                                      // P+0x104
         position = lastTx(first);
     }
-    const vc71::string second = getEditorLightmapBaseName();
+    const std::string second = getEditorLightmapBaseName();
     return stringPrefix(second, position);
 }
 
-vc71::string TerrainEditable::getEditorLowDetailmapBaseName()                                       // P+0x10C 0x101A62C0
+std::string TerrainEditable::getEditorLowDetailmapBaseName()                                       // P+0x10C 0x101A62C0
 {
-    const vc71::string name(::renddx9abi::toVc71String(getLowDetailmapBaseName()));                  // E+0x84
+    const std::string name(::renddx9abi::fromHostString(getLowDetailmapBaseName()));                  // E+0x84
     return withEditorFolder(name, "/LowDetailmaps", 14);
 }
 
-vc71::string TerrainEditable::getEditorLowDetailmapDirectory()                                      // P+0x110 0x101A6330
+std::string TerrainEditable::getEditorLowDetailmapDirectory()                                      // P+0x110 0x101A6330
 {
     unsigned int position;
     {
-        const vc71::string first = getEditorLowDetailmapBaseName();                                  // P+0x10C
+        const std::string first = getEditorLowDetailmapBaseName();                                  // P+0x10C
         position = lastTx(first);
     }
-    const vc71::string second = getEditorLowDetailmapBaseName();
+    const std::string second = getEditorLowDetailmapBaseName();
     return stringPrefix(second, position);
 }
 
@@ -313,9 +313,9 @@ int TerrainEditable::getShaderTechnique() const { return m_shaderTechnique; }
 // never reads `this`.
 TerrainEditableString TerrainEditable::getLevelSavePath() const
 {
-    vc71::string path;
+    std::string path;
     dx9rend::readStringSettingDefault("Editor_LevelSavePath", " ERROR ", path);
-    vc71::string withSlash(path);
+    std::string withSlash(path);
     withSlash += "/";
     return ::renddx9abi::toHostString(withSlash);
 }
@@ -326,8 +326,8 @@ TerrainEditableString TerrainEditable::getLevelSavePath() const
 void TerrainEditable::setDetailTextureName(int layer, const TerrainEditableString& name)
 {
     TerrainDetailTextureEditable* const record = static_cast<TerrainDetailTextureEditable*>(
-        reinterpret_cast<TerrainDetailTexture**>(m_detailTextures.first)[layer]);
-    const vc71::string newName(::renddx9abi::toVc71String(name));
+        m_detailTextures.data()[layer]);
+    const std::string newName(::renddx9abi::fromHostString(name));
     if (record->name.size() == newName.size()
         && std::memcmp(record->name.c_str(), newName.c_str(), newName.size()) == 0)
         return;
@@ -339,11 +339,11 @@ void TerrainEditable::setDetailTextureName(int layer, const TerrainEditableStrin
 // the record's material byte (+0x14), read and written directly.
 unsigned char TerrainEditable::getDetailMaterial(int layer) const
 {
-    return reinterpret_cast<TerrainDetailTexture* const*>(m_detailTextures.first)[layer]->materialId;
+    return m_detailTextures.data()[layer]->materialId;
 }
 void TerrainEditable::setDetailMaterial(int layer, unsigned char material)
 {
-    reinterpret_cast<TerrainDetailTexture**>(m_detailTextures.first)[layer]->materialId = material;
+    m_detailTextures.data()[layer]->materialId = material;
 }
 
 } // namespace geom

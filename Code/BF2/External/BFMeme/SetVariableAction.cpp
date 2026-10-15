@@ -14,9 +14,13 @@ using DataSetFloatMethod = bool (__thiscall*)(Data*, System*, float);
 using DataMethodTable = void* const*;
 DataMethodTable captureDataMethods(Data* data)
 { return *reinterpret_cast<DataMethodTable const*>(data); }
+// Slot 0x4C/4 is setFloat in both MSVC table layouts (one destructor slot); on x64 the
+// __thiscall spelling is ignored and the same table index is read.
 void callCapturedSetFloat(DataMethodTable methods, Data* receiver, System* system, float value)
 { reinterpret_cast<DataSetFloatMethod>(methods[0x4C / 4])(receiver, system, value); }
+#if defined(_M_IX86)
 static_assert(sizeof(void*) == 4, "PE Data dispatch is x86");
+#endif
 }
 SetVariableAction::SetVariableAction() : m_variable(nullptr), m_data(nullptr) {}
 SetVariableAction::~SetVariableAction() {}
@@ -47,6 +51,8 @@ bool SetVariableAction::execute(System* system, const Rect*, const NodeState*, c
     }
     return false; // The destination setter's result is discarded in retail.
 }
+#if defined(_M_IX86)
 static_assert(sizeof(SetVariableAction) == 12, "client SetVariableAction");
+#endif
 } }
 #endif

@@ -188,11 +188,7 @@ int main() {
     static_assert(sizeof(IRenderView)==4 && sizeof(Mat4)==64 && sizeof(Frustum)==488,"native shared geometry");
     frustumConstructor(); viewRuntime(); orthoPrecision();
     std::printf("RenderView: %d/%d checks passed (%s ABI)\n",checks-failures,checks,
-#if BF2_PLUGIN_ABI_NATIVE
         "native"
-#else
-        "compatibility"
-#endif
     );
     return failures?1:0;
 }

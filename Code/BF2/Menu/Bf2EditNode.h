@@ -25,7 +25,7 @@ public:
     bool setStringForHud(Data* string);                  // 7CE250, +CC -> +0C
     // The second argument is the outline flag (+3D), not anything about the
     // font - the console row that drives it is called `setEditNodeFont`.
-    bool setFontForHud(int font, bool outline);          // 7D0F20, +D0 -> +14/+3D
+    bool setFontForHud(FontHandle font, bool outline);          // 7D0F20, +D0 -> +14/+3D
     bool setMaxLengthForHud(int characters);             // 7C21D0, +D4 -> +18
     bool setColorForHud(float r, float g, float b, float a); // 7D0F40, +D8 -> +40..4C
 
@@ -33,7 +33,9 @@ protected:
     friend struct Bf2EditNodeFixture;
     char* m_name;                                        // +50, owned clone
 };
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2EditNode) == 84, "native Bf2EditNode storage");
+#endif
 } }
 #endif
 #endif

@@ -28,22 +28,22 @@ void psmNormalize3(float* v)
 // Local transform is composed with the owner's visual transform, not physics pose.
 void psmType0RefreshTransform(void* self)
 {
-    if (psmRuntimeField<unsigned char>(self, 0x14)) return;
-    Mat4& output = psmRuntimeField<Mat4>(self, 0x74);
-    const Mat4& local = psmRuntimeField<Mat4>(self, 0x34);
-    world::IObject* const owner = psmRuntimeField<world::IObject*>(self, 0x10);
+    if (psmInstanceA<unsigned char>(self, 0x14)) return;
+    Mat4& output = psmInstanceA<Mat4>(self, 0x74);
+    const Mat4& local = psmInstanceA<Mat4>(self, 0x34);
+    world::IObject* const owner = psmInstanceA<world::IObject*>(self, 0x10);
     if (owner) output.mult(local, owner->getVisualAbsoluteTransformation());
-    else if (psmRuntimeField<const Mat4*>(self, 0x30))
-        output.mult(local, *psmRuntimeField<const Mat4*>(self, 0x30));
+    else if (psmInstanceA<const Mat4*>(self, 0x30))
+        output.mult(local, *psmInstanceA<const Mat4*>(self, 0x30));
     else output = local;
 }
 
 class ParticleInstanceType0 : public IParticleSystemInstance
 {
-    unsigned char m_data[0x238];
-    template<class T> T& at(unsigned int offset) { return psmRuntimeField<T>(this, offset); }
+    unsigned char m_data[PSM_INSTANCE_DATA(0x23C)];
+    template<class T> T& at(unsigned int offset) { return psmInstanceA<T>(this, offset); }
     template<class T> const T& at(unsigned int offset) const
-    { return *reinterpret_cast<const T*>(reinterpret_cast<const unsigned char*>(this) + offset); }
+    { return psmInstanceA<T>(const_cast<ParticleInstanceType0*>(this), offset); }
 public:
     explicit ParticleInstanceType0(IParticleSystemTemplate* descriptor)
     {
@@ -62,13 +62,13 @@ public:
         at<unsigned char>(0x224)=0; at<unsigned char>(0x225)=0;
         at<float>(0x22C)=0; at<void*>(0x230)=0; at<int>(0x234)=-1;
         at<world::IObject*>(0x10)=0; at<world::IEffectController*>(0xC)=0; at<unsigned char>(8)=0;
-        const double lifetime = psmRuntimeField<float>(descriptor,0x84)+static_cast<double>(psmRuntimeField<float>(descriptor,0x80));
+        const double lifetime = psmDescriptor0<float>(descriptor,0x84)+static_cast<double>(psmDescriptor0<float>(descriptor,0x80));
         double capacityTime=lifetime;
-        const float emitTime=psmRuntimeField<float>(descriptor,0x1D4);
-        if (emitTime!=0 && !psmRuntimeField<unsigned char>(descriptor,0x6C) && capacityTime>emitTime)
+        const float emitTime=psmDescriptor0<float>(descriptor,0x1D4);
+        if (emitTime!=0 && !psmDescriptor0<unsigned char>(descriptor,0x6C) && capacityTime>emitTime)
             capacityTime=emitTime;
-        at<int>(0x220)=static_cast<int>(capacityTime*psmRuntimeField<float>(descriptor,0x10)+10.0);
-        at<float**>(0x24)=static_cast<float**>(::renddx9abi::engineAlloc(at<int>(0x220)*4+4));
+        at<int>(0x220)=static_cast<int>(capacityTime*psmDescriptor0<float>(descriptor,0x10)+10.0);
+        at<float**>(0x24)=static_cast<float**>(::renddx9abi::engineAlloc(at<int>(0x220)*kPsmPointerSize+kPsmPointerSize));
         at<float**>(0x24)[0]=0;
         at<Vec3>(0x18)={0,0,0};
         at<Vec3>(0xFC)={0,0,0}; at<Vec3>(0x108)={0,0,0};
@@ -85,8 +85,8 @@ public:
         float** particles=at<float**>(0x24);
         for (unsigned int i=0;particles[i];++i)
         {
-            psmRuntimeField<void*>(particles[i],0)=manager->m_type0FreeList;
-            --psmRuntimeField<int>(manager,0x5F28);
+            psmRecordLink(particles[i], 0)=manager->m_type0FreeList;
+            --manager->m_type0LiveCount;
             manager->m_type0FreeList=particles[i];
         }
         ::renddx9abi::engineFree(particles);
@@ -102,8 +102,8 @@ public:
         {
             float** array=self->at<float**>(0x24); float* particle=array[0];
             array[0]=array[--self->at<unsigned int>(0x28)]; array[self->at<unsigned int>(0x28)]=0;
-            psmRuntimeField<void*>(particle,0)=manager->m_type0FreeList;
-            manager->m_type0FreeList=particle; --psmRuntimeField<int>(manager,0x5F28);
+            psmRecordLink(particle, 0)=manager->m_type0FreeList;
+            manager->m_type0FreeList=particle; --manager->m_type0LiveCount;
         }
         self->at<float>(0x21C)=0; self->at<unsigned char>(0x218)=0; self->at<unsigned char>(0x219)=0;
         self->at<unsigned int>(0x140)=0; self->at<unsigned int>(0x28)=0; self->at<float>(0x120)=0;
@@ -118,14 +118,14 @@ public:
         IParticleSystemTemplate* descriptor=at<IParticleSystemTemplate*>(0x2C);
         if (descriptor->getQualityLevel()>static_cast<int>(manager->m_qualityLevel)) return;
         at<unsigned char>(0x226)=0; at<unsigned char>(0x14C)=1; at<unsigned char>(0x224)=1;
-        at<float>(0xE0)=psmRuntimeField<float>(descriptor,0x1D4);
-        at<float>(0xE4)=psmRuntimeField<float>(descriptor,0x1D8);
+        at<float>(0xE0)=psmDescriptor0<float>(descriptor,0x1D4);
+        at<float>(0xE4)=psmDescriptor0<float>(descriptor,0x1D8);
         at<float>(0xE8)=0; at<float>(0xF0)=0; at<float>(0xF4)=0;
-        at<float>(0xF8)=psmRuntimeField<float>(descriptor,0xC);
+        at<float>(0xF8)=psmDescriptor0<float>(descriptor,0xC);
         psmType0RefreshTransform(this);
         if (!at<unsigned char>(4))
         {
-            at<unsigned char>(0x238)=at<Vec3>(0xA4).y<psmRuntimeField<float>(dx9rend::g_raShaderConstants,0x1BC);
+            at<unsigned char>(0x238)=at<Vec3>(0xA4).y<*reinterpret_cast<const float*>(dx9rend::raShaderConstantsAt(0x1BC));
             psmAddActive(manager,this,firstPerson);
         }
         dx9rend::IRenderView* const view=dx9rend::rendererGetRenderViewDup();
@@ -150,9 +150,9 @@ public:
     void reserved08() override { at<unsigned char>(0x14)=1; at<void*>(0xC)=0; at<void*>(0x10)=0; at<void*>(0x30)=0; }
     void reserved09(bool value) override { at<unsigned char>(0x128)=value; }
     bool reserved10() const override { return at<unsigned char>(0x128)!=0; }
-    void reserved11(int value) override { at<int>(0x10)=value; }
-    int reserved12() const override { return at<int>(0x10); }
-    void reserved13(int value) override { at<int>(0x30)=value; }
+    void reserved11(intptr_t value) override { at<intptr_t>(0x10)=value; }
+    intptr_t reserved12() const override { return at<intptr_t>(0x10); }
+    void reserved13(intptr_t value) override { at<intptr_t>(0x30)=value; }
     void* reserved14(const void* value) override { at<Mat4>(0x34)=*static_cast<const Mat4*>(value); return &at<Mat4>(0x34); }
     const void* reserved15() const override { return &at<Mat4>(0x34); }
     void reserved16(const Vec3& value) override { at<Vec3>(0xCC)=value; }
@@ -196,7 +196,7 @@ public:
     void reserved42(bool value) override
     {
         if (at<unsigned char>(4) && value!=static_cast<bool>(at<unsigned char>(6)))
-        { at<unsigned char>(7)=value; psmReclassification(reinterpret_cast<ParticleSystemManager*>(g_ParticleSystemManager)).insert(reinterpret_cast<unsigned int>(this)); }
+        { at<unsigned char>(7)=value; psmReclassification(reinterpret_cast<ParticleSystemManager*>(g_ParticleSystemManager)).insert(this); }
     }
     float getGasCloudRadius() const override { return at<float>(0x228); }
     void setPlayer(void* value) override { at<void*>(0x230)=value; }
@@ -204,11 +204,15 @@ public:
     void setMaterial(int value) override { at<int>(0x234)=value; }
     int getMaterial() const override { return at<int>(0x234); }
     void setEffectController(world::IEffectController* value) override
-    { at<world::IEffectController*>(0xC)=value; reserved11(reinterpret_cast<int>(value ? value->getObject() : 0)); }
+    { at<world::IEffectController*>(0xC)=value; reserved11(reinterpret_cast<intptr_t>(value ? value->getObject() : 0)); }
     world::IEffectController* getEffectController() const override { return at<world::IEffectController*>(0xC); }
     bool getWaterSide() const override { return at<unsigned char>(0x238)!=0; }
 };
+#if defined(_M_IX86)
 static_assert(sizeof(ParticleInstanceType0)==0x23C,"ordinary particle instance PE1017F870 layout");
+#else
+static_assert(sizeof(ParticleInstanceType0)==kPsmInstanceSize,"x64 instance layout, ParticleRawLayout.h");
+#endif
 
 IParticleSystemInstance* psmCreateType0Instance(IParticleSystemTemplate* descriptor)
 {

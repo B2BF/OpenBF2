@@ -189,7 +189,7 @@ bool Bf2ObjectMarkerNode::addLockTextNodeForHud(Bf2TransformNode* node) // 7CD00
     m_lockTextNodes.push_back(node);   // retail inlines list::insert(end(), node)
     return true;
 }
-bool Bf2ObjectMarkerNode::setTextureForHud(int index, int texture) // 7CD1C0, +D8
+bool Bf2ObjectMarkerNode::setTextureForHud(int index, TextureHandle texture) // 7CD1C0, +D8
 {
     // Out-of-range is silently ignored and still answers true; a negative
     // index is not tested at all, so it writes before the array.
@@ -415,7 +415,7 @@ void Bf2ObjectMarkerNode::addMarker(unsigned int objectId, hfe::world::IObject* 
         return;
     quad.width = m_textureSizes[textureIndex].x;
     quad.height = m_textureSizes[textureIndex].y;
-    const int texture = m_textures[textureIndex];
+    const TextureHandle texture = m_textures[textureIndex];
     quad.texture = texture;
     if (!texture)
         return;
@@ -598,7 +598,7 @@ void Bf2ObjectMarkerNode::drawMarkers(System* system, const Rect* bounds, Render
 // `this` is never read. The clip is the caller's `bounds` - paintSelf's own clip is unused.
 // A texture of 0 draws nothing.
 void Bf2ObjectMarkerNode::drawMarker(float x, float y, float rotation, float width, float height,
-                                     int texture, System* system, const Rect* clip,
+                                     TextureHandle texture, System* system, const Rect* clip,
                                      RenderContext* context)
 {
     if (!texture)
@@ -629,7 +629,9 @@ namespace {
 TypeDescriptor* const registeredBf2ObjectMarkerNodeType = Bf2ObjectMarkerNode::getClassType();
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2ObjectMarkerNodeTypeDescriptor) == 16, "client BF2 marker metadata");
 static_assert(sizeof(Bf2ObjectMarkerNode) == 444, "native Bf2ObjectMarkerNode storage");
+#endif
 } }
 #endif

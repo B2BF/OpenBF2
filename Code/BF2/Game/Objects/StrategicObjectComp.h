@@ -38,8 +38,8 @@ public:
     const std::string& getStrategicObjectName() override;
     const std::string& getIntactIconName() override;
     const std::string& getDestroyedIconName() override;
-    int getIntactIconPtr() override;
-    int getDestroyedIconPtr() override;
+    std::intptr_t getIntactIconPtr() override;
+    std::intptr_t getDestroyedIconPtr() override;
     int getPart() override;
     int getIndex() override;
     void setIndex(int) override;

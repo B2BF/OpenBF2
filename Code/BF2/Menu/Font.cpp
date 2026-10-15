@@ -102,9 +102,11 @@ bool BitmapFont::drawCharacter(int character, meme::Quad* quad)
     m_texture->drawUV(quad, glyph.u, glyph.v, u1, v1);
     return true;
 }
+#if defined(_M_IX86)
 static_assert(sizeof(Font) == 32, "native x86 string-bearing Font");
 static_assert(sizeof(DifFont) == 40, "native x86 DifFont");
 static_assert(sizeof(BitmapFont) == 52, "native x86 BitmapFont");
+#endif
 static_assert(sizeof(BitmapGlyph) == 16, "four scalar glyph values");
 } } }
 #endif

@@ -46,9 +46,9 @@ struct LightSampleBlock
 {
     unsigned int  sampleCount;  // +0x00  texels in the block (terrain) / valid samples (mesh)
     TerrainAabb   bounds;       // +0x04  the block's world box (the mesh sampler leaves it empty)
-    // +0x40 - the mesh sampler's VC7.1 vector of 92-byte triangle records itself (the vector object
-    // at its +0x18; MeshLightSampling.h); 0 for the terrain sampler, which has no triangles. The
-    // generator reads the vector's first / last and each record's normals at +0x24 / +0x30 / +0x3C.
+    // +0x40 - the mesh sampler's std::vector<MeshSampleTriangle> of 92-byte triangle records itself
+    // (its m_triangles; MeshLightSampling.h); 0 for the terrain sampler, which has no triangles. The
+    // generator reads the vector's elements and each record's three normals.
     const void*   triangles;
 };
 
@@ -72,8 +72,9 @@ public:
     // answers its index (the mesh sampler: -1 while its record vector has no storage). The terrain
     // sampler ignores it and answers 0. [INFERRED] name.
     virtual int addLight(Vec3 color, Vec3 position, float range) = 0;                    // +0x20
-    // The mesh sampler's recorded lights: its VC7.1 vector (at +0x28) of 28-byte (position, colour,
-    // range) records as addLight stores them; null for the terrain sampler. No caller is known.
+    // The mesh sampler's recorded lights: its std::vector<MeshSampleLight> (m_lights) of 28-byte
+    // (position, colour, range) records as addLight stores them; null for the terrain sampler. No
+    // caller is known.
     // [INFERRED] name.
     virtual void* getLights() = 0;                                                       // +0x24
 

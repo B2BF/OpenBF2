@@ -2,12 +2,12 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
+#include "../../RendDX9Abi/ThunkAbi.h"
 #include "../../RendDX9Abi/HfeAbi.h"
 #include "../../RendDX9Abi/ModuleCommon.h"
 #include "../../RendDX9Abi/BfMemory.h"
 #include "../../RendDX9Abi/D3dx9Sdk.h"
 #include "../../RendDX9Abi/Frontier.h"
-#include "../../RendDX9Abi/Vc71Map.h"
 #include "RendDX9Base.h"
 #include "Texture.h"
 #include "Ra/RaShader.h"
@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <cstring>
 #include <stddef.h>
+#include <stdlib.h>
 #include <new>
 
 namespace dice {
@@ -67,78 +68,239 @@ namespace {
 // +0x268..+0x288 own raw IDirect3DBaseTexture9 references.  Keeping the carrier as dwords also
 // preserves the large +0x4CC..+0xACB span that the shipped constructor intentionally leaves alone.
 
-struct RaShaderConstants
+// [CHOSEN, not recovered] (issue #7) The x64 block keeps the retail word order but gives every word
+// that holds a pointer an 8-byte, 8-aligned slot; every other word keeps its 4 bytes. A record is
+// therefore {vptr; payload at self + sizeof(void*)} on both builds and its value words stay
+// contiguous. kRaConstantLayout maps each retail word onto its native byte offset; on x86 the
+// mapping is the identity and the block is the retail dword carrier. Every access below names the
+// retail offset and goes through raBytes / raField / raSpan.
+
+const unsigned int kRaConstantWords     = 0xAFC / 4;
+const unsigned int kRaPointerSize       = sizeof(void*);
+const unsigned int kRaTextureArrayWord  = 0x2C8 / 4;   // the 128 IDirect3DBaseTexture9* the
+const unsigned int kRaTextureArrayCount = 128;         // destructor releases (words 178..305)
+
+// The other retail words that hold a pointer, as the constructor, the destructor and the binders
+// use them.
+constexpr unsigned short kRaPointerWords[] =
 {
-    unsigned int words[0xAFC / 4];
+    0, 1,           // +0x000 DeviceLostResetListener vptr, +0x004 &g_raConstantOffsets
+    3, 4, 5,        // +0x00C the buffer the destructor frees, and the two words it zeroes with it
+    34,             // +0x088 the device
+    38, 39, 40,     // +0x098..+0x0A0 the three IUnknown references the destructor releases
+    // every record's binder-table pointer
+    23, 36, 41, 46, 51, 56, 61, 66, 70, 74, 77, 79, 84, 89, 91, 93, 95, 97, 102, 104, 106, 108,
+    110, 112, 117, 119, 121, 123, 125, 129, 132, 136, 139, 143, 146, 150, 152, 154, 156, 158, 160,
+    162, 164, 169, 174, 176,
+    // the texture records' payloads: EngineTexture* and IDirect3DBaseTexture9*
+    78, 105, 107, 109, 175, 177, 155, 157, 159, 161, 163,
+    // the transformed-Vec3 records' source record and transform function
+    130, 131, 137, 138, 144, 145
 };
 
+// The native byte offset of every retail word and whether it holds a pointer. A pointer word
+// starts on a pointer boundary and takes sizeof(void*) bytes; every other word takes 4.
+struct RaConstantLayout
+{
+    unsigned short offset[kRaConstantWords];
+    bool           pointer[kRaConstantWords];
+    unsigned int   size;
+
+    constexpr RaConstantLayout() : offset(), pointer(), size(0)
+    {
+        for (unsigned int i = 0; i != sizeof(kRaPointerWords) / sizeof(kRaPointerWords[0]); ++i)
+            pointer[kRaPointerWords[i]] = true;
+        for (unsigned int i = 0; i != kRaTextureArrayCount; ++i)
+            pointer[kRaTextureArrayWord + i] = true;
+
+        unsigned int at = 0;
+        for (unsigned int word = 0; word != kRaConstantWords; ++word)
+        {
+            if (pointer[word])
+                at = (at + kRaPointerSize - 1u) & ~(kRaPointerSize - 1u);
+            offset[word] = static_cast<unsigned short>(at);
+            at += pointer[word] ? kRaPointerSize : 4u;
+        }
+        size = (at + kRaPointerSize - 1u) & ~(kRaPointerSize - 1u);
+    }
+};
+
+constexpr RaConstantLayout kRaConstantLayout;
+
+constexpr bool raLayoutIsRetail()
+{
+    for (unsigned int word = 0; word != kRaConstantWords; ++word)
+        if (kRaConstantLayout.offset[word] != word * 4u)
+            return false;
+    return kRaConstantLayout.size == 0xAFC;
+}
+
+#if defined(_M_IX86)
+static_assert(raLayoutIsRetail(), "the x86 block is the retail dword carrier");
+#endif
+static_assert(kRaConstantLayout.size == Ra::kRaShaderConstantsSize,
+              "Ra/RaShader.h publishes the block size in-place storage provides");
+
+struct RaShaderConstants
+{
+#if defined(_M_IX86)
+    unsigned int words[0xAFC / 4];
+#else
+    alignas(8) unsigned char bytes[Ra::kRaShaderConstantsSize];
+#endif
+};
+
+#if defined(_M_IX86)
 static_assert(sizeof(RaShaderConstants) == 0xAFC,
               "sub_1003ACA0 allocates exactly 0xAFC bytes");
+#endif
+static_assert(sizeof(RaShaderConstants) == Ra::kRaShaderConstantsSize, "native block size");
+
+#if !defined(_M_IX86)
+// A retail offset that names no word of the block, or a word read as the wrong kind: stop rather
+// than guess where it lives in the native layout.
+__declspec(noreturn) void raConstantsBadOffset(const void* block, unsigned int retailByteOffset)
+{
+    RD9_FRONTIER_AT("dice::hfe::dx9rend::RaShaderConstants - retail offset (slot) is not a word "
+                    "of the 0xAFC-byte block, or not a word of the kind accessed",
+                    block, retailByteOffset);
+    ::abort();
+}
+#endif
+
+// The native address of a retail byte offset within the block; block + offset on x86.
+unsigned char* raBytes(void* block, unsigned int retailByteOffset)
+{
+#if defined(_M_IX86)
+    return static_cast<unsigned char*>(block) + retailByteOffset;
+#else
+    if ((retailByteOffset & 3u) != 0 || retailByteOffset >= 0xAFCu)
+        raConstantsBadOffset(block, retailByteOffset);
+    return static_cast<unsigned char*>(block) + kRaConstantLayout.offset[retailByteOffset / 4u];
+#endif
+}
+
+// The word at a retail byte offset: a pointer word when T is pointer-sized, else a 4-byte value
+// word. x64 checks the kind against the layout.
+template <typename T>
+T& raField(void* block, unsigned int retailByteOffset)
+{
+#if !defined(_M_IX86)
+    if (retailByteOffset < 0xAFCu && (retailByteOffset & 3u) == 0
+        && kRaConstantLayout.pointer[retailByteOffset / 4u] != (sizeof(T) == kRaPointerSize))
+        raConstantsBadOffset(block, retailByteOffset);
+#endif
+    return *reinterpret_cast<T*>(raBytes(block, retailByteOffset));
+}
+
+// `bytes` of consecutive value words from a retail byte offset, e.g. a record's payload.
+unsigned char* raSpan(void* block, unsigned int retailByteOffset, unsigned int bytes)
+{
+    unsigned char* const first = raBytes(block, retailByteOffset);
+#if defined(_M_IX86)
+    (void)bytes;
+#else
+    for (unsigned int at = 0; at < bytes; at += 4u)
+    {
+        const unsigned int word = retailByteOffset + at;
+        if (raBytes(block, word) != first + at || kRaConstantLayout.pointer[word / 4u])
+            raConstantsBadOffset(block, word);
+    }
+#endif
+    return first;
+}
+
+inline unsigned int& raValue(RaShaderConstants* constants, unsigned int word)
+{
+    return raField<unsigned int>(constants, word * 4u);
+}
+
+inline void*& raPointer(RaShaderConstants* constants, unsigned int word)
+{
+    return raField<void*>(constants, word * 4u);
+}
+
+// A record's payload, the words after its binder-table pointer.
+inline unsigned char* raRecordPayload(void* self)
+{
+    return static_cast<unsigned char*>(self) + sizeof(void*);
+}
 
 // These outer record binders are ordinary __thiscall members; the effect and the D3DX handle arrive
 // as the two stack arguments RaShader::applyParameterVector passes to every holder's slot 0.
-int __fastcall raBindVec4(void* self, void*, void* effect, void* handle)
+int RD9_THUNK raBindVec4(void* self RD9_THUNK_EDX, void* effect, void* handle)
 {
     return static_cast<ID3DXEffect*>(effect)->SetVector(
         ::renddx9abi::d3dxHandle(handle), reinterpret_cast<const D3DXVECTOR4*>(
-            static_cast<unsigned char*>(self) + 4));
+            raRecordPayload(self)));
 }
 
-int __fastcall raBindTexture(void* self, void*, void* effect, void* handle)
+int RD9_THUNK raBindTexture(void* self RD9_THUNK_EDX, void* effect, void* handle)
 {
     IDirect3DBaseTexture9* const texture = *reinterpret_cast<IDirect3DBaseTexture9**>(
-        static_cast<unsigned char*>(self) + 4);
+        raRecordPayload(self));
     return static_cast<ID3DXEffect*>(effect)->SetTexture(
         ::renddx9abi::d3dxHandle(handle), texture);
 }
 
-int __fastcall raBindFloat(void* self, void*, void* effect, void* handle)
+int RD9_THUNK raBindFloat(void* self RD9_THUNK_EDX, void* effect, void* handle)
 {
-    const FLOAT value = *reinterpret_cast<const FLOAT*>(
-        static_cast<unsigned char*>(self) + 4);
+    const FLOAT value = *reinterpret_cast<const FLOAT*>(raRecordPayload(self));
     return static_cast<ID3DXEffect*>(effect)->SetFloat(
         ::renddx9abi::d3dxHandle(handle), value);
 }
 
-int __fastcall raBindVec3(void* self, void*, void* effect, void* handle)
+int RD9_THUNK raBindVec3(void* self RD9_THUNK_EDX, void* effect, void* handle)
 {
     return static_cast<ID3DXEffect*>(effect)->SetFloatArray(
         ::renddx9abi::d3dxHandle(handle), reinterpret_cast<const float*>(
-            static_cast<unsigned char*>(self) + 4), 3);
+            raRecordPayload(self)), 3);
 }
 
-int __fastcall raBindVec2(void* self, void*, void* effect, void* handle)
+int RD9_THUNK raBindVec2(void* self RD9_THUNK_EDX, void* effect, void* handle)
 {
     return static_cast<ID3DXEffect*>(effect)->SetFloatArray(
         ::renddx9abi::d3dxHandle(handle), reinterpret_cast<const float*>(
-            static_cast<unsigned char*>(self) + 4), 2);
+            raRecordPayload(self)), 2);
 }
 
 typedef float* (__fastcall* TransformVec3Fn)(float*, const float*);
 
-int __fastcall raBindTransformedVec3(void* self, void*, void* effect, void* handle)
+// The transformed-Vec3 record: its binder table, another Vec3 record of this block and the
+// transform its payload goes through.
+struct RaTransformedVec3Record
 {
-    const unsigned int* const fields = static_cast<const unsigned int*>(self);
-    const float* const source = reinterpret_cast<const float*>(fields[1] + 4);
-    const TransformVec3Fn transform = reinterpret_cast<TransformVec3Fn>(fields[2]);
+    void*           vptr;        // +0x00
+    unsigned char*  source;      // +0x04
+    TransformVec3Fn transform;   // +0x08
+};
+
+#if defined(_M_IX86)
+static_assert(offsetof(RaTransformedVec3Record, source) == 4
+                  && offsetof(RaTransformedVec3Record, transform) == 8,
+              "the binder reads the source at +0x04 and the transform at +0x08");
+#endif
+
+int RD9_THUNK raBindTransformedVec3(void* self RD9_THUNK_EDX, void* effect, void* handle)
+{
+    const RaTransformedVec3Record* const record = static_cast<const RaTransformedVec3Record*>(self);
+    const float* const source = reinterpret_cast<const float*>(raRecordPayload(record->source));
     float transformed[3];
-    transform(transformed, source);
+    record->transform(transformed, source);
     return static_cast<ID3DXEffect*>(effect)->SetFloatArray(
         ::renddx9abi::d3dxHandle(handle), transformed, 3);
 }
 
-int __fastcall raBindInt(void* self, void*, void* effect, void* handle)
+int RD9_THUNK raBindInt(void* self RD9_THUNK_EDX, void* effect, void* handle)
 {
-    const INT value = *reinterpret_cast<const INT*>(
-        static_cast<unsigned char*>(self) + 4);
+    const INT value = *reinterpret_cast<const INT*>(raRecordPayload(self));
     return static_cast<ID3DXEffect*>(effect)->SetInt(
         ::renddx9abi::d3dxHandle(handle), value);
 }
 
-int __fastcall raBindEngineTexture(void* self, void*, void* effect, void* handle)
+int RD9_THUNK raBindEngineTexture(void* self RD9_THUNK_EDX, void* effect, void* handle)
 {
-    EngineTexture* const texture = *reinterpret_cast<EngineTexture**>(
-        static_cast<unsigned char*>(self) + 4);
+    EngineTexture* const texture = *reinterpret_cast<EngineTexture**>(raRecordPayload(self));
     if (!texture)
         return 0;
     return static_cast<ID3DXEffect*>(effect)->SetTexture(
@@ -161,11 +323,11 @@ float* __fastcall raScaleQuarter(float* out, const float* value)
     return out;
 }
 
-void* __fastcall raDeleteVec4Record(void* self, void*, unsigned int flags);
-void* __fastcall raDeleteFloatRecord(void* self, void*, unsigned int flags);
-void* __fastcall raDeleteVec3Record(void* self, void*, unsigned int flags);
-void* __fastcall raDeleteVec2Record(void* self, void*, unsigned int flags);
-void* __fastcall raDeleteIntRecord(void* self, void*, unsigned int flags);
+void* RD9_THUNK raDeleteVec4Record(void* self RD9_THUNK_EDX, unsigned int flags);
+void* RD9_THUNK raDeleteFloatRecord(void* self RD9_THUNK_EDX, unsigned int flags);
+void* RD9_THUNK raDeleteVec3Record(void* self RD9_THUNK_EDX, unsigned int flags);
+void* RD9_THUNK raDeleteVec2Record(void* self RD9_THUNK_EDX, unsigned int flags);
+void* RD9_THUNK raDeleteIntRecord(void* self RD9_THUNK_EDX, unsigned int flags);
 
 // off_101E1480..off_101E14BC.  The raw/smart texture binders have no deleting-destructor slot;
 // the owning RaShaderConstants destructor releases their payloads itself.
@@ -202,34 +364,35 @@ void* deleteRaRecord(void* self, unsigned int flags, void* const* vtable)
     return self;
 }
 
-void* __fastcall raDeleteVec4Record(void* self, void*, unsigned int flags)
+void* RD9_THUNK raDeleteVec4Record(void* self RD9_THUNK_EDX, unsigned int flags)
 {
     return deleteRaRecord(self, flags, kRaVec4Vtable);
 }
 
-void* __fastcall raDeleteFloatRecord(void* self, void*, unsigned int flags)
+void* RD9_THUNK raDeleteFloatRecord(void* self RD9_THUNK_EDX, unsigned int flags)
 {
     return deleteRaRecord(self, flags, kRaFloatVtable);
 }
 
-void* __fastcall raDeleteVec3Record(void* self, void*, unsigned int flags)
+void* RD9_THUNK raDeleteVec3Record(void* self RD9_THUNK_EDX, unsigned int flags)
 {
     return deleteRaRecord(self, flags, kRaVec3Vtable);
 }
 
-void* __fastcall raDeleteVec2Record(void* self, void*, unsigned int flags)
+void* RD9_THUNK raDeleteVec2Record(void* self RD9_THUNK_EDX, unsigned int flags)
 {
     return deleteRaRecord(self, flags, kRaVec2Vtable);
 }
 
-void* __fastcall raDeleteIntRecord(void* self, void*, unsigned int flags)
+void* RD9_THUNK raDeleteIntRecord(void* self RD9_THUNK_EDX, unsigned int flags)
 {
     return deleteRaRecord(self, flags, kRaIntVtable);
 }
 
-inline unsigned int ptrWord(const void* p)
+// A binder table as the pointer word that records it.
+inline void* raTable(void* const* table)
 {
-    return reinterpret_cast<unsigned int>(p);
+    return const_cast<void**>(table);
 }
 
 inline unsigned int floatWord(float f)
@@ -239,11 +402,12 @@ inline unsigned int floatWord(float f)
     return value;
 }
 
+// `holderOffset` is the record's retail offset; its payload is the word after the binder table.
 void setTextureRecord(RaShaderConstants* constants, unsigned int holderOffset,
                       IDirect3DBaseTexture9* texture)
 {
-    IDirect3DBaseTexture9** const field = reinterpret_cast<IDirect3DBaseTexture9**>(
-        reinterpret_cast<unsigned char*>(constants) + holderOffset + 4);
+    IDirect3DBaseTexture9** const field =
+        &raField<IDirect3DBaseTexture9*>(constants, holderOffset + 4);
     if (*field == texture)
         return;
     if (*field)
@@ -256,8 +420,7 @@ void setTextureRecord(RaShaderConstants* constants, unsigned int holderOffset,
 void setEngineTextureRecord(RaShaderConstants* constants, unsigned int holderOffset,
                             EngineTexture* texture)
 {
-    EngineTexture** const field = reinterpret_cast<EngineTexture**>(
-        reinterpret_cast<unsigned char*>(constants) + holderOffset + 4);
+    EngineTexture** const field = &raField<EngineTexture*>(constants, holderOffset + 4);
     if (*field == texture)
         return;
     if (*field && !--(*field)->refCount)
@@ -270,7 +433,7 @@ void setEngineTextureRecord(RaShaderConstants* constants, unsigned int holderOff
         textureAddRef(texture);
 }
 
-void __fastcall raConstantsOnDeviceLost(void* self, void*)
+void RD9_THUNK raConstantsOnDeviceLost(void* self RD9_THUNK_EDX)
 {
     RaShaderConstants* const constants = static_cast<RaShaderConstants*>(self);
     setTextureRecord(constants, 0x268, 0);
@@ -280,7 +443,7 @@ void __fastcall raConstantsOnDeviceLost(void* self, void*)
     setTextureRecord(constants, 0x288, 0);
 }
 
-void __fastcall raConstantsNullListener(void*, void*)
+void RD9_THUNK raConstantsNullListener(void* RD9_THUNK_EDX)
 {
 }
 
@@ -290,11 +453,11 @@ void* const kRaConstantsDeviceListenerVtable[3] = {
     reinterpret_cast<void*>(&raConstantsNullListener)
 };
 
-// dword_1023DDD0 and unk_1023DDC0: parallel VC7 vectors of names and byte offsets.  The ctor fills
+// dword_1023DDD0 and unk_1023DDC0: parallel vectors of names and byte offsets.  The ctor fills
 // them only when the offset vector is empty; duplicates are intentional (the water constants are
 // registered once in the short common prefix and again in the complete water group).
-vc71::vector_layout g_raConstantNames   = { 0, 0, 0, 0 };
-vc71::vector_layout g_raConstantOffsets = { 0, 0, 0, 0 };
+std::vector<std::string> g_raConstantNames;
+std::vector<int>          g_raConstantOffsets;
 
 // The ctor is their only direct PE xref; their purpose remains
 // [UNRESOLVED], so retain address-derived names rather than assigning invented semantics.
@@ -307,13 +470,14 @@ int g_raStateDDB0 = 0;
 int g_raStateDDB4 = 0;
 int g_raStateDDB8 = 0;
 
+// `offset` is the record's retail byte offset; the registry holds its native offset.
 struct RaConstantMetadata
 {
     const char*  name;
     unsigned int offset;
 };
 
-const RaConstantMetadata kRaConstantMetadata[] =
+constexpr RaConstantMetadata kRaConstantMetadata[] =
 {
     { "FogColor",                    184 },
     { "FogRange",                    164 },
@@ -366,125 +530,131 @@ const RaConstantMetadata kRaConstantMetadata[] =
     { "AccumulationMapProjOffset",   676 }
 };
 
-void initializeRaConstantRegistry()
+constexpr bool raMetadataNamesRecords()
 {
-    vc71::vectorRef<unsigned int> offsets(&g_raConstantOffsets);
-    if (offsets.size() != 0)
-        return;
-
-    vc71::vectorRef<vc71::string> names(&g_raConstantNames);
     for (unsigned int i = 0; i != sizeof(kRaConstantMetadata) / sizeof(kRaConstantMetadata[0]); ++i)
     {
-        const vc71::string name(kRaConstantMetadata[i].name);
-        names.push_back(name);
-        offsets.push_back(kRaConstantMetadata[i].offset);
+        const unsigned int offset = kRaConstantMetadata[i].offset;
+        if ((offset & 3u) != 0 || offset >= 0xAFCu || !kRaConstantLayout.pointer[offset / 4u])
+            return false;
+    }
+    return true;
+}
+
+static_assert(raMetadataNamesRecords(),
+              "every registered name is a record of the block (its binder-table word)");
+
+// The registry entry for a record's retail offset: the same offset on x86, the native one on x64.
+inline int raRegistryOffset(unsigned int retailByteOffset)
+{
+#if defined(_M_IX86)
+    return static_cast<int>(retailByteOffset);
+#else
+    return static_cast<int>(kRaConstantLayout.offset[retailByteOffset / 4u]);
+#endif
+}
+
+void initializeRaConstantRegistry()
+{
+    if (!g_raConstantOffsets.empty())
+        return;
+
+    for (unsigned int i = 0; i != sizeof(kRaConstantMetadata) / sizeof(kRaConstantMetadata[0]); ++i)
+    {
+        const std::string name(kRaConstantMetadata[i].name);
+        g_raConstantNames.push_back(name);
+        g_raConstantOffsets.push_back(raRegistryOffset(kRaConstantMetadata[i].offset));
     }
 }
 
-struct RaConstantRegistryLifetime
-{
-    ~RaConstantRegistryLifetime()
-    {
-        for (char* p = g_raConstantNames.first; p != g_raConstantNames.last;
-             p += sizeof(vc71::string))
-            reinterpret_cast<vc71::string*>(p)->~string();
-        if (g_raConstantNames.first)
-            ::operator delete(g_raConstantNames.first);
-        if (g_raConstantOffsets.first)
-            ::operator delete(g_raConstantOffsets.first);
-        g_raConstantNames.first = g_raConstantNames.last = g_raConstantNames.end = 0;
-        g_raConstantOffsets.first = g_raConstantOffsets.last = g_raConstantOffsets.end = 0;
-    }
-};
-
-RaConstantRegistryLifetime g_raConstantRegistryLifetime;
-
+// Every store names its retail word index (word = retail offset / 4).
 RaShaderConstants* constructRaShaderConstants(void* storage, IDirect3DDevice9* device)
 {
-    RaShaderConstants* const constants = static_cast<RaShaderConstants*>(storage);
-    unsigned int* const w = constants->words;
+    RaShaderConstants* const c = static_cast<RaShaderConstants*>(storage);
 
     // +0x00..+0x58: DeviceLostResetListener, registry carrier and the view matrix.
-    w[0] = ptrWord(kRaConstantsDeviceListenerVtable);
-    w[1] = ptrWord(&g_raConstantOffsets);
-    w[3] = w[4] = w[5] = 0;
-    w[6] = 4;
+    raPointer(c, 0) = raTable(kRaConstantsDeviceListenerVtable);
+    raPointer(c, 1) = &g_raConstantOffsets;
+    raPointer(c, 3) = raPointer(c, 4) = raPointer(c, 5) = 0;
+    raValue(c, 6) = 4;
     for (unsigned int i = 7; i <= 22; ++i)
-        w[i] = 0;
-    w[7] = w[12] = w[17] = w[22] = floatWord(1.0f);
+        raValue(c, i) = 0;
+    raValue(c, 7) = raValue(c, 12) = raValue(c, 17) = raValue(c, 22) = floatWord(1.0f);
 
-    w[23] = ptrWord(kRaVec4Vtable);
-    w[24] = w[25] = w[26] = w[27] = w[28] = floatWord(1.0f);
-    w[29] = w[30] = floatWord(0.1f);
-    w[31] = w[32] = w[33] = 0;
-    w[34] = ptrWord(device);
-    w[35] = floatWord(45.0f);
+    raPointer(c, 23) = raTable(kRaVec4Vtable);
+    raValue(c, 24) = raValue(c, 25) = raValue(c, 26) = raValue(c, 27) = raValue(c, 28) =
+        floatWord(1.0f);
+    raValue(c, 29) = raValue(c, 30) = floatWord(0.1f);
+    raValue(c, 31) = raValue(c, 32) = raValue(c, 33) = 0;
+    raPointer(c, 34) = device;
+    raValue(c, 35) = floatWord(45.0f);
 
-    w[36] = ptrWord(kRaFloatVtable); w[37] = 0;
-    w[38] = w[39] = w[40] = 0;
+    raPointer(c, 36) = raTable(kRaFloatVtable); raValue(c, 37) = 0;
+    raPointer(c, 38) = raPointer(c, 39) = raPointer(c, 40) = 0;
 
     const unsigned int vec4Records[] = { 41, 46, 51, 56, 61, 79, 84, 97, 112, 164, 169 };
     for (unsigned int i = 0; i != sizeof(vec4Records) / sizeof(vec4Records[0]); ++i)
     {
         const unsigned int at = vec4Records[i];
-        w[at] = ptrWord(kRaVec4Vtable);
-        w[at + 1] = w[at + 2] = w[at + 3] = w[at + 4] = floatWord(1.0f);
+        raPointer(c, at) = raTable(kRaVec4Vtable);
+        raValue(c, at + 1) = raValue(c, at + 2) = raValue(c, at + 3) = raValue(c, at + 4) =
+            floatWord(1.0f);
     }
 
     const unsigned int vec3ZeroRecords[] = { 66, 70, 125, 132 };
     for (unsigned int i = 0; i != sizeof(vec3ZeroRecords) / sizeof(vec3ZeroRecords[0]); ++i)
     {
         const unsigned int at = vec3ZeroRecords[i];
-        w[at] = ptrWord(kRaVec3Vtable);
-        w[at + 1] = w[at + 2] = w[at + 3] = 0;
+        raPointer(c, at) = raTable(kRaVec3Vtable);
+        raValue(c, at + 1) = raValue(c, at + 2) = raValue(c, at + 3) = 0;
     }
-    w[74] = ptrWord(kRaVec2Vtable); w[75] = w[76] = 0;
+    raPointer(c, 74) = raTable(kRaVec2Vtable); raValue(c, 75) = raValue(c, 76) = 0;
 
     const unsigned int smartTextureRecords[] = { 77, 104, 106, 108, 174, 176 };
     for (unsigned int i = 0; i != sizeof(smartTextureRecords) / sizeof(smartTextureRecords[0]); ++i)
     {
         const unsigned int at = smartTextureRecords[i];
-        w[at] = ptrWord(kRaEngineTextureVtable);
-        w[at + 1] = 0;
+        raPointer(c, at) = raTable(kRaEngineTextureVtable);
+        raPointer(c, at + 1) = 0;
     }
 
     const unsigned int floatRecords[] = { 89, 91, 93, 95, 102, 110, 117, 119, 121, 123, 152 };
     for (unsigned int i = 0; i != sizeof(floatRecords) / sizeof(floatRecords[0]); ++i)
     {
         const unsigned int at = floatRecords[i];
-        w[at] = ptrWord(kRaFloatVtable);
-        w[at + 1] = 0;
+        raPointer(c, at) = raTable(kRaFloatVtable);
+        raValue(c, at + 1) = 0;
     }
 
-    w[129] = ptrWord(kRaTransformedVec3Vtable);
-    w[130] = ptrWord(w + 125);
-    w[131] = ptrWord(reinterpret_cast<const void*>(&raScaleHalf));
-    w[136] = ptrWord(kRaTransformedVec3Vtable);
-    w[137] = ptrWord(w + 132);
-    w[138] = ptrWord(reinterpret_cast<const void*>(&raScaleHalf));
+    raPointer(c, 129) = raTable(kRaTransformedVec3Vtable);
+    raField<unsigned char*>(c, 130 * 4) = raBytes(c, 125 * 4);
+    raField<TransformVec3Fn>(c, 131 * 4) = &raScaleHalf;
+    raPointer(c, 136) = raTable(kRaTransformedVec3Vtable);
+    raField<unsigned char*>(c, 137 * 4) = raBytes(c, 132 * 4);
+    raField<TransformVec3Fn>(c, 138 * 4) = &raScaleHalf;
 
-    w[139] = ptrWord(kRaVec3Vtable);
-    w[140] = w[141] = floatWord(1.0f);
-    w[142] = floatWord(0.8f);
-    w[143] = ptrWord(kRaTransformedVec3Vtable);
-    w[144] = ptrWord(w + 139);
-    w[145] = ptrWord(reinterpret_cast<const void*>(&raScaleQuarter));
+    raPointer(c, 139) = raTable(kRaVec3Vtable);
+    raValue(c, 140) = raValue(c, 141) = floatWord(1.0f);
+    raValue(c, 142) = floatWord(0.8f);
+    raPointer(c, 143) = raTable(kRaTransformedVec3Vtable);
+    raField<unsigned char*>(c, 144 * 4) = raBytes(c, 139 * 4);
+    raField<TransformVec3Fn>(c, 145 * 4) = &raScaleQuarter;
 
-    w[146] = ptrWord(kRaVec3Vtable);
-    w[147] = w[148] = w[149] = floatWord(1.0f);
-    w[150] = ptrWord(kRaIntVtable); w[151] = 0;
+    raPointer(c, 146) = raTable(kRaVec3Vtable);
+    raValue(c, 147) = raValue(c, 148) = raValue(c, 149) = floatWord(1.0f);
+    raPointer(c, 150) = raTable(kRaIntVtable); raValue(c, 151) = 0;
 
     const unsigned int textureRecords[] = { 154, 156, 158, 160, 162 };
     for (unsigned int i = 0; i != sizeof(textureRecords) / sizeof(textureRecords[0]); ++i)
     {
         const unsigned int at = textureRecords[i];
-        w[at] = ptrWord(kRaTextureVtable);
-        w[at + 1] = 0;
+        raPointer(c, at) = raTable(kRaTextureVtable);
+        raPointer(c, at + 1) = 0;
     }
 
-    w[306] = floatWord(128.0f);
+    raValue(c, 306) = floatWord(128.0f);
     for (unsigned int i = 691; i != 703; ++i)
-        w[i] = 0;
+        raValue(c, i) = 0;
 
     initializeRaConstantRegistry();
 
@@ -498,31 +668,33 @@ RaShaderConstants* constructRaShaderConstants(void* storage, IDirect3DDevice9* d
     g_raStateDDB8 = 0;
 
     // sub_10038780: two RGB triples and their companion triples at the final 48 bytes.
-    w[691] = w[692] = w[693] = floatWord(0.5f);
-    w[694] = w[695] = w[696] = 0;
-    w[697] = w[698] = w[699] = floatWord(1.0f);
-    w[700] = w[701] = w[702] = 0;
+    raValue(c, 691) = raValue(c, 692) = raValue(c, 693) = floatWord(0.5f);
+    raValue(c, 694) = raValue(c, 695) = raValue(c, 696) = 0;
+    raValue(c, 697) = raValue(c, 698) = raValue(c, 699) = floatWord(1.0f);
+    raValue(c, 700) = raValue(c, 701) = raValue(c, 702) = 0;
 
-    // The ctor zeroes exactly this 0x200-byte COM-texture array, not the untouched tail around it.
-    ::memset(w + 178, 0, 0x200);
+    // The ctor zeroes exactly this 0x200-byte COM-texture array (128 pointers), not the untouched
+    // tail around it.
+    ::memset(raBytes(c, kRaTextureArrayWord * 4), 0,
+             kRaTextureArrayCount * sizeof(IDirect3DBaseTexture9*));
 
-    registerDeviceLostResetListener(constants, 3);
+    registerDeviceLostResetListener(c, 3);
 
     // These final stores intentionally override three earlier Vec4 defaults after registration.
-    w[52] = floatWord(1000.0f);
-    w[53] = floatWord(1024.0f);
-    w[54] = floatWord(1.0f);
-    w[55] = 0;
-    w[57] = w[58] = w[59] = 0;
-    w[60] = floatWord(1.0f);
-    return constants;
+    raValue(c, 52) = floatWord(1000.0f);
+    raValue(c, 53) = floatWord(1024.0f);
+    raValue(c, 54) = floatWord(1.0f);
+    raValue(c, 55) = 0;
+    raValue(c, 57) = raValue(c, 58) = raValue(c, 59) = 0;
+    raValue(c, 60) = floatWord(1.0f);
+    return c;
 }
 
 void releaseEngineTextureRecord(RaShaderConstants* constants, unsigned int recordWord)
 {
-    constants->words[recordWord] = ptrWord(kRaEngineTextureVtable);
-    EngineTexture* const texture = reinterpret_cast<EngineTexture*>(
-        constants->words[recordWord + 1]);
+    raPointer(constants, recordWord) = raTable(kRaEngineTextureVtable);
+    EngineTexture* const texture = static_cast<EngineTexture*>(
+        raPointer(constants, recordWord + 1));
     if (texture && !--texture->refCount)
     {
         textureDtor(texture);
@@ -532,9 +704,9 @@ void releaseEngineTextureRecord(RaShaderConstants* constants, unsigned int recor
 
 void releaseRawTextureRecord(RaShaderConstants* constants, unsigned int recordWord)
 {
-    constants->words[recordWord] = ptrWord(kRaTextureVtable);
-    IDirect3DBaseTexture9* const texture = reinterpret_cast<IDirect3DBaseTexture9*>(
-        constants->words[recordWord + 1]);
+    raPointer(constants, recordWord) = raTable(kRaTextureVtable);
+    IDirect3DBaseTexture9* const texture = static_cast<IDirect3DBaseTexture9*>(
+        raPointer(constants, recordWord + 1));
     if (texture)
         texture->Release();
 }
@@ -542,7 +714,7 @@ void releaseRawTextureRecord(RaShaderConstants* constants, unsigned int recordWo
 void restoreRaRecord(RaShaderConstants* constants, unsigned int recordWord,
                      void* const* vtable)
 {
-    constants->words[recordWord] = ptrWord(vtable);
+    raPointer(constants, recordWord) = raTable(vtable);
 }
 
 void destroyRaShaderConstantsObject(RaShaderConstants* constants)
@@ -552,18 +724,18 @@ void destroyRaShaderConstantsObject(RaShaderConstants* constants)
 
     // sub_100388E0 is a real aggregate destructor: restore the primary listener vptr, unregister,
     // then unwind every non-trivial embedded record in reverse construction order.
-    constants->words[0] = ptrWord(kRaConstantsDeviceListenerVtable);
+    raPointer(constants, 0) = raTable(kRaConstantsDeviceListenerVtable);
     unregisterDeviceLostResetListener(constants);
 
     IDirect3DBaseTexture9** array = reinterpret_cast<IDirect3DBaseTexture9**>(
-        reinterpret_cast<unsigned char*>(constants) + 0x2C8);
-    for (unsigned int i = 0; i != 128; ++i)
+        raBytes(constants, kRaTextureArrayWord * 4));                  // +0x2C8
+    for (unsigned int i = 0; i != kRaTextureArrayCount; ++i)
         if (array[i])
             array[i]->Release();
 
     for (unsigned int i = 38; i <= 40; ++i)
     {
-        IUnknown* const value = reinterpret_cast<IUnknown*>(constants->words[i]);
+        IUnknown* const value = static_cast<IUnknown*>(raPointer(constants, i));
         if (value)
             value->Release();
     }
@@ -612,9 +784,9 @@ void destroyRaShaderConstantsObject(RaShaderConstants* constants)
     restoreRaRecord(constants, 36, kRaFloatVtable);
     restoreRaRecord(constants, 23, kRaVec4Vtable);
 
-    if (constants->words[3])
-        ::renddx9abi::engineFree(reinterpret_cast<void*>(constants->words[3]));
-    constants->words[3] = constants->words[4] = constants->words[5] = 0;
+    if (raPointer(constants, 3))
+        ::renddx9abi::engineFree(raPointer(constants, 3));
+    raPointer(constants, 3) = raPointer(constants, 4) = raPointer(constants, 5) = 0;
 }
 
 
@@ -626,62 +798,54 @@ struct RenderQueue
     void* const*  vptr;              // +0x000
     unsigned int  field04;           // +0x004
     unsigned int  drawMode;          // +0x008  (ctor: 0)
-    unsigned char profiler[0x27C - 0x0C];   // +0x00C sortMode (ctor: 1) then the bracket storage
-    unsigned int* entriesFirst;      // +0x27C
-    unsigned int* entriesLast;       // +0x280
-    unsigned int* entriesEnd;        // +0x284
+    unsigned int  sortMode;          // +0x00C  (ctor: 1)
+    unsigned char profiler[0x278 - 0x10];   // +0x010 the profiler bracket storage
+    std::vector<RenderQueueEntry*> entries; // +0x278 (VC7.1 _First at +0x27C)
     unsigned char enabled;           // +0x288
     unsigned char pad289[3];
-    vc71::string  name;              // +0x28C
+    std::string  name;              // +0x28C
     unsigned char transparentPass;   // +0x2A8
     unsigned char pad2A9[3];
     unsigned int  sharedKey;         // +0x2AC
 
     void flushWithArg(unsigned char runDraws);  // +0x08
     void flush();                               // +0x0C
-    void setSharedString(const vc71::string* value);   // +0x10
+    void setSharedString(const std::string* value);   // +0x10
     void drawWalkNear();                        // +0x14
     void drawWalkDefault();                     // +0x18
     void add(RenderQueueEntry* entry);          // +0x04
 };
 
-static_assert(sizeof(RenderQueue) == 0x2B0, "sub_10042400 allocates 0x2B0 per queue");
-static_assert(offsetof(RenderQueue, entriesFirst) == 0x27C, "entry vector at +0x27C");
-static_assert(offsetof(RenderQueue, name) == 0x28C, "queue name at +0x28C");
-static_assert(offsetof(RenderQueue, sharedKey) == 0x2AC, "shared key at +0x2AC");
-
-// Initializes queue modes, storage, and flags; drawMode and sortMode occupy +0x008/+0x00C.
+// Initializes queue modes, storage, and flags.
 
 extern void* const kRenderQueueVtable[8];
 
 RenderQueue* renderQueueConstruct(void* storage, const char* queueName)
 {
-    RenderQueue* q = static_cast<RenderQueue*>(storage);
+    RenderQueue* q = new (storage) RenderQueue;   // the entry vector and the name, constructed empty
     q->vptr = kRenderQueueVtable;
-    *reinterpret_cast<unsigned int*>(reinterpret_cast<unsigned char*>(q) + 0x08) = 0;
-    *reinterpret_cast<unsigned int*>(reinterpret_cast<unsigned char*>(q) + 0x0C) = 1;
+    q->drawMode = 0;
+    q->sortMode = 1;
     // sub_10047F20(name) - the profiler stat registration; stat-only scaffolding, not reproduced.
-    q->entriesFirst = 0;
-    q->entriesLast  = 0;
-    q->entriesEnd   = 0;
     q->enabled      = 1;
-    new (&q->name) vc71::string(queueName);
+    q->name         = queueName;
     q->transparentPass = 0;
     q->sharedKey       = 0;
     return q;
 }
 
-inline unsigned int& queueSortMode(RenderQueue* q)
+inline unsigned int& queueSortMode(void* q)
 {
-    return *reinterpret_cast<unsigned int*>(reinterpret_cast<unsigned char*>(q) + 0x0C);
+    return static_cast<RenderQueue*>(q)->sortMode;
 }
 
 
-// Returns the per-entry camera distance used by queue sorting.
+// Returns the per-entry camera distance used by queue sorting: the float the StaticMesh draw
+// stores in the object block's +0x220 word.
 inline float entryCameraDistance(const RenderQueueEntry* e)
 {
     return *reinterpret_cast<const float*>(
-        static_cast<const unsigned char*>(e->objectParameters) + 0x220);
+        &static_cast<const Ra::RaObjectParameters*>(e->objectParameters)->tail220);
 }
 
 // Sort mode 1: front to back.
@@ -706,16 +870,16 @@ struct RenderEntryFartherFirst
 // both walks dispatch it.
 inline bool materialApplyStreams(void* material, Ra::RaShader* shader)
 {
-    typedef unsigned char (__fastcall* ApplyStreamsFn)(void*, void*, void*);
+    typedef unsigned char (__thiscall* ApplyStreamsFn)(void*, void*);
     return reinterpret_cast<ApplyStreamsFn>((*static_cast<void***>(material))[1])(
-        material, 0, shader) != 0;
+        material, shader) != 0;
 }
 
 // A queue's own +0x04 (add), by slot, as the first-person walk's fallback dispatches it.
 inline void queueAddThroughTable(void* queue, RenderQueueEntry* entry)
 {
-    typedef void (__fastcall* AddFn)(void*, void*, RenderQueueEntry*);
-    reinterpret_cast<AddFn>((*static_cast<void***>(queue))[1])(queue, 0, entry);
+    typedef void (__thiscall* AddFn)(void*, RenderQueueEntry*);
+    reinterpret_cast<AddFn>((*static_cast<void***>(queue))[1])(queue, entry);
 }
 
 // slot +0x08, sub_1003B1F0 (0xEF B) - flush.  The empty path IS the menu path: disabled, a null
@@ -723,37 +887,32 @@ inline void queueAddThroughTable(void* queue, RenderQueueEntry* entry)
 // emptied.  With them: sort by mode, walk - the first-person walk only for drawMode 1 off the
 // expansion pack, else the default one, both by vtable - then empty the vector.
 // sub_1003BF30 is `vector<Entry*>::resize(0, 0)` on the vector at +0x278, NOT a "latch reset" as
-// an earlier comment here said; on pointers that is exactly `last = first`.
+// an earlier comment here said; on pointers that is exactly clear().
 void RenderQueue::flushWithArg(unsigned char runDraws)
 {
     if (!enabled)
         return;
-    RenderQueueEntry** const first = reinterpret_cast<RenderQueueEntry**>(entriesFirst);
-    if (!first)
-        return;
-    RenderQueueEntry** const last = reinterpret_cast<RenderQueueEntry**>(entriesLast);
-    if (last - first == 0)
+    if (entries.empty())                                           // a null vector or a zero count
         return;
     if (!runDraws)
     {
-        entriesLast = entriesFirst;                                // sub_1003BF30(0, 0)
+        entries.clear();                                           // sub_1003BF30(0, 0)
         return;
     }
 
     // sub_10046EE0(this + 0x10) - the profiler bracket opens here.
-    const unsigned int sortMode = queueSortMode(this);
     if (sortMode == 1u)
-        std::sort(first, last, RenderEntryNearerFirst());
+        std::sort(entries.begin(), entries.end(), RenderEntryNearerFirst());
     else if (sortMode == 2u)
-        std::sort(first, last, RenderEntryFartherFirst());
+        std::sort(entries.begin(), entries.end(), RenderEntryFartherFirst());
 
-    typedef void (__fastcall* WalkFn)(void*, void*);
+    typedef void (__thiscall* WalkFn)(void*);
     if (drawMode != 1u || rendererIsExpansionPack())              // renderer +0xAC
-        reinterpret_cast<WalkFn>(vptr[0x18 / sizeof(void*)])(this, 0);
+        reinterpret_cast<WalkFn>(vptr[0x18 / 4])(this);
     else
-        reinterpret_cast<WalkFn>(vptr[0x14 / sizeof(void*)])(this, 0);
+        reinterpret_cast<WalkFn>(vptr[0x14 / 4])(this);
 
-    entriesLast = entriesFirst;                                    // sub_1003BF30(0, 0)
+    entries.clear();                                               // sub_1003BF30(0, 0)
     // sub_10046EF0(this + 0x10) - and closes here.
 }
 
@@ -771,12 +930,10 @@ void RenderQueue::drawWalkDefault()
 
     for (unsigned int i = 0; ; ++i)
     {
-        RenderQueueEntry** const first = reinterpret_cast<RenderQueueEntry**>(entriesFirst);
-        if (!first
-            || i >= static_cast<unsigned int>(reinterpret_cast<RenderQueueEntry**>(entriesLast)
-                                              - first))
+        // Re-read every iteration: a draw may append to this queue.
+        if (i >= static_cast<unsigned int>(entries.size()))
             break;
-        RenderQueueEntry* const e = first[i];
+        RenderQueueEntry* const e = entries[i];
         bool shaderChanged = false;
 
         if (sharedKey)
@@ -799,7 +956,7 @@ void RenderQueue::drawWalkDefault()
             }
             shader  = e->shader;
             lastKey = e->techniqueKey;
-            shader->m_queueProfiler = reinterpret_cast<unsigned char*>(this) + 0x10;
+            shader->m_queueProfiler = profiler;                    // this + 0x10
             shaderChanged = true;
             passCount = shader->begin(e);                          // +0x08
             if (passCount)
@@ -865,39 +1022,38 @@ void RenderQueue::drawWalkNear()
 {
     if (!enabled)
         return;
-    RenderQueueEntry** entries = reinterpret_cast<RenderQueueEntry**>(entriesFirst);
-    if (!entries)
+    if (entries.empty())
         return;
-    const unsigned int count = static_cast<unsigned int>(
-        reinterpret_cast<RenderQueueEntry**>(entriesLast) - entries);
-    if (!count)
-        return;
+    const unsigned int count = static_cast<unsigned int>(entries.size());
 
-    Ra::RaShader* const shader = entries[0]->shader;
-    shader->m_queueProfiler = reinterpret_cast<unsigned char*>(this) + 0x10;
-    if (!shader->begin(entries[0]))                                // +0x08
+    // The element pointer is re-read after every call that can append: a fallback add below may
+    // push onto this very queue and move its storage.
+    RenderQueueEntry** items = &entries[0];
+    Ra::RaShader* const shader = items[0]->shader;
+    shader->m_queueProfiler = profiler;                            // this + 0x10
+    if (!shader->begin(items[0]))                                  // +0x08
         return;
     shader->beginPass(0);
 
     for (unsigned int i = 0; i < count; )
     {
-        entries = reinterpret_cast<RenderQueueEntry**>(entriesFirst);
-        void* const material = entries[i]->material;
+        items = &entries[0];
+        void* const material = items[i]->material;
         const bool applied = materialApplyStreams(material, shader);   // material +0x04
-        shader->applyTemplateParameters(entries[i]);               // +0x14
+        shader->applyTemplateParameters(items[i]);                 // +0x14
 
         for (unsigned int j = i; j < count; ++j)
         {
-            entries = reinterpret_cast<RenderQueueEntry**>(entriesFirst);
-            RenderQueueEntry* const e = entries[j];
+            items = &entries[0];
+            RenderQueueEntry* const e = items[j];
             if (e && e->material == material)
             {
-                entries[j] = 0;
+                items[j] = 0;
                 if (!applied)
                 {
                     Ra::RaShader* const fallback = Ra::getShader(
                         static_cast<Ra::RaShaderTable*>(g_renderQueues),
-                        vc71::string("default"), false);
+                        std::string("default"), false);
                     queueAddThroughTable(fallback->queue(), e);    // its queue's +0x04
                 }
                 else
@@ -908,8 +1064,8 @@ void RenderQueue::drawWalkNear()
             }
         }
 
-        entries = reinterpret_cast<RenderQueueEntry**>(entriesFirst);
-        while (!entries[i])
+        items = &entries[0];
+        while (!items[i])
         {
             if (++i >= count)
                 goto done;
@@ -921,7 +1077,7 @@ done:
 }
 
 
-void __fastcall rq_flushWithArg(void* self, void*, unsigned char runDraws)
+void RD9_THUNK rq_flushWithArg(void* self RD9_THUNK_EDX, unsigned char runDraws)
 {
     static_cast<RenderQueue*>(self)->flushWithArg(runDraws);
 }
@@ -934,7 +1090,7 @@ void RenderQueue::flush()
     transparentPass = 0;
 }
 
-void __fastcall rq_flushNoArg(void* self, void*)
+void RD9_THUNK rq_flushNoArg(void* self RD9_THUNK_EDX)
 {
     static_cast<RenderQueue*>(self)->flush();
 }
@@ -959,7 +1115,7 @@ void renderStatsCountDraw()
 // skipFileCheck = false); the renderer's draw statistics are bumped; the entry is pushed.
 
 // The push is sub_1003C120 - the inline "room left in the block" fast path, else _Insert_n(1) -
-// on the entry vector whose allocator word sits at +0x278 and whose _First is the +0x27C member.
+// on the entry vector at +0x278, i.e. push_back.
 
 void RenderQueue::add(RenderQueueEntry* entry)
 {
@@ -969,17 +1125,15 @@ void RenderQueue::add(RenderQueueEntry* entry)
     if (!entry->shader)
     {
         entry->shader = Ra::getShader(static_cast<Ra::RaShaderTable*>(g_renderQueues),
-                                      vc71::string("default"), false);
+                                      std::string("default"), false);
     }
 
     renderStatsCountDraw();
 
-    vc71::vector_layout& entries = *reinterpret_cast<vc71::vector_layout*>(
-        reinterpret_cast<unsigned char*>(this) + 0x278);
-    vc71::vectorPushBackIn(entries, sizeof(void*), &entry);
+    entries.push_back(entry);
 }
 
-void __fastcall rq_add(void* self, void*, RenderQueueEntry* entry)
+void RD9_THUNK rq_add(void* self RD9_THUNK_EDX, RenderQueueEntry* entry)
 {
     static_cast<RenderQueue*>(self)->add(entry);
 }
@@ -989,18 +1143,18 @@ void __fastcall rq_add(void* self, void*, RenderQueueEntry* entry)
 // entry's techniqueKey and RaShader::begin looks it up in the technique map, which is keyed by the
 // same hash of each technique's name - so "draw_1p" selects a shader's draw_1p technique.  No
 // null test on the string, as shipped.
-void RenderQueue::setSharedString(const vc71::string* value)
+void RenderQueue::setSharedString(const std::string* value)
 {
     sharedKey = raHashString(*value);
 }
 
-void __fastcall rq_setSharedString(void* self, void*, const vc71::string* str)
+void RD9_THUNK rq_setSharedString(void* self RD9_THUNK_EDX, const std::string* str)
 {
     static_cast<RenderQueue*>(self)->setSharedString(str);
 }
 
 #define RD9_RQ_FRONTIER(name, slotOffset, addr)                                     \
-    void __fastcall name(void* self, void*)                                         \
+    void RD9_THUNK name(void* self RD9_THUNK_EDX)                                         \
     {                                                                               \
         RD9_FRONTIER_AT("dice::hfe::dx9rend::RenderQueue::slot_" #slotOffset        \
                         " (" #addr ")", self, slotOffset);                          \
@@ -1008,12 +1162,12 @@ void __fastcall rq_setSharedString(void* self, void*, const vc71::string* str)
 
 RD9_RQ_FRONTIER(rq_slot00, 0x00, 0x1003C410)   // destroy - shutdown only
 
-void __fastcall rq_drawWalkNear(void* self, void*)
+void RD9_THUNK rq_drawWalkNear(void* self RD9_THUNK_EDX)
 {
     static_cast<RenderQueue*>(self)->drawWalkNear();
 }
 
-void __fastcall rq_drawWalkDefault(void* self, void*)
+void RD9_THUNK rq_drawWalkDefault(void* self RD9_THUNK_EDX)
 {
     static_cast<RenderQueue*>(self)->drawWalkDefault();
 }
@@ -1034,46 +1188,25 @@ extern void* const kRenderQueueVtable[8] =
 
 // The file-scope "draw_1p" string (unk_1023E704, built once behind dword_1023E720's bit 0) the
 // table hands to the eight first-person-family queues.
-const vc71::string& sharedDraw1pString()
+const std::string& sharedDraw1pString()
 {
-    static const vc71::string s("draw_1p");
+    static const std::string s("draw_1p");
     return s;
 }
 
 
-// Collection of named render queues with compatibility pointer-slot layout.
+// The named render-queue table: Ra::RaShaderTable's members (the queue slots, the default shader -
+// the +0x84 world-pass owner - the shader map and the +0x94/+0xA4 queue collections) with the
+// queue-typed operations this file performs on them.
 
-struct RenderQueueCollection
+struct RenderQueueTable : Ra::RaShaderTable
 {
-    unsigned int allocatorOpaque; // PE ctor deliberately leaves +0x94/+0xA4 unwritten
-    RenderQueue** first;
-    RenderQueue** last;
-    RenderQueue** end;
-};
-
-struct RenderQueueTable
-{
-    void* const*  vptr;               // +0x000
-    RenderQueue*  slots[32];          // +0x004 .. +0x083
-    // Shares the RaShaderTable defaultShader position.
-    void*         worldQueueOwner;     // +0x084  ctor: 0; Ra::RaShaderTable::defaultShader
-    unsigned int  map88;              // +0x088  comp
-    void*         mapHead;            // +0x08C  the nil node (0x30, isnil, self-linked)
-    unsigned int  mapSize;            // +0x090
-    RenderQueueCollection worldCollections[2]; // +0x094 / +0x0A4
-    unsigned char byteB4;             // +0x0B4  ctor: 1
-    unsigned char padB5[3];
+    RenderQueue* queue(unsigned int index) const { return static_cast<RenderQueue*>(slots[index]); }
 
     void flushWorldPass();
 };
 
-static_assert(sizeof(RenderQueueTable) == 0xB8, "sub_10042CA0 allocates 0xB8 for the table");
-static_assert(offsetof(RenderQueueTable, map88) == 0x88, "the map header at +0x88");
-static_assert(offsetof(RenderQueueTable, worldCollections) == 0x94,
-              "sub_1003AD80's first queue collection is at +0x94");
-static_assert(offsetof(RenderQueueTable, byteB4) == 0xB4, "the trailing byte at +0xB4");
-
-void __fastcall rqt_destroy(void* self, void*, int alsoFree)
+void RD9_THUNK rqt_destroy(void* self RD9_THUNK_EDX, int alsoFree)
 {
     RD9_FRONTIER_AT("dice::hfe::dx9rend::RenderQueueTable - destroy (sub_10041A50's vtbl slot; "
                     "shutdown only)", self, alsoFree);
@@ -1092,11 +1225,11 @@ RenderQueue* makeQueue(const char* queueName)
     return renderQueueConstruct(storage, queueName);
 }
 
-void giveSharedString(RenderQueue* q)
+void giveSharedString(void* q)
 {
     if (!q)
         return;
-    q->setSharedString(&sharedDraw1pString());
+    static_cast<RenderQueue*>(q)->setSharedString(&sharedDraw1pString());
 }
 
 } // anonymous namespace
@@ -1105,13 +1238,13 @@ void giveSharedString(RenderQueue* q)
 // Case-folded hash for technique names and shared queue keys.
 // Non-ASCII characters retain signed-byte extension in the rolling arithmetic.
 
-unsigned int raHashString(const vc71::string& s)
+unsigned int raHashString(const std::string& s)
 {
     unsigned int hash = 0;
     unsigned int a = 230498u;                                      // 0x38462
     unsigned int b = 39842u;                                       // 0x9BA2
     const char* const chars = s.c_str();
-    const unsigned int length = s.size();
+    const unsigned int length = static_cast<unsigned int>(s.size());   // a name, never 4 GB
     for (unsigned int i = 0; i < length; ++i)
     {
         int c = static_cast<signed char>(chars[i]);
@@ -1130,9 +1263,14 @@ unsigned int raHashString(const vc71::string& s)
 // In-place constant construction does not allocate or publish the global constants object.
 namespace Ra {
 
-void* renderQueueCreateNamed(const vc71::string& name)
+void* renderQueueCreateNamed(const std::string& name)
 {
     return makeQueue(name.c_str());
+}
+
+void renderQueueSetDrawMode(void* queue, unsigned int mode)
+{
+    static_cast<RenderQueue*>(queue)->drawMode = mode;          // +0x08, no null test as shipped
 }
 
 void* raShaderConstantsConstructInPlace(void* storage, void* device)
@@ -1149,14 +1287,20 @@ void raShaderConstantsDestroyInPlace(void* object)
 // the Ra shader build (PE 0x1004B4E0) probes.  The shipped body reaches it as `mov ecx, offset
 // unk_1023DDC0` and reads the names at `this+0x10`, because the image lays the Ra registry pairs
 // out on a 0x20 stride; this rebuild's two vectors are separate globals, so the name vector is
-// published on its own.  Read-only to the caller - only its _First/_Last are used.
+// published on its own.  Read-only to the caller.
 // for Ra/RaShader.cpp's parameter binding (RW-124).
-const vc71::vector_layout& raShaderConstantsParameterNames()
+const std::vector<std::string>& raShaderConstantsParameterNames()
 {
     return g_raConstantNames;
 }
 
 } // namespace Ra
+
+// The native address of a retail offset inside the published block (block + offset on x86).
+unsigned char* raShaderConstantsAt(unsigned int retailByteOffset)
+{
+    return raBytes(g_raShaderConstants, retailByteOffset);
+}
 
 // sub_1003ACA0 - allocate 0xAFC, construct with the D3D device, publish dword_1023DDBC.
 void* createRaShaderConstants(IDirect3DDevice9* device)
@@ -1219,9 +1363,9 @@ void raShaderConstantsSetAccumulationMap(EngineTexture* texture)
         g_accumulationProjectionOffset[1] = offsetY;
     }
 
-    ::memcpy(reinterpret_cast<unsigned char*>(constants) + 0x294,
+    ::memcpy(raSpan(constants, 0x294, sizeof(g_accumulationProjectionScale)),
              g_accumulationProjectionScale, sizeof(g_accumulationProjectionScale));
-    ::memcpy(reinterpret_cast<unsigned char*>(constants) + 0x2A8,
+    ::memcpy(raSpan(constants, 0x2A8, sizeof(g_accumulationProjectionOffset)),
              g_accumulationProjectionOffset, sizeof(g_accumulationProjectionOffset));
 }
 
@@ -1234,7 +1378,7 @@ void raShaderConstantsSetHemiMapTexture(EngineTexture* texture)
 
 void raShaderConstantsSetHemiMapInfo(const float constants[4])
 {
-    ::memcpy(static_cast<unsigned char*>(g_raShaderConstants) + 0x140,
+    ::memcpy(raSpan(g_raShaderConstants, 0x140, 4u * sizeof(float)),
              constants, 4u * sizeof(float));
 }
 
@@ -1242,8 +1386,7 @@ void raShaderConstantsSetHemiMapInfo(const float constants[4])
 // RGB bytes truncate toward zero; packed alpha is always opaque.
 void raShaderConstantsSetFogColor(const float rgbw[4])
 {
-    unsigned char* const block = static_cast<unsigned char*>(g_raShaderConstants);
-    ::memcpy(block + 0xBC, rgbw, 4u * sizeof(float));
+    ::memcpy(raSpan(g_raShaderConstants, 0xBC, 4u * sizeof(float)), rgbw, 4u * sizeof(float));
 
     unsigned int packed =
         static_cast<unsigned int>(static_cast<int>(rgbw[0] * 255.0f)) | 0xFFFFFF00u;
@@ -1257,21 +1400,21 @@ void raShaderConstantsSetFogColor(const float rgbw[4])
 // sub_10037F60 - FogRange (+0xA8..+0xB4): the four calcFog coefficients, `w*xy + zw`.
 void raShaderConstantsSetFogRange(const float range[4])
 {
-    ::memcpy(static_cast<unsigned char*>(g_raShaderConstants) + 0xA8,
+    ::memcpy(raSpan(g_raShaderConstants, 0xA8, 4u * sizeof(float)),
              range, 4u * sizeof(float));
 }
 
 // sub_10038110 - WaterFogRange (+0xF8..+0x104).
 void raShaderConstantsSetWaterFogRange(const float range[4])
 {
-    ::memcpy(static_cast<unsigned char*>(g_raShaderConstants) + 0xF8,
+    ::memcpy(raSpan(g_raShaderConstants, 0xF8, 4u * sizeof(float)),
              range, 4u * sizeof(float));
 }
 
 // sub_10038140 - WaterFogColor (+0x10C..+0x114), a Vec3 holder.
 void raShaderConstantsSetWaterFogColor(const float rgb[3])
 {
-    ::memcpy(static_cast<unsigned char*>(g_raShaderConstants) + 0x10C,
+    ::memcpy(raSpan(g_raShaderConstants, 0x10C, 3u * sizeof(float)),
              rgb, 3u * sizeof(float));
 }
 
@@ -1280,11 +1423,11 @@ void raShaderConstantsSetWaterFogColor(const float rgb[3])
 // (364), uvLevelAddY (372) and uvLevelMulY (380) - the heightmap's world extent as a UV mapping.
 void raShaderConstantsSetUvLevel(float addX, float mulX, float addY, float mulY)
 {
-    unsigned char* const raw = static_cast<unsigned char*>(g_raShaderConstants);
-    *reinterpret_cast<float*>(raw + 0x168) = addX;
-    *reinterpret_cast<float*>(raw + 0x170) = mulX;
-    *reinterpret_cast<float*>(raw + 0x178) = addY;
-    *reinterpret_cast<float*>(raw + 0x180) = mulY;
+    void* const block = g_raShaderConstants;
+    raField<float>(block, 0x168) = addX;
+    raField<float>(block, 0x170) = mulX;
+    raField<float>(block, 0x178) = addY;
+    raField<float>(block, 0x180) = mulY;
 }
 
 // The owned texture of an EngineTexture holder - the word after its vptr. Terrain::setupWater
@@ -1292,8 +1435,7 @@ void raShaderConstantsSetUvLevel(float addX, float mulX, float addY, float mulY)
 // volume into it.
 EngineTexture* raShaderConstantsGetEngineTexture(unsigned int holderOffset)
 {
-    return *reinterpret_cast<EngineTexture**>(
-        static_cast<unsigned char*>(g_raShaderConstants) + holderOffset + 4);
+    return raField<EngineTexture*>(g_raShaderConstants, holderOffset + 4);
 }
 
 // sub_1003AD10 -> sub_100388E0.  RendDX9_shutdownD3DSubsystems calls this at 0x1000AE5D,
@@ -1310,24 +1452,21 @@ void destroyRaShaderConstants()
 
 // Reusable render-entry pool. Frame end resets the cursor; acquisition grows storage on demand.
 
+// BF2Render.cpp's frame end zeroes `next` through the pool's first word, so it stays first.
 struct RenderEntryPool
 {
-    unsigned int        next;      // +0x00  entries handed out so far this frame
-    vc71::vector_layout entries;   // +0x04  every entry ever built (the pointer vector)
+    unsigned int                   next;      // +0x00  entries handed out so far this frame
+    std::vector<RenderQueueEntry*> entries;   // +0x04  every entry ever built
 };
-
-static_assert(sizeof(RenderEntryPool) == 0x14, "sub_1003AC70 allocates 0x14");
 
 void createRenderEntryPool()
 {
-    RenderEntryPool* pool = static_cast<RenderEntryPool*>(
-        ::renddx9abi::engineAlloc(sizeof(RenderEntryPool)));
-    if (pool)
+    void* const storage = ::renddx9abi::engineAlloc(sizeof(RenderEntryPool));   // sub_1003AC70(0x14)
+    RenderEntryPool* pool = 0;
+    if (storage)
     {
-        pool->next          = 0;   // [0]
-        pool->entries.first = 0;   // [2]
-        pool->entries.last  = 0;   // [3]
-        pool->entries.end   = 0;   // [4]   [1], the allocator word, is deliberately not written
+        pool = new (storage) RenderEntryPool;   // the vector, constructed empty
+        pool->next = 0;
     }
     g_renderEntryPool = pool;
 }
@@ -1366,17 +1505,15 @@ RenderQueueEntry* renderEntryPoolAcquire()
 {
     RenderEntryPool* const pool = static_cast<RenderEntryPool*>(g_renderEntryPool);
 
-    const unsigned int size = pool->entries.first
-        ? static_cast<unsigned int>(pool->entries.last - pool->entries.first) / sizeof(void*)
-        : 0u;
-    if (!pool->entries.first || pool->next >= size)
+    const unsigned int size = static_cast<unsigned int>(pool->entries.size());
+    if (pool->next >= size)
     {
         void* const storage = ::renddx9abi::engineAlloc(sizeof(RenderQueueEntry));
         RenderQueueEntry* const fresh = storage ? renderQueueEntryConstruct(storage) : 0;
-        vc71::vectorPushBackIn(pool->entries, sizeof(void*), &fresh);
+        pool->entries.push_back(fresh);
     }
 
-    RenderQueueEntry** const entries = reinterpret_cast<RenderQueueEntry**>(pool->entries.first);
+    RenderQueueEntry** const entries = &pool->entries[0];
     RenderQueueEntry* const entry = entries[pool->next];
     entry->lighting.tail10C = 0;
     entry->techniqueKey     = 0;
@@ -1396,7 +1533,7 @@ void renderQueueEnqueue(RenderQueueEntry* entry, bool transparent, bool firstPer
 
     RenderQueue* queue;
     if ((index & ~4u) != 0u)
-        queue = static_cast<RenderQueueTable*>(g_renderQueues)->slots[index];
+        queue = static_cast<RenderQueueTable*>(g_renderQueues)->queue(index);
     else
         queue = static_cast<RenderQueue*>(entry->shader->queue());
 
@@ -1407,7 +1544,7 @@ void renderQueueEnqueue(RenderQueueEntry* entry, bool transparent, bool firstPer
 // by index, through its add slot.
 void renderQueueAddToSlot(unsigned int slotIndex, RenderQueueEntry* entry)
 {
-    static_cast<RenderQueueTable*>(g_renderQueues)->slots[slotIndex]->add(entry);
+    static_cast<RenderQueueTable*>(g_renderQueues)->queue(slotIndex)->add(entry);
 }
 
 
@@ -1416,33 +1553,16 @@ void renderQueueAddToSlot(unsigned int slotIndex, RenderQueueEntry* entry)
 void createRenderQueues()
 {
     RenderQueueTable* t = static_cast<RenderQueueTable*>(
-        ::renddx9abi::engineAlloc(sizeof(RenderQueueTable)));
+        ::renddx9abi::engineAlloc(sizeof(RenderQueueTable)));   // sub_10042CA0(0xB8)
     g_renderQueues = t;
     if (!t)
         return;
 
+    // The shader map (sub_10043020's nil node) and the two +0x94/+0xA4 collections are
+    // constructed empty here.
+    new (t) RenderQueueTable;
     t->vptr = kRenderQueueTableVtable;
-    t->worldQueueOwner = 0;
-    t->map88 = 0;
-    // sub_10043020 - the 0x30 nil node, isnil, self-linked in all three link slots.
-    unsigned char* nil = static_cast<unsigned char*>(::renddx9abi::engineAlloc(0x30));
-    if (nil)
-    {
-        ::memset(nil, 0, 0x30);
-        void** links = reinterpret_cast<void**>(nil);
-        links[0] = nil;
-        links[1] = nil;
-        links[2] = nil;
-        nil[0x2D] = 1;                 // isnil
-    }
-    t->mapHead = nil;
-    t->mapSize = 0;
-    for (unsigned int i = 0; i != 2; ++i)
-    {
-        t->worldCollections[i].first = 0;
-        t->worldCollections[i].last = 0;
-        t->worldCollections[i].end = 0;
-    }
+    t->defaultShader = 0;
     t->byteB4 = 1;
     ::memset(t->slots, 0, sizeof(t->slots));
 
@@ -1505,8 +1625,8 @@ void renderQueueFlush(unsigned int slotByteOffset, int flushArg)
     RenderQueueTable* t = static_cast<RenderQueueTable*>(g_renderQueues);
     if (!t)
         return;
-    RenderQueue* q = *reinterpret_cast<RenderQueue**>(
-        reinterpret_cast<unsigned char*>(t) + slotByteOffset);
+    // The shipped offset names a 4-byte slot after the table's vptr: +0x04 is slots[0].
+    RenderQueue* q = t->queue((slotByteOffset - 4u) / 4u);
     if (!q)
         return;
     if (flushArg < 0)
@@ -1521,14 +1641,14 @@ void renderQueueFlush(unsigned int slotByteOffset, int flushArg)
 // Recovered RenderQueue calls stay inside their owner instead of hand-indexing vtables.
 void RenderQueueTable::flushWorldPass()
 {
+    std::vector<void*>* const collections[2] = { &worldQueues, &pointLightQueues };
     for (unsigned int collectionIndex = 0; collectionIndex != 2; ++collectionIndex)
     {
-        RenderQueueCollection& collection = worldCollections[collectionIndex];
-        for (RenderQueue** it = collection.first; it != collection.last; ++it)
+        std::vector<void*>& collection = *collections[collectionIndex];
+        for (std::vector<void*>::iterator it = collection.begin(); it != collection.end(); ++it)
         {
-            RenderQueue* const queue = *it;
-            if (queue->enabled && queue->entriesFirst
-                && queue->entriesLast != queue->entriesFirst)
+            RenderQueue* const queue = static_cast<RenderQueue*>(*it);
+            if (queue->enabled && !queue->entries.empty())
                 queue->flushWithArg(1);
         }
     }
@@ -1536,10 +1656,9 @@ void RenderQueueTable::flushWorldPass()
 
     // The default shader's queue flush is unconditional once the shader exists.
 
-    if (worldQueueOwner)
+    if (defaultShader)
     {
-        RenderQueue* const ownerQueue =
-            *reinterpret_cast<RenderQueue**>(static_cast<unsigned char*>(worldQueueOwner) + 4);
+        RenderQueue* const ownerQueue = static_cast<RenderQueue*>(defaultShader->queue());   // +4
 
         ownerQueue->flushWithArg(1);
     }
@@ -1552,39 +1671,11 @@ void renderQueuesFlushWorldPass()
 
 namespace {
 
-struct HemiSmallTreeNode
+// One Ra shader of the table's map: unbuild it, drop its effect and empty its technique map.
+void resetOneHemiMaterialQueue(Ra::RaShader* shader)
 {
-    HemiSmallTreeNode* left;
-    HemiSmallTreeNode* parent;
-    HemiSmallTreeNode* right;
-    unsigned int value;
-    unsigned int value2;
-    unsigned char color;
-    unsigned char isNil;
-    unsigned char pad[2];
-};
-
-static_assert(sizeof(HemiSmallTreeNode) == 0x18,
-              "RenderQueue effect-state nodes are 0x18 bytes");
-
-void destroyHemiSmallTree(HemiSmallTreeNode* node)
-{
-    // sub_1004CAB0: recurse right, then walk/free the left spine. Values are scalar and have no
-    // destructor; only the nodes are returned to the engine heap.
-    while (!node->isNil)
-    {
-        destroyHemiSmallTree(node->right);
-        HemiSmallTreeNode* const left = node->left;
-        ::renddx9abi::engineFree(node);
-        node = left;
-    }
-}
-
-void resetOneHemiMaterialQueue(void* queue)
-{
-    unsigned char* const raw = static_cast<unsigned char*>(queue);
-    void*& effect = *reinterpret_cast<void**>(raw + 0x16C);
-    raw[0x170] = 0;
+    void*& effect = shader->m_effect;                                // +0x16C
+    shader->m_built = 0;                                             // +0x170
     if (effect)
     {
         // Retail deliberately zeros the pointer without Release after OnLostDevice; this cache
@@ -1593,25 +1684,20 @@ void resetOneHemiMaterialQueue(void* queue)
         effect = 0;
     }
 
-    HemiSmallTreeNode*& head = *reinterpret_cast<HemiSmallTreeNode**>(raw + 0x15C);
-    destroyHemiSmallTree(head->parent);
-    head->parent = head;
-    head->left = head;
-    head->right = head;
-    *reinterpret_cast<unsigned int*>(raw + 0x160) = 0;
+    // sub_1004CAB0 over the +0x158 technique map's nodes, then the head relinked: clear().
+    shader->m_techniques.clear();
 }
 
 } // anonymous namespace
 
-// sub_10041B90, called by EffectManager's channel reset. The table's +0x88 VC7.1 map owns the
-// material queues at node+0x28; the shipped body visits them in-order and resets each one.
+// sub_10041B90, called by EffectManager's channel reset. The table's +0x88 map owns the Ra
+// shaders; the shipped body visits them in-order and resets each one.
 void renderQueuesResetEffects()
 {
     RenderQueueTable* const table = static_cast<RenderQueueTable*>(g_renderQueues);
-    vc71::map_node* const head = static_cast<vc71::map_node*>(table->mapHead);
-    for (vc71::map_node* node = head->left; node != head;
-         node = vc71::map_layout::next(node))
-        resetOneHemiMaterialQueue(vc71::mapNodeValue(node));
+    for (std::map<std::string, Ra::RaShader*>::iterator node = table->shaders.begin();
+         node != table->shaders.end(); ++node)
+        resetOneHemiMaterialQueue(node->second);
 }
 
 } // namespace dx9rend

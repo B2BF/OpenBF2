@@ -9,7 +9,6 @@
 #include "../../Core/ConsoleObjects.h"
 #include "../../../RendDX9Abi/PluginEntry.h"
 
-#if BF2_PLUGIN_ABI_NATIVE
 
 namespace dice {
 namespace hfe {
@@ -158,5 +157,4 @@ bool unregisterHemiMapManagerConsoleObjects()
 } // namespace hfe
 } // namespace dice
 
-#endif // BF2_PLUGIN_ABI_NATIVE
 #endif // BF2_IMAGE_RENDDX9

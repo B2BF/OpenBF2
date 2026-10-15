@@ -1,5 +1,5 @@
-// [TEMP] [CHOSEN, not recovered] Actual BufferManager source and VC7 set shim, with fake COM
-// resources. Exercises collection and inline wrapper release, not device reset or real D3D.
+// [TEMP] [CHOSEN, not recovered] Actual BufferManager source and its std::set tracking sets, with
+// fake COM resources. Exercises collection and inline wrapper release, not device reset or real D3D.
 #include "../BF2/RendDX9/BufferManager.cpp"
 #include <cstdio>
 #include <vector>
@@ -30,8 +30,8 @@ void* comTable[3]={};
 int& refs(void* wrapper) { return static_cast<int*>(wrapper)[1]; }
 bool contains(unsigned int list,void* wrapper)
 {
-    vc71::set_layout& values=pointerSet(manager,list);
-    return values.find(reinterpret_cast<unsigned int>(wrapper))!=values.end();
+    std::set<void*>& values=pointerSet(manager,list);
+    return values.find(wrapper)!=values.end();
 }
 ULONG __stdcall resourceRelease(void* raw)
 {
@@ -56,7 +56,7 @@ Resource* makeResource(void* storage,unsigned int list,int id,int references)
         wrapper->vptr=const_cast<void**>(kVertexBufferVtable); wrapper->refCount=references;
         wrapper->buffer=reinterpret_cast<IDirect3DIndexBuffer9*>(resource);
     }
-    CHECK(pointerSet(manager,list).insert(reinterpret_cast<unsigned int>(storage))!=0);
+    CHECK(pointerSet(manager,list).insert(storage).second);
     return resource;
 }
 Resource* addResource(unsigned int list,int id,int references)
@@ -97,8 +97,6 @@ void engineFree(void* p)
         // Retain test storage until cleanup so any stale-set dereference is deterministic.
     } else std::free(p);
 }
-void* crtMalloc(size_t size) { return std::malloc(size); }
-void crtFree(void* p) { std::free(p); }
 void logf(const char*,...) {}
 unsigned int addr(const void* p) { return reinterpret_cast<unsigned int>(p); }
 void frontier(const char*,const void*,unsigned int) { std::abort(); }
@@ -118,8 +116,11 @@ int main()
 {
     comTable[2]=reinterpret_cast<void*>(&resourceRelease);
     BufferManager actual(0); manager=&actual; g_bufferManager=manager;
-    unsigned char renderer[320]={}; g_Renderer=reinterpret_cast<IBase*>(renderer);
-    int* counters=reinterpret_cast<int*>(renderer+264); counters[7]=10; counters[9]=20; counters[10]=30;
+    // Zeroed renderer storage: bumpRendererCounter reads only the typed renderStats block.
+    alignas(RendDX9Base) unsigned char renderer[sizeof(RendDX9Base)]={};
+    g_Renderer=reinterpret_cast<IBase*>(renderer);
+    int* counters=reinterpret_cast<int*>(renderer+offsetof(RendDX9Base,renderStats));
+    counters[7]=10; counters[9]=20; counters[10]=30;
     VertexBuffer getterProbe={}; getterProbe.vptr=const_cast<void**>(kVertexBufferVtable);
     typedef int(__thiscall* Getter)(void*);
     const Getter getter=reinterpret_cast<Getter>((*reinterpret_cast<void***>(&getterProbe))[0]);
@@ -140,8 +141,8 @@ int main()
     collecting=true; bufferManagerCollectUnused();
     const std::vector<int> expected={11,10,20,30,40};
     CHECK(releases==expected && wrapperFrees==expected);
-    CHECK(pointerSet(manager,1).size==3 && pointerSet(manager,0).size==1);
-    CHECK(pointerSet(manager,3).size==0 && pointerSet(manager,2).size==1);
+    CHECK(pointerSet(manager,1).size()==3 && pointerSet(manager,0).size()==1);
+    CHECK(pointerSet(manager,3).size()==0 && pointerSet(manager,2).size()==1);
     CHECK(contains(1,keep->wrapper) && refs(keep->wrapper)==3);
     CHECK(contains(1,zero->wrapper) && refs(zero->wrapper)==0);
     CHECK(contains(1,negative->wrapper) && refs(negative->wrapper)==-1);
@@ -156,17 +157,17 @@ int main()
     for(unsigned int kind=0;kind<2;++kind) {
         const unsigned int defaults=kind?3u:1u, managed=defaults-1u;
         Resource* duplicate=addResource(defaults,50+kind,2);
-        CHECK(pointerSet(manager,managed).insert(reinterpret_cast<unsigned int>(duplicate->wrapper))!=0);
+        CHECK(pointerSet(manager,managed).insert(duplicate->wrapper).second);
         void* scriptedTable[3]={reinterpret_cast<void*>(&scriptedGetRef),0,0};
         *reinterpret_cast<void***>(duplicate->wrapper)=scriptedTable;
         scriptedReads=0; collecting=true; bufferManagerCollectUnused();
-        CHECK(duplicate->freed && pointerSet(manager,defaults).size==0);
+        CHECK(duplicate->freed && pointerSet(manager,defaults).empty());
         CHECK(contains(managed,duplicate->wrapper) && refs(duplicate->wrapper)==0);
         CHECK(releases.size()==1 && releases[0]==50+static_cast<int>(kind));
         cleanupResources();
     }
-    // Constructor sentinels are test-owned; BufferManager has no recovered deleting destructor.
-    for(unsigned int i=0;i<7;++i) { std::free(actual.list(i).head); actual.list(i).head=0; }
+    // The tracking sets, the declaration cache and the two [UNRESOLVED] trees are std containers
+    // that the manager's implicit destructor releases; no test-owned sentinel remains to free.
     std::printf("BufferManager collect: %d/%d checks passed\n",checks-failures,checks);
     return failures?1:0;
 }

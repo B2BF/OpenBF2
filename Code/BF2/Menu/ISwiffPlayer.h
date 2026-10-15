@@ -2,6 +2,7 @@
 #ifndef MENU_ISWIFFPLAYER_H
 #define MENU_ISWIFFPLAYER_H
 #include "../Core/IBase.h"
+#include <stdint.h>
 #include <string>
 #if !DEDICATED
 namespace dice { namespace hfe { namespace ui {
@@ -32,8 +33,8 @@ public:
     virtual void  getTextInput1(std::string& out) = 0;                     // 21 +0x54  the clipboard cut
     virtual void  setSwiffHost(ISwiffHost* host) = 0;                      // 22 +0x58  init
     virtual ISwiffHost* getSwiffHost() = 0;                                // 23 +0x5C  onResize
-    virtual char  renderCapability0(int a) = 0;                            // 24 +0x60  SwiffHost 0x486E10
-    virtual char  renderCapability1(int a) = 0;                            // 25 +0x64  SwiffHost 0x486E80
+    virtual char  renderCapability0(intptr_t a) = 0;                            // 24 +0x60  SwiffHost 0x486E10
+    virtual char  renderCapability1(intptr_t a) = 0;                            // 25 +0x64  SwiffHost 0x486E80
     virtual int   getMovieWidth() = 0;                                     // 26 +0x68  init / onResize
     virtual int   getMovieHeight() = 0;                                    // 27 +0x6C  init / onResize
     virtual void  renderSetPairState(int a, int b) = 0;                    // 28 +0x70

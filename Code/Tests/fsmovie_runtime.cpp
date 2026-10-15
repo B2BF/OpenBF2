@@ -137,7 +137,7 @@ void* shaderManagerGetEffect(void* manager,const char* path) {
                            "stock LoadingScreen effect is requested");
     if(failure==NoEffect)return 0;++effectRefs;return effect();
 }
-ShaderParameter* effectGetShaderParameterTyped(Effect* e,const vc71::string& name) {
+ShaderParameter* effectGetShaderParameterTyped(Effect* e,const std::string& name) {
     check(e==effect(),"parameter lookup uses acquired effect");
     if(std::strcmp(name.c_str(),"TRANSFORM")==0) {
         record("transform");return failure==NoTransform?0:new ShaderParameter(&transformOwner);

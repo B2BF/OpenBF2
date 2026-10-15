@@ -41,5 +41,9 @@ private:
 // address. This is neither a pointer variable nor a callable Haptics() function.
 extern "C" __declspec(dllimport) NovintHFX::HapticsSystem Haptics;
 static_assert(sizeof(NovintHFX::ApplicationData::mouse_settings) == 28, "SDK ABI");
+#if defined(_M_IX86)
 static_assert(sizeof(NovintHFX::ApplicationData) == 32, "x86 SDK ABI");
+#endif
+// [CHOSEN, not recovered] x64 (https://github.com/B2BF/OpenBF2/issues/7): the SDK exists only as a
+// 32-bit DLL, so an x64 image imports nothing from it; FalconDevice reports no device there.
 #endif

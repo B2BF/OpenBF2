@@ -11,6 +11,7 @@
 
 #include "LightmapGeneration.h"
 #include "ILightSampleable.h"
+#include "MeshLightSampling.h"              // MeshSampleTriangle - LightSampleBlock::triangles' element
 #include "../IGeometryTemplate.h"
 #include "../ITerrainEditable.h"
 #include "../StaticMesh.h"                  // m_template, staticMeshRootParent
@@ -30,16 +31,11 @@
 #include "../../../RendDX9Abi/Frontier.h"
 #include "../../../RendDX9Abi/PluginAbi.h"
 #include "../../../RendDX9Abi/PluginEntry.h"
-#include "../../../RendDX9Abi/Vc71String.h"
-#include "../../../RendDX9Abi/Vc71Vector.h"
+#include <string>
 
 // The engine interfaces below are imported for their virtual order; in the retail flavour the
 // renderer's own IBase/IClassManager (HfeAbi.h) stand in for the host headers, exactly as
 // XpLightManager.cpp brackets the same includes.
-#if !BF2_PLUGIN_ABI_NATIVE
-#define CORE_IBASE_H
-#define CORE_CLASSMANAGER_H
-#endif
 #include "../../Game/Objects/IObject.h"
 #include "../../Game/Objects/IObjectTemplate.h"
 #include "../../Game/Objects/ObjectLayoutAccess.h"
@@ -48,10 +44,6 @@
 #include "../../Physics/Heightmap.h"
 #include "../../Physics/HeightmapCluster.h"
 #include "../../Scene/Object/ObjectManager.h"
-#if !BF2_PLUGIN_ABI_NATIVE
-#undef CORE_CLASSMANAGER_H
-#undef CORE_IBASE_H
-#endif
 
 #include <cfloat>
 #include <cmath>
@@ -61,6 +53,7 @@
 #include <cstring>
 #include <map>
 #include <new>
+#include <vector>
 
 namespace dice {
 namespace hfe {
@@ -77,7 +70,7 @@ extern void* g_bufferManager;
 // BufferManager.cpp, StateManager.cpp and RendDX9Draw.cpp seams, declared per TU as the other
 // geometry classes declare them.
 void* createVertexBuffer(void* bufferManager, unsigned int count, unsigned int stride,
-                         const vc71::string& name, unsigned int usage);
+                         const std::string& name, unsigned int usage);
 int   bufferManagerSwapPool(int value);
 void* vertexBufferLock(void* wrapper, unsigned int offsetVerts, unsigned int countVerts,
                        unsigned int flags);
@@ -98,8 +91,8 @@ extern LightManager* g_LightManager;
 
 // GeomMisc/FontSystem/FontSystem.cpp - Font::Ported and its +0x10 load / +0x18 drawText slots.
 IBase* createFontPortedDirect();
-bool   fontPortedLoad(IBase* font, const vc71::string& path);
-void   fontPortedDrawText(IBase* font, float x, float y, const vc71::string& text);
+bool   fontPortedLoad(IBase* font, const std::string& path);
+void   fontPortedDrawText(IBase* font, float x, float y, const std::string& text);
 
 LightmapGeneration* g_LightmapGeneration = 0;
 
@@ -128,15 +121,12 @@ const unsigned int kUnsetBits = 0xBF800000u;                  // -1.0f: "use the
 const unsigned int kTargetSize = 0x400u;                      // the 1024 x 1024 target
 const unsigned int kFormatA8R8G8B8 = 21u;
 const unsigned int kFormatD24S8 = 75u;
-
-// The mesh sampler's triangle record as far as the back-face test reads it (the
-// LightSampleBlock::triangles vector's element).
-struct SampleTriangle
-{
-    unsigned char unread00[0x24];
-    Vec3          normal[3];        // +0x24 / +0x30 / +0x3C
-    unsigned char unread48[0x14];
-};
+// The count word an occluder node's children array carries ahead of the four nodes (4 bytes in
+// retail). [CHOSEN, not recovered] x64 (https://github.com/B2BF/OpenBF2/issues/7): padded to
+// pointer size so the nodes, which hold pointers, stay pointer-aligned.
+const unsigned int kChildCountHeader =
+    sizeof(void*) > sizeof(unsigned int) ? static_cast<unsigned int>(sizeof(void*))
+                                         : static_cast<unsigned int>(sizeof(unsigned int));
 
 // The light marker clone's declaration: one FLOAT3 position.
 const D3DVERTEXELEMENT9 kLightMeshDeclaration[2] =
@@ -145,10 +135,6 @@ const D3DVERTEXELEMENT9 kLightMeshDeclaration[2] =
     { 0xFF, 0, D3DDECLTYPE_UNUSED, 0, 0, 0 }
 };
 
-#if defined(_M_IX86)
-static_assert(sizeof(SampleTriangle) == 92, "the trace divides the triangle vector by 92");
-#endif
-
 inline bool isUnset(float value)
 {
     unsigned int bits;
@@ -156,51 +142,26 @@ inline bool isUnset(float value)
     return bits == kUnsetBits;
 }
 
-// Host strings: the retail flavour's references are VC7.1 strings; only the static spelling of
-// the reference changes (NametagManager.cpp / XpLightManager.cpp).
-#if BF2_PLUGIN_ABI_NATIVE
+// Host strings are this image's std::string; these keep the call sites' host-string spelling
+// (NametagManager.cpp / XpLightManager.cpp).
 inline const std::string& hostStdString(const ::renddx9abi::HostString& value) { return value; }
 inline const ::renddx9abi::HostString& fromHostStdString(const std::string& value) { return value; }
-#else
-inline const std::string& hostStdString(const ::renddx9abi::HostString& value)
-{
-    return *reinterpret_cast<const std::string*>(&value);
-}
-inline const ::renddx9abi::HostString& fromHostStdString(const std::string& value)
-{
-    return *reinterpret_cast<const ::renddx9abi::HostString*>(&value);
-}
-#endif
 
 // The light and object template reads XpLightManager.cpp makes: the retail flavour reads the
 // retail layout's fields, the native flavour the rebuilt classes' accessors.
 inline const world::LightSourceTemplate* lightSourceTemplatePointer(const world::LightSource* light)
 {
-#if BF2_PLUGIN_ABI_NATIVE
     return static_cast<const world::LightSourceTemplate*>(light->getTemplate());
-#else
-    return *reinterpret_cast<const world::LightSourceTemplate* const*>(
-        reinterpret_cast<const unsigned char*>(light) + 0x144);
-#endif
 }
 
 inline unsigned int lightSourceFlags(const world::LightSource* light)
 {
-#if BF2_PLUGIN_ABI_NATIVE
     return light->getFlags();
-#else
-    return *reinterpret_cast<const unsigned int*>(reinterpret_cast<const unsigned char*>(light) + 0x04);
-#endif
 }
 
 inline const world::IObjectTemplate* objectTemplatePointer(const world::IObject* object)
 {
-#if BF2_PLUGIN_ABI_NATIVE
     return object->getTemplate();
-#else
-    return *reinterpret_cast<const world::IObjectTemplate* const*>(
-        reinterpret_cast<const unsigned char*>(object) + 0x14);
-#endif
 }
 
 inline world::IHeightmapCluster* heightmapClusterByName()
@@ -229,7 +190,7 @@ inline IDirect3DDevice9* renderDevice()
 // tree; each slot is reached through the instance's table (OverGrowthLoad.cpp's precedent).
 inline void* geometrySlot(void* geometry, unsigned int offset)
 {
-    return (*reinterpret_cast<void***>(geometry))[offset / sizeof(void*)];
+    return (*reinterpret_cast<void***>(geometry))[offset / 4];
 }
 inline void geometryDrawSilhouette(void* geometry, void* renderView, int legacyArm)   // +0x1C
 {
@@ -270,7 +231,7 @@ inline int geometryGetLodCount(void* geometry)                                  
 }
 
 // The image's printf-into-a-string helper (TerrainLightSampling.cpp carries the same body).
-void formatString(vc71::string& out, const char* format, ...)
+void formatString(std::string& out, const char* format, ...)
 {
     char buffer[0x1000];
     va_list args;
@@ -287,7 +248,7 @@ void formatString(vc71::string& out, const char* format, ...)
 
 // "%dmin %dsec", or "%dsec" under a minute; the seconds are unsigned. The trace inlines the
 // same body four times.
-void formatTime(vc71::string& out, unsigned int seconds)
+void formatTime(std::string& out, unsigned int seconds)
 {
     const unsigned int minutes = seconds / 60u;
     if (minutes)
@@ -898,8 +859,8 @@ OccluderNode::~OccluderNode()
 {
     if (children)
     {
-        unsigned int* const cookie = reinterpret_cast<unsigned int*>(children) - 1;
-        for (unsigned int i = *cookie; i-- > 0; )
+        unsigned char* const cookie = reinterpret_cast<unsigned char*>(children) - kChildCountHeader;
+        for (unsigned int i = *reinterpret_cast<unsigned int*>(cookie); i-- > 0; )
             children[i].~OccluderNode();
         ::renddx9abi::engineFree(cookie);
     }
@@ -962,7 +923,7 @@ LightmapGeneration::LightmapGeneration()
     m_giLightsBaseDir.x = 0.0f; m_giLightsBaseDir.y = 0.5f; m_giLightsBaseDir.z = -0.5f;
 
     m_font = createFontPortedDirect();
-    fontPortedLoad(m_font, vc71::string("Fonts/BF1942.font"));                // Font::Ported +0x10
+    fontPortedLoad(m_font, std::string("Fonts/BF1942.font"));                // Font::Ported +0x10
 
     // Two render targets in the default pool, then two system-memory read-back copies.
     const int savedManaged = dx9rend::textureManagerSwapManaged(0);
@@ -1005,7 +966,7 @@ LightmapGeneration::LightmapGeneration()
 
     m_lightEffect = static_cast<dx9rend::Effect*>(
         dx9rend::shaderManagerGetEffect(dx9rend::g_shaderManager, "shaders/LightGeom"));
-    dx9rend::effectSetTechniqueByName(m_lightEffect, vc71::string("Pointlight"));
+    dx9rend::effectSetTechniqueByName(m_lightEffect, std::string("Pointlight"));
 
     // A two-triangle screen quad of Vec2 positions (written in the default pool).
     m_quadVertexCount = 6;
@@ -1013,12 +974,12 @@ LightmapGeneration::LightmapGeneration()
     const int savedPool = dx9rend::bufferManagerSwapPool(0);
     m_quadBytes = m_quadVertexCount * m_quadStride;
     m_quadVertexBuffer = dx9rend::createVertexBuffer(dx9rend::g_bufferManager, m_quadVertexCount,
-                                                     m_quadStride, vc71::string("LightmapGeneration"),
+                                                     m_quadStride, std::string("LightmapGeneration"),
                                                      D3DUSAGE_WRITEONLY);
     dx9rend::bufferManagerSwapPool(savedPool);
     m_quadEffect = static_cast<dx9rend::Effect*>(
         dx9rend::shaderManagerGetEffect(dx9rend::g_shaderManager, "shaders/QuadGeom"));
-    dx9rend::effectSetTechniqueByName(m_quadEffect, vc71::string("TexturedQuad"));
+    dx9rend::effectSetTechniqueByName(m_quadEffect, std::string("TexturedQuad"));
     float* const quad = static_cast<float*>(dx9rend::vertexBufferLock(m_quadVertexBuffer, 0, 6, 0));
     if (!quad)
         ::renddx9abi::logf("LightmapGeneration.cpp:746: Failed to lock vertex buffer");
@@ -1165,83 +1126,19 @@ void destroyLightmapGenerationSingleton()
 
 namespace {
 
-// vector<OccluderRecord*>::operator=. [CHOSEN, not recovered] storage handling:
-// an empty source frees the target, otherwise the target is refilled in order.
-void assignRecords(Vc71Vec<OccluderRecord*>& to, const Vc71Vec<OccluderRecord*>& from)
-{
-    if (&to == &from)
-        return;
-    if (from.size() == 0)
-    {
-        to.clear();
-        return;
-    }
-    to.resize(0);
-    for (unsigned int i = 0; i < from.size(); ++i)
-        to.push_back(from[i]);
-}
-
 // ObjectManager +0xB4, getAllRegisteredObjects - copied into a TU-local map in key order (the
 // shipped traceAllObjects copy-constructs it). The retail flavour walks the host's VC7.1 tree
 // (OverGrowthLoad.cpp's HostObjectWalk over +0x34 is the same walk).
-#if !BF2_PLUGIN_ABI_NATIVE
-struct HostObjectNode
-{
-    HostObjectNode* left;      // +0x00
-    HostObjectNode* parent;    // +0x04
-    HostObjectNode* right;     // +0x08
-    unsigned int    key;       // +0x0C
-    world::IObject* object;    // +0x10
-    unsigned char   color;     // +0x14
-    unsigned char   isNil;     // +0x15
-};
-struct HostObjectMap
-{
-    void*           comp;      // +0x00
-    HostObjectNode* head;      // +0x04
-    unsigned int    size;      // +0x08
-};
-
-HostObjectNode* nextNode(HostObjectNode* node)
-{
-    if (node->isNil)
-        return node;
-    HostObjectNode* right = node->right;
-    if (!right->isNil)
-    {
-        while (!right->left->isNil)
-            right = right->left;
-        return right;
-    }
-    HostObjectNode* parent = node->parent;
-    while (!parent->isNil && node == parent->right)
-    {
-        node = parent;
-        parent = parent->parent;
-    }
-    return parent;
-}
-#endif
 
 void copyRegisteredObjects(std::map<unsigned int, world::IObject*>& out)
 {
-#if BF2_PLUGIN_ABI_NATIVE
     out = hostObjectManager()->getAllRegisteredObjects();
-#else
-    typedef HostObjectMap* (__thiscall* GetAllFn)(void*);
-    void* const manager = ::dice::hfe::objectManager;
-    HostObjectMap* const map =
-        reinterpret_cast<GetAllFn>((*static_cast<void***>(manager))[0xB4 / 4])(manager);
-    for (HostObjectNode* node = map->head->left; node != map->head; node = nextNode(node))
-        out.insert(out.end(), std::make_pair(node->key, node->object));
-#endif
 }
 
 // The registered objects one by one, in key order, without a copy (rebuildOccluders' walk).
 class RegisteredObjectWalk
 {
 public:
-#if BF2_PLUGIN_ABI_NATIVE
     RegisteredObjectWalk()
         : m_map(hostObjectManager()->getAllRegisteredObjects()), m_it(m_map.begin()) {}
     bool done() const { return m_it == m_map.end(); }
@@ -1250,21 +1147,6 @@ public:
 private:
     const std::map<unsigned int, world::IObject*>& m_map;
     std::map<unsigned int, world::IObject*>::const_iterator m_it;
-#else
-    RegisteredObjectWalk()
-    {
-        typedef HostObjectMap* (__thiscall* GetAllFn)(void*);
-        void* const manager = ::dice::hfe::objectManager;
-        m_map = reinterpret_cast<GetAllFn>((*static_cast<void***>(manager))[0xB4 / 4])(manager);
-        m_node = m_map->head->left;
-    }
-    bool done() const { return m_node == m_map->head; }
-    world::IObject* object() const { return m_node->object; }
-    void next() { m_node = nextNode(m_node); }
-private:
-    HostObjectMap*  m_map;
-    HostObjectNode* m_node;
-#endif
     RegisteredObjectWalk(const RegisteredObjectWalk&);
     RegisteredObjectWalk& operator=(const RegisteredObjectWalk&);
 };
@@ -1276,7 +1158,7 @@ private:
 // gets four children (new[4]) quartering x and z - the y half extent is multiplied by 0, and each
 // child then takes the node's own y range - and each child splits the records whose sphere
 // touches its box (aabbSphereOverlap). Otherwise the node keeps the records.
-void LightmapGeneration::splitOccluderNode(const Vc71Vec<OccluderRecord*>& records,
+void LightmapGeneration::splitOccluderNode(const std::vector<OccluderRecord*>& records,
                                            OccluderNode* node, int depth)
 {
     aabbCorners(node->corners, &node->bounds.min.x);
@@ -1284,7 +1166,7 @@ void LightmapGeneration::splitOccluderNode(const Vc71Vec<OccluderRecord*>& recor
     node->radius = boxRadius(node->bounds);
     if (!records.data() || records.size() <= 16u || depth >= 11)
     {
-        assignRecords(node->records, records);
+        node->records = records;                                // vector<OccluderRecord*>::operator=
         return;
     }
 
@@ -1293,12 +1175,12 @@ void LightmapGeneration::splitOccluderNode(const Vc71Vec<OccluderRecord*>& recor
     const float halfZ = node->bounds.extent.z * 0.5f;
     const float halfY = node->bounds.extent.y * 0.0f;
     const float halfX = node->bounds.extent.x * 0.5f;
-    void* const block = ::renddx9abi::engineAlloc(4 + 4 * sizeof(OccluderNode));
+    void* const block = ::renddx9abi::engineAlloc(kChildCountHeader + 4 * sizeof(OccluderNode));
     OccluderNode* children = 0;
     if (block)
     {
         *static_cast<unsigned int*>(block) = 4;
-        children = reinterpret_cast<OccluderNode*>(static_cast<unsigned int*>(block) + 1);
+        children = reinterpret_cast<OccluderNode*>(static_cast<unsigned char*>(block) + kChildCountHeader);
         for (int i = 0; i < 4; ++i)
             new (&children[i]) OccluderNode();                     // `eh vector constructor iterator`
     }
@@ -1327,7 +1209,7 @@ void LightmapGeneration::splitOccluderNode(const Vc71Vec<OccluderRecord*>& recor
     }
     for (int i = 0; i < 4; ++i)
     {
-        Vc71Vec<OccluderRecord*> inside;
+        std::vector<OccluderRecord*> inside;
         for (unsigned int r = 0; r < records.size(); ++r)
         {
             OccluderRecord* const record = records[r];
@@ -1342,7 +1224,7 @@ void LightmapGeneration::splitOccluderNode(const Vc71Vec<OccluderRecord*>& recor
 // sphere (Frustum::inside) and its corners (cornersInsideFrustum). The fourth argument is passed
 // on as 0 and never read.
 void LightmapGeneration::queryOccluderNode(const Frustum& frustum, OccluderNode* node,
-                                           Vc71Vec<OccluderRecord*>* out, int unused)
+                                           std::vector<OccluderRecord*>* out, int unused)
 {
     (void)unused;
     for (unsigned int i = 0; i < node->records.size(); ++i)
@@ -1360,9 +1242,9 @@ void LightmapGeneration::queryOccluderNode(const Frustum& frustum, OccluderNode*
 // The tree's candidates land in a function-local static list (freed at exit) that is emptied,
 // not freed, on every call; each candidate whose object `out` does not hold yet is appended when
 // the frustum holds its sphere and its corners.
-void LightmapGeneration::occludersInFrustum(const Frustum& frustum, Vc71Vec<OccluderRecord*>* out)
+void LightmapGeneration::occludersInFrustum(const Frustum& frustum, std::vector<OccluderRecord*>* out)
 {
-    static Vc71Vec<OccluderRecord*> s_candidates;
+    static std::vector<OccluderRecord*> s_candidates;
     s_candidates.resize(0);
     queryOccluderNode(frustum, m_occluderTree, &s_candidates, 0);
     for (unsigned int i = 0; i < s_candidates.size(); ++i)
@@ -1388,7 +1270,7 @@ void LightmapGeneration::occludersInFrustum(const Frustum& frustum, Vc71Vec<Occl
 // Every record goes into a TU-local ordered map keyed by its squared distance to
 // `position` less its squared radius (floored at 0); the map is then destroyed and nothing is
 // written back, so the occluder list keeps its full length (shipped).
-void LightmapGeneration::sortOccluders(Vc71Vec<OccluderRecord*>* records, const Vec3& position,
+void LightmapGeneration::sortOccluders(std::vector<OccluderRecord*>* records, const Vec3& position,
                                        int maxCount)
 {
     (void)maxCount;
@@ -1409,7 +1291,7 @@ void LightmapGeneration::sortOccluders(Vc71Vec<OccluderRecord*>* records, const 
 // The root is replaced (a failed allocation publishes null); with records, its box
 // starts at +-9999999 and grows over every record sphere's two extreme corners, then the root is
 // split over m_occluderList (the argument only feeds the box).
-void LightmapGeneration::buildOccluderTree(Vc71Vec<OccluderRecord*>* records)
+void LightmapGeneration::buildOccluderTree(std::vector<OccluderRecord*>* records)
 {
     void* const storage = ::renddx9abi::engineAlloc(sizeof(OccluderNode));
     m_occluderTree = storage ? new (storage) OccluderNode() : 0;
@@ -1437,7 +1319,7 @@ void LightmapGeneration::buildOccluderTree(Vc71Vec<OccluderRecord*>* records)
     splitOccluderNode(m_occluderList, m_occluderTree, 0);
 }
 
-void LightmapGeneration::addOccluder(world::IObject* object, Vc71Vec<OccluderRecord>* records)
+void LightmapGeneration::addOccluder(world::IObject* object, std::vector<OccluderRecord>* records)
 {
     if (!object)
         return;
@@ -1490,13 +1372,9 @@ void LightmapGeneration::rebuildOccluders()
 // The scene lights are appended through the published generator's last light (lastLight).
 void LightmapGeneration::gatherLights(TerrainAabb* bounds)
 {
-    vc71::vector_layout lights;
-    lights.first = 0;
-    lights.last = 0;
-    lights.end = 0;
+    std::vector<world::LightSource*> lights;
     g_LightManager->getLightsByMask(lights, 0x1F15u, 0u);                  // +0x14
-    for (world::LightSource** it = reinterpret_cast<world::LightSource**>(lights.first);
-         it != reinterpret_cast<world::LightSource**>(lights.last); ++it)
+    for (world::LightSource** it = lights.data(); it != lights.data() + lights.size(); ++it)
     {
         world::LightSource* const light = *it;
         const world::LightSourceTemplate* const tmpl = lightSourceTemplatePointer(light);
@@ -1556,7 +1434,7 @@ void LightmapGeneration::gatherLights(TerrainAabb* bounds)
             info->intensity = tmpl->getIntensity();
             info->viewDistance = 500.0f;
             info->softness = tmpl->getSoftness();
-            const vc71::string sunlight("sunlight");
+            const std::string sunlight("sunlight");
             const bool isSun = _stricmp(fromHostStdString(tmpl->getName()).c_str(),
                                         sunlight.c_str()) == 0;
             if (isSun)
@@ -1619,8 +1497,6 @@ void LightmapGeneration::gatherLights(TerrainAabb* bounds)
             }
         }
     }
-    if (lights.first)
-        ::renddx9abi::engineFree(lights.first);
 }
 
 
@@ -1633,7 +1509,7 @@ bool LightmapGeneration::updateResumeLog(OccluderRecord* record, bool succeeded,
 {
     if (m_logPath.empty())
         return true;
-    vc71::string name("");
+    std::string name("");
     if (record && record->object)
         name = fromHostStdString(objectTemplatePointer(record->object)->getName()).c_str();  // +0x28
 
@@ -1897,7 +1773,8 @@ bool LightmapGeneration::traceColour(OccluderRecord* record, int objectIndex, in
     const unsigned int capacity =
         0x100000u / (static_cast<unsigned int>(m_blockSize) * static_cast<unsigned int>(m_blockSize)) + 1;
     LightSample* samples = 0;
-    if (void* const storage = ::renddx9abi::engineAlloc(144 * capacity))
+    if (void* const storage = ::renddx9abi::engineAlloc(
+            static_cast<unsigned int>(3 * sizeof(LightSample)) * capacity))   // 144 * capacity
     {
         samples = static_cast<LightSample*>(storage);
         for (unsigned int i = 0; i < 3 * capacity; ++i)
@@ -1912,7 +1789,7 @@ bool LightmapGeneration::traceColour(OccluderRecord* record, int objectIndex, in
     dx9rend::IRenderView* const savedViewDup = renderer()->getRenderViewDup();    // +0x50
     unsigned int firstBlock = static_cast<unsigned int>(m_firstBlock - 1);
     unsigned int occluderPeak = 0;
-    Vc71Vec<OccluderRecord*> occluders;
+    std::vector<OccluderRecord*> occluders;
     unsigned int totalSamples = 0;
     const Vec3& cameraPosition = *reinterpret_cast<const Vec3*>(&savedView->getViewMatrixPtr()->m[12]);
     if (block != -1)
@@ -2171,7 +2048,7 @@ bool LightmapGeneration::traceColour(OccluderRecord* record, int objectIndex, in
                                 lightSourceTemplatePointer(light->source);
                             if (tmpl->getLightTypeEnum() == 1)
                                 dx9rend::effectSetTechniqueByName(m_lightEffect,
-                                                                  vc71::string("Pointlight"));
+                                                                  std::string("Pointlight"));
                             else if (tmpl->getLightTypeEnum() == 2)
                             {
                                 float coneAngle = light->source->getConeAngleRads2();   // +0x1C0
@@ -2188,13 +2065,13 @@ bool LightmapGeneration::traceColour(OccluderRecord* record, int objectIndex, in
                                 spotDirection.z = (m[2] * direction.x + m[10] * direction.z)
                                                   + m[6] * direction.y;
                                 dx9rend::effectSetTechniqueByName(m_lightEffect,
-                                                                  vc71::string("Spotlight"));
+                                                                  std::string("Spotlight"));
                                 dx9rend::effectGetShaderParameterBorrowedTyped(
-                                    m_lightEffect, vc71::string("WorldView"))->setValue(&worldView, 0);
+                                    m_lightEffect, std::string("WorldView"))->setValue(&worldView, 0);
                                 dx9rend::effectGetShaderParameterBorrowedTyped(
-                                    m_lightEffect, vc71::string("SpotDir"))->setValue(&spotDirection, 0);
+                                    m_lightEffect, std::string("SpotDir"))->setValue(&spotDirection, 0);
                                 dx9rend::effectGetShaderParameterBorrowedTyped(
-                                    m_lightEffect, vc71::string("ConeAngle"))->setValue(&coneAngle, 0);
+                                    m_lightEffect, std::string("ConeAngle"))->setValue(&coneAngle, 0);
                             }
                             // The scale replaces the WorldView diagonal (shipped).
                             worldView.m[0] = light->source->getScale().x;           // +0x1D4
@@ -2203,12 +2080,12 @@ bool LightmapGeneration::traceColour(OccluderRecord* record, int objectIndex, in
                             mat4Mult(worldViewProjection, worldView,
                                      *light->renderView->getProjectionMatrixPtr());  // +0x6C
                             dx9rend::effectGetShaderParameterBorrowedTyped(
-                                m_lightEffect, vc71::string("WorldViewProj"))
+                                m_lightEffect, std::string("WorldViewProj"))
                                 ->setValue(&worldViewProjection, 0);
                             const Vec3& colour = light->source->getColor();
                             const float lightColour[4] = { colour.x, colour.y, colour.z, 1.0f };
                             dx9rend::effectGetShaderParameterBorrowedTyped(
-                                m_lightEffect, vc71::string("LightColor"))->setValue(lightColour, 0);
+                                m_lightEffect, std::string("LightColor"))->setValue(lightColour, 0);
                             dx9rend::stateManagerSetStreamSource(0, m_lightMeshVertices, 0, 12);
                             dx9rend::stateManagerSetIndices(m_lightMeshIndices);
                             dx9rend::effectBegin(m_lightEffect);
@@ -2228,9 +2105,9 @@ bool LightmapGeneration::traceColour(OccluderRecord* record, int objectIndex, in
                     if (m_quadVertexBuffer)
                     {
                         dx9rend::stateManagerPush();
-                        dx9rend::effectSetTechniqueByName(m_quadEffect, vc71::string("TexturedQuad"));
+                        dx9rend::effectSetTechniqueByName(m_quadEffect, std::string("TexturedQuad"));
                         dx9rend::effectGetShaderParameterBorrowedTyped(
-                            m_quadEffect, vc71::string("TEXLAYER0"))->setValue(m_targetTexture, 0);
+                            m_quadEffect, std::string("TEXLAYER0"))->setValue(m_targetTexture, 0);
                         dx9rend::vertexBufferBindStream(m_quadVertexBuffer, 0);
                         dx9rend::effectBegin(m_quadEffect);
                         dx9rend::effectBeginPass(m_quadEffect, 0);
@@ -2385,12 +2262,12 @@ bool LightmapGeneration::traceColour(OccluderRecord* record, int objectIndex, in
                     {
                         LightmapGenerationProgress progress;
                         progress.percentDone = percent;
-                        vc71::string total;
-                        vc71::string left;
-                        vc71::string line;
+                        std::string total;
+                        std::string left;
+                        std::string line;
                         if (objectIndex != -1 && objectCount != -1)
                         {
-                            vc71::string head;
+                            std::string head;
                             formatString(head, "Object %d/%d :", objectIndex + 1, objectCount);
                             formatTime(total, static_cast<unsigned int>(
                                 static_cast<int>(g_system->getWallClockTime())));
@@ -2421,7 +2298,7 @@ bool LightmapGeneration::traceColour(OccluderRecord* record, int objectIndex, in
                         const unsigned int white[3] = { 255, 255, 255 };
                         renderer()->beginScene(white, 1);                            // +0xC8
                         float y = 30.0f;
-                        vc71::string text;
+                        std::string text;
                         formatString(text, "%.2f%%  Lights:%d", static_cast<double>(percent),
                                      m_lights.size());
                         fontPortedDrawText(m_font, 50.0f, 30.0f, text);
@@ -2449,8 +2326,8 @@ bool LightmapGeneration::traceColour(OccluderRecord* record, int objectIndex, in
                                      static_cast<int>(static_cast<float>(count) * rate));
                         fontPortedDrawText(m_font, 50.0f, y, text);
                         y = y + 40.0f;
-                        vc71::string total;
-                        vc71::string left;
+                        std::string total;
+                        std::string left;
                         formatTime(total, static_cast<unsigned int>(
                             static_cast<int>(g_system->getWallClockTime())));
                         formatTime(left, static_cast<unsigned int>(static_cast<int>(remainingSeconds)));
@@ -2556,7 +2433,8 @@ bool LightmapGeneration::traceIntensity(OccluderRecord* record, int objectIndex,
     const unsigned int capacity =
         0x100000u / (static_cast<unsigned int>(m_blockSize) * static_cast<unsigned int>(m_blockSize)) + 1;
     LightSample* samples = 0;
-    if (void* const storage = ::renddx9abi::engineAlloc(144 * capacity))
+    if (void* const storage = ::renddx9abi::engineAlloc(
+            static_cast<unsigned int>(3 * sizeof(LightSample)) * capacity))   // 144 * capacity
     {
         samples = static_cast<LightSample*>(storage);
         for (unsigned int i = 0; i < 3 * capacity; ++i)
@@ -2571,7 +2449,7 @@ bool LightmapGeneration::traceIntensity(OccluderRecord* record, int objectIndex,
     dx9rend::IRenderView* const savedViewDup = renderer()->getRenderViewDup();    // +0x50
     unsigned int firstBlock = static_cast<unsigned int>(m_firstBlock - 1);
     unsigned int occluderPeak = 0;
-    Vc71Vec<OccluderRecord*> occluders;
+    std::vector<OccluderRecord*> occluders;
     unsigned int totalSamples = 0;
     const Vec3& cameraPosition = *reinterpret_cast<const Vec3*>(&savedView->getViewMatrixPtr()->m[12]);
     if (block != -1)
@@ -2632,13 +2510,13 @@ bool LightmapGeneration::traceIntensity(OccluderRecord* record, int objectIndex,
 
             // Per light: a back-face bit per sampler triangle (the terrain has none - one clear bit),
             // and each local light's index in the sampler (the table is never freed - shipped).
-            const vc71::vector_layout* const triangleVector =
-                static_cast<const vc71::vector_layout*>(blockInfo.triangles);
+            const std::vector<MeshSampleTriangle>* const triangleVector =
+                static_cast<const std::vector<MeshSampleTriangle>*>(blockInfo.triangles);
             int triangleCount = 0;
-            if (triangleVector && triangleVector->first)
-                triangleCount = static_cast<int>((triangleVector->last - triangleVector->first) / 92);
-            const SampleTriangle* const triangles = triangleVector
-                ? reinterpret_cast<const SampleTriangle*>(triangleVector->first) : 0;
+            if (triangleVector && !triangleVector->empty())
+                triangleCount = static_cast<int>(triangleVector->size());
+            const MeshSampleTriangle* const triangles = triangleVector
+                ? triangleVector->data() : 0;
             int* lightIndex = static_cast<int*>(::renddx9abi::engineAlloc(4 * m_lights.size()));
             for (unsigned int l = 0; l < m_lights.size(); ++l, ++lightIndex)
             {
@@ -2910,7 +2788,7 @@ bool LightmapGeneration::traceIntensity(OccluderRecord* record, int objectIndex,
                                 lightSourceTemplatePointer(light->source);
                             if (tmpl->getLightTypeEnum() == 1)
                                 dx9rend::effectSetTechniqueByName(m_lightEffect,
-                                                                  vc71::string("Pointlight"));
+                                                                  std::string("Pointlight"));
                             else if (tmpl->getLightTypeEnum() == 2)
                             {
                                 float coneAngle = light->source->getConeAngleRads2();   // +0x1C0
@@ -2927,13 +2805,13 @@ bool LightmapGeneration::traceIntensity(OccluderRecord* record, int objectIndex,
                                 spotDirection.z = (m[2] * direction.x + m[10] * direction.z)
                                                   + m[6] * direction.y;
                                 dx9rend::effectSetTechniqueByName(m_lightEffect,
-                                                                  vc71::string("Spotlight"));
+                                                                  std::string("Spotlight"));
                                 dx9rend::effectGetShaderParameterBorrowedTyped(
-                                    m_lightEffect, vc71::string("WorldView"))->setValue(&worldView, 0);
+                                    m_lightEffect, std::string("WorldView"))->setValue(&worldView, 0);
                                 dx9rend::effectGetShaderParameterBorrowedTyped(
-                                    m_lightEffect, vc71::string("SpotDir"))->setValue(&spotDirection, 0);
+                                    m_lightEffect, std::string("SpotDir"))->setValue(&spotDirection, 0);
                                 dx9rend::effectGetShaderParameterBorrowedTyped(
-                                    m_lightEffect, vc71::string("ConeAngle"))->setValue(&coneAngle, 0);
+                                    m_lightEffect, std::string("ConeAngle"))->setValue(&coneAngle, 0);
                             }
                             // The scale replaces the WorldView diagonal (shipped).
                             worldView.m[0] = light->source->getScale().x;           // +0x1D4
@@ -2942,12 +2820,12 @@ bool LightmapGeneration::traceIntensity(OccluderRecord* record, int objectIndex,
                             mat4Mult(worldViewProjection, worldView,
                                      *light->renderView->getProjectionMatrixPtr());  // +0x6C
                             dx9rend::effectGetShaderParameterBorrowedTyped(
-                                m_lightEffect, vc71::string("WorldViewProj"))
+                                m_lightEffect, std::string("WorldViewProj"))
                                 ->setValue(&worldViewProjection, 0);
                             const Vec3& colour = light->source->getColor();
                             const float lightColour[4] = { colour.x, colour.y, colour.z, 1.0f };
                             dx9rend::effectGetShaderParameterBorrowedTyped(
-                                m_lightEffect, vc71::string("LightColor"))->setValue(lightColour, 0);
+                                m_lightEffect, std::string("LightColor"))->setValue(lightColour, 0);
                             dx9rend::stateManagerSetStreamSource(0, m_lightMeshVertices, 0, 12);
                             dx9rend::stateManagerSetIndices(m_lightMeshIndices);
                             dx9rend::effectBegin(m_lightEffect);
@@ -3134,12 +3012,12 @@ bool LightmapGeneration::traceIntensity(OccluderRecord* record, int objectIndex,
                     {
                         LightmapGenerationProgress progress;
                         progress.percentDone = percent;
-                        vc71::string total;
-                        vc71::string left;
-                        vc71::string line;
+                        std::string total;
+                        std::string left;
+                        std::string line;
                         if (objectIndex != -1 && objectCount != -1)
                         {
-                            vc71::string head;
+                            std::string head;
                             formatString(head, "Object %d/%d :", objectIndex + 1, objectCount);
                             formatTime(total, static_cast<unsigned int>(
                                 static_cast<int>(g_system->getWallClockTime())));
@@ -3170,7 +3048,7 @@ bool LightmapGeneration::traceIntensity(OccluderRecord* record, int objectIndex,
                         const unsigned int white[3] = { 255, 255, 255 };
                         renderer()->beginScene(white, 1);                            // +0xC8
                         float y = 30.0f;
-                        vc71::string text;
+                        std::string text;
                         formatString(text, "%.2f%%  Lights:%d", static_cast<double>(percent),
                                      m_lights.size());
                         fontPortedDrawText(m_font, 50.0f, 30.0f, text);
@@ -3198,8 +3076,8 @@ bool LightmapGeneration::traceIntensity(OccluderRecord* record, int objectIndex,
                                      static_cast<int>(static_cast<float>(count) * rate));
                         fontPortedDrawText(m_font, 50.0f, y, text);
                         y = y + 40.0f;
-                        vc71::string total;
-                        vc71::string left;
+                        std::string total;
+                        std::string left;
                         formatTime(total, static_cast<unsigned int>(
                             static_cast<int>(g_system->getWallClockTime())));
                         formatTime(left, static_cast<unsigned int>(static_cast<int>(remainingSeconds)));

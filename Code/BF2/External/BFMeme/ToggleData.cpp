@@ -60,7 +60,9 @@ int ToggleData::getCharacter(System* system, int character)
     Data* selected = m_toggle && m_toggle->getFloat(system) == 0.0f ? m_first : m_second;
     return selected ? selected->getCharacter(system, character) : 0;
 }
+#if defined(_M_IX86)
 static_assert(sizeof(ToggleData) == 20, "client ToggleData");
 static_assert(sizeof(ToggleDataDescriptor) == 16, "client ToggleData metadata");
+#endif
 } }
 #endif

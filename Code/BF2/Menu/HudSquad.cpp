@@ -168,7 +168,7 @@ HudSquad::HudSquad(meme::System* system)
     m_selectedPlayers.clear();
     m_excludedPlayers.clear();
     m_invitePlayers.clear();
-    for (int& icon : m_squadIcons) icon = 0;
+    for (std::intptr_t& icon : m_squadIcons) icon = 0;
     if (m_system) {
         m_textures[12] = m_system->loadTexture("Ingame/Kits/Icons/kit_Commander.tga", true);
         m_textures[13] = m_system->loadTexture("Ingame/Kits/Icons/kit_Squad.tga", true);
@@ -451,7 +451,7 @@ void HudSquad::paintCommanderHeading(int team)
     meme::Color color = kColor97DE20;
     std::wstring text = hudManager->getLocalizedString(
         std::string("HUD_TEXT_MENU_SPAWN_SQUAD_APPLY"));
-    int arrow = m_textures[0];                                                  // +14 button_upp
+    meme::TextureHandle arrow = m_textures[0];                                  // +14 button_upp
     if (!m_field09f)                                                            // +9F, expanded
         arrow = m_textures[1];                                                  // +18 button_down
     if (m_isCommander) {                                                        // +9D
@@ -567,7 +567,7 @@ void HudSquad::paintSquadRow(int team, int squad, int memberCount)
     else if (m_squadId == squad)
         buttonText = hudManager->getLocalizedString(
             std::string("HUD_TEXT_MENU_SPAWN_SQUAD_LEAVE"));                   // 78FDDF, copy-assigned
-    int arrow = m_textures[0];                                                  // +14 button_upp
+    meme::TextureHandle arrow = m_textures[0];                                  // +14 button_upp
     const int bit = squad < 0 ? 0 : (squad > 9 ? 9 : squad);
     if (!m_expanded.test(static_cast<std::size_t>(bit)))                       // _Xran 78FE1F unreachable
         arrow = m_textures[1];                                                  // +18 button_down
@@ -612,12 +612,12 @@ void HudSquad::paintPlayerRow(world::IPlayer* player, int)
 {
     if (!player)
         return;
-    const int kitIcon = hudManager->getPlayerKitIcon(player, false, false);    // +64
+    const meme::TextureHandle kitIcon = hudManager->getPlayerKitIcon(player, false, false); // +64
     hudManager->getPlayerRankIcon(player);                                      // +68, discarded
-    int vehicleIcon = hudManager->getPlayerVehicleIcon(player, true);          // +60
+    meme::TextureHandle vehicleIcon = hudManager->getPlayerVehicleIcon(player, true); // +60
     if (!vehicleIcon)
         vehicleIcon = m_textures[2];                                            // empty.tga
-    int leaderIcon;
+    meme::TextureHandle leaderIcon;
     if (player->getIsSquadLeader()) {                                           // PE +0x138
         const int squad = player->getSquadId();                                 // read once
         if (!m_squadIcons[squad])                                               // unbounded
@@ -627,7 +627,7 @@ void HudSquad::paintPlayerRow(world::IPlayer* player, int)
     } else {
         leaderIcon = m_textures[2];
     }
-    int voipIcon = m_textures[10];                                              // icon_speaker
+    meme::TextureHandle voipIcon = m_textures[10];                              // icon_speaker
     meme::Color voipColor = kColor97DE40;
     bool voipShown = false;
     if (player->getVoipEnabled()) {                                             // PE +0x268
@@ -717,7 +717,7 @@ void HudSquad::paintPlayerRow(world::IPlayer* player, int)
 void HudSquad::paintInviteRow(world::IPlayer* player, int, int excludedSquad)
 {
     if (player) {
-        int checkIcon = m_textures[3];                                          // checkbox_empty
+        meme::TextureHandle checkIcon = m_textures[3];                          // checkbox_empty
         if (excludedSquad < 0 && player->getSquadId() != m_squadId) {
             checkIcon = m_textures[2];                                          // no box
         } else {

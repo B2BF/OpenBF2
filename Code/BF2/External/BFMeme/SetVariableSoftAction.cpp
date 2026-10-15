@@ -16,6 +16,7 @@ bool chooseSoftValue(float current, float target, float delta, float speed, floa
 {
     float rounded;
     bool changed = false;
+#if defined(_M_IX86)
     __asm {
         fld target
         fld current
@@ -57,6 +58,20 @@ bool chooseSoftValue(float current, float target, float delta, float speed, floa
         fstp st(0)
     done:
     }
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    // An ordered current below the target moves up, above it moves down; equal or unordered
+    // samples write nothing. Only an ordered overshoot of the unrounded candidate clamps.
+    if (current < target) {
+        const double candidate = static_cast<double>(delta) * speed + current;
+        rounded = candidate > target ? target : static_cast<float>(candidate);
+        changed = true;
+    } else if (current > target) {
+        const double candidate = current - static_cast<double>(delta) * speed;
+        rounded = candidate < target ? target : static_cast<float>(candidate);
+        changed = true;
+    }
+#endif
     if (changed) value = rounded;
     return changed;
 }
@@ -93,8 +108,10 @@ bool SetVariableSoftAction::execute(System* system, const Rect*, const NodeState
     }
     return false;
 }
+#if defined(_M_IX86)
 static_assert(sizeof(SetVariableSoftAction) == 16, "client SetVariableSoftAction");
 static_assert(sizeof(ClassTypeDescriptor<SetVariableSoftAction, SetVariableAction>) == 16,
               "SetVariableSoftAction metadata");
+#endif
 } }
 #endif

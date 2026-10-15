@@ -1231,9 +1231,9 @@ void GameLogic::setFogStartEndAndBase(const Vec4& value)
     IBase* const framework = classManager->getSingleton("PostProductionFrameWork");
     if (framework)
     {
-        typedef void (__fastcall* SetStateVec4Fn)(void* self, void* edx, const Vec4* value);
+        typedef void (__thiscall* SetStateVec4Fn)(void* self, const Vec4* value);
         void** const vtbl = *reinterpret_cast<void***>(framework);
-        reinterpret_cast<SetStateVec4Fn>(vtbl[0x24 / sizeof(void*)])(framework, 0, &value);
+        reinterpret_cast<SetStateVec4Fn>(vtbl[0x24 / 4])(framework, &value);
     }
 }
 

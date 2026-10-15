@@ -62,9 +62,11 @@ LONG WINAPI crashHandler(EXCEPTION_POINTERS* ep)
                            (void*)ep->ExceptionRecord->ExceptionInformation[1]);
 
     const CONTEXT* c = ep->ContextRecord;
+#if defined(_M_IX86)
     ::renddx9abi::logf("[crash]   eax=%08X ebx=%08X ecx=%08X edx=%08X esi=%08X edi=%08X ebp=%08X esp=%08X",
                        (unsigned)c->Eax, (unsigned)c->Ebx, (unsigned)c->Ecx, (unsigned)c->Edx,
                        (unsigned)c->Esi, (unsigned)c->Edi, (unsigned)c->Ebp, (unsigned)c->Esp);
+    const uintptr_t stackPointer = (uintptr_t)c->Esp;
 
     // EBP chain.
     const void* const* frame = (const void* const*)c->Ebp;
@@ -80,13 +82,23 @@ LONG WINAPI crashHandler(EXCEPTION_POINTERS* ep)
         if (next <= frame) break;
         frame = next;
     }
+#else
+    // [CHOSEN, not recovered] x64: the 64-bit registers; x64 code keeps no frame-pointer chain, so
+    // only the return-address scan below runs.
+    ::renddx9abi::logf("[crash]   rax=%016llX rbx=%016llX rcx=%016llX rdx=%016llX rsi=%016llX rdi=%016llX",
+                       (unsigned long long)c->Rax, (unsigned long long)c->Rbx, (unsigned long long)c->Rcx,
+                       (unsigned long long)c->Rdx, (unsigned long long)c->Rsi, (unsigned long long)c->Rdi);
+    ::renddx9abi::logf("[crash]   rbp=%016llX rsp=%016llX rip=%016llX",
+                       (unsigned long long)c->Rbp, (unsigned long long)c->Rsp, (unsigned long long)c->Rip);
+    const uintptr_t stackPointer = (uintptr_t)c->Rsp;
+#endif
 
     // Return-address scan (frame-pointer independent; includes stale entries).
-    const void* const* sp = (const void* const*)((uintptr_t)c->Esp & ~(uintptr_t)3);
+    const void* const* sp = (const void* const*)(stackPointer & ~(uintptr_t)(sizeof(void*) - 1));
     int hits = 0;
     for (int i = 0; i < 4096 && hits < 80; ++i, ++sp)
     {
-        if (!readable(sp, 4)) break;
+        if (!readable(sp, sizeof(void*))) break;
         const void* v = *sp;
         if (!moduleOf(v, mod, sizeof mod, &rva)) continue;
         if (_strnicmp(mod, "SwiffPlayer", 11) != 0 && _strnicmp(mod, "RendDX9", 7) != 0

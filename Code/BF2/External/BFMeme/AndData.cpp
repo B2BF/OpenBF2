@@ -27,7 +27,9 @@ float AndData::getFloat(System* system)
     return m_second->getFloat(system) != 0.0f ? 1.0f : 0.0f;
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(AndData) == 16, "client BFMeme AndData");
 static_assert(sizeof(ClassTypeDescriptor<AndData, LogicalData>) == 16, "AndData metadata");
+#endif
 } }
 #endif

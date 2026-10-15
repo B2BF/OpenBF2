@@ -61,7 +61,7 @@ Color sampleBoundColor(const Color& base, const float* alpha, const float* red,
 }
 }
 
-bool Bf2ColorEffect::drawCharacter(System* system, int character, int font,
+bool Bf2ColorEffect::drawCharacter(System* system, int character, FontHandle font,
                                   int elementIndex, Quad* quad, RenderContext* context)
 {
     const Color color = sampleBoundColor(*getColor(), m_alphaBinding, m_redBinding,
@@ -69,7 +69,7 @@ bool Bf2ColorEffect::drawCharacter(System* system, int character, int font,
     colorQuad(quad, &color);
     return Effect::drawCharacter(system, character, font, elementIndex, quad, context);
 }
-bool Bf2ColorEffect::drawTexture(System* system, int texture, Quad* quad,
+bool Bf2ColorEffect::drawTexture(System* system, TextureHandle texture, Quad* quad,
                                 RenderContext* context)
 {
     const Color color = sampleBoundColor(*getColor(), m_alphaBinding, m_redBinding,
@@ -78,8 +78,10 @@ bool Bf2ColorEffect::drawTexture(System* system, int texture, Quad* quad,
     return Effect::drawTexture(system, texture, quad, context);
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2ColorEffect) == 48, "native Bf2ColorEffect storage");
 static_assert(sizeof(ClassTypeDescriptor<Bf2ColorEffect, ColorEffect>) == 16,
     "Bf2ColorEffect metadata");
+#endif
 } }
 #endif

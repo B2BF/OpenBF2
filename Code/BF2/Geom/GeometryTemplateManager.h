@@ -5,10 +5,10 @@
 #define BF2_GEOM_GEOMETRYTEMPLATEMANAGER_H
 
 #include "../../RendDX9Abi/HfeAbi.h"
-#include "../../RendDX9Abi/Vc71String.h"
+#include <string>
 #include "../Core/IBase.h"
 
-namespace vc71 { struct map_layout; }
+#include <map>
 
 namespace dice {
 namespace hfe {
@@ -16,13 +16,24 @@ namespace geom {
 
 class IGeometryTemplate;
 
+// The registry's key order: `_stricmp` over the two names, the instruction-proven comparison. A
+// name keeps the spelling it was first registered with. Defined in GeometryTemplateManager.cpp.
+struct GeometryTemplateNameLess
+{
+    bool operator()(const std::string& a, const std::string& b) const;
+};
+
+// name -> owning template pointer, in name order.
+typedef std::map<std::string, IGeometryTemplate*, GeometryTemplateNameLess>
+    GeometryTemplateRegistry;
+
 #define BF2_GTM_RESERVED(offset) virtual void reserved_##offset() = 0
 
 class IGeometryTemplateManager : public IBase
 {
 public:
-    // Cross-image methods use HostString, then convert once to internal VC7.1 storage.
-    // Do not expose vc71::string directly to a native-host caller.
+    // Cross-image methods use HostString, then convert once to the internal string storage.
+    // Do not expose std::string directly to a native-host caller.
     virtual void registerTemplate(IGeometryTemplate* value,
                                   const ::renddx9abi::HostString& name) = 0;    // +0x10
     virtual IGeometryTemplate* createTemplate(unsigned int classId,
@@ -44,7 +55,7 @@ public:
     BF2_GTM_RESERVED(50); BF2_GTM_RESERVED(54); BF2_GTM_RESERVED(58);
     BF2_GTM_RESERVED(5C);
     // Returns the case-insensitive name/template registry for ordered traversal.
-    virtual vc71::map_layout* getTemplateRegistry() = 0;                   // +0x60
+    virtual GeometryTemplateRegistry* getTemplateRegistry() = 0;           // +0x60
 
 protected:
     ~IGeometryTemplateManager() {}

@@ -16,7 +16,7 @@ for %%A in (1) do (
    /DDEDICATED=0 /DBF2_IMAGE_RENDDX9 /DBF2_PLUGIN_ABI_NATIVE=%%A /D_ITERATOR_DEBUG_LEVEL=0 ^
    /FI"%TASK_ROOT%\Code\BF2\Core\BuildConfig.h" /Fo"!OUT!\\" ^
    /Fe"!OUT!\particle_instance_type1_runtime.exe" ^
-   "%~dp0particle_instance_type1_runtime.cpp" "%TASK_ROOT%\Code\RendDX9Abi\Vc71String.cpp" ^
+   "%~dp0particle_instance_type1_runtime.cpp" ^
    "%TASK_ROOT%\Code\BF2\Geom\ParticleSystem\ParticleSystemTemplateType1.cpp" ^
    "%TASK_ROOT%\Code\BF2\Math\Mat4.cpp" "%TASK_ROOT%\Code\BF2\Math\Frustum.cpp" ^
    "%TASK_ROOT%\Code\BF2\Math\Mat4Inverse.cpp" "%TASK_ROOT%\Code\BF2\Math\Vec3.cpp" ^

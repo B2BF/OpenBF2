@@ -41,7 +41,9 @@ The x86 executables and AI library retain their existing diagnostic `/FORCE` lin
 they are not CI gates. Existing engine frontiers, including `swiff-native-as-host`,
 `swiff-host-bodies` and `RW-88`, remain. Green CI establishes only the builds and focused
 checks above, not complete symbol recovery, production startup, loading, joining or
-playability. Linux client/editor and Windows x64 client/editor targets do not exist yet.
+playability. The Windows x64 client and editor targets exist in the `msvc-x64`
+configuration, but CI does not build them, because they need the April 2005 DirectX SDK.
+Linux client/editor targets do not exist.
 
 ## Packages
 

@@ -17,12 +17,12 @@
 #include "ILightmapGeneration.h"
 #include "ILightSampling.h"
 #include "../QuadPatch.h"                 // TerrainAabb
-#include "../UndergrowthSystem.h"         // Vc71Vec - the renderer's owning VC7.1-layout vector
 #include "../../Math/Mat4.h"
 #include "../../Math/Vec3.h"
-#include "../../../RendDX9Abi/Vc71String.h"
+#include <string>
 
 #include <stddef.h>
+#include <vector>
 
 struct IUnknown;
 struct IDirect3DSurface9;
@@ -40,13 +40,13 @@ namespace geom {
 
 class ILightSampleable;
 
-// A light's per-triangle back-face bits: VC7.1 std::vector<bool>, the bit count ahead of the words.
-// [CHOSEN, not recovered] a local copyable form (Vc71BoolVector.h disables copying, and the light
-// records are copied by value).
+// A light's per-triangle back-face bits: the shipped std::vector<bool>, the bit count ahead of the
+// words. [CHOSEN, not recovered] a local copyable form over std::vector<unsigned int> words (the
+// light records are copied by value).
 struct LightFacingBits
 {
-    unsigned int           size;     // +0x00  _Mysize - the destructor zeroes it
-    Vc71Vec<unsigned int>  words;    // +0x04  _Myvec
+    unsigned int               size;     // +0x00  _Mysize - the destructor zeroes it
+    std::vector<unsigned int>  words;    // +0x04  _Myvec
 
     LightFacingBits() : size(0) {}
     LightFacingBits(const LightFacingBits& other) : size(other.size), words(other.words) {}
@@ -143,7 +143,7 @@ struct OccluderNode
     Vec3                           centre;          // +0x9C  the bounds' centre (refreshed)
     float                          radius;          // +0xA8  the bounds' radius (refreshed)
     OccluderNode*                  children;        // +0xAC  new[4], or null for a leaf
-    Vc71Vec<OccluderRecord*>       records;         // +0xB0  (first at +0xB4) the leaf's records
+    std::vector<OccluderRecord*>   records;         // +0xB0  (first at +0xB4) the leaf's records
 
 private:
     OccluderNode(const OccluderNode&);
@@ -215,26 +215,26 @@ public:
     // Every registered object's record, the pointer list, and the quadtree over it.
     void rebuildOccluders();
     // Appends `object`'s record unless it (or its root) moves.
-    void addOccluder(world::IObject* object, Vc71Vec<OccluderRecord>* records);
+    void addOccluder(world::IObject* object, std::vector<OccluderRecord>* records);
     // A new root bounding every record's sphere, split over m_occluderList.
-    void buildOccluderTree(Vc71Vec<OccluderRecord*>* records);
+    void buildOccluderTree(std::vector<OccluderRecord*>* records);
     // Quarters `node` while it holds more than 16 records, 11 levels deep at most.
-    void splitOccluderNode(const Vc71Vec<OccluderRecord*>& records, OccluderNode* node, int depth);
+    void splitOccluderNode(const std::vector<OccluderRecord*>& records, OccluderNode* node, int depth);
     // Every record under `node` whose subtree the frustum may see.
     void queryOccluderNode(const Frustum& frustum, OccluderNode* node,
-                           Vc71Vec<OccluderRecord*>* out, int unused);
+                           std::vector<OccluderRecord*>* out, int unused);
     // The visible records of the quadtree, each object once.
-    void occludersInFrustum(const Frustum& frustum, Vc71Vec<OccluderRecord*>* out);
+    void occludersInFrustum(const Frustum& frustum, std::vector<OccluderRecord*>* out);
     // Builds a distance-ordered map of `records` and drops it again (shipped: the list is never
     // trimmed to `maxCount`).
-    void sortOccluders(Vc71Vec<OccluderRecord*>* records, const Vec3& position, int maxCount);
+    void sortOccluders(std::vector<OccluderRecord*>* records, const Vec3& position, int maxCount);
 
     // data, in shipped order (the vptr is +0x00)
     int                        m_refCount;                 // +0x004  1
-    Vc71Vec<OccluderRecord>    m_occluders;                // +0x008  (first at +0x00C)
-    Vc71Vec<OccluderRecord*>   m_occluderList;             // +0x018  (first at +0x01C)
+    std::vector<OccluderRecord>  m_occluders;              // +0x008  (first at +0x00C)
+    std::vector<OccluderRecord*> m_occluderList;           // +0x018  (first at +0x01C)
     OccluderNode*              m_occluderTree;             // +0x028  rebuilt by a trace when null
-    Vc71Vec<LightInfo>         m_lights;                   // +0x02C  (first at +0x030)
+    std::vector<LightInfo>     m_lights;                   // +0x02C  (first at +0x030)
     Vec3                       m_skyColor;                 // +0x03C  0.3
     Vec3                       m_ambientColor;             // +0x048  0.3
     float                      m_resolutionModifier;       // +0x054  1
@@ -294,7 +294,7 @@ public:
     unsigned char              pad122[2];
     int                        m_lightmapFormat;           // +0x124  1 = DXT1, else DXT5
     float                      m_skyWhite;                 // +0x128  0
-    vc71::string               m_logPath;                  // +0x12C  the resume log ("" = none), 2006 `useLog`
+    std::string               m_logPath;                  // +0x12C  the resume log ("" = none), 2006 `useLog`
     // +0x148 - 0.8 from the constructor; each intensity trace resets it and a terrain trace raises it
     // to the largest sun channel of a sample whose normal is straight up (the terrain sampler gives
     // water exactly that normal). The 2006 editor read the same field through its
@@ -307,7 +307,6 @@ private:
 };
 
 #if defined(_M_IX86)
-static_assert(sizeof(LightInfo) == 100, "a light record is 100 bytes - see the /100 at 0x100A7150");
 static_assert(offsetof(LightInfo, source) == 0x14, "light source at +0x14");
 static_assert(offsetof(LightInfo, direction) == 0x18, "light direction at +0x18");
 static_assert(offsetof(LightInfo, maxOccluders) == 0x3C, "occluder cap at +0x3C");
@@ -316,25 +315,9 @@ static_assert(offsetof(LightInfo, facing) == 0x50, "back-face bits at +0x50");
 static_assert(sizeof(OccluderRecord) == 196, "an occluder record is 196 bytes - see 0x100A7D00");
 static_assert(offsetof(OccluderRecord, centre) == 0x50, "record centre at +0x50");
 static_assert(offsetof(OccluderRecord, geometry) == 0xC0, "record geometry at +0xC0");
-static_assert(sizeof(OccluderNode) == 0xC0, "a quadtree node is 0xC0 bytes - see 0x100A78C3");
 static_assert(offsetof(OccluderNode, centre) == 0x9C, "node centre at +0x9C");
 static_assert(offsetof(OccluderNode, children) == 0xAC, "node children at +0xAC");
 static_assert(offsetof(LightmapGeneration, m_occluders) == 0x008, "+0x008");
-static_assert(offsetof(LightmapGeneration, m_occluderList) == 0x018, "+0x018");
-static_assert(offsetof(LightmapGeneration, m_occluderTree) == 0x028, "+0x028");
-static_assert(offsetof(LightmapGeneration, m_lights) == 0x02C, "+0x02C");
-static_assert(offsetof(LightmapGeneration, m_resolutionModifier) == 0x054, "resolution modifier at +0x54 - see 0x100AB507");
-static_assert(offsetof(LightmapGeneration, m_blockSize) == 0x068, "+0x068");
-static_assert(offsetof(LightmapGeneration, m_generationMethod) == 0x074, "+0x074");
-static_assert(offsetof(LightmapGeneration, m_font) == 0x088, "+0x088");
-static_assert(offsetof(LightmapGeneration, m_quadVertexBuffer) == 0x0D0, "+0x0D0");
-static_assert(offsetof(LightmapGeneration, m_progressCallback) == 0x0D4, "+0x0D4 - see 0x100B04C9");
-static_assert(offsetof(LightmapGeneration, m_numberOfGILights) == 0x0E0, "+0x0E0");
-static_assert(offsetof(LightmapGeneration, m_sunLightFov) == 0x11C, "+0x11C");
-static_assert(offsetof(LightmapGeneration, m_lightmapFormat) == 0x124, "+0x124 - see 0x10199BD5");
-static_assert(offsetof(LightmapGeneration, m_logPath) == 0x12C, "+0x12C");
-static_assert(offsetof(LightmapGeneration, m_waterSunIntensity) == 0x148, "+0x148");
-static_assert(sizeof(LightmapGeneration) == 0x14C, "the creator allocates 0x14C - see 0x100A870F");
 #endif
 
 // The singleton the creator makes; the terrain sampler's lightmap writer reads its format.

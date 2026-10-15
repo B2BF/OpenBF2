@@ -12,9 +12,10 @@
 #  error "BF2Editor sources are compiled with BF2_IMAGE_EDITOR=1 (Code/Tools/BF2Editor/CMakeLists.txt)."
 #endif
 
-// The editor links the tree's x86 client object set, so it is an x86 Windows image for now.
-#if !defined(_WIN32) || defined(_WIN64)
-#  error "BF2Editor builds for Windows x86 only (docs/building.md)."
+// The editor links the tree's client object set: a Windows image, x86 or the native x64 client
+// (https://github.com/B2BF/OpenBF2/issues/7).
+#if !defined(_WIN32)
+#  error "BF2Editor builds for Windows x86 or x64 only (docs/building.md)."
 #endif
 
 #endif // BF2EDITOR_FRAMEWORK_EDITORCONFIG_H

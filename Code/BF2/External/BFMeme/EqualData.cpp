@@ -28,7 +28,9 @@ float EqualData::getFloat(System* system)
     return firstValue == second->getFloat(system) ? 1.0f : 0.0f;
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(EqualData) == 16, "client BFMeme EqualData");
 static_assert(sizeof(ClassTypeDescriptor<EqualData, LogicalData>) == 16, "EqualData metadata");
+#endif
 } }
 #endif

@@ -22,18 +22,20 @@ bool ColorEffect::streamProperties(System* system, Stream* stream)
         && stream->streamFloat(&m_color.b, "Blue")
         && stream->streamFloat(&m_color.a, "Alpha");
 }
-bool ColorEffect::drawCharacter(System* system, int character, int font,
+bool ColorEffect::drawCharacter(System* system, int character, FontHandle font,
                                 int elementIndex, Quad* quad, RenderContext* context)
 {
     for (auto& corner : quad->corners) corner.color = m_color;
     return Effect::drawCharacter(system, character, font, elementIndex, quad, context);
 }
-bool ColorEffect::drawTexture(System* system, int texture, Quad* quad, RenderContext* context)
+bool ColorEffect::drawTexture(System* system, TextureHandle texture, Quad* quad, RenderContext* context)
 {
     for (auto& corner : quad->corners) corner.color = m_color;
     return Effect::drawTexture(system, texture, quad, context);
 }
+#if defined(_M_IX86)
 static_assert(sizeof(ColorEffect) == 20, "Native x86 ColorEffect layout");
+#endif
 } }
 #endif
 

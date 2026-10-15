@@ -59,5 +59,10 @@ public:
     virtual bool getFlag42F() = 0;                        // +98
 };
 
+// [CHOSEN, not recovered] The size of the concrete RenderView (RendMisc/RenderView.cpp), for callers
+// that copy-construct one into their own pointer-aligned storage through renderViewCopyConstruct.
+// Retail x86: 1072 bytes (0x430); x64 adds the wider vptr and its alignment (issue #7).
+const unsigned int kRenderViewObjectBytes = sizeof(void*) == 4 ? 1072u : 1080u;
+
 } } }
 #endif

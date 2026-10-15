@@ -47,8 +47,8 @@ void StrategicObjectComp::handleUpdate(float) {}
 const std::string& StrategicObjectComp::getStrategicObjectName() { return m_template->getStrategicObjectName(); }
 const std::string& StrategicObjectComp::getIntactIconName() { return m_template->getIntactIcon(); }
 const std::string& StrategicObjectComp::getDestroyedIconName() { return m_template->getDestroyedIcon(); }
-int StrategicObjectComp::getIntactIconPtr() { return m_template->getIntactIconPtr(); }
-int StrategicObjectComp::getDestroyedIconPtr() { return m_template->getDestroyedIconPtr(); }
+std::intptr_t StrategicObjectComp::getIntactIconPtr() { return m_template->getIntactIconPtr(); }
+std::intptr_t StrategicObjectComp::getDestroyedIconPtr() { return m_template->getDestroyedIconPtr(); }
 int StrategicObjectComp::getPart() { return m_template->getPart(); }
 int StrategicObjectComp::getIndex() { return m_index; }
 void StrategicObjectComp::setIndex(int index) { m_index = index; }

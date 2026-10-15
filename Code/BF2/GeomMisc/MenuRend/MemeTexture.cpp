@@ -2,6 +2,7 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
+#include "../../../RendDX9Abi/ThunkAbi.h"
 #include "../../../RendDX9Abi/HfeAbi.h"
 #include "../../../RendDX9Abi/ModuleCommon.h"
 #include "../../../RendDX9Abi/BfMemory.h"
@@ -10,11 +11,18 @@
 #include "../../RendDX9/Texture.h"                    // EngineTexture, textureDims, textureAddRef
 #include "../../RendDX9/TextureAtlas/TextureAtlas.h"  // TextureAtlasEntry
 
+#include <stddef.h>
 #include <new>
+#include <utility>
+#include <vector>
 
 namespace dice {
 namespace hfe {
 namespace geom {
+
+// IMemeTexture::CanvasPointList (GeomMisc/MenuRend/IMemeTexture.h): the by-value point list of
+// slots +0x68 / +0x70. Spelled out here because that header brings the engine's IBase.
+typedef std::vector<std::pair<float, float> > MemeCanvasPointList;
 
 // From ModuleGeomMisc's getClassList (0x1007DD9D) and BF2's own call site.
 extern const unsigned int CID_MemeTexture  = 81032u;
@@ -54,8 +62,15 @@ public:
     void  applyCanvas(short mode);                                   // +0x78
     void  onDeviceLost();                                            // listener +0x00  0x10088920
     void  onDeviceReset();                                           // listener +0x04  0x10088940
+    // The listener thunks receive the subobject (shipped this + 4).
+    static MemeTexture* fromListener(void* sub)
+    {
+        return reinterpret_cast<MemeTexture*>(static_cast<char*>(sub)
+                                              - offsetof(MemeTexture, m_listenerVptr));
+    }
 
     // The trivial accessor pairs, one line each - see the vtable for their shipped addresses.
+    void*         engineTexture() const  { return m_texture; }                   // not a slot
     const char*   getName() const        { return m_name.c_str(); }              // +0x20
     void          setUserObject(void* p) { m_userObject = p; }                   // +0x24
     void*         getUserObject() const  { return m_userObject; }                // +0x28
@@ -77,9 +92,9 @@ private:
     void*         m_listenerVptr; // +0x04
     int           m_refCount;     // +0x08
     unsigned int  m_dword0C;      // +0x0C  [UNRESOLVED]
-    vc71::string  m_string10;     // +0x10
+    std::string  m_string10;     // +0x10
     void*         m_texture;      // +0x2C
-    vc71::string  m_name;         // +0x30  setTexture assigns this
+    std::string  m_name;         // +0x30  setTexture assigns this
     float         m_uvWidthCopy;  // +0x4C
     float         m_uvHeightCopy; // +0x50
     int           m_pixelWidth;   // +0x54
@@ -104,22 +119,21 @@ private:
     unsigned char* m_canvas;      // +0x84  ctor: 0 - the CPU drawing canvas the plot/fill write
 };
 
-static_assert(sizeof(MemeTexture) == 0x88,
-              "RefFactory_geom_Meme_Texture allocates 0x88 - see 0x1007C8BC");
+
 
 namespace {
 
-void __fastcall meme_addRef(void* s, void*) { static_cast<MemeTexture*>(s)->addRef(); }
-int  __fastcall meme_getRef(void* s, void*) { return static_cast<MemeTexture*>(s)->getRef(); }
-int  __fastcall meme_release(void* s, void*) { return static_cast<MemeTexture*>(s)->release(); }
+void RD9_THUNK meme_addRef(void* s RD9_THUNK_EDX) { static_cast<MemeTexture*>(s)->addRef(); }
+int  RD9_THUNK meme_getRef(void* s RD9_THUNK_EDX) { return static_cast<MemeTexture*>(s)->getRef(); }
+int  RD9_THUNK meme_release(void* s RD9_THUNK_EDX) { return static_cast<MemeTexture*>(s)->release(); }
 
-void* __fastcall meme_queryInterface(void* s, void*, unsigned int iid)
+void* RD9_THUNK meme_queryInterface(void* s RD9_THUNK_EDX, unsigned int iid)
 {
     return static_cast<MemeTexture*>(s)->queryInterface(iid);
 }
 
 // +0x10, sub_10088EA0. the one BF2 calls.
-void __fastcall meme_setTexture(void* s, void*, const char* name, const char* prefix, int flags)
+void RD9_THUNK meme_setTexture(void* s RD9_THUNK_EDX, const char* name, const char* prefix, int flags)
 {
     RD9_TRACE_AT("dice::hfe::geom::Meme::Texture::setTexture", s, 0x10);
     static_cast<MemeTexture*>(s)->setTexture(name, prefix, flags);
@@ -129,97 +143,81 @@ void __fastcall meme_setTexture(void* s, void*, const char* name, const char* pr
 // Float-returning adapters use the x86 FPU return convention expected by callers.
 
 
-bool __fastcall meme_s14(void* s, void*, unsigned int w, unsigned int h)
+bool RD9_THUNK meme_s14(void* s RD9_THUNK_EDX, unsigned int w, unsigned int h)
 {
     RD9_TRACE_AT("dice::hfe::geom::Meme::Texture::createTexture", s, 0x14);
     return static_cast<MemeTexture*>(s)->createTexture(w, h);
 }
 
-bool __fastcall meme_s18(void* s, void*, void* request, float u0, float v0, float u1, float v1)
+bool RD9_THUNK meme_s18(void* s RD9_THUNK_EDX, void* request, float u0, float v0, float u1, float v1)
 {
     return static_cast<MemeTexture*>(s)->drawUV(request, u0, v0, u1, v1);
 }
 
-bool __fastcall meme_s1C(void* s, void*, void* other, void* request)
+bool RD9_THUNK meme_s1C(void* s RD9_THUNK_EDX, void* other, void* request)
 {
     return static_cast<MemeTexture*>(s)->drawOther(static_cast<MemeTexture*>(other), request);
 }
 
-const char*   __fastcall meme_s20(void* s, void*) { return static_cast<MemeTexture*>(s)->getName(); }
-void          __fastcall meme_s24(void* s, void*, void* p) { static_cast<MemeTexture*>(s)->setUserObject(p); }
-void*         __fastcall meme_s28(void* s, void*) { return static_cast<MemeTexture*>(s)->getUserObject(); }
-float         __fastcall meme_s2C(void* s, void*) { return static_cast<MemeTexture*>(s)->getUvWidthCopy(); }
-float         __fastcall meme_s30(void* s, void*) { return static_cast<MemeTexture*>(s)->getUvHeightCopy(); }
-int           __fastcall meme_s34(void* s, void*) { return static_cast<MemeTexture*>(s)->getPixelWidth(); }
-int           __fastcall meme_s38(void* s, void*) { return static_cast<MemeTexture*>(s)->getPixelHeight(); }
-int           __fastcall meme_s3C(void* s, void*) { return static_cast<MemeTexture*>(s)->getPageWidth(); }
-int           __fastcall meme_s40(void* s, void*) { return static_cast<MemeTexture*>(s)->getPageHeight(); }
-unsigned char __fastcall meme_s44(void* s, void*, unsigned char v) { return static_cast<MemeTexture*>(s)->setByte66(v); }
-unsigned char __fastcall meme_s48(void* s, void*) { return static_cast<MemeTexture*>(s)->getByte66(); }
-float         __fastcall meme_s4C(void* s, void*) { return static_cast<MemeTexture*>(s)->getUOffset(); }
-float         __fastcall meme_s50(void* s, void*) { return static_cast<MemeTexture*>(s)->getVOffset(); }
-float         __fastcall meme_s54(void* s, void*) { return static_cast<MemeTexture*>(s)->getUvWidth(); }
-float         __fastcall meme_s58(void* s, void*) { return static_cast<MemeTexture*>(s)->getUvHeight(); }
-void          __fastcall meme_s5C(void* s, void*) { static_cast<MemeTexture*>(s)->releaseTexture(); }
-void          __fastcall meme_s60(void* s, void*) { static_cast<MemeTexture*>(s)->unload(); }
+const char*   RD9_THUNK meme_s20(void* s RD9_THUNK_EDX) { return static_cast<MemeTexture*>(s)->getName(); }
+void          RD9_THUNK meme_s24(void* s RD9_THUNK_EDX, void* p) { static_cast<MemeTexture*>(s)->setUserObject(p); }
+void*         RD9_THUNK meme_s28(void* s RD9_THUNK_EDX) { return static_cast<MemeTexture*>(s)->getUserObject(); }
+float         RD9_THUNK meme_s2C(void* s RD9_THUNK_EDX) { return static_cast<MemeTexture*>(s)->getUvWidthCopy(); }
+float         RD9_THUNK meme_s30(void* s RD9_THUNK_EDX) { return static_cast<MemeTexture*>(s)->getUvHeightCopy(); }
+int           RD9_THUNK meme_s34(void* s RD9_THUNK_EDX) { return static_cast<MemeTexture*>(s)->getPixelWidth(); }
+int           RD9_THUNK meme_s38(void* s RD9_THUNK_EDX) { return static_cast<MemeTexture*>(s)->getPixelHeight(); }
+int           RD9_THUNK meme_s3C(void* s RD9_THUNK_EDX) { return static_cast<MemeTexture*>(s)->getPageWidth(); }
+int           RD9_THUNK meme_s40(void* s RD9_THUNK_EDX) { return static_cast<MemeTexture*>(s)->getPageHeight(); }
+unsigned char RD9_THUNK meme_s44(void* s RD9_THUNK_EDX, unsigned char v) { return static_cast<MemeTexture*>(s)->setByte66(v); }
+unsigned char RD9_THUNK meme_s48(void* s RD9_THUNK_EDX) { return static_cast<MemeTexture*>(s)->getByte66(); }
+float         RD9_THUNK meme_s4C(void* s RD9_THUNK_EDX) { return static_cast<MemeTexture*>(s)->getUOffset(); }
+float         RD9_THUNK meme_s50(void* s RD9_THUNK_EDX) { return static_cast<MemeTexture*>(s)->getVOffset(); }
+float         RD9_THUNK meme_s54(void* s RD9_THUNK_EDX) { return static_cast<MemeTexture*>(s)->getUvWidth(); }
+float         RD9_THUNK meme_s58(void* s RD9_THUNK_EDX) { return static_cast<MemeTexture*>(s)->getUvHeight(); }
+void          RD9_THUNK meme_s5C(void* s RD9_THUNK_EDX) { static_cast<MemeTexture*>(s)->releaseTexture(); }
+void          RD9_THUNK meme_s60(void* s RD9_THUNK_EDX) { static_cast<MemeTexture*>(s)->unload(); }
 
 // Reports the original unsupported-operation diagnostic and returns a truthy value.
-int __fastcall meme_s64(void* s, void*)
+int RD9_THUNK meme_s64(void* s RD9_THUNK_EDX)
 {
     RD9_TRACE_AT("dice::hfe::geom::Meme::Texture::slot_0x64", s, 0x64);
     ::renddx9abi::logf("MemeTexture.cpp:291: hmm");
     return 1;
 }
 
-// +0x68 / +0x70 take a 16-byte vector<pair<float,float>> by value (alloc/first/last/end) plus a
-// colour byte - five stack dwords, matching the shipped retn 0x14.
-void __fastcall meme_s68(void* s, void*, void* /*alloc*/, float* first, float* last,
-                         float* /*end*/, unsigned char color)
+// +0x68 / +0x70 take a vector<pair<float,float>> by value plus a colour byte. The callee owns the
+// vector and destroys it on return, which is where the shipped body freed the point buffer.
+void RD9_THUNK meme_s68(void* s RD9_THUNK_EDX, MemeCanvasPointList points, unsigned char color)
 {
-    static_cast<MemeTexture*>(s)->plotOutline(first, last, color);
+    float* const first = points.empty() ? 0 : &points[0].first;
+    static_cast<MemeTexture*>(s)->plotOutline(first, first + 2 * points.size(), color);
 }
 
-void __fastcall meme_s6C(void* s, void*, unsigned char color)
+void RD9_THUNK meme_s6C(void* s RD9_THUNK_EDX, unsigned char color)
 {
     static_cast<MemeTexture*>(s)->fillCanvas(color);
 }
 
-// +0x70, 0x10089480 - copy the caller's point pairs, run the outline plot (its OWN vslot +0x68,
-// which frees the copy), run the fill (vslot +0x6C), then free the caller's buffer.
-void __fastcall meme_s70(void* s, void*, void* alloc, float* first, float* last,
-                         float* end, unsigned char color)
+// +0x70, 0x10089480 - pass a copy of the caller's points to its OWN vslot +0x68 (which consumes
+// the copy), run the fill (vslot +0x6C); the caller's list is destroyed on return.
+void RD9_THUNK meme_s70(void* s RD9_THUNK_EDX, MemeCanvasPointList points, unsigned char color)
 {
     MemeTexture* self = static_cast<MemeTexture*>(s);
 
-    float* copy = 0;
-    float* copyLast = 0;
-    if (first)
-    {
-        const unsigned int bytes =
-            static_cast<unsigned int>(reinterpret_cast<char*>(last) - reinterpret_cast<char*>(first));
-        copy = static_cast<float*>(::renddx9abi::engineAlloc(bytes));
-        ::memcpy(copy, first, bytes);
-        copyLast = reinterpret_cast<float*>(reinterpret_cast<char*>(copy) + bytes);
-    }
-
     // the two virtual dispatches, exactly as the shipped body makes them
     void** vtbl = *reinterpret_cast<void***>(self);
-    typedef void (__fastcall* PlotFn)(void*, void*, void*, float*, float*, float*, unsigned char);
-    typedef void (__fastcall* FillFn)(void*, void*, unsigned char);
-    reinterpret_cast<PlotFn>(vtbl[0x68 / 4])(self, 0, 0, copy, copyLast, copyLast, color);
-    reinterpret_cast<FillFn>(vtbl[0x6C / 4])(self, 0, color);
-
-    (void)alloc; (void)end;
-    if (first)
-        ::renddx9abi::engineFree(first);                   // the shipped body frees the original
+    typedef void (__thiscall* PlotFn)(void*, MemeCanvasPointList, unsigned char);
+    typedef void (__thiscall* FillFn)(void*, unsigned char);
+    reinterpret_cast<PlotFn>(vtbl[0x68 / 4])(self, points, color);
+    reinterpret_cast<FillFn>(vtbl[0x6C / 4])(self, color);
 }
 
-void __fastcall meme_s74(void* s, void*, unsigned char clearValue)
+void RD9_THUNK meme_s74(void* s RD9_THUNK_EDX, unsigned char clearValue)
 {
     static_cast<MemeTexture*>(s)->beginShape(clearValue);
 }
 
-void __fastcall meme_s78(void* s, void*, short mode)
+void RD9_THUNK meme_s78(void* s RD9_THUNK_EDX, short mode)
 {
     static_cast<MemeTexture*>(s)->applyCanvas(mode);
 }
@@ -260,15 +258,15 @@ void* const kMemeTextureVtable[31] =
 };
 
 // Listener thunks receive the secondary subobject and adjust back to the texture owner.
-void __fastcall meme_onDeviceLost(void* s, void*)
+void RD9_THUNK meme_onDeviceLost(void* s RD9_THUNK_EDX)
 {
-    reinterpret_cast<MemeTexture*>(reinterpret_cast<char*>(s) - 4)->onDeviceLost();
+    MemeTexture::fromListener(s)->onDeviceLost();
 }
-void __fastcall meme_onDeviceReset(void* s, void*)
+void RD9_THUNK meme_onDeviceReset(void* s RD9_THUNK_EDX)
 {
-    reinterpret_cast<MemeTexture*>(reinterpret_cast<char*>(s) - 4)->onDeviceReset();
+    MemeTexture::fromListener(s)->onDeviceReset();
 }
-void __fastcall meme_listenerNullsub(void*, void*) { /* nullsub_15 - empty in the original */ }
+void RD9_THUNK meme_listenerNullsub(void* RD9_THUNK_EDX) { /* nullsub_15 - empty in the original */ }
 
 void* const kMemeTextureListenerVtable[3] =
 {
@@ -295,6 +293,10 @@ MemeTexture::MemeTexture()
     , m_savedAlpha(0)
     , m_canvas(0)
 {
+#if defined(_M_IX86)
+    static_assert(offsetof(MemeTexture, m_listenerVptr) == 4,
+                  "both MemeTexture listener bodies are handed this + 4");
+#endif
     m_uvWidthCopy = 0.0f; m_uvHeightCopy = 0.0f;
     m_pixelWidth  = 0;    m_pixelHeight  = 0;
     m_pageWidth   = 0;    m_pageHeight   = 0;
@@ -334,8 +336,8 @@ void MemeTexture::dtor()
         ::renddx9abi::engineFree(m_canvas);
         m_canvas = 0;
     }
-    m_name.~string();
-    m_string10.~string();
+    m_name.~basic_string();
+    m_string10.~basic_string();
 }
 
 // Final release runs teardown before freeing storage.
@@ -375,7 +377,7 @@ void MemeTexture::setTexture(const char* name, const char* prefix, int flags)
 
     m_name = name;
 
-    vc71::string full(prefix);          // the shipped ctor(PBD) - a null prefix would crash there too
+    std::string full(prefix);          // the shipped ctor(PBD) - a null prefix would crash there too
     full += name;
 
     bool tryAtlas = true;               // v33
@@ -401,7 +403,7 @@ void MemeTexture::setTexture(const char* name, const char* prefix, int flags)
     {
         const int savedClass   = ::dice::hfe::dx9rend::textureManagerSwapDefaultMipClass(1);
         const int savedManaged = ::dice::hfe::dx9rend::textureManagerSwapManaged(1);
-        if (!::dice::hfe::dx9rend::atlasCacheLoadAtlases(vc71::string("Menu/Atlas/")))
+        if (!::dice::hfe::dx9rend::atlasCacheLoadAtlases(std::string("Menu/Atlas/")))
             tryAtlas = false;
         ::dice::hfe::dx9rend::textureManagerSwapDefaultMipClass(savedClass);
         ::dice::hfe::dx9rend::textureManagerSwapManaged(savedManaged);
@@ -409,7 +411,7 @@ void MemeTexture::setTexture(const char* name, const char* prefix, int flags)
 
     if (tryAtlas)
     {
-        vc71::string key;
+        std::string key;
         ::dice::hfe::dx9rend::pathStripExtension(key, full);   // sub_100753D0
         key += ".dds";                                          // sub_100019A0
 
@@ -459,8 +461,8 @@ void MemeTexture::setTexture(const char* name, const char* prefix, int flags)
     m_uvWidthCopy  = 1.0f;
     m_uvHeightCopy = 1.0f;
 
-    ::renddx9abi::logf("Meme::Texture::setTexture(\"%s%s\"): loader path -> 0x%08X %dx%d",
-                       prefix, name, ::renddx9abi::addr(m_texture), m_pixelWidth, m_pixelHeight);
+    ::renddx9abi::logf("Meme::Texture::setTexture(\"%s%s\"): loader path -> 0x%p %dx%d",
+                       prefix, name, m_texture, m_pixelWidth, m_pixelHeight);
 }
 
 
@@ -489,8 +491,8 @@ bool MemeTexture::createTexture(unsigned int w, unsigned int h)
         m_pageHeight   = static_cast<int>(dims[1]);
         m_uvWidthCopy  = 1.0f;
         m_uvHeightCopy = 1.0f;
-        ::renddx9abi::logf("Meme::Texture::createTexture(%ux%u): render target -> 0x%08X",
-                           w, h, ::renddx9abi::addr(m_texture));
+        ::renddx9abi::logf("Meme::Texture::createTexture(%ux%u): render target -> 0x%p",
+                           w, h, m_texture);
         return true;
     }
     return false;
@@ -563,10 +565,10 @@ void MemeTexture::unload()
         ::dice::hfe::dx9rend::EngineTexture* tex =
             static_cast<::dice::hfe::dx9rend::EngineTexture*>(m_texture);
 
-        vc71::string level, levelDir;
+        std::string level, levelDir;
         ::dice::hfe::dx9rend::readStringSetting("GSLoadLevel", level);
         ::dice::hfe::dx9rend::readStringSetting("GSLevelDirectory", levelDir);
-        vc71::string prefix(levelDir);
+        std::string prefix(levelDir);
         prefix += level;
 
         if (--tex->refCount)
@@ -590,7 +592,8 @@ void MemeTexture::unload()
 }
 
 
-// Plots normalized point pairs with even-odd pixel toggles and consumes the caller's point buffer.
+// Plots normalized point pairs with even-odd pixel toggles. The points belong to slot +0x68's
+// by-value vector, which frees them on return (the shipped core freed the buffer here).
 // The horizontal step is computed before the empty-span check, preserving division by zero.
 
 void MemeTexture::plotOutline(float* first, float* last, unsigned char color)
@@ -638,8 +641,6 @@ void MemeTexture::plotOutline(float* first, float* last, unsigned char color)
             }
         }
     }
-    if (first)
-        ::renddx9abi::engineFree(first);                   // sub_1005F360(a3) - unconditional in the original
 }
 
 
@@ -793,6 +794,12 @@ void MemeTexture::onDeviceReset()
         m_texture = ::dice::hfe::dx9rend::textureManagerCreateEmpty(
             static_cast<unsigned int>(m_pageWidth), static_cast<unsigned int>(m_pageHeight),
             21, 0, 1, tex);
+}
+
+// The wrapped EngineTexture (+0x2C) the QuadDrawer compares and binds by identity.
+void* memeTextureEngineTexture(const MemeTexture* texture)
+{
+    return texture->engineTexture();
 }
 
 // RefFactory_geom_Meme_Texture, 0x1007C8B0.

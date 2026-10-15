@@ -50,7 +50,9 @@ int BoolData::getCharacter(System*, int character)
     return (value ? "true" : "false")[character];
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(BoolData) == 12, "client BFMeme BoolData");
 static_assert(sizeof(ClassTypeDescriptor<BoolData, Data>) == 16, "BoolData metadata");
+#endif
 } }
 #endif

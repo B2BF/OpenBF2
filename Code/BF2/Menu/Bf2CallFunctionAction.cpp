@@ -16,6 +16,8 @@ bool Bf2CallFunctionAction::setFunction(Function* function)
     m_function = function;
     return true;
 }
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2CallFunctionAction) == 8, "client Bf2CallFunctionAction");
+#endif
 } }
 #endif

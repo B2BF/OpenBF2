@@ -9,7 +9,6 @@
 
 #include "../../../../RendDX9Abi/HfeAbi.h"
 #include "../../../../RendDX9Abi/BfMemory.h"
-#include "../../../../RendDX9Abi/Vc71Vector.h"
 
 namespace dice {
 namespace hfe {

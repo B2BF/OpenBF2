@@ -13,11 +13,12 @@ server, client, or editor session will complete.
 | Work on the native Windows dedicated server | MSVC x64 | [Windows x64](building.md#windows-x64) |
 | Work on the native Linux dedicated server | Linux x86-64 | [Linux and WSL](building.md#linux-and-wsl) |
 | Work on the rebuilt client or its DLLs | MSVC x86, native plugin ABI | [Client and plugins](building.md#client-and-plugins) |
+| Work on the native 64-bit client | MSVC x64 | [Native x64 client](building.md#native-x64-client) |
 | Work on editing tools | MSVC x86 | [Editor](building.md#editor) and [console commands](editor-console.md) |
 
-The 64-bit servers use native pointer-bearing layouts. Verify retail class sizes and
-offsets with x86. A plugin's **native** flavor means the rebuilt host's C++ ABI; it does
-not mean the plugin is 64-bit.
+The 64-bit servers and client use native pointer-bearing layouts. Verify retail class
+sizes and offsets with x86. A plugin script's `native` argument selects the rebuilt host's
+x86 build; its `x64` argument selects the 64-bit build.
 
 ## First successful check
 

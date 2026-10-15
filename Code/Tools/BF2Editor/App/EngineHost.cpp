@@ -107,11 +107,19 @@ const RendererSetting kRendererSettings[] = {
 // The device RendDX9 created. There is no typed getter on IRenderer: the rebuilt Renderer
 // (RendDX9/BF2Render.cpp, `class Renderer : public IRenderer`, single inheritance) is overlaid by its
 // RendDX9Base layout from offset 0 (RendDX9Init.cpp constructD3DHalf: g_rendererBase = this), and
-// RendDX9Base.h static_asserts `device` at +0x0C. The one raw read of the renderer's layout in the
-// editor; EngineHost::startRenderer verifies it against the device's own creation parameters.
+// RendDX9Base.h static_asserts its head {vptr, int refCount, IDirect3D9*, IDirect3DDevice9*}: `device`
+// at +0x0C on x86, +0x18 on x64. The one read of the renderer's layout in the editor, mirrored by that
+// head; EngineHost::startRenderer verifies it against the device's own creation parameters.
 IDirect3DDevice9* rendererDevice(dice::hfe::dx9rend::IRenderer* renderer)
 {
-    return *reinterpret_cast<IDirect3DDevice9* const*>(reinterpret_cast<const char*>(renderer) + 0x0C);
+    struct RendererHead
+    {
+        void*             vptr;
+        int               refCount;
+        void*             d3d9;
+        IDirect3DDevice9* device;
+    };
+    return reinterpret_cast<const RendererHead*>(renderer)->device;
 }
 
 // io::OldConsole::runFullAccess with no script arguments, as every BF2Engine call site passes them.

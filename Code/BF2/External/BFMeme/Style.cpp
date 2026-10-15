@@ -26,7 +26,7 @@ char* cloneStyleName(const char* name)               // shared helper0x737DC0
 }
 }
 
-Style::Style(const char* name, int font)
+Style::Style(const char* name, FontHandle font)
     : m_font(font), m_name(cloneStyleName(name))
 {
     // Retail deliberately leaves m_shadowFont and both scale fields untouched.
@@ -199,7 +199,9 @@ void Style::positionGlyphInt(Rect* output, const GlyphMetrics* metrics,
     *y = static_cast<int>(floatY);
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(Style) == 24, "PE Style allocation");
+#endif
 static_assert(sizeof(GlyphMetrics) == 20, "five scalar glyph metrics");
 static_assert(sizeof(Rect) == 20, "five scalar drawing bounds");
 } }

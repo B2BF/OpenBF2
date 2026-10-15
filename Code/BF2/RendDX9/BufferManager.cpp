@@ -1,20 +1,23 @@
 // Tracks vertex/index buffers and cached vertex declarations across device loss/reset.
-// Compatibility tree rebalancing remains covered by RW-74.
 
 #ifdef BF2_IMAGE_RENDDX9
 
+#include "../../RendDX9Abi/ThunkAbi.h"
 #include "../../RendDX9Abi/HfeAbi.h"
 #include "../../RendDX9Abi/BfMemory.h"
 #include "../../RendDX9Abi/Frontier.h"
-#include "../../RendDX9Abi/Vc71Map.h"
-#include "../../RendDX9Abi/Vc71Vector.h"
 #include "RendDX9Base.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <d3d9.h>
 #include <cstdlib>
+#include <stddef.h>
 #include <string.h>
+#include <map>
+#include <set>
+#include <utility>
+#include <vector>
 
 namespace dice {
 namespace hfe {
@@ -30,43 +33,66 @@ int bitsPerPixel(unsigned int d3dFormat); // RendDX9Types.cpp, sub_1000CD30
 
 namespace {
 
-// One intrusive list: [allocator][head][count]. The constructor builds each the same way -
-// allocate a sentinel, set a byte flag, point its three self-pointers at itself, zero the count.
-struct BmList
+// The two trees whose element types are unrecovered (see BufferManager). Retail nodes are 0x34 and
+// 0x30 bytes, carrying 36 and 32 bytes of payload; nothing recovered traverses them, so the
+// key/value split is [UNRESOLVED] and only their construction is reproduced.
+struct BmUnresolvedValue32
 {
-    void*         allocator;   // +0x00  unused by the constructor beyond being the ecx it passes
-    unsigned int* head;        // +0x04  the sentinel node
-    unsigned int  count;       // +0x08
+    unsigned int words[8];
 };
 
-// Allocates a compatibility sentinel with layout-specific flag offsets.
-// Sizes for untraversed 52- and 48-byte node types remain [INFERRED].
-unsigned int* allocSentinel(unsigned int size, unsigned int flagOffset)
+struct BmUnresolvedValue28
 {
-    unsigned char* node = static_cast<unsigned char*>(::renddx9abi::engineAlloc(size));
-    if (!node)
-        return 0;
+    unsigned int words[7];
+};
 
-    for (unsigned int i = 0; i < size; ++i)
-        node[i] = 0;
+struct VertexDeclaration;
 
-    node[flagOffset - 1] = 1;   // the allocator writes this one
-    node[flagOffset]     = 1;   // ... and the constructor overwrites the second with 1
+// The vertex-declaration cache key: the element list without its D3DDECL_END terminator.
+typedef std::vector<D3DVERTEXELEMENT9> DeclarationKey;
 
-    unsigned int* words = reinterpret_cast<unsigned int*>(node);
-    const unsigned int self = reinterpret_cast<unsigned int>(node);
-    words[0] = self;            // next -> self
-    words[1] = self;            // prev -> self
-    words[2] = self;            // and the third self-pointer the constructor also writes
-    return words;
+// A key as a lookup sees it, before (or without) copying it into a DeclarationKey.
+struct DeclarationKeyView
+{
+    const D3DVERTEXELEMENT9* elements;
+    unsigned int             count;
+};
+
+inline DeclarationKeyView viewOf(const DeclarationKey& key)
+{
+    const DeclarationKeyView view = { key.data(), static_cast<unsigned int>(key.size()) };
+    return view;
 }
 
-void initList(BmList& list, unsigned int nodeSize, unsigned int flagOffset)
+// The element count first, then the element bytes.
+int compareDeclarationKey(const DeclarationKeyView& a, const DeclarationKeyView& b)
 {
-    list.allocator = 0;
-    list.head      = allocSentinel(nodeSize, flagOffset);
-    list.count     = 0;
+    if (a.count != b.count)
+        return a.count > b.count ? 1 : -1;
+    const int compared = ::memcmp(a.elements, b.elements, a.count * sizeof(D3DVERTEXELEMENT9));
+    return compared > 0 ? 1 : (compared < 0 ? -1 : 0);
 }
+
+// sub_1004A5F0 is std::greater<vector<...> >: a greater key sorts first (descends left).
+struct DeclarationKeyGreater
+{
+    typedef void is_transparent;
+
+    bool operator()(const DeclarationKey& a, const DeclarationKey& b) const
+    {
+        return compareDeclarationKey(viewOf(a), viewOf(b)) > 0;
+    }
+    bool operator()(const DeclarationKeyView& a, const DeclarationKey& b) const
+    {
+        return compareDeclarationKey(a, viewOf(b)) > 0;
+    }
+    bool operator()(const DeclarationKey& a, const DeclarationKeyView& b) const
+    {
+        return compareDeclarationKey(viewOf(a), b) > 0;
+    }
+};
+
+typedef std::map<DeclarationKey, VertexDeclaration*, DeclarationKeyGreater> DeclarationCache;
 
 } // anonymous namespace
 
@@ -88,17 +114,23 @@ public:
     // Initialization intentionally succeeds without additional work.
     bool init() { return true; }
 
-    BmList& list(unsigned int index) { return m_lists[index]; }
+    // The four buffer-tracking sets, by index: 0 managed vertex buffers, 1 default-pool vertex
+    // buffers, 2 managed index buffers, 3 default-pool index buffers.
+    std::set<void*>&  bufferSet(unsigned int index) { return m_bufferSets[index]; }
+    DeclarationCache& declarations() { return m_declarations; }
 
 private:
     IDirect3DDevice9* m_device;   // +0x04
     // Default D3D allocation pool; also selects the buffer tracking set.
     unsigned int      m_pool;     // +0x08  D3DPOOL_MANAGED (1) - see the defect note above
-    BmList            m_lists[7]; // +0x0C .. +0x5F
+    // Retail std::set<Buffer*> instances with 0x14-byte pointer-key nodes, ordered by address.
+    std::set<void*>   m_bufferSets[4];   // +0x0C / +0x18 / +0x24 / +0x30
+    DeclarationCache  m_declarations;    // +0x3C  0x24-byte nodes
+    // [UNRESOLVED] element types: two trees the constructor builds (0x34- and 0x30-byte nodes) that
+    // nothing recovered traverses.
+    std::map<unsigned int, BmUnresolvedValue32> m_unresolvedTree34;   // +0x48
+    std::map<unsigned int, BmUnresolvedValue28> m_unresolvedTree30;   // +0x54
 };
-
-static_assert(sizeof(BufferManager) == 0x60,
-              "initializeD3DSubsystems allocates 96 for it - see RendDX9Init.cpp:280");
 
 
 // complete.
@@ -107,15 +139,8 @@ BufferManager::BufferManager(IDirect3DDevice9* device)
     : m_device(0)
     , m_pool(1)          // D3DPOOL_MANAGED
 {
-    // The node sizes, in the constructor's own order. The first four lists share an allocator and
-    // therefore an element type; the last three each have their own.
-    initList(m_lists[0], 0x14, 17);
-    initList(m_lists[1], 0x14, 17);
-    initList(m_lists[2], 0x14, 17);
-    initList(m_lists[3], 0x14, 17);
-    initList(m_lists[4], 0x24, 33);
-    initList(m_lists[5], 0x34, 49);
-    initList(m_lists[6], 0x30, 45);
+    // The four sets, the declaration cache and the two unresolved trees are constructed as members,
+    // in the constructor's own order.
 
     // Retain and store the device after constructing the lists.
     if (device)
@@ -165,13 +190,20 @@ struct VertexBuffer
     unsigned int             stride;    // +0x28
 };
 
+// Retail x86 evidence. createVertexBuffer allocates sizeof(VertexBuffer); other TUs reach the fields
+// through the accessors below, so the x64 wrapper is native (issue #7).
+#if defined(_M_IX86)
 static_assert(sizeof(VertexBuffer) == 0x2C, "createVertexBuffer allocates 0x2C - see 0x100120A0");
+#endif
+static_assert(sizeof(D3dVertexBufferDesc) == sizeof(D3DVERTEXBUFFER_DESC),
+              "GetDesc writes the D3D descriptor over the wrapper's copy");
 
-// Both buffer wrappers share this +4 reference-count getter.
-int   __fastcall vb_getRef(void* self, void*)
-{ return *reinterpret_cast<int*>(static_cast<unsigned char*>(self) + 4); }
-void  __fastcall vb_nullsub(void*, void*) { }
-void  __fastcall vb_addRef(void* s, void*) { ++static_cast<VertexBuffer*>(s)->refCount; }
+// Both buffer wrappers share this +4 reference-count getter (IndexBuffer keeps refCount at the
+// same offset; see the assert after its definition).
+int   RD9_THUNK vb_getRef(void* self RD9_THUNK_EDX)
+{ return static_cast<VertexBuffer*>(self)->refCount; }
+void  RD9_THUNK vb_nullsub(void* RD9_THUNK_EDX) { }
+void  RD9_THUNK vb_addRef(void* s RD9_THUNK_EDX) { ++static_cast<VertexBuffer*>(s)->refCount; }
 
 void* const kVertexBufferVtable[3] =
 {
@@ -186,24 +218,20 @@ void bumpRendererCounter(unsigned int dwordIndex, int delta)
 {
     if (!g_Renderer)
         return;
-    unsigned char* sub = reinterpret_cast<unsigned char*>(g_Renderer) + 264;
+    unsigned char* sub = reinterpret_cast<RendDX9Base*>(g_Renderer)->renderStats;
     *reinterpret_cast<int*>(sub + dwordIndex * 4) += delta;
 }
 
-vc71::set_layout& pointerSet(BufferManager* manager, unsigned int listIndex)
+std::set<void*>& pointerSet(BufferManager* manager, unsigned int listIndex)
 {
-    // BmList and vc71::set_layout are the same recovered 12-byte VC7 tree header.  The first four
-    // BufferManager members are std::set<Buffer*> instances with 0x14-byte pointer-key nodes.
-    return *reinterpret_cast<vc71::set_layout*>(&manager->list(listIndex));
+    return manager->bufferSet(listIndex);
 }
 
 void retainInPointerSet(BufferManager* manager, unsigned int listIndex, void* object,
                         int& referenceCount)
 {
     // PE sub_10013600 performs std::set::insert and the factory then takes the manager reference.
-    // The shared shim preserves the exact node/header ABI and ordering; only red-black balancing
-    // remains the repository-wide chosen policy. [CHOSEN, not recovered] [RETIRE-WHEN: RW-74]
-    if (!pointerSet(manager, listIndex).insert(reinterpret_cast<unsigned int>(object)))
+    if (!pointerSet(manager, listIndex).insert(object).second)
     {
         ::renddx9abi::logf("BufferManager tracking-set insertion failed for 0x%08X",
                            ::renddx9abi::addr(object));
@@ -248,7 +276,7 @@ void vertexBufferSetBuffer(VertexBuffer* self, IDirect3DVertexBuffer9* vb)
 // [INFERRED] dynamic/managed failure behavior follows the selected pool and usage flags.
 
 void* createVertexBuffer(void* bufferManager, unsigned int count, unsigned int stride,
-                         const vc71::string& name, unsigned int usage)
+                         const std::string& name, unsigned int usage)
 {
     RD9_TRACE_AT("dice::hfe::dx9rend::BufferManager::createVertexBuffer", bufferManager, 0x00);
 
@@ -314,7 +342,7 @@ int bufferManagerSwapPool(int value)
 void* bufferManagerCreateVertexBuffer(unsigned int count, unsigned int stride,
                                       unsigned int usage, const char* name)
 {
-    return createVertexBuffer(g_bufferManager, count, stride, vc71::string(name), usage);
+    return createVertexBuffer(g_bufferManager, count, stride, std::string(name), usage);
 }
 
 // Locks in vertex units and returns null on failure. Dynamic discard locks pass byte size zero.
@@ -373,9 +401,21 @@ unsigned int vertexBufferVertexCount(void* wrapper)
     return self->desc.size / self->stride;
 }
 
+// [CHOSEN, not recovered] (issue #7) typed reads of the wrapper fields other TUs used to take by
+// retail offset: the D3D buffer (+0x08) and the created byte size (desc.Size, +0x20).
+IDirect3DVertexBuffer9* vertexBufferD3D(void* wrapper)
+{
+    return static_cast<VertexBuffer*>(wrapper)->buffer;
+}
+
+unsigned int vertexBufferByteSize(void* wrapper)
+{
+    return static_cast<VertexBuffer*>(wrapper)->desc.size;
+}
+
 
 // Adds an owner reference to the shared vertex-buffer wrapper.
-void vertexBufferAddRef(void* wrapper) { vb_addRef(wrapper, 0); }
+void vertexBufferAddRef(void* wrapper) { vb_addRef(wrapper RD9_THUNK_ARG); }
 
 // The shipped call sites release a VertexBuffer wrapper inline: `if (!--wrapper[1])
 // { sub_10014510(wrapper); engineFree(wrapper); }`. sub_10014510, read in full: restore the base
@@ -417,8 +457,14 @@ struct IndexBuffer
     D3DINDEXBUFFER_DESC     desc;       // +0x10 .. +0x23
 };
 
+// Retail x86 evidence; bufferManagerCreateIndexBuffer allocates sizeof(IndexBuffer) (issue #7).
+#if defined(_M_IX86)
 static_assert(sizeof(IndexBuffer) == 0x24,
               "BufferManager::createIndexBuffer allocates 0x24 at PE 0x100121B0");
+#endif
+static_assert(offsetof(IndexBuffer, refCount) == offsetof(VertexBuffer, refCount) &&
+              offsetof(IndexBuffer, buffer) == offsetof(VertexBuffer, buffer),
+              "the shared {getRef, nullsub, addRef} table reads both wrappers alike");
 
 void indexBufferSetBuffer(IndexBuffer* self, IDirect3DIndexBuffer9* ib)
 {
@@ -511,6 +557,12 @@ void indexBufferBind(void* wrapper)
     stateManagerSetIndices(self->buffer);
 }
 
+// [CHOSEN, not recovered] (issue #7) the wrapped D3D index buffer (+0x08), for other TUs.
+IDirect3DIndexBuffer9* indexBufferD3D(void* wrapper)
+{
+    return static_cast<IndexBuffer*>(wrapper)->buffer;
+}
+
 // The inline owner-side decrement around sub_10014300.
 void indexBufferRelease(void* wrapper)
 {
@@ -530,7 +582,6 @@ void indexBufferRelease(void* wrapper)
 
 // Ref-counted vertex declaration cached by its element vector, excluding D3DDECL_END.
 // Destruction releases the D3D object and decrements the renderer's declaration count.
-// [CHOSEN, not recovered] The cache tree is unbalanced. [RETIRE-WHEN: RW-74]
 
 namespace {
 
@@ -541,9 +592,9 @@ struct VertexDeclaration
     IDirect3DVertexDeclaration9*    decl;       // +0x08
 };
 
-void __fastcall vd_getRef(void* s, void*) { (void)s; }
-void __fastcall vd_nullsub(void*, void*) { }
-void __fastcall vd_addRef(void* s, void*) { ++static_cast<VertexDeclaration*>(s)->refCount; }
+void RD9_THUNK vd_getRef(void* s RD9_THUNK_EDX) { (void)s; }
+void RD9_THUNK vd_nullsub(void* RD9_THUNK_EDX) { }
+void RD9_THUNK vd_addRef(void* s RD9_THUNK_EDX) { ++static_cast<VertexDeclaration*>(s)->refCount; }
 
 void* const kVertexDeclVtable[3] =
 {
@@ -551,21 +602,6 @@ void* const kVertexDeclVtable[3] =
     reinterpret_cast<void*>(&vd_nullsub),
     reinterpret_cast<void*>(&vd_addRef)
 };
-
-struct DeclarationNode
-{
-    DeclarationNode*   left;
-    DeclarationNode*   parent;
-    DeclarationNode*   right;
-    vc71::vector_layout key;
-    VertexDeclaration* value;
-    unsigned char      color;
-    unsigned char      isNil;
-    unsigned char      pad[2];
-};
-
-static_assert(sizeof(DeclarationNode) == 0x24,
-              "BufferManager declaration-cache node is 0x24 bytes");
 
 unsigned int declarationElementCount(const D3DVERTEXELEMENT9* elements)
 {
@@ -578,117 +614,6 @@ unsigned int declarationElementCount(const D3DVERTEXELEMENT9* elements)
     return count;
 }
 
-int compareDeclarationKey(const D3DVERTEXELEMENT9* elements, unsigned int count,
-                          const vc71::vector_layout& key)
-{
-    const unsigned int keyCount = key.first
-        ? static_cast<unsigned int>((key.last - key.first) / sizeof(D3DVERTEXELEMENT9)) : 0u;
-    if (count != keyCount)
-        return count > keyCount ? 1 : -1;
-    const int compared = ::memcmp(elements, key.first, count * sizeof(D3DVERTEXELEMENT9));
-    return compared > 0 ? 1 : (compared < 0 ? -1 : 0);
-}
-
-DeclarationNode* findDeclaration(BufferManager* manager,
-                                 const D3DVERTEXELEMENT9* elements,
-                                 unsigned int count)
-{
-    DeclarationNode* const head = reinterpret_cast<DeclarationNode*>(manager->list(4).head);
-    DeclarationNode* node = head->parent;
-    while (!node->isNil)
-    {
-        const int compared = compareDeclarationKey(elements, count, node->key);
-        if (!compared)
-            return node;
-        // sub_1004A5F0 is std::greater<vector<...> >: a greater key descends left.
-        node = compared > 0 ? node->left : node->right;
-    }
-    return head;
-}
-
-DeclarationNode* insertDeclaration(BufferManager* manager,
-                                   const D3DVERTEXELEMENT9* elements,
-                                   unsigned int count,
-                                   VertexDeclaration* value)
-{
-    BmList& map = manager->list(4);
-    DeclarationNode* const head = reinterpret_cast<DeclarationNode*>(map.head);
-    DeclarationNode* parent = head;
-    DeclarationNode* node = head->parent;
-    int compared = 0;
-    while (!node->isNil)
-    {
-        parent = node;
-        compared = compareDeclarationKey(elements, count, node->key);
-        if (!compared)
-            return node;
-        node = compared > 0 ? node->left : node->right;
-    }
-
-    DeclarationNode* inserted = static_cast<DeclarationNode*>(
-        ::renddx9abi::engineAlloc(sizeof(DeclarationNode)));
-    if (!inserted)
-    {
-        ::renddx9abi::logf("BufferManager declaration-cache insertion allocation failed");
-        std::abort();
-    }
-    ::memset(inserted, 0, sizeof(*inserted));
-    inserted->left = head;
-    inserted->parent = parent;
-    inserted->right = head;
-    inserted->key.alloc = 0;
-    const unsigned int bytes = count * sizeof(D3DVERTEXELEMENT9);
-    inserted->key.first = static_cast<char*>(::operator new(bytes));
-    ::memcpy(inserted->key.first, elements, bytes);
-    inserted->key.last = inserted->key.first + bytes;
-    inserted->key.end = inserted->key.last;
-    inserted->value = value;
-    inserted->color = 0;
-    inserted->isNil = 0;
-
-    if (parent == head)
-    {
-        head->parent = inserted;
-        head->left = inserted;
-        head->right = inserted;
-    }
-    else if (compared > 0)
-    {
-        parent->left = inserted;
-        if (head->left == parent)
-            head->left = inserted;
-    }
-    else
-    {
-        parent->right = inserted;
-        if (head->right == parent)
-            head->right = inserted;
-    }
-    ++map.count;
-    return inserted;
-}
-
-DeclarationNode* nextDeclaration(DeclarationNode* node)
-{
-    if (node->isNil)
-        return node;
-    DeclarationNode* right = node->right;
-    if (right->isNil)
-    {
-        DeclarationNode* parent = node->parent;
-        while (!parent->isNil && node == parent->right)
-        {
-            node = parent;
-            parent = parent->parent;
-        }
-        return parent;
-    }
-    node = right;
-    while (!node->left->isNil)
-        node = node->left;
-    return node;
-}
-
 } // anonymous namespace
 
 void* vertexDeclarationCreate(const void* elements)
@@ -697,12 +622,13 @@ void* vertexDeclarationCreate(const void* elements)
     const D3DVERTEXELEMENT9* const declaration =
         static_cast<const D3DVERTEXELEMENT9*>(elements);
     const unsigned int elementCount = declarationElementCount(declaration);
-    DeclarationNode* cached = findDeclaration(bm, declaration, elementCount);
-    DeclarationNode* const head = reinterpret_cast<DeclarationNode*>(bm->list(4).head);
-    if (cached != head)
+    const DeclarationKeyView key = { declaration, elementCount };
+    DeclarationCache& cache = bm->declarations();
+    DeclarationCache::iterator cached = cache.find(key);
+    if (cached != cache.end())
     {
-        ++cached->value->refCount;
-        return cached->value;
+        ++cached->second->refCount;
+        return cached->second;
     }
 
     IDirect3DVertexDeclaration9* decl = 0;
@@ -717,7 +643,7 @@ void* vertexDeclarationCreate(const void* elements)
     bumpRendererCounter(12, +1);
     decl->Release();                           // discard CreateVertexDeclaration's reference
 
-    insertDeclaration(bm, declaration, elementCount, self);
+    cache.insert(std::make_pair(DeclarationKey(declaration, declaration + elementCount), self));
     ++self->refCount;                          // declaration-cache ownership
     return self;
 }
@@ -727,6 +653,12 @@ void vertexDeclarationBind(void* wrapper)
 {
     VertexDeclaration* self = static_cast<VertexDeclaration*>(wrapper);
     stateManagerSetVertexDeclaration(self->decl);
+}
+
+// [CHOSEN, not recovered] (issue #7) the wrapped D3D declaration (+0x08), for other TUs.
+IDirect3DVertexDeclaration9* vertexDeclarationD3D(void* wrapper)
+{
+    return static_cast<VertexDeclaration*>(wrapper)->decl;
 }
 
 // The inline release dance around sub_10014790, same shape as the vertex buffer's.
@@ -751,20 +683,20 @@ void vertexDeclarationRelease(void* wrapper)
 
 void BufferManager::onDeviceLost()
 {
-    vc71::set_layout& vertexBuffers = pointerSet(this, 1); // +0x18, default pool
-    for (vc71::set_node* node = vertexBuffers.begin(); node != vertexBuffers.end();
-         node = vc71::set_layout::next(node))
+    std::set<void*>& vertexBuffers = pointerSet(this, 1); // +0x18, default pool
+    for (std::set<void*>::const_iterator node = vertexBuffers.begin();
+         node != vertexBuffers.end(); ++node)
     {
-        VertexBuffer* const buffer = reinterpret_cast<VertexBuffer*>(node->key);
+        VertexBuffer* const buffer = static_cast<VertexBuffer*>(*node);
         if (buffer->buffer)
             vertexBufferSetBuffer(buffer, 0);
     }
 
-    vc71::set_layout& indexBuffers = pointerSet(this, 3);  // +0x30, default pool
-    for (vc71::set_node* node = indexBuffers.begin(); node != indexBuffers.end();
-         node = vc71::set_layout::next(node))
+    std::set<void*>& indexBuffers = pointerSet(this, 3);  // +0x30, default pool
+    for (std::set<void*>::const_iterator node = indexBuffers.begin();
+         node != indexBuffers.end(); ++node)
     {
-        IndexBuffer* const buffer = reinterpret_cast<IndexBuffer*>(node->key);
+        IndexBuffer* const buffer = static_cast<IndexBuffer*>(*node);
         if (buffer->buffer)
             indexBufferSetBuffer(buffer, 0);
     }
@@ -772,11 +704,11 @@ void BufferManager::onDeviceLost()
 
 void BufferManager::onDeviceReset()
 {
-    vc71::set_layout& vertexBuffers = pointerSet(this, 1);
-    for (vc71::set_node* node = vertexBuffers.begin(); node != vertexBuffers.end();
-         node = vc71::set_layout::next(node))
+    std::set<void*>& vertexBuffers = pointerSet(this, 1);
+    for (std::set<void*>::const_iterator node = vertexBuffers.begin();
+         node != vertexBuffers.end(); ++node)
     {
-        VertexBuffer* const buffer = reinterpret_cast<VertexBuffer*>(node->key);
+        VertexBuffer* const buffer = static_cast<VertexBuffer*>(*node);
         if (!buffer->buffer)
         {
             // sub_10014720 creates directly into +0x08.  It does not route through setBuffer and
@@ -787,11 +719,11 @@ void BufferManager::onDeviceReset()
         }
     }
 
-    vc71::set_layout& indexBuffers = pointerSet(this, 3);
-    for (vc71::set_node* node = indexBuffers.begin(); node != indexBuffers.end();
-         node = vc71::set_layout::next(node))
+    std::set<void*>& indexBuffers = pointerSet(this, 3);
+    for (std::set<void*>::const_iterator node = indexBuffers.begin();
+         node != indexBuffers.end(); ++node)
     {
-        IndexBuffer* const buffer = reinterpret_cast<IndexBuffer*>(node->key);
+        IndexBuffer* const buffer = static_cast<IndexBuffer*>(*node);
         if (!buffer->buffer)
         {
             m_device->CreateIndexBuffer(buffer->desc.Size, buffer->desc.Usage,
@@ -807,24 +739,24 @@ void BufferManager::onDeviceDestroy()
     static const unsigned int vertexLists[2] = { 1u, 0u };
     for (unsigned int listIndex = 0; listIndex < 2; ++listIndex)
     {
-        vc71::set_layout& buffers = pointerSet(this, vertexLists[listIndex]);
-        for (vc71::set_node* node = buffers.begin(); node != buffers.end();
-             node = vc71::set_layout::next(node))
-            vertexBufferRelease(reinterpret_cast<void*>(node->key));
+        std::set<void*>& buffers = pointerSet(this, vertexLists[listIndex]);
+        for (std::set<void*>::const_iterator node = buffers.begin(); node != buffers.end();
+             ++node)
+            vertexBufferRelease(*node);
     }
 
     static const unsigned int indexLists[2] = { 3u, 2u };
     for (unsigned int listIndex = 0; listIndex < 2; ++listIndex)
     {
-        vc71::set_layout& buffers = pointerSet(this, indexLists[listIndex]);
-        for (vc71::set_node* node = buffers.begin(); node != buffers.end();
-             node = vc71::set_layout::next(node))
-            indexBufferRelease(reinterpret_cast<void*>(node->key));
+        std::set<void*>& buffers = pointerSet(this, indexLists[listIndex]);
+        for (std::set<void*>::const_iterator node = buffers.begin(); node != buffers.end();
+             ++node)
+            indexBufferRelease(*node);
     }
 
-    DeclarationNode* const head = reinterpret_cast<DeclarationNode*>(m_lists[4].head);
-    for (DeclarationNode* node = head->left; node != head; node = nextDeclaration(node))
-        vertexDeclarationRelease(node->value);
+    for (DeclarationCache::const_iterator node = m_declarations.begin();
+         node != m_declarations.end(); ++node)
+        vertexDeclarationRelease(node->second);
 }
 
 // PE 0x10011B00, with removals 0x100119A0/0x10011A50. Release before erasing,
@@ -835,11 +767,11 @@ void bufferManagerCollectUnused()
     const unsigned int order[] = { 1u, 0u, 3u, 2u };
     for (unsigned int i = 0; i < 4; ++i)
     {
-        vc71::set_layout& buffers = pointerSet(manager, order[i]);
-        vc71::set_node* node = buffers.begin();
+        std::set<void*>& buffers = pointerSet(manager, order[i]);
+        std::set<void*>::iterator node = buffers.begin();
         while (node != buffers.end())
         {
-            void* const buffer = reinterpret_cast<void*>(node->key);
+            void* const buffer = *node;
             typedef int (__thiscall *GetRefFn)(void*);
             const int refs = reinterpret_cast<GetRefFn>(
                 (*reinterpret_cast<void***>(buffer))[0])(buffer);
@@ -850,8 +782,8 @@ void bufferManagerCollectUnused()
                 const unsigned int firstList = i < 2 ? 1u : 3u;
                 for (unsigned int candidate = 0; candidate < 2; ++candidate)
                 {
-                    vc71::set_layout& owned = pointerSet(manager, firstList - candidate);
-                    vc71::set_node* found = owned.find(reinterpret_cast<unsigned int>(buffer));
+                    std::set<void*>& owned = pointerSet(manager, firstList - candidate);
+                    std::set<void*>::iterator found = owned.find(buffer);
                     if (found == owned.end())
                         continue;
                     if (i < 2)
@@ -864,7 +796,7 @@ void bufferManagerCollectUnused()
                 node = buffers.begin();
             }
             else
-                node = vc71::set_layout::next(node);
+                ++node;
         }
     }
 }
@@ -887,11 +819,11 @@ namespace {
 // each node's key for equality (not the tree's lower_bound find). Custom ltcg convention in the
 // image (ECX = &result, EDX = &value, stack first/last). Same answer as set::find for unique keys;
 // written as the operation the image performs.
-vc71::set_node* findLinear(vc71::set_layout& set, unsigned int value)
+std::set<void*>::iterator findLinear(std::set<void*>& set, void* value)
 {
-    vc71::set_node* node = set.begin();
-    while (node != set.end() && node->key != value)
-        node = vc71::set_layout::next(node);
+    std::set<void*>::iterator node = set.begin();
+    while (node != set.end() && *node != value)
+        ++node;
     return node;
 }
 
@@ -902,22 +834,22 @@ vc71::set_node* findLinear(vc71::set_layout& set, unsigned int value)
 void bufferManagerRemoveVertexBuffer(void* wrapper)
 {
     BufferManager* const manager = static_cast<BufferManager*>(g_bufferManager);
-    const unsigned int value = reinterpret_cast<unsigned int>(wrapper);
+    void* const value = wrapper;
 
-    vc71::set_layout& defaultPool = pointerSet(manager, 1);      // +0x18, D3DPOOL_DEFAULT buffers
-    vc71::set_node* node = findLinear(defaultPool, value);
+    std::set<void*>& defaultPool = pointerSet(manager, 1);      // +0x18, D3DPOOL_DEFAULT buffers
+    std::set<void*>::iterator node = findLinear(defaultPool, value);
     if (node != defaultPool.end())
     {
-        vertexBufferRelease(reinterpret_cast<void*>(node->key));
+        vertexBufferRelease(*node);
         defaultPool.erase(node);
         return;
     }
 
-    vc71::set_layout& managedPool = pointerSet(manager, 0);      // +0x0C, D3DPOOL_MANAGED buffers
+    std::set<void*>& managedPool = pointerSet(manager, 0);      // +0x0C, D3DPOOL_MANAGED buffers
     node = findLinear(managedPool, value);
     if (node != managedPool.end())
     {
-        vertexBufferRelease(reinterpret_cast<void*>(node->key));
+        vertexBufferRelease(*node);
         managedPool.erase(node);
     }
 }
@@ -927,22 +859,22 @@ void bufferManagerRemoveVertexBuffer(void* wrapper)
 void bufferManagerRemoveIndexBuffer(void* wrapper)
 {
     BufferManager* const manager = static_cast<BufferManager*>(g_bufferManager);
-    const unsigned int value = reinterpret_cast<unsigned int>(wrapper);
+    void* const value = wrapper;
 
-    vc71::set_layout& defaultPool = pointerSet(manager, 3);      // +0x30, D3DPOOL_DEFAULT index buffers
-    vc71::set_node* node = findLinear(defaultPool, value);
+    std::set<void*>& defaultPool = pointerSet(manager, 3);      // +0x30, D3DPOOL_DEFAULT index buffers
+    std::set<void*>::iterator node = findLinear(defaultPool, value);
     if (node != defaultPool.end())
     {
-        indexBufferRelease(reinterpret_cast<void*>(node->key));
+        indexBufferRelease(*node);
         defaultPool.erase(node);
         return;
     }
 
-    vc71::set_layout& managedPool = pointerSet(manager, 2);      // +0x24, D3DPOOL_MANAGED index buffers
+    std::set<void*>& managedPool = pointerSet(manager, 2);      // +0x24, D3DPOOL_MANAGED index buffers
     node = findLinear(managedPool, value);
     if (node != managedPool.end())
     {
-        indexBufferRelease(reinterpret_cast<void*>(node->key));
+        indexBufferRelease(*node);
         managedPool.erase(node);
     }
 }

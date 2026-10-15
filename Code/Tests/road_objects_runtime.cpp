@@ -8,9 +8,7 @@
 #include "../BF2/Geom/RoadEditable.h"
 #include "../BF2/Geom/RoadEditableRenderer.h"
 #include "../BF2/Geom/Terrain.h"
-#if BF2_PLUGIN_ABI_NATIVE
 #include "../BF2/Geom/HeightmapEventNode.h"
-#endif
 #include "../BF2/GeomMisc/PerlinNoise.h"
 #include "../BF2/GeomMisc/EditorSpline.h"
 #include "../BF2/Math/Mat4.h"
@@ -551,8 +549,6 @@ int lehmer64(int x, long long factor)
 // The link doubles the five TUs call.
 
 namespace renddx9abi {
-void* crtMalloc(size_t size) { return std::malloc(size); }                  // vc71::string's heap
-void  crtFree(void* p) { std::free(p); }
 void* engineAlloc(unsigned int size) { ++g_allocs; return std::malloc(size); }
 void  engineFree(void* p) { if (p) ++g_frees; std::free(p); }
 void logf(const char* format, ...)
@@ -576,7 +572,7 @@ namespace dx9rend {
 void* g_bufferManager = reinterpret_cast<void*>(0xB0F);
 void* g_shaderManager = reinterpret_cast<void*>(0x5AD);
 
-void* createVertexBuffer(void*, unsigned int count, unsigned int stride, const vc71::string& name,
+void* createVertexBuffer(void*, unsigned int count, unsigned int stride, const std::string& name,
                          unsigned int usage)
 {
     FakeVertexBuffer* const buffer = new FakeVertexBuffer();
@@ -621,7 +617,7 @@ void* shaderManagerGetEffect(void*, const char* rawPath)
     g_effects.push_back(rawPath);
     return &g_effectToken;
 }
-ShaderParameter* effectGetShaderParameterTyped(Effect*, const vc71::string& name)
+ShaderParameter* effectGetShaderParameterTyped(Effect*, const std::string& name)
 {
     g_paramNames.push_back(name.c_str());
     ShaderParameter* const parameter = new ShaderParameter(0);
@@ -630,7 +626,7 @@ ShaderParameter* effectGetShaderParameterTyped(Effect*, const vc71::string& name
 }
 void effectAddRef(Effect*) { ++g_effectAddRefs; }
 int  effectRelease(Effect*) { ++g_effectReleases; return 1; }
-bool effectSetTechniqueByName(void*, const vc71::string& name)
+bool effectSetTechniqueByName(void*, const std::string& name)
 {
     g_techniques.push_back(name.c_str());
     return true;
@@ -647,6 +643,11 @@ void effectEnd(void*) { g_events.push_back("end"); }
 void* g_rendererBase = g_rendererBaseStorage;
 void* g_deviceCaps = g_capsStorage;
 void* g_raShaderConstants = g_raStorage;
+// The x86 mapping of RenderQueues.cpp's accessor: the retail offset into the constants block.
+unsigned char* raShaderConstantsAt(unsigned int retailByteOffset)
+{
+    return static_cast<unsigned char*>(g_raShaderConstants) + retailByteOffset;
+}
 
 int bufferManagerSwapPool(int value)
 {
@@ -679,7 +680,7 @@ void indexBufferRelease(void* wrapper) { ++static_cast<FakeIndexBuffer*>(wrapper
 void bufferManagerRemoveVertexBuffer(void* wrapper) { ++static_cast<FakeVertexBuffer*>(wrapper)->removes; }
 void bufferManagerRemoveIndexBuffer(void* wrapper) { ++static_cast<FakeIndexBuffer*>(wrapper)->removes; }
 
-void* textureManagerGetTexture(const vc71::string& name)
+void* textureManagerGetTexture(const std::string& name)
 {
     g_textureRequests.push_back(name.c_str());
     ++g_textureCount;
@@ -695,7 +696,7 @@ void stateManagerSetRenderState(unsigned int state, unsigned int value)
     g_renderStates.push_back(state);
     g_renderStates.push_back(value);
 }
-void readStringSettingDefault(const char* name, const char* defaultValue, vc71::string& out)
+void readStringSettingDefault(const char* name, const char* defaultValue, std::string& out)
 {
     g_settingRequests.push_back(std::string(name) + "|" + defaultValue);
     if (std::strcmp(name, "Editor_LevelSavePath") == 0)
@@ -766,7 +767,7 @@ void lightManagerSetRenderTargetTexture(unsigned int index, dx9rend::EngineTextu
 
 // Terrain.cpp's raw reader open / close (sub_100763A0 / sub_10075E00), the same stores, for the
 // writer twins RoadTemplate::compile uses.
-void TerrainRawReader::open(const vc71::string& path, int mode, int access, int)
+void TerrainRawReader::open(const std::string& path, int mode, int access, int)
 {
     m_stream = 0;
     m_stream = ::dice::hfe::fileManager->open(::renddx9abi::makeHostString(path),
@@ -821,7 +822,6 @@ unsigned int __fastcall emPostNode(void*, void*, int category, EventNode* node, 
     PostedNode record;
     record.category = category;
     record.delay = delay;
-#if BF2_PLUGIN_ABI_NATIVE
     geom::HeightmapEventNode* const heightmapNode = static_cast<geom::HeightmapEventNode*>(node);
     record.type = node->getType();
     record.typeField = static_cast<unsigned int>(record.type);
@@ -831,18 +831,6 @@ unsigned int __fastcall emPostNode(void*, void*, int category, EventNode* node, 
     record.area[2] = area.z;
     record.area[3] = area.w;
     node->release();
-#else
-    // The retail-shaped node: table {scalar deleting destructor, release, getType}, type at +0x28,
-    // the area at +0x30.
-    typedef int  (__fastcall* GetTypeFn)(void*, void*);
-    typedef void (__fastcall* ReleaseFn)(void*, void*);
-    void** const table = *reinterpret_cast<void***>(node);
-    record.type = reinterpret_cast<GetTypeFn>(table[2])(node, 0);
-    const unsigned char* const raw = reinterpret_cast<const unsigned char*>(node);
-    std::memcpy(&record.typeField, raw + 0x28, 4);
-    std::memcpy(record.area, raw + 0x30, 16);
-    reinterpret_cast<ReleaseFn>(table[1])(node, 0);
-#endif
     g_posted.push_back(record);
     return 1;
 }
@@ -1947,7 +1935,6 @@ void roadEditableObjectChecks()
     check(!self->m_vertexBuffer && self->m_vertexCount == 0, "invalidate without a spline or template builds nothing");
 
     // compileTemplates is a stub that answers true; the by-value set is the callee's to destroy.
-#if BF2_PLUGIN_ABI_NATIVE
     {
         RoadTemplateNameSet templates;
         templates.insert(renddx9abi::HostString("highway"));
@@ -1955,49 +1942,6 @@ void roadEditableObjectChecks()
         check(road->compileTemplates(renddx9abi::HostString("Levels\\Test"), templates),
               "compileTemplates answers true");
     }
-#else
-    {
-        // A hand-built VC7.1 set<string> the way a retail caller hands one over: head (nil) above a
-        // root "highway" with the children "dirt" and "tarmac", passed by value through the raw slot.
-        struct RawNameSet
-        {
-            void* comparator;
-            RoadTemplateNameSetNode* head;
-            unsigned int size;
-        };
-        RoadTemplateNameSetNode* nodes[4];
-        for (int i = 0; i < 4; ++i)
-        {
-            nodes[i] = static_cast<RoadTemplateNameSetNode*>(renddx9abi::engineAlloc(sizeof(RoadTemplateNameSetNode)));
-            std::memset(nodes[i], 0, sizeof(RoadTemplateNameSetNode));
-        }
-        RoadTemplateNameSetNode* const head = nodes[0];
-        head->isNil = 1;
-        head->parent = nodes[1];
-        head->left = nodes[2];
-        head->right = nodes[3];
-        nodes[1]->parent = head;
-        nodes[1]->left = nodes[2];
-        nodes[1]->right = nodes[3];
-        for (int i = 2; i < 4; ++i)
-        {
-            nodes[i]->parent = nodes[1];
-            nodes[i]->left = head;
-            nodes[i]->right = head;
-        }
-        new (nodes[1]->value) vc71::string("highway");
-        new (nodes[2]->value) vc71::string("dirt");
-        new (nodes[3]->value) vc71::string("tarmac");
-        RawNameSet raw = { 0, head, 3u };
-        typedef bool (__fastcall* CompileTemplatesFn)(void*, void*, const renddx9abi::HostString&, RawNameSet);
-        void** const table = *reinterpret_cast<void***>(road);
-        const int frees = g_frees;
-        check(reinterpret_cast<CompileTemplatesFn>(table[0x84 / 4])(road, 0, renddx9abi::HostString("Levels\\Test"),
-                                                                    raw),
-              "compileTemplates (+0x84) answers true");
-        check(g_frees == frees + 4, "the callee destroys the by-value set: three nodes, then the head");
-    }
-#endif
 
     // Destruction: off the queue, the handler unregistered, handles and effect released, block freed.
     g_queue->add(road);

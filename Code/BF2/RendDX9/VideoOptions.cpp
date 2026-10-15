@@ -8,54 +8,44 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
+#include "../../RendDX9Abi/ThunkAbi.h"
 #include "../../RendDX9Abi/HfeAbi.h"
 #include "../../RendDX9Abi/PluginEntry.h"
 #include "../../RendDX9Abi/Frontier.h"
 #include "../Geom/XpLightManager.h"
 #include "../Geom/ParticleSystem/ParticleSystemManager.h"
+#include "../Geom/DecalSystem/DecalManager.h"  // apply's decals-enabled store
+#include "../Geom/Overgrowth/OverGrowth.h"     // apply's vegetation quality scale
 #include "../Geom/UndergrowthSystem.h"   // typed vegetation quality calls
+#include "../Geom/Terrain.h"             // apply's lighting-dirty store
 #include "RendDX9Base.h"
 #include "../RendMisc/IRenderer.h"     // sub_1000F8D0's typed Renderer calls
 #include "../RendMisc/IRenderView.h"   //   (+0x10 setDisplayMode, +0x48 / +0x50 and the views' +0x40 / +0x10)
 #include "../Core/EventManager.h"      // sub_1000F8D0's two ECRenderer posts
-#include <cstddef>      // offsetof - the retail-ABI display-block assertions in sub_1000F8D0
+#include <cstddef>      // offsetof - baseOfVo
+#include <new>          // videoOptionsConstruct's placement construction
 #include <intrin.h>     // __rdtsc / __cpuid - the CPU-speed benchmark inside detectQualityLevel (+0x34)
 #include <cstdio>       // _snprintf - the "%ix%i@%iHz" / "%dSamples" formatters
 #include <cstdlib>      // abort - the explicit ECCore callback frontier
 #include <cstring>      // _strnicmp - setDynamicOption's prefix match
-#if BF2_PLUGIN_ABI_NATIVE
 #include <string>       // the host-shaped dynamic-option carriers, below
 #include <vector>
-#else
-#include <type_traits>  // the retail-flavour assertion on HostString, below
-#endif
 
 namespace dice {
 namespace hfe {
 namespace dx9rend {
 
 
-// Cross-image dynamic options use HostString while internal storage keeps VC7.1 layout.
+// Cross-image dynamic options use HostString copies of the object's own option lists.
 // [CHOSEN, not recovered] [RETIRE-WHEN: RW-49] Native getters return conversion caches.
 // References last until the next getter call; use only on the render thread. Retire the
 // caches when storage directly matches the host ABI and reference lifetimes are validated.
 
-#if BF2_PLUGIN_ABI_NATIVE
 typedef std::vector< ::renddx9abi::HostString > HostDynamicOptionList;
-#else
-typedef ::vc71::vector_layout HostDynamicOptionList;
-// The retail arms of the three slots hand back this object's own storage unchanged, which is only
-// correct while the host's string IS the string these lists store. If that ever stops being true
-// this fails here rather than four bytes into a stranger's buffer.
-static_assert(std::is_same< ::renddx9abi::HostString, ::vc71::string>::value,
-              "the retail-ABI host string must be the VC7.1 string the dynamic-option lists store");
-#endif
 
-// Plugin-side typed view of the hand-built 15-slot table.  It deliberately selects the string and
-// vector carrier for the ABI flavour: current STL for the rebuilt native pair, VC7.1 layouts for
-// the retail-compatible DLL.  Keeping this view here lets internal virtual calls retain the PE's
-// dispatch order without casting vtable entries or accidentally passing a VC7.1 string to a native
-// std::string slot.
+// Plugin-side typed view of the hand-built 15-slot table, with the host's string and vector
+// carriers.  Keeping this view here lets internal virtual calls retain the PE's dispatch order
+// without casting vtable entries.
 class PluginVideoOptions
 {
 public:
@@ -76,16 +66,17 @@ public:
     virtual bool getPerGpuFlag() = 0;                                                     // +0x38
 };
 
-#if BF2_PLUGIN_ABI_NATIVE
 static ::renddx9abi::HostString s_nativeOption[2];
 static HostDynamicOptionList    s_nativeOptionList[2];
-#endif
 
 // The globals apply reaches. Each is defined where its class lives; declared here rather than
 // pulled in through a header because these are image globals, not an interface.
 extern IBase* g_Renderer;                    // BF2Render.cpp,   0x1023B96C
 extern void*  g_textureManager;              // TextureManager.cpp, dword_1023B974
-namespace Ra { extern void* g_effectManager; }   // dword_1023D954
+namespace Ra {
+extern void* g_effectManager;                       // dword_1023D954
+void effectManagerSetFlag40(unsigned char value);   // Ra/EffectManager.cpp - the +0x40 byte
+}
 
 // BF2Render.cpp, dword_10258F38. The ECCore handler's case 2 publishes the level-scoped
 // OverGrowth owner. apply changes its recovered +0xF4 fog/view-distance scalar when present.
@@ -124,7 +115,7 @@ unsigned int maxAnisotropy() { const CapsView* c = capsOf(); return c ? c->caps.
 } // anonymous namespace
 
 
-// Video-quality interface embedded in the renderer at its asserted +0x3F8 offset.
+// Video-quality interface embedded in the renderer (retail +0x3F8; RendDX9Base::videoOptions).
 
 namespace {
 
@@ -133,7 +124,7 @@ namespace {
 
 // +0x04, sub_100112B0, read in full: `return this[index + 10]`. Dword index 10 is byte offset
 // 0x28, which is row B - the only row anything recovered reads.
-int __fastcall videoOptions_getQuality(void* self, void*, int index)
+int RD9_THUNK videoOptions_getQuality(void* self RD9_THUNK_EDX, int index)
 {
     const VideoOptions* vo = static_cast<const VideoOptions*>(self);
     if (index < 0 || index > 7)
@@ -170,20 +161,23 @@ inline int clampMinusOne(int v)
     return t > 1 ? 1 : t;
 }
 
-// The Renderer fields apply writes. They live inside BF2Render.cpp's opaque tail rather than being
-// named members, so they are reached by documented raw offset - the same treatment RendDX9Init.cpp
-// gives the base object.
+// The Renderer fields apply writes, named by their retail offset. `renderer` is always the
+// published g_Renderer here; BF2Render.cpp's tail accessors map the offset onto the named member,
+// which keeps the x64 Renderer layout native (issue #7).
 inline void writeRendererInt(void* renderer, unsigned offset, int value)
 {
-    *reinterpret_cast<int*>(static_cast<unsigned char*>(renderer) + offset) = value;
+    (void)renderer;
+    rendererTailInt(offset) = value;
 }
 inline void writeRendererFloat(void* renderer, unsigned offset, float value)
 {
-    *reinterpret_cast<float*>(static_cast<unsigned char*>(renderer) + offset) = value;
+    (void)renderer;
+    rendererTailFloat(offset) = value;
 }
 inline void writeRendererByte(void* renderer, unsigned offset, unsigned char value)
 {
-    *(static_cast<unsigned char*>(renderer) + offset) = value;
+    (void)renderer;
+    rendererRenderSwitch(offset) = value;
 }
 
 // sub_100278A0: `this->vslot_0xC4()`, which is a one-line forward to
@@ -220,35 +214,14 @@ inline void callSlotFloat(void* obj, unsigned slot, float arg)
     reinterpret_cast<Fn>(vtbl[slot / 4])(obj, arg);
 }
 
-#if !BF2_PLUGIN_ABI_NATIVE
-// The retail-ABI host carrier IS the layout of the renderer's own display-mode block at base+0xA0
-// (sub_1000CA40 copies one onto the other member for member), which is what lets sub_1000F8D0 hand
-// that block to Renderer +0x10 as a carrier. Held here rather than trusted.
-static_assert(offsetof(RendDX9Base, modeWidth) - offsetof(RendDX9Base, fullscreen) ==
-              offsetof(::renddx9abi::HostDisplayMode, width), "block width at +0x04");
-static_assert(offsetof(RendDX9Base, modeHeight) - offsetof(RendDX9Base, fullscreen) ==
-              offsetof(::renddx9abi::HostDisplayMode, height), "block height at +0x06");
-static_assert(offsetof(RendDX9Base, modeRefresh) - offsetof(RendDX9Base, fullscreen) ==
-              offsetof(::renddx9abi::HostDisplayMode, refreshHz), "block refresh at +0x08");
-static_assert(offsetof(RendDX9Base, modeBpp) - offsetof(RendDX9Base, fullscreen) ==
-              offsetof(::renddx9abi::HostDisplayMode, bpp), "block bpp at +0x0A");
-static_assert(offsetof(RendDX9Base, depthFormatsAlloc) - offsetof(RendDX9Base, fullscreen) ==
-              offsetof(::renddx9abi::HostDisplayMode, depthFormats), "block depth list at +0x0C");
-static_assert(offsetof(RendDX9Base, multiSampleAlloc) - offsetof(RendDX9Base, fullscreen) ==
-              offsetof(::renddx9abi::HostDisplayMode, multiSamples), "block multisample list at +0x1C");
-static_assert(offsetof(RendDX9Base, vsync) - offsetof(RendDX9Base, fullscreen) ==
-              offsetof(::renddx9abi::HostDisplayMode, vsync), "block vsync at +0x2C");
-static_assert(offsetof(RendDX9Base, hwndAlloc) - offsetof(RendDX9Base, fullscreen) ==
-              offsetof(::renddx9abi::HostDisplayMode, windows), "block window list at +0x30");
-#endif
 
 
 // sub_10009250 on base+0xA4 - the Mode40 copy-assignment, with the renderer's own record on the left
-// (base+0xA4 is laid out as a Mode40: width +0xA4, height +0xA6, refresh +0xA8, bpp +0xAA, the depth
-// list at +0xAC, the multisample list at +0xBC). The four scalars (NOT the pad byte), then each list
-// assigned from the source's range - VC7.1 `assign(first, last)`: erase everything, insert the range
-// at begin (0x10008A00 / 0x10008C30). [CHOSEN] the source-level assignment; the tree's shared
-// display-vector helper replaces the storage rather than reusing it, which nothing can observe.
+// (retail base+0xA4 is laid out as a Mode40: width +0xA4, height +0xA6, refresh +0xA8, bpp +0xAA, the
+// depth list at +0xAC, the multisample list at +0xBC). The four scalars (NOT the pad byte), then each
+// list assigned from the source's range - `assign(first, last)`: erase everything, insert the range
+// at begin (0x10008A00 / 0x10008C30). [CHOSEN] the source-level assignment; the multisample list's
+// helper replaces the storage rather than reusing it, which nothing can observe.
 
 void assignRendererModeRecord(RendDX9Base* b, const Mode40& src)
 {
@@ -256,14 +229,9 @@ void assignRendererModeRecord(RendDX9Base* b, const Mode40& src)
     b->modeHeight  = src.height;
     b->modeRefresh = src.refresh;
     b->modeBpp     = src.bpp;
-    ::renddx9abi::assignOwnedDisplayVector<unsigned int>(
-        *reinterpret_cast<vc71::vector_layout*>(&b->depthFormatsAlloc),
-        reinterpret_cast<const unsigned int*>(src.depthFormats.first),
-        reinterpret_cast<const unsigned int*>(src.depthFormats.last));
-    ::renddx9abi::assignOwnedDisplayVector<MultiSample8>(
-        *reinterpret_cast<vc71::vector_layout*>(&b->multiSampleAlloc),
-        reinterpret_cast<const MultiSample8*>(src.multiSample.first),
-        reinterpret_cast<const MultiSample8*>(src.multiSample.last));
+    b->depthFormats.assign(src.depthFormats.begin(), src.depthFormats.end());
+    assignMultiSampleList(b, src.multiSample.data(),
+                          src.multiSample.data() + src.multiSample.size());
 }
 
 // Applies a display mode and selected antialiasing settings. [INFERRED] helper name.
@@ -275,24 +243,20 @@ void videoOptionsChangeResolution(VideoOptions* vo, const Mode40* mode)
     RendDX9Base* const b = static_cast<RendDX9Base*>(g_rendererBase);
 
     // 1 - 0x1000F8DE..0x1000F8E4 `mov eax, [esi+0B0h]; mov eax, [eax]` unguarded.
-    const unsigned int keptDepthFormat = *b->depthFormatsFirst;
+    const unsigned int keptDepthFormat = b->depthFormats[0];
 
     // 2 - 0x1000F8FC `call sub_10009250` with ecx = base+0xA4.
     assignRendererModeRecord(b, *mode);
 
-    // 3 - free and null the triple (VC7.1 clear() is _Tidy), then
+    // 3 - clear() (VC7.1's _Tidy frees and nulls the triple), then
     //     sub_10009070 = push_back. The chosen mode's own depth candidates are discarded.
-    vc71::vector_layout& depth = *reinterpret_cast<vc71::vector_layout*>(&b->depthFormatsAlloc);
-    vectorClear<unsigned int>(&depth);
-    vc71::vectorRef<unsigned int>(&depth).push_back(keptDepthFormat);
+    b->depthFormats.clear();
+    b->depthFormats.push_back(keptDepthFormat);
 
     // 4 - the same on the multisample list, then sub_100090E0 =
     //     push_back(aaDescriptors[selected AA]). The index (+0xD8) is not range-checked.
-    vc71::vector_layout& multiSample =
-        *reinterpret_cast<vc71::vector_layout*>(&b->multiSampleAlloc);
-    vectorClear<MultiSample8>(&multiSample);
-    vc71::vectorRef<MultiSample8>(&multiSample).push_back(
-        reinterpret_cast<const MultiSample8*>(vo->aaDescriptors.first)[vo->minusOneD8]);
+    clearMultiSampleList(b);
+    pushMultiSample(b, vo->aaDescriptors.data()[vo->minusOneD8]);
 
     // 5 - 0x1000F966..0x1000F9A0: 16-bit stores of the low halves.
     if (vo->windowSizeX != 0 && vo->windowSizeY != 0)
@@ -332,7 +296,7 @@ void videoOptionsChangeResolution(VideoOptions* vo, const Mode40* mode)
     const int sizeFrameY = ::GetSystemMetrics(SM_CYSIZEFRAME);          // 0x21
     const int caption    = ::GetSystemMetrics(SM_CYCAPTION);            // 4
     const int windowHeight = caption + sizeFrameY * 2 + b->modeHeight;
-    ::SetWindowPos(static_cast<HWND>(*b->hwndFirst), 0, 0, 0, windowWidth, windowHeight,
+    ::SetWindowPos(static_cast<HWND>(b->windows[0]), 0, 0, 0, windowWidth, windowHeight,
                    SWP_NOMOVE);                                         // window list unguarded
 
     // 9 - EventManager (PE +0x10) postEvent(11, 3, 0, 0.0f). With no delay
@@ -340,15 +304,10 @@ void videoOptionsChangeResolution(VideoOptions* vo, const Mode40* mode)
     ::dice::hfe::eventManager->postEvent(static_cast<EventCategory>(11), 3, 0, 0.0f);
 
     // 10 - 0x1000FB0E..0x1000FB17: `mov ecx, dword_1023B970; push esi (= base+0xA0); call [eax+10h]`.
-#if BF2_PLUGIN_ABI_NATIVE
     // [CHOSEN, not recovered] The native host carrier is not the block's type; the retail call's
     // copy is a self-assignment that leaves the block unchanged (BF2Render.cpp), so this runs the
     // rest of +0x10 without one. Its answer is discarded, as the virtual call's is.
     rendererApplyCurrentDisplayMode(g_rendererBase);
-#else
-    static_cast<IRenderer*>(g_rendererBase)->setDisplayMode(
-        *reinterpret_cast<const ::renddx9abi::HostDisplayMode*>(&b->fullscreen));   // bool dropped
-#endif
 
     // 11 - 0x1000FB1A..0x1000FB3B: `shl ecx, 10h; add ecx, edx` into a stack dword whose address is
     //      the payload. Unsigned only so a width above 0x7FFF cannot overflow a signed shift.
@@ -365,7 +324,7 @@ void videoOptionsChangeResolution(VideoOptions* vo, const Mode40* mode)
 
 } // anonymous namespace
 
-void __fastcall videoOptions_apply(void* self, void*)
+void RD9_THUNK videoOptions_apply(void* self RD9_THUNK_EDX)
 {
     RD9_TRACE_AT("dice::hfe::dx9rend::VideoOptions::apply", self, 0x2C);
 
@@ -399,31 +358,25 @@ void __fastcall videoOptions_apply(void* self, void*)
         else if (wanted6 == 3) mip = 0;
     }
 
-    // The fourteen mip-class records. The original reloads the TextureManager pointer and
-    // reassigns its scratch on every iteration; both are no-ops because the two values are always
-    // equal by this point, and the loop is written here as what it does.
-    unsigned char* const tm = static_cast<unsigned char*>(::dice::hfe::dx9rend::g_textureManager);
+    // The fourteen mip-class records (TM+0x28, stride 8). The original reloads the TextureManager
+    // pointer and reassigns its scratch on every iteration; both are no-ops because the two values
+    // are always equal by this point, and the loop is written here as what it does.
+    void* const tm = ::dice::hfe::dx9rend::g_textureManager;
     if (tm)
-    {
-        for (int i = 0; i < 112; i += 8)
-        {
-            if (*(tm + i + 40))
-                *reinterpret_cast<int*>(tm + i + 44) = mip;
-        }
-    }
+        textureManagerSetEnabledMipClassValues(mip);
 
     writeIntSetting("GSSkipMipLevels", mip);
 
     // Five records then get a clamped value instead - 2, 3, 5, 8 and 9, by the same arithmetic
-    // five times over. Offsets 60/68/84/108/116 are those records' value fields.
+    // five times over (retail TM+60/68/84/108/116, those records' value fields).
     if (tm)
     {
         const int clamped = clampMinusOne(mip);
-        *reinterpret_cast<int*>(tm + 60)  = clamped;
-        *reinterpret_cast<int*>(tm + 68)  = clamped;
-        *reinterpret_cast<int*>(tm + 84)  = clamped;
-        *reinterpret_cast<int*>(tm + 108) = clamped;
-        *reinterpret_cast<int*>(tm + 116) = clamped;
+        textureManagerSetMipClassValue(2, clamped);
+        textureManagerSetMipClassValue(3, clamped);
+        textureManagerSetMipClassValue(5, clamped);
+        textureManagerSetMipClassValue(8, clamped);
+        textureManagerSetMipClassValue(9, clamped);
     }
 
     // index 7: texture filtering
@@ -449,19 +402,19 @@ void __fastcall videoOptions_apply(void* self, void*)
     if (wanted2 == 1)
     {
         rendererSetShaderPathAndUpdate(renderer, 3);
-        if (effectManager) writeRendererByte(effectManager, 64, 0);
+        if (effectManager) Ra::effectManagerSetFlag40(0);       // retail +0x40
         // vslot +0x00 on ourselves - setQuality(4, 0). Only the lowest setting does this.
         reinterpret_cast<PluginVideoOptions*>(vo)->setQuality(4, 0);
     }
     else if (wanted2 == 2)
     {
         rendererSetShaderPathAndUpdate(renderer, 1);
-        if (effectManager) writeRendererByte(effectManager, 64, 0);
+        if (effectManager) Ra::effectManagerSetFlag40(0);       // retail +0x40
     }
     else if (wanted2 == 3)
     {
         rendererSetShaderPathAndUpdate(renderer, 0);
-        if (effectManager) writeRendererByte(effectManager, 64, 0);
+        if (effectManager) Ra::effectManagerSetFlag40(0);       // retail +0x40
     }
 
     // Terrain quality also updates the road renderer, guarded only by g_Renderer (RW-77).
@@ -516,7 +469,8 @@ void __fastcall videoOptions_apply(void* self, void*)
         vo->rowA[1]  = wanted1;
     }
 
-    void* const fogObject = ::dice::hfe::dx9rend::g_OverGrowth;
+    ::dice::hfe::geom::OverGrowth* const fogObject =
+        static_cast< ::dice::hfe::geom::OverGrowth*>(::dice::hfe::dx9rend::g_OverGrowth);
 
     if (wanted1 == 1)
     {
@@ -531,7 +485,7 @@ void __fastcall videoOptions_apply(void* self, void*)
             writeRendererInt  (renderer, 2028, 0);
         }
         // Apply the exact 0.4 fog setting.
-        if (fogObject) writeRendererFloat(fogObject, 244, 0.4f);
+        if (fogObject) fogObject->setQualityScale(0.4f);                // OverGrowth +0xF4
     }
     else if (wanted1 == 2)
     {
@@ -545,7 +499,7 @@ void __fastcall videoOptions_apply(void* self, void*)
             writeRendererInt  (renderer, 2020, 0);
             writeRendererInt  (renderer, 2028, 0);
         }
-        if (fogObject) writeRendererFloat(fogObject, 244, 0.7f);
+        if (fogObject) fogObject->setQualityScale(0.7f);
     }
     else if (wanted1 == 3)
     {
@@ -559,7 +513,7 @@ void __fastcall videoOptions_apply(void* self, void*)
             writeRendererInt  (renderer, 2020, 0);
             writeRendererInt  (renderer, 2028, -1);
         }
-        if (fogObject) writeRendererFloat(fogObject, 244, 1.0f);
+        if (fogObject) fogObject->setQualityScale(1.0f);
     }
 
     // indices 3 and 4: lighting and shadows, both through the LightManager
@@ -601,7 +555,9 @@ void __fastcall videoOptions_apply(void* self, void*)
     ::dice::hfe::geom::IParticleSystemManager* const particles =
         ::dice::hfe::geom::asParticleSystemManager(
             ::dice::hfe::geom::g_ParticleSystemManager);
-    void* const decals    = ::dice::hfe::geom::g_DecalManager;
+    ::dice::hfe::geom::DecalManager* const decals =
+        static_cast< ::dice::hfe::geom::DecalManager*>(
+            static_cast< ::dice::hfe::geom::IDecalManager*>(::dice::hfe::geom::g_DecalManager));
     if (particles)
     {
         // sub_1000FCB0 calls ParticleSystemManager::applySettings (vtable +0x3C) with a pointer into
@@ -620,17 +576,18 @@ void __fastcall videoOptions_apply(void* self, void*)
         };
         particles->applySettings(&s_particleProfiles[vo->quality[5]]);
     }
+    // Retail stores the decals-enabled byte at DecalManager +0x2A6; the native layout moves it.
     if (decals)
-        *(static_cast<unsigned char*>(decals) + 678) = (vo->quality[5] > 1) ? 1 : 0;
+        decals->setEnabledField(vo->quality[5] > 1);
 
     // the Terrain's lighting-dirty byte, every apply
     // 0x10010330..0x10010339, read: `mov eax, dword_1024B930; test; je;
-    // mov byte ptr [eax+41Ch], 1` - Terrain::m_lightingDirty (Terrain.h asserts +0x41C), so the next
+    // mov byte ptr [eax+41Ch], 1` - Terrain::m_lightingDirty (retail +0x41C), so the next
     // frame's applyFrameConstants recomputes the terrain lighting. It was missing here. Only a live
     // terrain sees it: none at boot or in the main menu of a first session.
-    void* const terrain = ::dice::hfe::geom::g_Terrain;
+    ::dice::hfe::geom::Terrain* const terrain = ::dice::hfe::geom::terrain();
     if (terrain)
-        writeRendererByte(terrain, 0x41C, 1);
+        terrain->m_lightingDirty = 1;
 
     // [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: rc-login-reset-hold]
     // Resolution and AA resets remain held; applied-state bookkeeping still advances.
@@ -665,10 +622,11 @@ void __fastcall videoOptions_apply(void* self, void*)
 
 namespace {
 
-// VideoOptions is embedded in the base renderer at +1016; recover the base from it.
+// VideoOptions is embedded in the base renderer (retail +1016); recover the base from it.
 inline RendDX9Base* baseOfVo(VideoOptions* vo)
 {
-    return reinterpret_cast<RendDX9Base*>(reinterpret_cast<unsigned char*>(vo) - 1016);
+    return reinterpret_cast<RendDX9Base*>(reinterpret_cast<unsigned char*>(vo) -
+                                          offsetof(RendDX9Base, videoOptions));
 }
 
 // bpp -> a representative D3DFORMAT, as in the Renderer-side enumeration.
@@ -681,11 +639,11 @@ inline D3DFORMAT voFormatFromBpp(unsigned int bpp)
 // 0..16; a supported type stores {type, max(quality-1, 0)}.
 void fillMultiSample(RendDX9Base* b, Mode40* rec)
 {
-    vectorClear<MultiSample8>(&rec->multiSample);
+    rec->multiSample.clear();
     if (!b || !b->d3d9)
         return;
     const D3DFORMAT fmt = voFormatFromBpp(rec->bpp);
-    vc71::vectorRef<MultiSample8> ms(&rec->multiSample);
+    std::vector<MultiSample8>& ms = rec->multiSample;
     for (unsigned int i = 0; i <= 16u; ++i)
     {
         DWORD quality = 0;
@@ -706,31 +664,31 @@ void fillMultiSample(RendDX9Base* b, Mode40* rec)
 // the strings so a chosen string maps back to a type.
 void buildAAList(VideoOptions* vo, Mode40* rec)
 {
-    vectorClear< ::vc71::string >(&vo->aaList);
-    vectorClear<MultiSample8>(&vo->aaDescriptors);
+    vo->aaList.clear();
+    vo->aaDescriptors.clear();
     if (!rec)
         return;
     RendDX9Base* b = baseOfVo(vo);
     fillMultiSample(b, rec);
 
-    vc71::vectorRef< ::vc71::string > strs(&vo->aaList);
-    vc71::vectorRef<MultiSample8>     desc(&vo->aaDescriptors);
-    for (const MultiSample8* d = reinterpret_cast<const MultiSample8*>(rec->multiSample.first);
-         d != reinterpret_cast<const MultiSample8*>(rec->multiSample.last); ++d)
+    std::vector< ::std::string >& strs = vo->aaList;
+    std::vector<MultiSample8>&      desc = vo->aaDescriptors;
+    for (std::vector<MultiSample8>::const_iterator d = rec->multiSample.begin();
+         d != rec->multiSample.end(); ++d)
     {
         if (d->type == 1)
             continue;                       // nonmaskable - not offered
         desc.push_back(*d);
         if (d->type == 0)
         {
-            strs.push_back(::vc71::string("Off"));
+            strs.push_back(::std::string("Off"));
         }
         else
         {
             char buf[32];
             _snprintf(buf, sizeof(buf), "%dSamples", d->type);
             buf[sizeof(buf) - 1] = 0;
-            strs.push_back(::vc71::string(buf));
+            strs.push_back(::std::string(buf));
         }
     }
 }
@@ -742,8 +700,8 @@ void buildAAList(VideoOptions* vo, Mode40* rec)
 void buildResolutionList(VideoOptions* vo)
 {
     RendDX9Base* b = baseOfVo(vo);
-    vectorClear< ::vc71::string >(&vo->resList);
-    vectorClear<Mode40>(&vo->modeCache);
+    vo->resList.clear();
+    vo->modeCache.clear();
     if (!b || !b->d3d9)
         return;
 
@@ -754,17 +712,17 @@ void buildResolutionList(VideoOptions* vo)
     // The required depth-stencil format is the base's first depth-stencil candidate (D3DFMT_D24S8).
     // [INFERRED] the shipped filter reads *(*(base+0xB0)); on modern hardware every 32bpp mode supports it.
     unsigned int requiredFmt = D3DFMT_D24S8;
-    if (b->depthFormatsFirst && b->depthFormatsFirst != b->depthFormatsLast)
-        requiredFmt = b->depthFormatsFirst[0];
+    if (!b->depthFormats.empty())
+        requiredFmt = b->depthFormats[0];
 
-    vc71::vectorRef< ::vc71::string > strs(&vo->resList);
-    vc71::vectorRef<Mode40>           cache(&vo->modeCache);
-    for (Mode40* rec = reinterpret_cast<Mode40*>(b->modeList.first);
-         rec != reinterpret_cast<Mode40*>(b->modeList.last); ++rec)
+    std::vector< ::std::string >& strs  = vo->resList;
+    std::vector<Mode40>&           cache = vo->modeCache;
+    for (std::vector<Mode40>::const_iterator rec = b->modeList.begin(); rec != b->modeList.end();
+         ++rec)
     {
         bool supported = false;
-        for (const unsigned int* f = reinterpret_cast<const unsigned int*>(rec->depthFormats.first);
-             f != reinterpret_cast<const unsigned int*>(rec->depthFormats.last); ++f)
+        for (std::vector<unsigned int>::const_iterator f = rec->depthFormats.begin();
+             f != rec->depthFormats.end(); ++f)
             if (*f == requiredFmt) { supported = true; break; }
 
         if (supported && rec->bpp == 32 && rec->width >= 800)
@@ -773,7 +731,7 @@ void buildResolutionList(VideoOptions* vo)
             _snprintf(buf, sizeof(buf), "%ix%i@%iHz",
                       (int)rec->width, (int)rec->height, (int)rec->refresh);
             buf[sizeof(buf) - 1] = 0;
-            strs.push_back(::vc71::string(buf));
+            strs.push_back(::std::string(buf));
             cache.push_back(*rec);
         }
     }
@@ -782,18 +740,51 @@ void buildResolutionList(VideoOptions* vo)
 } // anonymous namespace
 
 #define RD9_VO_SLOT(name, slotOffset, addr)                                                 \
-    void __fastcall name(void* self, void*)                                                 \
+    void RD9_THUNK name(void* self RD9_THUNK_EDX)                                                 \
     {                                                                                       \
         RD9_FRONTIER_AT("dice::hfe::dx9rend::VideoOptions::slot_" #slotOffset                \
                         " (" #addr ")", self, 0x00);                                        \
     }
+
+// The word setQuality compares against: dword `index + 54` of the retail object - the selected AA
+// and resolution indices for 0 and 1, then (2..7) the allocator/first/last/end words of the
+// modeCache and aaDescriptors list headers that follow them there. Every caller discards
+// setQuality's answer; [CHOSEN] the list words are reproduced from the native vectors' pointers
+// (the allocator words were never written, so they read 0).
+inline int pointerWord(const void* p)
+{
+    return static_cast<int>(reinterpret_cast<std::size_t>(p));
+}
+
+template <typename T>
+int listHeaderWord(const std::vector<T>& list, int word)
+{
+    switch (word)
+    {
+    case 1:  return pointerWord(list.data());
+    case 2:  return pointerWord(list.data() + list.size());
+    case 3:  return pointerWord(list.data() + list.capacity());
+    default: return 0;
+    }
+}
+
+int committedQualityWord(const VideoOptions* vo, int index)
+{
+    if (index == 0)
+        return vo->minusOneD8;
+    if (index == 1)
+        return vo->minusOneDC;
+    if (index < 6)
+        return listHeaderWord(vo->modeCache, index - 2);
+    return listHeaderWord(vo->aaDescriptors, index - 6);
+}
 
 // +0x00, sub_1000F620 - setQuality(index, value). Clamp `value` into [rowC[index], maxQuality[index]]
 // (rowC is the per-setting floor, maxQuality the ceiling), store it in the quality row (this+0x28),
 // and return whether it differs from the committed row at this[index+54] (byte 0xD8). On a first
 // apply that committed row still holds the -1/0 initial values, so every setting reports "changed",
 // which is correct. Out-of-range index is the shipped "Unknown quality setting" guard (returns 0).
-char __fastcall videoOptions_setQuality(void* self, void*, int index, int value)
+char RD9_THUNK videoOptions_setQuality(void* self RD9_THUNK_EDX, int index, int value)
 {
     VideoOptions* vo = static_cast<VideoOptions*>(self);
     if (index < 0 || index >= 8)
@@ -808,15 +799,14 @@ char __fastcall videoOptions_setQuality(void* self, void*, int index, int value)
     {
         v = vo->rowC[index];
     }
-    const int committed =
-        *reinterpret_cast<const int*>(reinterpret_cast<const unsigned char*>(vo) + 216 + index * 4);
+    const int committed = committedQualityWord(vo, index);
     vo->quality[index] = v;
     return (committed == v) ? 0 : 1;
 }
 
 // Returns the setting's minimum quality from its initialized eight-entry row.
 // These wrappers guard indices; the original slots assume indices 0..7.
-int __fastcall videoOptions_slot08(void* self, void*, int index)
+int RD9_THUNK videoOptions_slot08(void* self RD9_THUNK_EDX, int index)
 {
     const VideoOptions* vo = static_cast<const VideoOptions*>(self);
     if (index < 0 || index > 7)
@@ -825,7 +815,7 @@ int __fastcall videoOptions_slot08(void* self, void*, int index)
 }
 
 // +0x0C, sub_100112D0: `return this[index + 26]` - dword row D at byte 0x68.
-int __fastcall videoOptions_slot0C(void* self, void*, int index)
+int RD9_THUNK videoOptions_slot0C(void* self RD9_THUNK_EDX, int index)
 {
     const VideoOptions* vo = static_cast<const VideoOptions*>(self);
     if (index < 0 || index > 7)
@@ -835,7 +825,7 @@ int __fastcall videoOptions_slot0C(void* self, void*, int index)
 
 // +0x10, sub_100112E0: `return this[index + 34]` - dword maxQuality at byte 0x88. setQuality clamps
 // the requested value up to it, so this is the per-setting maximum.
-int __fastcall videoOptions_slot10(void* self, void*, int index)
+int RD9_THUNK videoOptions_slot10(void* self RD9_THUNK_EDX, int index)
 {
     const VideoOptions* vo = static_cast<const VideoOptions*>(self);
     if (index < 0 || index > 7)
@@ -845,7 +835,7 @@ int __fastcall videoOptions_slot10(void* self, void*, int index)
 
 // +0x14, sub_10011300: `return *(BYTE*)(this + index + 168)` - the byte row `flags` at byte 0xA8.
 // Returned as char (AL), matching the shipped signature.
-char __fastcall videoOptions_slot14(void* self, void*, int index)
+char RD9_THUNK videoOptions_slot14(void* self RD9_THUNK_EDX, int index)
 {
     const VideoOptions* vo = static_cast<const VideoOptions*>(self);
     if (index < 0 || index > 7)
@@ -855,49 +845,40 @@ char __fastcall videoOptions_slot14(void* self, void*, int index)
 
 // +0x18, sub_10011320 - `return this + 16*index + 176`: a pointer to the index-th dynamic-option
 // string list (index 0 = aaList @0xB0, index 1 = resList @0xC0), so the menu can enumerate every
-// option for a dropdown. The list is a vc71::vector_layout (begin @+4), which is what the menu walks.
-const HostDynamicOptionList& __fastcall
-videoOptions_getDynamicOptionList(void* self, void*, int index)
+// option for a dropdown.
+const HostDynamicOptionList& RD9_THUNK
+videoOptions_getDynamicOptionList(void* self RD9_THUNK_EDX, int index)
 {
-#if BF2_PLUGIN_ABI_NATIVE
-    // The shipped body is unguarded pointer arithmetic into the object; that has no meaning once
-    // the host's element type differs from the stored one, so the native branch serves the two
+    // The shipped body is unguarded pointer arithmetic into the object, so this serves the two
     // lists this object actually owns. Both callers (VideoSettings' resolution and antialiasing
     // getters) pass 1 and 0. A copy, not a view: the list is rebuilt whenever the resolution
     // changes, and the caller copies it immediately anyway.
     const int slot = (index == 0) ? 0 : 1;
     VideoOptions* vo = static_cast<VideoOptions*>(self);
-    const vc71::vector_layout* list = (slot == 0) ? &vo->aaList : &vo->resList;
+    const std::vector< ::std::string >& list = (slot == 0) ? vo->aaList : vo->resList;
     s_nativeOptionList[slot].clear();
-    for (const ::vc71::string* s = reinterpret_cast<const ::vc71::string*>(list->first);
-         s && s != reinterpret_cast<const ::vc71::string*>(list->last); ++s)
+    for (std::vector< ::std::string >::const_iterator s = list.begin(); s != list.end(); ++s)
         s_nativeOptionList[slot].push_back(std::string(s->c_str()));
     return s_nativeOptionList[slot];
-#else
-    return *reinterpret_cast<const HostDynamicOptionList*>(
-        reinterpret_cast<const unsigned char*>(self) + 16 * index + 176);
-#endif
 }
 // +0x1C, sub_1000FB70 - setDynamicOption(index, value). Prefix-searches the index-th string list
 // (index 0 = anti-aliasing @0xB4, index 1 = resolution @0xC4) for `value` - strnicmp over the search
 // string's length, so "800x600" matches "800x600@60Hz". On a match it records the chosen entry index
 // at this[index+54] (0xD8 for AA, 0xDC for resolution) and, when the resolution changed, rebuilds the
 // AA list for the newly-selected mode. Returns whether the selection changed.
-bool __fastcall videoOptions_setDynamicOption(
-    void* self, void*, int index, const ::renddx9abi::HostString* value)
+bool RD9_THUNK videoOptions_setDynamicOption(void* self RD9_THUNK_EDX, int index, const ::renddx9abi::HostString* value)
 {
     VideoOptions* vo = static_cast<VideoOptions*>(self);
     if (index < 0 || index > 1 || !value)
         return false;
 
-    vc71::vector_layout* list      = (index == 0) ? &vo->aaList : &vo->resList;
+    const std::vector< ::std::string >& list = (index == 0) ? vo->aaList : vo->resList;
     const char*          needle    = value->c_str();
-    const unsigned int   needleLen = value->size();
+    const unsigned int   needleLen = static_cast<unsigned int>(value->size());   // an option string
 
     int found = -1;
     int i = 0;
-    for (const ::vc71::string* s = reinterpret_cast<const ::vc71::string*>(list->first);
-         s != reinterpret_cast<const ::vc71::string*>(list->last); ++s, ++i)
+    for (std::vector< ::std::string >::const_iterator s = list.begin(); s != list.end(); ++s, ++i)
     {
         if (_strnicmp(s->c_str(), needle, needleLen) == 0)
         {
@@ -917,7 +898,7 @@ bool __fastcall videoOptions_setDynamicOption(
 
     if (changed && index == 1)   // resolution changed -> rebuild the AA list for the new mode
     {
-        Mode40* rec = reinterpret_cast<Mode40*>(vo->modeCache.first) + found;
+        Mode40* rec = vo->modeCache.data() + found;
         buildAAList(vo, rec);
     }
     return changed;
@@ -928,36 +909,32 @@ bool __fastcall videoOptions_setDynamicOption(
 // spelling it as an integer was only an ABI disguise and made typed callers unnecessarily fragile.
 // PE 0x10011350 intentionally has no index, empty-list or negative-selection guard: preserve that
 // behavior here.
-const ::renddx9abi::HostString& __fastcall
-videoOptions_getDynamicOption(void* self, void*, int index)
+const ::renddx9abi::HostString& RD9_THUNK
+videoOptions_getDynamicOption(void* self RD9_THUNK_EDX, int index)
 {
     VideoOptions* vo = static_cast<VideoOptions*>(self);
-    vc71::vector_layout* list = (index == 0) ? &vo->aaList : &vo->resList;
-    const ::vc71::string* begin = reinterpret_cast<const ::vc71::string*>(list->first);
+    const std::vector< ::std::string >& list = (index == 0) ? vo->aaList : vo->resList;
+    const ::std::string* begin = list.data();
     const int sel = (index == 0) ? vo->minusOneD8 : vo->minusOneDC;
-#if BF2_PLUGIN_ABI_NATIVE
     const int slot = (index == 0) ? 0 : 1;
     s_nativeOption[slot] = (begin + sel)->c_str();
     return s_nativeOption[slot];
-#else
-    return begin[sel];
-#endif
 }
 // +0x24, sub_1000ED70 - store a float, clamped to [0.5, 1.0], at this+0x100. Its exact role is
 // [UNRESOLVED] (aspect/gamma-ish); applyQualityPreset feeds it 0.75 / 0.9 / 1.0. The shipped body
 // passes the value as the dword bit pattern (1061158912 == 0x3F400000 == 0.75f, etc.), which is the
 // same four stack bytes as passing the float, so this takes a plain float.
-void __fastcall videoOptions_setViewDistanceScale(void* self, void*, float value)
+void RD9_THUNK videoOptions_setViewDistanceScale(void* self RD9_THUNK_EDX, float value)
 {
     float v = value;
     if (v < 0.5f)      v = 0.5f;
     else if (v > 1.0f) v = 1.0f;
-    *reinterpret_cast<float*>(reinterpret_cast<unsigned char*>(self) + 0x100) = v;
+    static_cast<VideoOptions*>(self)->dynFloat = v;
 }
 // +0x28, sub_10011340 - return the +0x100 float (the value slot +0x24 clamps and stores).
 // The PE is one `fld dword ptr [ecx+100h]`; BF2.exe consumes it with an `fstp dword`, matching
 // IVideoOptions::getViewDistanceScale's float contract rather than Hex-Rays' ambiguous x87 double.
-float __fastcall videoOptions_getViewDistanceScale(void* self, void*)
+float RD9_THUNK videoOptions_getViewDistanceScale(void* self RD9_THUNK_EDX)
 {
     return static_cast<VideoOptions*>(self)->dynFloat;
 }
@@ -969,9 +946,7 @@ unsigned int systemRamMB();   // defined with the detectQualityLevel helpers bel
 int textureQualityForPreset(int preset)
 {
     unsigned int v = 3;
-    if (g_deviceCaps &&
-        *reinterpret_cast<const unsigned int*>(
-            static_cast<const unsigned char*>(g_deviceCaps) + 0x584) < 0xF0u)
+    if (g_deviceCaps && deviceCapsUnknown584() < 0xF0u)              // DeviceCaps +0x584
         v = 2;
     if (preset == 0 && v > 2)
         --v;
@@ -982,7 +957,7 @@ int textureQualityForPreset(int preset)
 
 // Applies low/medium/high presets (0/1/2) through virtual quality and dynamic-option setters.
 // HostString must match the receiving ABI; dynamic option 1 is applied before option 0.
-int __fastcall videoOptions_applyQualityPreset(void* self, void*, int preset)
+int RD9_THUNK videoOptions_applyQualityPreset(void* self RD9_THUNK_EDX, int preset)
 {
     PluginVideoOptions* const options = reinterpret_cast<PluginVideoOptions*>(self);
 
@@ -1200,7 +1175,7 @@ int __fastcall videoOptions_slot34(void* /*self*/, void*)
 // gpuWhitelistLevel documents; a modern card misses it, so this returns the shipped default 1.
 // applyQualityPreset's medium preset uses it to decide whether setting 4 is 2 (true) or 0.
 // [RETIRE-WHEN: the VideoOptions GPU whitelist tables are extracted]
-char __fastcall videoOptions_slot38(void* self, void*)
+char RD9_THUNK videoOptions_slot38(void* self RD9_THUNK_EDX)
 {
     (void)self;
     return 1;
@@ -1233,7 +1208,7 @@ void* const kVideoOptionsVtable[15] =
 // The complete callback is read, but its geometry/shader cleanup dependencies
 // remain unimplemented. Keep the existing registration boundary unchanged;
 // if this correctly shaped subobject is called, stop before reading arguments.
-void __fastcall videoOptions_handleECCoreEvent(void*, void*, int, unsigned int,
+void RD9_THUNK videoOptions_handleECCoreEvent(void* RD9_THUNK_EDX, int, unsigned int,
                                                void*, void*)
 {
     std::fprintf(stderr, "[FRONTIER] dice::hfe::dx9rend::VideoOptions::handleECCoreEvent reached (PE 0x100103F0)\n");
@@ -1251,25 +1226,14 @@ void* const kVideoOptionsEventVtable[1] =
 // VideoOptions_ctor 10010590, called by base ctor 1000BA84 before D3D setup.
 // The ECCore base's temporary purecall table is superseded by the derived table;
 // no intervening callback observes it. Do not initialize fields the ctor leaves
-// untouched: quality rows, list allocator words, selection indices, dynFloat/padding.
+// untouched: quality rows, selection indices, dynFloat/padding. The placement default-
+// initialization constructs the four std::vector lists (the retail ctor nulls their pointer
+// triples) and writes nothing else; destructD3DHalf (RendDX9Init.cpp) destroys them.
 void videoOptionsConstruct(void* base)
 {
-    VideoOptions* vo = reinterpret_cast<VideoOptions*>(
-        static_cast<unsigned char*>(base) + 0x3F8);
+    VideoOptions* vo = new (&static_cast<RendDX9Base*>(base)->videoOptions) VideoOptions;
     vo->vptr = const_cast<void**>(kVideoOptionsVtable);
     vo->vptrEventHandler = const_cast<void**>(kVideoOptionsEventVtable);
-    vo->aaList.first = nullptr;
-    vo->aaList.last = nullptr;
-    vo->aaList.end = nullptr;
-    vo->resList.first = nullptr;
-    vo->resList.last = nullptr;
-    vo->resList.end = nullptr;
-    vo->modeCache.first = nullptr;
-    vo->modeCache.last = nullptr;
-    vo->modeCache.end = nullptr;
-    vo->aaDescriptors.first = nullptr;
-    vo->aaDescriptors.last = nullptr;
-    vo->aaDescriptors.end = nullptr;
     vo->windowSizeX = 0;
     vo->windowSizeY = 0;
     vo->refreshHz = 0;
@@ -1288,8 +1252,7 @@ void videoOptionsConstruct(void* base)
 void videoOptionsInitialize(void* base)
 {
     RendDX9Base* b = static_cast<RendDX9Base*>(base);
-    VideoOptions* vo = reinterpret_cast<VideoOptions*>(
-        reinterpret_cast<unsigned char*>(b) + 1016);
+    VideoOptions* vo = &b->videoOptions;
 
     // skipped (1 of 3): the ECCore event registration.
     // The original registers `this + 4` - the ECCoreEventHandler subobject - with the host's
@@ -1342,11 +1305,11 @@ void videoOptionsInitialize(void* base)
         vo->maxQuality[7] = 2;
     }
 
-    // Clear both dynamic-option string lists (aaList @0xB0, resList @0xC0). On a freshly zeroed object
-    // these are empty and this is a no-op; vectorClear also handles a re-initialise by destroying the
-    // strings and freeing the buffer, matching the shipped `if (*v4)` element-destruction guard.
-    vectorClear< ::vc71::string >(&vo->aaList);
-    vectorClear< ::vc71::string >(&vo->resList);
+    // Clear both dynamic-option string lists (aaList @0xB0, resList @0xC0). On a freshly constructed
+    // object these are empty and this is a no-op; a re-initialise destroys the strings, as the
+    // shipped `if (*v4)` element-destruction guard does.
+    vo->aaList.clear();
+    vo->resList.clear();
 
     // ALL four OF these ARE -1, AND apply depends ON IT. The loop writes +0xD8 and +0xDC; the
     // two explicit stores below write +0xD4 and +0xD0. apply's resolution-change guard compares

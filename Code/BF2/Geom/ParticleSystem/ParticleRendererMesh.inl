@@ -10,6 +10,11 @@ inline void meshParticleMeshDrawBatch(unsigned char* mesh, int technique, bool t
 {
     reinterpret_cast<MeshParticleMesh*>(mesh)->draw(technique, transparentPass);
 }
+// Mesh +0x44 is the selected (lod, geom) record; its first word is the number of bone slots.
+inline unsigned int meshParticleMeshLodPartCount(unsigned char* mesh)
+{
+    return reinterpret_cast<MeshParticleMesh*>(mesh)->m_lodRecord->partCount;
+}
 
 template<typename Fn>
 static Fn psmMeshGeometrySlot(void* mesh, unsigned int offset)
@@ -21,23 +26,23 @@ static Fn psmMeshGeometrySlot(void* mesh, unsigned int offset)
 // the same slot StaticMesh names). Only 10175230 calls it, and discards the result.
 static void* psmMeshGeometryGetTemplate(void* mesh)
 {
-    typedef void* (__fastcall *Fn)(void*, void*);
-    return psmMeshGeometrySlot<Fn>(mesh, 0x38)(mesh, 0);
+    typedef void* (__thiscall *Fn)(void*);
+    return psmMeshGeometrySlot<Fn>(mesh, 0x38)(mesh);
 }
 
 // +0x4C, PE 101AFD80 `this[+38h][part] = transform`, `retn 8` - BundledMesh's
 // setPartTransformation(const Mat4*, int) shape. The pointer is stored, not copied.
 static void psmMeshGeometrySetPartTransformation(void* mesh, const Mat4* transform, int part)
 {
-    typedef void (__fastcall *Fn)(void*, void*, const Mat4*, int);
-    psmMeshGeometrySlot<Fn>(mesh, 0x4C)(mesh, 0, transform, part);
+    typedef void (__thiscall *Fn)(void*, const Mat4*, int);
+    psmMeshGeometrySlot<Fn>(mesh, 0x4C)(mesh, transform, part);
 }
 
 // +0x50, PE 101AFC20 `this->vslot4C(transform, 0)`, `retn 4` - setGeometryTransformation.
 static void psmMeshGeometrySetTransformation(void* mesh, const Mat4* transform)
 {
-    typedef void (__fastcall *Fn)(void*, void*, const Mat4*);
-    psmMeshGeometrySlot<Fn>(mesh, 0x50)(mesh, 0, transform);
+    typedef void (__thiscall *Fn)(void*, const Mat4*);
+    psmMeshGeometrySlot<Fn>(mesh, 0x50)(mesh, transform);
 }
 
 // The renderer calls ShaderParameter through its vtable (`call [reg+18h]`, +24h, +28h). Upcast so
@@ -107,14 +112,14 @@ static void psmMeshMultiplyInPlace(Mat4& matrix, const Mat4& rhs)
 // renderer +0x1814, chains through the particle's first word; identical in shape to 1016F7F0.
 static void psmSortMeshParticles(unsigned char* renderer, unsigned char** table, unsigned int count)
 {
-    unsigned char** buckets = reinterpret_cast<unsigned char**>(renderer + 0x1814);
+    unsigned char** buckets = &psmMeshField<unsigned char*>(renderer, 0x1814);
     for (unsigned int byte = 0; byte < 4; ++byte)
     {
         for (int i = static_cast<int>(count) - 1; i >= 0; --i)
         {
             unsigned char* particle = table[i];
             const unsigned int key = particle[0xBC + byte];
-            psmDrawField<unsigned char*>(particle, 0) = buckets[key];
+            psmRecordLink(particle, 1) = buckets[key];
             buckets[key] = particle;
         }
         unsigned int output = 0;
@@ -125,7 +130,7 @@ static void psmSortMeshParticles(unsigned char* renderer, unsigned char** table,
             while (particle)
             {
                 table[output++] = particle;
-                particle = psmDrawField<unsigned char*>(particle, 0);
+                particle = static_cast<unsigned char*>(psmRecordLink(particle, 1));
             }
         }
     }
@@ -143,16 +148,16 @@ static void psmUpdateMeshParticleDrawState(unsigned char* renderer, unsigned cha
     if (!(flags & 0x80)) return;   // `test al,al; jns`: bit 7 of the low byte is the dirty flag
     flags &= ~0x80u;
     const double age = psmDrawField<float>(particle, 0x5C);
-    const float rate = static_cast<float>(age * age * psmDrawField<float>(descriptor, 0x100)
-        + age * psmDrawField<float>(descriptor, 0x104)
-        + age * age * age * psmDrawField<float>(descriptor, 0xFC)
-        + psmDrawField<float>(descriptor, 0x108));
-    const float step = psmParticleClamp(rate, 0.0f, 1.0f) * psmDrawField<float>(renderer, 0x1C20);
+    const float rate = static_cast<float>(age * age * psmDescriptor1<float>(descriptor, 0x100)
+        + age * psmDescriptor1<float>(descriptor, 0x104)
+        + age * age * age * psmDescriptor1<float>(descriptor, 0xFC)
+        + psmDescriptor1<float>(descriptor, 0x108));
+    const float step = psmParticleClamp(rate, 0.0f, 1.0f) * psmMeshField<float>(renderer, 0x1C20);
     Mat4& matrix = psmDrawField<Mat4>(particle, 4);
     const Vec3& position = psmDrawField<Vec3>(particle, 0x50);
 
     // 101758C5/101758E1: `fucompp; test ah,44h; jp` - a NaN directional scale takes the velocity arm.
-    if (!descriptor[0x1F0] && psmDrawField<float>(descriptor, 0x1EC) == 0.0f)
+    if (!descriptor[0x1F0] && psmDescriptor1<float>(descriptor, 0x1EC) == 0.0f)
     {
         Vec3& rotation = psmDrawField<Vec3>(particle, 0xA8);
         const Vec3& rotationSpeed = psmDrawField<Vec3>(particle, 0x9C);
@@ -216,10 +221,10 @@ static void psmUpdateMeshParticleDrawState(unsigned char* renderer, unsigned cha
                 up = psmMeshCross(direction, right);
             }
             // `test ah,41h; jnz`: only a strictly positive directional scale stretches (NaN no).
-            if (psmDrawField<float>(descriptor, 0x1EC) > 0.0f)
+            if (psmDescriptor1<float>(descriptor, 0x1EC) > 0.0f)
             {
                 matrix = Mat4::getIdentity();
-                const Vec3 stretch = { 1.0f, 1.0f, lengthRounded * psmDrawField<float>(descriptor, 0x1EC) };
+                const Vec3 stretch = { 1.0f, 1.0f, lengthRounded * psmDescriptor1<float>(descriptor, 0x1EC) };
                 psmMeshScaleColumns(matrix, stretch);
                 Mat4 basis;
                 psmMeshConstructFromRows(basis, right, up, direction, position);
@@ -233,19 +238,19 @@ static void psmUpdateMeshParticleDrawState(unsigned char* renderer, unsigned cha
     // the size graph scales the whole 3x3 part uniformly, then the transparency graph
     // multiplies the alpha the collector faded.
     const double tailAge = psmDrawField<float>(particle, 0x5C);
-    const float sizeRate = static_cast<float>(tailAge * tailAge * psmDrawField<float>(descriptor, 0x150)
-        + tailAge * psmDrawField<float>(descriptor, 0x154)
-        + tailAge * tailAge * tailAge * psmDrawField<float>(descriptor, 0x14C)
-        + psmDrawField<float>(descriptor, 0x158));
+    const float sizeRate = static_cast<float>(tailAge * tailAge * psmDescriptor1<float>(descriptor, 0x150)
+        + tailAge * psmDescriptor1<float>(descriptor, 0x154)
+        + tailAge * tailAge * tailAge * psmDescriptor1<float>(descriptor, 0x14C)
+        + psmDescriptor1<float>(descriptor, 0x158));
     const float size = static_cast<float>(
-        static_cast<double>(psmParticleClamp(sizeRate, 0.0f, 1.0f)) * psmDrawField<float>(descriptor, 0x1E8)
+        static_cast<double>(psmParticleClamp(sizeRate, 0.0f, 1.0f)) * psmDescriptor1<float>(descriptor, 0x1E8)
         + psmDrawField<float>(particle, 0x68));
     const Vec3 uniform = { size, size, size };
     psmMeshScaleColumns(matrix, uniform);
-    const float alphaRate = static_cast<float>(tailAge * tailAge * psmDrawField<float>(descriptor, 0x140)
-        + tailAge * psmDrawField<float>(descriptor, 0x144)
-        + tailAge * tailAge * tailAge * psmDrawField<float>(descriptor, 0x13C)
-        + psmDrawField<float>(descriptor, 0x148));
+    const float alphaRate = static_cast<float>(tailAge * tailAge * psmDescriptor1<float>(descriptor, 0x140)
+        + tailAge * psmDescriptor1<float>(descriptor, 0x144)
+        + tailAge * tailAge * tailAge * psmDescriptor1<float>(descriptor, 0x13C)
+        + psmDescriptor1<float>(descriptor, 0x148));
     psmDrawField<float>(particle, 0x6C) =
         psmParticleClamp(alphaRate, 0.0f, 1.0f) * psmDrawField<float>(particle, 0x6C);
 }
@@ -258,31 +263,31 @@ static void psmCollectMeshParticles(unsigned char* renderer, dx9rend::IRenderVie
     view->getViewMatrixPtr();                   // discarded
     const float nearPlane = view->getNearPlane();
     view->getViewMatrixPtr();                   // discarded (getViewport below likewise)
-    const unsigned int count = psmDrawField<unsigned int>(instance, 0x28);
-    if (psmDrawField<int>(descriptor, 8) == -1)
+    const unsigned int count = psmInstanceB<unsigned int>(instance, 0x28);
+    if (psmDescriptor1<int>(descriptor, 8) == -1)
     {
         // renderer +0x1C38 is tested and both arms store the same counter. The retail
         // constructor initialises neither +0x1C38 nor the counter +0x1D44 (the rebuild's
         // zero-filled manager makes both 0). Kept as the dead test it is.
-        if (psmDrawField<unsigned int>(renderer, 0x1C38))
-            psmDrawField<unsigned int>(descriptor, 8) = psmDrawField<unsigned int>(renderer, 0x1D44);
+        if (psmMeshField<unsigned int>(renderer, 0x1C38))
+            psmDescriptor1<unsigned int>(descriptor, 8) = psmMeshField<unsigned int>(renderer, 0x1D44);
         else
-            psmDrawField<unsigned int>(descriptor, 8) = psmDrawField<unsigned int>(renderer, 0x1D44);
-        ++psmDrawField<unsigned int>(renderer, 0x1D44);
+            psmDescriptor1<unsigned int>(descriptor, 8) = psmMeshField<unsigned int>(renderer, 0x1D44);
+        ++psmMeshField<unsigned int>(renderer, 0x1D44);
     }
     view->getViewport();                        // discarded
     ParticleSystemManager* manager = reinterpret_cast<ParticleSystemManager*>(g_ParticleSystemManager);
-    const unsigned int lod = psmDrawField<unsigned int>(descriptor, 0x68);
+    const unsigned int lod = psmDescriptor1<unsigned int>(descriptor, 0x68);
     const float farDistance = manager->m_farDistances[lod];
     const float inverseFarRange = manager->m_inverseFarRanges[lod];
     unsigned int accepted = 0;
     for (unsigned int i = 0; i < count; ++i)
     {
-        unsigned char* particle = psmDrawField<unsigned char**>(instance, 0x14)[i];
-        const double depth = static_cast<double>(psmDrawField<float>(particle, 0x54)) * psmDrawField<float>(renderer, 0x1C28)
-            + static_cast<double>(psmDrawField<float>(particle, 0x58)) * psmDrawField<float>(renderer, 0x1C2C)
-            + static_cast<double>(psmDrawField<float>(particle, 0x50)) * psmDrawField<float>(renderer, 0x1C24)
-            + psmDrawField<float>(renderer, 0x1C30);
+        unsigned char* particle = psmInstanceB<unsigned char**>(instance, 0x14)[i];
+        const double depth = static_cast<double>(psmDrawField<float>(particle, 0x54)) * psmMeshField<float>(renderer, 0x1C28)
+            + static_cast<double>(psmDrawField<float>(particle, 0x58)) * psmMeshField<float>(renderer, 0x1C2C)
+            + static_cast<double>(psmDrawField<float>(particle, 0x50)) * psmMeshField<float>(renderer, 0x1C24)
+            + psmMeshField<float>(renderer, 0x1C30);
         const float roundedDepth = static_cast<float>(depth);
         // The near test compares the unrounded depth (`fst` keeps st0), the far fade below uses
         // the rounded copy. `test ah,5; jnp` lets NaN through.
@@ -295,7 +300,7 @@ static void psmCollectMeshParticles(unsigned char* renderer, dx9rend::IRenderVie
             if (fade > 1) fade = 1;
             alpha = static_cast<float>((1 - fade) * (1 - fade) * psmDrawField<float>(particle, 0x70));
         }
-        if (alpha < psmDrawField<float>(descriptor, 0xC4)) continue;   // alpha cull
+        if (alpha < psmDescriptor1<float>(descriptor, 0xC4)) continue;   // alpha cull
         const Mat4* camera = view->getViewMatrixPtr();
         const float x = static_cast<float>(static_cast<double>(camera->m[12]) - psmDrawField<float>(particle, 0x50));
         const double y = static_cast<double>(camera->m[13]) - psmDrawField<float>(particle, 0x54);
@@ -303,25 +308,25 @@ static void psmCollectMeshParticles(unsigned char* renderer, dx9rend::IRenderVie
         psmDrawField<float>(particle, 0xBC) = static_cast<float>(z * z + y * y + static_cast<double>(x) * x);
         psmUpdateMeshParticleDrawState(renderer, particle, descriptor, instance, view);
         // The template id is written after the draw-state update, unlike the sprite collectors.
-        psmDrawField<unsigned short>(particle, 0x64) = psmDrawField<unsigned short>(descriptor, 4);
-        psmDrawField<unsigned char**>(renderer, 4)[psmDrawField<unsigned int>(renderer, 0x1808) + accepted] = particle;
+        psmDrawField<unsigned short>(particle, 0x64) = psmDescriptor1<unsigned short>(descriptor, 4);
+        psmMeshField<unsigned char**>(renderer, 4)[psmMeshField<unsigned int>(renderer, 0x1808) + accepted] = particle;
         ++accepted;
     }
     if (!accepted) return;
     // Draw order 0 -> group 0 at +8 (drawn by the pass=true draw); anything else -> group 1 at
     // +0xC08 (drawn by the pass=false draw). A full group (256) returns without claiming the
     // table slots it just wrote; those particles' dirty bits are already consumed. Kept.
-    const bool second = psmDrawField<unsigned int>(descriptor, 0x94) != 0;
-    unsigned int& groupCount = psmDrawField<unsigned int>(renderer, second ? 0x1810 : 0x180C);
+    const bool second = psmDescriptor1<unsigned int>(descriptor, 0x94) != 0;
+    unsigned int& groupCount = psmMeshField<unsigned int>(renderer, second ? 0x1810 : 0x180C);
     if (groupCount >= 256) return;
-    unsigned char* group = renderer + (second ? 0xC08 : 8) + 12 * groupCount;
-    psmDrawField<unsigned char*>(group, 0) = instance;
-    psmDrawField<unsigned int>(group, 4) = psmDrawField<unsigned int>(renderer, 0x1808) + accepted - 1;
-    psmDrawField<unsigned int>(group, 8) = accepted;
+    PsmDrawGroup* const group = psmMeshGroups(renderer, second ? 0xC08 : 8) + groupCount;
+    group->instance = instance;
+    group->last = static_cast<int>(psmMeshField<unsigned int>(renderer, 0x1808) + accepted - 1);
+    group->count = accepted;
     ++groupCount;
     psmSortMeshParticles(renderer,
-        psmDrawField<unsigned char**>(renderer, 4) + psmDrawField<unsigned int>(renderer, 0x1808), accepted);
-    psmDrawField<unsigned int>(renderer, 0x1808) += accepted;
+        psmMeshField<unsigned char**>(renderer, 4) + psmMeshField<unsigned int>(renderer, 0x1808), accepted);
+    psmMeshField<unsigned int>(renderer, 0x1808) += accepted;
 }
 
 // PE 10175025..10175086, the group-overflow arm of 10174DA0. byte_1023A29C is a process-wide
@@ -333,10 +338,10 @@ static void psmNoteMeshGroupOverflow(unsigned char* renderer)
     static bool s_reportGroupOverflow = true;   // [INFERRED] name, PE .data 1023A29C = 1
     if (!s_reportGroupOverflow) return;
     s_reportGroupOverflow = false;
-    for (unsigned int i = 0; i < psmDrawField<unsigned int>(renderer, 0x180C); ++i)
-        psmDrawField<IParticleSystemInstance*>(renderer, 8 + 12 * i)->getTemplate();
-    for (unsigned int i = 0; i < psmDrawField<unsigned int>(renderer, 0x1810); ++i)
-        psmDrawField<IParticleSystemInstance*>(renderer, 0xC08 + 12 * i)->getTemplate();
+    for (unsigned int i = 0; i < psmMeshField<unsigned int>(renderer, 0x180C); ++i)
+        psmMeshField<IParticleSystemInstance*>(renderer, 8 + 12 * i)->getTemplate();
+    for (unsigned int i = 0; i < psmMeshField<unsigned int>(renderer, 0x1810); ++i)
+        psmMeshField<IParticleSystemInstance*>(renderer, 0xC08 + 12 * i)->getTemplate();
 }
 
 // PE 10175660 (402 B). Per-frame MeshParticleMesh effect state. Unlike the sprite renderers there
@@ -351,26 +356,26 @@ static void psmBindMeshParticleParameters(unsigned char* renderer)
     if (map)
     {
         {
-            const vc71::string name("HemiMapInfo");
+            const std::string name("HemiMapInfo");
             dx9rend::ParameterOwner* parameter = psmMeshParameter(
                 dx9rend::effectGetShaderParameterBorrowedTyped(g_meshParticleMeshEffectState.effect, name));
             const HemiMapInfo& info = g_HemiMapManager->getHemiMapInfo(map);
             parameter->setValue(&info, 0);
         }
         {
-            const vc71::string name("HemiShadowAltitude");
+            const std::string name("HemiShadowAltitude");
             psmMeshParameter(dx9rend::effectGetShaderParameterBorrowedTyped(g_meshParticleMeshEffectState.effect, name))
                 ->setFloat(map->falloff);
         }
         {
-            const vc71::string name("Texture1");
+            const std::string name("Texture1");
             psmMeshParameter(dx9rend::effectGetShaderParameterBorrowedTyped(g_meshParticleMeshEffectState.effect, name))
                 ->setValue(map->texture, 0);
         }
     }
     else
     {
-        const vc71::string name("Texture1");
+        const std::string name("Texture1");
         dx9rend::ParameterOwner* parameter = psmMeshParameter(
             dx9rend::effectGetShaderParameterBorrowedTyped(g_meshParticleMeshEffectState.effect, name));
         // PE 100F1490 rereads the owner despite the null result above (as in the siblings).
@@ -379,10 +384,8 @@ static void psmBindMeshParticleParameters(unsigned char* renderer)
     }
     // These four statics are dereferenced without a null test (only WorldViewProjection above
     // and the three colour words in the draws are tested). Shipped.
-    unsigned char* constants = static_cast<unsigned char*>(dx9rend::g_raShaderConstants);
-    psmMeshParameter(g_meshParticleMeshEffectState.fogRange)->setValue(constants + 0xA8, 0);
-    constants = static_cast<unsigned char*>(dx9rend::g_raShaderConstants);
-    psmMeshParameter(g_meshParticleMeshEffectState.fogColor)->setValue(constants + 0xBC, 0);
+    psmMeshParameter(g_meshParticleMeshEffectState.fogRange)->setValue(dx9rend::raShaderConstantsAt(0xA8), 0);
+    psmMeshParameter(g_meshParticleMeshEffectState.fogColor)->setValue(dx9rend::raShaderConstantsAt(0xBC), 0);
     {
         const Vec3& sun = g_LightManager->getEffectSunColor();
         psmMeshParameter(g_meshParticleMeshEffectState.effectSunColor)->setValue(&sun, 0);
@@ -397,21 +400,21 @@ static void psmBindMeshParticleParameters(unsigned char* renderer)
 // MeshParticleMesh instance, filling its bone slots from the top down and flushing a batch
 // (drawBatch) every time slot 0 is reached. Returns false only for an empty group.
 static bool psmDrawMeshParticleGroup(unsigned char* renderer, dx9rend::IRenderView* view,
-    unsigned int target, unsigned int groupIndex, unsigned char* groups)
+    unsigned int target, unsigned int groupIndex, PsmDrawGroup* groups)
 {
-    unsigned char* const group = groups + 12 * groupIndex;
-    if (!psmDrawField<unsigned int>(group, 8)) return false;
-    const int lastIndex = psmDrawField<int>(group, 4);
+    PsmDrawGroup* const group = groups + groupIndex;
+    if (!group->count) return false;
+    const int lastIndex = group->last;
     view->getViewport();                        // discarded
-    IParticleSystemInstance* const instance = psmDrawField<IParticleSystemInstance*>(group, 0);
-    const unsigned int count = psmDrawField<unsigned int>(group, 8);
+    IParticleSystemInstance* const instance = reinterpret_cast<IParticleSystemInstance*>(group->instance);
+    const unsigned int count = group->count;
     unsigned int consumed = 0;
     IParticleSystemTemplate* const systemTemplate = instance->getTemplate();
     unsigned char* const descriptor = reinterpret_cast<unsigned char*>(systemTemplate);
     // Technique for drawBatch: blend mode 1 -> "Additive"; else write-Z -> "DiffuseWithZWrite";
     // else "Diffuse".
     int technique = 0;
-    if (psmDrawField<unsigned int>(descriptor, 0x90) == 1) technique = 1;
+    if (psmDescriptor1<unsigned int>(descriptor, 0x90) == 1) technique = 1;
     else if (descriptor[0x1F2]) technique = 2;
     // COLOR1 reads descriptor +0x1AC..+0x1B8 as a Vec4 whose w is the derived light-affection
     // factor at +0x1B8; COLOR2 is the {rgb,1} Vec4 at +0x1BC; colorblendgraph the graph at +0x12C.
@@ -426,58 +429,58 @@ static bool psmDrawMeshParticleGroup(unsigned char* renderer, dx9rend::IRenderVi
         static_cast<IParticleSpriteSystemTemplate*>(systemTemplate)->getLightMapIntensityOffset();
     {
         // No null test on the looked-up parameter (the colour words above are tested).
-        const vc71::string name("LightmapIntensityOffset");
+        const std::string name("LightmapIntensityOffset");
         psmMeshParameter(dx9rend::effectGetShaderParameterBorrowedTyped(g_meshParticleMeshEffectState.effect, name))
             ->setValue(&lightmapIntensityOffset, 0);
     }
     // Descriptor +0x8C is the MeshParticleMesh instance the type-1 template's setGeometry
     // (slot 114, PE 101796D0) created. Every use below re-reads it, as the PE does. A null
     // geometry leaves the group untouched and still reports true (shipped).
-    if (psmDrawField<unsigned char*>(descriptor, 0x8C))
+    if (psmDescriptor1<unsigned char*>(descriptor, 0x8C))
     {
         // Mesh +0x44 points at the selected (lod, geom) record whose first word is the number of
         // bone slots (the instance's matrix array at +0x38 has 26).
-        unsigned int slot = *psmDrawField<unsigned int*>(psmDrawField<unsigned char*>(descriptor, 0x8C), 0x44);
+        unsigned int slot = meshParticleMeshLodPartCount(psmDescriptor1<unsigned char*>(descriptor, 0x8C));
         if (count)
         {
             for (;;)
             {
-                unsigned char* particle = psmDrawField<unsigned char**>(renderer, 4)[lastIndex - static_cast<int>(consumed)];
+                unsigned char* particle = psmMeshField<unsigned char**>(renderer, 4)[lastIndex - static_cast<int>(consumed)];
                 if (psmDrawField<unsigned int>(particle, 0xBC) < target) break;   // unsigned `jb`
                 --slot;
-                psmMeshGeometrySetPartTransformation(psmDrawField<unsigned char*>(descriptor, 0x8C),
+                psmMeshGeometrySetPartTransformation(psmDescriptor1<unsigned char*>(descriptor, 0x8C),
                     &psmDrawField<Mat4>(particle, 4), static_cast<int>(slot));
-                meshParticleMeshSetAgeAndAlpha(psmDrawField<unsigned char*>(descriptor, 0x8C),
+                meshParticleMeshSetAgeAndAlpha(psmDescriptor1<unsigned char*>(descriptor, 0x8C),
                     psmDrawField<float>(particle, 0x5C), psmDrawField<float>(particle, 0x6C), slot);
                 if (!slot)
                 {
                     // A full batch writes slot 0 twice: +0x4C above, then +0x50 (-> +0x4C(m, 0)).
-                    psmMeshGeometrySetTransformation(psmDrawField<unsigned char*>(descriptor, 0x8C),
+                    psmMeshGeometrySetTransformation(psmDescriptor1<unsigned char*>(descriptor, 0x8C),
                         &psmDrawField<Mat4>(particle, 4));
-                    meshParticleMeshDrawBatch(psmDrawField<unsigned char*>(descriptor, 0x8C), technique, false);
-                    slot = *psmDrawField<unsigned int*>(psmDrawField<unsigned char*>(descriptor, 0x8C), 0x44);
+                    meshParticleMeshDrawBatch(psmDescriptor1<unsigned char*>(descriptor, 0x8C), technique, false);
+                    slot = meshParticleMeshLodPartCount(psmDescriptor1<unsigned char*>(descriptor, 0x8C));
                 }
-                --psmDrawField<unsigned int>(group, 8);
-                ++psmDrawField<unsigned int>(renderer, 0x1C14);
+                --group->count;
+                ++psmMeshField<unsigned int>(renderer, 0x1C14);
                 if (++consumed >= count) break;
             }
         }
-        if (slot < *psmDrawField<unsigned int*>(psmDrawField<unsigned char*>(descriptor, 0x8C), 0x44))
+        if (slot < meshParticleMeshLodPartCount(psmDescriptor1<unsigned char*>(descriptor, 0x8C)))
         {
             // A partial batch parks every unfilled slot on the shared zero matrix (PE 10079290),
             // collapsing those copies of the mesh to a point, and draws the whole batch anyway.
             while (slot > 1)
             {
                 --slot;
-                psmMeshGeometrySetPartTransformation(psmDrawField<unsigned char*>(descriptor, 0x8C),
+                psmMeshGeometrySetPartTransformation(psmDescriptor1<unsigned char*>(descriptor, 0x8C),
                     &Mat4::getZero(), static_cast<int>(slot));
             }
             if (slot == 1)
-                psmMeshGeometrySetTransformation(psmDrawField<unsigned char*>(descriptor, 0x8C), &Mat4::getZero());
-            meshParticleMeshDrawBatch(psmDrawField<unsigned char*>(descriptor, 0x8C), technique, false);
+                psmMeshGeometrySetTransformation(psmDescriptor1<unsigned char*>(descriptor, 0x8C), &Mat4::getZero());
+            meshParticleMeshDrawBatch(psmDescriptor1<unsigned char*>(descriptor, 0x8C), technique, false);
         }
     }
-    psmDrawField<int>(group, 4) = lastIndex - static_cast<int>(consumed);
+    group->last = lastIndex - static_cast<int>(consumed);
     return true;
 }
 
@@ -486,18 +489,20 @@ static bool psmDrawMeshParticleGroup(unsigned char* renderer, dx9rend::IRenderVi
 // +0x7C first-person flag, +0x7D use the second first-person view, +0x80 alpha.
 static void psmDrawMeshParticleExtraList(unsigned char* renderer, bool pass)
 {
-    unsigned char** entry = psmDrawField<unsigned char**>(renderer, 0x1D84);
-    if (entry != psmDrawField<unsigned char**>(renderer, 0x1D88))
+    std::vector<MeshParticleMesh*>& list = meshParticlesRendererMeshes(renderer);
+    MeshParticleMesh** entry = list.data();
+    if (entry != list.data() + list.size())
     {
         do
         {
-            unsigned char* const mesh = *entry;
+            MeshParticleMesh* const meshObject = *entry;
+            unsigned char* const mesh = reinterpret_cast<unsigned char*>(meshObject);
             psmMeshGeometryGetTemplate(mesh);   // slot +0x38, result discarded
             // The view is fetched for every element, including the ones skipped below.
-            dx9rend::IRenderView* const view = pass && mesh[0x7D]
+            dx9rend::IRenderView* const view = pass && meshObject->m_alternateView     // +0x7D
                 ? static_cast<dx9rend::IRenderer*>(dx9rend::g_rendererBase)->getRenderView2()
                 : static_cast<dx9rend::IRenderer*>(dx9rend::g_rendererBase)->getRenderViewDup();
-            if (pass ? mesh[0x7C] != 0 : mesh[0x7C] == 0)
+            if (pass ? meshObject->m_firstPerson != 0 : meshObject->m_firstPerson == 0) // +0x7C
             {
                 if (g_meshParticleMeshEffectState.worldViewProjection)
                 {
@@ -515,19 +520,19 @@ static void psmDrawMeshParticleExtraList(unsigned char* renderer, bool pass)
                     psmMeshParameter(g_meshParticleMeshEffectState.colorBlendGraph)->setValue(&blend, 0);
                 const float one = 1.0f;
                 {
-                    const vc71::string name("LightmapIntensityOffset");
+                    const std::string name("LightmapIntensityOffset");
                     psmMeshParameter(dx9rend::effectGetShaderParameterBorrowedTyped(g_meshParticleMeshEffectState.effect, name))
                         ->setValue(&one, 0);
                 }
-                meshParticleMeshSetAgeAndAlpha(mesh, 1.0f, psmDrawField<float>(mesh, 0x80), 0);
-                meshParticleMeshSetAgeAndAlpha(mesh, 1.0f, psmDrawField<float>(mesh, 0x80), 1);
+                meshParticleMeshSetAgeAndAlpha(mesh, 1.0f, meshObject->m_alpha, 0);   // +0x80
+                meshParticleMeshSetAgeAndAlpha(mesh, 1.0f, meshObject->m_alpha, 1);
                 meshParticleMeshDrawBatch(mesh, 1, false);   // always "Additive"
             }
             ++entry;
-        } while (entry != psmDrawField<unsigned char**>(renderer, 0x1D88));
+        } while (entry != list.data() + list.size());
     }
     // Only the first-person call (pass == true) empties the list: PE 100D74B0 resize(0, 0),
     // which keeps the allocation (same effect as psmDrawClearPointerVector).
     if (pass)
-        psmDrawClearPointerVector(renderer + 0x1D80);
+        psmDrawClearPointerVector<MeshParticleMesh*>(renderer, psmMeshRendererOffset(0x1D80));
 }

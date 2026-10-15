@@ -59,22 +59,24 @@ typedef object_detail::LayoutAccess L;     // the raw Object offsets, as Soldier
 // reviveAnimations tells the carried kit's geometry that the soldier has returned to the prone
 // pose. geom::IGeometry is still unrecovered, but this one seam is bounded in both shipped x86
 // images: handleMessage is PE/MSVC +0x60 and ELF/Itanium +0x64 (the destructor-pair shift).
+// The slot follows the compiler's destructor ABI, so native MSVC x64 takes the PE arm too.
 void geometryHandleMessage(void* geometry, TemplateMessage message, void* payload)
 {
-#if defined(_MSC_VER) && defined(_M_IX86)
+#if defined(_MSC_VER)
     typedef void (__thiscall *Method)(void*, TemplateMessage, void*);
-    const unsigned int slot = 0x60 / sizeof(void*);
+    const unsigned int slot = 0x60 / 4;
 #else
     typedef void (*Method)(void*, TemplateMessage, void*);
-    const unsigned int slot = 0x64 / sizeof(void*);
+    const unsigned int slot = 0x64 / 4;
 #endif
     void** const vtable = *reinterpret_cast<void***>(geometry);
     reinterpret_cast<Method>(vtable[slot])(geometry, message, payload);
 }
 
 // Renderer dispatch for field of view, geometry selection and bone palettes.
-// Explicit PE/ELF slot constants account for their differing destructor layouts.
-#if defined(_MSC_VER) && defined(_M_IX86)
+// Explicit PE/ELF slot constants account for their differing destructor layouts; MSVC x64 keeps
+// the MSVC (PE) table order.
+#if defined(_MSC_VER)
 #define BF2_SOLDIER_GEOM_CALL __thiscall
 const unsigned int kGeometrySetFovSlot            = 0x10;
 const unsigned int kGeometrySetGeomIndexSlot      = 0x6C;
@@ -90,7 +92,7 @@ const unsigned int kGeometryGatherUsedBonesSlot   = 0x5C;
 
 template<class F> F geometrySlot(void* geometry, unsigned int offset)
 {
-    return reinterpret_cast<F>((*static_cast<void***>(geometry))[offset / sizeof(void*)]);
+    return reinterpret_cast<F>((*static_cast<void***>(geometry))[offset / 4]);
 }
 
 void geometrySetFov(void* geometry, float fov)

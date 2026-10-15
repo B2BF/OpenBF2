@@ -254,7 +254,7 @@ void HudAmmo::updatePointer(bool enabled)
 {
     if (hudManager->isPointerEnabled() == enabled) return;
     if (enabled) {
-        const int texture = m_system->loadTexture(m_field1a0, true);
+        const meme::TextureHandle texture = m_system->loadTexture(m_field1a0, true);
         const int mode = hudManager->getMode();
         hudManager->enablePointer(texture, mode);
         auto* pointer = static_cast<meme::Pointer*>(m_system->getPointerObject());
@@ -1011,6 +1011,7 @@ bool abilityFlag(world::IAbilityGLComp* ability, unsigned index)
 float armorAbilityRatio(float hitPoints, float maximum, float previous, bool blend)
 {
     const float half = 0.5f;
+#if defined(_M_IX86)
     float result;
     __asm {
         fld hitPoints
@@ -1023,11 +1024,18 @@ float armorAbilityRatio(float hitPoints, float maximum, float previous, bool ble
         fstp result
     }
     return result;
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    double ratio = static_cast<double>(hitPoints) / maximum;
+    if (blend) ratio = (ratio + previous) * half;
+    return static_cast<float>(ratio);
+#endif
 }
 float ammoAbilityRatio(int status, float previous, bool blend)
 {
     const float scale = 0.06666667014360428f; // PE934BB0, bits3D888889
     const float half = 0.5f;
+#if defined(_M_IX86)
     float result;
     __asm {
         fild status
@@ -1040,6 +1048,12 @@ float ammoAbilityRatio(int status, float previous, bool blend)
         fstp result
     }
     return result;
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    double ratio = static_cast<double>(status) * scale;
+    if (blend) ratio = (ratio + previous) * half;
+    return static_cast<float>(ratio);
+#endif
 }
 const char repairAbilityIcon[] = "Ingame/Player/Bars/abilitybar_smallRepairIcon.tga";
 const char medicAbilityIcon[] = "Ingame/Player/Bars/abilitybar_smallMedicIcon.tga";

@@ -24,10 +24,27 @@ FalconInputFormat inputBuffer[1]; // PE 0xA03918, static polling buffer
 const float lowerTravel[3] = { -0.0025f, -0.0025f, -0.001f };
 const float upperTravel[3] = { 0.0025f, 0.0025f, 0.001f };
 }
+// [CHOSEN, not recovered] x64 (https://github.com/B2BF/OpenBF2/issues/7): NovintHFX ships only as a
+// 32-bit DLL. The x64 image never calls it: init() reports the device absent through the same
+// `false` retail returns with no device connected, so m_device stays null and every device path
+// below returns at its existing null test.
+#if defined(_M_IX86)
+#define BF2_FALCON_SDK 1
+#else
+#define BF2_FALCON_SDK 0
+#endif
 FalconDevice::FalconDevice()
-    : m_refCount(1), m_active(false), m_pollTime(0), m_haptics(&Haptics), m_device(0)
+    : m_refCount(1), m_active(false), m_pollTime(0),
+#if BF2_FALCON_SDK
+      m_haptics(&Haptics),
+#else
+      m_haptics(0),
+#endif
+      m_device(0)
 {
+#if defined(_M_IX86)
     static_assert(offsetof(FalconDevice, m_samples) == 0xE4, "x86 scalar prefix");
+#endif
     static_assert(sizeof(FalconInputFormat) == 40, "x86 input sample alignment");
     m_field100 = 0;
     g_falconDevice = 0;
@@ -46,12 +63,14 @@ FalconDevice::FalconDevice()
 }
 FalconDevice::~FalconDevice()
 {
+#if BF2_FALCON_SDK
     if (m_device) {
         m_haptics->StopRunningDevice(&m_device);
         m_haptics = 0;
         g_falconDevice = 0;
         m_device = 0;
     }
+#endif
 }
 void FalconDevice::addRef() { ++m_refCount; }
 int FalconDevice::getRef() { return m_refCount; }
@@ -125,6 +144,12 @@ float FalconDevice::buttonPressedSampleLatency(InputDeviceButtons button) const
 bool FalconDevice::init()
 {
     if (!inputDeviceManager) return false;
+#if !BF2_FALCON_SDK
+    std::fprintf(stderr, "[x64] dice::hfe::io::FalconDevice::init: no 64-bit NovintHFX SDK; "
+                         "the Falcon is reported as not connected\n");
+    std::fflush(stderr);
+    return false;
+#else
     const HWND window = GetForegroundWindow();
     NovintHFX::ApplicationData application;
     application.window = window;
@@ -141,12 +166,14 @@ bool FalconDevice::init()
     m_numButtons = 4;
     // AttachApplication failure still returns true; zero devices returns false.
     return true;
+#endif
 }
 bool FalconDevice::getNextInput(InputDeviceAxes& axis, InputDeviceButtons& button,
                                InputDeviceKeys& key, bool& negative)
 {
     if (!m_active) return false;
     if (!m_device) return false;
+#if BF2_FALCON_SDK
     m_device->InputUpdate();
     int buttons, pressed, released;
     m_device->GetButtonData(&buttons, &pressed, &released);
@@ -179,6 +206,7 @@ bool FalconDevice::getNextInput(InputDeviceAxes& axis, InputDeviceButtons& butto
             return true;
         }
     }
+#endif
     return false;
 }
 void FalconDevice::update(float dt)
@@ -188,6 +216,7 @@ void FalconDevice::update(float dt)
         updateCurrentState(dt); // [FRONTIER] retained actual positive-dt dependency
         return;
     }
+#if BF2_FALCON_SDK
     if (m_samples.size() > 256) m_samples.clear();
     m_haptics->InputUpdate();
     double position[3];
@@ -201,6 +230,7 @@ void FalconDevice::update(float dt)
     m_sampleTime = m_pollTime;
     m_pollTime = GetTickCount();
     for (unsigned int i = 0; i < 1; ++i) m_samples.push_back(inputBuffer[i]);
+#endif
 }
 } } }
 #endif

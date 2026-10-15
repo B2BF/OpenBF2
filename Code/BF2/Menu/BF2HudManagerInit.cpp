@@ -188,7 +188,7 @@ bool BF2HudManager::init()
         ref2System->loadMenu("Menu/InGame",nullptr);
         runHudScript("Menu/HUD/HudSetup/HudSetupMain.con");
         runHudScript("Menu/Nametag/nametags.con");
-        const int texture=ref2System->loadTexture("Ingame/GeneralIcons/full.tga",true);
+        const meme::TextureHandle texture=ref2System->loadTexture("Ingame/GeneralIcons/full.tga",true);
         ref2System->setDefaultTexture(texture);
         hudMap=m_field0fc->m_field008;
         // Retail _Tidy releases all storage, not just the logical elements.

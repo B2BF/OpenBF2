@@ -11,7 +11,7 @@
 #include "../../../Core/Ids.h"
 #include "../../IGameLogic.h"          // gameLogic->addPreStoredTemplate - the 16-deep pre-store
 #include "../../../Geom/IGeometryTemplate.h"
-#if !DEDICATED && defined(_M_IX86) && BF2_PLUGIN_ABI_NATIVE
+#if !DEDICATED && defined(_MSC_VER)
 #include "../../../Geom/GeometryTemplateManager.h"
 #endif
 
@@ -46,7 +46,7 @@ void precacheTracerGeometry(IObjectTemplate* tracerTemplate)
 // Returns a borrowed geometry template through the legacy cache type. Requires the client manager.
 IObjectTemplate* lookupTracerGeometryTemplate(const std::string& name)
 {
-#if defined(_M_IX86) && BF2_PLUGIN_ABI_NATIVE
+#if !DEDICATED && defined(_MSC_VER)
     geom::IGeometryTemplateManager* const manager =
         static_cast<geom::IGeometryTemplateManager*>(::dice::hfe::g_geometryTemplateManager);
     return reinterpret_cast<IObjectTemplate*>(manager->getTemplate(name));

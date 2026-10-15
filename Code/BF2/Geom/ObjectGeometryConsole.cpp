@@ -5,7 +5,6 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 #include "../../RendDX9Abi/PluginAbi.h"
-#if BF2_PLUGIN_ABI_NATIVE
 
 #include "MeshTemplate.h"                  // IGeometryTemplate (getClassId, +0x10)
 #include "RoadCompiled.h"
@@ -13,7 +12,7 @@
 
 #include "../../RendDX9Abi/HfeAbi.h"
 #include "../../RendDX9Abi/PluginEntry.h"
-#include "../../RendDX9Abi/Vc71String.h"
+#include <string>
 #include "../Core/ConsoleObjectMacro.h"
 #include "../Core/ConsoleObjects.h"
 #include "../Game/Objects/IObject.h"
@@ -56,7 +55,8 @@ IBase* activeObjectGeometry()
 
 // that geometry as a RoadCompiled: only when its template (IGeometry +0x38) is a
 // GeometryTemplate.RoadCompiled (getClassId +0x10 against the reflection id, read as data). The
-// component is the IGeometry subobject, so the object is 4 bytes lower (`lea eax, [esi-4]`).
+// component is the IGeometry subobject, so the object is that member's offset lower (retail 4
+// bytes, `lea eax, [esi-4]`).
 // IGeometry has no typed interface in this tree; +0x38 is dispatched through the component's own
 // table, as XpLightManager.cpp and ObjectDrawer.cpp do.
 RoadCompiled* activeRoadCompiled()
@@ -65,14 +65,15 @@ RoadCompiled* activeRoadCompiled()
     if (!geometry)
         return 0;
 
-    typedef IGeometryTemplate* (__fastcall* GetTemplateFn)(void*, void*);
+    typedef IGeometryTemplate* (__thiscall* GetTemplateFn)(void*);
     IGeometryTemplate* const tmpl = reinterpret_cast<GetTemplateFn>(
-        (*reinterpret_cast<void***>(geometry))[0x38 / sizeof(void*)])(geometry, 0);
+        (*reinterpret_cast<void***>(geometry))[0x38 / 4])(geometry);
     if (!tmpl)
         return 0;
     if (tmpl->getClassId() != CID_RoadCompiledTemplate)
         return 0;
-    return reinterpret_cast<RoadCompiled*>(reinterpret_cast<unsigned char*>(geometry) - 4);
+    return reinterpret_cast<RoadCompiled*>(reinterpret_cast<unsigned char*>(geometry)
+                                           - offsetof(RoadCompiled, m_geometry));
 }
 
 // geometry.GenerateLightmapForThisInstance: the active object's geometry flag behind IGeometry
@@ -83,7 +84,7 @@ bool getGenerateLightmapForThisInstance()
     IBase* const geometry = activeObjectGeometry();
     typedef bool (__thiscall* GetFn)(void*);
     return reinterpret_cast<GetFn>(
-        (*reinterpret_cast<void***>(geometry))[0xBC / sizeof(void*)])(geometry);
+        (*reinterpret_cast<void***>(geometry))[0xBC / 4])(geometry);
 }
 
 void setGenerateLightmapForThisInstance(bool value)
@@ -91,7 +92,7 @@ void setGenerateLightmapForThisInstance(bool value)
     IBase* const geometry = activeObjectGeometry();
     typedef void (__thiscall* SetFn)(void*, bool);
     reinterpret_cast<SetFn>(
-        (*reinterpret_cast<void***>(geometry))[0xB8 / sizeof(void*)])(geometry, value);
+        (*reinterpret_cast<void***>(geometry))[0xB8 / 4])(geometry, value);
 }
 
 } // anonymous namespace
@@ -119,7 +120,7 @@ class BF2_CC_NAME : public ::dice::hfe::ConsoleObjectBaseImpl                   
     virtual void executeObjectMethod()                                                             \
     {                                                                                              \
         if (m_argCount != 1) return;                                                               \
-        const vc71::string copy(BF2_CC_ARG(std::string, 0).c_str());                               \
+        const std::string copy(BF2_CC_ARG(std::string, 0).c_str());                               \
         m_hasReturnValue = false;                                                                  \
         activeRoadCompiled()->loadMesh(copy);                                                      \
     }                                                                                              \
@@ -152,5 +153,4 @@ bool unregisterObjectGeometryConsoleObjects()
 } // namespace hfe
 } // namespace dice
 
-#endif // BF2_PLUGIN_ABI_NATIVE
 #endif // BF2_IMAGE_RENDDX9

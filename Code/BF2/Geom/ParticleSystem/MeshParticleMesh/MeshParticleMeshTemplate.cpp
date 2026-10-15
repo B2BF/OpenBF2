@@ -47,30 +47,10 @@ const char kMeshesFolder[]  = "Meshes/";
 const char kShadersFolder[] = "Shaders/";
 
 
-// sub_10128790 - the std::set header node: VC7.1's _Buynode, which constructs the three links with
-// placement NEW - and placement new tests the address it is handed. The first test is therefore the
-// node itself (0x101287C9); the other two are node+4 / node+8 (0x101287E0 / 0x101287F6), which are
-// never null. The colour and nil bytes are plain stores, so a failed allocation faults at [4], as in
-// retail.
-// Byte-identical in shape to SkinnedMeshTemplate.cpp's 0x101117A0, which is file-local there.
-
-vc71::set_node* setConstructHead()
-{
-    vc71::set_node* node =
-        static_cast<vc71::set_node*>(::renddx9abi::engineAlloc(sizeof(vc71::set_node)));
-    ::new (static_cast<void*>(&node->left)) vc71::set_node*(0);        // [+0], tested on the node
-    ::new (static_cast<void*>(&node->parent)) vc71::set_node*(0);      // [+4], tested on node+4
-    ::new (static_cast<void*>(&node->right)) vc71::set_node*(0);       // [+8], tested on node+8
-    node->color = 1;
-    node->isNil = 0;
-    return node;
-}
-
-
 // sub_100750C0 - `n == 0 ? true : _strnicmp(a.c_str(), b.c_str(), n) == 0`. A case-insensitive
 // prefix test with the string pair in ecx/edx and the count on the stack. [INFERRED] name.
 
-bool stringEqualsNoCase(const vc71::string& a, const vc71::string& b, unsigned int count)
+bool stringEqualsNoCase(const std::string& a, const std::string& b, unsigned int count)
 {
     if (!count)
         return true;
@@ -78,74 +58,19 @@ bool stringEqualsNoCase(const vc71::string& a, const vc71::string& b, unsigned i
 }
 
 
-// Engine-heap compatibility-vector helpers. Growth copies a prototype; shrink destroys
-// nested buffers, while POD material shrink does not release state references.
-// [CHOSEN, not recovered] [RETIRE-WHEN: RW-74] Replace allocation details after shared
-// container behavior, layout and ownership are validated.
-
-unsigned int vectorCount(const vc71::vector_layout& v, unsigned int elemSize)
+// MeshTemplate's per-geom vectors - +0x50 lod counts, +0x60 lod distances, +0x70 skipped lods.
+template<class T>
+unsigned int meshGeomCount(const std::vector<T>& v)
 {
-    return v.first ? static_cast<unsigned int>(v.last - v.first) / elemSize : 0u;
+    return static_cast<unsigned int>(v.size());
 }
 
-void vectorFreeNestedRange(char* begin, char* end, bool twoLevels)
+template<class T>
+T& meshGeomInt(std::vector<T>& v, unsigned int geom)
 {
-    for (char* p = begin; p != end; p += sizeof(vc71::vector_layout))
-    {
-        vc71::vector_layout& element = *reinterpret_cast<vc71::vector_layout*>(p);
-        if (element.first)
-        {
-            if (twoLevels)
-                vectorFreeNestedRange(element.first, element.last, false);   // sub_1012AC30's inner
-            ::renddx9abi::engineFree(element.first);
-        }
-        element.first = 0;
-        element.last  = 0;
-        element.end   = 0;
-    }
+    return v.data()[geom];
 }
 
-void vectorResize(vc71::vector_layout& v, unsigned int count, unsigned int elemSize,
-                  const void* prototype, int nestedLevels)
-{
-    const unsigned int size = vectorCount(v, elemSize);
-    if (count <= size)
-    {
-        if (count < size && v.first)
-        {
-            char* const newLast = v.first + elemSize * count;
-            if (nestedLevels)
-                vectorFreeNestedRange(newLast, v.last, nestedLevels > 1);
-            v.last = newLast;
-        }
-        return;
-    }
-
-    const unsigned int capacity =
-        v.first ? static_cast<unsigned int>(v.end - v.first) / elemSize : 0u;
-    if (count > capacity)
-    {
-        unsigned int grown = capacity + (capacity >> 1);
-        if (grown < count)
-            grown = count;
-        char* const buffer = static_cast<char*>(::renddx9abi::engineAlloc(elemSize * grown));
-        if (size)
-            std::memcpy(buffer, v.first, elemSize * size);
-        if (v.first)
-            ::renddx9abi::engineFree(v.first);
-        v.first = buffer;
-        v.last  = buffer + elemSize * size;
-        v.end   = buffer + elemSize * grown;
-    }
-
-    for (unsigned int i = size; i < count; ++i)
-        std::memcpy(v.first + elemSize * i, prototype, elemSize);
-    v.last = v.first + elemSize * count;
-}
-
-// A zeroed vector_layout whose allocator word is left alone - what every nested-resize caller pushes
-// (`mov [eax+4], ebx` / `[eax+8]` / `[eax+0Ch]`, nothing at [eax]).
-const vc71::vector_layout kEmptyNestedVector = { 0, 0, 0, 0 };
 
 
 // The release block inside the destructor (0x10127B8D..0x10127C98), run when the last template dies.
@@ -187,7 +112,7 @@ void lookupParameterOnce(dx9rend::ShaderParameter*& slot, const char* name)
 {
     if (!slot)
         slot = dx9rend::effectGetShaderParameterTyped(g_meshParticleMeshEffectState.effect,
-                                                      vc71::string(name));
+                                                      std::string(name));
 }
 
 } // anonymous namespace
@@ -203,7 +128,7 @@ IBase* __fastcall createMeshParticleMeshTemplate(unsigned int iid, IBase* outer)
     if (outer)
         return 0;
 
-    void* const storage = ::renddx9abi::engineAlloc(0x164);
+    void* const storage = ::renddx9abi::engineAlloc(sizeof(MeshParticleMeshTemplate));
     MeshParticleMeshTemplate* self = 0;
     if (storage)
         self = new (storage) MeshParticleMeshTemplate();
@@ -216,31 +141,16 @@ IBase* __fastcall createMeshParticleMeshTemplate(unsigned int iid, IBase* outer)
 
 
 // 0x10127A30, 133 bytes. The base runs first (0x101924F0 = MeshTemplate::MeshTemplate), then the two
-// vptrs, then this class's stores in the order below.
+// vptrs, then this class's stores in the order below. The material table, the instance set
+// (sub_10128790's header node) and the lod table are constructed as members.
 
-// Leaves allocator/comparator storage and the 26-part array untouched.
+// Leaves the 26-part array untouched.
 // Increments the live-template count after clearing the load/keep flag.
 
 MeshParticleMeshTemplate::MeshParticleMeshTemplate()
     : MeshTemplate()
 {
     m_refCount = 1;                              // +0xC8
-
-    m_materials.first = 0;                       // +0xD0 .. +0xD8
-    m_materials.last  = 0;
-    m_materials.end   = 0;
-
-    // sub_10128790, then `[head+11h] = 1` and the three self links, then size = 0.
-    m_instances.head = setConstructHead();
-    m_instances.head->isNil  = 1;
-    m_instances.head->parent = m_instances.head;
-    m_instances.head->left   = m_instances.head;
-    m_instances.head->right  = m_instances.head;
-    m_instances.size = 0;
-
-    m_geoms.first = 0;                           // +0xEC .. +0xF4
-    m_geoms.last  = 0;
-    m_geoms.end   = 0;
 
     m_isDecal  = 0;                              // +0x160
     m_keepData = 0;                              // +0x04
@@ -250,33 +160,29 @@ MeshParticleMeshTemplate::MeshParticleMeshTemplate()
 
 // Clears instance template pointers before destroying containers. Surviving instances must not draw.
 // Shared effect release occurs inside the material loop, so a last empty template leaves
-// shared handles alive. Material storage must cover all declared LOD counts.
+// shared handles alive. Material storage must cover all declared LOD counts (no bounds test).
 
 void MeshParticleMeshTemplate::destroyMembers()
 {
     --g_meshParticleMeshEffectState.templateCount;   // `sub dword_1025BEDC, 1`
 
-    const unsigned int geomCount = vectorCount(m_lodCounts, 4);
+    const unsigned int geomCount = meshGeomCount(m_lodCounts);
     for (unsigned int geom = 0; geom < geomCount; ++geom)
     {
-        const unsigned int lodCount = reinterpret_cast<const unsigned int*>(m_lodCounts.first)[geom];
+        const unsigned int lodCount = static_cast<unsigned int>(meshGeomInt(m_lodCounts, geom));
         for (unsigned int lod = 0; lod < lodCount; ++lod)
         {
             // `mov eax,[this+0D0h]; mov esi,[eax+geom*16+4]; add esi, lod*16` - re-read every lod.
-            vc71::vector_layout* const lodMaterials =
-                reinterpret_cast<vc71::vector_layout*>(
-                    reinterpret_cast<vc71::vector_layout*>(m_materials.first)[geom].first) + lod;
-            if (!lodMaterials->first)
+            LodMaterials& lodMaterials = m_materials.data()[geom].data()[lod];
+            if (lodMaterials.empty())
                 continue;
 
             // Signed division by 24 (`imul 2AAAAAABh; sar edx,2` plus the sign fix-up).
-            const int materialCount =
-                static_cast<int>(lodMaterials->last - lodMaterials->first) / 24;
+            const int materialCount = static_cast<int>(lodMaterials.size());
             for (int m = 0; m < materialCount; ++m)
             {
                 // `mov eax,[esi+4]` - `first` is re-read on every material.
-                MeshParticleMeshMaterial* const record =
-                    reinterpret_cast<MeshParticleMeshMaterial*>(lodMaterials->first) + m;
+                MeshParticleMeshMaterial* const record = lodMaterials.data() + m;
                 if (record->state)
                     record->state->release();                 // [edx+8]
 
@@ -287,40 +193,18 @@ void MeshParticleMeshTemplate::destroyMembers()
     }
 
     // Detach every live instance: `mov [key+84h], 0` along the in-order walk.
-    for (vc71::set_node* node = m_instances.head->left;
-         node != m_instances.head;
-         node = vc71::set_layout::next(node))
-    {
-        reinterpret_cast<MeshParticleMesh*>(node->key)->m_template = 0;
-    }
+    for (InstanceSet::iterator node = m_instances.begin(); node != m_instances.end(); ++node)
+        (*node)->m_template = 0;
 
     // +0xE8: free each geom's lod buffer, then the outer buffer.
-    if (m_geoms.first)
-    {
-        vectorFreeNestedRange(m_geoms.first, m_geoms.last, false);
-        ::renddx9abi::engineFree(m_geoms.first);
-    }
-    m_geoms.first = 0;
-    m_geoms.last  = 0;
-    m_geoms.end   = 0;
+    m_geoms.~LodTable();
 
-    // +0xDC: erase(begin, end) (sub_10128FA0's whole-tree arm), free the head, clear head and size.
-    // The comparator word is left alone, as it was at construction.
-    m_instances.clear();
-    ::renddx9abi::engineFree(m_instances.head);
-    m_instances.head = 0;
-    m_instances.size = 0;
+    // +0xDC: erase(begin, end) (sub_10128FA0's whole-tree arm), then free the head.
+    m_instances.~InstanceSet();
 
     // +0xCC: sub_1012AC30 over [first, last) - every geom's lod vectors' buffers, then each geom's
     // buffer - then the outer buffer.
-    if (m_materials.first)
-    {
-        vectorFreeNestedRange(m_materials.first, m_materials.last, true);
-        ::renddx9abi::engineFree(m_materials.first);
-    }
-    m_materials.first = 0;
-    m_materials.last  = 0;
-    m_materials.end   = 0;
+    m_materials.~MaterialTable();
 
     MeshTemplate::destroyMembers();
 }
@@ -378,10 +262,10 @@ unsigned int MeshParticleMeshTemplate::getClassId() const
 
 // Names starting with "decal_" set the decal flag; renaming never clears it.
 
-void MeshParticleMeshTemplate::setName(const vc71::string& name)
+void MeshParticleMeshTemplate::setName(const std::string& name)
 {
     m_name = name;                                                   // +0x14, MSVCP71 operator=
-    const bool decal = stringEqualsNoCase(m_name, vc71::string("decal_"), 6);
+    const bool decal = stringEqualsNoCase(m_name, std::string("decal_"), 6);
     if (decal)
         m_isDecal = 1;
 }
@@ -392,7 +276,7 @@ void MeshParticleMeshTemplate::setName(const vc71::string& name)
 
 void* MeshParticleMeshTemplate::createInstance()
 {
-    void* const storage = ::renddx9abi::engineAlloc(0x88);
+    void* const storage = ::renddx9abi::engineAlloc(sizeof(MeshParticleMesh));
     MeshParticleMesh* const instance =
         storage ? meshParticleMeshConstruct(storage, this) : 0;
 
@@ -402,7 +286,7 @@ void* MeshParticleMeshTemplate::createInstance()
         return instance;
     }
 
-    m_instances.insert(reinterpret_cast<unsigned int>(instance));
+    m_instances.insert(instance);
     if (m_loaded
         || dx9rend::resourceManagerIsReady()                         // sub_1000D950(ds:1023B988)
         || load())                                                   // [edx+2Ch]
@@ -411,7 +295,7 @@ void* MeshParticleMeshTemplate::createInstance()
         return instance;
     }
 
-    vc71::setEraseValue(m_instances, instance);
+    m_instances.erase(instance);
     if (instance)
         meshParticleMeshDestroyFlags(instance, 1);                   // [edx+34h] (1)
     return 0;
@@ -426,12 +310,12 @@ bool MeshParticleMeshTemplate::load()
     if (m_loaded)                                                    // +0x4C
         return false;
 
-    vc71::string path(m_path);                                       // var_58
+    std::string path(m_path);                                       // var_58
     path += kMeshesFolder;
     path += m_name;
     path += ".bundledMesh";
 
-    vc71::string gpuPath(m_path);                                    // var_74
+    std::string gpuPath(m_path);                                    // var_74
     gpuPath += kMeshesFolder;
     gpuPath += "gpu_";
     gpuPath += m_name;
@@ -463,12 +347,8 @@ bool MeshParticleMeshTemplate::load()
     m_loaded = 1;                                                    // +0x4C, before the walk
 
     // `mov ecx,[node+0Ch]; call sub_101B0070` then the iterator ++ (sub_1009F6E0).
-    for (vc71::set_node* node = m_instances.head->left;
-         node != m_instances.head;
-         node = vc71::set_layout::next(node))
-    {
-        meshParticleMeshRefreshSelection(reinterpret_cast<MeshParticleMesh*>(node->key));
-    }
+    for (InstanceSet::iterator node = m_instances.begin(); node != m_instances.end(); ++node)
+        meshParticleMeshRefreshSelection(*node);
     return true;
 }
 
@@ -478,29 +358,24 @@ bool MeshParticleMeshTemplate::load()
 
 void MeshParticleMeshTemplate::readLods(::renddx9abi::HostNonlinearStream* stream)
 {
-    const unsigned int geomCount = vectorCount(m_lodCounts, 4);      // var_10
+    const unsigned int geomCount = meshGeomCount(m_lodCounts);      // var_10
 
-    vectorResize(m_geoms, geomCount, sizeof(vc71::vector_layout),
-                 &kEmptyNestedVector, 1);
+    m_geoms.resize(geomCount);
 
     for (unsigned int geom = 0; geom < geomCount; ++geom)
     {
-        const unsigned int lodCount = reinterpret_cast<const unsigned int*>(m_lodCounts.first)[geom];
+        const unsigned int lodCount = static_cast<unsigned int>(meshGeomInt(m_lodCounts, geom));
 
         MeshParticleMeshLod prototype;
         std::memset(&prototype, 0, sizeof(prototype));
         prototype.bounds.dirty = 1;
 
-        vc71::vector_layout& lods =
-            reinterpret_cast<vc71::vector_layout*>(m_geoms.first)[geom];
-        vectorResize(lods, lodCount, sizeof(MeshParticleMeshLod), &prototype, 0);
+        m_geoms[geom].resize(lodCount, prototype);
 
         for (unsigned int lod = 0; lod < lodCount; ++lod)
         {
             // `mov eax,[this+0ECh]; add eax, geom*16; mov esi,[eax+4]; add esi, lod*72` - re-read.
-            MeshParticleMeshLod* const record =
-                reinterpret_cast<MeshParticleMeshLod*>(
-                    reinterpret_cast<vc71::vector_layout*>(m_geoms.first)[geom].first) + lod;
+            MeshParticleMeshLod* const record = m_geoms[geom].data() + lod;
 
             // The version gate every mesh template shares: head 0 and version < 10 is the old
             // 36-byte bounds record. (ecx = bounds, edx = stream - the tree's two readers.)
@@ -522,46 +397,36 @@ void MeshParticleMeshTemplate::readLods(::renddx9abi::HostNonlinearStream* strea
 void MeshParticleMeshTemplate::readMaterials(::renddx9abi::HostNonlinearStream* stream)
 {
     MeshParticleMeshEffectState& shared = g_meshParticleMeshEffectState;
-    const unsigned int geomCount = vectorCount(m_lodCounts, 4);      // var_10
+    const unsigned int geomCount = meshGeomCount(m_lodCounts);      // var_10
 
-    vectorResize(m_materials, geomCount, sizeof(vc71::vector_layout),
-                 &kEmptyNestedVector, 2);
+    m_materials.resize(geomCount);
 
     for (unsigned int geom = 0; geom < geomCount; ++geom)            // var_C / var_4 = 16*geom
     {
-        const unsigned int lodCount = reinterpret_cast<const unsigned int*>(m_lodCounts.first)[geom];
+        const unsigned int lodCount = static_cast<unsigned int>(meshGeomInt(m_lodCounts, geom));
 
-        vc71::vector_layout& geomMaterials =
-            reinterpret_cast<vc71::vector_layout*>(m_materials.first)[geom];
-        vectorResize(geomMaterials, lodCount, sizeof(vc71::vector_layout),
-                     &kEmptyNestedVector, 1);
+        m_materials[geom].resize(lodCount);
 
         for (unsigned int lod = 0; lod < lodCount; ++lod)            // var_24 counts down
         {
             // Both trees are re-read from `this` for every lod.
-            vc71::vector_layout* const lodMaterials =
-                reinterpret_cast<vc71::vector_layout*>(
-                    reinterpret_cast<vc71::vector_layout*>(m_materials.first)[geom].first) + lod;
+            LodMaterials& lodMaterials = m_materials[geom][lod];
 
             unsigned int materialCount = 0;                          // var_1C
             stream->read(&materialCount, 4);
 
             // An all-zero 24-byte prototype - `[edx] .. [edx+14h]` all written, this one complete.
             const MeshParticleMeshMaterial prototype = { 0, 0, 0, 0, 0, 0 };
-            vectorResize(*lodMaterials, materialCount, sizeof(MeshParticleMeshMaterial),
-                         &prototype, 0);
+            lodMaterials.resize(materialCount, prototype);
 
-            MeshParticleMeshLod* const lodRecord =
-                reinterpret_cast<MeshParticleMeshLod*>(
-                    reinterpret_cast<vc71::vector_layout*>(m_geoms.first)[geom].first) + lod;
+            MeshParticleMeshLod* const lodRecord = m_geoms[geom].data() + lod;
             lodRecord->renderKind   = 3;                             // lod +0x40
             lodRecord->hasAlphaTest = 0;                             // lod +0x44 (byte)
 
             for (unsigned int m = 0; m < materialCount; ++m)         // var_14
             {
                 // `mov edx,[ebx+4]; lea ecx,[m+m*2]; lea ebx,[edx+ecx*8]` - first re-read per material.
-                MeshParticleMeshMaterial* const record =
-                    reinterpret_cast<MeshParticleMeshMaterial*>(lodMaterials->first) + m;
+                MeshParticleMeshMaterial* const record = lodMaterials.data() + m;
                 std::memset(record, 0, sizeof(*record));             // the six zero stores
 
                 if (m_version >= 5u)                                 // +0xA8
@@ -596,7 +461,7 @@ void MeshParticleMeshTemplate::readMaterials(::renddx9abi::HostNonlinearStream* 
                         fxName[fxNameLength - 3] = 0;                // [len - 3], see the header note
                         ::renddx9abi::engineFree(fxName);
                     }
-                    vc71::string effectName(kShadersFolder);         // *unk_10263DF0
+                    std::string effectName(kShadersFolder);         // *unk_10263DF0
                     effectName += "MeshParticleMesh";
                     shared.effect = static_cast<dx9rend::Effect*>(
                         dx9rend::shaderManagerGetEffect(dx9rend::g_shaderManager,
@@ -610,7 +475,7 @@ void MeshParticleMeshTemplate::readMaterials(::renddx9abi::HostNonlinearStream* 
                 if (!shared.worldViewProjection)
                 {
                     shared.worldViewProjection = dx9rend::effectGetShaderParameterTyped(
-                        shared.effect, vc71::string("WorldViewProjection"));
+                        shared.effect, std::string("WorldViewProjection"));
                     if (!shared.worldViewProjection)
                     {
                         // Debug type 6, MeshParticleMeshTemplate.cpp:318 (0x13E). Unreachable in

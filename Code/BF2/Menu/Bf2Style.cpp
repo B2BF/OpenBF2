@@ -20,10 +20,12 @@ const int sectionSign = 0xA7;
 // Every body reads the effect's colour field at +4 directly instead of
 // calling getColor(); an effect that is not colour-shaped yields whatever sits
 // at that offset. Keep the raw read rather than substituting the virtual.
+// +4 is the first word after the vtable pointer (ColorEffect's colour); the
+// same word sits at +8 on x64, so the offset is the vtable pointer's size.
 Color readEffectColorField(Effect* effect)
 {
     return *reinterpret_cast<const Color*>(
-        reinterpret_cast<const char*>(effect) + 4);
+        reinterpret_cast<const char*>(effect) + sizeof(void*));
 }
 // style unsigned conversion: the four escape digits are widened as
 // unsigned, so a character below '0' becomes a very large float. The values are
@@ -32,7 +34,7 @@ float escapeDigit(int value)
 { return static_cast<float>(static_cast<unsigned int>(value)); }
 }
 
-Bf2Style::Bf2Style(const char* name, int font)
+Bf2Style::Bf2Style(const char* name, FontHandle font)
     : Style(name, font), m_wordWrap(true), m_shadowFont(0), m_texture(0),
       m_shadowOffsetX(0.0f), m_shadowOffsetY(0.0f)
 {
@@ -52,7 +54,7 @@ namespace {
 TypeDescriptor* const registeredBf2StyleType = Bf2Style::getClassType();
 }
 
-bool Bf2Style::setShadowFont(int font)
+bool Bf2Style::setShadowFont(FontHandle font)
 {
     if (!font) return false;
     m_shadowFont = font;
@@ -60,7 +62,7 @@ bool Bf2Style::setShadowFont(int font)
 }
 bool Bf2Style::setShadowOffset(float x, float y)
 { m_shadowOffsetX = x; m_shadowOffsetY = y; return true; }
-bool Bf2Style::setTexture(int texture)
+bool Bf2Style::setTexture(TextureHandle texture)
 { m_texture = texture; return true; }
 
 // The shadow pass then the glyph pass, exactly as all three bodies inline them.
@@ -80,7 +82,7 @@ bool Bf2Style::paintGlyph(System* system, int character, int position,
         const Color black = {0.0f, 0.0f, 0.0f, 1.0f};
         colorQuad(&shadowQuad, &black);
         translateQuad(&shadowQuad, m_shadowOffsetX, m_shadowOffsetY, 0.0f);
-        const int font = m_shadowFont ? m_shadowFont : m_font;
+        const FontHandle font = m_shadowFont ? m_shadowFont : m_font;
         if (!drawContextCharacter(&shadowContext, system, character, font,
                                   position, &shadowQuad))
             return false;
@@ -204,7 +206,7 @@ void Bf2Style::drawText(System* system, Data* data, int elementIndex,
 }
 
 // right aligned
-Bf2RightAlignedStyle::Bf2RightAlignedStyle(const char* name, int font)
+Bf2RightAlignedStyle::Bf2RightAlignedStyle(const char* name, FontHandle font)
     : Bf2Style(name, font) {}
 Bf2RightAlignedStyle::~Bf2RightAlignedStyle() {}              // 7C26A0, shared body
 TypeDescriptor* Bf2RightAlignedStyle::getClassType()
@@ -286,7 +288,7 @@ void Bf2RightAlignedStyle::drawText(System* system, Data* data, int elementIndex
 }
 
 // centre aligned
-Bf2CenterAlignedStyle::Bf2CenterAlignedStyle(const char* name, int font)
+Bf2CenterAlignedStyle::Bf2CenterAlignedStyle(const char* name, FontHandle font)
     : Bf2Style(name, font) {}
 Bf2CenterAlignedStyle::~Bf2CenterAlignedStyle() {}            // 7C26A0, shared body
 TypeDescriptor* Bf2CenterAlignedStyle::getClassType()
@@ -368,9 +370,13 @@ void Bf2CenterAlignedStyle::drawText(System* system, Data* data, int elementInde
     }
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2Style) == 44, "native Bf2Style storage");
-static_assert(sizeof(Bf2RightAlignedStyle) == 44, "right-aligned adds no storage");
-static_assert(sizeof(Bf2CenterAlignedStyle) == 44, "centre-aligned adds no storage");
+#endif
+static_assert(sizeof(Bf2RightAlignedStyle) == sizeof(Bf2Style), "right-aligned adds no storage");
+static_assert(sizeof(Bf2CenterAlignedStyle) == sizeof(Bf2Style), "centre-aligned adds no storage");
+#if defined(_M_IX86)
 static_assert(sizeof(ClassTypeDescriptor<Bf2Style, Style>) == 16, "Bf2Style metadata");
+#endif
 } }
 #endif

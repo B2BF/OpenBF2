@@ -9,11 +9,12 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
-#include "DecalContainers.h"
 #include "../../Math/Mat4.h"
 #include "../../Math/Vec3.h"
 
+#include <map>
 #include <stddef.h>
+#include <vector>
 
 namespace dice {
 namespace hfe {
@@ -30,8 +31,9 @@ namespace geom {
 class DecalObject;
 struct DecalRecord;
 
-typedef decalvc71::Map<DecalObject*, DecalObject*, decalvc71::UnsignedLess<DecalObject*> >
-    DecalObjectMap;
+// The manager's client and active sets: every entry maps an object to itself (retail's
+// std::map<DecalObject*, DecalObject*>, ordered by the raw pointer).
+typedef std::map<DecalObject*, DecalObject*> DecalObjectMap;
 
 
 // Batch grouped by kind, texture, and shadow map. Holds at most ten object transforms.
@@ -42,7 +44,7 @@ struct DecalBatch
     DecalBatch() : vertexCount(0), kind(0), texture(0), shadowMap(0) {}
 
     // vertexCount = 0, kind = the argument, texture = shadowMap = 0,
-    // then both vectors cleared (_Tidy: freed and nulled), objects first.
+    // then both vectors cleared, objects first (retail's VC7.1 clear also released the storage).
     void reset(int newKind)
     {
         vertexCount = 0;
@@ -57,21 +59,9 @@ struct DecalBatch
     int                                kind;          // +0x04
     dx9rend::EngineTexture*            texture;       // +0x08
     dx9rend::EngineTexture*            shadowMap;     // +0x0C
-    decalvc71::Vector<DecalObject*>    objects;       // +0x10
-    decalvc71::Vector<DecalRecord*>    records;       // +0x20
+    std::vector<DecalObject*>          objects;       // +0x10
+    std::vector<DecalRecord*>          records;       // +0x20
 };
-
-// std::swap on a batch - VC7.1's _Sort swaps elements by value; this exchanges the same contents
-// without the deep copies. [CHOSEN] (see DecalContainers.h).
-inline void swap(DecalBatch& a, DecalBatch& b)
-{
-    const unsigned int vertexCount = a.vertexCount; a.vertexCount = b.vertexCount; b.vertexCount = vertexCount;
-    const int kind = a.kind; a.kind = b.kind; b.kind = kind;
-    dx9rend::EngineTexture* const texture = a.texture; a.texture = b.texture; b.texture = texture;
-    dx9rend::EngineTexture* const shadowMap = a.shadowMap; a.shadowMap = b.shadowMap; b.shadowMap = shadowMap;
-    a.objects.swap(b.objects);
-    a.records.swap(b.records);
-}
 
 class DecalRenderer
 {
@@ -107,7 +97,7 @@ private:
     void setDynamicShadowParameters(const DecalBatch& batch);
     void setStaticShadowParameters(const DecalBatch& batch);
 
-    decalvc71::Vector<DecalBatch> m_batches;                  // +0x000
+    std::vector<DecalBatch>       m_batches;                  // +0x000
     unsigned int                  m_dword10;                  // +0x010  [UNRESOLVED]
     unsigned char                 m_byte14;                   // +0x014  [UNRESOLVED]
     unsigned char                 m_pad15[3];
@@ -147,26 +137,12 @@ private:
     friend struct DecalRendererLayoutCheck;
 };
 
+// The retail offsets stay beside the members; with std::vector members neither object keeps the
+// retail size (DecalBatch 0x30, DecalRenderer 0x1FC) or the offsets after its first vector.
 struct DecalRendererLayoutCheck
 {
 #if defined(_M_IX86)
-    static_assert(sizeof(DecalBatch) == 0x30, "0x101AC590 strides the batch vector by 0x30");
     static_assert(offsetof(DecalBatch, objects) == 0x10, "0x101AB9B6");
-    static_assert(offsetof(DecalBatch, records) == 0x20, "0x101AB9C5");
-    static_assert(sizeof(DecalRenderer) == 0x1FC, "DecalManager +0x94..+0x28F");
-    static_assert(offsetof(DecalRenderer, m_boundTexture) == 0x18, "+0x18");
-    static_assert(offsetof(DecalRenderer, m_viewColumn) == 0x20, "+0x20");
-    static_assert(offsetof(DecalRenderer, m_worldViewProjection) == 0x30, "+0x30");
-    static_assert(offsetof(DecalRenderer, m_fadeDistanceAndInterval) == 0x70, "+0x70");
-    static_assert(offsetof(DecalRenderer, m_enabled) == 0x90, "+0x90");
-    static_assert(offsetof(DecalRenderer, m_vertexBuffer) == 0x94, "+0x94");
-    static_assert(offsetof(DecalRenderer, m_vertexCursor) == 0x9C, "+0x9C");
-    static_assert(offsetof(DecalRenderer, m_instanceTransforms) == 0xA0, "+0xA0");
-    static_assert(offsetof(DecalRenderer, m_shadowTransforms) == 0xC8, "+0xC8");
-    static_assert(offsetof(DecalRenderer, m_shadowTrapezoidMats) == 0xF0, "+0xF0");
-    static_assert(offsetof(DecalRenderer, m_shadowViewPorts) == 0x118, "+0x118");
-    static_assert(offsetof(DecalRenderer, m_paramFadeDistanceAndInterval) == 0x1B8, "+0x1B8");
-    static_assert(offsetof(DecalRenderer, m_paramWorldSpaceCamPos) == 0x1F8, "+0x1F8");
 #endif
 };
 

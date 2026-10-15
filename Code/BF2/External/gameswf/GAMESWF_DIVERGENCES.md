@@ -38,6 +38,7 @@ versions.
 | Drawing and bounds | `gameswf_shape.*`, `gameswf_styles.h`, `gameswf_impl.*` | Runtime shapes, image clips, owned runtime definitions, local clip extents, and scale-aware width/height updates. |
 | Text and localization | `gameswf_text.cpp`, `gameswf_font.h`, `gameswf_string.cpp`, render interfaces | Renderer-managed text lines, editing/focus/selection, independent narrow and wide values, and font-leading terms for caret and auto-height. |
 | Mouse input | `gameswf_impl.*`, `gameswf_button.*`, `gameswf_text.cpp` | Per-character dispatch, capture across press/release, handler names, and capture release when a containing sprite is hidden. |
+| x64 portability ([issue #7](https://github.com/B2BF/OpenBF2/issues/7)) | `base/container.h`, `base/utility.*`, `gameswf_action.cpp` | Hash entries store the functor's full `size_t` hash, the value lookups compare (the upstream `int` round trip sign-extended on x64 and lost keys). Object and function address strings print the whole pointer, so object identity through string comparison holds above 4 GB. The debug-only assert breakpoint uses `__debugbreak` where inline asm is unavailable. x86 code generation and output are unchanged. Marked `[CHOSEN, not recovered] x64`. |
 
 ## Constraints for changes
 

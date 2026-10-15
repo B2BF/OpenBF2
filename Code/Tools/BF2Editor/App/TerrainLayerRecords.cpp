@@ -1,9 +1,7 @@
 // Code/Tools/BF2Editor/App/TerrainLayerRecords.cpp - see TerrainLayerRecords.h. Editor-only code (D3).
 
-// The renderer's record class is declared for the native plugin ABI the editor's RendDX9.dll is built with
-// (renddx9.cmd native, /MD): this translation unit includes Geom/Terrain.h with BF2_PLUGIN_ABI_NATIVE 1. The colour
-// texture's slot takes a vc71::string by value (the editor builds RendDX9Abi/Vc71String.cpp natively: one CRT heap).
-#define BF2_PLUGIN_ABI_NATIVE 1
+// The renderer's record class takes its colour texture's name as a std::string by value: the editor and its
+// RendDX9.dll share one STL and CRT heap (/MD, issue #7).
 #include "Framework/EditorConfig.h"
 #include "App/TerrainLayerRecords.h"
 
@@ -44,7 +42,7 @@ std::string applyGroundLayer(dice::hfe::geom::ITerrainEditable* editable, int la
     // The colour texture paintColorFromTexture samples (TerrainDetailTextureEditable::setColorTextureName loads it). An
     // emptied name is not sent: the renderer would look for a texture named "".
     if (!settings.colorTexture.empty())
-        record->setColorTextureName(vc71::string(settings.colorTexture.c_str()));
+        record->setColorTextureName(settings.colorTexture);
     return settings.material.empty() ? std::string() : std::string("the material");
 }
 

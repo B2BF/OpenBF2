@@ -8,7 +8,7 @@
 #define BF2_GEOM_QUADPATCHEDITABLE_H
 
 #include "QuadPatch.h"
-#include "../../RendDX9Abi/Vc71String.h"
+#include <string>
 
 #include <cstddef>
 
@@ -159,9 +159,9 @@ public:
     void writeLayersBack(int x0, int x1, int z0, int z1, int layer);       // (the layer is not read)
     void paintDetail(float x, float z, float radius, int strength, int layer);
     void drawForLightmapGeneration();
-    void importBaseLayers(const vc71::string& directory);
-    void importLayerTile(int layer, const vc71::string& directory);
-    void importColormapTile(const vc71::string& directory);
+    void importBaseLayers(const std::string& directory);
+    void importLayerTile(int layer, const std::string& directory);
+    void importColormapTile(const std::string& directory);
     void commitColormapEdit();
     void revertLayer(int layer);
     void revertAllLayers();
@@ -181,9 +181,9 @@ public:
     void commitAllLayers();
 
     // R3: saving. Strings by reference (`retn 4`). [INFERRED] names.
-    void burnColormap(const vc71::string& base);                           // (`base` read only when not edited)
-    void saveDetailMaps(const vc71::string& suffix);
-    void saveLightmap(const vc71::string& base);
+    void burnColormap(const std::string& base);                           // (`base` read only when not edited)
+    void saveDetailMaps(const std::string& suffix);
+    void saveLightmap(const std::string& base);
     void removeCompDetailMaps();
     void saveEditedColormap();
     void makeCompDetailMaps();
@@ -202,7 +202,7 @@ public:
     int                     m_checkerCountV;         // +0x13C
     int                     m_fileIndexX;            // +0x140  gridX + patchCount / 2 - the "%02ix%02i" file name
     int                     m_fileIndexZ;            // +0x144
-    vc71::string            m_fileName;              // +0x148  "%02ix%02i"
+    std::string            m_fileName;              // +0x148  "%02ix%02i"
     PatchDetailLayers       m_detailLayers;          // +0x164  the imported weight maps
     PatchDetailLayers       m_detailLayersEdit;      // +0x1E0  the edited working copy (R2) [INFERRED]
     MergedPatchDetailLayers m_mergedLayers;          // +0x25C  source = +0x164 until its own maps exist
@@ -240,23 +240,6 @@ static_assert(sizeof(PatchDetailLayers) == 0x7C, "six records behind a vptr");
 static_assert(offsetof(PatchDetailLayers, records) == 0x04, "records at +0x04");
 static_assert(sizeof(MergedPatchDetailLayers) == 0x80, "the merged set's source at +0x7C");
 static_assert(offsetof(MergedPatchDetailLayers, source) == 0x7C, "source at +0x7C - QuadPatchEditable::init (0x1019F530) stores +0x2D8");
-static_assert(sizeof(QuadPatchEditable) == 0x32C, "TerrainEditable::init (0x1010ADA0) allocates 0x32C per patch");
-static_assert(offsetof(QuadPatchEditable, m_colormapEdit) == 0x120, "+0x120");
-static_assert(offsetof(QuadPatchEditable, editableTerrain) == 0x124, "+0x124");
-static_assert(offsetof(QuadPatchEditable, m_checkerLastU) == 0x128, "checker state at +0x128");
-static_assert(offsetof(QuadPatchEditable, m_fileIndexX) == 0x140, "+0x140");
-static_assert(offsetof(QuadPatchEditable, m_fileName) == 0x148, "+0x148");
-static_assert(offsetof(QuadPatchEditable, m_detailLayers) == 0x164, "+0x164");
-static_assert(offsetof(QuadPatchEditable, m_detailLayersEdit) == 0x1E0, "+0x1E0");
-static_assert(offsetof(QuadPatchEditable, m_mergedLayers) == 0x25C, "+0x25C");
-static_assert(offsetof(QuadPatchEditable, m_compDetailMap) == 0x2DC, "+0x2DC");
-static_assert(offsetof(QuadPatchEditable, m_undergrowthOverlay) == 0x2E4, "+0x2E4");
-static_assert(offsetof(QuadPatchEditable, m_roadMask) == 0x2F4, "+0x2F4 - see 0x1019F300");
-static_assert(offsetof(QuadPatchEditable, m_layerIndexBuffer) == 0x2F8, "+0x2F8");
-static_assert(offsetof(QuadPatchEditable, m_layerTriangleCount) == 0x310, "+0x310");
-static_assert(offsetof(QuadPatchEditable, m_detailMapsFromFile) == 0x328, "+0x328");
-static_assert(offsetof(QuadPatchEditable, m_importPending) == 0x329, "+0x329");
-static_assert(offsetof(QuadPatchEditable, m_colormapEdited) == 0x32A, "+0x32A");
 #endif
 
 } // namespace geom

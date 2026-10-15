@@ -1400,6 +1400,7 @@ public:
         float argument;
         // Preserve FLD before the flag and fstp before getBuilder, including
         // the x87 behavior for a signaling NaN or nondefault exception mask.
+#if defined(_M_IX86)
         __asm {
             mov eax, input
             fld dword ptr [eax]
@@ -1407,6 +1408,13 @@ public:
             mov byte ptr [eax], 1
             fstp argument
         }
+#else
+        // [PLATFORM] x64: SSE2 conversions. The double round trip quiets a signalling NaN as
+        // fld/fstp does; its invalid-operation flag is raised in MXCSR instead of the x87 word.
+        const double loaded = *input;
+        *returnFlag = true;
+        argument = static_cast<float>(loaded);
+#endif
         m_result = (hudManager->getBuilder()->*Method)(argument);
     }
     void setArgFromString(int index, const std::string& value) override

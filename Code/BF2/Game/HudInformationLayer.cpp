@@ -817,7 +817,9 @@ void HudInformationLayer::update(float dt)
 
 HudInformationLayer::HudInformationLayer() : m_refCount(1), m_nextId(0)
 {
+#if defined(_M_IX86)
     static_assert(sizeof(State) == 0x518, "Non-STL x86 suffix changed");
+#endif
     m_state.field88 = false;
     m_state.FriendlyTicketBleed = 0;
     m_state.field90 = false;
@@ -995,9 +997,14 @@ HudInformationLayer::HudInformationLayer() : m_refCount(1), m_nextId(0)
         // The last two overwrite eight bytes of adjacent HUD flags. Copy their
         // representation without inventing a larger source array or correcting
         // the shipped overrun. The destructor frees only the ten real pointers.
+        // [CHOSEN, not recovered] x64 (https://github.com/B2BF/OpenBF2/issues/7): the overrun stays
+        // the same eight flag bytes (+0x234..+0x23B), one 8-byte pointer instead of two 4-byte ones,
+        // so PlayerTeam and kitSelected are untouched as on x86. On x86 every write passes the test.
         const char* initial = emptyString;
-        std::memcpy(reinterpret_cast<unsigned char*>(&m_state) + offsetof(State, optionIcons) + i * sizeof(initial),
-                    &initial, sizeof(initial));
+        const size_t overrunEnd = offsetof(State, optionIcons) + sizeof(m_state.optionIcons) + 8;
+        const size_t at = offsetof(State, optionIcons) + i * sizeof(initial);
+        if (at + sizeof(initial) <= overrunEnd)
+            std::memcpy(reinterpret_cast<unsigned char*>(&m_state) + at, &initial, sizeof(initial));
         m_state.radioNames[i] = emptyWideString;
         m_state.radioVehicleNames[i] = emptyWideString;
         m_state.squadNames[i] = emptyWideString;

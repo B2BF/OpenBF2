@@ -16,7 +16,9 @@ public:
     virtual void setDestination(int destination);
     static TypeDescriptor* getClassType();               // 7CB740, metadata937B8C
 };
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2BlendFuncEffect) == 12, "native Bf2BlendFuncEffect storage");
+#endif
 } }
 #endif
 #endif

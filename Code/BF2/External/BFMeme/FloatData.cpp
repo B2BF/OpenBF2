@@ -61,7 +61,9 @@ int FloatData::getCharacter(System*, int character)
     return static_cast<signed char>(m_text[character]);
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(FloatData) == 20, "client BFMeme FloatData");
 static_assert(sizeof(ClassTypeDescriptor<FloatData, Data>) == 16, "FloatData metadata");
+#endif
 } }
 #endif

@@ -77,7 +77,7 @@ bool IStream::streamCharacter(wchar_t* value, const char* label) // 839DC0, wire
     *value = static_cast<wchar_t>(temporary);
     return true;
 }
-bool IStream::streamTexture(System* system, int* texture, const char*)
+bool IStream::streamTexture(System* system, TextureHandle* texture, const char*)
 {
     *texture = 0;
     char name[256];
@@ -85,7 +85,7 @@ bool IStream::streamTexture(System* system, int* texture, const char*)
     *texture = system->loadTexture(name, true);
     return true;
 }
-bool IStream::streamFont(System* system, int* font, const char*)
+bool IStream::streamFont(System* system, FontHandle* font, const char*)
 {
     *font = 0;
     char name[256];
@@ -123,6 +123,8 @@ bool IStream::readShortString(System*, char* buffer, int capacity, const char*)
     buffer[length] = 0; // equality is allowed above: caller needs space for the terminator
     return true;
 }
+#if defined(_M_IX86)
 static_assert(sizeof(IStream) == 8, "BFMeme input stream layout");
+#endif
 } }
 #endif

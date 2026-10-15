@@ -2,16 +2,20 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
+#include "../../RendDX9Abi/ThunkAbi.h"
 #include "../../RendDX9Abi/HfeAbi.h"
 #include "../../RendDX9Abi/BfMemory.h"
-#include "../../RendDX9Abi/Vc71Map.h"
 #include "../../RendDX9Abi/Frontier.h"
 #include "RendDX9Base.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <d3d9.h>
+#include <cstdio>
+#include <cstdlib>
 #include <new>
+#include <set>
+#include <stddef.h>
 
 namespace dice {
 namespace hfe {
@@ -47,6 +51,11 @@ public:
     int              type()     const { return m_type; }
     void             clearFence()     { m_field10 = 0; }
     void             releaseD3DQuery();
+    // +0x19, the fence-issued flag (see queryIssueEnd / queryWaitDone).
+    unsigned char&   issued()         { return m_field19; }
+
+    // The native address of the field at a retail x86 byte offset; see queryFieldAt.
+    unsigned char*   fieldAt(unsigned int retailOffset);
 
 private:
     void*            m_vptr;        // +0x00  set by the constructor to the 3-slot table
@@ -60,15 +69,19 @@ private:
     unsigned char    m_pad1A[2];    // +0x1A  the allocation is 0x1C
 };
 
+// Retail x86 evidence. createQuery allocates sizeof(Query); other TUs reach the fields through
+// queryFieldAt, so the x64 object is native (issue #7).
+#if defined(_M_IX86)
 static_assert(sizeof(Query) == 0x1C, "sub_10004420 allocates 0x1C - see 0x10004428");
+#endif
 
 // The three slots. Free functions with an explicit ECX/EDX pair, because MSVC will not let a free
 // function be __thiscall and the table has to hold real entries rather than a null.
 namespace {
 
-int  __fastcall query_getRef(void* self, void*)  { return static_cast<Query*>(self)->getRef(); }
-void __fastcall query_nullsub(void*, void*)      { /* nullsub_53 - empty in the original too */ }
-void __fastcall query_addRef(void* self, void*)  { static_cast<Query*>(self)->addRef(); }
+int  RD9_THUNK query_getRef(void* self RD9_THUNK_EDX)  { return static_cast<Query*>(self)->getRef(); }
+void RD9_THUNK query_nullsub(void* RD9_THUNK_EDX)      { /* nullsub_53 - empty in the original too */ }
+void RD9_THUNK query_addRef(void* self RD9_THUNK_EDX)  { static_cast<Query*>(self)->addRef(); }
 
 void* const kQueryVtable[3] =
 {
@@ -145,22 +158,22 @@ public:
     // +0x08 is nullsub_21 - empty in the original; see kQueryManagerVtable.
 
 private:
-    void*            m_vptr;              // +0x00
-    vc71::set_layout m_liveQueries;       // +0x04  std::set<Query*>
-    vc71::set_layout m_supportedTypes;    // +0x10  std::set<int>
-    unsigned char    m_occlusionOk;       // +0x1C  ctor: 1
-    unsigned char    m_flag1D;            // +0x1D  ctor: 1  [UNRESOLVED] what it gates
-    unsigned char    m_pad1E[2];          // +0x1E
+    void*                  m_vptr;              // +0x00
+    std::set<Query*>       m_liveQueries;       // +0x04
+    // Retail std::set<int>; the keys are compared unsigned, as the recovered lookups do.
+    std::set<unsigned int> m_supportedTypes;    // +0x10
+    unsigned char          m_occlusionOk;       // +0x1C  ctor: 1
+    unsigned char          m_flag1D;            // +0x1D  ctor: 1  [UNRESOLVED] what it gates
+    unsigned char          m_pad1E[2];          // +0x1E
 };
 
-static_assert(sizeof(QueryManager) == 0x20,
-              "RendDX9Init.cpp:249 allocates 32 - see the bf_malloc at 0x1000B41E");
+// RendDX9Init.cpp:249 allocates sizeof(QueryManager) (retail: 32, the bf_malloc at 0x1000B41E).
 
 namespace {
 
-void __fastcall qm_onDeviceLost(void* self, void*)  { static_cast<QueryManager*>(self)->onDeviceLost(); }
-void __fastcall qm_onDeviceReset(void* self, void*) { static_cast<QueryManager*>(self)->onDeviceReset(); }
-void __fastcall qm_nullsub(void*, void*)            { /* nullsub_21 - empty in the original too */ }
+void RD9_THUNK qm_onDeviceLost(void* self RD9_THUNK_EDX)  { static_cast<QueryManager*>(self)->onDeviceLost(); }
+void RD9_THUNK qm_onDeviceReset(void* self RD9_THUNK_EDX) { static_cast<QueryManager*>(self)->onDeviceReset(); }
+void RD9_THUNK qm_nullsub(void* RD9_THUNK_EDX)            { /* nullsub_21 - empty in the original too */ }
 
 void* const kQueryManagerVtable[3] =
 {
@@ -198,8 +211,7 @@ QueryManager::QueryManager(IDirect3DDevice9* device)
     m_pad1E[0] = 0;
     m_pad1E[1] = 0;
 
-    m_liveQueries.construct();      // sub_100047E0 + the self-linking, on this+0x04
-    m_supportedTypes.construct();   // the same, on this+0x10
+    // The two sets (sub_100047E0 + the self-linking, on +0x04 and +0x10) are constructed as members.
 
     if (!probeQueryType(device, D3DQUERYTYPE_OCCLUSION))
     {
@@ -229,7 +241,7 @@ QueryManager::QueryManager(IDirect3DDevice9* device)
                        m_occlusionOk ? "yes" : "NO",
                        m_supportedTypes.find(D3DQUERYTYPE_EVENT) != m_supportedTypes.end()
                            ? "yes" : "NO",
-                       m_supportedTypes.size);
+                       static_cast<unsigned int>(m_supportedTypes.size()));
 
     // the constructor's last act, 0x100046F4..0x100046FD:
     //     mov ecx, dword_1023B970; push 3; push edi (= this); call sub_10009D60
@@ -252,7 +264,7 @@ Query* QueryManager::createQuery(int type)
     if (query && m_supportedTypes.find(static_cast<unsigned int>(type)) != m_supportedTypes.end())
         query->create(type, m_occlusionOk != 0);
 
-    m_liveQueries.insert(reinterpret_cast<unsigned int>(query));
+    m_liveQueries.insert(query);
     return query;
 }
 
@@ -263,11 +275,11 @@ void QueryManager::onDeviceLost()
 {
     RD9_TRACE_AT("dice::hfe::dx9rend::QueryManager::onDeviceLost", this, 0x00);
 
-    for (vc71::set_node* n = m_liveQueries.begin();
+    for (std::set<Query*>::const_iterator n = m_liveQueries.begin();
          n != m_liveQueries.end();
-         n = vc71::set_layout::next(n))
+         ++n)
     {
-        Query* q = reinterpret_cast<Query*>(n->key);
+        Query* q = *n;
         q->releaseD3DQuery();
     }
 }
@@ -280,11 +292,11 @@ void QueryManager::onDeviceReset()
 {
     RD9_TRACE_AT("dice::hfe::dx9rend::QueryManager::onDeviceReset", this, 0x04);
 
-    for (vc71::set_node* n = m_liveQueries.begin();
+    for (std::set<Query*>::const_iterator n = m_liveQueries.begin();
          n != m_liveQueries.end();
-         n = vc71::set_layout::next(n))
+         ++n)
     {
-        Query* q = reinterpret_cast<Query*>(n->key);
+        Query* q = *n;
 
         if (m_supportedTypes.find(static_cast<unsigned int>(q->type())) != m_supportedTypes.end())
         {
@@ -333,7 +345,7 @@ void* queryManagerCreateQuery(int type)
 void queryIssueEnd(void* query)
 {
     Query* q = static_cast<Query*>(query);
-    unsigned char* issued = reinterpret_cast<unsigned char*>(q) + 0x19;
+    unsigned char* issued = &q->issued();                  // +0x19
     *issued = 0;
     if (q->d3dQuery())
     {
@@ -345,7 +357,7 @@ void queryIssueEnd(void* query)
 void queryWaitDone(void* query)
 {
     Query* q = static_cast<Query*>(query);
-    unsigned char* issued = reinterpret_cast<unsigned char*>(q) + 0x19;
+    unsigned char* issued = &q->issued();                  // +0x19
     if (*issued)
     {
         while (q->d3dQuery()->GetData(0, 0, D3DGETDATA_FLUSH) == S_FALSE)
@@ -364,7 +376,7 @@ void queryWaitDone(void* query)
 // node or empty, and removing that one node is the whole effect.
 void QueryManager::removeQuery(Query* query)
 {
-    vc71::set_node* const node = m_liveQueries.find(reinterpret_cast<unsigned int>(query));
+    const std::set<Query*>::iterator node = m_liveQueries.find(query);
     if (node != m_liveQueries.end())
         m_liveQueries.erase(node);
 }
@@ -393,6 +405,42 @@ void queryReleaseRef(void* query)
         q->destroy();
         ::renddx9abi::engineFree(q);
     }
+}
+
+// [CHOSEN, not recovered] (issue #7): the native address of the Query field at `retailOffset` in the
+// retail x86 0x1C-byte layout, for the recovered bodies outside this file that read a Query by its
+// retail offsets (SkyDome's occlusion read and begin/end toggle). It is the identity on x86. An
+// offset that names no field stops with a [FRONTIER] diagnostic instead of reading a guess.
+unsigned char* Query::fieldAt(unsigned int retailOffset)
+{
+#if defined(_M_IX86)
+    static_assert(offsetof(Query, m_refCount) == 0x04 && offsetof(Query, m_d3dQuery) == 0x08 &&
+                  offsetof(Query, m_type) == 0x0C && offsetof(Query, m_field10) == 0x10 &&
+                  offsetof(Query, m_field14) == 0x14 && offsetof(Query, m_field18) == 0x18 &&
+                  offsetof(Query, m_field19) == 0x19, "the retail Query field offsets");
+#endif
+    switch (retailOffset)
+    {
+    case 0x04: return reinterpret_cast<unsigned char*>(&m_refCount);
+    case 0x08: return reinterpret_cast<unsigned char*>(&m_d3dQuery);
+    case 0x0C: return reinterpret_cast<unsigned char*>(&m_type);
+    case 0x10: return reinterpret_cast<unsigned char*>(&m_field10);
+    case 0x14: return reinterpret_cast<unsigned char*>(&m_field14);
+    case 0x18: return &m_field18;
+    case 0x19: return &m_field19;
+    default:   break;
+    }
+    std::fprintf(stderr, "[FRONTIER] dice::hfe::dx9rend::Query::fieldAt - retail offset 0x%X "
+                         "names no Query field\n", retailOffset);
+    std::fflush(stderr);
+    ::renddx9abi::logf("[FRONTIER] dice::hfe::dx9rend::Query::fieldAt - retail offset 0x%X names "
+                       "no Query field", retailOffset);
+    std::abort();
+}
+
+unsigned char* queryFieldAt(void* query, unsigned int retailOffset)
+{
+    return static_cast<Query*>(query)->fieldAt(retailOffset);
 }
 
 } // namespace dx9rend

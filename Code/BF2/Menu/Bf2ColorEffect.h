@@ -13,9 +13,9 @@ public:
     TypeDescriptor* getType() override;
     unsigned int getObjectSize() override;
     bool setColor(float r, float g, float b, float a) override;
-    bool drawCharacter(System*, int character, int font, int elementIndex,
+    bool drawCharacter(System*, int character, FontHandle font, int elementIndex,
                        Quad*, RenderContext*) override;
-    bool drawTexture(System*, int texture, Quad*, RenderContext*) override;
+    bool drawTexture(System*, TextureHandle texture, Quad*, RenderContext*) override;
     // Names [INFERRED]; the three slots this class adds above Effect's21.
     virtual bool setOwnerNode(void* owner);
     virtual bool setAlphaBinding(const float* alpha);
@@ -32,7 +32,9 @@ protected:
     int m_field28;                    // +28, cleared by the constructor, else unread
     float m_disabledBinding;          // +2C, -1 so every default binding is inactive
 };
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2ColorEffect) == 48, "native Bf2ColorEffect storage");
+#endif
 } }
 #endif
 #endif

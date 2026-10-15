@@ -18,16 +18,16 @@ if not exist "%OUT%" mkdir "%OUT%"
 set FLAGS=/nologo /c /MD /std:c++14 /permissive /EHsc /Od /Z7 /Gy /Gw /DBF2_IMAGE_SWIFFPLAYER /DBF2_PLUGIN_ABI_NATIVE=1 /D_ITERATOR_DEBUG_LEVEL=0 /DDEDICATED=0 /DWIN32 /D_WINDOWS /DNDEBUG /D_CRT_SECURE_NO_WARNINGS
 cl %FLAGS% %BF2_TEST_SOURCE_FLAGS% /I"%EXT%" /I"%EXT%\gameswf" /I"%SWF%" /FI"%ROOT%\BF2\Core\BuildConfig.h" "%~dp0swiff_disconnect_runtime.cpp" /Fo"%OUT%\fixture.obj" >"%OUT%\compile.log" 2>&1
 if errorlevel 1 (type "%OUT%\compile.log"& exit /b 1)
-rem Only gameswf/base, VC7.1 string storage and the gameswf allocator adapter are linked.
+rem Only gameswf/base and the gameswf allocator adapter are linked.
 rem The fixture includes the actual SwiffPlayer TU and supplies isolated CRT heap providers.
 type nul >"%OUT%\objects.rsp"
 set /a COUNT=0
 for %%O in ("%OBJECTS%\*.obj") do (
     set "SKIP=0"
-    for %%S in (36_BfMemory 37_Msvcr71Heap 39_DllMain 40_PluginEntry 42_SwiffPlayer 43_SwiffCrashLog 44_SwiffPlayerModule 45_Frontier) do if /i "%%~nO"=="%%S" set "SKIP=1"
+    for %%S in (36_BfMemory 37_DllMain 38_PluginEntry 40_SwiffPlayer 41_SwiffCrashLog 42_SwiffPlayerModule 43_Frontier) do if /i "%%~nO"=="%%S" set "SKIP=1"
     if "!SKIP!"=="0" (echo "%%~fO">>"%OUT%\objects.rsp"& set /a COUNT+=1)
 )
-if not "%COUNT%"=="37" (echo Expected 37 dependency objects, found %COUNT%. Check the plugin manifest.& exit /b 1)
+if not "%COUNT%"=="36" (echo Expected 36 dependency objects, found %COUNT%. Check the plugin manifest.& exit /b 1)
 link /nologo /MACHINE:X86 /OPT:REF /INCREMENTAL:NO /DEBUG /SUBSYSTEM:CONSOLE /OUT:"%OUT%\swiff_disconnect_runtime.exe" /PDB:"%OUT%\fixture.pdb" "%OUT%\fixture.obj" @"%OUT%\objects.rsp" kernel32.lib user32.lib winmm.lib >"%OUT%\link.log" 2>&1
 if errorlevel 1 (type "%OUT%\link.log"& exit /b 1)
 rem Argument tracing legitimately reads arguments; this fixture tests the callback itself.

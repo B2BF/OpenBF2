@@ -32,6 +32,8 @@ bool CallFunctionAction::execute(System* system, const Rect*, const NodeState*,
     if (!m_function) return false;
     return m_function->call(system);
 }
+#if defined(_M_IX86)
 static_assert(sizeof(CallFunctionAction) == 8, "client CallFunctionAction");
+#endif
 } }
 #endif

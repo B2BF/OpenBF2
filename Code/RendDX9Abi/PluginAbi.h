@@ -1,44 +1,29 @@
 // [CHOSEN, not recovered] Rebuilt plugins share the host's current STL/CRT.
-// Retail plugin loading is retired under https://github.com/B2BF/OpenBF2/issues/7.
-// Legacy declarations remain for shared layout code and isolated reference fixtures.
+// Retail plugin loading is retired under https://github.com/B2BF/OpenBF2/issues/7: every image that
+// includes this header (the plugin DLLs, the rebuilt client and the editor) is built with one MSVC
+// dynamic CRT and one STL layout, so host and plugins pass std containers to each other directly.
 
 #ifndef RENDDX9ABI_PLUGINABI_H
 #define RENDDX9ABI_PLUGINABI_H
 
-#ifndef BF2_PLUGIN_ABI_NATIVE
-#define BF2_PLUGIN_ABI_NATIVE 0
-#endif
+#include <string>
 
-#if BF2_PLUGIN_ABI_NATIVE != 0 && BF2_PLUGIN_ABI_NATIVE != 1
-#error BF2_PLUGIN_ABI_NATIVE must be 0 (retail VC7.1 ABI) or 1 (native rebuilt-client ABI)
-#endif
-
-#if (defined(BF2_IMAGE_RENDDX9) || defined(BF2_IMAGE_SWIFFPLAYER) || defined(BF2_IMAGE_BF2AUDIO)) && !BF2_PLUGIN_ABI_NATIVE
-#error Rebuilt plugins require BF2_PLUGIN_ABI_NATIVE=1; retail executable compatibility has been removed
-#endif
-
-#include "Vc71String.h"
-#include "Vc71Vector.h"
-
-#if BF2_PLUGIN_ABI_NATIVE
 #include <list>
 #include <string>
 #include <vector>
 #include "../BF2/Core/ClassManager.h"
 
 #if !defined(_MSC_VER) || !defined(_MT) || !defined(_DLL)
-#error BF2_PLUGIN_ABI_NATIVE requires the supported MSVC dynamic-CRT (/MD) build
+#error The rebuilt plugin ABI requires the supported MSVC dynamic-CRT (/MD) build
 #endif
 #if !defined(_ITERATOR_DEBUG_LEVEL) || _ITERATOR_DEBUG_LEVEL != 0
-#error BF2_PLUGIN_ABI_NATIVE requires _ITERATOR_DEBUG_LEVEL=0 in both host and plugin images
-#endif
+#error The rebuilt plugin ABI requires _ITERATOR_DEBUG_LEVEL=0 in both host and plugin images
 #endif
 
 namespace dice { namespace hfe { class IBase; } }
 
 namespace renddx9abi {
 
-#if BF2_PLUGIN_ABI_NATIVE
 typedef std::string HostString;
 typedef std::list<HostString> HostStringList;
 
@@ -54,71 +39,21 @@ public:
 private:
     std::vector<T>& m_vector;
 };
-#else
-typedef vc71::string HostString;
-
-// VC7.1 std::list<std::string>, as read by RendDX9.dll sub_10017AB0: the list object's +4 is the
-// self-linked head node and each element string starts at node+8. This is a host-boundary view,
-// never a replacement for RendDX9's own recovered list layouts.
-struct HostStringListNode
-{
-    HostStringListNode* next;
-    HostStringListNode* prev;
-    HostString          value;
-};
-
-struct HostStringList
-{
-    void*               allocator;
-    HostStringListNode* head;
-    unsigned int        size;
-};
-
-#if defined(_M_IX86)
-static_assert(sizeof(HostStringList) == 12,
-              "the retail host std::list view must retain its VC7.1 x86 size");
-#endif
-
-template <typename T>
-class HostVectorWriter
-{
-public:
-    explicit HostVectorWriter(void* hostVector) : m_vector(hostVector) {}
-    void push_back(const T& value) { m_vector.push_back(value); }
-    // The twin of the native accessor above; `vectorRef` already derives this from the host's
-    // (_Last - _First) span, so it is the same number the retail host would compute.
-    unsigned int size() const { return m_vector.size(); }
-
-private:
-    vc71::vectorRef<T> m_vector;
-};
-#endif
 
 // Host-callable slots use HostString, converting once at this boundary (RW-129).
-// Native host strings differ from the internal 28-byte vc71::string; compatibility conversions are
-// identity references. Passing the wrong layout corrupts the caller's storage.
-#if BF2_PLUGIN_ABI_NATIVE
-inline HostString toHostString(const vc71::string& value)
+inline HostString toHostString(const std::string& value)
 {
     return HostString(value.c_str(), value.size());
 }
 
-inline vc71::string toVc71String(const HostString& value)
+inline std::string fromHostString(const HostString& value)
 {
-    return vc71::string(value.c_str(), static_cast<unsigned int>(value.size()));
+    return std::string(value.c_str(), static_cast<unsigned int>(value.size()));
 }
-#else
-inline const HostString&   toHostString(const vc71::string& value)  { return value; }
-inline const vc71::string& toVc71String(const HostString& value)    { return value; }
-#endif
 
 inline unsigned int hostStringListSize(const HostStringList* values)
 {
-#if BF2_PLUGIN_ABI_NATIVE
     return values ? static_cast<unsigned int>(values->size()) : 0;
-#else
-    return values ? values->size : 0;
-#endif
 }
 
 template <typename Visitor>
@@ -126,37 +61,26 @@ inline void visitHostStringList(const HostStringList* values, Visitor visitor)
 {
     if (!values)
         return;
-
-#if BF2_PLUGIN_ABI_NATIVE
     for (HostStringList::const_iterator it = values->begin(); it != values->end(); ++it)
         visitor(*it);
-#else
-    if (!values->head)
-        return;
-    for (HostStringListNode* node = values->head->next;
-         node != values->head;
-         node = node->next)
-        visitor(node->value);
-#endif
 }
 
-inline HostString makeHostString(const vc71::string& value)
+inline HostString makeHostString(const std::string& value)
 {
     return HostString(value.c_str());
 }
 
-inline void assignFromHostString(vc71::string& destination, const HostString& value)
+inline void assignFromHostString(std::string& destination, const HostString& value)
 {
     destination = value.c_str();
 }
 
 // The recovered PE factories remain explicitly __fastcall.  Core/ClassManager.h's native record
-// holds an ordinary free-function pointer (__cdecl under the supported build), so native mode
-// publishes one stateless thunk per recovered factory instead of changing the internal functions.
+// holds an ordinary free-function pointer (__cdecl under the supported build), so each recovered
+// factory is published through one stateless thunk instead of changing the internal functions.
 typedef dice::hfe::IBase* (__fastcall *RetailFastcallFactory)(unsigned int,
                                                                dice::hfe::IBase*);
 
-#if BF2_PLUGIN_ABI_NATIVE
 template <RetailFastcallFactory Factory>
 struct NativeFactoryThunk
 {
@@ -165,17 +89,11 @@ struct NativeFactoryThunk
         return Factory(iid, outer);
     }
 };
-#endif
 
 } // namespace renddx9abi
 
-#if BF2_PLUGIN_ABI_NATIVE
 #define RD9_HOST_VECTOR_PARAMETER(Type, name) std::vector<Type>& name
 #define RD9_CLASS_FACTORY(factory) \
     (&::renddx9abi::NativeFactoryThunk<factory>::invoke)
-#else
-#define RD9_HOST_VECTOR_PARAMETER(Type, name) void* name
-#define RD9_CLASS_FACTORY(factory) (factory)
-#endif
 
 #endif // RENDDX9ABI_PLUGINABI_H

@@ -10,12 +10,12 @@
 #include <new>
 namespace dice { namespace hfe { namespace Rend {
 
-EnvMapObjectTemplate::EnvMapObjectTemplate(const vc71::string& name) : m_name(name)
+EnvMapObjectTemplate::EnvMapObjectTemplate(const std::string& name) : m_name(name)
 {
     setSize(1.0f);
     setIsStatic(true);
 }
-const vc71::string& EnvMapObjectTemplate::getName() const { return m_name; }
+const std::string& EnvMapObjectTemplate::getName() const { return m_name; }
 void EnvMapObjectTemplate::setSize(float value) { m_size=value; }
 float EnvMapObjectTemplate::getSize() const { return m_size; }
 void EnvMapObjectTemplate::setIsStatic(bool flag) { m_isStatic=flag; }

@@ -59,7 +59,9 @@ protected:
     float m_boundsWidth, m_boundsHeight; // +44/+48, arguments 3 and 4 of +D4
     float m_boundsX, m_boundsY;          // +4C/+50, arguments 1 and 2 of +D4
 };
+#if defined(_M_IX86)
 static_assert(sizeof(Bf2HoverNode) == 84, "native Bf2HoverNode storage");
+#endif
 } }
 #endif
 #endif

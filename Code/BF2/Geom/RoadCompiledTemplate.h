@@ -9,9 +9,9 @@
 #define BF2_GEOM_ROADCOMPILEDTEMPLATE_H
 
 #include "MeshTemplate.h"          // IGeometryTemplate (44 slots) and the 12-byte GeometryTemplate prefix
-#include "Vc71PtrList.h"          // RoadList - the VC7.1 std::list<RoadCompiled*>
 
 #include <stddef.h>                // offsetof - the layout assertions below
+#include <list>
 
 namespace dice {
 namespace hfe {
@@ -23,10 +23,9 @@ namespace geom {
 class RoadCompiled;
 
 
-// Shared compatibility list for template instances and per-frame compiled-road queues.
+// The shipped std::list<RoadCompiled*>: template instances and the per-frame compiled-road queue.
 
-typedef Vc71PtrListNode<RoadCompiled> RoadListNode;
-typedef Vc71PtrList<RoadCompiled>     RoadList;
+typedef std::list<RoadCompiled*> RoadList;
 
 
 // RoadCompiledTemplate - GeometryTemplate.RoadCompiled. The 44 slots in table order; the ones this
@@ -47,10 +46,10 @@ public:
 
     // IGeometryTemplate
     virtual unsigned int getClassId() const;                                        // +0x10
-    virtual void setName(const vc71::string& name);                                 // +0x14
-    virtual const vc71::string& getName() const;                                    // +0x18
-    virtual void setPath(const vc71::string& path);                                 // +0x1C
-    virtual const vc71::string& getPath() const;                                    // +0x20
+    virtual void setName(const std::string& name);                                 // +0x14
+    virtual const std::string& getName() const;                                    // +0x18
+    virtual void setPath(const std::string& path);                                 // +0x1C
+    virtual const std::string& getPath() const;                                    // +0x20
     virtual void* createInstance();                                                 // +0x24
     virtual bool isLoaded() const;                                                  // +0x28
     virtual bool load();                                                            // +0x2C
@@ -93,8 +92,8 @@ public:
     unsigned char            m_loaded;         // +0x10  ctor 0
     unsigned char            m_pad11[3];       // +0x11  not written
     RoadList                 m_instances;      // +0x14
-    vc71::string             m_name;           // +0x20
-    vc71::string             m_path;           // +0x3C
+    std::string             m_name;           // +0x20
+    std::string             m_path;           // +0x3C
     dx9rend::EngineTexture*  m_texture0;       // +0x58  ctor 0
     dx9rend::EngineTexture*  m_texture1;       // +0x5C  ctor 0
     float                    m_blendFactor;    // +0x60  ctor 0
@@ -110,14 +109,6 @@ private:
 static_assert(offsetof(RoadCompiledTemplate, m_refCount) == 0x0C, "refCount at +0x0C");
 static_assert(offsetof(RoadCompiledTemplate, m_loaded) == 0x10, "loaded at +0x10");
 static_assert(offsetof(RoadCompiledTemplate, m_instances) == 0x14, "instance list at +0x14");
-static_assert(offsetof(RoadCompiledTemplate, m_name) == 0x20, "name at +0x20");
-static_assert(offsetof(RoadCompiledTemplate, m_path) == 0x3C, "path at +0x3C");
-static_assert(offsetof(RoadCompiledTemplate, m_texture0) == 0x58, "texture0 at +0x58");
-static_assert(offsetof(RoadCompiledTemplate, m_texture1) == 0x5C, "texture1 at +0x5C");
-static_assert(offsetof(RoadCompiledTemplate, m_blendFactor) == 0x60, "blend factor at +0x60");
-static_assert(offsetof(RoadCompiledTemplate, m_fadeOff) == 0x64, "fade-off at +0x64");
-static_assert(offsetof(RoadCompiledTemplate, m_priority) == 0x6C, "priority at +0x6C");
-static_assert(sizeof(RoadCompiledTemplate) == 0x70, "the factory 0x100B09DC allocates 0x70");
 #endif
 
 // The reflection id getClassId answers and the Object.geometry.* rows test (0x100B12F0).

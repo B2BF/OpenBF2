@@ -31,7 +31,7 @@ struct MapIconRecord
     Color color;              // +08
     hfe::Vec2 size;           // +18
     float rotation;           // +20; retail default construction leaves this untouched
-    int texture;              // +24
+    TextureHandle texture;    // +24
     bool clampToVisibleMap;   // +28; 776AF0 applies the 775800 viewport inset clamp when true
     std::uint8_t padding[3];  // +29; retail copies no padding bytes
 
@@ -46,7 +46,9 @@ struct MapIconRecord
           rotation(other.rotation), texture(other.texture),
           clampToVisibleMap(other.clampToVisibleMap) {}
 };
+#if defined(_M_IX86)
 static_assert(sizeof(MapIconRecord) == 0x2C, "retail map icon record");
+#endif
 // Order-line record ending in its drawable icon. [INFERRED] Field names.
 struct MapLineRecord
 {
@@ -62,10 +64,12 @@ struct MapLineRecord
     hfe::Vec2 b;                 // +1C end, map space
     MapIconRecord line;          // +24 the connecting line's icon (map_Line)
 };
+#if defined(_M_IX86)
 static_assert(sizeof(MapLineRecord) == 0x50, "retail order-line record");
+#endif
 struct MapTimedMarker
 {
-    int texture;                // +00
+    TextureHandle texture;      // +00
     int networkId;              // +04
     hfe::Vec2 size;             // +08
     int kind;                   // +10
@@ -80,11 +84,14 @@ struct MapTimedMarker
 
     MapTimedMarker() : size{0.0f, 0.0f}, position{0.0f, 0.0f} {}
 };
+#if defined(_M_IX86)
 static_assert(sizeof(MapTimedMarker) == 0x34, "retail timed map marker");
+#endif
 struct MapField09ec { std::uint32_t words[2]; };     // 8-byte list value;7771D0 allocates the16-byte node
 struct MapVehicleDrop {
     bool active;
-    int texture, id;
+    TextureHandle texture;
+    int id;
     hfe::Vec3 position;     // 77ACE0 writes bool,texture,id,x,y,z;24 bytes
 };
 
@@ -249,9 +256,9 @@ private:
     virtual int getSquadRequestType(int squad);                    // +F4 77A8D0
     // +110, 7730B0 (61 B): the icon a support request (ECHud 46..50) draws with - 47 ammo, 48
     // repair, 49/50 revive, 46 and anything else medic (the four constructor textures at +9A8).
-    virtual int getSupportRequestTexture(int eventId);
+    virtual TextureHandle getSupportRequestTexture(int eventId);
     // Returns the cached squad-number icon, loading it on demand. Requires a valid squad index. [INFERRED] Name.
-    virtual int getSquadNumberIcon(int squad);
+    virtual TextureHandle getSquadNumberIcon(int squad);
     // +114, 782220 (602 B): one order's line and marker. Always answers true.
     virtual bool addOrderIcons(hfe::SquadOrder* order, int squad, int leaderNetworkId,
                                int kind, const Rect* bounds);
@@ -261,16 +268,16 @@ private:
                                  bool active);
     // Updates map presentation and expires timed markers over delta seconds.
     virtual void update(float delta);                     // +E0  77C330, 4,379 B
-    virtual int timedMarkerTexture(unsigned int id);       // +E4 7779B0
+    virtual TextureHandle timedMarkerTexture(unsigned int id); // +E4 7779B0
     virtual hfe::Vec2 timedMarkerSize(unsigned int id);    // +E8 7779E0
     virtual bool populateNetworkIcon(int id, MapIconRecord* icon,
                                      bool asPlayer);       // +EC 775720
     virtual void colorMapIcon(hfe::world::IPlayer* player,
                               MapIconRecord* icon, int type,
                               bool compareTeam);           // +F0 7788B0
-    virtual int getSmallSquadIcon(int squadId);            // +FC 772ED0
+    virtual TextureHandle getSmallSquadIcon(int squadId);  // +FC 772ED0
     virtual void paintMapIcon(hfe::Vec2 position, float rotation,
-                              hfe::Vec2 size, unsigned int texture, System* system,
+                              hfe::Vec2 size, std::uintptr_t texture, System* system,
                               const Rect* adjusted, const Rect* bounds,
                               const Color* color, RenderContext* context);
     virtual void paintMapIcons(System* system, const Rect* adjusted,
@@ -294,7 +301,7 @@ private:
                                               bool notCapturable,
                                               bool cachePresent,
                                               bool localCaptureActive); // +13C 7755A0
-    virtual int getLeaderMapIcon(int squadId, int sizeIndex);
+    virtual TextureHandle getLeaderMapIcon(int squadId, int sizeIndex);
     // 772810, the arm +D8 takes when the map is not expanded. [INFERRED] name.
     void setCommanderZoom(int level, bool remember);
     // Retail indexes `[this + 0x69C + type*4]` for a vehicle type in [0, 40) -
@@ -324,9 +331,9 @@ private:
     // addresses, call order and complete argument shapes are recovered.
     void updateFilterActiveFlags();
     void updatePaintCenter();
-    void drawMapTexture(int texture, const Rect* adjusted, const Rect* bounds,
+    void drawMapTexture(TextureHandle texture, const Rect* adjusted, const Rect* bounds,
                         System* system, RenderContext* context);
-    void drawMapTint(int texture, const Color* color, const Rect* adjusted,
+    void drawMapTint(TextureHandle texture, const Color* color, const Rect* adjusted,
                      const Rect* bounds, System* system, RenderContext* context);
     // Updates and draws supply lines. [INFERRED] Helper names.
     void updateSupplyLine(System* system);
@@ -335,7 +342,7 @@ private:
     void loadSupplyLineTextures(System* system);
     void advanceSupplyLineGroup();
     bool updateCombatAreaTexture(bool measureOnly);
-    void drawCombatAreaTexture(int texture, const Rect* adjusted,
+    void drawCombatAreaTexture(TextureHandle texture, const Rect* adjusted,
                                const Rect* bounds, System* system,
                                RenderContext* context);
     void drawMapBorder(const Rect* adjusted, const Rect* bounds,
@@ -359,7 +366,7 @@ private:
                                 MapIconRecord* icon);
     void projectObject(hfe::world::IObject* object,
                        MapIconRecord* icon, bool heading);
-    unsigned int remapMapIconType(unsigned int type, int texture,
+    unsigned int remapMapIconType(unsigned int type, TextureHandle texture,
                                   bool timed, float* rotation);
     void addTimedMarker(int networkId, hfe::Vec2 position,
                         MapIconRecord icon, float duration,
@@ -369,9 +376,9 @@ private:
                             MapIconRecord* icon, bool* rotate,
                             bool* secondary, int* type);
     void updateSatelliteTarget(hfe::world::IObject* object,
-                               int networkId, int texture);
+                               int networkId, TextureHandle texture);
     void updateUavTarget(hfe::world::IObject* object,
-                         int networkId, int texture);
+                         int networkId, TextureHandle texture);
     // [INFERRED] name; complete PE body is map<unsigned,IObject*>::erase(key).
     void removeUavObject(unsigned int networkId);
     void collectIconFamily783F90();
@@ -399,8 +406,8 @@ private:
     void collectSuppliesIcon();                          // 77FA00 [FRONTIER]
     void collectVehicleDropIcon(const MapVehicleDrop*);  // 77FB20 [FRONTIER]
     void drawSatellite(System*, const Rect*, RenderContext*);
-    void drawMapShadow(int texture, const Rect*, System*, RenderContext*);
-    void drawMapFrame(int texture, const Rect*, System*, RenderContext*);
+    void drawMapShadow(TextureHandle texture, const Rect*, System*, RenderContext*);
+    void drawMapFrame(TextureHandle texture, const Rect*, System*, RenderContext*);
     void drawControlPointLabels(System*, const NodeState*, const Rect*,
                                 const Rect*, RenderContext*);
     hfe::geom::IMemeTexture* combatAreaTexture() const;
@@ -505,22 +512,22 @@ private:
     bool m_overheadZoomActive;                           // +7F8, constructor false
     bool m_field7f9;                                     // +7F9, true; `setZoomIcons`
     std::uint8_t m_field7fa[2];                           // untouched
-    int m_field7fc[10];                                   // +7FC..823, small-squad texture cache
+    TextureHandle m_field7fc[10];                         // +7FC..823, small-squad texture cache
     // Cached squad-number texture handles.
-    int m_squadNumberIcons[10];                           // +824..84B, constructor 0
-    int m_field84c[20];                                   // +84C..89B, sized leader texture cache
-    int m_field89c;                                      // texture mini_Squad_request
-    int m_field8a0;                                      // texture GeneralIcons/empty
-    int m_defaultMinimapTexture;                         // +8A4, texture GeneralIcons/full
-    int m_field8a8[23];                                  // +8A8..903, textures (constructor order)
-    int m_controlPointTextures[3];                       // +904..90C
-    int m_controlPointBaseTextures[3];                   // +910..918
-    int m_teamFlagTextures[3];                           // +91C..924
-    int m_field928[4];                                   // +928..937, textures
-    int m_minimapTexture;                                // +938
-    int m_field93c[26];                                  // +93C..9A3, textures and zeros
+    TextureHandle m_squadNumberIcons[10];                 // +824..84B, constructor 0
+    TextureHandle m_field84c[20];                         // +84C..89B, sized leader texture cache
+    TextureHandle m_field89c;                            // texture mini_Squad_request
+    TextureHandle m_field8a0;                            // texture GeneralIcons/empty
+    TextureHandle m_defaultMinimapTexture;               // +8A4, texture GeneralIcons/full
+    TextureHandle m_field8a8[23];                        // +8A8..903, textures (constructor order)
+    TextureHandle m_controlPointTextures[3];             // +904..90C
+    TextureHandle m_controlPointBaseTextures[3];         // +910..918
+    TextureHandle m_teamFlagTextures[3];                 // +91C..924
+    TextureHandle m_field928[4];                         // +928..937, textures
+    TextureHandle m_minimapTexture;                      // +938
+    TextureHandle m_field93c[26];                        // +93C..9A3, textures and zeros; [25] spawn group
     int m_spawnGroup;                                    // +9A4, signed, direct kit writes
-    int m_field9a8[13];                                  // +9A8..9DB, textures and zeros
+    TextureHandle m_field9a8[13];                        // +9A8..9DB, textures and zeros
     bool m_field9dc;                                     // +9DC, constructor false
     std::uint8_t m_field9dd[3];
     std::uint32_t m_field9e0[3];                          // +9E0..9EB; +9E8 constructor0
@@ -549,8 +556,8 @@ private:
     std::uint8_t m_fielda7e[2];
     float m_fielda80, m_fielda84, m_fielda88;             // +A80/+A84/+A88 satellite scan window
     float m_fielda8c;                                      // +A8C timed satellite fade
-    int m_fielda90;                                      // texture map_SatelliteScanLine
-    int m_fielda94;                                      // texture mini_SatelliteObject
+    TextureHandle m_fielda90;                            // texture map_SatelliteScanLine
+    TextureHandle m_fielda94;                            // texture mini_SatelliteObject
     float m_satelliteScanX, m_satelliteScanY;              // +A98/+A9C
     int m_satelliteLineSize;                             // +AA0 =150
     float m_satelliteReloadRemaining;                    // +AA4
@@ -559,7 +566,8 @@ private:
     float m_fieldabc, m_fieldac0, m_fieldac4;              // 0, 4.0, 0
     float m_uavReloadRemaining;                          // +AC8
     bool m_uavActive;                                    // +ACC
-    int m_uavRadius, m_uavTexture, m_uavIcon;              // +AD0..AD8: 100, map_UAV, icon_UAV
+    int m_uavRadius;                                     // +AD0, 100
+    TextureHandle m_uavTexture, m_uavIcon;               // +AD4/+AD8: map_UAV, icon_UAV
     float m_uavReloadFraction;                           // +ADC =1.0 ("%sUAVTimeUntilReloaded")
     bool m_uavReloading;                                 // +AE0
     float m_uavActiveTime;                               // +AE4
@@ -567,11 +575,11 @@ private:
     float m_fieldaec, m_fieldaf0;                         // 0.5, 0
     hfe::Vec3 m_airstrikePosition;                        // +AF4..AFC
     bool m_airstrikeActive;                              // +B00
-    int m_airstrikeTexture, m_artilleryIcon;              // +B04/+B08
+    TextureHandle m_airstrikeTexture, m_artilleryIcon;    // +B04/+B08
     float m_fieldb0c, m_fieldb10;                         // +B0C/+B10
     hfe::Vec3 m_suppliesPosition;                        // +B14..B1C
     bool m_suppliesActive;                               // +B20
-    int m_suppliesTexture;                               // +B24 icon_supplies
+    TextureHandle m_suppliesTexture;                     // +B24 icon_supplies
     float m_fieldb28;                                     // +B28 =0, supplies duration
     std::list<MapVehicleDrop> m_vehicleDrops;             // +B2C,77ACE0
     std::map<unsigned int, hfe::world::IObject*> m_uavObjects; // +B38, 77A030
@@ -591,13 +599,14 @@ private:
     std::uint32_t m_fieldb98;                             // untouched by the constructor; see above
     std::uint32_t m_fieldb9c, m_fieldba0;                  // constructor0
     // Supply-line texture handles, loaded by stage and initially zero.
-    int m_supplyLineTextures[20];                         // +BA4..BF3, constructor0
+    TextureHandle m_supplyLineTextures[20];               // +BA4..BF3, constructor0
     std::list<int> m_controlPointIds;                     // +BF4,77C0A0
     std::list<int> m_fieldc00;                            // +C00,77E720 compares control-point template ID
     std::uint32_t m_fieldc0c[18];                         // +C0C..C53, constructor0
     std::map<unsigned int, hfe::world::IControlPoint*> m_controlPoints; // +C54,77E720/779B70
     // m_fieldc64 stores the font handle loaded through this map's System.
-    std::uint32_t m_fieldc60, m_fieldc64;                  // +C60 untouched; +C64 0
+    std::uint32_t m_fieldc60;                             // +C60 untouched
+    std::uintptr_t m_fieldc64;                            // +C64 0; uint32_t on x86
     Color m_fieldc68;                                    // (1,1,1,1); `setCPFontColor`
     float m_fieldc78, m_fieldc7c;                         // constructor0
 };

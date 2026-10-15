@@ -39,6 +39,7 @@
 #include "../../IO/Network/NetworkableInfo.h" // getForceNetworkableId - the phase-A replication gate
 #include "../../Scene/Object/ObjectTypes/Game/IPlayerControlObject.h" // getDefaultTeam - the object's team
 #include "../Objects/ObjectLayoutAccess.h"    // physicsNode (+0x44) / objectTemplate (+0x14)
+#include "../Objects/RemoteControlledObjectTemplate.h"   // rcType - getSpecialCommanderObjects
 #include "../../Physics/IPhysicsNode.h"       // getPositionalSpeed (+0x60) - the priority speed factor
 #include "../../IO/Network/INetworkableObject.h"   // m_ownerId / m_object - the scope pass reads both
 #include "../../Core/Debug.h"                 // the attested line-98 "Control object not found"
@@ -73,15 +74,6 @@ int remoteControlledObjectTeam(world::IObject* object)
     if (pco)
         return pco->getTeam();                           // IPlayerControlObject +0x98
     return 0;
-}
-
-// Returns the template's remote-control type, despite the helper's State name.
-// [UNRESOLVED] Meanings of the selected type values.
-int remoteControlledObjectState(world::IObject* object)
-{
-    const char* const templ = reinterpret_cast<const char*>(
-        world::object_detail::LayoutAccess::objectTemplate(object));   // IObject +0x14
-    return *reinterpret_cast<const int*>(templ + 0x180);               // ...Template::rcType
 }
 
 // ICameraObject's transform - both updateGhostManager call sites inline `vtable +0x10 with a 0
@@ -213,7 +205,11 @@ void ServerConnection::getSpecialCommanderObjects(int team)
          it != rcObjects.end(); ++it)
     {
         world::IObject* const object = it->second;
-        const int state = remoteControlledObjectState(object);           // the template's rcType
+        // Registry objects carry a RemoteControlledObjectTemplate; the PE reads its rcType at
+        // retail +0x180. The named member, because this build's template layout is not retail's
+        // (rcType sits at +0x208 on x86 here). [UNRESOLVED] Meanings of the selected type values.
+        const int state = static_cast<const world::RemoteControlledObjectTemplate*>(
+            world::object_detail::LayoutAccess::objectTemplate(object))->rcType;   // IObject +0x14
         if (remoteControlledObjectTeam(object) != team)
             continue;
         if (state != 1 && state != 2 && state != 3)

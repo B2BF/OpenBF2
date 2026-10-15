@@ -42,7 +42,9 @@ protected:
     NodeState m_state;         // +4C/+50, ctor {1.0, 1.0}
     std::uint32_t m_field054;  // +54, ctor 0 [UNRESOLVED]
 };
+#if defined(_M_IX86)
 static_assert(sizeof(BfFixedSliderNode) == 88, "retail and native BfFixedSliderNode storage");
+#endif
 } }
 #endif
 #endif

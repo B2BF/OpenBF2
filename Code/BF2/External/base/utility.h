@@ -24,8 +24,17 @@
 // On windows, replace ANSI assert with our own, for a less annoying
 // debugging experience.
 //int	tu_testbed_assert_break(const char* filename, int linenum, const char* expression);
+#if !defined(_M_IX86)
+#include <intrin.h>	// __debugbreak, the x64 arm below
+#endif
 #undef assert
+#if defined(_M_IX86)
 #define assert(x)	if (!(x)) { __asm { int 3 } }	// tu_testbed_assert_break(__FILE__, __LINE__, #x))
+#else
+// [CHOSEN, not recovered] x64 (https://github.com/B2BF/OpenBF2/issues/7): no inline asm on x64;
+// the same breakpoint through the intrinsic.
+#define assert(x)	if (!(x)) { __debugbreak(); }
+#endif
 
 #endif // not NDEBUG
 #endif // _WIN32

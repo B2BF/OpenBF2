@@ -66,7 +66,7 @@ void BfEditNode::updateVisibleStart(System* system, const Rect* rect)
     float remaining = rect->width;
     for (int index = m_cursor - 1; index >= m_firstVisible; --index) {
         GlyphMetrics metrics;
-        const int font = m_font;
+        const FontHandle font = m_font;
         const int character = m_string->getCharacter(system, index);
         system->getGlyphMetrics(character, font, &metrics); // result deliberately discarded
         // Right + width + left, preserving the actual evaluation order.
@@ -137,6 +137,8 @@ bool BfEditNode::onEvent1(System*, const Rect*, const NodeState*, int, int, int)
     std::fflush(stderr);
     std::abort();
 }
+#if defined(_M_IX86)
 static_assert(sizeof(BfEditNode) == 80, "native BfEditNode storage");
+#endif
 } }
 #endif

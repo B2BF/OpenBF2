@@ -60,6 +60,7 @@ public:
     friend class Rotor;
     friend class EffectBundle; // client PE 0x641EB0 / ELF 0x81FB0B0 reads m_engineRunning
     friend class ::dice::hfe::EngineSound; // sway reads m_gear directly: ELF +0x1E8 / PE +0x200
+    friend class ObjectSpawner;   // the hold arm reads m_input (retail +0x1C4) directly
 
 protected:
     /* 0x1B0 */ const EngineTemplate* m_template;

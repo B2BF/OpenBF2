@@ -30,6 +30,8 @@ int FileIStream::read(void* buffer, int bytes)
 int FileIStream::getPosition() { return m_memory->getPosition(); }
 bool FileIStream::setPosition(int position)
 { return static_cast<unsigned char>(m_memory->seek(hfe::io::SEEKORIGIN_BEGIN, position)) != 0; }
+#if defined(_M_IX86)
 static_assert(sizeof(FileIStream) == 12, "client file-input visitor layout");
+#endif
 } }
 #endif

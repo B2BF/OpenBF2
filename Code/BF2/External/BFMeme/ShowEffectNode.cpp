@@ -69,7 +69,9 @@ void ShowEffectNode::paint(System* system, const NodeState* state,
     }
     Node::paint(system, state, bounds, clip, context);
 }
+#if defined(_M_IX86)
 static_assert(sizeof(ShowEffectNode) == 12, "client ShowEffectNode prefix storage");
 static_assert(sizeof(ShowEffectNodeTypeDescriptor) == 16, "ShowEffectNode metadata");
+#endif
 } }
 #endif

@@ -78,7 +78,7 @@ Bf2MiniMenuMapNode::Bf2MiniMenuMapNode(System* system, const char* name,
     // The four members below are the ones that travel through the obfuscation
     // pair; the pair is an identity, so each simply receives the handle. The
     // shipped order is 3, 4, 6, 5 - not sequential.
-    const int actionTexture = m_system->loadTexture(microMapActionTexture, true);
+    const TextureHandle actionTexture = m_system->loadTexture(microMapActionTexture, true);
     m_field8a8[3] = actionTexture;
     m_field8a8[4] = actionTexture;
     m_field8a8[6] = actionTexture;
@@ -90,7 +90,7 @@ Bf2MiniMenuMapNode::Bf2MiniMenuMapNode(System* system, const char* name,
     m_field8a8[10] = m_defaultMinimapTexture;
     m_field8a8[11] = m_defaultMinimapTexture;
 
-    const int secondAction = m_system->loadTexture(microMapActionTexture, true);
+    const TextureHandle secondAction = m_system->loadTexture(microMapActionTexture, true);
     m_field8a8[13] = secondAction;
     m_field8a8[14] = secondAction;
     m_field8a8[16] = secondAction;
@@ -194,7 +194,7 @@ void Bf2MiniMenuMapNode::setViewCenter(hfe::Vec2) { resetViewBiasForHud(); } // 
 
 // The mini-map replaces the base timed-marker lookup quartet. The shared
 // 4553E0 body returns zero for +E4/+FC; +E8 and +EC were read at 7CF690/7CF660.
-int Bf2MiniMenuMapNode::timedMarkerTexture(unsigned int) { return 0; }
+TextureHandle Bf2MiniMenuMapNode::timedMarkerTexture(unsigned int) { return 0; }
 hfe::Vec2 Bf2MiniMenuMapNode::timedMarkerSize(unsigned int)
 {
     return hfe::Vec2{4.0f, 4.0f};
@@ -206,9 +206,9 @@ bool Bf2MiniMenuMapNode::populateNetworkIcon(int, MapIconRecord* icon, bool)
     icon->size = hfe::Vec2{4.0f, 4.0f};
     return true;
 }
-int Bf2MiniMenuMapNode::getSmallSquadIcon(int) { return 0; }
+TextureHandle Bf2MiniMenuMapNode::getSmallSquadIcon(int) { return 0; }
 // +110, the same shared 4553E0 (`xor eax, eax; retn 4`) - vtable 938858 slot +110.
-int Bf2MiniMenuMapNode::getSupportRequestTexture(int) { return 0; }
+TextureHandle Bf2MiniMenuMapNode::getSupportRequestTexture(int) { return 0; }
 
 // Adds order markers to the compact map.
 bool Bf2MiniMenuMapNode::addOrderIcons(hfe::SquadOrder* order, int, int leaderNetworkId,
@@ -312,7 +312,7 @@ void Bf2MiniMenuMapNode::populateControlPointMapIcon(
 // are floored first, positions are not half-pixel snapped, and no mask texture
 // is installed.
 void Bf2MiniMenuMapNode::paintMapIcon(hfe::Vec2 position, float rotation,
-                                      hfe::Vec2 size, unsigned int texture, System* system,
+                                      hfe::Vec2 size, std::uintptr_t texture, System* system,
                                       const Rect* adjusted, const Rect* bounds,
                                       const Color* color, RenderContext* context)
 {

@@ -21,8 +21,8 @@ bool ForwardingOStream::streamInt(int* p, const char* label) { return m_destinat
 bool ForwardingOStream::streamString(char** p, const char* label) { return m_destination->streamString(p,label); }
 bool ForwardingOStream::streamWideString(wchar_t** p, const char* label) { return m_destination->streamWideString(p,label); }
 bool ForwardingOStream::streamCharacter(wchar_t* p, const char* label) { return m_destination->streamCharacter(p,label); }
-bool ForwardingOStream::streamTexture(System* s, int* p, const char* label) { return m_destination->streamTexture(s,p,label); }
-bool ForwardingOStream::streamFont(System* s, int* p, const char* label) { return m_destination->streamFont(s,p,label); }
+bool ForwardingOStream::streamTexture(System* s, TextureHandle* p, const char* label) { return m_destination->streamTexture(s,p,label); }
+bool ForwardingOStream::streamFont(System* s, FontHandle* p, const char* label) { return m_destination->streamFont(s,p,label); }
 bool ForwardingOStream::streamSound(System* s, int* p, const char* label) { return m_destination->streamSound(s,p,label); }
 bool ForwardingOStream::streamEnum(int* p, EnumNext next, EnumName name, const char* label) { return m_destination->streamEnum(p,next,name,label); }
 int ForwardingOStream::write(const void* p, int count) { return m_destination->write(p,count); }
@@ -116,8 +116,10 @@ bool saveNamedObject(System* system, Object*& value)
     }
     return true;
 }
+#if defined(_M_IX86)
 static_assert(sizeof(ForwardingOStream) == 8, "forwarding stream layout");
 static_assert(sizeof(MemoryOStream) == 16, "memory stream layout");
 static_assert(sizeof(ClassOStream) == 0x81C, "class output dictionary layout");
+#endif
 } }
 #endif

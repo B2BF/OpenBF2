@@ -6,13 +6,14 @@
 #define GEOM_TERRAIN_H
 
 #include <cstddef>
+#include <map>
+#include <vector>
 #include "../Core/IBase.h"
 #include "../Math/Vec3.h"
 #include "../RendDX9/RendDX9Base.h"
+#include "../RendDX9/Ra/RaParameterBlocks.h"   // the embedded Ra object block
 #include "../../RendDX9Abi/HostFileAbi.h"
-#include "../../RendDX9Abi/Vc71String.h"
-#include "../../RendDX9Abi/Vc71Vector.h"
-#include "../../RendDX9Abi/Vc71Map.h"
+#include <string>
 
 namespace dice {
 namespace hfe {
@@ -23,9 +24,63 @@ namespace dx9rend { struct EngineTexture; namespace Ra { class RaShader; class R
 
 namespace geom {
 
+// The water-object ring's header (Terrain::m_waterObjectRing): the count word, padded to pointer
+// alignment for the object blocks after it - 4 bytes on x86, as shipped.
+const unsigned int kWaterObjectRingHeader =
+    sizeof(void*) > sizeof(int) ? static_cast<unsigned int>(sizeof(void*))
+                                : static_cast<unsigned int>(sizeof(int));
+
 class QuadPatch;
+class QuadPatchEditable;
 class SurroundingPatch;
 class TerrainCuller;
+struct TerrainCullerNode;
+
+// One vertex of the surrounding ring's generated grid (sub_100DE740): position and texture
+// coordinate, 16 bytes.
+struct TerrainSurroundingVertex
+{
+    float x;            // +0x00
+    float z;            // +0x04
+    float u;            // +0x08  x * secondaryWorldScale.x / span
+    float v;            // +0x0C  z * secondaryWorldScale.z / span
+};
+
+// One gathered dynamic-shadow index range (24 bytes on the retail x86 layout). The gather that fills
+// them (sub_1018AC00) is a [FRONTIER]; the pass-7 draw walks them per patch.
+struct TerrainShadowRange
+{
+    unsigned int             start;          // +0x00  first index in the dynamic index buffer
+    unsigned int             count;          // +0x04  index count
+    const unsigned char*     shadowRecord;   // +0x08  the LightManager shadow record (lightviewprojortho at +760, lightviewproj at +952)
+    const TerrainCullerNode* node;           // +0x0C  the node whose LOD selects the morph constants
+    unsigned int             unresolved10;   // +0x10  [UNRESOLVED]
+    int                      patchIndex;     // +0x14  the patch the range belongs to (QuadPatch::patchIndex)
+};
+
+// One LOD record of Terrain::m_lodTables and QuadPatchDetailLayer::lodTables (400 bytes in the
+// retail image): per LOD row, sixteen index starts and sixteen index counts selected by the crack
+// mask, then the four child-record links the loaders store. The links are pointers, so on x64 the
+// record is 416 bytes [CHOSEN, not recovered] (https://github.com/B2BF/OpenBF2/issues/7); every
+// stride, allocation and clear uses kTerrainLodRecordSize. Nothing outside RendDX9 reads a record.
+struct TerrainLodRecord
+{
+    unsigned int   starts[3][16];      // +0x000  row = LOD, column = crack mask
+    unsigned int   counts[3][16];      // +0x0C0
+    unsigned char* children[4];        // +0x180  null on the last level
+};
+
+const int kTerrainLodRecordSize = static_cast<int>(sizeof(TerrainLodRecord));
+
+#if defined(_M_IX86)
+static_assert(sizeof(TerrainLodRecord) == 400, "the LOD records are 400 bytes - see 0x100DA9C0");
+static_assert(offsetof(TerrainLodRecord, counts) == 0xC0, "index counts at +0xC0 (row + 192)");
+static_assert(offsetof(TerrainLodRecord, children) == 0x180, "child links at +0x180..+0x18C");
+#endif
+
+// The +0x2B0 multimap TerrainEditable::update sorts its visible patches into, keyed by squared camera
+// distance. Equal keys keep insertion order (they are inserted at the upper bound).
+typedef std::multimap<float, QuadPatchEditable*> TerrainPatchQueue;
 
 
 // The terraindata.raw reader: a host stream plus the typed reads the shipped loader family
@@ -41,7 +96,7 @@ public:
     // Opens a stream with FileManager(path, mode, access, 0). Clears the held pointer
     // first, so it does not release a previously held stream. The fourth argument is
     // unused; its original meaning is [UNRESOLVED].
-    void open(const vc71::string& path, int mode, int access, int unusedFourth);
+    void open(const std::string& path, int mode, int access, int unusedFourth);
     // sub_10075E00 - release and null.
     void close();
 
@@ -58,9 +113,9 @@ public:
     bool writeU32(unsigned int value) { return write(&value, 4) == 4; }
     bool writeF32(float value) { return write(&value, 4) == 4; }
     // sub_10076260 - write(c_str(), size()) == size(); the terminator is not written.
-    bool writeString(const vc71::string& text)
+    bool writeString(const std::string& text)
     {
-        const unsigned int length = text.size();
+        const unsigned int length = static_cast<unsigned int>(text.size());
         return write(text.c_str(), length) == length;
     }
     // sub_100762E0 - answers `write(src, 8) != 0`, ANY non-zero count, not == 8 (shipped; its
@@ -79,7 +134,7 @@ public:
     unsigned int write(const void* src, unsigned int n) { return m_stream->write(src, n); }
     unsigned int read(void* dst, unsigned int n);              // sub_10075E20 - the raw read, unguarded
     // sub_10076000 - bytes up to (not including) `delimiter`, at most 0x1000; false on an empty line.
-    bool readLine(vc71::string& out, char delimiter);
+    bool readLine(std::string& out, char delimiter);
     int  tell();                                               // sub_10075E50 - the nonlinear +0x34
     void seek(int origin, int offset);                         // sub_10075E40 - the nonlinear +0x30
 
@@ -95,10 +150,10 @@ class TerrainDetailTextureBase
 {
 public:
     virtual ~TerrainDetailTextureBase() {}                           // +0x00  (the base's)
-    virtual void          setName(vc71::string name) = 0;             // +0x04
-    virtual vc71::string  getName() = 0;                              // +0x08
-    virtual void          setColorTextureName(vc71::string name) = 0; // +0x0C
-    virtual vc71::string  getColorTextureName() = 0;                  // +0x10
+    virtual void          setName(std::string name) = 0;             // +0x04
+    virtual std::string  getName() = 0;                              // +0x08
+    virtual void          setColorTextureName(std::string name) = 0; // +0x0C
+    virtual std::string  getColorTextureName() = 0;                  // +0x10
     virtual void          setEditableInt68(int value) = 0;            // +0x14  [UNRESOLVED] the editable record's +0x68
     virtual int           getEditableInt68() = 0;                     // +0x18
     virtual void          setMaterialId(unsigned char id) = 0;        // +0x1C
@@ -127,10 +182,10 @@ public:
     // stack record, 0x100DD38F for the heap records). All three store topTiling = 32.0f.
     TerrainDetailTexture();
     virtual ~TerrainDetailTexture();                                  // +0x00  0x100E1730 -> sub_100D8C80
-    virtual void          setName(vc71::string name);                 // +0x04
-    virtual vc71::string  getName();                                  // +0x08
-    virtual void          setColorTextureName(vc71::string name);     // +0x0C
-    virtual vc71::string  getColorTextureName();                      // +0x10
+    virtual void          setName(std::string name);                 // +0x04
+    virtual std::string  getName();                                  // +0x08
+    virtual void          setColorTextureName(std::string name);     // +0x0C
+    virtual std::string  getColorTextureName();                      // +0x10
     virtual void          setEditableInt68(int value);                // +0x14
     virtual int           getEditableInt68();                         // +0x18
     virtual void          setMaterialId(unsigned char id);            // +0x1C
@@ -193,7 +248,7 @@ struct TerrainWaterFrameList
 
     // sub_10014FD0, 353 B - read the list file: pairs of <texture> <number>. The by-value
     // argument is the shipped signature (`ret 1Ch`); the answer is dropped by setupWater.
-    bool load(vc71::string path);
+    bool load(std::string path);
     dx9rend::EngineTexture* currentFrame() const;   // sub_10014EC0 - WaterMapFrame0
     dx9rend::EngineTexture* nextFrame() const;      // sub_10014EF0 - WaterMapFrame1
     float                   frameBlend() const;     // sub_10014F30 - WaterCycleTime
@@ -221,7 +276,7 @@ public:
     // the Terrain surface, slots 4..56
     virtual unsigned int getReflectionTypeId();                      // +0x10
     virtual void  init();                                            // +0x14 0x100D7920  console `terrain.init`; load()'s first call
-    virtual void  load(const vc71::string& path);                    // +0x18 0x100DE070  console `terrain.load`
+    virtual void  load(const std::string& path);                    // +0x18 0x100DE070  console `terrain.load`
     virtual void  slot07_noop();                                     // +0x1C 0x100D8520  `ret`
     virtual void  setRenderStyle(int style);                         // +0x20 0x1018F9C0  console `forceRenderStyle` set; 0..1 accepted
     virtual int   getRenderStyle();                                  // +0x24 0x1018F9E0  console `forceRenderStyle` get
@@ -259,8 +314,8 @@ public:
     virtual void  setWaterScroll(float x, float y);                  // +0x8C 0x100E2910  console `waterScroll` set
     virtual float getWaterAnimSpeed();                               // +0x90 0x100E27D0  +0x6C4   console `waterAnimSpeed`
     virtual void  setWaterAnimSpeed(float v);                        // +0x94
-    virtual vc71::string getWaterNormalMap();                        // +0x98 0x100E27E0  a copy of +0x6D0   console `waterNormalMap` get
-    virtual void  setWaterNormalMap(vc71::string name);              // +0x9C 0x100D85E0  +0x6D0 = name, then slot +0xD4 (ret 0x1C: by value)
+    virtual std::string getWaterNormalMap();                        // +0x98 0x100E27E0  a copy of +0x6D0   console `waterNormalMap` get
+    virtual void  setWaterNormalMap(std::string name);              // +0x9C 0x100D85E0  +0x6D0 = name, then slot +0xD4 (ret 0x1C: by value)
     virtual Vec4* getWaterSpecularColor(Vec4* out);                  // +0xA0 0x100E2930  materialBlock->+0x70   console `waterSpecularColor` get
     virtual void  setWaterSpecularColor(float r, float g, float b, float a); // +0xA4 0x100E2970  materialBlock->+0x70
     virtual float getWaterSpecularPower();                           // +0xA8 0x100E29A0  materialBlock->+0x84   console `waterSpecularPower` get
@@ -293,7 +348,7 @@ public:
     virtual void onRenderPathChanged(int path);                      // +0x08 0x100D8670  +0xC = path
     virtual void onRenderPathNotification(int path);                 // +0x0C 0x100D8680  "TBM: Dont use this!" (Terrain.cpp:3313), logged
     virtual int  getCurrentRenderPath() const;                       // +0x10 0x101A9A10  shared getter
-    virtual vc71::string getRenderPathListenerName() const;          // +0x14 0x100E2750  "Terrain"
+    virtual std::string getRenderPathListenerName() const;          // +0x14 0x100E2750  "Terrain"
 
     // non-virtual bodies the load path calls
     void  loadLowDetailTexture();
@@ -303,10 +358,12 @@ public:
     void  loadSurroundingPatches(TerrainRawReader& reader);
     // sub_100DE740 - the ring grid generator buildSurroundingGeometry calls eight times.
     void  generateSurroundingGrid(int x0, int z0, int x1, int z1, int stepX, int stepZ,
-                                  vc71::vector_layout& indices, vc71::vector_layout& vertices);
+                                  std::vector<int>& indices,
+                                  std::vector<TerrainSurroundingVertex>& vertices);
     // The two upload loops 0x100DEAB0 inlines twice each.
-    void  uploadSurroundingVertices(void* vertexBuffer, const vc71::vector_layout& vertices);
-    void  uploadSurroundingIndices(void* indexBuffer, const vc71::vector_layout& indices);
+    void  uploadSurroundingVertices(void* vertexBuffer,
+                                    const std::vector<TerrainSurroundingVertex>& vertices);
+    void  uploadSurroundingIndices(void* indexBuffer, const std::vector<int>& indices);
     // sub_100D8890 (thiscall, recursive) - the destructor's pre-0x1A arm: free a 400-byte LOD record
     // and, when its first child link (+0x180) is set, its four children's subtrees first.
     void  freeLodTableTree(unsigned char* table);
@@ -324,7 +381,7 @@ public:
     // sub_100DC0E0 (601 B, `retn 4`) - reorder `indices` (the u16 vector at +0x470) for the vertex
     // cache through two D3DX meshes; the positions come from the legacy base-grid table at +0xD4.
     // Name: the 2006 profiler label "terain_optimizeLodIndices" around its call.
-    void  optimizeLodIndices(vc71::vector_layout& indices);
+    void  optimizeLodIndices(std::vector<unsigned short>& indices);
 
     // the per-frame bodies - TerrainDraw.cpp
     void  applyFrameConstants();                                     // sub_100D95D0  the +0xB8 arm's constants worker
@@ -364,10 +421,10 @@ public:
     int            m_patchColormapSize;     // +0x048  512                 file
     int            m_lowDetailmapSize;      // +0x04C  512
     int            m_surroundingTextureSize;// +0x050  512                        [INFERRED] name
-    vc71::string   m_colormapBaseName;      // +0x054  file line 1  ("Levels/<l>/Colormaps/tx")
-    vc71::string   m_lightmapBaseName;      // +0x070  file line 4  ("Levels/<l>/Lightmaps/tx")
-    vc71::string   m_detailmapBaseName;     // +0x08C  file line 2  ("Levels/<l>/Detailmaps/tx")
-    vc71::string   m_lowDetailmapBaseName;  // +0x0A8  file line 3  ("Levels/<l>/LowDetailmaps/tx")
+    std::string   m_colormapBaseName;      // +0x054  file line 1  ("Levels/<l>/Colormaps/tx")
+    std::string   m_lightmapBaseName;      // +0x070  file line 4  ("Levels/<l>/Lightmaps/tx")
+    std::string   m_detailmapBaseName;     // +0x08C  file line 2  ("Levels/<l>/Detailmaps/tx")
+    std::string   m_lowDetailmapBaseName;  // +0x0A8  file line 3  ("Levels/<l>/LowDetailmaps/tx")
     Vec3           m_terrainWaterColor;     // +0x0C4  file (after the GI colour)
     void*          m_baseGridVertexBuffer;  // +0x0D0  "Terrain_BaseGrid", (patchSize+1)^2 x 4 B   (0x100DA9C0)
     // +0x0D4: written only by slot +0xD0 (0x100D8700) and the constructor. optimizeLodIndices reads it
@@ -393,7 +450,7 @@ public:
     int            m_lodRangeTriangleCount[3]; // +0x11C  0
     unsigned char  m_gap128[0x1A8 - 0x128]; // +0x128..+0x1A8  not touched by the constructor
     int            m_primitiveType;         // +0x1A8  4 = D3DPT_TRIANGLELIST - every patch draw's primitive type (createLodIndexBuffer stores it again)
-    unsigned char* m_lodTables;             // +0x1AC  85 x 400-byte LOD records (0x100DA9C0), file
+    unsigned char* m_lodTables;             // +0x1AC  85 TerrainLodRecords (400 bytes each in retail, 0x100DA9C0), file
     void*          m_effect;                // +0x1B0  ShaderManager "Shaders/TerrainShader"
     // +0x1B4..+0x2A0: the shader parameter handles init() looks up, in the shipped lookup order.
     void*          m_hScaleBaseUV;          // +0x1B4  scalebaseuv
@@ -457,12 +514,15 @@ public:
     unsigned char  m_flag2AC;               // +0x2AC  1 [UNRESOLVED]
     unsigned char  m_flag2AD;               // +0x2AD  1 [UNRESOLVED]
     unsigned char  m_pad2AE[2];
-    // Three std::maps with 0x18-byte nodes (_Isnil at +0x15): 4-byte key, 4-byte trivially destroyed
+    // Three trees with 0x18-byte nodes (_Isnil at +0x15): 4-byte key, 4-byte trivially destroyed
     // value (the erase sub_100E1800 frees nodes only). Nothing in this class inserts into them -
     // only the constructor (0x100DF367) and the destructor (0x100DDF1D..) touch +0x2B0..+0x2D3.
-    vc71::map_layout m_map2B0;              // +0x2B0  std::map, 0x18-byte nodes (sub_100E1760) [UNRESOLVED key/value]
-    vc71::map_layout m_map2BC;              // +0x2BC  std::map, 0x18-byte nodes
-    vc71::map_layout m_map2C8;              // +0x2C8  std::map, 0x18-byte nodes
+    // TerrainEditable::update fills the first as its multimap<float, QuadPatchEditable*> draw
+    // queue. The other two are typed like it because the same constructor (sub_100E1760) builds
+    // all three [INFERRED]; their key and value are [UNRESOLVED].
+    TerrainPatchQueue m_map2B0;             // +0x2B0  TerrainEditable's draw queue
+    TerrainPatchQueue m_map2BC;             // +0x2BC
+    TerrainPatchQueue m_map2C8;             // +0x2C8
     void*          m_lowDetailTexture;      // +0x2D4  loadLowDetailTexture's texture - TEXLAYER4
     int            m_unresolved2D8;         // +0x2D8  not touched
     ::dice::hfe::world::IHeightmapCluster* m_heightmapCluster;   // +0x2DC  0; applyFrameConstants caches the "HeightmapCluster" singleton
@@ -476,7 +536,7 @@ public:
     float          m_farTopTilingLow;       // +0x32C  32.0; file (version >= 0x17, else = Hi)
     float          m_farTopTilingHi;        // +0x330  16.0; file
     float          m_farYOffset;            // +0x334  0; file
-    vc71::vector_layout m_detailTextures;   // +0x338  TerrainDetailTexture* per record (first at +0x33C)
+    std::vector<TerrainDetailTexture*> m_detailTextures;   // +0x338  one per record
     int            m_currentPass;           // +0x348  0; drawFinal's pass cache (the +0xBC arm resets it)
     ::dice::hfe::world::IHeightmap* m_primaryHeightmap; // +0x34C  init: the cluster's primary heightmap
     int            m_heightmapSizeX;        // +0x350  init: its size
@@ -493,9 +553,8 @@ public:
     unsigned char  m_flag364;               // +0x364  0
     unsigned char  m_pad365[3];
     void*          m_indexBuffer;           // +0x368  49152 x u16, usage 520, format 101 (load's tail) - the dynamic shadow-range index buffer
-    // +0x36C: the shadow-range records the gather fills (24 bytes each: start, count, shadow record,
-    // node, +0x10, patch); the pass-7 draw walks them per patch. The alloc word (+0x36C) is untouched.
-    vc71::vector_layout m_shadowRanges;     // +0x36C  (first at +0x370)
+    // +0x36C: the shadow-range records the gather fills; the pass-7 draw walks them per patch.
+    std::vector<TerrainShadowRange> m_shadowRanges;   // +0x36C
     int            m_unresolved37C;         // +0x37C  not touched
     QuadPatch**    m_patches;               // +0x380  patchCount^2 pointers (load)
     SurroundingPatch* m_surrounding[8];     // +0x384..+0x3A0  the eight surrounding patches (load)
@@ -524,7 +583,7 @@ public:
     float          m_unresolved440;         // +0x440  -1.0f [UNRESOLVED] (the LOD-3 pair's first word, never set by a draw)
     int            m_unresolved444;         // +0x444  not touched
     // +0x448: the patches whose shadow gather produced ranges this frame; the pass-7 draw walks it.
-    vc71::vector_layout m_shadowPatches;    // +0x448  (first at +0x44C)
+    std::vector<QuadPatch*> m_shadowPatches; // +0x448
     unsigned int   m_indexBufferCount;      // +0x458  49152
     float          m_shadowGatherThreshold; // +0x45C  4.0f; drawMain gathers only when > 0.1 [INFERRED]
     float          m_shadowExtrusionScale;  // +0x460  4.0f; drawMain: threshold * (1.643 + sunDirection.y), handed to the gather [INFERRED]
@@ -533,7 +592,7 @@ public:
     unsigned char  m_pad469[3];
     int            m_unresolved46C;         // +0x46C  0
     // Reused ushort index buffer for one block of base-grid LOD generation.
-    vc71::vector_layout m_lodBlockIndices;  // +0x470  (first at +0x474)
+    std::vector<unsigned short> m_lodBlockIndices;  // +0x470
     unsigned char  m_indexBufferLocked;     // +0x480  0; lockDynamicIndexBuffer raises it
     unsigned char  m_pad481[3];
     void*          m_indexBufferBits;       // +0x484  0; the discard lock of +0x368
@@ -545,11 +604,13 @@ public:
     dx9rend::Ra::RaStreamDataEditable* m_waterGridGeometry;      // +0x490  0; drawWaterCell builds the 65x65 water grid once (RaStreamDataEditable)
     dx9rend::Ra::RaStreamDataEditable* m_waterGridGeometryTemp;  // +0x494  0; its construction slot, nulled once moved into +0x490
     void*          m_materialParameters;    // +0x498  the 0x150-byte Ra material block (raMaterialParametersConstruct); +0x14C holds the water technique
-    unsigned char  m_objectParameters[0x224]; // +0x49C  the 0x224-byte Ra object block (raObjectParametersConstruct)
+    // +0x49C  the Ra object block (raObjectParametersConstruct)
+    alignas(dx9rend::Ra::RaObjectParameters)
+    unsigned char  m_objectParameters[sizeof(dx9rend::Ra::RaObjectParameters)];
     TerrainEnvMapRecord* m_waterEnvMap;     // +0x6C0  setupWater's envmap record (null when neither file exists)
     float          m_waterAnimSpeed;        // +0x6C4  10.0
     Vec2           m_waterScroll;           // +0x6C8  (0.1, 0.1)
-    vc71::string   m_waterVolumeName;       // +0x6D0  "watervolume"; console `waterNormalMap`
+    std::string   m_waterVolumeName;       // +0x6D0  "watervolume"; console `waterNormalMap`
     int            m_unresolved6EC[4];      // +0x6EC..+0x6F8  0
     int            m_unresolved6FC;         // +0x6FC  not touched
     float          m_unresolved700;         // +0x700  0.5f
@@ -570,17 +631,16 @@ public:
     unsigned char  m_pad729[3];
     float          m_waterCullHeightOffset; // +0x72C  0; drawWaterGrid: a cell is skipped when sea + this lies below the patch's minimum height [INFERRED]
     int            m_waterObjectRingCursor; // +0x730  0; drawWaterGrid resets it, drawWaterCell takes ring entry cursor++ (no bound, as shipped)
-    unsigned char* m_waterObjectRing;       // +0x734  0; drawWaterCell: 256 RaObjectParameters behind a count word
+    unsigned char* m_waterObjectRing;       // +0x734  0; drawWaterCell: 256 RaObjectParameters behind a count word (kWaterObjectRingHeader bytes)
     float          m_waterAlphaHeightMul;   // +0x738  0; applyFrameConstants: WaterColor.w = (20 - camera.y + sea) * 0.05 * this + m_waterAlphaAdd
     float          m_waterAlphaAdd;         // +0x73C  0.32f
-    vc71::string   m_levelPath;             // +0x740  load's argument
+    std::string   m_levelPath;             // +0x740  load's argument
     int            m_fileOffsetDetail;      // +0x75C  reader.tell() before the detail records
     int            m_fileOffsetPatches;     // +0x760  reader.tell() before the patches
     int            m_unresolved764;         // +0x764  not touched
 };
 
 #if defined(_M_IX86)
-static_assert(sizeof(Terrain) == 0x768, "RefFactory_geom_Terrain allocates 0x768 - see 0x100B0544");
 static_assert(offsetof(Terrain, m_renderPath) == 0x00C, "render path at +0x0C");
 static_assert(offsetof(Terrain, m_refCount) == 0x010, "Terrain::m_refCount at +0x10");
 static_assert(offsetof(Terrain, m_primaryWorldScale) == 0x014, "primary scale at +0x14");
@@ -592,68 +652,9 @@ static_assert(offsetof(Terrain, m_patchColormapSize) == 0x048, "patchColormapSiz
 static_assert(offsetof(Terrain, m_lowDetailmapSize) == 0x04C, "lowDetailmapSize at +0x4C - see 0x1010DC96");
 static_assert(offsetof(Terrain, m_surroundingTextureSize) == 0x050, "surrounding texture size at +0x50 - see 0x101A48FA");
 static_assert(offsetof(Terrain, m_colormapBaseName) == 0x054, "colormap base name at +0x54");
-static_assert(offsetof(Terrain, m_lowDetailmapBaseName) == 0x0A8, "low-detail base name at +0xA8");
-static_assert(offsetof(Terrain, m_terrainWaterColor) == 0x0C4, "terrain water colour at +0xC4");
-static_assert(offsetof(Terrain, m_baseGridVertexBuffer) == 0x0D0, "base grid VB at +0xD0");
-static_assert(offsetof(Terrain, m_lodIndexCount) == 0x0DC, "LOD index count at +0xDC");
-static_assert(offsetof(Terrain, m_sideVertexCount) == 0x0FC, "side vertex count at +0xFC");
-static_assert(offsetof(Terrain, m_lodRangeStart) == 0x104, "LOD range starts at +0x104 - see 0x100DD135");
-static_assert(offsetof(Terrain, m_lodRangeIndexCount) == 0x110, "LOD range index counts at +0x110 - see 0x100DD163");
-static_assert(offsetof(Terrain, m_lodRangeTriangleCount) == 0x11C, "LOD range triangle counts at +0x11C - see 0x100DD159");
-static_assert(offsetof(Terrain, m_primitiveType) == 0x1A8, "primitive type at +0x1A8");
-static_assert(offsetof(Terrain, m_lodTables) == 0x1AC, "LOD tables at +0x1AC");
-static_assert(offsetof(Terrain, m_effect) == 0x1B0, "effect at +0x1B0");
-static_assert(offsetof(Terrain, m_hNightTimeMode) == 0x26C, "NightTimeMode handle at +0x26C");
-static_assert(offsetof(Terrain, m_hWaterHeight) == 0x280, "WaterHeight handle at +0x280");
-static_assert(offsetof(Terrain, m_hWaterCycleTime) == 0x2A0, "WaterCycleTime handle at +0x2A0");
-static_assert(offsetof(Terrain, m_map2B0) == 0x2B0, "first map at +0x2B0");
-static_assert(offsetof(Terrain, m_lowDetailTexture) == 0x2D4, "low-detail texture at +0x2D4");
-static_assert(offsetof(Terrain, m_heightmapCluster) == 0x2DC, "cluster cache at +0x2DC");
-static_assert(offsetof(Terrain, m_sunColor) == 0x2E4, "sun colour at +0x2E4");
-static_assert(offsetof(Terrain, m_giColor) == 0x2F0, "GI colour at +0x2F0");
-static_assert(offsetof(Terrain, m_detailTextureCount) == 0x320, "detail texture count at +0x320");
-static_assert(offsetof(Terrain, m_farSideTiling) == 0x324, "far side tiling at +0x324");
-static_assert(offsetof(Terrain, m_farYOffset) == 0x334, "far Y offset at +0x334");
-static_assert(offsetof(Terrain, m_detailTextures) == 0x338, "detail texture vector at +0x338");
-static_assert(offsetof(Terrain, m_currentPass) == 0x348, "pass cache at +0x348");
-static_assert(offsetof(Terrain, m_primaryHeightmap) == 0x34C, "primary heightmap at +0x34C");
-static_assert(offsetof(Terrain, m_drawMain) == 0x358, "draw gate at +0x358");
-static_assert(offsetof(Terrain, m_indexBuffer) == 0x368, "index buffer at +0x368");
-static_assert(offsetof(Terrain, m_shadowRanges) == 0x36C, "shadow ranges at +0x36C");
-static_assert(offsetof(Terrain, m_patches) == 0x380, "patch table at +0x380");
-static_assert(offsetof(Terrain, m_renderStyle) == 0x3A4, "render style at +0x3A4");
-static_assert(offsetof(Terrain, m_rawVersion) == 0x3AC, "raw version at +0x3AC");
-static_assert(offsetof(Terrain, m_gridDeclaration) == 0x3B0, "grid declaration at +0x3B0");
-static_assert(offsetof(Terrain, m_vertexDeclaration) == 0x3B4, "declaration at +0x3B4");
-static_assert(offsetof(Terrain, m_culler) == 0x3BC, "culler at +0x3BC");
-static_assert(offsetof(Terrain, m_viewProj) == 0x3C8, "view-projection at +0x3C8");
-static_assert(offsetof(Terrain, m_cameraPosition) == 0x408, "camera position at +0x408");
-static_assert(offsetof(Terrain, m_deviceResetPending) == 0x418, "device-reset byte at +0x418");
-static_assert(offsetof(Terrain, m_lightingDirty) == 0x41C, "lighting dirty byte at +0x41C");
-static_assert(offsetof(Terrain, m_morphLimits) == 0x428, "morph limits at +0x428");
-static_assert(offsetof(Terrain, m_shadowPatches) == 0x448, "shadow patches at +0x448");
-static_assert(offsetof(Terrain, m_indexBufferCount) == 0x458, "index count at +0x458");
-static_assert(offsetof(Terrain, m_lodTablesFromFile) == 0x468, "LOD-from-file byte at +0x468");
-static_assert(offsetof(Terrain, m_lodBlockIndices) == 0x470, "the +0x470 vector (first at +0x474) - see 0x100DDE85");
-static_assert(offsetof(Terrain, m_indexBufferBits) == 0x484, "index lock pointer at +0x484");
-static_assert(offsetof(Terrain, m_compactVertices) == 0x48A, "compact flag at +0x48A");
-static_assert(offsetof(Terrain, m_lowDetailTextureMode) == 0x48C, "low-detail mode at +0x48C");
-static_assert(offsetof(Terrain, m_waterGridGeometry) == 0x490, "water grid at +0x490");
-static_assert(offsetof(Terrain, m_materialParameters) == 0x498, "material block at +0x498");
-static_assert(offsetof(Terrain, m_objectParameters) == 0x49C, "object block at +0x49C");
-static_assert(offsetof(Terrain, m_waterEnvMap) == 0x6C0, "water envmap record at +0x6C0");
-static_assert(offsetof(Terrain, m_waterAnimSpeed) == 0x6C4, "water anim speed at +0x6C4");
-static_assert(offsetof(Terrain, m_waterVolumeName) == 0x6D0, "water volume name at +0x6D0");
-static_assert(offsetof(Terrain, m_waterQuality) == 0x704, "water quality at +0x704");
-static_assert(offsetof(Terrain, m_waterTechnique) == 0x714, "water technique at +0x714");
-static_assert(offsetof(Terrain, m_waterTextureList) == 0x724, "2D water frame list at +0x724");
 static_assert(sizeof(TerrainWaterFrameList) == 0x48, "setupWater allocates 0x48 for the frame list - see 0x100DA5FD");
 static_assert(offsetof(TerrainWaterFrameList, frameCount) == 0x40, "frame count at +0x40 - see sub_10014F70");
 static_assert(offsetof(TerrainWaterFrameList, phase) == 0x44, "phase at +0x44 - see sub_10014EC0 and 0x100DBBE8");
-static_assert(offsetof(Terrain, m_waterCullHeightOffset) == 0x72C, "water cull offset at +0x72C");
-static_assert(offsetof(Terrain, m_waterObjectRing) == 0x734, "water object ring at +0x734");
-static_assert(offsetof(Terrain, m_levelPath) == 0x740, "level path at +0x740");
-static_assert(offsetof(Terrain, m_fileOffsetDetail) == 0x75C, "detail file offset at +0x75C");
 static_assert(sizeof(TerrainDetailTexture) == 0x2C, "the detail record is 0x2C bytes - see 0x100DD280");
 static_assert(offsetof(TerrainDetailTexture, texture) == 0x04, "detail record texture at +0x04");
 static_assert(offsetof(TerrainDetailTexture, materialId) == 0x14, "detail record material byte at +0x14 - see 0x100E1446");
@@ -681,7 +682,7 @@ const Vec3* terrainOriginScratch(const Vec3& in);
 // ModuleGeom.cpp - the `terrain.create <class>` verb's body (0x100B118C): drop any existing
 // "Terrain" singleton, look up "dice.hfe.geom." + className, and register the singleton that
 // publishes into g_Terrain (iid 820004, flags 2 = construct now).
-void registerTerrainSingleton(const vc71::string& className);
+void registerTerrainSingleton(const std::string& className);
 
 // The reflection factory (0x100B0544) ModuleGeom::getClassList publishes for class id 821004.
 IBase* __fastcall createTerrain(unsigned int iid, IBase* outer);
@@ -708,10 +709,11 @@ IBase* terrainEnvMapManager();
 // The renderer's frame statistics block - Renderer vslot +0x6C answers base + 264; the terrain
 // draws bump the six counters at +612..+632 of it.
 unsigned int& terrainRendererStat(unsigned int byteOffset);
-// LightManager +0x79C: the dynamic-shadow records (1176 bytes each; a Frustum sits at +16, the
-// lightviewprojortho matrix at +760 and lightviewproj at +952). The tree's LightManager never fills
-// it, so every reader below finds it empty; the offset is the shipped one (sub_1015C550).
-vc71::vector_layout& terrainShadowRecords();
+// LightManager +0x79C: the dynamic-shadow records (XpLightManager.h LightShadowRecord: the frustum,
+// matrices[4] lightviewprojortho and matrices[7] lightviewproj). The tree's LightManager never fills
+// it, so every reader below finds it empty (sub_1015C550).
+struct LightShadowRecord;
+std::vector<LightShadowRecord>& terrainShadowRecords();
 unsigned int terrainShadowRecordCount();
 // sub_101C7980 - true unless one of the six frustum planes has the box entirely in front of it
 // (the plane's outcode picks the box corner to test).

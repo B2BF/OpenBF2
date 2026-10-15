@@ -39,9 +39,9 @@ struct SwiffHostStandIn : dice::hfe::ui::ISwiffHost
     std::string getCurrentMapGameMode() override { std::abort(); }
     int  getCurrentMapMaxPlayers() override { std::abort(); }
     int  getCurrentMapSize() override { std::abort(); }
-    bool setPlayerRenderCapability0(int) override { std::abort(); }
+    bool setPlayerRenderCapability0(intptr_t) override { std::abort(); }
     void* getCursor(int) override { std::abort(); }
-    bool setPlayerRenderCapability1(int) override { std::abort(); }
+    bool setPlayerRenderCapability1(intptr_t) override { std::abort(); }
     void setFlag28(bool) override { std::abort(); }
     bool getFlag28() override { std::abort(); }
     dice::hfe::ui::IServerBrowser* getServerList(const std::string&) override { std::abort(); }

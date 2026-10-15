@@ -14,7 +14,7 @@
 #include "../Game/Objects/ObjectTemplate.h"      // getMaterialVector (+0xBC) - createMaterialMapping
 #include "../Game/Utility/Vars.h"                 // the load tail's two debug-mesh cells
 #include "../Geom/IGeometryTemplate.h"
-#if !DEDICATED && defined(_M_IX86) && BF2_PLUGIN_ABI_NATIVE
+#if !DEDICATED && defined(_M_IX86)
 #include "../Geom/GeometryTemplateManager.h"
 #endif
 #include "../IO/Stream/IStream.h"                // INonlinearStream - the parser's input
@@ -535,7 +535,7 @@ void createCollisionDebugMesh(IBase** output, const std::string& name, int verte
     std::sprintf(suffix, "%d", collisionDebugMeshNumber);
     const std::string templateName = name + suffix;
     IBase* manager = collisionDebugManager();
-#if !DEDICATED && defined(_M_IX86) && BF2_PLUGIN_ABI_NATIVE
+#if !DEDICATED && defined(_M_IX86)
     geom::IGeometryTemplate* meshTemplate =
         static_cast<geom::IGeometryTemplateManager*>(manager)->createTemplate(
             geom::CID_DebugXMeshTemplate, templateName);
@@ -552,20 +552,9 @@ void createCollisionDebugMesh(IBase** output, const std::string& name, int verte
 #else
     const unsigned int setNameOrdinal = 27;
 #endif
-#if defined(_MSC_VER) && defined(_M_IX86)
-    // [CHOSEN, not recovered] A borrowed VC7.1 short-string carrier. DebugXMesh +68
-    // (RendDX9 10082D30) still consumes vc71::string in the rebuilt x86 renderer;
-    // the manager above instead consumes native HostString. The fixed 13-byte name
-    // fits inline, so this measured +4/+20/+24 carrier needs no foreign allocator.
-    const struct { unsigned int allocator; char buffer[16]; unsigned int size, capacity; }
-        instanceName = { 0, "collisionMesh", 13, 15 };
-    static_assert(sizeof(instanceName) == 28, "VC7.1 borrowed short-string carrier");
-    typedef void (__thiscall* SetName)(IBase*, const void*);
-    collisionDebugSlot<SetName>(*output, setNameOrdinal)(*output, &instanceName);
-#else
+    // DebugXMesh +68 (RendDX9 10082D30) takes the shared std::string (issue #7).
     typedef void (__thiscall* SetName)(IBase*, const std::string&);
     collisionDebugSlot<SetName>(*output, setNameOrdinal)(*output, std::string("collisionMesh"));
-#endif
     // RendDX9 template table 1020C5C0: +D8=10092AE0, +DC=10093590. The sixth
     // argument is a byte-tested optimization bool; the seventh is a VertexDeclaration*.
     typedef bool (__thiscall* Build)(IBase*, int, int, int, unsigned char*, unsigned short*,
@@ -590,7 +579,7 @@ void extractCollisionDebugAdjacency(const std::string&, int vertexCount, int fac
 {
     const std::string name("adjTempTemplate");
     IBase* manager = collisionDebugManager();
-#if !DEDICATED && defined(_M_IX86) && BF2_PLUGIN_ABI_NATIVE
+#if !DEDICATED && defined(_M_IX86)
     IBase* meshTemplate = static_cast<geom::IGeometryTemplateManager*>(manager)->createTemplate(
         geom::CID_DebugXMeshTemplate, name);
 #else
@@ -624,7 +613,7 @@ void extractCollisionDebugAdjacency(const std::string&, int vertexCount, int fac
         Debug(DebugTypeError, "Physics/CollisionMeshTemplate.cpp", 1807, "")
             << "Failed to generate adjacency";
     manager = collisionDebugManager();            // client reloads the global after callbacks
-#if !DEDICATED && defined(_M_IX86) && BF2_PLUGIN_ABI_NATIVE
+#if !DEDICATED && defined(_M_IX86)
     static_cast<geom::IGeometryTemplateManager*>(manager)->removeTemplate(name);
 #else
     typedef void (__thiscall* RemoveTemplate)(IBase*, const std::string&);

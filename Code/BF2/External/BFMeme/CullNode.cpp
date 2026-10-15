@@ -31,13 +31,16 @@ public:
     int getInstanceCount() override { return cullNodeInstances; }
     unsigned int getInstanceSize() override { return sizeof(CullNode); }
 };
+#if defined(_M_IX86)
 static_assert(sizeof(CullNodeTypeDescriptor) == 16, "CullNode metadata storage");
+#endif
 
 // 835F25..835F45 and835F69..835F82 store the rounded float before comparing
 // the still-extended x87 result. Keep that order, including unordered results
 // and the sign of values that round to zero. Helper names are [INFERRED].
 float decreaseFade(float current, float delta, float duration)
 {
+#if defined(_M_IX86)
     float result;
     const float zero = 0.0f;
     __asm {
@@ -53,9 +56,16 @@ float decreaseFade(float current, float delta, float duration)
     decreased:
     }
     return result;
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    // Only an ordered negative unrounded result is replaced by +0.
+    const double unrounded = static_cast<double>(current) - static_cast<double>(delta) / duration;
+    return unrounded < 0.0 ? 0.0f : static_cast<float>(unrounded);
+#endif
 }
 float increaseFade(float current, float delta, float duration)
 {
+#if defined(_M_IX86)
     float result;
     const float one = 1.0f;
     __asm {
@@ -71,6 +81,12 @@ float increaseFade(float current, float delta, float duration)
     increased:
     }
     return result;
+#else
+    // [PLATFORM] x64: SSE2 arithmetic (x87 keeps 80-bit intermediates).
+    // Only an ordered unrounded result above one is clamped; equal and unordered keep it.
+    const double unrounded = static_cast<double>(delta) / duration + current;
+    return unrounded > 1.0 ? 1.0f : static_cast<float>(unrounded);
+#endif
 }
 }
 
@@ -142,6 +158,8 @@ bool CullNode::update(System* system, const NodeState* state,
     return true;
 }
 
+#if defined(_M_IX86)
 static_assert(sizeof(CullNode) == 24, "client BFMeme CullNode");
+#endif
 } }
 #endif

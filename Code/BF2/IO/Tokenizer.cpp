@@ -6,7 +6,7 @@
 #include "../../RendDX9Abi/PluginEntry.h"
 #include "../../RendDX9Abi/HostFileAbi.h"
 #include "../../RendDX9Abi/BfMemory.h"
-#include "../../RendDX9Abi/Vc71String.h"
+#include <string>
 #include "Tokenizer.h"
 
 #include <cstddef>
@@ -17,7 +17,6 @@ namespace hfe {
 namespace {
 
 // Select the file-info representation required by the host ABI.
-#if BF2_PLUGIN_ABI_NATIVE
 
 // The native host's own record - this image shares the host's STL and CRT.
 typedef ::dice::hfe::io::FileInfo TokenizerFileInfo;
@@ -27,30 +26,6 @@ inline ::dice::hfe::io::FileInfo& hostFileInfo(TokenizerFileInfo& info)
     return info;
 }
 
-#else
-
-// Retail file-info carrier. Its filename uses the VC7.1 string allocator and lifecycle.
-struct TokenizerFileInfo
-{
-    vc71::string  name;            // +0   the only member the shipped frame constructs
-    unsigned char isDirectory;     // +28
-    unsigned char pad29[3];
-    unsigned int  size;            // +32  the buffer size and the read size
-    unsigned int  pad36;           // +36  MSVC 8-aligns the FILETIMEs
-    unsigned int  times[6];        // +40..+63  creation, last access, last write
-};
-
-#if defined(_M_IX86)
-static_assert(sizeof(TokenizerFileInfo) == 64, "the PE io::FileInfo the shipped frame reserves");
-static_assert(offsetof(TokenizerFileInfo, size) == 32, "sub_10076C90 reads the size at +0x20");
-#endif
-
-inline ::renddx9abi::HostFileInfo& hostFileInfo(TokenizerFileInfo& info)
-{
-    return reinterpret_cast< ::renddx9abi::HostFileInfo&>(info);
-}
-
-#endif // BF2_PLUGIN_ABI_NATIVE
 
 // End-of-input token text: ASCII ETX followed by the string terminator.
 const char kEndTokenText[] = "\x03";

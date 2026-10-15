@@ -6,11 +6,15 @@
 
 #include "MeshTemplate.h"
 #include <cstddef>
+#include <map>
+#include <set>
+#include <vector>
 
 namespace dice { namespace hfe {
 namespace dx9rend { namespace Ra { struct RaShader; } }
 namespace geom {
 class BundledMeshMaterial;
+class BundledMesh;
 
 // readLods100E9F50 / instance101049B0 prove the 72/32-byte strides.
 struct BundledMeshLod
@@ -23,22 +27,31 @@ struct BundledMeshLod
 };
 struct BundledMeshGeom
 {
-    vc71::vector_layout lods;            // BundledMeshLod
-    vc71::vector_layout distances;       // float
+    std::vector<BundledMeshLod> lods;
+    std::vector<float> distances;
 };
 static_assert(sizeof(BundledMeshLod)==72, "Bundled lod stride");
-static_assert(sizeof(BundledMeshGeom)==32, "Bundled geom stride");
 
+// m_materials holds geom -> lod -> material pointers; m_instances the live instances. The three
+// value maps store each value's 32 bits as written, keyed (geom << 16) | (lod << 8) | material.
 class BundledMeshTemplate : public MeshTemplate
 {
 public:
+    typedef std::vector<BundledMeshMaterial*> MaterialList;
+    typedef std::vector<std::vector<MaterialList> > MaterialTree;
+    typedef std::vector<BundledMeshGeom> GeomVector;
+    typedef std::map<unsigned int, unsigned int> ValueMap;
+    typedef std::set<BundledMesh*> InstanceSet;
+
     BundledMeshTemplate();
+    // The destructor body (then the base's): the deleting slot frees the storage afterwards
+    // without running a C++ destructor, so this destroys every member itself.
     void destroyMembers();
     virtual void addRef();
     virtual int getRef();
     virtual int release();
     virtual unsigned int getClassId() const;
-    virtual void setName(const vc71::string& name);
+    virtual void setName(const std::string& name);
     virtual void* createInstance();
     virtual bool load();
     virtual void setLodDistance(int geom, int lod, float distance);
@@ -78,13 +91,13 @@ public:
     virtual bool makeScript(::dice::hfe::io::IStream* stream);
 
     int m_refCount;                       // +0C8
-    vc71::vector_layout m_materials;       // +0CC geom -> lod -> BundledMeshMaterial*
-    vc71::set_layout m_instances;          // +0DC
-    vc71::map_layout m_materialValues0E8;  // +0E8 packed geom/lod/material -> float
-    vc71::map_layout m_map0F4;             // +0F4 packed key -> static gloss float
-    vc71::map_layout m_map100;             // +100 packed key -> int, draw material+94
+    MaterialTree m_materials;              // +0CC
+    InstanceSet m_instances;               // +0DC
+    ValueMap m_materialValues0E8;          // +0E8 packed key -> float bits
+    ValueMap m_map0F4;                     // +0F4 packed key -> static gloss float bits
+    ValueMap m_map100;                     // +100 packed key -> int, draw material+94
     unsigned int m_dword10C;              // +10C
-    vc71::vector_layout m_geoms;           // +110 BundledMeshGeom
+    GeomVector m_geoms;                    // +110
     unsigned int m_maxPartCount;          // +120
     unsigned char m_hasOpaqueMaterials;   // +124 readMaterials kind!=1
     unsigned char m_byte125;              // +125 slots48/4C
@@ -105,11 +118,6 @@ public:
     unsigned int m_dword1F4;              // +1F4 ctor untouched
     unsigned int m_liveInstanceCount;     // +1F8
 };
-static_assert(sizeof(BundledMeshTemplate)==0x1FC, "factory allocation");
-static_assert(offsetof(BundledMeshTemplate,m_materials)==0xCC, "material tree");
-static_assert(offsetof(BundledMeshTemplate,m_geoms)==0x110, "geometry tree");
-static_assert(offsetof(BundledMeshTemplate,m_bounds)==0x19C, "template bounds");
-static_assert(offsetof(BundledMeshTemplate,m_liveInstanceCount)==0x1F8, "instance count");
 
 void bundledMeshInitTechniques();
 dx9rend::Ra::RaShader* bundledMeshShaderForBits(unsigned int bits);

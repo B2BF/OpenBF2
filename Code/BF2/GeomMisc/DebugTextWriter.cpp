@@ -40,7 +40,7 @@ public:
     virtual int   release();                                  // +0x08
     virtual void* queryInterface(unsigned int iid) const;     // +0x0C  0x1009BCD0   read
 
-    virtual bool setFont(const vc71::string& path);           // +0x10  0x1009B160   read
+    virtual bool setFont(const std::string& path);           // +0x10  0x1009B160   read
     virtual void slot_0x14();
     virtual void slot_0x18();
     virtual void slot_0x1C();
@@ -73,8 +73,10 @@ private:
     unsigned int   m_colour;        // +0x30  ctor: 0xFF000000 - opaque black, argb
 };
 
+#if defined(_M_IX86)
 static_assert(sizeof(DebugTextWriter) == 0x34,
               "RefFactory_geom_DebugTextWriter allocates 0x34 - see 0x1007CE00");
+#endif
 
 
 // geom_DebugTextWriter_ctor, 0x1009B7C0.
@@ -144,7 +146,7 @@ void* DebugTextWriter::queryInterface(unsigned int iid) const
 
 // Loads the requested font and stores its ready state. Returns false when no font exists or loading fails.
 
-bool DebugTextWriter::setFont(const vc71::string& path)
+bool DebugTextWriter::setFont(const std::string& path)
 {
     RD9_TRACE("dice::hfe::geom::DebugTextWriter::setFont", 0x10);
 
@@ -158,7 +160,7 @@ bool DebugTextWriter::setFont(const vc71::string& path)
 
     // font->vslot+0x10(path), by raw offset as the original does it.
     void** vtbl = *reinterpret_cast<void***>(m_font);
-    typedef bool (__thiscall* LoadFn)(void*, const vc71::string&);
+    typedef bool (__thiscall* LoadFn)(void*, const std::string&);
     const bool ok = reinterpret_cast<LoadFn>(vtbl[0x10 / 4])(m_font, path);
 
     m_fontLoaded = ok ? 1 : 0;
