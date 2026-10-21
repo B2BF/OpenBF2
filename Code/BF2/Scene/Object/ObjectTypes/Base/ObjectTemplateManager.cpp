@@ -479,7 +479,10 @@ bool ObjectTemplateManager::deleteTemplate(IObjectTemplate* t)
 
     m_objTemplateNameHashes.remove(t->getName());      // Hash::remove, inlined at 0x83245f0
 
-    m_globalTemplateList.remove(t);
+    const auto it = std::find(m_globalTemplateList.begin(), m_globalTemplateList.end(), t);
+
+    if (it != m_globalTemplateList.end())
+        m_globalTemplateList.erase(it);
     m_objTemplateTree.erase(t->getId());
     m_workingFolders.erase(t->getId());
 

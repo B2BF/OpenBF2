@@ -449,6 +449,8 @@ void FireComp::setFirebuttonLastHeldAtTick(io::PlayerInputMap input, unsigned in
 bool FireComp::requestFire(bool released, bool)
 {
     IPlayer* const player = firearm()->getPlayer();
+    if (!player)
+        return false;
     const io::PlayerInputMap ignored = m_template->getIgnoreFireButton();
     if (ignored != io::PINone && ignored == player->getCurrentFiringButton())
         return false;
