@@ -328,10 +328,10 @@ bool BF2Render::render(double frameTime, DemoRecorder* recorder)
     if (recorder && recorder->isOpenForPlayback())
     {
         // [UNRESOLVED] This aggregate starts uninitialized, unlike the original identity
-        // Mat4 constructor. getCameraTransformation must fill it; partial writes expose
-        // that existing layout/initialization difference.
+        // Mat4 constructor. getPlaybackMatrixAndFOV writes all of it whenever the spectator
+        // rig exists (playback always creates one) and leaves it untouched otherwise.
         Mat4 transform;
-        recorder->getCameraTransformation(transform, 0);
+        recorder->getPlaybackMatrixAndFOV(&transform, 0);
         const float fov    = recorder->demoConfig.getFOV();
         const float aspect = recorder->demoConfig.getAspect();
         m_renderer->getRenderView()->setFov(fov);                  // +0x1C

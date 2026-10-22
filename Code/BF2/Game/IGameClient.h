@@ -61,20 +61,23 @@ public:
     virtual void slot44(int) = 0;
     // +0x48  demo playback restart (gameLogic reset / restartDemoPlayback, the recorder rewound). PE 4D2650.
     virtual void restartDemo() = 0;
-    // +0x4C  demo playback pause/resume on the recorder. PE 4D26C0.
-    virtual void setDemoPaused(bool paused) = 0;
-    // [UNRESOLVED] Demo-playback method names and corresponding recorder members.
-    virtual void slot50() = 0;
-    virtual int  slot54() = 0;
-    virtual bool slot58() = 0;
+    // +0x4C..+0x58: names [INFERRED] from the DemoRecorder methods they reach.
+    // +0x4C  the next (true) or previous (false) player.
+    virtual void selectDemoPlayer(bool next) = 0;
+    // +0x50
+    virtual void nextDemoCamera() = 0;
+    // +0x54  -1 without a playing demo.
+    virtual int  getCurrentDemoPlayerId() = 0;
+    // +0x58
+    virtual bool getIsDemoFreeFlying() = 0;
     // +0x5C  setPause(!getPause()). PE 4D2790.
     virtual void togglePause() = 0;
     // +0x60  BF2Engine's pause state machine (ELF 0x4038A0 / 0x403060 callers). PE 4D27B0.
     virtual void setPause(bool paused) = 0;
     // +0x64   - the +0x144 byte (comdat-folded with Game::getAbortLoadLevel).
     virtual bool getPause() = 0;
-    // +0x68  the recorder exists and is in playback. PE 4D2800.
-    virtual bool isDemoPlaying() = 0;
+    // +0x68  true once the demo stream has run out. [INFERRED] name.
+    virtual bool isDemoAtEnd() = 0;
     // +0x6C  a recorded demo handed to the profile (LocalProfileManager +0xA4, DemoLibrary
     //        refresh). PE 4D3D60. [UNRESOLVED] name and both int roles.
     virtual void slot6C(int a, int b) = 0;

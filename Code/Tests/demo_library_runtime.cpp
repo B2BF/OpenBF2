@@ -37,12 +37,26 @@ struct DemoSwiffHost : SwiffHostStandIn {
 };
 static DemoSwiffHost swiffHostObserver;
 struct DemoLibraryFixture {
+    static HTTPRequest* base(IBase* b){ return static_cast<DemoLibrary*>(b); }  // the +4 base, through its own table
+    static void transfer(IBase* b,int handle,const std::string& path){
+        DemoLibrary* d=static_cast<DemoLibrary*>(b); d->m_getPending=true; d->m_ghttpHandleA=handle; d->m_downloadPath=path;
+    }
     static int refs(IBase* b){ return static_cast<DemoLibrary*>(b)->m_refCount; }
     static int pending(IBase* b){ return static_cast<DemoLibrary*>(b)->m_pendingBookmark; }
     static const std::string& downloadPath(IBase* b){ return static_cast<DemoLibrary*>(b)->m_downloadPath; }
     static void report(IBase* b,const std::string& m){ static_cast<DemoLibrary*>(b)->reportError(m); }
 };
 } }
+
+// [TEMP] The GameSpy HTTP entry points the HTTPRequest base calls on these paths: counted, the
+// request handles recorded. Declared with the SDK's C names and plain widths (GHTTPRequest and
+// GHTTPBool are ints) so ghttp.h and its socket headers stay out of this windows.h unit.
+static unsigned ghttpStartups=0, ghttpCleanups=0;
+static std::vector<int> ghttpThinks, ghttpCancels;
+extern "C" void ghttpStartup(void) { ++ghttpStartups; }
+extern "C" void ghttpCleanup(void) { ++ghttpCleanups; }
+extern "C" int ghttpRequestThink(int request) { ghttpThinks.push_back(request); return 1; }
+extern "C" void ghttpCancelRequest(int request) { ghttpCancels.push_back(request); }
 
 // [TEMP] A refcounted byte-vector stream: the sink the deflating ZStream writes into and the source
 // each inflating ZStream reads from (the file manager hands out a fresh one per open).
@@ -70,9 +84,10 @@ struct ByteStream : io::IStream {
 };
 unsigned ByteStream::destroyed=0;
 
-// [TEMP] The profile manager the refresh asks for its current profile; every other slot aborts.
+// [TEMP] The profile manager the refresh asks for its current profile and the download completion
+// hands its bookmark to; every other slot aborts.
 struct ProfileOwner : ILocalProfileManager {
-    LocalProfile* current=nullptr; unsigned queries=0;
+    LocalProfile* current=nullptr; unsigned queries=0; std::vector<unsigned> removedBookmarks;
     void addRef() override { std::abort(); }
     int getRef() override { std::abort(); }
     int release() override { std::abort(); }
@@ -117,7 +132,7 @@ struct ProfileOwner : ILocalProfileManager {
     void addDemoBookmark(const std::string&,const std::string&,const std::string&,const std::string&) override { std::abort(); }
     unsigned int getNumDemoBookmarks() override { std::abort(); }
     LocalDemoBookmark* getDemoBookmark(unsigned int) override { std::abort(); }
-    bool removeDemoBookmark(unsigned int) override { std::abort(); }
+    bool removeDemoBookmark(unsigned int index) override { removedBookmarks.push_back(index); return true; }
     float getTotalPlayedTime() override { std::abort(); }
     void setTotalPlayedTime(float) override { std::abort(); }
     bool validateProfileName(const std::string&,std::string&) override { std::abort(); }
@@ -208,9 +223,6 @@ int main(int argc,char** argv)
         IBase* object=DemoLibrary::create(IID_IDemoLibrary,nullptr);
         IDemoLibrary* api=static_cast<IDemoLibrary*>(object);
         if(!std::strcmp(argv[1],"download")) api->download("name","http://server/demo","description");
-        if(!std::strcmp(argv[1],"update")) api->update();
-        if(!std::strcmp(argv[1],"downloading")) api->isDownloading();
-        if(!std::strcmp(argv[1],"cancel")) api->cancelDownload();
         std::printf("unexpected return\n");
         return 0;
     }
@@ -262,9 +274,11 @@ int main(int argc,char** argv)
         raw->release();
     }
     // the library
-    check(!DemoLibrary::create(IID_IDemoLibrary,reinterpret_cast<IBase*>(1)),"aggregation is refused before allocation");
-    check(!DemoLibrary::create(0xffffffff,nullptr),"unsupported factory id releases the fresh owner");
+    check(!DemoLibrary::create(IID_IDemoLibrary,reinterpret_cast<IBase*>(1)) && ghttpStartups==0,"aggregation is refused before allocation");
+    check(!DemoLibrary::create(0xffffffff,nullptr) && ghttpStartups==1 && ghttpCleanups==1,
+        "unsupported factory id releases the fresh owner, whose HTTPRequest base starts and cleans up the HTTP layer");
     IBase* object=DemoLibrary::create(IID_IDemoLibrary,nullptr);
+    check(ghttpStartups==2,"the HTTPRequest base starts the HTTP layer");
     check(object!=nullptr,"factory returns the owner for its interface id");
     if(!object){ std::printf("DemoLibrary: %u/%u passed\n",checks-failures,checks); return 1; }
     IDemoLibrary* api=static_cast<IDemoLibrary*>(object);
@@ -314,6 +328,37 @@ int main(int argc,char** argv)
     check(api->removeEntry(0) && files.deletedPaths==std::vector<std::string>({"@HOME@/Profiles/Default/demos/first.bf2demo"}) && api->getNumEntries()==2
         && api->getEntry(0)->name=="second","removeEntry deletes the row's file and erases the row");
     check(!api->removeEntry(2) && files.deletedPaths.size()==1,"removeEntry past the count deletes nothing");
+
+    // the HTTP side over the HTTPRequest base
+    api->update();
+    check(ghttpThinks.empty(),"update without a transfer thinks no request");
+    check(!api->isDownloading(),"no transfer is not downloading");
+    check(!api->cancelDownload() && ghttpCancels.empty() && files.deletedPaths.size()==1,"cancel without a transfer refuses and deletes nothing");
+    DemoLibraryFixture::transfer(object,7,"@HOME@/Profiles/Default/demos/partial.bf2demo");
+    api->update();
+    check(ghttpThinks==std::vector<int>({7}),"update thinks the pending get request");
+    check(api->isDownloading(),"a pending get is downloading");
+    check(api->cancelDownload() && ghttpCancels==std::vector<int>({7}) && !api->isDownloading()
+        && files.deletedPaths.size()==2 && files.deletedPaths[1]=="@HOME@/Profiles/Default/demos/partial.bf2demo",
+        "cancel stops the request and deletes the target file");
+    DemoLibraryFixture::base(object)->onProgress(0.25f);
+    check(api->getDownloadProgress()==0.25f,"the progress callback stores the fraction");
+    const int revision=DemoLibraryFixture::base(object)->getRevision();
+    DemoLibraryFixture::transfer(object,8,"@HOME@/Profiles/Default/demos/partial.bf2demo");
+    DemoLibraryFixture::base(object)->onGetFailure("");
+    check(api->hasDownloadFailed() && !api->isDownloading() && DemoLibraryFixture::base(object)->getRevision()==revision+1
+        && seamCalls==0 && files.deletedPaths.size()==3,"a failure latches, runs the base bookkeeping and deletes the file; an empty message is not reported");
+    registry.swiff=true;
+    DemoLibraryFixture::base(object)->onGetFailure("Unable to download demo file");
+    check(seamCalls==1 && seamType==1 && seamText=="Unable to download demo file" && files.deletedPaths.size()==4,"a failure message is reported");
+    registry.swiff=false; seamCalls=0;
+    const unsigned searchesBefore=files.searches;
+    DemoLibraryFixture::base(object)->onGetFileComplete();
+    check(!api->hasDownloadFailed() && owner.removedBookmarks==std::vector<unsigned>({4}) && DemoLibraryFixture::pending(object)==-1
+        && files.searches==searchesBefore+1 && api->getNumEntries()==3,"completion clears the latch, hands the bookmark over, clears it and rebuilds the list");
+    DemoLibraryFixture::base(object)->onGetFileComplete();
+    check(owner.removedBookmarks.size()==1 && files.searches==searchesBefore+2,"without a pending bookmark completion only rebuilds the list");
+    ghttpThinks.clear(); ghttpCancels.clear();
     check(seamCalls==0,"no error is reported along the refresh path");
     DemoLibraryFixture::report(object,"Unable to download demo file");
     check(seamCalls==0,"without a SwiffHost the reporter does nothing");
@@ -321,12 +366,10 @@ int main(int argc,char** argv)
     check(seamCalls==1 && seamType==1 && seamFlag==0 && seamText=="Unable to download demo file","with a SwiffHost the reporter posts the {1, text, 0} record");
     api->addRef();
     check(api->getRef()==2 && api->release()==1,"non-final release keeps the owner");
-    check(api->release()==0,"final release reports zero");
+    check(api->release()==0 && ghttpCleanups==2 && ghttpCancels==std::vector<int>({8}),
+        "final release reports zero; the base cancels the handle the finished get left behind, then cleans up");
     death("download","[FRONTIER] dice::hfe::DemoLibrary::download:");
-    death("update","[FRONTIER] dice::hfe::DemoLibrary::update:");
-    death("downloading","[FRONTIER] dice::hfe::DemoLibrary::isDownloading:");
-    death("cancel","[FRONTIER] dice::hfe::DemoLibrary::cancelDownload:");
-    std::printf("DemoLibrary: %u/%u passed; native owner=%zu (retail 176 with the withheld base) entry=%zu (retail 144) header=%zu (retail 92) zstream=%zu (retail 24)\n",
+    std::printf("DemoLibrary: %u/%u passed; native owner=%zu (retail 176 with the HTTPRequest base) entry=%zu (retail 144) header=%zu (retail 92) zstream=%zu (retail 24)\n",
         checks-failures,checks,sizeof(DemoLibrary),sizeof(DemoLibraryEntry),sizeof(DemoHeader),sizeof(io::ZStream));
     return failures?1:0;
 }
