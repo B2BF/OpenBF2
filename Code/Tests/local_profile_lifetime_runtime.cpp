@@ -989,7 +989,7 @@ struct ProfileDemoLibrary : IDemoLibrary {
     unsigned int getNumEntries() override { std::abort(); }
     DemoLibraryEntry* getEntry(unsigned int) override { std::abort(); }
     bool removeEntry(unsigned int) override { std::abort(); }
-    int update() override { std::abort(); }
+    void update() override { std::abort(); }
     bool isDownloading() override { std::abort(); }
     const std::string& getDownloadName() override { std::abort(); }
     const std::string& getDownloadUrl() override { std::abort(); }
