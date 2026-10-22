@@ -885,6 +885,17 @@ void staticMeshInitTechniques()
 
 } // anonymous namespace
 
+// Keep the shared technique gate and initializer in their existing owner.
+void staticMeshRearmTechniques()
+{
+    g_staticMeshTechniquesPending = 1;
+}
+
+void staticMeshPrimeTechniques()
+{
+    staticMeshInitTechniques();
+}
+
 
 // Exposed for Geom/StaticMesh.cpp's post-load (sub_100FC190), which resizes the instance's own two
 // per-geom vectors with these same two shipped bodies. In retail these are std::vector<T>::resize

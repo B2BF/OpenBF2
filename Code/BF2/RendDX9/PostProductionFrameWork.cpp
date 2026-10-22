@@ -1,7 +1,6 @@
 // Post-processing settings and device/event-listener owner. [INFERRED] source placement.
 // The published singleton points to the interface at owner+8; preserve that adjustment.
-// [CHOSEN] named storage wraps the fixed owner layout. Resource acquisition and full-screen
-// rendering remain subject to the temporary boundaries beside their implementations.
+// [CHOSEN] named storage wraps the fixed owner layout; TV and tinnitus rendering are recovered.
 
 #ifdef BF2_IMAGE_RENDDX9
 
@@ -12,9 +11,17 @@
 #include "../../RendDX9Abi/Vc71String.h"
 #include "RendDX9Base.h"
 #include "Texture.h"          // textureReleaseRef for the listener's lost slot
+#include "PostProductionFrameWork.h"
+#include "ShaderParameter.h"
+#include "../Core/EventManager.h"
+#include "../GeomMisc/FSQuadDrawer.h"
 
 #include <new>
 #include <string.h>
+#include <cmath>
+#include <cstdlib>
+#include <deque>
+#include "../RendMisc/IRenderView.h"
 
 namespace dice {
 namespace hfe {
@@ -24,6 +31,8 @@ namespace dx9rend {
 // gameplay has started, by which point registerSingleton has written it).
 extern IBase* g_Renderer;
 extern IBase* g_PostProductionFrameWorkOwner;
+extern void* g_shaderManager;
+void postProductionFrameWorkOwnerDetach(void* owner);
 
 namespace {
 
@@ -32,24 +41,31 @@ namespace {
 inline unsigned&      U (void* p, unsigned off) { return *reinterpret_cast<unsigned*>(static_cast<char*>(p) + off); }
 inline float&         F (void* p, unsigned off) { return *reinterpret_cast<float*>(static_cast<char*>(p) + off); }
 inline unsigned char& Bt(void* p, unsigned off) { return *reinterpret_cast<unsigned char*>(static_cast<char*>(p) + off); }
+template<class T> T*& pointer(void* p, unsigned off)
+{
+    return *reinterpret_cast<T**>(static_cast<char*>(p) + off);
+}
+// Private native storage preserves the source-level push_front/pop_back history.
+// No raw layout reader consumes this island in the rebuilt image.
+typedef std::deque<unsigned> FrameHistory;
+static_assert(sizeof(FrameHistory) == 20, "postproduction history must fit its private storage island");
+FrameHistory& history(void* owner)
+{
+    return *reinterpret_cast<FrameHistory*>(static_cast<char*>(owner) + 336);
+}
 
 
 // The published singleton's vtable (owner+8). Every slot `this` is owner+8.
 
 
-// +0x00 deleting destructor (0x10051700 -> sub_100517C0: shutdown then free-if-flag).
-// The owner block is a single 548-byte allocation freed by DX9RendModule::close(); the shipped
-// teardown (sub_10050830 shutdown + heap free of the MI-adjusted pointer) is part of the deferred
-// render lifetime and is not reached during play (nothing releases the singleton mid-session).
-// A logged, non-freeing body: it must not free owner+8 (the allocation base is owner+0).
-// [RETIRE-WHEN: the post-production render path is recovered]
-void* __fastcall pp_dtor(void* self, void*, int /*flags*/)
+// The public interface is adjusted back to its allocation before destruction.
+void* __fastcall pp_dtor(void* self, void*, int flags)
 {
-    static bool noted = false;
-    if (!noted) { noted = true;
-        ::renddx9abi::logf("PostProductionFrameWork::~ (slot 0): teardown deferred with the render "
-                           "path; the owner block is freed by DX9RendModule::close"); }
-    return self;
+    void* owner = static_cast<char*>(self) - 8;
+    postProductionFrameWorkOwnerDetach(owner);
+    if (flags & 1)
+        ::renddx9abi::engineFree(owner);
+    return owner;
 }
 
 // +0x04 / +0x08 / +0x0C / +0x10 / +0x14 / +0x18 / +0x1C / +0x20 - eight paired float accessors.
@@ -133,19 +149,21 @@ void __fastcall pp_setByte241(void* self, void*, unsigned char v) { Bt(self, 241
 float __fastcall pp_getRendererFloat1852(void*, void*) { return F(g_Renderer, 1852); }
 float __fastcall pp_getRendererFloat1856(void*, void*) { return F(g_Renderer, 1856); }
 
-// +0x5C setNoiseTextureName (0x1004FC30). The shipped body compares an incoming name against the
-// stored one at this+127, releases the old texture at this+126, stores the new name, then acquires a
-// new texture via the texture manager (sub_10019260). The acquisition is exactly the deferred half of
-// the constructor; with no texture ever loaded (this+126 stays null) there is nothing to release and
-// nothing to reacquire, so this is a visible no-op until the render path lands. Logged once.
-// [RETIRE-WHEN: the post-production render path is recovered]
-void __fastcall pp_setNoiseTextureName(void* self, void*, const void* /*name*/)
+// Replaces the optional unmanaged distortion texture when its name changes.
+void __fastcall pp_setNoiseTextureName(void* self, void*, const renddx9abi::HostString& name)
 {
-    (void)self;
-    static bool noted = false;
-    if (!noted) { noted = true;
-        ::renddx9abi::logf("PostProductionFrameWork::setNoiseTextureName (slot 23): screen-distortion "
-                           "texture deferred with the render path; name not stored"); }
+    vc71::string& stored = *reinterpret_cast<vc71::string*>(static_cast<char*>(self) + 508);
+    if (stored.size() == name.size() && !memcmp(stored.c_str(), name.c_str(), name.size()))
+        return;
+    textureReleaseRef(pointer<EngineTexture>(self, 504));
+    stored = vc71::string(name.data(), static_cast<unsigned>(name.size()));
+    if (name.size())
+    {
+        const int managed = textureManagerSwapManaged(0);
+        pointer<EngineTexture>(self, 504) = static_cast<EngineTexture*>(textureManagerGetTexture(
+            vc71::string(name.data(), static_cast<unsigned>(name.size()))));
+        textureManagerSwapManaged(managed);
+    }
 }
 
 const void* const kPostProdVtable[24] =
@@ -210,47 +228,35 @@ const void* const kDeviceLostVtable[3] =
 };
 
 
-// EventListener / IBase spine vtable (owner+0). Registration is deferred, so handleEvent is not
-// reached; the reference spine at +4/+8/+C/+10 is the recovered IBase implementation. Refcount is the
-// dword at this+0x0C.
-
-
-// slot 0 handleEvent (0x1004F0F0): react to (class 0,id 13) device-reset and (class 5,id 1)
-// GSViewDistance change. Recovered verbatim; unreached until the EventManager registration is undone
-// from deferral. a4 is the event payload.
-int __fastcall el_handleEvent(void* self, void*, int a2, int a3, int a4, int a5)
+// Tinnitus notifications carry their setup in the notification node. The native
+// host node layout differs from the original PE layout, so read its actual type.
+void __fastcall el_handleEvent(void* self, void*, EventCategory category,
+                              unsigned int id, EventNode* node, void* userData)
 {
-    int result = a2;
-    if (a2)
+    if (category != ECGameLogic)
     {
-        if (a2 == 5 && a3 == 1)
+        if (category == 5 && id == 1)
         {
-            const vc71::string* s = reinterpret_cast<const vc71::string*>(a5);
-            return strcmp(s->c_str(), "GSViewDistance") == 0 ? 1 : 0;
+            const std::string* s = static_cast<const std::string*>(userData);
+            (void)(*s == "GSViewDistance");
         }
     }
-    else if (a3 == 13)
+    else if (id == 13)
     {
-        result = *reinterpret_cast<int*>(a4 + 44);
-        if (result)
+        const void* setup = static_cast<NotificationEventNode*>(node)->m_data;
+        if (setup)
         {
-            U(self, 356) = *reinterpret_cast<unsigned*>(result);
-            U(self, 360) = *reinterpret_cast<unsigned*>(result + 4);
-            U(self, 364) = *reinterpret_cast<unsigned*>(result + 8);
-            U(self, 368) = *reinterpret_cast<unsigned*>(result + 12);
-            result       = *reinterpret_cast<int*>(result + 16);
-            U(self, 372) = static_cast<unsigned>(result);
+            memcpy(static_cast<char*>(self) + 356, setup, 20);
             if (U(self, 356) == 1)
             {
-                int v6 = static_cast<int>((F(self, 368) + F(self, 364) + F(self, 360)) * 30.0f);
+                int v6 = static_cast<int>((static_cast<double>(F(self, 368))
+                    + F(self, 364) + F(self, 360)) * 30.0f);
                 if (v6 < 20) v6 = 20;
                 U(self, 28) = static_cast<unsigned>(v6) + U(self, 16);
                 F(self, 32) = static_cast<float>(v6);
-                result = v6;
             }
         }
     }
-    return result;
 }
 
 int  __fastcall el_addRef (void* self, void*) { return ++U(self, 12); }
@@ -306,14 +312,10 @@ void applySecondaryDefaults(void* owner)
 
 
 // Initializes the preallocated 548-byte owner and returns it.
-// [FRONTIER] Effect acquisition, parameter handles, helper textures, listener registration,
-// and fullscreen rendering remain deferred; resource fields stay zero until implemented.
-// [RETIRE-WHEN: the post-production render path is recovered]
 
 void* postProductionFrameWorkOwnerCtor(void* mem)
 {
-    // The shipped ctor sets every field explicitly; we memset first and then write only the non-zero
-    // finals, which is the identical resulting state.
+    // Initialize the fixed storage before constructing its native private members.
     memset(mem, 0, 548);
 
     // The three interface vtables (owner+0 / +4 / +8).
@@ -365,8 +367,38 @@ void* postProductionFrameWorkOwnerCtor(void* mem)
     Bt(mem, 220) = 1;
     Bt(mem, 228) = 1;
 
-    // The embedded VC7.1 std::string at this+129 (byte 516) - the noise-texture name, empty.
+    new (static_cast<char*>(mem) + 336) FrameHistory();
+    // The renderer-internal string remains fixed-layout; host inputs are native strings.
     new (static_cast<char*>(mem) + 516) vc71::string();
+
+    Effect* effect = static_cast<Effect*>(shaderManagerGetEffect(
+        g_shaderManager, "mods/xpack/Shaders/PostProduction_nv3x"));
+    pointer<Effect>(mem, 376) = effect;
+    const struct { unsigned offset; const char* semantic; } parameters[] = {
+        {380, "TEXLAYER0"}, {384, "TEXLAYER1"}, {388, "TEXLAYER2"},
+        {392, "TEXLAYER3"}, {396, "TEXLAYER4"}, {400, "TEXLAYER5"},
+        {404, "TEXLAYER6"}, {408, "BACKBUFFERLERPBIAS"}, {412, "SAMPLEOFFSET"},
+        {424, "FRACTIME"}, {428, "FRACTIME256"}, {432, "FRACSINE"},
+        {436, "INTERFERENCE"}, {440, "DISTORTIONROLL"}, {444, "DISTORTIONFREQ"},
+        {448, "DISTORTIONSCALE"}, {452, "TVGRANULARITY"}, {456, "TVAMBIENT"},
+        {460, "GLOWSTRENGTH"}, {416, "FOGCOLOR"}, {420, "FOGSTARTANDEND"},
+        {464, "TVCOLOR"}, {468, "NIGHTFILTER_NOISE_STRENGTH"},
+        {472, "NIGHTFILTER_NOISE"}, {476, "NIGHTFILTER_BLUR"},
+        {480, "NIGHTFILTER_MONO"}, {484, "DELTAU"}, {488, "DELTAV"},
+        {492, "DISPLACEMENT"}
+    };
+    for (const auto& parameter : parameters)
+        pointer<ShaderParameter>(mem, parameter.offset) =
+            effectGetShaderParameterTyped(effect, vc71::string(parameter.semantic));
+    eventManager->registerEventHandler(ECGameLogic,
+        reinterpret_cast<IEventListener*>(mem), 0);
+    U(mem, 356) = 0;
+    pointer<EngineTexture>(mem, 500) = static_cast<EngineTexture*>(
+        textureManagerGetTexture(vc71::string("common/textures/noise")));
+    pointer<EngineTexture>(mem, 504) = static_cast<EngineTexture*>(
+        textureManagerGetTexture(vc71::string("common/textures/random")));
+    pointer<EngineTexture>(mem, 508) = static_cast<EngineTexture*>(
+        textureManagerGetTexture(vc71::string("common/textures/sine")));
 
     // this+66..83 (byte 264..332): the two 3x3 matrices, set once near the end of the ctor.
     U(mem, 264) = 1028443341u; U(mem, 268) = 1045220557u; U(mem, 272) = 1056964608u;
@@ -385,22 +417,221 @@ void* postProductionFrameWorkOwnerCtor(void* mem)
     // after the Renderer (pass two of initDll), so the list at dword_1023B970+0x5C exists.
     registerDeviceLostResetListener(static_cast<char*>(mem) + 4, 3);
 
-    ::renddx9abi::logf("PostProductionFrameWork constructed at owner 0x%08X (singleton owner+8) - "
-                       "vtables live, state defaulted, device-lost listener registered (priority "
-                       "3); effect/params/textures + the EventManager handler deferred with the "
-                       "render path", ::renddx9abi::addr(mem));
     return mem;
 }
 
 
-// Detaches the owner's device listener before its storage is freed.
-// [FRONTIER] Remaining destructor work depends on deferred event/resource acquisition.
+// Releases resources in acquisition-owner order before the module frees storage.
 void postProductionFrameWorkOwnerDetach(void* owner)
 {
     U(owner, 0) = ::renddx9abi::addr(kOwnerVtable);
     U(owner, 4) = ::renddx9abi::addr(kDeviceLostVtable);
     U(owner, 8) = ::renddx9abi::addr(kPostProdVtable);
     unregisterDeviceLostResetListener(static_cast<char*>(owner) + 4);
+    eventManager->unregisterEventHandler(ECGameLogic,
+        reinterpret_cast<IEventListener*>(owner));
+    const unsigned textures[] = {512, 500, 504, 508};
+    for (unsigned offset : textures)
+    {
+        EngineTexture* texture = pointer<EngineTexture>(owner, offset);
+        textureReleaseRef(texture);
+    }
+    const unsigned parameters[] = {404, 400, 396, 392, 388, 384, 380,
+        408, 412, 460, 416, 420, 424, 428, 432, 436, 440, 448, 444,
+        452, 456, 464, 468, 472, 476, 480, 484, 488, 492};
+    for (unsigned offset : parameters)
+        if (ShaderParameter* parameter = pointer<ShaderParameter>(owner, offset))
+            parameter->release();
+    if (Effect* effect = pointer<Effect>(owner, 376))
+        effectRelease(effect);
+    reinterpret_cast<vc71::string*>(static_cast<char*>(owner) + 516)->~string();
+    history(owner).~FrameHistory();
+}
+
+float postProductionGetTVInterference() { return F(g_PostProductionFrameWorkOwner, 168); }
+void postProductionSetTVInterference(float value) { F(g_PostProductionFrameWorkOwner, 168) = value; }
+float postProductionGetTVGranularity() { return F(g_PostProductionFrameWorkOwner, 184); }
+void postProductionSetTVGranularity(float value) { F(g_PostProductionFrameWorkOwner, 184) = value; }
+float postProductionGetTVAmbient() { return F(g_PostProductionFrameWorkOwner, 188); }
+void postProductionSetTVAmbient(float value) { F(g_PostProductionFrameWorkOwner, 188) = value; }
+void postProductionGetTVColor(float rgb[3])
+{
+    memcpy(rgb, reinterpret_cast<char*>(g_PostProductionFrameWorkOwner) + 196, 12);
+}
+void postProductionSetTVColor(const float rgb[3])
+{
+    memcpy(reinterpret_cast<char*>(g_PostProductionFrameWorkOwner) + 196, rgb, 12);
+}
+bool postProductionGetTVEnabled() { return Bt(g_PostProductionFrameWorkOwner, 39) != 0; }
+void postProductionSetTVEnabled(bool value) { Bt(g_PostProductionFrameWorkOwner, 39) = value; }
+
+void postProductionPrepare()
+{
+    void* owner = g_PostProductionFrameWorkOwner;
+    Bt(owner, 248) = 0;
+    Bt(owner, 37) = 0;
+    rendererPostSetTarget(rendererPostMultisampleActive() ? 0 : rendererPostSceneTexture());
+    stateManagerClear(1, 0, 1.0f, 0);
+}
+
+void postProductionPass()
+{
+    void* owner = g_PostProductionFrameWorkOwner;
+    // [TEMP, CHOSEN, not recovered] The optional glow producer and pass remain
+    // unavailable. [RETIRE-WHEN: postproduction-glow] Recover the EffectManager
+    // glow queue and its full-screen submission before this enabled branch.
+    if (Bt(owner, 36))
+        RD9_FRONTIER_AT("dice::hfe::dx9rend::PostProductionFrameWork::glowPass", owner, 36);
+}
+
+namespace {
+void captureTinnitusFrame(void* owner)
+{
+    if (geom::g_FSQuadDrawer)
+    {
+        const unsigned index = U(owner, 20) + 17;
+        geom::fsQuadDrawerCaptureTinnitus(rendererPostSceneTexture(), rendererPostHistoryTexture(index));
+        history(owner).push_front(index);
+        if (history(owner).size() > 4)
+            history(owner).pop_back();
+        ++U(owner, 20);
+        ++U(owner, 16);
+        if (U(owner, 20) >= 4)
+        {
+            Bt(owner, 24) = 1;
+            U(owner, 20) = 0;
+        }
+    }
+    else
+        ++U(owner, 16);
+}
+
+bool drawTinnitus(void* owner)
+{
+    Effect* effect = pointer<Effect>(owner, 376);
+    if (!effect || Bt(owner, 250) || U(owner, 16) >= U(owner, 28))
+    {
+        U(owner, 356) = 2;
+        return false;
+    }
+    captureTinnitusFrame(owner);
+    if (!Bt(owner, 24))
+        return false;
+    const float* viewport = rendererGetRenderView()->getViewport();
+    float offset[2];
+    const unsigned short width = static_cast<unsigned short>(static_cast<int>(viewport[2]));
+    const float halfWidth = static_cast<float>(0.5 / width);
+    offset[0] = static_cast<float>(halfWidth - 0.5 / (width >> 2));
+    const unsigned short height = static_cast<unsigned short>(static_cast<int>(viewport[3]));
+    const float halfHeight = static_cast<float>(0.5 / height);
+    offset[1] = static_cast<float>(halfHeight - 0.5 / (height >> 2));
+    const float bias = static_cast<float>(static_cast<double>(U(owner, 28) - U(owner, 16)) / F(owner, 32));
+    stateManagerPush();
+    effectSetTechniqueByName(effect, vc71::string("Tinnitus"));
+    effectBegin(effect);
+    for (unsigned i = 0; i != 4; ++i)
+        pointer<ShaderParameter>(owner, 380 + i * 4)->setValue(
+            rendererPostHistoryTexture(history(owner)[i]), 0);
+    pointer<ShaderParameter>(owner, 408)->setValue(&bias, 0);
+    pointer<ShaderParameter>(owner, 412)->setValue(offset, 0);
+    effectBeginPass(effect, 0);
+    geom::fsQuadDrawerDrawCurrentEffect();
+    effectEnd(effect);
+    stateManagerPop();
+    return true;
+}
+
+void drawTV(void* owner)
+{
+    stateManagerPush();
+    rendererPostSelectBackBuffer();
+    Effect* effect = pointer<Effect>(owner, 376);
+    if (EngineTexture* gradient = pointer<EngineTexture>(owner, 208))
+    {
+        effectSetTechniqueByName(effect, vc71::string("TVEffect_Gradient_Tex"));
+        pointer<ShaderParameter>(owner, 392)->setValue(gradient, 0);
+    }
+    else
+        effectSetTechniqueByName(effect, vc71::string("TVEffect"));
+    effectBegin(effect);
+    pointer<ShaderParameter>(owner, 380)->setValue(rendererPostSceneTexture(), 0);
+    pointer<ShaderParameter>(owner, 384)->setValue(pointer<EngineTexture>(owner, 500), 0);
+    EngineTexture* random = pointer<EngineTexture>(owner, 504);
+    pointer<ShaderParameter>(owner, 388)->setValue(random, 0);
+    pointer<ShaderParameter>(owner, 464)->setValue(static_cast<char*>(owner) + 196, 0);
+
+    const float fraction = static_cast<float>(std::fmod(rendererPostTime() * 0.1f, 1.0));
+    pointer<ShaderParameter>(owner, 424)->setFloat(fraction);
+    const double scaled = static_cast<double>(fraction) * 256.0f;
+    pointer<ShaderParameter>(owner, 428)->setFloat(static_cast<float>(scaled - static_cast<int>(scaled)));
+    pointer<ShaderParameter>(owner, 432)->setFloat(static_cast<float>(
+        std::sin(static_cast<double>(fraction) * 6.2831854820251465f)));
+    pointer<ShaderParameter>(owner, 436)->setFloat(F(owner, 168));
+    pointer<ShaderParameter>(owner, 440)->setFloat(F(owner, 172));
+    pointer<ShaderParameter>(owner, 444)->setFloat(F(owner, 176));
+    pointer<ShaderParameter>(owner, 448)->setFloat(F(owner, 180));
+    pointer<ShaderParameter>(owner, 452)->setFloat(F(owner, 184));
+    pointer<ShaderParameter>(owner, 456)->setFloat(F(owner, 188));
+    const unsigned int* dimensions = textureDims(random);
+    float displacement[2];
+    displacement[0] = static_cast<float>(static_cast<unsigned>(std::rand()) % dimensions[0]
+                                         / static_cast<double>(dimensions[0]));
+    displacement[1] = static_cast<float>(static_cast<unsigned>(std::rand()) % dimensions[1]
+                                         / static_cast<double>(dimensions[1]));
+    pointer<ShaderParameter>(owner, 492)->setValue(displacement, 0);
+    effectBeginPass(effect, 0);
+    geom::fsQuadDrawerDrawCurrentEffect();
+    effectEnd(effect);
+    stateManagerPop();
+}
+
+bool drawPostProduction(void* owner)
+{
+    // [TEMP, CHOSEN, not recovered] Keep each unrecovered branch visible at use.
+    // [RETIRE-WHEN: postproduction-other-passes] Recover and validate distortion,
+    // glow, flashbang and gas-mask passes. Their producers may already be active;
+    // these are explicit remaining gameplay limitations, not disabled features.
+    if (Bt(owner, 212))
+        RD9_FRONTIER_AT("dice::hfe::dx9rend::PostProductionFrameWork::distortionPass", owner, 212);
+    else if (Bt(owner, 37))
+        RD9_FRONTIER_AT("dice::hfe::dx9rend::PostProductionFrameWork::glowComposite", owner, 37);
+    if (Bt(owner, 250))
+        RD9_FRONTIER_AT("dice::hfe::dx9rend::PostProductionFrameWork::flashbangPass", owner, 250);
+    if (F(owner, 224) > 0.0f)
+        RD9_FRONTIER_AT("dice::hfe::dx9rend::PostProductionFrameWork::gasMaskPass", owner, 224);
+    bool blit = true;
+    if (U(owner, 356) == 1)
+    {
+        if (rendererPostMultisampleActive())
+        {
+            blit = false;
+            rendererPostSetTarget(0);
+        }
+        drawTinnitus(owner);
+    }
+    if (Bt(owner, 39))
+    {
+        blit = false;
+        drawTV(owner);
+    }
+    if (pointer<EngineTexture>(owner, 512))
+        RD9_FRONTIER_AT("dice::hfe::dx9rend::PostProductionFrameWork::noiseComposite", owner, 512);
+    return blit;
+}
+}
+
+void postProductionFinish()
+{
+    if (rendererPostMultisampleActive())
+    {
+        stateManagerSetRenderStatePersistent(161, 0);
+        rendererPostResolveScene();
+    }
+    if (drawPostProduction(g_PostProductionFrameWorkOwner))
+        geom::fsQuadDrawerBlitToBackBuffer(rendererPostSceneTexture());
+    if (rendererPostMultisampleActive())
+        stateManagerSetRenderStatePersistent(161, 1);
+    rendererPostSetTarget(0);
 }
 
 // Stores 0..255 RGB as normalized fog colour. Requires the post-production owner.

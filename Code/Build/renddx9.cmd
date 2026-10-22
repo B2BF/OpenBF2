@@ -234,7 +234,7 @@ rem These sources use the rebuilt host's native std::string/list/map ABI.
 rem Keep them in a separate list and loop: appending them to SOURCES made that one `set` line
 rem exceed cmd.exe's 8191-character limit at deeper checkout paths, which silently dropped the
 rem whole assignment and left every ConsoleObject symbol unresolved at link time.
-set CONSOLE_SOURCES= "%BF2%\Core\ConsoleObjectBase.cpp" "%ABI%\NativeConsoleObjects.cpp" "%BF2%\Geom\LightManagerConsole.cpp" "%BF2%\Geom\HemiMapManager\HemiMapManagerConsole.cpp" "%BF2%\Geom\SkyDomeConsole.cpp" "%BF2%\Geom\TerrainConsole.cpp" "%BF2%\RendDX9\RendererConsole.cpp" "%BF2%\Geom\NametagManagerConsole.cpp" "%BF2%\Geom\Overgrowth\OverGrowthConsole.cpp" "%BF2%\Geom\UndergrowthSystemConsole.cpp" "%BF2%\Geom\DecalSystem\DecalManagerConsole.cpp"
+set CONSOLE_SOURCES= "%BF2%\Core\ConsoleObjectBase.cpp" "%ABI%\NativeConsoleObjects.cpp" "%BF2%\Geom\LightManagerConsole.cpp" "%BF2%\Geom\HemiMapManager\HemiMapManagerConsole.cpp" "%BF2%\Geom\SkyDomeConsole.cpp" "%BF2%\Geom\TerrainConsole.cpp" "%BF2%\RendDX9\RendererConsole.cpp" "%BF2%\Geom\NametagManagerConsole.cpp" "%BF2%\Geom\Overgrowth\OverGrowthConsole.cpp" "%BF2%\Geom\UndergrowthSystemConsole.cpp" "%BF2%\Geom\DecalSystem\DecalManagerConsole.cpp" "%BF2%\Core\StringUtil.cpp"
 rem RD1 (2026-09-30): the `Object.geometry.loadMesh` row - native console ABI, like the list above.
 set CONSOLE_SOURCES=!CONSOLE_SOURCES! "%BF2%\Geom\ObjectGeometryConsole.cpp"
 rem The 2006 editor's `lightmapGeneration` rows - native console ABI; the TU is empty unless

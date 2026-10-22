@@ -6,9 +6,11 @@
 #if !DEDICATED
 #include "Stream.h"
 #include "TypeDescriptor.h"
+#include "System.h"
 // Concrete menu node types permit event-20 dispatch while the shared Node suffix remains untyped.
 #include "../../Menu/Bf2ButtonNode.h"
 #include "../../Menu/Bf2ObjectMarkerNode.h"
+#include "../../Menu/Bf2EditNode.h"
 #include <cstdio>
 #include <cstdlib>
 #include <new>
@@ -199,9 +201,19 @@ bool dispatchNodeEvent15(Node*, System*, const Rect*, const NodeState*)
     // [CHOSEN, not recovered] [RETIRE-WHEN: node-suffix-call-frontiers]
     return false;
 }
-bool dispatchNodeEvent16(Node*, System*, const Rect*, const NodeState*)
+bool dispatchNodeEvent16(Node* node, System* system, const Rect*, const NodeState*)
 {
-    // [FRONTIER] [TEMP] [CHOSEN, not recovered] Event 16 stops because edit and path nodes have nonempty handlers.
+    // Match exact descriptors while the remaining Node suffix is untyped.
+    TypeDescriptor* const type = node->getType();
+    if (type == BfEditNode::getClassType() || type == Bf2EditNode::getClassType()) {
+        BfEditNode* const edit = static_cast<BfEditNode*>(node);
+        if (edit->m_focused) {
+            edit->m_focused = false;
+            system->unlockPointer();
+        }
+        return false;
+    }
+    // [FRONTIER] [TEMP] [CHOSEN, not recovered] The other edit and path handlers remain unrecovered.
     // [RETIRE-WHEN: node-suffix-call-frontiers] Implement the typed virtual handlers before replacing this stop.
     std::fprintf(stderr, "[FRONTIER] dice::meme::dispatchNodeEvent16 reached (Node virtual+A0 - NOT a false default: 5 of 74 tables override it, BfEditNode/Bf2EditNode 7AA9B0, BfEditNodeInt 7AACF0, PathNode/StackPathNode 836A80)\n");
     std::fflush(stderr);

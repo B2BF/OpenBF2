@@ -26,13 +26,17 @@
 #include <new>
 #include <stdio.h>
 #include <string.h>
+#include <string>
+#include <cctype>
 
 namespace dice {
 namespace hfe {
+extern IBase* loadStat;
 namespace dx9rend {
 
 extern void* g_deviceCaps;
 extern void* g_rendererBase;   // RendDX9Init.cpp, dword_1023B970 - the two A2M-mask reads below
+bool rendererIsExpansionPack();
 namespace Ra { extern void* g_effectManager; }
 
 namespace {
@@ -166,6 +170,7 @@ extern IBase* g_Renderer;    // BF2Render.cpp - renderDevice() reaches the devic
 class Effect;
 Effect* createEffectObject();
 bool effectBind(Effect* self, void* d3dxEffect);
+bool effectReload(Effect* self, const vc71::string& path);
 void* effectD3dxHandle(void* effect);   // wrapper+0x08, the ID3DXEffect* (the listener walks)
 void deobfuscateShader(unsigned char* buf, unsigned int size);   // the include Open uses it too
 
@@ -247,9 +252,13 @@ void updateShaderDefines(void* shaderManager, void* base)
         // The nine special cases, in the body's own strcmp order.
         if (::strcmp(name, "RAPATH") == 0)
         {
-            // itoa(g_Renderer[1740], 10). With no Renderer the original starts from the literal
-            // "0" it copies into the buffer before the test.
-            pushDefine(sm, "0");
+            // The active quality path is stored by VideoOptions::apply.
+            const int path = g_Renderer
+                ? *reinterpret_cast<const int*>(
+                    reinterpret_cast<const unsigned char*>(g_Renderer) + 0x6CC)
+                : 0;
+            ::_snprintf_s(buf, sizeof(buf), _TRUNCATE, "%i", path);
+            pushDefine(sm, buf);
         }
         else if (::strcmp(name, "USEPARTIALPRECISIONTYPES") == 0)
         {
@@ -845,6 +854,105 @@ void* shaderManagerGetEffect(void* shaderManager, const char* rawPath)
                        "(d3dx 0x%08X), %u entries", file, key, ::renddx9abi::addr(effect),
                        ::renddx9abi::addr(d3dx), cache.size);
     return effect;
+}
+
+namespace {
+
+std::string normalizedShaderPath(const char* path)
+{
+    std::string result(path);
+    for (char& ch : result)
+        if (ch == '\\') ch = '/';
+    return result;
+}
+
+void lowerShaderPath(std::string& path)
+{
+    for (char& ch : path)
+    {
+        switch (static_cast<unsigned char>(ch))
+        {
+        case 0xC5: ch = static_cast<char>(0xE5); break;
+        case 0xC4: ch = static_cast<char>(0xE4); break;
+        case 0xD6: ch = static_cast<char>(0xF6); break;
+        case 0xDC: ch = static_cast<char>(0xFC); break;
+        case 0xC9: ch = static_cast<char>(0xE9); break;
+        default: ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch))); break;
+        }
+    }
+}
+
+// Reloading suppresses LoadStat's render callback while effect resources are inconsistent.
+// LoadStat's device-lost byte is shared with RendDX9Init's device-reset bracket.
+void setShaderReloadBusy(unsigned char value)
+{
+    reinterpret_cast<unsigned char*>(::dice::hfe::loadStat)[8] = value;
+}
+
+bool reloadCachedEffect(ShaderManager* sm, const vc71::string& filename)
+{
+    vc71::string path(filename);
+    if (g_Renderer && !std::strstr(path.c_str(), "mods/"))
+    {
+        vc71::string prefixed(rendererIsExpansionPack() ? "mods/xpack/" : "mods/bf2/");
+        prefixed += path;
+        path = prefixed;
+    }
+
+    setShaderReloadBusy(1);
+    if (!::renddx9abi::engineFileExists(path))
+    {
+        setShaderReloadBusy(0);
+        return false;
+    }
+
+    std::string key = normalizedShaderPath(filename.c_str());
+    const std::string::size_type dot = key.rfind('.');
+    if (dot != std::string::npos) key.erase(dot);
+    const ::renddx9abi::HostString stripped = stripShaderModPath(key.c_str());
+    vc71::map_node* const found = vc71::mapFind(sm->effectCache, stripped.c_str());
+    Effect* const effect = found ? static_cast<Effect*>(vc71::mapNodeValue(found)) : nullptr;
+    if (!effect || !effectReload(effect, path))
+    {
+        setShaderReloadBusy(0);
+        return false;
+    }
+
+    std::string alias = normalizedShaderPath(path.c_str());
+    lowerShaderPath(alias);
+    if (!vc71::mapFind(sm->cache20, alias.c_str()))
+    {
+        vc71::map_node* const node = vc71::mapInsert(sm->cache20, 0x30, alias.c_str());
+        vc71::mapNodeValueRef(node) = effect;
+        (void)vc71::mapFind(sm->cache20, alias.c_str());
+    }
+    setShaderReloadBusy(0);
+    return true;
+}
+
+} // anonymous namespace
+
+// Recompile the cached FX programs with the current quality macros, retaining wrapper identity.
+// The separate states-effect registry has no recovered publisher yet.
+void shaderManagerReloadEffects(void* shaderManager)
+{
+    ShaderManager* const sm = static_cast<ShaderManager*>(shaderManager);
+    for (vc71::map_node* node = vc71::mapFirst(sm->effectCache); node;
+         node = vc71::mapNext(sm->effectCache, node))
+    {
+        vc71::string filename(*reinterpret_cast<const vc71::string*>(node->value));
+        filename += ".fx";
+        reloadCachedEffect(sm, filename);
+    }
+    for (vc71::map_node* node = vc71::mapFirst(sm->map54); node;
+         node = vc71::mapNext(sm->map54, node))
+    {
+        // [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: shader-manager-states-reload]
+        // Recover the .dfx parser, its owner callbacks and reload validation before publishing
+        // states-effect registry entries. FX-only caches do not enter this boundary.
+        RD9_FRONTIER_AT("dice::hfe::dx9rend::ShaderManager::reloadStatesEffect "
+                        "(states-effect source parser and owner callbacks)", sm, 0x00);
+    }
 }
 
 
