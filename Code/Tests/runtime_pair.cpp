@@ -44,12 +44,15 @@
 #include "../BF2/Scene/Object/ObjectUtil.h"
 #include "../BF2/Scene/Object/PlayerManager.h"
 #include "../BF2/Scene/Object/ObjectTypes/Base/ObjectTemplateManager.h"
+#include "../BF2/Scene/Object/ObjectTypes/Game/IPlayerControlObject.h"
+#include "../BF2/Sound/ISoundObjectTemplate.h"
 #include "../BF2/AI/AIInterface/BFKnowledge/AITemplate.h"          // [TEMP] AI link scaffolding
 #include "../BF2/AI/AIInterface/BFKnowledge/AITemplateManager.h"   //   below
 #include "../BF2/AI/AIInterface/BFKnowledge/KitTemplateManager.h"
 
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
 #include <iostream>
 #include <list>
 #include <sstream>
@@ -347,9 +350,8 @@ void testMatrixMultiplyPaths(Checks& checks)
                   "Mat4::mult remains the distinct affine fast path");
 }
 
-// Mirrors BundleTemplate.cpp's complete local sound interface through the recovered +0x74 slot.
-// It deliberately has no virtual destructor, matching the RTTI/vtable evidence for the interface.
-class SoundTemplateProbe : public dice::hfe::IBase
+// Canonical sound interface collaborator: a second lookalike declaration would hide dispatch UB.
+class SoundTemplateProbe : public dice::hfe::ISoundObjectTemplate
 {
 public:
     explicit SoundTemplateProbe(std::vector<std::string>* events)
@@ -360,38 +362,39 @@ public:
     virtual int getRef() { return m_refs; }
     virtual int release() { return --m_refs; }
     virtual void* queryInterface(unsigned int) const { return 0; }
-    virtual void setIsUsed() {}
-    virtual void setFilename(const std::string&) {}
-    virtual std::string getFilename() const { return std::string(); }
-    virtual void setVolumeEnvelope(const std::string&) {}
-    virtual std::string getVolumeEnvelope() const { return std::string(); }
-    virtual void setPitchEnvelope(const std::string&) {}
-    virtual std::string getPitchEnvelope() const { return std::string(); }
-    virtual void setLoopCount(int) {}
-    virtual int getLoopCount() const { return 0; }
-    virtual void setVolume(float) {}
-    virtual float getVolume() const { return 0.0f; }
-    virtual void setPitch(float) {}
-    virtual float getPitch() const { return 0.0f; }
-    virtual void setMinDistance(float) {}
-    virtual float getMinDistance() const { return 0.0f; }
-    virtual void setHalfVolumeDistance(float) {}
-    virtual float getHalfVolumeDistance() const { return 0.0f; }
-    virtual void setReverbLevel(float) {}
-    virtual float getReverbLevel() const { return 0.0f; }
-    virtual void setSoundRadius(float) {}
-    virtual float getSoundRadius() const { return 0.0f; }
-    virtual void setLowSamples(int) {}
-    virtual int getLowSamples() const { return 0; }
-    virtual void setMediumSamples(int) {}
-    virtual int getMediumSamples() const { return 0; }
-    virtual void setRelativeTransformation(const Mat4* transformation)
+    void setIsUsed() override { std::abort(); }
+    void setFilename(const std::string&) override { std::abort(); }
+    std::string getFilename() const override { std::abort(); }
+    void setVolumeEnvelope(const std::string&) override { std::abort(); }
+    std::string getVolumeEnvelope() const override { std::abort(); }
+    void setPitchEnvelope(const std::string&) override { std::abort(); }
+    std::string getPitchEnvelope() const override { std::abort(); }
+    void setLoopCount(int) override { std::abort(); }
+    int getLoopCount() const override { std::abort(); }
+    void setVolume(float) override { std::abort(); }
+    float getVolume() const override { std::abort(); }
+    void setPitch(float) override { std::abort(); }
+    float getPitch() const override { std::abort(); }
+    void setMinDistance(float) override { std::abort(); }
+    float getMinDistance() const override { std::abort(); }
+    void setHalfVolumeDistance(float) override { std::abort(); }
+    float getHalfVolumeDistance() const override { std::abort(); }
+    void setReverbLevel(float) override { std::abort(); }
+    float getReverbLevel() const override { std::abort(); }
+    void setSoundRadius(float) override { std::abort(); }
+    float getSoundRadius() const override { std::abort(); }
+    void setLowSamples(int) override { std::abort(); }
+    int getLowSamples() const override { std::abort(); }
+    void setMediumSamples(int) override { std::abort(); }
+    int getMediumSamples() const override { std::abort(); }
+    void setRelativeTransformation(const Mat4* transformation) override
     {
         if (m_events) m_events->push_back("soundRelativeTransformation");
         ++m_relativeCalls;
         m_lastPointer = transformation;
         if (transformation) m_lastRelative = *transformation;
     }
+    dice::hfe::ISoundTemplate* impl() const override { std::abort(); }
 
     int m_relativeCalls;
     const Mat4* m_lastPointer;
@@ -402,8 +405,8 @@ private:
     int m_refs;
 };
 
-// Slot-compatible view of the recovered IPlayerControlObject tail used by addDriverDecals.
-class PlayerControlProbe : public dice::hfe::IBase
+// Only the driver-decal operations are exercised. Other canonical methods fail if reached.
+class PlayerControlProbe : public dice::hfe::world::IPlayerControlObject
 {
 public:
     PlayerControlProbe()
@@ -414,30 +417,75 @@ public:
     virtual int getRef() { return m_refs; }
     virtual int release() { return --m_refs; }
     virtual void* queryInterface(unsigned int) const { return 0; }
-#define BF2_PCO_TEST_SLOT(n) virtual void unused##n() {}
-    BF2_PCO_TEST_SLOT(00); BF2_PCO_TEST_SLOT(01); BF2_PCO_TEST_SLOT(02);
-    BF2_PCO_TEST_SLOT(03); BF2_PCO_TEST_SLOT(04); BF2_PCO_TEST_SLOT(05);
-    BF2_PCO_TEST_SLOT(06); BF2_PCO_TEST_SLOT(07); BF2_PCO_TEST_SLOT(08);
-    BF2_PCO_TEST_SLOT(09); BF2_PCO_TEST_SLOT(10); BF2_PCO_TEST_SLOT(11);
-    BF2_PCO_TEST_SLOT(12); BF2_PCO_TEST_SLOT(13); BF2_PCO_TEST_SLOT(14);
-    BF2_PCO_TEST_SLOT(15); BF2_PCO_TEST_SLOT(16); BF2_PCO_TEST_SLOT(17);
-    BF2_PCO_TEST_SLOT(18); BF2_PCO_TEST_SLOT(19); BF2_PCO_TEST_SLOT(20);
-    BF2_PCO_TEST_SLOT(21); BF2_PCO_TEST_SLOT(22); BF2_PCO_TEST_SLOT(23);
-    BF2_PCO_TEST_SLOT(24); BF2_PCO_TEST_SLOT(25); BF2_PCO_TEST_SLOT(26);
-    BF2_PCO_TEST_SLOT(27); BF2_PCO_TEST_SLOT(28); BF2_PCO_TEST_SLOT(29);
-    BF2_PCO_TEST_SLOT(30); BF2_PCO_TEST_SLOT(31); BF2_PCO_TEST_SLOT(32);
-    BF2_PCO_TEST_SLOT(33); BF2_PCO_TEST_SLOT(34); BF2_PCO_TEST_SLOT(35);
-    BF2_PCO_TEST_SLOT(36); BF2_PCO_TEST_SLOT(37); BF2_PCO_TEST_SLOT(38);
-    BF2_PCO_TEST_SLOT(39); BF2_PCO_TEST_SLOT(40); BF2_PCO_TEST_SLOT(41);
-    BF2_PCO_TEST_SLOT(42); BF2_PCO_TEST_SLOT(43); BF2_PCO_TEST_SLOT(44);
-    BF2_PCO_TEST_SLOT(45); BF2_PCO_TEST_SLOT(46); BF2_PCO_TEST_SLOT(47);
-    BF2_PCO_TEST_SLOT(48); BF2_PCO_TEST_SLOT(49); BF2_PCO_TEST_SLOT(50);
-    BF2_PCO_TEST_SLOT(51); BF2_PCO_TEST_SLOT(52); BF2_PCO_TEST_SLOT(53);
-    BF2_PCO_TEST_SLOT(54); BF2_PCO_TEST_SLOT(55); BF2_PCO_TEST_SLOT(56);
-    BF2_PCO_TEST_SLOT(57); BF2_PCO_TEST_SLOT(58); BF2_PCO_TEST_SLOT(59);
-    BF2_PCO_TEST_SLOT(60); BF2_PCO_TEST_SLOT(61); BF2_PCO_TEST_SLOT(62);
-    BF2_PCO_TEST_SLOT(63); BF2_PCO_TEST_SLOT(64); BF2_PCO_TEST_SLOT(65);
-#undef BF2_PCO_TEST_SLOT
+    using IPlayer = dice::hfe::world::IPlayer;
+    using ICameraObject = dice::hfe::world::ICameraObject;
+    using VehicleMod = dice::hfe::world::VehicleMod;
+    IPlayer* getOccupingPlayer() const override { std::abort(); }
+    IObject* getOccupingObject() const override { std::abort(); }
+    bool isOccupied() const override { std::abort(); }
+    bool enter(IPlayer*) override { std::abort(); }
+    void exit() override { std::abort(); }
+    void exitPlayer() override { std::abort(); }
+    void onEnter(IObject*) override { std::abort(); }
+    void onExit() override { std::abort(); }
+    int getPcoId() const override { std::abort(); }
+    void setPcoId(int) override { std::abort(); }
+    std::map<int, ICameraObject*>* getCameras() override { std::abort(); }
+    std::map<int, ICameraObject*>* getOwnCameras() override { std::abort(); }
+    void nextCamera() override { std::abort(); }
+    ICameraObject* getActiveCamera() override { std::abort(); }
+    void setActiveCamera(int) override { std::abort(); }
+    bool getExitPosition(Vec3&) override { std::abort(); }
+    bool getAltExitPosition(Vec3&) override { std::abort(); }
+    void addExternalCamera(ICameraObject*) override { std::abort(); }
+    void removeExternalCamera(ICameraObject*) override { std::abort(); }
+    bool canSpawn(const Mat4&) override { std::abort(); }
+    std::map<int, IPlayerControlObject*>* getPcos() override { std::abort(); }
+    const std::vector<int>* getPcoPosId() override { std::abort(); }
+    void addWeapon(IObject*) override { std::abort(); }
+    void* getWeapons() override { std::abort(); }
+    IObject* getActiveWeapon(int) const override { std::abort(); }
+    void* getWeapons(int) override { std::abort(); }
+    void setActiveWeapon(IObject*, int) override { std::abort(); }
+    void toggleOnWeaponLock(IObject*) override { std::abort(); }
+    int getArtPos() override { std::abort(); }
+    bool checkSpecialToggle(dice::hfe::io::PlayerInput) override { std::abort(); }
+    bool checkSpecialToggleLastUpdate(dice::hfe::io::PlayerInputMap) override { std::abort(); }
+    void setTeam(int) override { std::abort(); }
+    void setDefaultTeam(int) override { std::abort(); }
+    int getDefaultTeam() override { std::abort(); }
+    int getTeam() override { std::abort(); }
+    float getTimeToLiveUnused() override { std::abort(); }
+    void setTimeToLiveUnused(float) override { std::abort(); }
+    bool isAllowedToExit() override { std::abort(); }
+    void addPlayerInputObject(IObject*) override { std::abort(); }
+    void removePlayerInputObject(IObject*) override { std::abort(); }
+    void setTimeSpawned(float) override { std::abort(); }
+    float getTimeSpawned() const override { std::abort(); }
+    void setObjectSpawnerId(int) override { std::abort(); }
+    int getObjectSpawnerId() const override { std::abort(); }
+    void setObjectSpawnerHolding(bool) override { std::abort(); }
+    bool getObjectSpawnerHolding() const override { std::abort(); }
+    const Vec3& getNameTagOffset() override { std::abort(); }
+    const Vec3& getRidingWithOffset() override { std::abort(); }
+    float getRidingWithDistMod() override { std::abort(); }
+    int getVehicleCameraShake() override { std::abort(); }
+    float getVehicleFov() override { std::abort(); }
+    void addVehicleMod(VehicleMod) override { std::abort(); }
+    void removeVehicleMod(VehicleMod) override { std::abort(); }
+    int getVehicleMod(VehicleMod) override { std::abort(); }
+    const std::string& getSoundFilter() const override { std::abort(); }
+    int getCockpitLod() override { std::abort(); }
+    int getCockpitSubGeom() override { std::abort(); }
+    float getShakeFactor() const override { std::abort(); }
+    bool getIsSprinting() const override { std::abort(); }
+    void setIsSprinting(bool) override { std::abort(); }
+    float getSprintStamina() const override { std::abort(); }
+    void setSprintStamina(float) override { std::abort(); }
+    void setSprintStaminaDissipationFactor(float) override { std::abort(); }
+    float getSprintFactor() override { std::abort(); }
+    bool getIsUnderwater() const override { std::abort(); }
+    float getNormalizedUnderwaterTime() const override { std::abort(); }
     virtual void setDriverDecalObject(IObject* object)
     {
         ++m_setCalls;
@@ -449,6 +497,21 @@ public:
         ++m_transformCalls;
         m_lastTransformation = transformation;
     }
+    std::vector<Mat4>* getDriverDecalTransformations() const override { std::abort(); }
+    int getSpecialToggleWeaponInput() const override { std::abort(); }
+    void setIsDucking(bool) override { std::abort(); }
+    bool getIsDucking() override { std::abort(); }
+    bool getAutoUseAbility() const override { std::abort(); }
+    bool applyCameraAnimation(const Mat4&, Mat4&) override { std::abort(); }
+    bool allowEnterOtherVehicle() override { std::abort(); }
+    bool isChildSoldierActive() const override { std::abort(); }
+    bool getNeverDrawAs1p() const override { std::abort(); }
+    void removeChildVehicle(IObject*) override { std::abort(); }
+    int getAmmoStatus() override { std::abort(); }
+    void setAmmoStatus(int) override { std::abort(); }
+    void onFirstGhost() override { std::abort(); }
+    void setGiveUnmannedInput(bool) override { std::abort(); }
+    void preHandlePlayerInput(dice::hfe::io::PlayerInput&, float) const override { std::abort(); }
 
     IObject* m_driverObject;
     int m_setCalls;
@@ -3947,12 +4010,17 @@ typedef std::map<IObject*, PortalManager::PassingObjectData*> PortalPassingMap;
 
 PortalPassingMap& portalPassingMapAtRecoveredX86Offset(PortalManager& manager)
 {
+#if defined(BF2_BUNDLE_SOUND_DISPATCH_ONLY) && !defined(_M_IX86) && !defined(__i386__)
+    // This PE-layout fixture is outside the portable bundle-interface subset.
+    std::abort();
+#else
     static_assert(sizeof(void*) == 4,
                   "PortalManager raw map fixture is valid only for the PE-x86 harness");
     // Recovered PortalManager layout: primary vptr +0x00, refcount +0x04, map +0x08. The manager is
     // fully constructed before this typed view is formed, so all std::map invariants are live.
     return *reinterpret_cast<PortalPassingMap*>(
         reinterpret_cast<unsigned char*>(&manager) + 0x08);
+#endif
 }
 
 int destroyHeapObject(IObject* object)
@@ -8258,6 +8326,7 @@ void testPointObjectCollision(Checks& checks)
 
 } // unnamed namespace
 
+#if !defined(BF2_BUNDLE_SOUND_DISPATCH_ONLY)
 int main()
 {
     ObjectManagerPeAbiProbe defaultObjectManager(1000);
@@ -8369,3 +8438,4 @@ int main()
     dice::hfe::world::objectManager = savedObjectManager;
     return result;
 }
+#endif

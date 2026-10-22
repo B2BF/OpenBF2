@@ -3,6 +3,7 @@
 #include "App/AnimationDocuments.h"
 
 #include "Framework/ObjectLibrary.h"
+#include "Framework/SavePlan.h"
 #include "Framework/SourceControl.h"
 
 #include "IO/File/FileManager.h"
@@ -89,9 +90,8 @@ std::vector<size_t> AnimationDocuments::modified() const
     return out;
 }
 
-bool AnimationDocuments::save(std::string& result)
+bool AnimationDocuments::planSave(SavePart& part)
 {
-    result.clear();
     std::string written;
     for (size_t i = 0; i < m_documents.size(); ++i)
     {
@@ -100,30 +100,17 @@ bool AnimationDocuments::save(std::string& result)
             continue;
         if (d.archived)
         {
-            result = d.path + " is read from a mounted archive, so a save would be shadowed: not saved "
-                     "(EditorObjects.extract, then start with +looseObjects 1)";
+            part.refuse(d.path + " is read from a mounted archive, so a save would be shadowed: not saved "
+                        "(EditorObjects.extract, then start with +looseObjects 1)");
             return false;
         }
         const std::string text = d.file.render();
-        const ScmResult edit = sourceControl().openForEdit(d.writePath);
-        std::string error;
-        if (!edit.ok)
-        {
-            result = "source control refused " + d.writePath + ": " + edit.message;
-            return false;
-        }
-        std::string readBack;
-        if (!ObjectLibrary::writeTextFile(d.writePath, text, error) || !ObjectLibrary::readTextFile(d.writePath, readBack, error)
-            || readBack != text)
-        {
-            result = error.empty() ? d.writePath + " does not hold what was written" : error;
-            return false;
-        }
-        d.savedText = text;
+        part.add(d.writePath, text);
+        part.onWritten([this, i, text]() { m_documents[i].savedText = text; });
         written += (written.empty() ? "" : ", ") + d.path;
     }
     if (!written.empty())
-        result = "saved the animation systems " + written;
+        part.onReport([written](const SavePart&) { return "saved the animation systems " + written; });
     return true;
 }
 

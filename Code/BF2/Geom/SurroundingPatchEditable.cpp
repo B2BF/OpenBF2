@@ -733,6 +733,17 @@ void SurroundingPatchEditable::drawForLightmapGeneration()
     dx9rend::rendererDrawIndexedPrimitive(te->m_sideIndexCount / 3, 4u, 0, 0u, te->m_sideVertexCount, 0u);
 }
 
+// The placement rectangle at height 0, in the shipped store order.
+void SurroundingPatchEditable::getWorldBounds(TerrainAabb& box)
+{
+    box.min.y = 0.0f;
+    box.min.x = static_cast<float>(originX);                                  // +0x24
+    box.min.z = static_cast<float>(originZ);                                  // +0x28
+    box.max.y = 0.0f;
+    box.max.x = static_cast<float>(endX);                                     // +0x2C
+    box.max.z = static_cast<float>(endZ);                                     // +0x30
+}
+
 
 // R2 - textures
 

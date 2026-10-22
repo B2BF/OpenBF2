@@ -10,6 +10,7 @@
 #include "App/LibraryPanel.h"
 #include "App/ObjectTemplatePanel.h"
 #include "App/TerrainPanel.h"
+#include "App/RoadPanel.h"
 #include "App/AnimationPanel.h"
 #include "App/MaterialPanel.h"
 #include "App/WizardPanel.h"
@@ -83,6 +84,8 @@ private:
     bool m_showGameplayLayers;
     bool m_showTerrain;
     TerrainPanel m_terrain;
+    bool m_showRoads = false;
+    RoadPanel m_roadPanel;
     bool m_showLibrary;
     LibraryPanel m_library;
     bool m_showObjectTemplates;

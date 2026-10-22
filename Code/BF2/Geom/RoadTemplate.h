@@ -7,6 +7,7 @@
 #ifndef BF2_GEOM_ROADTEMPLATE_H
 #define BF2_GEOM_ROADTEMPLATE_H
 
+#include "IRoadTemplate.h"             // IRoadTemplate (table 0x1021D610), shared with the editor
 #include "UndergrowthSystem.h"        // Vc71Vec<T>
 #include "Vc71BoolVector.h"
 #include "../Math/Vec3.h"             // Vec2
@@ -19,41 +20,6 @@ namespace dice {
 namespace hfe {
 namespace geom {
 
-
-// IRoadTemplate (IID 820008) - the 25 slots after the IBase quartet, table 0x1021D610 in order.
-// Every string crosses the host boundary (the retail LevelEditor, and this tree's editor road
-//   module, call these slots from the other image), so every string is renddx9abi::HostString.
-// The names follow the plugin's rows where one exists (census §2.2); the rest are [INFERRED].
-
-class IRoadTemplate : public IBase
-{
-public:
-    virtual void setTextureFile(int index, const ::renddx9abi::HostString& file) = 0;   // +0x10
-    virtual const ::renddx9abi::HostString& getTextureFile(int index) = 0;            // +0x14
-    virtual void setTextureScale(int index, const Vec2& scale) = 0;                     // +0x18
-    virtual const Vec2& getTextureScale(int index) = 0;                                 // +0x1C
-    virtual void setMirror(unsigned int index, bool mirror) = 0;                        // +0x20
-    virtual bool getMirror(unsigned int index) = 0;                                     // +0x24
-    virtual void setWidth(float width) = 0;                                             // +0x28
-    virtual float getWidth() = 0;                                                       // +0x2C
-    virtual void setMaxTesselatedError(int lod, float error) = 0;                       // +0x30
-    virtual float getMaxTesselatedError(int lod) = 0;                                   // +0x34
-    virtual void setBlendFactor(float factor) = 0;                                      // +0x38
-    virtual float getBlendFactor() = 0;                                                 // +0x3C
-    virtual void setFadeOffDistance(const Vec2& distance) = 0;                          // +0x40
-    virtual const Vec2& getFadeOffDistance() = 0;                                       // +0x44
-    virtual void setPriority(int priority) = 0;                                         // +0x48
-    virtual int getPriority() = 0;                                                      // +0x4C
-    virtual void setMaterial(int material) = 0;                                         // +0x50
-    virtual int getMaterial() = 0;                                                      // +0x54
-    virtual void setName(const ::renddx9abi::HostString& name) = 0;                     // +0x58
-    virtual ::renddx9abi::HostString getName() = 0;                                     // +0x5C
-    virtual bool compile(const ::renddx9abi::HostString& path) = 0;                     // +0x60
-    virtual void setUnknown5C(int value) = 0;                                           // +0x64
-    virtual int getUnknown5C() = 0;                                                     // +0x68
-    virtual void setUnknown60(float value) = 0;                                         // +0x6C
-    virtual float getUnknown60() = 0;                                                   // +0x70
-};
 
 class RoadTemplate : public IRoadTemplate
 {

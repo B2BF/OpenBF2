@@ -8,6 +8,7 @@
 #ifndef BF2_GEOMMISC_EDITORSPLINE_H
 #define BF2_GEOMMISC_EDITORSPLINE_H
 
+#include "IEditorSpline.h"               // IEditorSpline (table 0x1020CE70), shared with the editor
 #include "SplineControlPoint.h"
 #include "../Geom/UndergrowthSystem.h"      // Vc71Vec<T>
 #include "../Math/Vec3.h"
@@ -24,57 +25,6 @@ namespace dx9rend { class Effect; class ShaderParameter; }
 
 namespace geom {
 
-
-// Editable spline with width and sampling step controls. Preserve the virtual declaration order.
-// String results use HostString by value; several method names are [INFERRED].
-
-class IEditorSpline : public IBase
-{
-public:
-    virtual IEditorSpline* makeOffsetCopy(float offset) = 0;                    // +0x10
-    virtual void slot_0x14() = 0;                                               // +0x14 0x1009C010 nullsub
-    virtual void draw() = 0;                                                    // +0x18
-    virtual void setLineWidth(float width) = 0;                                 // +0x1C
-    virtual float getLineWidth() = 0;                                           // +0x20
-    virtual void setStepSize(float step) = 0;                                   // +0x24
-    virtual float getStepSize() = 0;                                            // +0x28
-    virtual void setColor(const Vec4& color) = 0;                               // +0x2C
-    virtual const Vec4& getColor() = 0;                                         // +0x30
-    virtual void setSnapFlags(int flags) = 0;                                   // +0x34
-    virtual int getSnapFlags() = 0;                                             // +0x38
-    virtual void pickAndAddControlPoint(const Vec2& screen) = 0;                // +0x3C
-    virtual void addControlPoint(const Vec3& position) = 0;                     // +0x40
-    virtual void clearControlPoints() = 0;                                      // +0x44
-    virtual void pickAndMoveControlPoint(int index, const Vec2& screen) = 0;    // +0x48
-    virtual void setControlPointPosition(int index, const Vec3& position) = 0;  // +0x4C
-    virtual SplineControlPoint* getControlPoint(int index) = 0;                 // +0x50
-    virtual int getControlPointCount() = 0;                                     // +0x54
-    virtual int findNearestControlPoint(const Vec2& screen) = 0;                // +0x58
-    virtual void setAllControlPointTypes(bool visible) = 0;                     // +0x5C
-    virtual void setControlPointType(int index, int type) = 0;                  // +0x60
-    virtual int getControlPointType(int index) = 0;                             // +0x64
-    virtual void resetControlPointTypes() = 0;                                  // +0x68
-    virtual bool nextSegment() = 0;                                             // +0x6C
-    virtual bool nextSample(Vec3* position, Vec3* normal) = 0;                  // +0x70
-    virtual float getControlPointSpeed(int index) = 0;                          // +0x74
-    virtual int getControlPointDirection(int index) = 0;                        // +0x78
-    virtual ::renddx9abi::HostString getControlPointSound(int index) = 0;       // +0x7C
-    virtual float getControlPointDelay(int index) = 0;                          // +0x80
-    virtual ::renddx9abi::HostString getName() = 0;                             // +0x84
-    virtual void setControlPointSpeed(int index, float speed) = 0;              // +0x88
-    virtual void setLastControlPointSpeed(float speed) = 0;                     // +0x8C
-    virtual void setControlPointDelay(int index, float delay) = 0;              // +0x90
-    virtual void setLastControlPointDelay(float delay) = 0;                     // +0x94
-    virtual void setControlPointDirection(int index, int direction) = 0;        // +0x98
-    virtual void setLastControlPointDirection(int direction) = 0;               // +0x9C
-    virtual void setControlPointSound(int index, ::renddx9abi::HostString sound) = 0;   // +0xA0
-    virtual void setLastControlPointSound(::renddx9abi::HostString sound) = 0;  // +0xA4
-    virtual void setControlPointFlag(int index, bool flag) = 0;                 // +0xA8
-    virtual void setLastControlPointFlag(bool flag) = 0;                        // +0xAC
-    virtual void* destroy(unsigned int flags) = 0;                              // +0xB0
-    virtual void setOrder(int order) = 0;                                       // +0xB4
-    virtual int getOrder() = 0;                                                 // +0xB8 0x10051710 (ICF)
-};
 
 class EditorSpline : public IEditorSpline
 {

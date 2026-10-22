@@ -6,6 +6,8 @@
 
 #include "App/EditSession.h"
 #include "App/FreeCamera.h"
+#include "App/HudEditor.h"
+#include "App/ImGuiHost.h"
 #include "App/ShortcutKeys.h"
 #include "App/ViewRecorder.h"
 
@@ -13,6 +15,7 @@
 #include "Framework/EditorLog.h"
 #include "Framework/EditorSettings.h"
 #include "Framework/HelpDocuments.h"
+#include "Framework/LevelCopier.h"
 #include "Framework/ObjectLibrary.h"
 #include "Framework/SourceControl.h"
 
@@ -48,6 +51,7 @@ void buildDefaultLayout(ImGuiID dockspace, const ImGuiViewport* viewport)
     ImGui::DockBuilderDockWindow("Selection", right);
     ImGui::DockBuilderDockWindow("Properties", right);
     ImGui::DockBuilderDockWindow("Engine", right);
+    ImGui::DockBuilderDockWindow("HUD editor", right);
     ImGui::DockBuilderDockWindow("History", rightBottom);
     ImGui::DockBuilderDockWindow("Layers", rightBottom);
     ImGui::DockBuilderDockWindow("Profiler", rightBottom);
@@ -183,7 +187,14 @@ void EditorShell::draw(const ShellStatus& status)
     if (m_showResources)
         m_resources.draw(&m_showResources);
     if (m_session)
+    {
         m_panels.draw(*m_session);
+        m_session->setPreviewBeforeSave(m_options.previewSave);
+        m_session->setBackupsKept(m_options.backupsKept);
+        if (m_session->takeSaveRequest())
+            m_savePreview.requestPreview();
+        m_savePreview.draw(*m_session, m_options.previewSave);
+    }
     if (m_showProfiler)
     {
         // A layout saved before the panel existed: open it beside the Engine panel the first time.
@@ -200,6 +211,16 @@ void EditorShell::draw(const ShellStatus& status)
             ImGui::SetNextWindowDockID(history->DockId, ImGuiCond_FirstUseEver);
         m_minimap.draw(&m_showMinimap, *m_session);
     }
+    if (m_showHudEditor && m_hud)
+    {
+        // A layout saved before the panel existed: open it beside the Engine panel the first time.
+        ImGuiWindow* engine = ImGui::FindWindowByName("Engine");
+        if (engine && engine->DockId != 0)
+            ImGui::SetNextWindowDockID(engine->DockId, ImGuiCond_FirstUseEver);
+        m_hud->drawPanel(&m_showHudEditor, m_view, playTestActive());
+    }
+    else
+        claimViewMouse(false);
     if (m_showAbout)
         drawAbout();
     if (m_showCatalogue)
@@ -213,6 +234,8 @@ void EditorShell::draw(const ShellStatus& status)
     if (m_showLightSetups && m_session)
         drawLightSetups();
     drawSaveAsPopup();
+    drawNewLevelPopup();
+    drawLightmapsPopup();
     drawRecordPopup();
     if (m_showDemo)
         ImGui::ShowDemoWindow(&m_showDemo);
@@ -232,6 +255,8 @@ void EditorShell::loadSettings(const EditorSettings& settings)
     m_options.pauseOnFocusLoss = settings.getBool("options.pauseOnFocusLoss", m_options.pauseOnFocusLoss);
     m_options.masterVolume = settings.getInt("options.masterVolume", m_options.masterVolume);
     m_options.soundOn = settings.getBool("options.soundOn", m_options.soundOn);
+    m_options.previewSave = settings.getBool("options.previewSave", m_options.previewSave);
+    m_options.backupsKept = settings.getInt("options.backupsKept", m_options.backupsKept);
     std::snprintf(m_startupBuffer, sizeof(m_startupBuffer), "%s", m_options.startupCommand.c_str());
     std::snprintf(m_rawDataBuffer, sizeof(m_rawDataBuffer), "%s", m_options.rawDataPath.c_str());
     std::snprintf(m_packBuffer, sizeof(m_packBuffer), "%s", m_options.packFolder.c_str());
@@ -251,6 +276,7 @@ void EditorShell::loadSettings(const EditorSettings& settings)
     m_showResources = settings.getBool("panels.resources", m_showResources);
     m_showProfiler = settings.getBool("panels.profiler", m_showProfiler);
     m_showMinimap = settings.getBool("panels.minimap", m_showMinimap);
+    m_showHudEditor = settings.getBool("panels.hudEditor", m_showHudEditor);
     m_panels.loadSettings(settings);
     m_resources.loadSettings(settings);
     shortcuts().load(settings);
@@ -263,6 +289,7 @@ void EditorShell::saveSettings(EditorSettings& settings) const
     settings.setBool("panels.resources", m_showResources);
     settings.setBool("panels.profiler", m_showProfiler);
     settings.setBool("panels.minimap", m_showMinimap);
+    settings.setBool("panels.hudEditor", m_showHudEditor);
     m_panels.saveSettings(settings);
     m_resources.saveSettings(settings);
     shortcuts().save(settings);
@@ -277,6 +304,8 @@ void EditorShell::saveSettings(EditorSettings& settings) const
     settings.setBool("options.pauseOnFocusLoss", m_options.pauseOnFocusLoss);
     settings.setInt("options.masterVolume", m_options.masterVolume);
     settings.setBool("options.soundOn", m_options.soundOn);
+    settings.setBool("options.previewSave", m_options.previewSave);
+    settings.setInt("options.backupsKept", m_options.backupsKept);
     for (int i = 0; i < 3; ++i)
     {
         char key[48];
@@ -434,6 +463,7 @@ bool EditorShell::setPanelVisible(const std::string& name, bool visible)
     const Panel panels[] = {
         { "Log", &m_showLog }, { "Engine", &m_showEngine }, { "Resources", &m_showResources },
         { "Profiler", &m_showProfiler }, { "Minimap", &m_showMinimap }, { "Keyboard shortcuts", &m_showShortcuts },
+        { "HUD editor", &m_showHudEditor },
         { "Options", &m_showOptions },
     };
     if (_stricmp(name.c_str(), "all") == 0)
@@ -468,7 +498,7 @@ bool EditorShell::setPanelVisible(const std::string& name, bool visible)
     }
     for (size_t i = 0; i < sizeof(panels) / sizeof(panels[0]); ++i)
     {
-        if (_stricmp(panels[i].name, name.c_str()) == 0)
+        if (samePanel(panels[i].name, name))
         {
             *panels[i].shown = visible;
             if (visible)
@@ -496,11 +526,25 @@ void EditorShell::drawMenu()
     {
         if (m_session)
         {
-            if (ImGui::MenuItem("Save level objects", shortcuts().display("file.save").c_str()))
+            if (ImGui::MenuItem("Save", shortcuts().display("file.save").c_str()))
                 m_session->runSave();
+            ImGui::SetItemTooltip(m_options.previewSave ? "Shows every file the save writes, then writes them all or none."
+                                                        : "Writes every change of the level, all of it or none.");
+            if (ImGui::MenuItem("Preview the save..."))
+                m_savePreview.requestPreview();
+            ImGui::SetItemTooltip("Every file a save would write, with what changes in it; nothing is written until you "
+                                  "say so.");
+            if (ImGui::MenuItem("Backups..."))
+                m_savePreview.openBackups();
+            ImGui::SetItemTooltip("What each save replaced, kept per level; the level put back to before any save.");
             if (ImGui::MenuItem("Resave every level file"))
                 m_session->runCommand("EditorLevel.resave", "save");
             ImGui::SetItemTooltip("Writes every object and settings file of the level, changed or not.");
+            if (ImGui::MenuItem("New level..."))
+            {
+                m_openNewLevel = true;
+                m_newLevelResult.clear();
+            }
             if (ImGui::MenuItem("Save level as..."))
             {
                 m_openSaveAs = true;
@@ -554,6 +598,13 @@ void EditorShell::drawMenu()
         ImGui::MenuItem("Profiler", 0, &m_showProfiler);
         if (m_session)
             ImGui::MenuItem("Minimap", 0, &m_showMinimap);
+        if (m_hud)
+            ImGui::MenuItem("HUD editor", 0, &m_showHudEditor);
+        else if (m_session)
+        {
+            ImGui::MenuItem("HUD editor", 0, false, false);
+            ImGui::SetItemTooltip("The game's HUD is not loaded (the editor was started with +hud 0, or the HUD did not start - see the log).");
+        }
         ImGui::Separator();
         bool paused = m_renderPaused;
         if (ImGui::MenuItem("Pause the renderer", 0, &paused, m_session != 0))
@@ -645,6 +696,11 @@ void EditorShell::drawMenu()
             m_session->runCommand("EditorLighting.minimap 512", "lighting");
         if (ImGui::MenuItem("Generate environment maps", 0, false, m_session != 0))
             m_session->runCommand("EditorLighting.envMaps", "lighting");
+        if (ImGui::MenuItem("Generate lightmaps...", 0, false, m_session != 0))
+        {
+            m_openLightmaps = true;
+            m_lightmapResult.clear();
+        }
         ImGui::Separator();
         if (ImGui::MenuItem("Find unused object lightmaps", 0, false, m_session != 0))
             m_session->runCommand("EditorLighting.cleanLightmaps 0", "lighting");
@@ -906,6 +962,15 @@ void EditorShell::drawOptions()
     ImGui::TextDisabled("The editor plays no sound yet (it starts the engine with +noSound 1); the volume is kept for it.");
     ImGui::SetItemTooltip("The world and the view stand still until the editor's window is in front again.");
     ImGui::Checkbox("Write the log to BF2Editor.log beside the editor", &m_options.logToFile);
+    ImGui::SeparatorText("Saving");
+    ImGui::Checkbox("Show what a save writes before writing it (File > Save, Ctrl+S)", &m_options.previewSave);
+    ImGui::SetNextItemWidth(160.0f);
+    ImGui::DragInt("Backups kept per level", &m_options.backupsKept, 0.2f, 0, 500, m_options.backupsKept ? "%d" : "every one",
+                   ImGuiSliderFlags_AlwaysClamp);
+    ImGui::SetItemTooltip("Each save keeps what it replaced in bf2editor/Backups/<mod>/<level>; the oldest go once there "
+                          "are more. 0 keeps every one.");
+    if (m_session && ImGui::Button("Backups..."))
+        m_savePreview.openBackups();
     ImGui::SeparatorText("Start-up");
     ImGui::SetNextItemWidth(-160.0f);
     if (ImGui::InputTextWithHint("Start-up command", "a console line, e.g. EditorView.panel Terrain 1", m_startupBuffer,
@@ -1118,6 +1183,142 @@ void EditorShell::drawSaveAsPopup()
         if (!r.failed && m_saveAsOpen)
             ImGui::CloseCurrentPopup();
     }
+    ImGui::SameLine();
+    if (ImGui::Button("Close") || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+        ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
+void EditorShell::drawNewLevelPopup()
+{
+    if (m_openNewLevel)
+    {
+        ImGui::OpenPopup("New level");
+        m_openNewLevel = false;
+    }
+    if (!ImGui::BeginPopupModal("New level", 0, ImGuiWindowFlags_AlwaysAutoResize))
+        return;
+    static const int kSizes[] = { 256, 512, 1024 };
+    static const int kScales[] = { 1, 2, 4 };
+    static const int kLowRes[] = { 128, 256, 512, 1024 };
+    static const char* const kSizeNames = "256\0" "512\0" "1024\0";
+    static const char* const kScaleNames = "1\0" "2\0" "4\0";
+    static const char* const kLowResNames = "128\0" "256\0" "512\0" "1024\0";
+    ImGui::TextWrapped("Makes a level beside the open one, as the retail editor's Create new terrain did: flat "
+                       "heightmaps at the default height, its default textures on every patch (from "
+                       "bf2editor/Content/Terrain), the level's scripts and the compiled terrain.");
+    ImGui::SetNextItemWidth(320.0f);
+    if (ImGui::IsWindowAppearing())
+        ImGui::SetKeyboardFocusHere();
+    ImGui::InputTextWithHint("Name", "letters, digits and underscores", m_newLevelName, sizeof(m_newLevelName));
+    ImGui::SetNextItemWidth(120.0f);
+    ImGui::Combo("Size (cells per side)", &m_newLevelSize, kSizeNames);
+    ImGui::SetNextItemWidth(120.0f);
+    ImGui::Combo("Scale (metres per cell)", &m_newLevelScale, kScaleNames);
+    const int size = kSizes[m_newLevelSize], scale = kScales[m_newLevelScale];
+    ImGui::Text("Level size: %d m", size * scale);
+    ImGui::SetNextItemWidth(320.0f);
+    ImGui::SliderInt("Default height (m)", &m_newLevelHeight, 0, 100);
+    ImGui::SetNextItemWidth(120.0f);
+    ImGui::Combo("Low-res size (the surrounding terrain)", &m_newLevelLowRes, kLowResNames);
+    const int lowRes = kLowRes[m_newLevelLowRes];
+    const int lowResScale = scale * (size / lowRes);
+    if (lowResScale > 0)
+        ImGui::Text("Low-res scale: %d m per cell", lowResScale);
+    else
+        ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.35f, 1.0f), "Low-res scale may not be 0: a smaller low-res size");
+    ImGui::Checkbox("Open the new level (the editor starts again on it)", &m_newLevelOpen);
+    if (!m_newLevelResult.empty())
+        ImGui::TextWrapped("%s", m_newLevelResult.c_str());
+    const bool named = validLevelName(m_newLevelName);
+    if (m_newLevelName[0] && !named)
+        ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.35f, 1.0f), "The name takes letters, digits and underscores");
+    ImGui::BeginDisabled(!named || lowResScale <= 0);
+    if (ImGui::Button("Create"))
+    {
+        char line[200];
+        std::snprintf(line, sizeof(line), "EditorLevel.create %s %d/%d/%d/%d %d", m_newLevelName, size, scale,
+                      m_newLevelHeight, lowRes, m_newLevelOpen ? 1 : 0);
+        const ConsoleLineResult r = runConsoleLine(line);
+        m_newLevelResult = r.output;
+        logLine(r.failed ? LogLevel::Warning : LogLevel::Info, "new level: %s", r.output.c_str());
+        if (!r.failed && m_newLevelOpen)
+            ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button("Close") || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+        ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
+void EditorShell::drawLightmapsPopup()
+{
+    if (m_openLightmaps)
+    {
+        ImGui::OpenPopup("Generate lightmaps");
+        m_openLightmaps = false;
+    }
+    if (!ImGui::BeginPopupModal("Generate lightmaps", 0, ImGuiWindowFlags_AlwaysAutoResize))
+        return;
+    ImGui::TextWrapped("Traces lightmaps with the renderer's lightmap generator: the terrain's, lit by the level's "
+                       "Editor/TerrainLight.con (the retail editor's terrain preset when the level has none), into "
+                       "Lightmaps/ - the ring patches' into Editor/Lightmaps/ -, and the static objects', lit by "
+                       "Editor/ObjectLight.con, into Lightmaps/Objects/ with their atlas. The editor is busy until the "
+                       "trace ends.");
+    ImGui::SeparatorText("Lightmap generation");
+    ImGui::Checkbox("Trace terrain", &m_lightmapTerrain);
+    ImGui::Checkbox("Trace objects", &m_lightmapObjects);
+    ImGui::SetItemTooltip("Every static object, traced from its mesh's .samples file (bf2editor/LightmapSamples*.zip, "
+                          "mounted at Objects), then the atlas the game reads.");
+    ImGui::SameLine();
+    ImGui::Checkbox("Selected only", &m_lightmapSelected);
+    ImGui::SetItemTooltip("Only the selected objects. The atlas is packed again only when the level keeps its single "
+                          "object lightmaps; a stock level has only its atlas.");
+    ImGui::Checkbox("Only nearest", &m_lightmapNearest);
+    ImGui::SetItemTooltip("Only the sample block nearest to the camera: a quick look at the settings.");
+    ImGui::Checkbox("Primary", &m_lightmapPrimary);
+    ImGui::SameLine();
+    ImGui::Checkbox("Secondary (the ring patches)", &m_lightmapSecondary);
+    ImGui::SeparatorText("Resolution");
+    static const char* const kQualities[] = { "Low (0.25)", "Medium (0.5)", "Final (1)", "High (2)" };
+    for (int i = 0; i < 4; ++i)
+    {
+        if (i)
+            ImGui::SameLine();
+        ImGui::RadioButton(kQualities[i], &m_lightmapQuality, i);
+    }
+    ImGui::SeparatorText("Resume options");
+    const bool resumable = GetFileAttributesA("Logs/LightmapGeneration.log") != INVALID_FILE_ATTRIBUTES;
+    ImGui::BeginDisabled(!resumable);
+    ImGui::Checkbox(resumable ? "Resume previous (resume data available)" : "Resume previous (no resume data)",
+                    &m_lightmapResume);
+    ImGui::EndDisabled();
+    const bool terrainParts = m_lightmapTerrain && (m_lightmapPrimary || m_lightmapSecondary);
+    const bool parts = terrainParts || m_lightmapObjects;
+    if (m_lightmapTerrain && !m_lightmapPrimary && !m_lightmapSecondary)
+        ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.35f, 1.0f), "At least one of Primary or Secondary must be selected");
+    else if (!parts)
+        ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.35f, 1.0f), "Trace the terrain, the objects or both");
+    if (!m_lightmapResult.empty())
+        ImGui::TextWrapped("%s", m_lightmapResult.c_str());
+    ImGui::BeginDisabled(!parts);
+    if (ImGui::Button("Generate"))
+    {
+        const bool resume = m_lightmapResume && resumable;
+        std::string what = !terrainParts ? std::string()
+                         : m_lightmapPrimary && m_lightmapSecondary ? "both" : m_lightmapPrimary ? "primary" : "secondary";
+        if (m_lightmapObjects)
+            what += std::string(what.empty() ? "" : "+") + (m_lightmapSelected ? "selected" : "objects");
+        const char* const options = m_lightmapNearest && resume ? "nearest+resume" : m_lightmapNearest ? "nearest"
+                                  : resume ? "resume" : "-";
+        char line[160];
+        std::snprintf(line, sizeof(line), "EditorLighting.lightmaps %d %s %s", m_lightmapQuality, what.c_str(), options);
+        const ConsoleLineResult r = runConsoleLine(line);
+        m_lightmapResult = r.output;
+        logLine(r.failed ? LogLevel::Warning : LogLevel::Info, "lightmaps: %s", r.output.c_str());
+    }
+    ImGui::EndDisabled();
     ImGui::SameLine();
     if (ImGui::Button("Close") || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
         ImGui::CloseCurrentPopup();

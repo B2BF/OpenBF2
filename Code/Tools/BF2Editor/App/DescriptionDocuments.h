@@ -2,8 +2,7 @@
 
 // The open mod's mod.desc and the open level's Info/<level>.desc as the editor edits them. They are
 // loose files beside the mod and the level (the game reads Info/ loose); held in memory, changed through the
-// history like the other documents, and written by the level save (source control, a temporary file, a
-// read-back). Editor-only code (D3).
+// history like the other documents, and planned by the level save (Framework/SavePlan). Editor-only code (D3).
 #ifndef BF2EDITOR_APP_DESCRIPTIONDOCUMENTS_H
 #define BF2EDITOR_APP_DESCRIPTIONDOCUMENTS_H
 
@@ -13,6 +12,8 @@
 
 namespace bf2editor
 {
+
+class SavePart;
 
 class DescriptionDocuments
 {
@@ -37,8 +38,8 @@ public:
 
     bool modified() const;
     std::string modifiedList() const;           // "mods/bf2/mod.desc, ..."
-    // The modified files written; "" in `result` when none was.
-    bool save(std::string& result);
+    // The modified files into `part`, taken as saved once written; its answer "saved <paths>".
+    void planSave(SavePart& part);
 
 private:
     struct File
@@ -51,7 +52,6 @@ private:
     };
     const File& file(Which which) const { return which == Mod ? m_mod : m_level; }
     File& file(Which which) { return which == Mod ? m_mod : m_level; }
-    bool write(File& f, std::string& error);
 
     File m_mod;
     File m_level;

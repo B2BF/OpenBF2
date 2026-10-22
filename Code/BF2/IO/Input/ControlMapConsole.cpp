@@ -1,6 +1,6 @@
 // Console bindings for the active control map and its manager. File split [INFERRED].
 // The console checks object activity before invoking executors; executors require a live target.
-// Only create and device setAxisScale are available in the dedicated image.
+// Only create and both setAxisScale overloads are available in the dedicated image.
 // Preserve command spelling, omitted-argument defaults and the declared overload order.
 // [PLATFORM] manager names are passed by value in PE and by const reference in ELF;
 // these typed bindings use the ELF declarations.
@@ -104,11 +104,20 @@ BF2_CONSOLE_OBJECT("ControlMap", 1, 0)
 // ctor 0x69567A, exec 0x6956EB. argc exactly 1. Registered in both images (ELF 0x8506D93).
 BF2_CONSOLE_METHOD_1_ACTIVE(create, consoleCreate, controlMapManager != 0,
                             std::string, kControlMapConsoleTag)
-// Device axis scaling is available in both client and dedicated images.
+// The active map's own axis-scale override (PE ctor 0x649F8A, metadata io::InputDeviceAxes/float,
+// return void). Registered in both images.
+BF2_CONSOLE_METHOD_2_ACTIVE(setAxisScale, consoleSetAxisScale, activeMap() != 0,
+                            io::InputDeviceAxes, float, kControlMapConsoleTag)
+
+// `InputDevices` - SetConsoleClassDefaults 0x770F56 ("InputDevices", access 1, category 0). The
+// device-axis-scale command (PE ctor 0x64831F, argc 3, return bool) lives on this object, not on
+// ControlMap; it is registered in both images.
+BF2_CONSOLE_OBJECT("InputDevices", 1, 0)
 BF2_CONSOLE_METHOD_3_RET_ACTIVE(setAxisScale, consoleSetDeviceAxisScale, bool, true,
                                 InputDeviceFlags, InputDeviceAxes, float, kControlMapConsoleTag)
 
 #if !DEDICATED
+BF2_CONSOLE_OBJECT("ControlMap", 1, 0)
 // ctor 0x69579F, exec 0x69581C.
 BF2_CONSOLE_METHOD_1_ACTIVE(setActive, consoleSetActive, controlMapManager != 0,
                             std::string, kControlMapConsoleTag)
@@ -156,10 +165,6 @@ BF2_CONSOLE_METHOD_4_5_ACTIVE(AddKeyToTriggerMapping, consoleAddKeyToTriggerMapp
                               int, InputDeviceFlags, InputDeviceKeys, float, bool, false,
                               kControlMapConsoleTag)
 
-// ctor 0x6970AE, exec 0x6971C6. argc exactly 2. The retail argType string is the qualified
-// "io::InputDeviceAxes" here, unlike the mapping rows' bare spelling; reproduced.
-BF2_CONSOLE_METHOD_2_ACTIVE(setAxisScale, consoleSetAxisScale, activeMap() != 0,
-                            io::InputDeviceAxes, float, kControlMapConsoleTag)
 // ctor 0x6971F6, exec 0x6972B4.
 BF2_CONSOLE_METHOD_1_ACTIVE(setYawFactor, consoleSetYawFactor, activeMap() != 0,
                             float, kControlMapConsoleTag)

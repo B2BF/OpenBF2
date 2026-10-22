@@ -18,6 +18,7 @@
 #include "Framework/LayerSummary.h"
 #include "Framework/LevelObjectFile.h"
 #include "Framework/ObjectLibrary.h"
+#include "Framework/SavePlan.h"
 #include "Framework/UndergrowthConfig.h"
 #include "Framework/UndergrowthMap.h"
 #include "Framework/Selection.h"
@@ -29,6 +30,7 @@
 #include "Framework/LevelEditorDefs.h"
 #include "App/MaterialDocuments.h"
 #include "App/ObjectWizard.h"
+#include "App/RoadNetwork.h"
 #include "App/TemplateDocuments.h"
 #include "App/TerrainEditing.h"
 
@@ -36,11 +38,12 @@
 #include "Math/Vec3.h"
 
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
 
-namespace dice { namespace hfe { namespace world { class IObject; } } }
+namespace dice { namespace hfe { namespace world { class IObject; class IObjectTemplate; } } }
 
 namespace bf2editor
 {
@@ -89,6 +92,17 @@ enum class PickMode
     Set,
     Add,
     Toggle
+};
+
+// A document the level's save writes besides the level's own files (the HUD editor's scripts, App/HudEditor).
+class ISavedDocument
+{
+public:
+    virtual ~ISavedDocument() {}
+    // Its part of the save when it has changes, planned with the level's other parts.
+    virtual void planSave(SavePlan& plan) = 0;
+    // What the unsaved-changes summary says about it: a sentence after a blank, or "" when nothing changed.
+    virtual std::string unsavedText() const = 0;
 };
 
 class EditSession : public IEditorCommands
@@ -155,13 +169,23 @@ public:
     // what happened.
     void runUndo();
     void runRedo();
+    // File > Save and Ctrl+S: with the preview option on the shell shows the save first (takeSaveRequest, App/
+    // SavePreviewPanel), else the level is saved at once.
     void runSave();
+    void setPreviewBeforeSave(bool on) { m_previewBeforeSave = on; }
+    bool takeSaveRequest()
+    {
+        const bool requested = m_saveRequested;
+        m_saveRequested = false;
+        return requested;
+    }
 
     // The level's object files (WP6), opened after the level loads; 0 when they could not be (the log
     // says why), and then nothing can be saved.
     // The level has loaded: the terrain as it stands is the saved state (dirty checks compare with it).
     void setDocument(LevelDocument* document)
     {
+        dropPendingSave();
         m_document = document;
         m_terrain.markSaved();
         m_verticalScaleAtLoad = m_terrain.verticalScale();
@@ -258,8 +282,42 @@ public:
     bool saveLevel(std::string& result);
     // File > Resave: the save, with every level file written even when unchanged.
     bool resaveLevel(std::string& result);
+    // The save preview, backups and restores (App/EditSessionSave.cpp; [CHOSEN, not recovered], issue draft 13).
+    // Every save is planned before anything is written (Framework/SavePlan) and written as a whole, each file it
+    // replaces kept in the level's backup folder (<game folder>/bf2editor/Backups/<mod>/<level>/<date and time>).
+    // previewSave plans the level save without writing anything and keeps it as the pending save; `result` lists
+    // its files. writePendingSave writes it when nothing changed since (else it is dropped and nothing written).
+    bool previewSave(bool everything, std::string& result);
+    const SavePlan* pendingSave() const { return m_pendingSave.get(); }
+    bool writePendingSave(std::string& result);
+    void dropPendingSave() { m_pendingSave.reset(); }
+    // A pending file (counted over the parts that are saved, in order) against the file on disk: a unified diff of a
+    // text file, the sizes of another.
+    bool pendingSaveDiff(size_t index, std::string& result);
+    // The level's backups, newest first; one put back with every save after it (by its name, or "#n" for the n-th
+    // newest), which needs every change saved first and starts the editor again on the level.
+    std::vector<SaveBackup> backups() const;
+    bool listBackups(std::string& result);
+    bool restoreBackup(const std::string& name, std::string& result);
+    // The level's backup folder, and how many backups it keeps (0: every one; the editor's options set it).
+    std::string backupFolder() const;
+    void setBackupsKept(int count) { m_backupsKept = count < 0 ? 0 : count; }
+    // The HUD editor's scripts, saved with the level (0: none).
+    void setHudDocument(ISavedDocument* document) { m_hudDocument = document; }
+    // The open level's mod folder as the engine names it ("mods/bf2"); "" with no level.
+    std::string modFolder() const;
+    int backupsKept() const { return m_backupsKept; }
+    // Files a command writes at once, outside the level save (a light setup, the object lists, a clone, a copied
+    // layer), as one backed-up save labelled `label`: {path, content} each, written all or none. False with `error`
+    // when nothing could be written or source control refused one.
+    bool writeFilesNow(const std::string& label, const std::vector<std::pair<std::string, std::string> >& files,
+                       std::string& error);
+    // The console's rows for the above (EditorLevel.preview, previewAll, previewDiff, writePreview, dropPreview,
+    // backups, restore): `action` preview | previewAll | diff <n> | write | drop | backups | restore <name>.
+    bool saveCommand(const std::string& action, const std::string& argument, std::string& result);
     bool packLevel(const std::string& modFolder, std::string& result);
     bool saveLevelAs(const std::string& name, bool open, std::string& result);
+    bool createLevel(const std::string& name, const std::string& terrain, bool open, std::string& result);
     // Objects made and unmade (WP6). createObject and deleteSelection are the user's edits; the
     // history's scripts replay them with recreateObject and removeObject.
     bool createObject(const std::string& templateName, const dice::hfe::Vec3& position,
@@ -432,9 +490,28 @@ public:
     bool groundApply(int layer, const std::string& name, const std::string& value, std::string& result);
     bool groundRemoveLayer(int layer, std::string& result);
     std::string groundListing() const;
-    bool saveGroundProperties(std::string& result);
-    // The painted terrain maps, saved with the level into its Editor folder (EditableTerrain::saveMaps).
-    bool saveTerrainMaps(std::string& result);
+    // Editor/GroundProperties.con, planned when the ground properties changed.
+    void planGroundProperties(SavePlan& plan);
+    // The painted terrain maps, planned into the level's Editor folder (EditableTerrain::saveMaps stages them).
+    void planTerrainMaps(SavePlan& plan);
+    // The compiled terrain (EditableTerrain::compileTerrain: terraindata.raw and the painted patches' game textures)
+    // planned into the level, with the heightmaps when `heights` changed; nothing when neither the heights nor the
+    // surface (`surface`: paint, ground properties) changed. Without the editable terrain changed heights are refused.
+    void planCompiledTerrain(SavePlan& plan, bool heights, bool surface);
+    // The level's overgrowth, regenerated and planned into its overgrowth folder (EditableTerrain::saveOvergrowth);
+    // with `required` false a level without one plans nothing.
+    void planOvergrowth(SavePlan& plan, bool required);
+    // The batch save parts (+saveTerrainAndClose, +saveOvergrowthAndClose; both in +saveAndClose), written whether or
+    // not anything changed, as the retail editor's part saves were: the terrain part saves changed ground properties
+    // and painted maps, then compiles the terrain and saves it (with the heightmaps when they changed); the overgrowth
+    // part regenerates and saves the level's overgrowth - with `required` false a level without one saves nothing.
+    bool saveTerrainPart(std::string& result);
+    bool saveOvergrowthPart(bool required, std::string& result);
+    // Copies staged files ({staged path, path relative to the level folder}) that differ from the level's into the
+    // level, as one save (backed up). False with `error` when they could not be written (then none is).
+    bool copyStagedFiles(const std::vector<std::pair<std::string, std::string> >& files, int& written, std::string& error);
+    // The same files added to a save part.
+    void addStagedFiles(SavePart& part, const std::vector<std::pair<std::string, std::string> >& files) const;
     // The layer a new object of `file` takes: the active layer in the editor file, else the file's own.
     int newObjectLayer(size_t file) const;
     // Whether objects of the two Object.layer ids can be in one game-mode file: the same layer, or two whose filters
@@ -558,6 +635,7 @@ public:
     // A .baf's own length (frames / 24) and joint count from its header; false when unreadable.
     bool bafInfo(const std::string& path, float& seconds, int& joints);
     bool animationsModified() const { return !m_animations.modified().empty(); }
+    void planAnimationFiles(SavePlan& plan);
     bool saveAnimationFiles(std::string& result);
     // The mod's mod.desc and the level's Info/<level>.desc: their
     // fields listed ("list", which "mod" or "level"), one set by the user ("set", one undoable edit), and the
@@ -568,6 +646,7 @@ public:
     // The retail level editor's lists of the open mod: spawner vehicle presets and teams.
     const LevelEditorDefs& levelEditorLists() const;
     bool materialsModified() const;
+    void planMaterialFiles(SavePlan& plan);
     bool saveMaterialFiles(std::string& result);
     bool extractCommonArchives(std::string& result);
     // +looseCommon 1 leaves the Common archives unmounted (the material files then read from the loose copy).
@@ -692,7 +771,7 @@ public:
     const UndergrowthConfig* undergrowthConfig();
     float undergrowthScale() const { return m_terrain.spacing(); }
     bool undergrowthChanged() const;
-    bool saveUndergrowth(std::string& result);
+    void planUndergrowth(SavePlan& plan);
     // Edits supported Undergrowth.cfg values with undoable text snapshots. Adding materials,
     // types, meshes, or textures requires atlas/data generation that is not implemented.
     bool setUndergrowthSetting(const std::string& key, float value, std::string& result);
@@ -720,6 +799,7 @@ public:
                                    std::string& result);
     bool removeObjectTemplateProperty(const std::string& name, const std::string& property, std::string& result);
     bool applyObjectTemplateEdit(int id, const std::string& state, std::string& error);
+    void planObjectTemplates(SavePlan& plan);
     bool saveObjectTemplates(std::string& result);
     // A bundle template's children (IBundleTemplate): the engine's list; a child added at a position, one
     // moved or turned, one taken out - each one undoable edit of the engine's list (IBundleTemplate
@@ -812,6 +892,31 @@ public:
     bool previewCommand(const std::string& action, const std::string& argument, std::string& result);
     unsigned templatePreview() const { return m_preview; }
     void updatePreview();
+    // The preview's parts, edited in the view ([added], issue draft 14; App/EditSessionTemplates.cpp): every child of
+    // the previewed template's tree where its template places it, and each seat's soldier exit points (the
+    // engine's: the seat's setSoldierExitLocation or altSoldierExitPosition in the seat's frame, half a metre up).
+    // A part picked in the view (or with EditorPreview.pick) gets the gizmo; letting go writes it as one undoable
+    // edit - the child's setPosition / setRotation lines, or the seat's exit line - and the preview is made again.
+    struct PreviewPart
+    {
+        enum Kind { Child, Exit, AltExit };
+        Kind            kind = Child;
+        std::string     owner;          // the template whose line it is: the child's parent, the exit's seat
+        std::string     child;          // the child as the child edits name it ("name#n"); "" for an exit
+        std::string     label;          // as drawn: the child's template, or "exit" / "alternative exit"
+        std::string     exitRotation;   // an exit's rotation text, kept when it moves
+        dice::hfe::Mat4 world;          // where it is
+        dice::hfe::Mat4 frame;          // the frame its line is written in (the parent's, or the seat's)
+        int             depth = 0;      // 1 for the template's own children
+        bool            seat = false;   // a child that is a seat (a PlayerControlObject template)
+        bool            camera = false; // a child that is a Camera template
+    };
+    std::vector<PreviewPart> previewParts();
+    bool previewPartsShown() const { return m_previewParts; }
+    int pickedPreviewPart() const { return m_pickedPart; }
+    void pickPreviewPart(int index) { m_pickedPart = index; }
+    // The part `index` moved to `world` (for an exit, only its position counts): the edit, then the preview again.
+    bool movePreviewPart(size_t index, const dice::hfe::Mat4& world, std::string& result);
     // O1: the geometry template's settings in the template's .tweak ("list", "set", "remove").
     bool geometryCommand(const std::string& action, const std::string& name, const std::string& spec,
                          const std::string& value, std::string& result);
@@ -827,6 +932,45 @@ public:
     bool bakeGroundHemi(int resolution, const dice::hfe::Vec3& position, float size, std::string& result);
     bool captureMinimap(int resolution, std::string& result);
     bool generateEnvMaps(std::string& result);
+    bool generateLightmaps(int quality, const std::string& parts, const std::string& options, std::string& result);
+    // The terrain part of generateLightmaps (the generator already set up): the level's terrain preset, the trace and
+    // the copy into the level; and the object part: every static object (or the selected ones) traced from its mesh's
+    // samples into a staging folder, the atlas packed, both copied into the level's Lightmaps/Objects.
+    bool traceTerrainLightmaps(int quality, bool primary, bool surrounding, bool nearest, bool resume,
+                               const std::string& levelDir, const std::string& levelPath, std::string& result);
+    bool traceObjectLightmaps(int quality, bool selectedOnly, std::string& result);
+    // Roads and splines (App/EditSessionRoads.cpp, App/RoadNetwork.h): opened once the level loaded; the retail rows
+    // (`object` SplineManager, Road, RoadTemplate or RoadTemplateTexture) and the editor's own (`object` EditorRoad:
+    // docs/editor-console.md), whose edits are undoable; saved with the level when they changed. The batch part
+    // (+saveRoadAndClose) compiles every editable road even unchanged; a level without any saves nothing.
+    bool openRoads(const std::string& levelName, std::string& report);
+    RoadNetwork& roads() { return m_roads; }
+    bool roadCommand(const std::string& object, const std::string& method, const std::vector<std::string>& args,
+                     std::string& result);
+    void planRoads(SavePlan& plan, bool force);
+    bool saveRoads(bool force, std::string& result);
+    // The view's road tool (EditorRoad.tool): while it is on, a click on the ground adds a point to the active spline
+    // (a new spline when there is none), a press on a spline's point makes that spline active and drags the point,
+    // Alt+click near the active spline's curve inserts a point there, a right click on a point - or Delete with one
+    // selected - removes it. Every one is an undoable EditorRoad edit. Turning it on turns the brushes off.
+    bool roadToolActive() const { return m_roadTool; }
+    bool setRoadTool(bool active, std::string& result);
+    // The spline the road tool and the Roads panel edit, and its selected point (-1 for none). A spline that no longer
+    // exists (deleted, undone) counts as none.
+    int activeSpline() const { return m_roads.hasSpline(m_activeSpline) ? m_activeSpline : -1; }
+    int activeSplinePoint() const { return activeSpline() >= 0 ? m_activeSplinePoint : -1; }
+    void setActiveSpline(int id, int point) { m_activeSpline = id; m_activeSplinePoint = point; }
+    // Whether the view draws the splines (EditorRoad.showSplines; the retail ToggleSpline).
+    bool splinesShown() const { return m_splinesShown; }
+    void setSplinesShown(bool shown) { m_splinesShown = shown; }
+    // The spline EditorRoad.splineMark marked for a merge and its marked point, -1 for none (the retail spline manager's
+    // "select for merge"); the template EditorRoad.connect builds with when none is named.
+    int markedSpline() const { return m_roads.hasSpline(m_markedSpline) ? m_markedSpline : -1; }
+    int markedSplinePoint() const { return markedSpline() >= 0 ? m_markedSplinePoint : -1; }
+    const std::string& activeRoadTemplate() const { return m_activeRoadTemplate; }
+    // The level's Roads/*.mesh no editable road compiles and CompiledRoads.con does not load (the retail Clean Road
+    // Folder's search), reported; with `move`, moved into Roads/Unused - never deleted.
+    bool cleanRoadFolder(bool move, std::string& result);
     unsigned minimapVersion() const { return m_minimapVersion; }
     static bool isEffectTemplate(const std::string& name);
     bool previewEffect(const std::string& templateName, std::string& result);
@@ -971,8 +1115,8 @@ public:
     // E6: after the terrain's vertical scale changed from the one the level loaded with, each root object's
     // height moved by as much as the ground under it did (one undoable edit).
     bool repositionObjects(std::string& result);
-    // L2: the level's Lightmaps/Objects lightmaps (<template>=<n>=<x>=<y>=<z>.dds) no object uses, reported;
-    // with `move`, moved into Lightmaps/Objects/Unused (never deleted).
+    // L2: the level's Lightmaps/Objects lightmaps (<template>=<n>=<x>=<y>=<z>.dds) no object uses and the atlas pages
+    // its LightmapAtlas.tai no longer names, reported; with `move`, moved into Lightmaps/Objects/Unused (never deleted).
     bool cleanLightmapFolder(bool move, std::string& result);
     bool hasCopiedTransform() const { return m_haveCopiedTransform; }
 
@@ -990,6 +1134,24 @@ public:
 
 private:
     bool saveLevelFiles(std::string& result, bool everything);
+    // Every part of a level save, in the order the level save has always written them. False with `error` when no
+    // level document is open.
+    bool planLevelSave(SavePlan& plan, bool everything, std::string& error);
+    // A planned level save written; its answer to `result`.
+    bool writeLevelSave(SavePlan& plan, bool everything, std::string& result);
+    // A plan written with the level's backup (`label` names what wrote it in the backup); `result` gets the parts'
+    // answers. False, with why in `result`, when nothing could be written; a refused part is among the answers, and
+    // the caller asks the plan (anyRefused) whether everything was saved.
+    bool writeSave(SavePlan& plan, const std::string& label, std::string& result);
+    std::unique_ptr<SavePlan> m_pendingSave;
+    unsigned                  m_pendingRevision = 0;
+    std::string               m_pendingState;           // unsavedSummary() when it was planned
+    bool                      m_pendingEverything = false;
+    int                       m_backupsKept = 10;
+    ISavedDocument*           m_hudDocument = 0;
+    bool                      m_previewBeforeSave = false;
+    bool                      m_saveRequested = false;
+    bool                      m_restored = false;       // a restore wrote the level's files: reopen before saving
     bool makePreview(const std::string& name, const float at[3], float yaw, std::string& result);
     bool clearPreview(std::string& result);
     OverlayOptions             m_overlays;
@@ -1255,6 +1417,11 @@ private:
     float                         m_previewYaw = 0.0f;
     float                         m_turntable = 0.0f;           // degrees a second
     long long                     m_turntableLast = 0;
+    bool                          m_previewParts = false;       // the preview's parts shown and editable in the view
+    int                           m_pickedPart = -1;
+    void collectPreviewParts(dice::hfe::world::IObjectTemplate* objectTemplate, const dice::hfe::Mat4& world, int depth,
+                             std::vector<PreviewPart>& parts);
+    void addExitParts(const std::string& seat, const dice::hfe::Mat4& world, int depth, std::vector<PreviewPart>& parts);
     float                         m_verticalScaleAtLoad = 0.0f;     // E6: the terrain's scale.y as the level opened
     std::vector<dice::hfe::Vec3>  m_measurePoints;
     std::map<int, MaterialEdit>   m_materialEdits;
@@ -1286,6 +1453,39 @@ private:
     std::map<int, TemplateEdit>   m_templateEdits;
     int                           m_nextTemplateEdit;
     bool                          m_objectArchivesMounted;
+    // Roads (App/EditSessionRoads.cpp): an edit is the states of the objects it changed, before and after, applied in
+    // order (after) or in reverse order (before) by the history's EditorRoad.applyEdit <id> <before|after>.
+    struct RoadChange
+    {
+        int                kind = 0;            // 0 a spline, 1 a template, 2 a road
+        int                splineId = -1;       // a spline's id
+        std::string        name;                // a template's or road's name
+        bool               existedBefore = false;
+        bool               existsAfter = false;
+        SplineRecord       splineBefore, splineAfter;
+        RoadTemplateRecord templateBefore, templateAfter;
+        RoadRecord         roadBefore, roadAfter;
+    };
+    struct RoadEdit
+    {
+        std::vector<RoadChange> changes;
+    };
+    bool roadEditCommand(const std::string& method, const std::vector<std::string>& args, std::string& result);
+    bool recordRoadEdit(const RoadEdit& edit, const std::string& label, std::string& result);
+    bool applyRoadEdit(int id, const std::string& state, std::string& error);
+    bool applyRoadChange(const RoadChange& change, bool after, std::string& error);
+    RoadNetwork                   m_roads;
+    std::map<int, RoadEdit>       m_roadEdits;
+    int                           m_nextRoadEdit = 1;
+    bool                          m_roadTool = false;
+    int                           m_activeSpline = -1;
+    int                           m_activeSplinePoint = -1;
+    bool                          m_splinesShown = true;
+    int                           m_copiedSpline = -1;            // EditorRoad.splineCopy's spline
+    float                         m_splinePasteOffset = 1.0f;     // the next paste's sideways offset in metres
+    int                           m_markedSpline = -1;            // EditorRoad.splineMark's spline and point
+    int                           m_markedSplinePoint = -1;
+    std::string                   m_activeRoadTemplate;           // EditorRoad.activeTemplate
 };
 
 } // namespace bf2editor

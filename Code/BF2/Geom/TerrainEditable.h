@@ -11,6 +11,7 @@
 
 #include "ITerrainEditable.h"
 #include "Terrain.h"
+#include "LightmapGeneration/ILightSampleable.h"
 #include "../Game/IEventListener.h"
 #include "../IO/Console/IConsoleSaveable.h"
 #include "../../RendDX9Abi/PluginAbi.h"
@@ -31,28 +32,6 @@ class SurroundingPatchEditable;
 // The two ids queryInterface tests besides 1 / 820004 / 820005 (dword_10208DC0 / dword_1021AE6C).
 const unsigned int kIID_IConsoleSaveable_TE = 0x3709A4FFu;    // Core/Ids.h IID_IConsoleSaveable
 const unsigned int kIID_ILightSampleable_TE = 0xEBC881FBu;    // Core/Ids.h IID_ILightSampleable
-
-
-// Logs and aborts at an unavailable terrain-editor operation.
-// [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: RW-277]
-// Retire this helper when the remaining createLightSampler boundary is implemented.
-
-__declspec(noreturn) void terrainEditableFrontier(const char* qualifiedName);
-
-
-// ILightSampleable (IID 0xEBC881FB) - the light-sampler factory interface. [CHOSEN, not recovered]
-// tree-local declaration: StaticMesh's recovered table (StaticMesh.h, +0x30) has the same shape but the
-// tree declares no class for it. Slot names [INFERRED] from TerrainEditable's bodies.
-
-class ILightSampleable : public IBase
-{
-public:
-    virtual bool   isLightSampleable() = 0;                        // +0x10 TerrainEditable: 0x10107C00 `mov al, 1`
-    virtual IBase* createLightSampler(int lightmapSize) = 0;       // +0x14 (a TerrainLightSampler, phase F)
-    virtual bool   destroyLightSampler(IBase* sampler) = 0;        // +0x18
-protected:
-    ~ILightSampleable() {}
-};
 
 
 // TerrainDetailTextureEditable - the 0x78-byte detail record TerrainEditable::init builds six of
@@ -237,8 +216,10 @@ public:
 
     // ILightSampleable (+0x774)
     virtual bool   isLightSampleable();
-    virtual IBase* createLightSampler(int lightmapSize);                   // (phase F)
-    virtual bool   destroyLightSampler(IBase* sampler);
+    // A TerrainLightSampler over every patch and ring patch (TerrainLightSampling.h), after
+    // forcing the ring patches out of engine mode. Null when the sampler's init fails.
+    virtual ILightSampling* createLightSampler(float resolutionModifier);
+    virtual bool   destroyLightSampler(ILightSampling* sampler);
 
     // the TU's non-virtual bodies
     void reloadLowDetailMaps();                                            // 0x10107490  update's one-shot latch

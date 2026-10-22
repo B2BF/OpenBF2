@@ -1,0 +1,33 @@
+; [CHOSEN, not recovered] - DICE's own .def is not in the shipped image, but its EFFECT is.
+; `dumpbin /exports BF2VoipServer_w32ded.dll` on the reference binary (image base 0x10000000)
+; returns exactly these eleven CBF2VoipServer members, in this order (ordinals 1..11), plus the CRT
+; entry point DllEntryPoint at 0x10061F36, which is not an EXPORTS entry.
+;
+; The engine imports six of them by decorated name directly from this image
+; (Code/BF2/Game/GameServer/VoipServerConnection.cpp -> VoipServerInternal::Start):
+;   ??0CBF2VoipServer@BF2VoipServer@@QAE@XZ
+;   ??1CBF2VoipServer@BF2VoipServer@@QAE@XZ
+;   ?Initialize@CBF2VoipServer@BF2VoipServer@@QAE?AW4VRESULT@VOIP@@_N@Z
+;   ?CreateInstance@CBF2VoipServer@BF2VoipServer@@QAE?AW4VRESULT@VOIP@@IV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@AAH@Z
+;   ?Update@CBF2VoipServer@BF2VoipServer@@QAE?AW4VRESULT@VOIP@@XZ
+;   ?Shutdown@CBF2VoipServer@BF2VoipServer@@QAE?AW4VRESULT@VOIP@@XZ
+; The other five (IsRunning, getNumInstances, getInstance, ReleaseInstance, ReleaseAllInstances)
+; are shipped exports the dedicated server does not import.
+;
+; The decoration is MSVC C++ ABI for the BF2VoipServer::CBF2VoipServer member set; the ordinals are
+; pinned to match the shipped image.
+;
+; NO `LIBRARY` STATEMENT: the link already names the image BF2VoipServer_w32ded.dll; a LIBRARY line
+; here would only duplicate it, and link.exe warns when the two disagree.
+EXPORTS
+    ??0CBF2VoipServer@BF2VoipServer@@QAE@XZ @1
+    ??1CBF2VoipServer@BF2VoipServer@@QAE@XZ @2
+    ?CreateInstance@CBF2VoipServer@BF2VoipServer@@QAE?AW4VRESULT@VOIP@@IV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@AAH@Z @3
+    ?Initialize@CBF2VoipServer@BF2VoipServer@@QAE?AW4VRESULT@VOIP@@_N@Z @4
+    ?IsRunning@CBF2VoipServer@BF2VoipServer@@QAE_NXZ @5
+    ?ReleaseAllInstances@CBF2VoipServer@BF2VoipServer@@QAE?AW4VRESULT@VOIP@@XZ @6
+    ?ReleaseInstance@CBF2VoipServer@BF2VoipServer@@QAE?AW4VRESULT@VOIP@@H@Z @7
+    ?Shutdown@CBF2VoipServer@BF2VoipServer@@QAE?AW4VRESULT@VOIP@@XZ @8
+    ?Update@CBF2VoipServer@BF2VoipServer@@QAE?AW4VRESULT@VOIP@@XZ @9
+    ?getInstance@CBF2VoipServer@BF2VoipServer@@QAEPAVCBF2VoipServerInstance@2@I@Z @10
+    ?getNumInstances@CBF2VoipServer@BF2VoipServer@@QAEIXZ @11

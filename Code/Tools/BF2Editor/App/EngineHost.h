@@ -24,6 +24,7 @@ struct EngineConfig
     bool        looseObjects;   // ... but not those mounted at Objects (the object editor's loose mode)
     bool        looseCommon;    // ... nor those mounted at Common (the material editor's loose mode)
     bool        ignoreAsserts;  // Vars "hack-ignore-asserts" = 1: an Assert is logged instead of exit(1)
+    bool        hud = false;    // the game's HUD: its modules, the HudManager singleton and its init (needs a window)
 
     // The renderer (WP4). No window: the engine comes up without one, as a batch run needs.
     HWND        window;         // the editor window the renderer draws into
@@ -58,12 +59,19 @@ public:
     IDirect3DDevice9* device() const { return m_device; }
     const std::string& rendererSummary() const { return m_rendererSummary; }
 
+    // The game's HUD ([CHOSEN, not recovered]: the editor's own start-up runs the client's HUD steps): up when boot() was
+    // asked for it and its init succeeded. hudLevelLoaded() is the HUD's BF2HudManager::onLevelLoaded. The renderer
+    // updates and paints the HUD itself; App/HudEditor decides each frame whether it is drawn.
+    bool hudUp() const { return m_hudUp; }
+    void hudLevelLoaded();
+
 private:
     EngineHost(const EngineHost&);
     EngineHost& operator=(const EngineHost&);
 
     bool fail(const std::string& step);
     bool startRenderer(const EngineConfig& config);
+    bool m_hudUp = false;
 
     // How far boot() got, so shutdown() undoes exactly that.
     enum Phase

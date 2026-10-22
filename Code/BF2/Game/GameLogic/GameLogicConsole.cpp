@@ -5,7 +5,10 @@
 #include "../../Core/SettingsRepostitory.h"   // settings->boolGet("GSIsServer") - the getters' gate
 #include "../IGameLogic.h"
 #include "GameLogic.h"            // the messages.* bindings reach the concrete class
+#include "ServerGameLogic.h"      // ServerGameLogic::createObject - the gameLogic.createObject receiver
 #include "VoiceMessages.h"
+#include "../../Scene/Object/PlayerManager.h"   // world::playerManager - player.kit's receiver
+#include "../Objects/IPlayer.h"                 // world::IPlayer - player.kit's active player
 #include "../../Math/Vec3.h"      // Vec4 - the fogStartEndAndBase property's complete type
 #include <string>
 
@@ -45,6 +48,13 @@ void gameLogicSetTeamName(int team, const std::string& name)
     gameLogic->setTeamName(team, name);
 }
 
+// PE ctor 0x414E20, executor 0x414F50, shared gate 0x416B40 (`dword_83BF50 != 0`, i.e. gameLogic).
+// argc exactly 2; dispatches IGameLogic +0x1F8 GameLogic::setTeamLanguage(int, const std::string&).
+void gameLogicSetTeamLanguage(int team, const std::string& language)
+{
+    gameLogic->setTeamLanguage(team, language);
+}
+
 // Pre-spawn free-camera transform. Linux64 server ELF 0x87D9A0 (ConsoleClass199) and win32 client
 // 0x43B055 both read two Vec3 arguments and call GameLogic::setBeforeSpawnCamera directly.
 void gameLogicSetBeforeSpawnCamera(Vec3 position, Vec3 direction)
@@ -52,9 +62,22 @@ void gameLogicSetBeforeSpawnCamera(Vec3 position, Vec3 direction)
     static_cast<GameLogic*>(gameLogic)->setBeforeSpawnCamera(position, direction);
 }
 
-// The two camera getters select the server gameLogic exactly as ConsoleClass322..325 do: the
-// GSIsServer setting first, then the published gameLogic pointer.
-GameLogic* gameLogicCameraReadTarget()
+// ConsoleClass195 (PE ctor 0x419620, executor 0x419710, gate 0x418D60). The executor re-derives the
+// server gameLogic behind the GSIsServer gate and calls the concrete class's createObject. The same
+// single body is present in the client PE (ctor 0x43AA9A, executor 0x43AB0B, target 0x4DCB40): the
+// receiver is always ServerGameLogic because the gate requires GSIsServer, and when GSIsServer is
+// set BF2Engine::startGame calls setGameLogic(CID_ServerGameLogic) (the client's non-server path
+// uses CID_ClientGameLogic = 121006). One std::string, no return value.
+void gameLogicCreateObject(std::string name)
+{
+    static_cast<ServerGameLogic*>(gameLogic)->createObject(name);
+}
+
+// The shared `GSIsServer && gameLogic` gate: returns the published gameLogic only while the
+// process is a server, else null. The two camera getters, the createObject method and its
+// property bindings all select their receiver through it (PE executors 0x88F7C0/0x88F620 and
+// gate 0x418D60).
+GameLogic* serverGameLogic()
 {
     if (!settings->boolGet(std::string("GSIsServer"), false))
         return 0;
@@ -63,12 +86,12 @@ GameLogic* gameLogicCameraReadTarget()
 
 Vec3 gameLogicGetBeforeSpawnCameraPosition()
 {
-    return gameLogicCameraReadTarget()->getBeforeSpawnCameraPosition();
+    return serverGameLogic()->getBeforeSpawnCameraPosition();
 }
 
 Vec3 gameLogicGetBeforeSpawnCameraDirection()
 {
-    return gameLogicCameraReadTarget()->getBeforeSpawnCameraDirection();
+    return serverGameLogic()->getBeforeSpawnCameraDirection();
 }
 
 // Stock GameLogicInit.con and level Init.con ticket policy. PE constructors/executors:
@@ -143,16 +166,22 @@ BF2_CONSOLE_METHOD_2_STATIC_ACTIVE(setTeamFlag, gameLogicSetTeamFlag, gameLogic 
                                    int, std::string, kGameLogicConsoleTag)
 BF2_CONSOLE_METHOD_2_STATIC_ACTIVE(setTeamName, gameLogicSetTeamName, gameLogic != 0,
                                    int, std::string, kGameLogicConsoleTag)
+BF2_CONSOLE_METHOD_2_STATIC_ACTIVE(setTeamLanguage, gameLogicSetTeamLanguage, gameLogic != 0,
+                                   int, std::string, kGameLogicConsoleTag)
 BF2_CONSOLE_METHOD_2_STATIC_ACTIVE(setBeforeSpawnCamera, gameLogicSetBeforeSpawnCamera,
                                    gameLogic != 0, Vec3, Vec3, kGameLogicConsoleTag)
+// ConsoleClass195 - exec 0x419710, gate 0x418D60 (GSIsServer && gameLogic), argc exactly 1,
+// returns void. Only caller of ServerGameLogic::createObject.
+BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(createObject, gameLogicCreateObject,
+                                   serverGameLogic() != 0, std::string, kGameLogicConsoleTag)
 // ConsoleClass201/202 - exec 0x88F7C0 / 0x88F620, 0 args, dynamic, return Vec3; active only while
 // GSIsServer is set. The setter above uses the plain gameLogic check instead.
 BF2_CONSOLE_METHOD_0_RET_ACTIVE(getBeforeSpawnCameraPosition,
                                 gameLogicGetBeforeSpawnCameraPosition, Vec3,
-                                gameLogicCameraReadTarget() != 0, kGameLogicConsoleTag)
+                                serverGameLogic() != 0, kGameLogicConsoleTag)
 BF2_CONSOLE_METHOD_0_RET_ACTIVE(getBeforeSpawnCameraDirection,
                                 gameLogicGetBeforeSpawnCameraDirection, Vec3,
-                                gameLogicCameraReadTarget() != 0, kGameLogicConsoleTag)
+                                serverGameLogic() != 0, kGameLogicConsoleTag)
 BF2_CONSOLE_METHOD_2_STATIC_ACTIVE(setDefaultNumberOfTickets,
                                    gameLogicSetDefaultNumberOfTickets, gameLogic != 0,
                                    U32, U32, kGameLogicConsoleTag)
@@ -279,6 +308,24 @@ BF2_CONSOLE_OBJECT("Renderer", 2, 0)
 
 BF2_CONSOLE_PROPERTY(fogStartEndAndBase, Vec4, gameLogic,
                      setFogStartEndAndBase, getFogStartEndAndBase, kGameLogicConsoleTag)
+
+// player.kit - reads or sets the active player's kit index. Dedicated PE defaults 0x75A5C0; ctor
+// 0x41C520 (vtable off_7886E8, +0xA1 = 1); the shared gate 0x41C040 is `playerManager &&
+// getActivePlayer() != 0`; executor 0x41C670 dispatches IPlayer::getKit / setKit on the active
+// player. Retail appends this binding to the same gameLogic list (0x83C4EC).
+BF2_CONSOLE_OBJECT("Player", 2, 0)
+namespace {
+world::IPlayer* activeGamePlayer()
+{
+    return world::playerManager ? world::playerManager->getActivePlayer() : 0;
+}
+void gameLogicSetActivePlayerKit(int kit)
+{
+    activeGamePlayer()->setKit(kit);
+}
+} // namespace
+BF2_CONSOLE_PROPERTY_FN(kit, int, activeGamePlayer() != 0, activeGamePlayer()->getKit(),
+                        gameLogicSetActivePlayerKit, kGameLogicConsoleTag)
 
 } // namespace hfe
 } // namespace dice

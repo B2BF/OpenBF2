@@ -31,6 +31,9 @@ void rendererSetSkinnedMeshLod(int lod);
 void rendererSetBundledMeshLod(int lod);
 int  rendererGetSkinnedMeshLod();
 int  rendererGetBundledMeshLod();
+// BF2Render.cpp - drawHud's arms (0x1005CCC0) over the renderer byte +0x6B1.
+bool rendererGetDrawHud();
+void rendererSetDrawHud(bool on);
 int rendererGetDrawFps();
 void rendererSetDrawFps(int value);
 
@@ -133,6 +136,10 @@ BF2_CONSOLE_PROPERTY_FN(forceSkinnedMeshLod, int, g_Renderer != 0,
                         rendererGetSkinnedMeshLod(), rendererSetSkinnedMeshLod, kRendererConsoleTag)
 BF2_CONSOLE_PROPERTY_FN(forceBundledMeshLod, int, g_Renderer != 0,
                         rendererGetBundledMeshLod(), rendererSetBundledMeshLod, kRendererConsoleTag)
+
+// drawHud - ctor 0x1005CB70 (type "bool"), active while g_Renderer exists (0x1005B930).
+BF2_CONSOLE_PROPERTY_FN(drawHud, bool, g_Renderer != 0,
+                        rendererGetDrawHud(), rendererSetDrawHud, kRendererConsoleTag)
 
 BF2_CONSOLE_OBJECT("renderer", 1, 0)
 BF2_CONSOLE_PROPERTY_FN(drawFps, int, g_Renderer != 0,

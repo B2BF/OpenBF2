@@ -364,45 +364,29 @@ bool EditSession::applyUndergrowthChange(int id, const std::string& state, std::
     return true;
 }
 
-bool EditSession::saveUndergrowth(std::string& result)
+void EditSession::planUndergrowth(SavePlan& plan)
 {
-    result.clear();
     if (!undergrowthChanged())
-        return true;
+        return;
+    SavePart& part = plan.part("undergrowth");
+    std::string answer;
     if (undergrowthConfigChanged())
     {
         const std::string configPath = m_document->levelDirectory() + "Undergrowth.cfg";
         const std::string text = m_undergrowthConfig.render();
-        const ScmResult edit = sourceControl().openForEdit(configPath);
-        std::string error;
-        if (!edit.ok || !ObjectLibrary::writeTextFile(configPath, text, error))
-        {
-            result = "undergrowth NOT saved: " + (edit.ok ? error : "source control refused " + configPath + ": " + edit.message);
-            return false;
-        }
-        m_undergrowthConfigSaved = text;
-        result = "saved " + configPath;
-        if (m_undergrowth.bytes() == m_undergrowthSaved)
-            return true;
-        result += "; ";
+        part.add(configPath, text);
+        part.onWritten([this, text]() { m_undergrowthConfigSaved = text; });
+        answer = "saved " + configPath;
     }
-    const std::string path = m_document->levelDirectory() + "Undergrowth.raw";
-    const ScmResult edit = sourceControl().openForEdit(path);
-    if (!edit.ok)
+    if (m_undergrowth.bytes() != m_undergrowthSaved)
     {
-        result = "undergrowth NOT saved: source control refused " + path + ": " + edit.message;
-        return false;
+        const std::string path = m_document->levelDirectory() + "Undergrowth.raw";
+        const std::string bytes = m_undergrowth.bytes();
+        part.add(path, bytes);
+        part.onWritten([this, bytes]() { m_undergrowthSaved = bytes; });
+        answer += (answer.empty() ? "" : "; ") + std::string("saved ") + path;
     }
-    std::string error, written;
-    if (!ObjectLibrary::writeTextFile(path, m_undergrowth.bytes(), error)
-        || !ObjectLibrary::readTextFile(path, written, error) || written != m_undergrowth.bytes())
-    {
-        result = "undergrowth NOT saved: " + (error.empty() ? path + " does not hold what was written" : error);
-        return false;
-    }
-    m_undergrowthSaved = m_undergrowth.bytes();
-    result += "saved " + path;
-    return true;
+    part.onReport([answer](const SavePart&) { return answer; });
 }
 
 } // namespace bf2editor

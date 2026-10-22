@@ -163,6 +163,29 @@ bool TestHarness::mouseToObject(unsigned id, std::string& result)
     return true;
 }
 
+bool TestHarness::mouseToPart(int index, std::string& result)
+{
+    const std::vector<EditSession::PreviewPart> parts = m_session.previewParts();
+    if (index < 0 || index >= static_cast<int>(parts.size()))
+    {
+        result = "the preview has no part " + std::to_string(index);
+        return false;
+    }
+    const dice::hfe::Mat4& m = parts[static_cast<size_t>(index)].world;
+    const float origin[3] = { m.m[12], m.m[13], m.m[14] };
+    float x = 0.0f, y = 0.0f;
+    if (!m_camera.worldToPixel(origin, m_session.viewWidth(), m_session.viewHeight(), x, y))
+    {
+        result = "the part is behind the camera";
+        return false;
+    }
+    mouseMove(x, y, result);
+    char text[96];
+    std::snprintf(text, sizeof(text), "the mouse is at %.1f %.1f", x, y);
+    result = text;
+    return true;
+}
+
 bool TestHarness::mouseToAreaPoint(const std::string& area, int index, std::string& result)
 {
     LevelObjectFile::CombatAreaData data;
@@ -325,8 +348,14 @@ bool TestHarness::mouseToAxis(int axis, float pixels, std::string& result)
         result = "the axis is 0 (X), 1 (Y) or 2 (Z)";
         return false;
     }
+    // The gizmo is the picked preview part's while one is picked, else the selection's.
     dice::hfe::Mat4 m;
-    if (!EditSession::transformOf(m_session.selection().primary(), m))
+    const std::vector<EditSession::PreviewPart> parts =
+        m_session.previewPartsShown() && m_session.pickedPreviewPart() >= 0 ? m_session.previewParts()
+                                                                            : std::vector<EditSession::PreviewPart>();
+    if (!parts.empty() && m_session.pickedPreviewPart() < static_cast<int>(parts.size()))
+        m = parts[static_cast<size_t>(m_session.pickedPreviewPart())].world;
+    else if (!EditSession::transformOf(m_session.selection().primary(), m))
     {
         result = "nothing is selected";
         return false;

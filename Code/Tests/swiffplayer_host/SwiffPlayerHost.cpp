@@ -721,7 +721,7 @@ public:
     virtual IBase* getSingleton(const vc71::string& name)
     { for (int i = 0; i < m_singletonCount; ++i) if (!strcmp(m_singletonNames[i], name.c_str())) return m_singletonSlots[i] ? *m_singletonSlots[i] : 0; return 0; }
     virtual void  reserved_getSingletonAs()               { fatal("getSingletonAs"); }
-    virtual void  reserved_registerSimpleSingleton()      { fatal("registerSimpleSingleton"); }
+    virtual void  registerSimpleSingleton(const renddx9abi::HostString&, void*) { fatal("registerSimpleSingleton"); }
     virtual void  reserved_unregisterSimpleSingleton()    { fatal("unregisterSimpleSingleton"); }
     virtual void  reserved_getSimpleSingleton()           { fatal("getSimpleSingleton"); }
     virtual void  reserved_getPrintableSingletonList()    { fatal("getPrintableSingletonList"); }

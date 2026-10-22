@@ -1,6 +1,7 @@
 // Loads a template's defining .con and matching .tweak through the engine filesystem for in-place editing.
 // Mounted archive files are read-only because archives shadow loose files; loose mode leaves archives unmounted.
-// Saves atomically to getWritePath after source-control openForEdit and verifies the written file by reading it back.
+// A save plans each modified file at getWritePath (Framework/SavePlan writes it through source control, atomically,
+// and verifies it).
 #ifndef BF2EDITOR_APP_TEMPLATEDOCUMENTS_H
 #define BF2EDITOR_APP_TEMPLATEDOCUMENTS_H
 
@@ -13,6 +14,8 @@
 
 namespace bf2editor
 {
+
+class SavePart;
 
 struct TemplateDocument
 {
@@ -41,7 +44,9 @@ public:
     TemplateDocument& document(size_t index) { return m_documents[index]; }
     const TemplateDocument& document(size_t index) const { return m_documents[index]; }
     std::vector<size_t> modified() const;
-    bool save(size_t index, std::string& error);
+    // The file, when it changed, into `part`; the document takes it as saved once written. False with `error` for
+    // a file read from a mounted archive.
+    bool planSave(size_t index, SavePart& part, std::string& error);
     // Everything forgotten (the level closes; a relaunch reads the files again).
     void clear() { m_documents.clear(); }
 

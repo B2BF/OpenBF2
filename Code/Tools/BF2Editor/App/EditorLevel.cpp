@@ -13,6 +13,8 @@
 #include "Core/SmartItf.h"
 #include "Game/IGame.h"
 #include "Game/IGameLogic.h"
+#include "Game/Objects/IObject.h"
+#include "Game/Objects/IObjectTemplate.h"
 #include "IO/Console/Console.h"
 #include "IO/File/File.h"
 #include "IO/File/FileManager.h"
@@ -24,6 +26,7 @@
 
 #include <cctype>
 #include <cstdio>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -170,6 +173,110 @@ BlockRun runEngineLines(const std::vector<std::string>& lines)
     }
     return run;
 }
+
+// One object of an overgrowth collision script as Overgrowth.save writes it: `Object.create <template>`, then
+// `Object.absoluteTransformation [..][..][..][x/y/z/1]`, whose last row is the position.
+struct CollisionRecord
+{
+    std::string templateName;   // lower case
+    float       position[3];
+    bool        placed;
+};
+
+std::vector<CollisionRecord> parseCollisionScript(const std::string& text)
+{
+    std::vector<CollisionRecord> records;
+    size_t start = 0;
+    while (start < text.size())
+    {
+        size_t end = text.find('\n', start);
+        if (end == std::string::npos)
+            end = text.size();
+        const std::string line = trimmedLower(text.substr(start, end - start));
+        start = end + 1;
+        if (line.compare(0, 14, "object.create ") == 0)
+        {
+            CollisionRecord record;
+            record.templateName = trimmedLower(line.substr(14));
+            record.position[0] = record.position[1] = record.position[2] = 0.0f;
+            record.placed = false;
+            records.push_back(record);
+        }
+        else if (line.compare(0, 30, "object.absolutetransformation ") == 0 && !records.empty())
+        {
+            const size_t row = line.rfind('[');
+            CollisionRecord& record = records.back();
+            record.placed = row != std::string::npos
+                && std::sscanf(line.c_str() + row, "[%f/%f/%f/", &record.position[0], &record.position[1],
+                               &record.position[2]) == 3;
+        }
+    }
+    return records;
+}
+
+// Removes the objects a level's Overgrowth/OvergrowthCollision.con made: each record takes the nearest loaded
+// object marked isOvergrowth with its template within 0.01 m, the document's binding tolerance. `records`
+// receives the script's record count; returns the number of objects removed.
+int removeOvergrowthCollisionObjects(const std::string& levelPath, int& records)
+{
+    records = 0;
+    std::string text;
+    if (!world::objectManager || !readEngineText(levelPath + "Overgrowth/OvergrowthCollision.con", text))
+        return 0;
+    const std::vector<CollisionRecord> script = parseCollisionScript(text);
+    records = static_cast<int>(script.size());
+
+    const std::map<unsigned int, world::IObject*>& roots = world::objectManager->getAllObjectsFromGrid();
+    std::vector<world::IObject*> candidates;
+    std::map<std::string, std::vector<size_t> > byTemplate;
+    for (std::map<unsigned int, world::IObject*>::const_iterator it = roots.begin(); it != roots.end(); ++it)
+    {
+        world::IObject* const object = it->second;
+        if (!object || !object->getTemplate() || !object->getIsOvergrowth())
+            continue;
+        byTemplate[trimmedLower(object->getTemplate()->getName())].push_back(candidates.size());
+        candidates.push_back(object);
+    }
+
+    // Collected first: removal changes the map the candidates came from.
+    std::vector<bool> taken(candidates.size(), false);
+    std::vector<world::IObject*> doomed;
+    for (size_t r = 0; r < script.size(); ++r)
+    {
+        std::map<std::string, std::vector<size_t> >::const_iterator group = byTemplate.find(script[r].templateName);
+        if (!script[r].placed || group == byTemplate.end())
+            continue;
+        size_t best = candidates.size();
+        float bestDistance = 0.01f * 0.01f;
+        for (size_t c = 0; c < group->second.size(); ++c)
+        {
+            const size_t index = group->second[c];
+            if (taken[index])
+                continue;
+            const Mat4& m = candidates[index]->getAbsoluteTransformation();
+            const float dx = m.m[12] - script[r].position[0];
+            const float dy = m.m[13] - script[r].position[1];
+            const float dz = m.m[14] - script[r].position[2];
+            const float distance = dx * dx + dy * dy + dz * dz;
+            if (distance <= bestDistance)
+            {
+                bestDistance = distance;
+                best = index;
+            }
+        }
+        if (best < candidates.size())
+        {
+            taken[best] = true;
+            doomed.push_back(candidates[best]);
+        }
+    }
+    // The engine's own removal, as the editor's delete does it: forceDestroy, then the destroy list drained.
+    for (size_t i = 0; i < doomed.size(); ++i)
+        doomed[i]->forceDestroy();
+    if (!doomed.empty())
+        world::objectManager->destroyObjects();
+    return static_cast<int>(doomed.size());
+}
 }
 
 EditorLevel::EditorLevel()
@@ -288,8 +395,23 @@ bool EditorLevel::open(const std::string& name, const std::string& gameMode, int
         replaceGameLogic();
         return false;
     }
+    // The retail editor loads a level through Init.con's editor branch, which runs Overgrowth.con and then
+    // `Overgrowth.editorEnable 1`, and never OvergrowthCollision.con. In editor mode the renderer's resource
+    // pre-load leaves the static isOvergrowth objects (Karkand's palms) to draw as themselves and the
+    // overgrowth generates its plants from its maps. This load ran the game branch, so editor mode is set
+    // before the post-load event initialises the overgrowth, and the objects the collision script made
+    // are removed: the generated plants stand where they stood.
+    const BlockRun editorMode = runEngineLines(std::vector<std::string>(1, "Overgrowth.editorEnable 1"));
     eventManager->postEvent(ECCore, kPostLoad, static_cast<void*>(0), 0.0f);
     eventManager->postEvent(ECCore, kResourcesLoaded, static_cast<void*>(0), 0.0f);
+    int collisionRecords = 0;
+    const int collisionRemoved = removeOvergrowthCollisionObjects(path, collisionRecords);
+    if (editorMode.complaints)
+        logLine(LogLevel::Warning, "level: %s", editorMode.firstComplaint.c_str());
+    else if (collisionRecords)
+        logLine(LogLevel::Info, "level: overgrowth in editor mode, as the retail editor loads it; %d of %d "
+                "OvergrowthCollision.con objects removed (the retail editor never runs that script)",
+                collisionRemoved, collisionRecords);
 
     QueryPerformanceCounter(&end);
     m_open = true;

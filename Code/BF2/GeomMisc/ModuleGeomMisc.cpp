@@ -127,7 +127,7 @@ void ModuleGeomMisc::getClassList(RD9_HOST_VECTOR_PARAMETER(ClassRegInfo, hostVe
     meme.create  = RD9_CLASS_FACTORY(&createMemeTexture);
     out.push_back(meme);
 
-    // Movie-player factory used during client startup; unavailable video loading reports failure.
+    // Full-screen movie player used by the client's startup-movie queue.
     ClassRegInfo movie;
     movie.classId = CID_FSMoviePlayer;              // 81046, dword_1020AF2C
     movie.name    = "dice.hfe.geom.FSMoviePlayer";

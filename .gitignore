@@ -1,7 +1,9 @@
 ﻿# Local agent/session state
 .claude/
+.opencode/
 
-# CMake / CLion local state
+# CMake / CLion / VSCode local state
+.vscode/
 .idea/
 /out/
 /cmake-build-*/

@@ -399,6 +399,30 @@ bool MapList::insertEntry(int idx, const std::string& name, const std::string& g
     return true;
 }
 
+// Removes the entry at idx. Follows insertEntry's guard order (range, then permission) and
+// keeps the current selection pointing at the same entry. Recovered from the dedicated PE
+// executor's callee (0x441750), whose trailing bool is the temporary modification override.
+bool MapList::removeEntry(int idx, bool modifiableOverride)
+{
+    const bool saved = m_modifiableOverride;
+    if (modifiableOverride)
+        m_modifiableOverride = modifiableOverride;
+
+    if (!validateIndex(idx) || !isModifiable())
+    {
+        m_modifiableOverride = saved;
+        return false;
+    }
+
+    internalSetDirty();
+    m_entries.erase(m_entries.begin() + idx);
+    if (idx <= m_currentMap)
+        --m_currentMap;
+
+    m_modifiableOverride = saved;
+    return true;
+}
+
 // Console reads always resolve the map list. Writes require isModifiable; returning
 // null hides write bindings. The write receiver requires the initialized global list.
 MapList* MapList::consoleReadAccess()

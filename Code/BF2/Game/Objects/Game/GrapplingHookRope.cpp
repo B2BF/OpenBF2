@@ -307,8 +307,8 @@ void GrapplingHookRope::initialize()
 
     _float174 = _float164 / static_cast<float>(_dword168);
     _float178 = _float174 * _float174;
-    _float19C = m_ropeTemplate->_ropeParams[16];
-    _float1F8 = m_ropeTemplate->_float1D0;
+    _float19C = m_ropeTemplate->m_elasticity;
+    _float1F8 = m_ropeTemplate->m_awakeTime;
 
     for (std::vector<RopeParticle>::iterator it = m_particles.begin();
          it != m_particles.end(); ++it)
@@ -456,7 +456,7 @@ bool GrapplingHookRope::checkForEntry(IPlayer* player)
                 delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
             const float distance = std::sqrt(distanceSquared);
 
-            static const float maximumDistance = m_ropeTemplate->_ropeParams[14] + 1.0f;
+            static const float maximumDistance = m_ropeTemplate->m_attachClimberRadius + 1.0f;
             if (distanceSquared < maximumDistance * maximumDistance)
             {
                 int movementMultiplier = 1;
@@ -614,7 +614,7 @@ void GrapplingHookRope::applyForces()
 // unhooked ropes use 1.0. Every particle's collision byte and accumulated force are then cleared.
 void GrapplingHookRope::doPhysics()
 {
-    const float damping = _byte1C8 ? m_ropeTemplate->_ropeParams[17] : 1.0f;
+    const float damping = _byte1C8 ? m_ropeTemplate->m_airFriction : 1.0f;
     for (std::vector<RopeParticle>::iterator it = m_particles.begin();
          it != m_particles.end(); ++it)
     {
@@ -913,8 +913,8 @@ void GrapplingHookRope::handleParticleCollision(
 // first template to enter this routine supplies both cached thresholds, as in retail.
 void GrapplingHookRope::handleLinkCollision()
 {
-    static const float lowMotionThreshold = m_ropeTemplate->_ropeParams[10];
-    static const float hookDelay = m_ropeTemplate->_ropeParams[11];
+    static const float lowMotionThreshold = m_ropeTemplate->m_linkAttachMovement;
+    static const float hookDelay = m_ropeTemplate->m_linkAttachTime;
 
     for (std::vector<RopeLink*>::iterator linkIt = m_ropeLinks.begin() + 1;
          linkIt != m_ropeLinks.end() - 1; ++linkIt)
@@ -1077,7 +1077,7 @@ void GrapplingHookRope::handleTimers(float deltaTime)
 
     if (gameLogic->isServer())
     {
-        static const float maximumUnusedLifetime = m_ropeTemplate->_ropeParams[0];
+        static const float maximumUnusedLifetime = m_ropeTemplate->m_ropeUnusedLifetime;
         if (m_unusedLifetime < maximumUnusedLifetime)
         {
             if (m_riderCount)
@@ -1234,7 +1234,7 @@ void GrapplingHookRope::pullBackRope()
 // threshold, matching retail's function-static initialization quirk.
 void GrapplingHookRope::setClimbablePartsOfRope()
 {
-    static const float maxVerticalComponent = m_ropeTemplate->_ropeParams[18];
+    static const float maxVerticalComponent = m_ropeTemplate->m_climbableAngle;
     const float epsilon = 1.1920929e-7f;
     for (std::vector<RopeLink*>::iterator it = m_ropeLinks.begin();
          it != m_ropeLinks.end(); ++it)
@@ -1384,9 +1384,9 @@ float GrapplingHookRope::findAttachAngle(int segmentIndex)
 // behavior. Both impulse passes affect particles [0, m_dword170) and attenuate before applying.
 void GrapplingHookRope::throwRope()
 {
-    static float firstForce = m_ropeTemplate->_ropeParams[1];
-    static float firstVerticalBias = m_ropeTemplate->_ropeParams[2];
-    static float firstAttenuation = m_ropeTemplate->_ropeParams[3];
+    static float firstForce = m_ropeTemplate->m_throwStrength;
+    static float firstVerticalBias = m_ropeTemplate->m_upThrowBoost;
+    static float firstAttenuation = m_ropeTemplate->m_degradeThrowStrength;
 
     Vec3 direction = m_creationDirection;
     direction.y += std::fabs(direction.y) * firstVerticalBias;
@@ -1400,9 +1400,9 @@ void GrapplingHookRope::throwRope()
         it->m_force.z += direction.z * impulse;
     }
 
-    static float secondForce = m_ropeTemplate->_ropeParams[4];
-    static float secondVerticalBias = m_ropeTemplate->_ropeParams[5];
-    static float secondAttenuation = m_ropeTemplate->_ropeParams[6];
+    static float secondForce = m_ropeTemplate->m_throwStrength2;
+    static float secondVerticalBias = m_ropeTemplate->m_upThrowBoost2;
+    static float secondAttenuation = m_ropeTemplate->m_degradeThrowStrength2;
 
     direction = m_creationDirection;
     direction.y += std::fabs(direction.y) * secondVerticalBias;
@@ -1421,9 +1421,9 @@ void GrapplingHookRope::throwRope()
 // impulse; index three is the exclusive stop. The first particle is then pinned with -0.4 on Y.
 void GrapplingHookRope::dropRope()
 {
-    float impulse = m_ropeTemplate->_ropeParams[7];
-    static float verticalBias = m_ropeTemplate->_ropeParams[8];
-    static float attenuation = m_ropeTemplate->_ropeParams[9];
+    float impulse = m_ropeTemplate->m_dropStrength;
+    static float verticalBias = m_ropeTemplate->m_upDropBoost;
+    static float attenuation = m_ropeTemplate->m_degradeDropStrength;
 
     m_creationDirection.y = m_creationDirection.y * 0.1f + verticalBias;
     for (std::vector<RopeParticle>::iterator it = m_particles.end() - 1;
@@ -1509,8 +1509,8 @@ Vec3 GrapplingHookRope::getDismountPosition(
     const Vec3& fallback,
     const RopeLink& link)
 {
-    static const float radius = m_ropeTemplate->_ropeParams[12];
-    static const float up = m_ropeTemplate->_ropeParams[13];
+    static const float radius = m_ropeTemplate->m_dismountCheckOffset;
+    static const float up = m_ropeTemplate->m_minYNormal;
 
     Vec3 result = fallback;
     IObject* hitObject = 0;

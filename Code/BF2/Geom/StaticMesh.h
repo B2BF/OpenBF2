@@ -217,10 +217,11 @@ public:
 
     // The ILightSampleable subobject at +0x30: +0x10 0x10197EF0 `mov al,1; retn`.
     bool  lightSampleableSlot10ReturnsTrue() const;
-    // +0x14 0x10198680 and +0x18 the light-sampler pair the lightmap generator
-    // uses (allocate a 0x88 sampler from "<path>/Meshes/<name>.samp_<geom><lod>" and drop this
-    // instance's lightmap; free it and reload the lightmap).  Both read; both stop at the sampler
-    // constructor, which is not recovered.  See the .cpp.
+    // +0x14 and +0x18 are the light-sampler pair the lightmap generator uses: createLightSampler
+    // makes a MeshLightSampler (LightmapGeneration/MeshLightSampling.h) from the template's
+    // "<path>/Meshes/<name>.samples" (".samp_<geom><lod>" past geom 0, lod 0) and drops this
+    // instance's cached lightmap; destroyLightSampler destroys it, which writes the lightmap, and
+    // reloads the lightmap. See the .cpp.
 
     // The RaObjectParameters block embedded at +0x38, typed.  The draw writes eight of its
     // holders by name; see RaShader.h for the layout.

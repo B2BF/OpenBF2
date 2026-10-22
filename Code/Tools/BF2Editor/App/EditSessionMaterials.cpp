@@ -140,9 +140,18 @@ bool EditSession::materialsModified() const
     return m_materials.modified();
 }
 
+void EditSession::planMaterialFiles(SavePlan& plan)
+{
+    if (m_materials.modified())
+        m_materials.planSave(plan.part("material files"));
+}
+
 bool EditSession::saveMaterialFiles(std::string& result)
 {
-    return m_materials.save(result);
+    SavePlan plan;
+    planMaterialFiles(plan);
+    plan.dropUnchanged();
+    return writeSave(plan, "EditorMaterial.save", result) && !plan.anyRefused();
 }
 
 void EditSession::selectExistingMaterialCell()
@@ -313,7 +322,7 @@ bool EditSession::materialCommand(const std::string& action, const std::vector<s
     }
     if (action == "save")
     {
-        if (!m_materials.save(result))
+        if (!saveMaterialFiles(result))
             return false;
         if (result.empty())
             result = "nothing to save: the material files have no changes";

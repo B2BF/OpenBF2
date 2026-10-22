@@ -37,7 +37,7 @@ bool StatsManager::connect()
     const int port = serverSettings->m_gameSpyPort;
     std::strcpy(gcd_gamename, gamespy::g_gameName);
     std::strcpy(gcd_secret_key, gamespy::getSecretKey());
-    std::strcpy(StatsServerHostname, "gamestats.openspy.net"); // gamespy.com|openspy.net
+    std::strcpy(StatsServerHostname, "gamestats.bf2hub.p.bf2.org"); // gamespy.com|openspy.net
     return InitStatsConnection(port) == 0;
 }
 void StatsManager::disconnect()

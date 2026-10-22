@@ -3,6 +3,7 @@
 #include "App/MaterialDocuments.h"
 
 #include "Framework/ObjectLibrary.h"
+#include "Framework/SavePlan.h"
 #include "Framework/SourceControl.h"
 
 #include "IO/File/FileManager.h"
@@ -97,37 +98,14 @@ bool MaterialDocuments::modified() const
     return m_loaded && (m_defineFile.render() != m_define.savedText || m_cellFile.render() != m_cells.savedText);
 }
 
-bool MaterialDocuments::write(File& file, const std::string& text, std::string& error)
+bool MaterialDocuments::planSave(SavePart& part)
 {
-    if (text == file.savedText)
-        return true;
-    const ScmResult edit = sourceControl().openForEdit(file.writePath);
-    if (!edit.ok)
-    {
-        error = "source control refused " + file.writePath + ": " + edit.message;
-        return false;
-    }
-    if (!ObjectLibrary::writeTextFile(file.writePath, text, error))
-        return false;
-    std::string written;
-    if (!ObjectLibrary::readTextFile(file.writePath, written, error) || written != text)
-    {
-        error = file.writePath + " does not hold what was written";
-        return false;
-    }
-    file.savedText = text;
-    return true;
-}
-
-bool MaterialDocuments::save(std::string& result)
-{
-    result.clear();
     if (!modified())
         return true;
     if (archived())
     {
-        result = "the material files are read from the mounted Common archives, so a save would be shadowed: not "
-                 "saved (EditorMaterial.extract, then start with +looseCommon 1)";
+        part.refuse("the material files are read from the mounted Common archives, so a save would be shadowed: not "
+                    "saved (EditorMaterial.extract, then start with +looseCommon 1)");
         return false;
     }
     std::string written;
@@ -135,17 +113,17 @@ bool MaterialDocuments::save(std::string& result)
     const std::string cellText = m_cellFile.render();
     if (defineText != m_define.savedText)
     {
-        if (!write(m_define, defineText, result))
-            return false;
+        part.add(m_define.writePath, defineText);
+        part.onWritten([this, defineText]() { m_define.savedText = defineText; });
         written = m_define.writePath;
     }
     if (cellText != m_cells.savedText)
     {
-        if (!write(m_cells, cellText, result))
-            return false;
+        part.add(m_cells.writePath, cellText);
+        part.onWritten([this, cellText]() { m_cells.savedText = cellText; });
         written += (written.empty() ? "" : ", ") + m_cells.writePath;
     }
-    result = "saved the material files " + written;
+    part.onReport([written](const SavePart&) { return "saved the material files " + written; });
     return true;
 }
 

@@ -193,6 +193,13 @@ public:
     // [CHOSEN, not recovered] Shared helper for bounded output-line insertion; no public API or virtual slot.
     void pushOutputLine(const std::string& line);
 
+    // [CHOSEN, not recovered] True only while this console is dispatching a line that originates from
+    // a script opened out of a mounted archive. m_fromArchive is sampled per run() (and left sticky
+    // afterwards), so it is qualified by m_depth, which is non-zero only inside an active script run;
+    // rcon, Python and interactive input dispatch at depth 0 and therefore read false. Used by the
+    // openbf2.addModDll extension to refuse archive-sourced native-code loads (B2BF/OpenBF2#39).
+    bool isDispatchingArchiveScript() const { return m_fromArchive && m_depth > 0; }
+
     // Assigns a console variable and returns whether the assignment succeeds.
     bool setVariable(const std::string& name, const std::string& value);
     bool calcBooleanExpr(const std::string& lhs, const std::string& op,
@@ -343,6 +350,10 @@ private:
 
 // Process-wide console used to execute .con scripts.
 extern OldConsole* mainConsole;
+
+// The console handleCommand is currently dispatching for; set immediately before a binding runs so a
+// binding can reach back to its caller (e.g. isDispatchingArchiveScript). Null before the first dispatch.
+extern OldConsole* g_executingConsole;
 
 } // namespace io
 } // namespace hfe

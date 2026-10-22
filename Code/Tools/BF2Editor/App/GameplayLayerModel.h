@@ -17,6 +17,8 @@
 namespace bf2editor
 {
 
+class SavePart;
+
 class GameplayLayerModel
 {
 public:
@@ -38,10 +40,12 @@ public:
     const std::vector<std::string>& notes() const { return m_notes; }
     std::string layerFileText() const { return renderLayerFile(m_layers); }
     bool layersChanged() const { return layerFileText() != m_savedLayerText; }
-    // After the editor file's text is final (`editorText`, as saved or as it stands): the editor file when it does
-    // not exist yet, every game-mode file the layers make that differs from its file, and Layer.con when it
-    // changed. `written` counts the files written.
-    bool writeGenerated(const std::string& editorText, std::string& report, int& written);
+    // After the editor file's text is final (`editorText`, as saved or as it stands), into `part` (Framework/SavePlan):
+    // the editor file when it does not exist yet, every game-mode file the layers make that differs from its file,
+    // and Layer.con when it changed; the model takes them as saved once they are written. `editorFilePlanned`: the
+    // level document's part writes the editor file already. False, with the part refused, when the editor file is not
+    // in the retail layout.
+    bool planGenerated(const std::string& editorText, SavePart& part, bool editorFilePlanned);
     int  activeLayer = 1;           // where new gameplay objects go
     // A free layer id: the smallest of 2..19 no layer holds (retail refuses 20 and more).
     int  freeLayerId() const;

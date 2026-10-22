@@ -131,9 +131,19 @@ bool ImGuiHost::wantsKeyboard() const
     return m_up && ImGui::GetIO().WantCaptureKeyboard;
 }
 
+namespace
+{
+bool g_viewMouseClaimed = false;
+}
+
+void claimViewMouse(bool claimed)
+{
+    g_viewMouseClaimed = claimed;
+}
+
 bool pointerOverUi()
 {
-    return ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)
+    return g_viewMouseClaimed || ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)
         || ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
 }
 

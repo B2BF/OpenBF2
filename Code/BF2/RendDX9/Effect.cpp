@@ -1148,6 +1148,49 @@ void applyModPrefix(char* out, unsigned int outSize, const char* path)
     ::_snprintf_s(out, outSize, _TRUNCATE, "%s%s", xpack ? "mods/xpack/" : "mods/bf2/", path);
 }
 
+#if defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+// The editor's renderer only [CHOSEN, not recovered]: the game's 1.50 StaticMesh.fx comments out its include of
+// StaticMesh_lightmapgen.fx, the lightmapGeneration techniques the lightmap generator draws static meshes with as
+// occluders, so terrain lightmaps would carry no object shadows; the retail editor's own StaticMesh.fx included it.
+// True when `path` names StaticMesh.fx and its source has no include of that file outside a comment.
+bool needsLightmapGenerationInclude(const char* path, const char* source, unsigned int size)
+{
+    const char* const slash = ::strrchr(path, '/');
+    if (::_stricmp(slash ? slash + 1 : path, "StaticMesh.fx") != 0)
+        return false;
+    const char needle[] = "StaticMesh_lightmapgen.fx";
+    bool block = false, line = false;
+    for (unsigned int i = 0; i < size; ++i)
+    {
+        const char c = source[i];
+        const char next = i + 1 < size ? source[i + 1] : '\0';
+        if (block)
+        {
+            if (c == '*' && next == '/')
+            {
+                block = false;
+                ++i;
+            }
+        }
+        else if (line)
+        {
+            if (c == '\n')
+                line = false;
+        }
+        else if (c == '/' && next == '*')
+        {
+            block = true;
+            ++i;
+        }
+        else if (c == '/' && next == '/')
+            line = true;
+        else if (c == 'S' && size - i >= sizeof(needle) - 1 && ::_strnicmp(source + i, needle, sizeof(needle) - 1) == 0)
+            return false;
+    }
+    return true;
+}
+#endif
+
 } // anonymous namespace
 
 
@@ -1199,6 +1242,29 @@ static void* compileEffectFromFileWithErrors(const char* rawPath, void** errorsO
     void*        device = renderDevice();
     void*        include = shaderManagerInclude(g_shaderManager);
     unsigned long flags = shaderManagerEffectFlags(g_shaderManager);
+
+#if defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+    if (device && needsLightmapGenerationInclude(path, reinterpret_cast<const char*>(file.data), file.size))
+    {
+        std::string extended(reinterpret_cast<const char*>(file.data), file.size);
+        extended += "\n#include \"mods/xpack/Shaders/StaticMesh_lightmapgen.fx\"\n";
+        void* extendedErrors = 0;
+        const long extendedHr = D3DXCreateEffect(device, extended.data(), static_cast<unsigned int>(extended.size()),
+                                                 reinterpret_cast<const D3DXMACRO*>(macros), include, flags, 0,
+                                                 &effect, &extendedErrors);
+        if (extendedHr >= 0 && effect)
+        {
+            ::renddx9abi::freeEngineFile(file);
+            ::renddx9abi::logf("compileEffectFromFile(\"%s\"): COMPILED - effect=0x%08X from %u bytes with %u macro pairs, "
+                               "the editor's lightmap-generation include added", path, ::renddx9abi::addr(effect),
+                               sourceBytes, macroCount / 2);
+            return effect;
+        }
+        effect = 0;
+        ::renddx9abi::logf("compileEffectFromFile(\"%s\"): the editor's lightmap-generation include did not compile "
+                           "(hr=0x%08X); the shipped source is compiled", path, static_cast<unsigned>(extendedHr));
+    }
+#endif
 
     const long hr = device
         ? D3DXCreateEffect(device, file.data, file.size,

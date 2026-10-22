@@ -42,6 +42,9 @@ public:
     void normalSubGrid(int x0, int z0, int x1, int z1, int stepX, int stepZ,
                        Vec3* out, int* cursor, int flags);                  // (`retn 24h`; flags unread)
     void drawForLightmapGeneration();
+    // TerrainLightSampling's read: (originX, 0, originZ) .. (endX, 0, endZ); only min and max are
+    // written. [INFERRED] name.
+    void getWorldBounds(TerrainAabb& box);
     void makeColormapEditCopy();
     void commitColormapEdit();
     void reloadLightmap();

@@ -25,6 +25,7 @@ struct TerrainRawLayers
 {
     unsigned version = 0;           // the header's first word (0x1A on 1.50 content) and its "has version" word
     unsigned hasVersion = 0;
+    unsigned patchCount = 0;        // patches per side
     float    farSideTiling[2] = { 0.0f, 0.0f };
     float    farTopTilingHi = 0.0f;
     float    farTopTilingLow = 0.0f;

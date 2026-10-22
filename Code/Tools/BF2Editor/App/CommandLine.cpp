@@ -21,6 +21,7 @@ EditorOptions::EditorOptions()
     , looseObjects(-1)
     , looseCommon(-1)
     , editableTerrain(-1)
+    , hud(-1)
     , skipContentCheck(-1)
     , defaultContent(false)
     , windowWidth(-1)
@@ -68,7 +69,8 @@ enum SwitchId
     SwLayerSize,
     SwLooseObjects,
     SwLooseCommon,
-    SwEditableTerrain
+    SwEditableTerrain,
+    SwHud
 };
 
 struct SwitchSpec
@@ -123,6 +125,7 @@ const SwitchSpec kSwitches[] = {
     { "looseObjects",           SwLooseObjects,     0,              0 },
     { "looseCommon",            SwLooseCommon,      0,              0 },
     { "editableTerrain",        SwEditableTerrain,  0,              0 },
+    { "hud",                    SwHud,              0,              0 },
 };
 
 bool equalsIgnoreCase(const std::string& a, const std::string& b)
@@ -334,6 +337,9 @@ EditorOptions parseCommandLine(const std::string& commandLine)
         case SwEditableTerrain:
             readFlag(sw, value, options.editableTerrain, options);
             break;
+        case SwHud:
+            readFlag(sw, value, options.hud, options);
+            break;
         case SwSeh:
             readFlag(sw, value, options.seh, options);
             break;
@@ -446,9 +452,10 @@ std::string usageText()
         "  +loadLevel <level>              open a level of that mod\n"
         "  +saveAndClose <level>           open the level, save all of it, exit\n"
         "  +saveObjectsAndClose <level>    ... save only its objects\n"
-        "  +saveTerrainAndClose <level>    ... save only its terrain\n"
-        "  +saveRoadAndClose <level>       ... save only its roads\n"
-        "  +saveOvergrowthAndClose <level> ... save only its overgrowth (the save switches combine)\n"
+        "  +saveTerrainAndClose <level>    ... save only its terrain (compiled again even when unchanged)\n"
+        "  +saveRoadAndClose <level>       ... save only its roads (every editable road compiled)\n"
+        "  +saveOvergrowthAndClose <level> ... save only its overgrowth, regenerated (the save switches combine;\n"
+        "                                  terrain and overgrowth need the editable terrain, +editableTerrain 1)\n"
         "  +runConFileAndClose <script>    run a console script, then do any saves asked for, then exit\n"
         "  +forceLoadPlugin <module>       start an editing module that is not started by default\n"
         "  +importAll                      run the import-all command\n"
@@ -474,7 +481,9 @@ std::string usageText()
         "                                      saved to) the mod's loose Common folder (EditorMaterial.extract)\n"
         "  (editor) +editableTerrain 0|1       1 (the default): once the level is open, its terrain becomes the renderer's\n"
         "                                      TerrainEditable (Terrain.con's editor branch), so height edits show;\n"
-        "                                      0 keeps the compiled terrain\n";
+        "                                      0 keeps the compiled terrain\n"
+        "  (editor) +hud 0|1                   the game's HUD (Menu/HUD/HudSetup) in the view - the play test's\n"
+        "                                      soldier and vehicle HUDs, and the HUD editor; on unless 0\n";
 }
 
 std::string relaunchCommandLine(const std::string& commandLine, const std::string& gameMode, int layerSize,

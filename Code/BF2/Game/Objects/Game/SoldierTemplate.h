@@ -156,7 +156,14 @@ public:
     void setSoundFilter(const std::string& f) { m_soundFilter = f; }
 
     // The setter does not validate pose; callers must supply an index in 0..3.
-    void poseCameraPosition(int pose, const Vec3& p) { m_poseCameraPosition[pose] = p; }
+    // stores the Vec3 and then forces x and z back to zero, so only the authored height
+    // survives. Content such as `poseCameraPosition 0 0/0.47/0.1` therefore yields (0, 0.47, 0).
+    void poseCameraPosition(int pose, const Vec3& p)
+    {
+        m_poseCameraPosition[pose].x = 0.0f;
+        m_poseCameraPosition[pose].y = p.y;
+        m_poseCameraPosition[pose].z = 0.0f;
+    }
     const Vec3& getPoseCameraPosition(int pose) const { return m_poseCameraPosition[pose]; }
 
     // the two animation rigs. All four content setters and their console registrations are

@@ -52,27 +52,8 @@ bool EditSession::lightSetupCommand(const std::string& action, const std::string
     }
     const auto save = [&](int m, std::string& error) {
         const std::string path = folder + kSetupFiles[m];
-        CreateDirectoryA(folder.substr(0, folder.size() - 1).c_str(), 0);
-        const bool existed = GetFileAttributesA(path.c_str()) != INVALID_FILE_ATTRIBUTES;
-        if (existed)
-        {
-            const ScmResult edit = sourceControl().openForEdit(path);
-            if (!edit.ok)
-            {
-                error = "source control refused " + path + ": " + edit.message;
-                return false;
-            }
-        }
-        const std::string text = m_lightSetups[m].render();
-        std::string back;
-        if (!ObjectLibrary::writeTextFile(path, text, error) || !ObjectLibrary::readTextFile(path, back, error) || back != text)
-        {
-            if (error.empty())
-                error = path + " does not hold what was written";
+        if (!writeFilesNow("light setup", { std::make_pair(path, m_lightSetups[m].render()) }, error))
             return false;
-        }
-        if (!existed)
-            sourceControl().add(path);
         m_lightSetupModified[m] = false;
         return true;
     };

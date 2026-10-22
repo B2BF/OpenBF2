@@ -35,6 +35,7 @@ void*            g_toolsContext = 0;
 void*            g_panelContext = 0;
 ITestHarness*    g_testHarness = 0;
 IPlayTestCommands* g_playTest = 0;
+IHudCommands* g_hud = 0;
 // Set by an editor command that failed while the current line ran; runConsoleScript and
 // runConsoleLine clear it before each line.
 std::string      g_lastError;
@@ -436,6 +437,17 @@ std::string levelSaveAs(const std::string& name, int open)
     return result;
 }
 
+std::string levelCreate(const std::string& name, const std::string& terrain, int open)
+{
+    std::string result;
+    if (open != 0 && open != 1)
+        return outcome(false, "EditorLevel.create takes a level name, size/scale/height/lowResSize (or default) and 0 or 1 "
+                              "(open the new level)");
+    if (!g_commands->createLevel(name, terrain, open != 0, result))
+        return outcome(false, result);
+    return result;
+}
+
 std::string levelPack(const std::string& modFolder)
 {
     std::string result;
@@ -470,6 +482,28 @@ std::string testMouseToObject(const std::string& reference)
     if (!g_commands || !g_commands->resolveObject(reference, id, result))
         return outcome(false, g_commands ? result : std::string("no level is open"));
     if (!g_testHarness->mouseToObject(id, result))
+        return outcome(false, result);
+    return result;
+}
+
+// Answers where the mouse went.
+std::string testMouseToHud(const std::string& node, int which)
+{
+    float x = 0.0f, y = 0.0f;
+    std::string error;
+    if (!g_hud)
+        return outcome(false, "the HUD is not up (+hud 1)");
+    if (!g_hud->hudScreenPoint(node, which, x, y, error) || !g_testHarness->mouseMove(x, y, error))
+        return outcome(false, error);
+    char text[96];
+    std::snprintf(text, sizeof(text), "the mouse at %.0f, %.0f", x, y);
+    return text;
+}
+
+std::string testMouseToPart(int index)
+{
+    std::string result;
+    if (!g_testHarness->mouseToPart(index, result))
         return outcome(false, result);
     return result;
 }
@@ -574,6 +608,93 @@ std::string playTestKit(int team, int kit)
 {
     std::string result;
     return g_playTest->setPlayTestKit(team, kit, result) ? result : outcome(false, result);
+}
+
+std::string playTestWeapon(const std::string& name)
+{
+    std::string result;
+    return g_playTest->testPlayTestWeapon(name, result) ? result : outcome(false, result);
+}
+
+std::string hudInfo()
+{
+    return g_hud->describeHud();
+}
+
+std::string hudPreview(int on)
+{
+    std::string result;
+    return g_hud->setHudPreview(on != 0, result) ? result : outcome(false, result);
+}
+
+std::string hudSet(const std::string& name, const std::string& value)
+{
+    std::string result;
+    return g_hud->setHudVariable(name, value, result) ? result : outcome(false, result);
+}
+
+std::string hudSelect(const std::string& node)
+{
+    std::string result;
+    return g_hud->selectHudNode(node, result) ? result : outcome(false, result);
+}
+
+std::string hudNode(const std::string& node)
+{
+    return g_hud->describeHudNode(node);
+}
+
+std::string hudRect(const std::string& node, const std::string& rect)
+{
+    int x = 0, y = 0, width = 0, height = 0;
+    char tail = 0;
+    if (std::sscanf(rect.c_str(), "%d/%d/%d/%d%c", &x, &y, &width, &height, &tail) != 4)
+        return outcome(false, "EditorHud.rect takes a node and its rectangle as x/y/width/height");
+    std::string result;
+    return g_hud->setHudRect(node, x, y, width, height, result) ? result : outcome(false, result);
+}
+
+std::string hudSetRow(const std::string& node, int row, const std::string& words)
+{
+    std::string result;
+    return g_hud->setHudRow(node, row, words, result) ? result : outcome(false, result);
+}
+
+std::string hudAddRow(const std::string& node, const std::string& method, const std::string& words)
+{
+    std::string result;
+    return g_hud->addHudRow(node, method, words, result) ? result : outcome(false, result);
+}
+
+std::string hudRemoveRow(const std::string& node, int row)
+{
+    std::string result;
+    return g_hud->removeHudRow(node, row, result) ? result : outcome(false, result);
+}
+
+std::string hudChanges()
+{
+    return g_hud->describeHudChanges();
+}
+
+// The history's rows: nothing answered on success (the history counts any answer as a failure); the note on what
+// the live HUD did goes to the log.
+std::string hudSetLine(int script, int line, const std::string& text)
+{
+    std::string result;
+    return outcome(g_hud->editHudLine(0, script, line, text, result), result);
+}
+
+std::string hudInsertLine(int script, int line, const std::string& text)
+{
+    std::string result;
+    return outcome(g_hud->editHudLine(1, script, line, text, result), result);
+}
+
+std::string hudRemoveLine(int script, int line)
+{
+    std::string result;
+    return outcome(g_hud->editHudLine(2, script, line, std::string(), result), result);
 }
 
 std::string playTestHold(const std::string& name, float value, int steps)
@@ -1430,12 +1551,22 @@ std::string terrainShowSector(int x, int z, int shown)
     return hostToolAction("terrainShowSector", std::to_string(x) + "\n" + std::to_string(z) + "\n" + std::to_string(shown));
 }
 std::string terrainShownSectors() { return hostToolAction("terrainShownSectors", ""); }
+std::string terrainGenerateOvergrowth() { return hostToolAction("overgrowthGenerate", ""); }
+std::string terrainCompile() { return hostToolAction("terrainCompile", ""); }
 std::string cameraFromSelection() { return hostToolAction("fromSelection", ""); }
 std::string levelSnapAll() { return hostToolAction("snapAll", ""); }
 std::string levelSaveLists() { return hostToolAction("saveLists", ""); }
 std::string levelLevels() { return hostToolAction("levels", ""); }
 std::string levelOpen(const std::string& name) { return hostToolAction("open", name); }
 std::string levelResave() { return hostToolAction("resave", ""); }
+// The save preview, backups and restores ([CHOSEN, not recovered], issue draft 13; App/EditSessionSave.cpp).
+std::string levelPreview() { return hostToolAction("save.preview", ""); }
+std::string levelPreviewAll() { return hostToolAction("save.previewAll", ""); }
+std::string levelPreviewDiff(int file) { return hostToolAction("save.diff", std::to_string(file)); }
+std::string levelWritePreview() { return hostToolAction("save.write", ""); }
+std::string levelDropPreview() { return hostToolAction("save.drop", ""); }
+std::string levelBackups() { return hostToolAction("save.backups", ""); }
+std::string levelRestore(const std::string& name) { return hostToolAction("save.restore", name); }
 std::string viewOverlays() { return hostToolAction("overlays", ""); }
 std::string previewShow(const std::string& name) { return hostToolAction("preview.show", name); }
 std::string previewRefresh() { return hostToolAction("preview.refresh", ""); }
@@ -1455,6 +1586,21 @@ std::string previewCamera(int which)
     return hostToolAction("preview.camera", text);
 }
 std::string previewClear() { return hostToolAction("preview.clear", ""); }
+std::string previewShowParts(int on) { return hostToolAction("preview.showParts", std::to_string(on)); }
+std::string previewParts() { return hostToolAction("preview.parts", ""); }
+std::string previewPick(int part) { return hostToolAction("preview.pick", std::to_string(part)); }
+std::string previewMovePart(int part, const dice::hfe::Vec3& by)
+{
+    char text[96];
+    std::snprintf(text, sizeof(text), "%d %g/%g/%g", part, by.x, by.y, by.z);
+    return hostToolAction("preview.movePart", text);
+}
+std::string previewTurnPart(int part, float degrees)
+{
+    char text[64];
+    std::snprintf(text, sizeof(text), "%d %g", part, degrees);
+    return hostToolAction("preview.turnPart", text);
+}
 std::string selectionReload() { return hostToolAction("reloadSelected", ""); }
 std::string levelReloadObjects() { return hostToolAction("reloadAll", ""); }
 std::string levelRepositionObjects() { return hostToolAction("reposition", ""); }
@@ -1815,6 +1961,169 @@ std::string lightingEnvMaps()
     return answered(g_commands->generateEnvMaps(r), r);
 }
 
+std::string lightingLightmaps(int quality, const std::string& parts, const std::string& options)
+{
+    std::string r;
+    return answered(g_commands->generateLightmaps(quality, parts, options, r), r);
+}
+
+// Roads (App/EditSessionRoads.cpp): one command with its words, the empty optional ones left out.
+std::string roadAction(const char* object, const char* method, const std::string& a = std::string(),
+                       const std::string& b = std::string(), const std::string& c = std::string(),
+                       const std::string& d = std::string())
+{
+    std::vector<std::string> args;
+    const std::string* const words[] = { &a, &b, &c, &d };
+    size_t used = 0;
+    for (size_t i = 0; i < 4; ++i)
+        if (!words[i]->empty())
+            used = i + 1;
+    for (size_t i = 0; i < used; ++i)
+        args.push_back(*words[i]);
+    std::string r;
+    return answered(g_commands->roadCommand(object, method, args, r), r);
+}
+
+// The retail rows, each a binding of its own (the console finds rows by name).
+#define BF2E_ROAD_ROW_0(fn, object, method) \
+    std::string fn() { return roadAction(object, method); }
+#define BF2E_ROAD_ROW_1(fn, object, method) \
+    std::string fn(const std::string& a) { return roadAction(object, method, a); }
+BF2E_ROAD_ROW_0(splineManagerCreateInstance, "SplineManager", "CreateInstance")
+BF2E_ROAD_ROW_1(splineManagerSetId, "SplineManager", "SetId")
+BF2E_ROAD_ROW_1(splineManagerSnapModes, "SplineManager", "SetControlPointSnapModes")
+BF2E_ROAD_ROW_1(splineManagerLineWidth, "SplineManager", "setLineWidth")
+BF2E_ROAD_ROW_1(splineManagerStepSize, "SplineManager", "setStepSize")
+BF2E_ROAD_ROW_1(splineManagerAddControlPoint, "SplineManager", "AddControlPoint")
+BF2E_ROAD_ROW_1(splineManagerSpeed, "SplineManager", "SetSpeed")
+BF2E_ROAD_ROW_1(splineManagerDelay, "SplineManager", "SetDelay")
+BF2E_ROAD_ROW_1(splineManagerDirection, "SplineManager", "SetDirection")
+BF2E_ROAD_ROW_1(splineManagerSound, "SplineManager", "SetSound")
+BF2E_ROAD_ROW_0(splineManagerEnd, "SplineManager", "End")
+std::string roadCreateInstance(const std::string& name, const std::string& spline, const std::string& roadTemplate,
+                               const std::string& seed, const std::string&)
+{
+    return roadAction("Road", "CreateInstance", name, spline, roadTemplate, seed);
+}
+BF2E_ROAD_ROW_1(roadTextureScaleOffset, "Road", "SetTextureScaleOffset")
+BF2E_ROAD_ROW_1(roadPersistance, "Road", "SetPersistance")
+BF2E_ROAD_ROW_1(roadRange, "Road", "SetRange")
+BF2E_ROAD_ROW_1(roadOctaves, "Road", "SetOctaves")
+BF2E_ROAD_ROW_1(roadPrio, "Road", "Prio")
+BF2E_ROAD_ROW_1(roadFadeStartLeft, "Road", "FadeDistAtStartLeft")
+BF2E_ROAD_ROW_1(roadFadeStartRight, "Road", "FadeDistAtStartRight")
+BF2E_ROAD_ROW_1(roadFadeEndLeft, "Road", "FadeDistAtEndLeft")
+BF2E_ROAD_ROW_1(roadFadeEndRight, "Road", "FadeDistAtEndRight")
+BF2E_ROAD_ROW_0(roadTemplateCreateInstance, "RoadTemplate", "CreateInstance")
+BF2E_ROAD_ROW_1(roadTemplateName, "RoadTemplate", "SetName")
+BF2E_ROAD_ROW_1(roadTemplateWidth, "RoadTemplate", "SetWidth")
+BF2E_ROAD_ROW_1(roadTemplateMaxError, "RoadTemplate", "SetMaxTesselatedError")
+BF2E_ROAD_ROW_1(roadTemplateBlendFactor, "RoadTemplate", "SetBlendFactor")
+BF2E_ROAD_ROW_1(roadTemplateFadeOff, "RoadTemplate", "SetFadeOffDistance")
+BF2E_ROAD_ROW_1(roadTemplatePrio, "RoadTemplate", "SetPrio")
+BF2E_ROAD_ROW_1(roadTemplateMaterial, "RoadTemplate", "SetMaterial")
+BF2E_ROAD_ROW_1(roadTemplatePrimary, "RoadTemplate", "SetIsPrimaryTexture")
+BF2E_ROAD_ROW_1(roadTextureFile, "RoadTemplateTexture", "SetTextureFile")
+BF2E_ROAD_ROW_1(roadTextureMirror, "RoadTemplateTexture", "SetMirror")
+BF2E_ROAD_ROW_1(roadTextureScale, "RoadTemplateTexture", "SetScale")
+#undef BF2E_ROAD_ROW_0
+#undef BF2E_ROAD_ROW_1
+
+// EditorRoad.*
+std::string editorRoadInfo() { return roadAction("EditorRoad", "info"); }
+std::string editorRoadSplines() { return roadAction("EditorRoad", "splines"); }
+std::string editorRoadRoads() { return roadAction("EditorRoad", "roads"); }
+std::string editorRoadTemplates() { return roadAction("EditorRoad", "templates"); }
+std::string editorRoadSave() { return roadAction("EditorRoad", "save"); }
+std::string editorRoadSplineCreate() { return roadAction("EditorRoad", "splineCreate"); }
+std::string editorRoadSpline(const std::string& id) { return roadAction("EditorRoad", "spline", id); }
+std::string editorRoadRoad(const std::string& name) { return roadAction("EditorRoad", "road", name); }
+std::string editorRoadTemplate(const std::string& name) { return roadAction("EditorRoad", "template", name); }
+std::string editorRoadSplineCreateAs(const std::string& id) { return roadAction("EditorRoad", "splineCreate", id); }
+std::string editorRoadSplineAdd(const std::string& id, const std::string& at)
+{
+    return roadAction("EditorRoad", "splineAdd", id, at);
+}
+std::string editorRoadSplineInsert(const std::string& id, const std::string& index, const std::string& at)
+{
+    return roadAction("EditorRoad", "splineInsert", id, index, at);
+}
+std::string editorRoadSplineMove(const std::string& id, const std::string& index, const std::string& at)
+{
+    return roadAction("EditorRoad", "splineMove", id, index, at);
+}
+std::string editorRoadSplineRemovePoint(const std::string& id, const std::string& index)
+{
+    return roadAction("EditorRoad", "splineRemovePoint", id, index);
+}
+std::string editorRoadSplineSet(const std::string& id, const std::string& key, const std::string& value)
+{
+    return roadAction("EditorRoad", "splineSet", id, key, value);
+}
+std::string editorRoadSplinePoint(const std::string& id, const std::string& index, const std::string& key,
+                                  const std::string& value, const std::string&)
+{
+    return roadAction("EditorRoad", "splinePoint", id, index, key, value);
+}
+std::string editorRoadSplineDelete(const std::string& id) { return roadAction("EditorRoad", "splineDelete", id); }
+std::string editorRoadTemplateCreate(const std::string& name) { return roadAction("EditorRoad", "templateCreate", name); }
+std::string editorRoadTemplateCreateFrom(const std::string& name, const std::string& from)
+{
+    return roadAction("EditorRoad", "templateCreate", name, from);
+}
+std::string editorRoadTemplateSet(const std::string& name, const std::string& key, const std::string& value)
+{
+    return roadAction("EditorRoad", "templateSet", name, key, value);
+}
+std::string editorRoadTemplateDelete(const std::string& name) { return roadAction("EditorRoad", "templateDelete", name); }
+std::string editorRoadCreate(const std::string& name, const std::string& spline, const std::string& roadTemplate,
+                             const std::string& seed, const std::string&)
+{
+    return roadAction("EditorRoad", "create", name, spline, roadTemplate, seed);
+}
+std::string editorRoadSet(const std::string& name, const std::string& key, const std::string& value)
+{
+    return roadAction("EditorRoad", "set", name, key, value);
+}
+std::string editorRoadDelete(const std::string& name) { return roadAction("EditorRoad", "delete", name); }
+std::string editorRoadRename(const std::string& name, const std::string& to)
+{
+    return roadAction("EditorRoad", "rename", name, to);
+}
+std::string editorRoadBuild(const std::string& name, const std::string& mode)
+{
+    return roadAction("EditorRoad", "build", name, mode);
+}
+std::string editorRoadApplyEdit(const std::string& id, const std::string& state)
+{
+    return roadAction("EditorRoad", "applyEdit", id, state);
+}
+std::string editorRoadTool(const std::string& on) { return roadAction("EditorRoad", "tool", on); }
+std::string editorRoadActiveSpline(const std::string& id, const std::string& point = std::string())
+{
+    return roadAction("EditorRoad", "activeSpline", id, point);
+}
+std::string editorRoadShowSplines(const std::string& on) { return roadAction("EditorRoad", "showSplines", on); }
+std::string editorRoadApply(const std::string& name) { return roadAction("EditorRoad", "apply", name); }
+std::string editorRoadSplineCopy(const std::string& id = std::string()) { return roadAction("EditorRoad", "splineCopy", id); }
+std::string editorRoadSplinePaste() { return roadAction("EditorRoad", "splinePaste"); }
+std::string editorRoadSplineMark(const std::string& id = std::string(), const std::string& point = std::string())
+{
+    return roadAction("EditorRoad", "splineMark", id, point);
+}
+std::string editorRoadSplineMerge(const std::string& id = std::string(), const std::string& point = std::string())
+{
+    return roadAction("EditorRoad", "splineMerge", id, point);
+}
+std::string editorRoadActiveTemplate(const std::string& name) { return roadAction("EditorRoad", "activeTemplate", name); }
+std::string editorRoadConnect(const std::string& name, const std::string& roadTemplate = std::string())
+{
+    return roadAction("EditorRoad", "connect", name, roadTemplate);
+}
+std::string editorRoadDisconnect() { return roadAction("EditorRoad", "disconnect"); }
+std::string editorRoadRefresh() { return roadAction("EditorRoad", "refresh"); }
+std::string editorRoadCleanFolder(const std::string& move = std::string()) { return roadAction("EditorRoad", "cleanFolder", move); }
+
 std::string effectPreviewLine(const std::string& templateName)
 {
     std::string r;
@@ -2134,6 +2443,150 @@ BF2_CONSOLE_METHOD_1_RET_ACTIVE(cleanLightmaps, lightingCleanLightmaps, std::str
 BF2_CONSOLE_METHOD_3_RET_ACTIVE(groundHemi, lightingGroundHemi, std::string, g_commands != 0, int, Vec3, float, kEditorConsoleTag)
 BF2_CONSOLE_METHOD_1_RET_ACTIVE(minimap, lightingMinimap, std::string, g_commands != 0, int, kEditorConsoleTag)
 BF2_CONSOLE_METHOD_0_RET_ACTIVE(envMaps, lightingEnvMaps, std::string, g_commands != 0, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_3_RET_ACTIVE(lightmaps, lightingLightmaps, std::string, g_commands != 0, int, std::string, std::string, kEditorConsoleTag)
+
+// The retail editor's road rows (its LevelEditor plugin's and EditorEngine's): Editor/Splines.con,
+// Editor/Roads.con and the road templates' editor branch run through these (App/RoadNetwork.h).
+BF2_CONSOLE_OBJECT("SplineManager", 2, 0)
+BF2_CONSOLE_METHOD_0_RET_ACTIVE(CreateInstance, splineManagerCreateInstance, std::string, g_commands != 0, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(SetId, splineManagerSetId, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(SetControlPointSnapModes, splineManagerSnapModes, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(setLineWidth, splineManagerLineWidth, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(setStepSize, splineManagerStepSize, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(AddControlPoint, splineManagerAddControlPoint, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(SetSpeed, splineManagerSpeed, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(SetDelay, splineManagerDelay, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(SetDirection, splineManagerDirection, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(SetSound, splineManagerSound, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_0_RET_ACTIVE(End, splineManagerEnd, std::string, g_commands != 0, kEditorConsoleTag)
+
+BF2_CONSOLE_OBJECT("Road", 2, 0)
+BF2_CONSOLE_METHOD_3_5_RET_ACTIVE(CreateInstance, roadCreateInstance, std::string, g_commands != 0, std::string, std::string, std::string, std::string, std::string, "", "", kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(SetTextureScaleOffset, roadTextureScaleOffset, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(SetPersistance, roadPersistance, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(SetRange, roadRange, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(SetOctaves, roadOctaves, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(Prio, roadPrio, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(FadeDistAtStartLeft, roadFadeStartLeft, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(FadeDistAtStartRight, roadFadeStartRight, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(FadeDistAtEndLeft, roadFadeEndLeft, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(FadeDistAtEndRight, roadFadeEndRight, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+
+BF2_CONSOLE_OBJECT("RoadTemplate", 2, 0)
+BF2_CONSOLE_METHOD_0_RET_ACTIVE(CreateInstance, roadTemplateCreateInstance, std::string, g_commands != 0, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(SetName, roadTemplateName, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(SetWidth, roadTemplateWidth, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(SetMaxTesselatedError, roadTemplateMaxError, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(SetBlendFactor, roadTemplateBlendFactor, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(SetFadeOffDistance, roadTemplateFadeOff, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(SetPrio, roadTemplatePrio, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(SetMaterial, roadTemplateMaterial, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(SetIsPrimaryTexture, roadTemplatePrimary, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+
+BF2_CONSOLE_OBJECT("RoadTemplateTexture", 2, 0)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(SetTextureFile, roadTextureFile, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(SetMirror, roadTextureMirror, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(SetScale, roadTextureScale, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+
+// Returning editor rows whose arguments are all optional: none or one, and none, one or two (the shared macros take at
+// least one). The target is called with the arguments given; its own defaults fill the rest.
+#define EDITOR_CONSOLE_METHOD_0_1_RET_ACTIVE(fnName, target, RET, activeExpr, A0, listTag)                     \
+namespace {                                                                                                    \
+class BF2_CC_NAME : public ::dice::hfe::ConsoleObjectBaseImpl                                                  \
+{                                                                                                              \
+    BF2_CC_HEAD(fnName, 0, 0, 1, #RET, true)                                                                   \
+            m_argTypes[0] = #A0;                                                                               \
+    BF2_CC_TAIL(1, listTag)                                                                                    \
+    virtual bool isObjectActive() const { return (activeExpr); }                                               \
+    virtual void executeObjectMethod()                                                                         \
+    {                                                                                                          \
+        m_hasReturnValue = true;                                                                               \
+        m_returnValue = m_argCount == 0 ? target() : target(BF2_CC_ARG(A0, 0));                                \
+    }                                                                                                          \
+    virtual void setArgFromString(int index, const std::string& value)                                         \
+    {                                                                                                          \
+        BF2_CC_CONVERT(A0, 1)                                                                                  \
+    }                                                                                                          \
+    BF2_CC_RETURN_AS_STRING                                                                                    \
+    BF2_CC_COMMON_HOOKS                                                                                        \
+private:                                                                                                       \
+    RET m_returnValue;                                                                                         \
+};                                                                                                             \
+static BF2_CC_NAME BF2_CC_INSTANCE;                                                                            \
+}
+#define EDITOR_CONSOLE_METHOD_0_2_RET_ACTIVE(fnName, target, RET, activeExpr, A0, A1, listTag)                 \
+namespace {                                                                                                    \
+class BF2_CC_NAME : public ::dice::hfe::ConsoleObjectBaseImpl                                                  \
+{                                                                                                              \
+    BF2_CC_HEAD(fnName, 0, 0, 2, #RET, true)                                                                   \
+            m_argTypes[0] = #A0;                                                                               \
+            m_argTypes[1] = #A1;                                                                               \
+    BF2_CC_TAIL(2, listTag)                                                                                    \
+    virtual bool isObjectActive() const { return (activeExpr); }                                               \
+    virtual void executeObjectMethod()                                                                         \
+    {                                                                                                          \
+        m_hasReturnValue = true;                                                                               \
+        if (m_argCount == 0)                                                                                   \
+            m_returnValue = target();                                                                          \
+        else if (m_argCount == 1)                                                                              \
+            m_returnValue = target(BF2_CC_ARG(A0, 0));                                                         \
+        else                                                                                                   \
+            m_returnValue = target(BF2_CC_ARG(A0, 0), BF2_CC_ARG(A1, 1));                                      \
+    }                                                                                                          \
+    virtual void setArgFromString(int index, const std::string& value)                                         \
+    {                                                                                                          \
+        BF2_CC_CONVERT(A0, 1)                                                                                  \
+        BF2_CC_CONVERT(A1, 2)                                                                                  \
+    }                                                                                                          \
+    BF2_CC_RETURN_AS_STRING                                                                                    \
+    BF2_CC_COMMON_HOOKS                                                                                        \
+private:                                                                                                       \
+    RET m_returnValue;                                                                                         \
+};                                                                                                             \
+static BF2_CC_NAME BF2_CC_INSTANCE;                                                                            \
+}
+
+BF2_CONSOLE_OBJECT("EditorRoad", 2, 0)
+BF2_CONSOLE_METHOD_0_RET_ACTIVE(info, editorRoadInfo, std::string, g_commands != 0, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_0_RET_ACTIVE(splines, editorRoadSplines, std::string, g_commands != 0, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_0_RET_ACTIVE(roads, editorRoadRoads, std::string, g_commands != 0, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_0_RET_ACTIVE(templates, editorRoadTemplates, std::string, g_commands != 0, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_0_RET_ACTIVE(save, editorRoadSave, std::string, g_commands != 0, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_0_RET_ACTIVE(splineCreate, editorRoadSplineCreate, std::string, g_commands != 0, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(spline, editorRoadSpline, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(road, editorRoadRoad, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(template, editorRoadTemplate, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(splineCreateAs, editorRoadSplineCreateAs, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_2_RET_ACTIVE(splineAdd, editorRoadSplineAdd, std::string, g_commands != 0, std::string, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_3_RET_ACTIVE(splineInsert, editorRoadSplineInsert, std::string, g_commands != 0, std::string, std::string, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_3_RET_ACTIVE(splineMove, editorRoadSplineMove, std::string, g_commands != 0, std::string, std::string, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_2_RET_ACTIVE(splineRemovePoint, editorRoadSplineRemovePoint, std::string, g_commands != 0, std::string, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_3_RET_ACTIVE(splineSet, editorRoadSplineSet, std::string, g_commands != 0, std::string, std::string, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_3_5_RET_ACTIVE(splinePoint, editorRoadSplinePoint, std::string, g_commands != 0, std::string, std::string, std::string, std::string, std::string, "", "", kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(splineDelete, editorRoadSplineDelete, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(templateCreate, editorRoadTemplateCreate, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_2_RET_ACTIVE(templateCreateFrom, editorRoadTemplateCreateFrom, std::string, g_commands != 0, std::string, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_3_RET_ACTIVE(templateSet, editorRoadTemplateSet, std::string, g_commands != 0, std::string, std::string, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(templateDelete, editorRoadTemplateDelete, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_3_5_RET_ACTIVE(create, editorRoadCreate, std::string, g_commands != 0, std::string, std::string, std::string, std::string, std::string, "", "", kEditorConsoleTag)
+BF2_CONSOLE_METHOD_3_RET_ACTIVE(set, editorRoadSet, std::string, g_commands != 0, std::string, std::string, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(delete, editorRoadDelete, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_2_RET_ACTIVE(rename, editorRoadRename, std::string, g_commands != 0, std::string, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_2_RET_ACTIVE(build, editorRoadBuild, std::string, g_commands != 0, std::string, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_2_RET_ACTIVE(applyEdit, editorRoadApplyEdit, std::string, g_commands != 0, std::string, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(tool, editorRoadTool, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_2_RET_ACTIVE(activeSpline, editorRoadActiveSpline, std::string, g_commands != 0, std::string, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(showSplines, editorRoadShowSplines, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(apply, editorRoadApply, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+EDITOR_CONSOLE_METHOD_0_1_RET_ACTIVE(splineCopy, editorRoadSplineCopy, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_0_RET_ACTIVE(splinePaste, editorRoadSplinePaste, std::string, g_commands != 0, kEditorConsoleTag)
+EDITOR_CONSOLE_METHOD_0_2_RET_ACTIVE(splineMark, editorRoadSplineMark, std::string, g_commands != 0, std::string, std::string, kEditorConsoleTag)
+EDITOR_CONSOLE_METHOD_0_2_RET_ACTIVE(splineMerge, editorRoadSplineMerge, std::string, g_commands != 0, std::string, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(activeTemplate, editorRoadActiveTemplate, std::string, g_commands != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_2_RET_ACTIVE(connect, editorRoadConnect, std::string, g_commands != 0, std::string, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_0_RET_ACTIVE(disconnect, editorRoadDisconnect, std::string, g_commands != 0, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_0_RET_ACTIVE(refresh, editorRoadRefresh, std::string, g_commands != 0, kEditorConsoleTag)
+EDITOR_CONSOLE_METHOD_0_1_RET_ACTIVE(cleanFolder, editorRoadCleanFolder, std::string, g_commands != 0, std::string, kEditorConsoleTag)
 
 BF2_CONSOLE_OBJECT("EditorEffect", 2, 0)
 BF2_CONSOLE_METHOD_1_RET_ACTIVE(preview, effectPreviewLine, std::string, g_commands != 0, std::string, kEditorConsoleTag)
@@ -2228,6 +2681,9 @@ BF2_CONSOLE_METHOD_1_RET_ACTIVE(merge, terrainMerge, std::string, g_commands != 
 BF2_CONSOLE_METHOD_1_RET_ACTIVE(clearEdits, terrainClearEdits, std::string, g_commands != 0, std::string, kEditorConsoleTag)
 BF2_CONSOLE_METHOD_3_RET_ACTIVE(showSector, terrainShowSector, std::string, g_commands != 0, int, int, int, kEditorConsoleTag)
 BF2_CONSOLE_METHOD_0_RET_ACTIVE(shownSectors, terrainShownSectors, std::string, g_commands != 0, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_0_RET_ACTIVE(generateOvergrowth, terrainGenerateOvergrowth, std::string, g_commands != 0,
+                                kEditorConsoleTag)
+BF2_CONSOLE_METHOD_0_RET_ACTIVE(compile, terrainCompile, std::string, g_commands != 0, kEditorConsoleTag)
 
 // The bindings. Each object block sets the console name the bindings after it register under
 // (BF2_CONSOLE_OBJECT lowercases its first letter, and lookups ignore case). Access 2 and category 0,
@@ -2416,6 +2872,8 @@ BF2_CONSOLE_METHOD_1_RET_ACTIVE(wait, testWait, std::string, g_testHarness != 0,
 BF2_CONSOLE_METHOD_2_RET_ACTIVE(mouseMove, testMouseMove, std::string, g_testHarness != 0, float, float, kEditorConsoleTag)
 BF2_CONSOLE_METHOD_2_RET_ACTIVE(mouseBy, testMouseBy, std::string, g_testHarness != 0, float, float, kEditorConsoleTag)
 BF2_CONSOLE_METHOD_1_RET_ACTIVE(mouseToObject, testMouseToObject, std::string, g_testHarness != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(mouseToPart, testMouseToPart, std::string, g_testHarness != 0, int, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_2_RET_ACTIVE(mouseToHud, testMouseToHud, std::string, g_testHarness != 0, std::string, int, kEditorConsoleTag)
 BF2_CONSOLE_METHOD_2_RET_ACTIVE(mouseToAxis, testMouseToAxis, std::string, g_testHarness != 0, int, float, kEditorConsoleTag)
 BF2_CONSOLE_METHOD_2_RET_ACTIVE(mouseButton, testMouseButton, std::string, g_testHarness != 0, int, int, kEditorConsoleTag)
 BF2_CONSOLE_METHOD_1_RET_ACTIVE(mouseWheel, testMouseWheel, std::string, g_testHarness != 0, float, kEditorConsoleTag)
@@ -2435,8 +2893,24 @@ BF2_CONSOLE_METHOD_0_RET_ACTIVE(leave, playTestLeave, std::string, g_playTest !=
 BF2_CONSOLE_METHOD_0_RET_ACTIVE(info, playTestInfo, std::string, g_playTest != 0, kEditorConsoleTag)
 BF2_CONSOLE_METHOD_2_RET_ACTIVE(kit, playTestKit, std::string, g_playTest != 0, int, int, kEditorConsoleTag)
 BF2_CONSOLE_METHOD_3_RET_ACTIVE(hold, playTestHold, std::string, g_playTest != 0, std::string, float, int, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(weapon, playTestWeapon, std::string, g_playTest != 0, std::string, kEditorConsoleTag)
 BF2_CONSOLE_METHOD_0_RET_ACTIVE(drive, playTestDrive, std::string, g_playTest != 0, kEditorConsoleTag)
 BF2_CONSOLE_METHOD_1_RET_ACTIVE(driveTemplate, playTestDriveTemplate, std::string, g_playTest != 0, std::string, kEditorConsoleTag)
+
+BF2_CONSOLE_OBJECT("EditorHud", 2, 0)
+BF2_CONSOLE_METHOD_0_RET_ACTIVE(info, hudInfo, std::string, g_hud != 0, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(preview, hudPreview, std::string, g_hud != 0, int, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_2_RET_ACTIVE(set, hudSet, std::string, g_hud != 0, std::string, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(select, hudSelect, std::string, g_hud != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(node, hudNode, std::string, g_hud != 0, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_2_RET_ACTIVE(rect, hudRect, std::string, g_hud != 0, std::string, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_3_RET_ACTIVE(setRow, hudSetRow, std::string, g_hud != 0, std::string, int, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_3_RET_ACTIVE(addRow, hudAddRow, std::string, g_hud != 0, std::string, std::string, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_2_RET_ACTIVE(removeRow, hudRemoveRow, std::string, g_hud != 0, std::string, int, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_0_RET_ACTIVE(changes, hudChanges, std::string, g_hud != 0, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_3_RET_ACTIVE(setLine, hudSetLine, std::string, g_hud != 0, int, int, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_3_RET_ACTIVE(insertLine, hudInsertLine, std::string, g_hud != 0, int, int, std::string, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_2_RET_ACTIVE(removeLine, hudRemoveLine, std::string, g_hud != 0, int, int, kEditorConsoleTag)
 
 BF2_CONSOLE_OBJECT("EditorGround", 2, 0)
 BF2_CONSOLE_METHOD_0_RET_ACTIVE(layers, groundLayersLine, std::string, g_commands != 0, kEditorConsoleTag)
@@ -2460,6 +2934,11 @@ BF2_CONSOLE_METHOD_1_RET_ACTIVE(turntable, previewTurntable, std::string, g_comm
 BF2_CONSOLE_METHOD_0_RET_ACTIVE(info, previewInfo, std::string, g_commands != 0, kEditorConsoleTag)
 BF2_CONSOLE_METHOD_1_RET_ACTIVE(camera, previewCamera, std::string, g_commands != 0, int, kEditorConsoleTag)
 BF2_CONSOLE_METHOD_0_RET_ACTIVE(clear, previewClear, std::string, g_commands != 0, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(showParts, previewShowParts, std::string, g_commands != 0, int, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_0_RET_ACTIVE(parts, previewParts, std::string, g_commands != 0, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(pick, previewPick, std::string, g_commands != 0, int, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_2_RET_ACTIVE(movePart, previewMovePart, std::string, g_commands != 0, int, Vec3, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_2_RET_ACTIVE(turnPart, previewTurnPart, std::string, g_commands != 0, int, float, kEditorConsoleTag)
 
 BF2_CONSOLE_OBJECT("EditorSnap", 2, 0)
 BF2_CONSOLE_METHOD_0_RET_ACTIVE(info, snapInfo, std::string, g_commands != 0, kEditorConsoleTag)
@@ -2546,6 +3025,13 @@ BF2_CONSOLE_OBJECT("EditorLevel", 2, 0)
 BF2_CONSOLE_METHOD_0_RET_ACTIVE(status, levelStatus, std::string, g_commands != 0, kEditorConsoleTag)
 BF2_CONSOLE_METHOD_0_RET_ACTIVE(save, levelSave, std::string, g_commands != 0, kEditorConsoleTag)
 BF2_CONSOLE_METHOD_0_RET_ACTIVE(resave, levelResave, std::string, g_commands != 0, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_0_RET_ACTIVE(preview, levelPreview, std::string, g_commands != 0, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_0_RET_ACTIVE(previewAll, levelPreviewAll, std::string, g_commands != 0, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(previewDiff, levelPreviewDiff, std::string, g_commands != 0, int, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_0_RET_ACTIVE(writePreview, levelWritePreview, std::string, g_commands != 0, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_0_RET_ACTIVE(dropPreview, levelDropPreview, std::string, g_commands != 0, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_0_RET_ACTIVE(backups, levelBackups, std::string, g_commands != 0, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(restore, levelRestore, std::string, g_commands != 0, std::string, kEditorConsoleTag)
 BF2_CONSOLE_METHOD_0_RET_ACTIVE(reloadObjects, levelReloadObjects, std::string, g_commands != 0, kEditorConsoleTag)
 BF2_CONSOLE_METHOD_0_RET_ACTIVE(repositionObjects, levelRepositionObjects, std::string, g_commands != 0, kEditorConsoleTag)
 BF2_CONSOLE_METHOD_0_RET_ACTIVE(description, levelDescription, std::string, g_commands != 0, kEditorConsoleTag)
@@ -2556,6 +3042,7 @@ BF2_CONSOLE_METHOD_0_RET_ACTIVE(levels, levelLevels, std::string, g_commands != 
 BF2_CONSOLE_METHOD_1_RET_ACTIVE(open, levelOpen, std::string, g_commands != 0, std::string, kEditorConsoleTag)
 BF2_CONSOLE_METHOD_1_RET_ACTIVE(pack, levelPack, std::string, g_commands != 0, std::string, kEditorConsoleTag)
 BF2_CONSOLE_METHOD_2_RET_ACTIVE(saveAs, levelSaveAs, std::string, g_commands != 0, std::string, int, kEditorConsoleTag)
+BF2_CONSOLE_METHOD_3_RET_ACTIVE(create, levelCreate, std::string, g_commands != 0, std::string, std::string, int, kEditorConsoleTag)
 BF2_CONSOLE_METHOD_0_RET_ACTIVE(layers, levelLayers, std::string, g_commands != 0, kEditorConsoleTag)
 BF2_CONSOLE_METHOD_2_RET_ACTIVE(switchLayer, levelSwitchLayer, std::string, g_commands != 0, std::string, int, kEditorConsoleTag)
 BF2_CONSOLE_METHOD_2_RET_ACTIVE(duplicateLayer, levelDuplicateLayer, std::string, g_commands != 0, std::string, int, kEditorConsoleTag)
@@ -2611,6 +3098,11 @@ void setTestHarness(ITestHarness* harness)
 void setPlayTest(IPlayTestCommands* playTest)
 {
     g_playTest = playTest;
+}
+
+void setHudCommands(IHudCommands* hud)
+{
+    g_hud = hud;
 }
 
 bool playTestActive()

@@ -8,6 +8,7 @@
 #define BF2_GEOM_ROADEDITABLERENDERER_H
 
 #include "IRoadEditable.h"
+#include "IRoadEditableRenderer.h"           // IRoadEditableRenderer (table 0x1021DA00), shared with the editor
 #include "Vc71PtrList.h"
 #include "../../RendDX9Abi/HfeAbi.h"
 
@@ -20,18 +21,6 @@ namespace geom {
 typedef Vc71PtrList<IRoadEditable>     RoadEditableList;
 typedef Vc71PtrListNode<IRoadEditable> RoadEditableListNode;
 
-
-// IRoadEditableRenderer (IID 820020) - the five slots after the IBase quartet, table 0x1021DA00.
-
-class IRoadEditableRenderer : public IBase
-{
-public:
-    virtual void add(IRoadEditable* road) = 0;                                  // +0x10
-    virtual void remove(IRoadEditable* road) = 0;                               // +0x14
-    virtual void drawAll() = 0;                                                 // +0x18
-    virtual void setFlag08(bool value) = 0;                                     // +0x1C (ICF)
-    virtual bool getFlag08() = 0;                                               // +0x20 (ICF)
-};
 
 class RoadEditableRenderer : public IRoadEditableRenderer
 {

@@ -39,6 +39,12 @@ protected:
     int* m_positionX;                                    // +34 borrowed optional live position
     int* m_positionY;                                    // +38 borrowed optional live position
 };
+#if defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+// [CHOSEN, not recovered] The editor's HUD editor (Tools/BF2Editor/App/HudEditor): told, on each update, where a
+// script-made node stands on the HUD canvas - x, y, width and height, its parents' positions included. Editor
+// image only; null when nothing listens.
+extern void (*editorHudNodeUpdated)(Bf2TransformNode* node, float x, float y, float width, float height);
+#endif
 } }
 #endif
 #endif

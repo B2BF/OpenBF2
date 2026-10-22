@@ -17,8 +17,14 @@
 #include "BundledMeshStateManager.h"
 #include "XpLightManager.h"
 
+#include "../../RendDX9Abi/PluginEntry.h"   // fileManager - the atlas builders' listing
+#include "../RendDX9/TextureAtlas/TextureAtlas.h"
+
 #include <cstddef>
+#include <cstdio>
+#include <list>
 #include <new>
+#include <string>
 #include <string.h>
 
 namespace dice {
@@ -375,6 +381,196 @@ bool staticMeshRendererTryLoadLightmapTexture(StaticMeshRenderer* self,
     *outTexture  = entry->page;
     dx9rend::textureAddRef(entry->page);                                 // page vslot +0x08
     return true;
+}
+
+
+namespace {
+
+#if !BF2_PLUGIN_ABI_NATIVE
+// The retail FileInfo list findFiles fills: a VC7.1 std::list (allocator word, head node, size) of
+// 64-byte records whose nodes the host allocates on the engine heap. The same carrier as
+// ResourceManager.cpp's, kept local to this file.
+struct LightmapFileInfo
+{
+    ::renddx9abi::HostString name;          // +0x00
+    bool                     isDirectory;   // +0x1C
+    unsigned char            pad1D[3];
+    unsigned int             size;          // +0x20
+    unsigned int             reserved;      // +0x24
+    unsigned int             times[6];      // +0x28
+};
+
+struct LightmapFileInfoList
+{
+    struct Node { Node* next; Node* prev; LightmapFileInfo value; };
+
+    unsigned int allocator;
+    Node*        head;
+    unsigned int size;
+
+    LightmapFileInfoList() : allocator(0), size(0)
+    {
+        head = static_cast<Node*>(::renddx9abi::engineAlloc(sizeof(Node)));
+        head->next = head;
+        head->prev = head;
+    }
+    ~LightmapFileInfoList()
+    {
+        Node* node = head->next;
+        while (node != head)
+        {
+            Node* const next = node->next;
+            node->value.~LightmapFileInfo();
+            ::renddx9abi::engineFree(node);
+            node = next;
+        }
+        ::renddx9abi::engineFree(head);
+    }
+
+private:
+    LightmapFileInfoList(const LightmapFileInfoList&);
+    LightmapFileInfoList& operator=(const LightmapFileInfoList&);
+};
+static_assert(sizeof(LightmapFileInfo) == 64, "retail FileInfo record");
+static_assert(sizeof(LightmapFileInfoList) == 12, "retail list header");
+#endif
+
+// The part after the last '\\' or '/', or the whole path when neither occurs.
+std::string lightmapBaseName(const std::string& path)
+{
+    int cut = static_cast<int>(path.rfind('\\'));
+    const int forward = static_cast<int>(path.rfind('/'));
+    if (forward > cut)
+        cut = forward;
+    if (cut == -1)
+        return path;
+    return path.substr(static_cast<std::string::size_type>(cut) + 1);
+}
+
+// The base name without its last '.' and what follows it.
+std::string lightmapStem(const std::string& path)
+{
+    const std::string base = lightmapBaseName(path);
+    const std::string::size_type dot = base.rfind('.');
+    if (dot == std::string::npos)
+        return base;
+    return base.substr(0, dot);
+}
+
+// Appends directory + name when the listed file `name` is one of the lightmaps both atlas builders
+// pack (see StaticMeshRenderer.h).
+void collectLightmapFile(const std::string& name, unsigned int size, const vc71::string& directory,
+                         const std::string& extension, std::list<vc71::string>& files)
+{
+    if (size == 0)
+        return;
+    if (name.find(extension.c_str(), 0, extension.size()) == std::string::npos)
+        return;
+    const std::string stem = lightmapStem(name);
+    const std::string base = lightmapBaseName(name);
+    if (stem.find("LightmapAtlas", 0, 13) != std::string::npos)
+        return;
+    std::string expected(stem);
+    expected += extension;
+    if (base.compare(expected) != 0)
+        return;
+    vc71::string path(directory);
+    path += name.c_str();
+    files.push_back(path);
+}
+
+// The builders' shared prologue: `directory` with a trailing '/' unless it already ends in a
+// separator, and the lightmap files listed under it (recursively, in the FileManager's order).
+void collectLightmapFiles(const vc71::string& directory, const vc71::string& extension,
+                          vc71::string& normalised, std::list<vc71::string>& files)
+{
+    normalised = directory;
+    if (normalised.size() != 0)
+    {
+        const char last = normalised.c_str()[normalised.size() - 1];
+        if (last != '\\' && last != '/')
+            normalised += vc71::string("/");
+    }
+    const std::string ext(extension.c_str(), extension.size());
+#if BF2_PLUGIN_ABI_NATIVE
+    std::list<io::FileInfo> listed;
+    fileManager->findFiles(std::string(normalised.c_str(), normalised.size()), true, listed);   // +0x34
+    for (std::list<io::FileInfo>::const_iterator it = listed.begin(); it != listed.end(); ++it)
+        collectLightmapFile(it->name, it->size, normalised, ext, files);
+#else
+    LightmapFileInfoList listed;
+    fileManager->findFiles(::renddx9abi::HostString(normalised.c_str()), true,
+                           *reinterpret_cast< ::renddx9abi::HostFileInfoList*>(&listed));   // +0x34
+    for (LightmapFileInfoList::Node* node = listed.head->next; node != listed.head; node = node->next)
+        collectLightmapFile(std::string(node->value.name.c_str(), node->value.name.size()),
+                            node->value.size, normalised, ext, files);
+#endif
+}
+
+// The batch limit: a batch's command line stays below this many characters.
+const unsigned int kAtlasCommandLineLimit = 32300u;
+
+} // anonymous namespace
+
+bool staticMeshRendererLoadAllLightMapFilesDll(StaticMeshRenderer* self,
+                                               const vc71::string& directory,
+                                               const vc71::string& extension)
+{
+    vc71::string normalised;
+    std::list<vc71::string> files;
+    collectLightmapFiles(directory, extension, normalised, files);
+
+    vc71::string savePath;
+    dx9rend::readStringSettingDefault("Editor_LevelSavePath", " ERROR ", savePath);
+    vc71::string atlasName(normalised);
+    atlasName += "LightmapAtlas";
+    return dx9rend::textureAtlasBuild(self->m_lightmapAtlases[0], savePath, atlasName, savePath,
+                                      files, false);
+}
+
+bool staticMeshRendererLoadAllLightMapFiles(StaticMeshRenderer* self,
+                                            const vc71::string& directory,
+                                            const vc71::string& extension)
+{
+    vc71::string normalised;
+    std::list<vc71::string> files;
+    collectLightmapFiles(directory, extension, normalised, files);
+
+    vc71::string savePath;
+    dx9rend::readStringSettingDefault("Editor_LevelSavePath", " ERROR ", savePath);
+    std::list<vc71::string>::const_iterator next = files.begin();
+    for (int batch = 0; ; ++batch)
+    {
+        std::list<vc71::string> batchFiles;
+        char number[256];
+        std::sprintf(number, "%d", batch);
+        std::string command("dice_TextureAtlasTool -maxres 2048 -o ");
+        command += normalised.c_str();
+        command += "LightmapAtlas";
+        command += number;
+        command += " -output_path ";
+        command += savePath.c_str();
+        command += " -input_path ";
+        command += savePath.c_str();
+        command += " ";
+        while (next != files.end() && command.size() < kAtlasCommandLineLimit)
+        {
+            command += next->c_str();
+            command += " ";
+            batchFiles.push_back(*next);
+            ++next;
+        }
+
+        vc71::string atlasName(normalised);
+        atlasName += "LightmapAtlas";
+        vc71::string batchName(atlasName);
+        batchName += number;
+        if (!dx9rend::textureAtlasGenerate(self->m_lightmapAtlases[0], savePath, batchName, savePath,
+                                           batchFiles, false))
+            return false;
+        if (next == files.end())
+            return true;
+    }
 }
 
 // RefFactory_geom_StaticMeshRenderer, 0x100B068E.

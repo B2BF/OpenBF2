@@ -585,6 +585,15 @@ QuadPatchEditable::~QuadPatchEditable()
             dx9rend::indexBufferRelease(m_layerIndexBuffer[i]);               // +0x2F8..
 }
 
+// The patch size is asked once (E+0x4C); both halvings are signed, as shipped.
+void QuadPatchEditable::getFileIndices(int* x, int* z)
+{
+    TerrainEditable* const te = editableTerrain;
+    const int patchSize = te->getPatchSize();                                 // E+0x4C
+    *x = te->m_heightmapSizeX / patchSize / 2 + gridX;                        // +0x350, +0x68
+    *z = te->m_heightmapSizeZ / patchSize / 2 + gridZ;                        // +0x354, +0x6C
+}
+
 // Places the patch at grid (x, z), loads its maps, and builds buffers and layer sets.
 // Colormaps prefer the editor copy, then the game copy, then a checkerboard; lightmaps
 // default to white. Missing detail maps are created and saved immediately.
@@ -2015,6 +2024,22 @@ void QuadPatchEditable::drawForLightmapGeneration()
     const unsigned int vertices = (te->m_primitiveType == 4) ? 3 * primitives : primitives + 2;
     dx9rend::rendererDrawIndexedPrimitive(static_cast<unsigned int>(te->m_lodRangeTriangleCount[0]),
                                           static_cast<unsigned int>(te->m_primitiveType), 0, 0, vertices, 0);
+}
+
+// (scaledX, 0, scaledZ) .. + patchSize * the primary scale (E+0x4C, then E+0x34). The box's
+// derived fields are left as the caller built them.
+void QuadPatchEditable::getWorldBounds(TerrainAabb& bounds)
+{
+    TerrainEditable* const te = editableTerrain;
+    const int patchSize = te->getPatchSize();                                 // E+0x4C
+    const Vec3& scale = te->getPrimaryWorldScale();                           // E+0x34
+    bounds.min.y = 0.0f;
+    bounds.min.x = static_cast<float>(scaledX);
+    bounds.min.z = static_cast<float>(scaledZ);
+    const float size = static_cast<float>(patchSize);
+    bounds.max.y = 0.0f;
+    bounds.max.x = size * scale.x + static_cast<float>(scaledX);
+    bounds.max.z = size * scale.z + static_cast<float>(scaledZ);
 }
 
 // the road mask and its consumers

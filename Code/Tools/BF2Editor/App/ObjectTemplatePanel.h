@@ -63,6 +63,11 @@ private:
     std::string m_archives;         // EditorObjects.status, asked for when the panel opens and on Refresh
     std::string m_message;
     bool        m_messageFailed;
+    // The weapon test's tuning fields: the engine's values (asked again twice a second) and what is being typed.
+    std::string m_tuningTemplate;
+    std::string m_tuningValue[4];
+    char        m_tuningEdit[4][32] = {};
+    int         m_tuningFrame = -1000;
 };
 
 } // namespace bf2editor

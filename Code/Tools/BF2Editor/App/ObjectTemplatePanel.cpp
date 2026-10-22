@@ -10,8 +10,10 @@
 #include "Framework/EditorLog.h"
 
 #include "Core/ConsoleObjects.h"
+#include "Core/Ids.h"
 #include "Game/Objects/IObject.h"
 #include "Game/Objects/IObjectTemplate.h"
+#include "Scene/Object/ObjectTypes/Base/ObjectTemplateManager.h"
 
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -667,6 +669,86 @@ void ObjectTemplatePanel::draw(EditSession& session, bool* open)
             run("EditorPreview.clear", "preview");
         ImGui::TextDisabled("Made where the view's centre meets the ground, with a grid, its bounds and its centre drawn; "
                             "Refresh makes it again after an edit.");
+        // A weapon: held by the play-test soldier and fired, its common tuning beside it (the retail object editor's
+        // weapon test, with the properties a modder tunes while testing).
+        const dice::hfe::world::IObjectTemplate* const shownTemplate =
+            dice::hfe::world::objectTemplateManager ? dice::hfe::world::objectTemplateManager->getTemplate(m_template) : 0;
+        if (shownTemplate && shownTemplate->getClassID() == dice::hfe::world::CID_GenericFireArmTemplate)
+        {
+            ImGui::SeparatorText("Weapon test");
+            if (ImGui::Button("Test this weapon"))
+                run(std::string("EditorPlayTest.weapon ") + m_template, "play-test");
+            ImGui::SetItemTooltip("A soldier where the camera stands, holding this weapon: fire with the left button, R "
+                                  "reloads. Press it again for a fresh weapon (a new magazine size takes one).");
+            static const char* const kTuning[][2] = { { "fire.roundsPerMinute", "rate of fire (rounds a minute)" },
+                                                      { "ammo.reloadTime", "reload time (seconds)" },
+                                                      { "ammo.magSize", "rounds in a magazine" },
+                                                      { "ammo.nrOfMags", "magazines" } };
+            const bool refresh = m_tuningTemplate != m_template || ImGui::GetFrameCount() - m_tuningFrame > 30;
+            for (size_t t = 0; t < sizeof(kTuning) / sizeof(kTuning[0]); ++t)
+            {
+                if (refresh)
+                {
+                    const ConsoleLineResult value =
+                        runConsoleLine(std::string("EditorObjectTemplate.engineValue ") + m_template + " " + kTuning[t][0]);
+                    m_tuningValue[t] = value.failed ? std::string() : value.output;
+                }
+                ImGui::PushID(static_cast<int>(t));
+                ImGui::SetNextItemWidth(120.0f);
+                if (ImGui::InputText(kTuning[t][1], m_tuningEdit[t], sizeof(m_tuningEdit[t]), ImGuiInputTextFlags_EnterReturnsTrue)
+                    && m_tuningEdit[t][0])
+                {
+                    run(std::string("EditorObjectTemplate.set ") + m_template + " " + kTuning[t][0] + " " + m_tuningEdit[t],
+                        "template");
+                    m_tuningFrame = -1000;
+                }
+                // Not being typed in: it shows the engine's value.
+                if (!ImGui::IsItemActive())
+                    std::snprintf(m_tuningEdit[t], sizeof(m_tuningEdit[t]), "%s", m_tuningValue[t].c_str());
+                ImGui::PopID();
+            }
+            if (refresh)
+            {
+                m_tuningTemplate = m_template;
+                m_tuningFrame = ImGui::GetFrameCount();
+            }
+            ImGui::TextDisabled("Each change is an undoable edit of the template's file; the held weapon fires and reloads "
+                                "at the new rate at once.");
+        }
+        // Its parts, picked in the view or here and moved with the gizmo ([added]).
+        if (session.templatePreview())
+        {
+            bool shown = session.previewPartsShown();
+            if (ImGui::Checkbox("Edit its parts in the view", &shown))
+                run(std::string("EditorPreview.showParts ") + (shown ? "1" : "0"), "preview");
+            ImGui::SetItemTooltip("Children, seats, cameras and the seats' soldier exit points, drawn on the preview. Click "
+                                  "one to pick it: the gizmo moves it (and turns a child in the rotate mode). Letting go "
+                                  "writes its line in the template's file, one undoable edit. Esc lets it go.");
+            if (shown)
+            {
+                const std::vector<EditSession::PreviewPart> parts = session.previewParts();
+                const int picked = session.pickedPreviewPart();
+                if (ImGui::BeginChild("##previewParts", ImVec2(0.0f, 150.0f), ImGuiChildFlags_Borders))
+                {
+                    for (size_t i = 0; i < parts.size(); ++i)
+                    {
+                        const EditSession::PreviewPart& part = parts[i];
+                        char row[320];
+                        std::snprintf(row, sizeof(row), "%*s%s%s%s  (%s)##part%u", part.depth * 2, "",
+                                      part.kind == EditSession::PreviewPart::Child ? part.label.c_str() : part.label.c_str(),
+                                      part.seat ? "  [seat]" : "", part.camera ? "  [camera]" : "", part.owner.c_str(),
+                                      static_cast<unsigned>(i));
+                        if (ImGui::Selectable(row, picked == static_cast<int>(i)))
+                            run("EditorPreview.pick " + std::to_string(picked == static_cast<int>(i) ? -1 : static_cast<int>(i)),
+                                "preview");
+                    }
+                }
+                ImGui::EndChild();
+                if (picked >= 0 && picked < static_cast<int>(parts.size()))
+                    ImGui::TextDisabled("%s picked: the gizmo moves it (Move / Rotate on the toolbar); Esc lets it go.",
+                                        parts[static_cast<size_t>(picked)].label.c_str());
+            }
+        }
 
         // The geometry template's settings: the .tweak's GeometryTemplate lines, edited in place.
         ImGui::SeparatorText("Geometry settings (.tweak)");

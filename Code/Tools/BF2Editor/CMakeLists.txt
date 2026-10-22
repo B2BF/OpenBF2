@@ -90,6 +90,20 @@ set(bf2_editor_framework_sources
     "${BF2_EDITOR_ROOT}/Framework/GroundPropertiesFile.h"
     "${BF2_EDITOR_ROOT}/Framework/TerrainRawLayers.cpp"
     "${BF2_EDITOR_ROOT}/Framework/TerrainRawLayers.h"
+    "${BF2_EDITOR_ROOT}/Framework/TerrainRawFile.cpp"
+    "${BF2_EDITOR_ROOT}/Framework/TerrainRawFile.h"
+    "${BF2_EDITOR_ROOT}/Framework/TerrainRawCompile.cpp"
+    "${BF2_EDITOR_ROOT}/Framework/TerrainRawCompile.h"
+    "${BF2_EDITOR_ROOT}/Framework/TerrainLowDetail.cpp"
+    "${BF2_EDITOR_ROOT}/Framework/TerrainLowDetail.h"
+    "${BF2_EDITOR_ROOT}/Framework/NewLevel.cpp"
+    "${BF2_EDITOR_ROOT}/Framework/NewLevel.h"
+    "${BF2_EDITOR_ROOT}/Framework/RoadFiles.cpp"
+    "${BF2_EDITOR_ROOT}/Framework/RoadFiles.h"
+    "${BF2_EDITOR_ROOT}/Framework/LightmapAtlas.cpp"
+    "${BF2_EDITOR_ROOT}/Framework/LightmapAtlas.h"
+    "${BF2_EDITOR_ROOT}/Framework/TextureEncode.cpp"
+    "${BF2_EDITOR_ROOT}/Framework/TextureEncode.h"
     "${BF2_EDITOR_ROOT}/Framework/DdsImage.cpp"
     "${BF2_EDITOR_ROOT}/Framework/DdsImage.h"
     "${BF2_EDITOR_ROOT}/Framework/TemplateFile.h"
@@ -98,6 +112,14 @@ set(bf2_editor_framework_sources
     "${BF2_EDITOR_ROOT}/Framework/Selection.h"
     "${BF2_EDITOR_ROOT}/Framework/SourceControl.cpp"
     "${BF2_EDITOR_ROOT}/Framework/SourceControl.h"
+    "${BF2_EDITOR_ROOT}/Framework/SavePlan.cpp"
+    "${BF2_EDITOR_ROOT}/Framework/SavePlan.h"
+    "${BF2_EDITOR_ROOT}/Framework/TextDiff.cpp"
+    "${BF2_EDITOR_ROOT}/Framework/TextDiff.h"
+    "${BF2_EDITOR_ROOT}/Framework/HudSetup.cpp"
+    "${BF2_EDITOR_ROOT}/Framework/HudSetup.h"
+    "${BF2_EDITOR_ROOT}/Framework/ArchiveRewrite.cpp"
+    "${BF2_EDITOR_ROOT}/Framework/ArchiveRewrite.h"
 )
 # Framework services that talk to the engine (editor only).
 set(bf2_editor_engine_framework_sources
@@ -110,6 +132,8 @@ set(bf2_editor_app_sources
     "${BF2_EDITOR_ROOT}/App/EditorMain.cpp"
     "${BF2_EDITOR_ROOT}/App/EngineHost.cpp"
     "${BF2_EDITOR_ROOT}/App/EngineHost.h"
+    "${BF2_EDITOR_ROOT}/App/HudEditor.cpp"
+    "${BF2_EDITOR_ROOT}/App/HudEditor.h"
     "${BF2_EDITOR_ROOT}/App/ImGuiHost.cpp"
     "${BF2_EDITOR_ROOT}/App/ImGuiHost.h"
     "${BF2_EDITOR_ROOT}/App/EditorShell.cpp"
@@ -197,6 +221,16 @@ set(bf2_editor_app_sources
     "${BF2_EDITOR_ROOT}/App/TestHarness.h"
     "${BF2_EDITOR_ROOT}/App/EditableTerrain.cpp"
     "${BF2_EDITOR_ROOT}/App/EditableTerrain.h"
+    "${BF2_EDITOR_ROOT}/App/RoadNetwork.cpp"
+    "${BF2_EDITOR_ROOT}/App/RoadNetwork.h"
+    "${BF2_EDITOR_ROOT}/App/EditSessionRoads.cpp"
+    "${BF2_EDITOR_ROOT}/App/EditSessionSave.cpp"
+    "${BF2_EDITOR_ROOT}/App/SavePreviewPanel.cpp"
+    "${BF2_EDITOR_ROOT}/App/SavePreviewPanel.h"
+    "${BF2_EDITOR_ROOT}/App/RoadPanel.cpp"
+    "${BF2_EDITOR_ROOT}/App/RoadPanel.h"
+    "${BF2_EDITOR_ROOT}/App/StagingFolder.cpp"
+    "${BF2_EDITOR_ROOT}/App/StagingFolder.h"
     "${BF2_EDITOR_ROOT}/App/PropertyPickers.cpp"
     "${BF2_EDITOR_ROOT}/App/PropertyPickers.h"
     "${BF2_EDITOR_ROOT}/App/TexturePalette.cpp"
@@ -210,20 +244,22 @@ set(bf2_editor_app_sources
 # the editor's copy of bf2_client_objects below, so the link sees exactly one definition.
 #   Game/Main/BF2Engine.cpp       - SingleInstanceGuard takes no Battlefield2_Instance_Mutex (WP3).
 #   Core/ModuleRegistry.cpp       - ModuleGame::handleEvent drives no menu or loading screen (WP4).
-#   Game/Main/BF2EngineSetup.cpp  - no HUD / HUD-console / profile-console modules (WP4); the
+#   Game/Main/BF2EngineSetup.cpp  - no profile-console module, the HUD's only with +hud 1 (WP4); the
 #                                   "HeightmapCluster" singleton is the editable class (WP8).
 #   Physics/HeightmapCluster.cpp  - addHeightmap makes HeightmapEditable tiles (WP8).
 #   Physics/HeightmapConsole.cpp  - heightmapCluster.create resolves the editable class (WP8).
+#   Menu/Bf2TransformNode.cpp     - tells the HUD editor where each script-made HUD node stands (App/HudEditor).
 set(bf2_editor_shared_sources
     "${BF2_ROOT}/Game/Main/BF2Engine.cpp"
     "${BF2_ROOT}/Core/ModuleRegistry.cpp"
     "${BF2_ROOT}/Game/Main/BF2EngineSetup.cpp"
     "${BF2_ROOT}/Physics/HeightmapCluster.cpp"
     "${BF2_ROOT}/Physics/HeightmapConsole.cpp"
+    "${BF2_ROOT}/Menu/Bf2TransformNode.cpp"
 )
 # Matches the object path of each shared TU inside $<TARGET_OBJECTS:bf2_client_objects>.
 set(bf2_editor_shared_object_regex
-    "(Game[/\\\\]Main[/\\\\]BF2Engine|Core[/\\\\]ModuleRegistry|Game[/\\\\]Main[/\\\\]BF2EngineSetup|Physics[/\\\\]HeightmapCluster|Physics[/\\\\]HeightmapConsole)\\.cpp\\.obj")
+    "(Game[/\\\\]Main[/\\\\]BF2Engine|Core[/\\\\]ModuleRegistry|Game[/\\\\]Main[/\\\\]BF2EngineSetup|Physics[/\\\\]HeightmapCluster|Physics[/\\\\]HeightmapConsole|Menu[/\\\\]Bf2TransformNode)\\.cpp\\.obj")
 
 # Dear ImGui (docking) and ImGuizmo are vendored under Code/BF2/External.
 # Only the Win32 and D3D9 backends are built.

@@ -132,7 +132,7 @@ void GrapplingHookRopeContainer::initialize(Soldier* soldier,
     m_initialSoldierPosition = soldier->getAbsolutePosition();
     setAbsolutePosition(m_segment->getMidpoint());
 
-    static const float firstTemplateDistance = rope->m_ropeTemplate->_ropeParams[15];
+    static const float firstTemplateDistance = rope->m_ropeTemplate->m_climbingSpeed;
     _float3DC = firstTemplateDistance / (100.0f * rope->_float174);
     if (_float3DC > 1.0f)
         _float3DC = 1.0f;
@@ -606,7 +606,7 @@ void GrapplingHookRopeContainer::handleDismount(
         return;
 
     Vec3 raisedPosition = getAbsolutePosition();
-    const float linkHeight = m_rope->_float174 * m_rope->m_ropeTemplate->_ropeParams[18];
+    const float linkHeight = m_rope->_float174 * m_rope->m_ropeTemplate->m_climbableAngle;
     raisedPosition.y += linkHeight + linkHeight;
 
     const int runLength = m_rope->findUnclimbableIndexFromLink(link, direction);
@@ -644,7 +644,7 @@ void GrapplingHookRopeContainer::handleDismount(
             from, to, hitPoint, hitFraction, hitNormal, material, true))
     {
         if ((m_eventField18 < 0.0f
-             && hitNormal.y > m_rope->m_ropeTemplate->_ropeParams[19])
+             && hitNormal.y > m_rope->m_ropeTemplate->m_dismountAngle)
             || direction == 0)
         {
             Vec3 position = from;

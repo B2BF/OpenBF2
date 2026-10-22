@@ -15,6 +15,27 @@
 
 static void logf(const char* fmt, ...);   // defined below - the BF2_LOG mirror
 
+// Rebuilds the engine's single command-line string from argv. The C runtime strips the shell's
+// quotes, so an argument containing a space must be quoted again or it splits when rejoined; an
+// absolute path such as "D:\Battlefield 2\mods\...\maplist.con" would otherwise lose everything
+// after its first space.
+static void appendCommandLineArg(std::string& out, const char* arg, bool first)
+{
+    if (!first)
+        out += ' ';
+    const std::string value(arg ? arg : "");
+    if (value.empty() || value.find_first_of(" \t") != std::string::npos)
+    {
+        out += '"';
+        out += value;
+        out += '"';
+    }
+    else
+    {
+        out += value;
+    }
+}
+
 // Resolves fault addresses through DbgHelp. Keep image-relative RVAs in diagnostics:
 // /force-resolved missing functions may point at RVA zero without a symbol or source line.
 static void describe(SIZE_T addr, SIZE_T base)
@@ -762,10 +783,7 @@ int main(int argc, const char** argv)
 
     std::string commandLine;
     for (int i = 1; i < argc; ++i)
-    {
-        commandLine += argv[i];
-        if (i != argc - 1) commandLine += ' ';
-    }
+        appendCommandLineArg(commandLine, argv[i], i == 1);
 
     dice::hfe::BF2* bf2 = new dice::hfe::BF2();
     printf("[boot] BF2 constructed\n"); fflush(stdout);

@@ -25,6 +25,8 @@
 #include "../RendMisc/IRenderView.h"
 #include "../RendMisc/IRenderer.h"            // getRenderStats - the shadow draws' +0x25C counter
 #include "../Scene/Object/WindManager.h"      // the vegetation arm's wind speed
+#include "LightmapGeneration/ILightSampleable.h"  // the +0x30 table's interface (ILightSampling)
+#include "LightmapGeneration/MeshLightSampling.h" // the sampler createLightSampler makes
 #include "MeshTemplate.h"                     // MeshBounds / meshBoundsFinalize
 #include "StaticMeshRenderer.h"               // the singleton's flags, counters and atlases
 #include "StaticMeshTemplate.h"               // the tail gate reads MeshTemplate::m_loaded
@@ -32,6 +34,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <new>
 
@@ -490,31 +493,85 @@ bool __fastcall sm_ls_slot10(void* self, void*)
     return fromLightSampleable(self)->lightSampleableSlot10ReturnsTrue();
 }
 
-// [FRONTIER] Creates and loads a light sampler for the selected geometry/LOD.
-// Stops at the missing sampler constructor; this entry serves lightmap generation.
-// [RETIRE-WHEN: RW-staticmesh-light-sampler]
-void __fastcall sm_ls_createLightSampler(void* self, void*, int argument)
+// Defined below with the other name builders.
+void staticMeshLightmapName(const StaticMesh* self, vc71::string& out);
+
+// ILightSampleable +0x14: a MeshLightSampler for the current (geom, lod), loaded from
+// "<template path>/Meshes/<template name>.samples" (geom 0, lod 0) or ".samp_<geom><lod>" and
+// writing the instance's lightmap name. A template with lightmapOverride caps the sample grid at
+// its lightmap size for the pair; `resolutionModifier` is LightmapGeneration's. On success the
+// pair's cached lightmap texture is released and the instance's current lightmap cleared. Null
+// when the file cannot be opened. The allocation is used unchecked, as shipped.
+// [INFERRED] placement: retail keeps this body with the rest of its run in
+// StaticMeshLightmapGeneration.cpp; this tree keeps the run's other members here.
+ILightSampling* __fastcall sm_ls_createLightSampler(void* self, void*, float resolutionModifier)
 {
-    (void)argument;
-    RD9_FRONTIER_AT("dice::hfe::geom::StaticMesh::createLightSampler (ILightSampleable +0x14, "
-                    "0x10198680 - read in full; the 0x88-byte sampler's constructor 0x101BD8D0 "
-                    "is unrecovered)", fromLightSampleable(self), 0x14);
+    StaticMesh* const mesh = fromLightSampleable(self);
+    void* const storage = ::renddx9abi::engineAlloc(sizeof(MeshLightSampler));
+    MeshLightSampler* const sampler = storage ? new (storage) MeshLightSampler() : 0;
+
+    typedef int (__fastcall* IndexFn)(const void*, void*);
+    const int lod  = reinterpret_cast<IndexFn>(mesh->m_vptr[0x7C / sizeof(void*)])(mesh, 0);
+    const int geom = reinterpret_cast<IndexFn>(mesh->m_vptr[0x70 / sizeof(void*)])(mesh, 0);
+    char suffix[12];
+    if ((geom | lod) != 0)
+        std::sprintf(suffix, ".samp_%d%d", geom, lod);
+    else
+        std::strcpy(suffix, ".samples");
+
+    IGeometryTemplate* const tmpl = static_cast<StaticMeshTemplate*>(mesh->m_template);
+    if (tmpl->getLightmapOverride())                                       // +0x6C
+        sampler->m_sizeCap = tmpl->getLightmapSize(geom, lod);             // +0x74
+    sampler->m_resolutionModifier = resolutionModifier;
+
+    vc71::string meshes(tmpl->getPath());                                  // +0x20
+    meshes += "/Meshes/";
+    vc71::string named(meshes);
+    named += tmpl->getName();                                              // +0x18
+    vc71::string path(named);
+    path += suffix;
+    vc71::string outputName;
+    staticMeshLightmapName(mesh, outputName);
+    const bool failed = !sampler->load(path, outputName);
+    if (failed)
+    {
+        sampler->~MeshLightSampler();
+        ::renddx9abi::engineFree(sampler);
+        return 0;
+    }
+
+    const int geomTimesFive =
+        5 * reinterpret_cast<IndexFn>(mesh->m_vptr[0x70 / sizeof(void*)])(mesh, 0);
+    const unsigned int key = static_cast<unsigned int>(
+        reinterpret_cast<IndexFn>(mesh->m_vptr[0x7C / sizeof(void*)])(mesh, 0) + 2 * geomTimesFive);
+    vc71::map_node_u32* const node = vc71::mapInsertU32(mesh->m_map260, key);
+    dx9rend::EngineTexture*& slot = *reinterpret_cast<dx9rend::EngineTexture**>(node->value);
+    dx9rend::EngineTexture* const cached = slot;
+    mesh->m_dword26C = reinterpret_cast<unsigned int>(cached);
+    if (cached)
+    {
+        if (--cached->refCount == 0)
+        {
+            dx9rend::textureDtor(cached);
+            ::renddx9abi::engineFree(cached);
+        }
+        mesh->m_dword26C = 0;
+        slot = 0;
+    }
+    return sampler;
 }
 
-// +0x18, (0x68 B) - destroyLightSampler(p).  `retn 4`, answers true.  read IN
-// full: destroy and free the sampler when one is passed (sub_101BD920 + engineFree), then
-// re-fetch this instance's lightmap texture from its (geom, lod) map entry, lower the
-// "no lightmap" flag and run the lightmap loader again.  The sampler destructor is the same
-// unrecovered subsystem as above, so a non-null argument stops there; the null-argument path -
-// the reload - is written.
-bool __fastcall sm_ls_destroyLightSampler(void* self, void*, void* sampler)
+// ILightSampleable +0x18: destroys and frees the sampler when one is passed (its destructor
+// writes the lightmap file), then re-fetches this instance's lightmap texture from its (geom, lod)
+// map entry, lowers the "no lightmap" flag and runs the lightmap loader again. Always true.
+bool __fastcall sm_ls_destroyLightSampler(void* self, void*, ILightSampling* sampler)
 {
     StaticMesh* const mesh = fromLightSampleable(self);
     if (sampler)
     {
-        RD9_FRONTIER_AT("dice::hfe::geom::StaticMesh::destroyLightSampler (ILightSampleable "
-                        "+0x18, 0x10198D80 - the sampler destructor 0x101BD920 is unrecovered)",
-                        mesh, 0x18);
+        MeshLightSampler* const meshSampler = static_cast<MeshLightSampler*>(sampler);
+        meshSampler->~MeshLightSampler();
+        ::renddx9abi::engineFree(meshSampler);
     }
 
     const unsigned int key = static_cast<unsigned int>(mesh->getLodIndex())
@@ -533,8 +590,8 @@ void* const kStaticMeshLightSampleableVtable[7] =
     reinterpret_cast<void*>(&sm_ls_release),              // +0x08  0x10103C70  thunk -> release
     reinterpret_cast<void*>(&sm_ls_queryInterface),       // +0x0C  0x10103BF0  thunk -> queryInterface
     reinterpret_cast<void*>(&sm_ls_slot10),               // +0x10  0x10197EF0  true
-    reinterpret_cast<void*>(&sm_ls_createLightSampler),   // +0x14  0x10198680  stop - sampler ctor
-    reinterpret_cast<void*>(&sm_ls_destroyLightSampler)   // +0x18  (null arm)
+    reinterpret_cast<void*>(&sm_ls_createLightSampler),   // +0x14  0x10198680
+    reinterpret_cast<void*>(&sm_ls_destroyLightSampler)   // +0x18  0x10198D80
 };
 
 } // anonymous namespace - staticMeshRootParent is shared with XpLightManager.cpp's

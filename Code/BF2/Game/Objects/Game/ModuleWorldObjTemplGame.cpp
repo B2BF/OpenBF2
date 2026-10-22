@@ -333,6 +333,76 @@ struct GameTemplateConsoleAccess
     }
     static Vec3 getMaskOffset() { return maskObject()->m_maskOffset; }
     static void setMaskOffset(const Vec3& value) { maskObject()->m_maskOffset = value; }
+
+    // GrapplingHookRopeTemplate rope constants. The dedicated PE template ctor writes them at
+    // +0x240..+0x294 and each generated ConsoleClass executor stores/loads its float directly
+    // (PE gate sub_4BC4A0 = getActiveTemplate(40013)).
+    static GrapplingHookRopeTemplate* grapplingHookRope()
+    {
+        return static_cast<GrapplingHookRopeTemplate*>(
+            getActiveTemplate(CID_GrapplingHookRopeTemplate));
+    }
+    static float getThrowStrength() { return grapplingHookRope()->m_throwStrength; }
+    static void setThrowStrength(float v) { grapplingHookRope()->m_throwStrength = v; }
+    static float getUpThrowBoost() { return grapplingHookRope()->m_upThrowBoost; }
+    static void setUpThrowBoost(float v) { grapplingHookRope()->m_upThrowBoost = v; }
+    static float getDegradeThrowStrength() { return grapplingHookRope()->m_degradeThrowStrength; }
+    static void setDegradeThrowStrength(float v) { grapplingHookRope()->m_degradeThrowStrength = v; }
+    static float getThrowStrength2() { return grapplingHookRope()->m_throwStrength2; }
+    static void setThrowStrength2(float v) { grapplingHookRope()->m_throwStrength2 = v; }
+    static float getUpThrowBoost2() { return grapplingHookRope()->m_upThrowBoost2; }
+    static void setUpThrowBoost2(float v) { grapplingHookRope()->m_upThrowBoost2 = v; }
+    static float getDegradeThrowStrength2() { return grapplingHookRope()->m_degradeThrowStrength2; }
+    static void setDegradeThrowStrength2(float v) { grapplingHookRope()->m_degradeThrowStrength2 = v; }
+    static float getDropStrength() { return grapplingHookRope()->m_dropStrength; }
+    static void setDropStrength(float v) { grapplingHookRope()->m_dropStrength = v; }
+    static float getUpDropBoost() { return grapplingHookRope()->m_upDropBoost; }
+    static void setUpDropBoost(float v) { grapplingHookRope()->m_upDropBoost = v; }
+    static float getDegradeDropStrength() { return grapplingHookRope()->m_degradeDropStrength; }
+    static void setDegradeDropStrength(float v) { grapplingHookRope()->m_degradeDropStrength = v; }
+    static float getLinkAttachMovement() { return grapplingHookRope()->m_linkAttachMovement; }
+    static void setLinkAttachMovement(float v) { grapplingHookRope()->m_linkAttachMovement = v; }
+    static float getLinkAttachTime() { return grapplingHookRope()->m_linkAttachTime; }
+    static void setLinkAttachTime(float v) { grapplingHookRope()->m_linkAttachTime = v; }
+    static float getDismountCheckOffset() { return grapplingHookRope()->m_dismountCheckOffset; }
+    static void setDismountCheckOffset(float v) { grapplingHookRope()->m_dismountCheckOffset = v; }
+    static float getMinYNormal() { return grapplingHookRope()->m_minYNormal; }
+    static void setMinYNormal(float v) { grapplingHookRope()->m_minYNormal = v; }
+    static float getAttachClimberRadius() { return grapplingHookRope()->m_attachClimberRadius; }
+    static void setAttachClimberRadius(float v) { grapplingHookRope()->m_attachClimberRadius = v; }
+    static float getClimbingSpeed() { return grapplingHookRope()->m_climbingSpeed; }
+    static void setClimbingSpeed(float v) { grapplingHookRope()->m_climbingSpeed = v; }
+    static float getElasticity() { return grapplingHookRope()->m_elasticity; }
+    static void setElasticity(float v) { grapplingHookRope()->m_elasticity = v; }
+    static float getAirFriction() { return grapplingHookRope()->m_airFriction; }
+    static void setAirFriction(float v) { grapplingHookRope()->m_airFriction = v; }
+    static float getClimbableAngle() { return grapplingHookRope()->m_climbableAngle; }
+    static void setClimbableAngle(float v) { grapplingHookRope()->m_climbableAngle = v; }
+    static float getDismountAngle() { return grapplingHookRope()->m_dismountAngle; }
+    static void setDismountAngle(float v) { grapplingHookRope()->m_dismountAngle = v; }
+    static float getClimbersAttachForce() { return grapplingHookRope()->m_climbersAttachForce; }
+    static void setClimbersAttachForce(float v) { grapplingHookRope()->m_climbersAttachForce = v; }
+    static float getAwakeTime() { return grapplingHookRope()->m_awakeTime; }
+    static void setAwakeTime(float v) { grapplingHookRope()->m_awakeTime = v; }
+
+    // ObjectTemplate.timeout writes the GrapplingHookRope template's PE +0x240 word - the field the
+    // rope consumer names its unused lifetime (GrapplingHookRopeTemplate::m_ropeUnusedLifetime).
+    static float getRopeTimeout() { return grapplingHookRope()->m_ropeUnusedLifetime; }
+    static void setRopeTimeout(float v) { grapplingHookRope()->m_ropeUnusedLifetime = v; }
+
+    // ObjectTemplate.Timeout writes the Zipline template's PE +0x240 word, which
+    // Zipline::updateTimeOut compares the live timer against (ZiplineTemplate::_float17C).
+    static ZiplineTemplate* zipline() { return static_cast<ZiplineTemplate*>(getActiveTemplate(CID_ZiplineTemplate)); }
+    static float getZiplineTimeout() { return zipline()->_float17C; }
+    static void setZiplineTimeout(float v) { zipline()->_float17C = v; }
+
+    // DropVehicleTemplate: the console field is the recovered m_destroyVehicleTime (PE +0x210).
+    static DropVehicleTemplate* activeDropVehicleTemplate()
+    {
+        return static_cast<DropVehicleTemplate*>(getActiveTemplate(CID_DropVehicleTemplate));
+    }
+    static int getNoPassengerTimeToLive() { return activeDropVehicleTemplate()->m_destroyVehicleTime; }
+    static void setNoPassengerTimeToLive(int v) { activeDropVehicleTemplate()->m_destroyVehicleTime = v; }
     static PlayerControlObjectTemplate* playerControlObject()
     {
         return static_cast<PlayerControlObjectTemplate*>(
@@ -475,6 +545,76 @@ struct GameTemplateConsoleAccess
     static void setPcoVehicleType(VehicleType type)
     {
         playerControlObject()->setVehicleType(type);
+    }
+
+    // Occupancy and exit-policy fields retail registers as plain ObjectTemplate properties, each
+    // gated on CID_PlayerControlObjectTemplate (dedicated PE executors 0x4B78F0 etc. read/write the
+    // raw field; disableSpawnPointsOnEnter normalizes its stored byte to 0/1).
+    static bool getAllowDucking() { return playerControlObject()->m_allowDucking; }
+    static void setAllowDucking(bool value) { playerControlObject()->m_allowDucking = value; }
+    static bool getDisableInputWhileDucking()
+    {
+        return playerControlObject()->m_disableInputWhileDucking;
+    }
+    static void setDisableInputWhileDucking(bool value)
+    {
+        playerControlObject()->m_disableInputWhileDucking = value;
+    }
+    static bool getDontClearTeamOnExit() { return playerControlObject()->m_dontClearTeamOnExit; }
+    static void setDontClearTeamOnExit(bool value)
+    {
+        playerControlObject()->m_dontClearTeamOnExit = value;
+    }
+    static bool getDestroyOnExit() { return playerControlObject()->m_destroyOnExit; }
+    static void setDestroyOnExit(bool value) { playerControlObject()->m_destroyOnExit = value; }
+    static bool getDontAllowExit() { return playerControlObject()->m_dontAllowExit; }
+    static void setDontAllowExit(bool value) { playerControlObject()->m_dontAllowExit = value; }
+    static bool getDisableSpawnPointsOnEnter()
+    {
+        return playerControlObject()->m_disableSpawnPointsOnEnter;
+    }
+    static void setDisableSpawnPointsOnEnter(bool value)
+    {
+        playerControlObject()->m_disableSpawnPointsOnEnter = value;
+    }
+    static bool getToggleWeapon() { return playerControlObject()->m_toggleWeapon; }
+    static void setToggleWeapon(bool value) { playerControlObject()->m_toggleWeapon = value; }
+    static bool getIsOpenVehicle() { return playerControlObject()->m_isOpenVehicle; }
+    static void setIsOpenVehicle(bool value) { playerControlObject()->m_isOpenVehicle = value; }
+    static int getCrewKitIndex() { return playerControlObject()->m_crewKitIndex; }
+    static void setCrewKitIndex(int value) { playerControlObject()->m_crewKitIndex = value; }
+    static float getBoundingRadiusModifierWhenOccupied()
+    {
+        return playerControlObject()->m_boundingRadiusModifierWhenOccupied;
+    }
+    static void setBoundingRadiusModifierWhenOccupied(float value)
+    {
+        playerControlObject()->m_boundingRadiusModifierWhenOccupied = value;
+    }
+    // addTargetObjectTypeToWatch appends to the watched-type set; duplicates collapse.
+    static void addTargetObjectTypeToWatch(int type)
+    {
+        playerControlObject()->m_targetObjectTypesToWatch.insert(type);
+    }
+    // Seat name and rotation limits dispatch through the template's own accessors, matching retail's
+    // virtual seat-component set/get pair (dedicated PE executors 0x4B27B0 / 0x4B34A0 / 0x4B3670).
+    static std::string getSeatParent() { return playerControlObject()->getSeatParent(); }
+    static void setSeatParent(const std::string& value) { playerControlObject()->setSeatParent(value); }
+    static float getSeatLeftRotationLimit()
+    {
+        return playerControlObject()->getSeatLeftRotationLimit();
+    }
+    static void setSeatLeftRotationLimit(float value)
+    {
+        playerControlObject()->setSeatLeftRotationLimit(value);
+    }
+    static float getSeatRightRotationLimit()
+    {
+        return playerControlObject()->getSeatRightRotationLimit();
+    }
+    static void setSeatRightRotationLimit(float value)
+    {
+        playerControlObject()->setSeatRightRotationLimit(value);
     }
 
     static SoldierTemplate* soldier()
@@ -832,6 +972,210 @@ BF2_CONSOLE_PROPERTY(soldierExitPosition, Vec3,
 BF2_CONSOLE_PROPERTY(soldierExitRotation, Vec3,
                      GameTemplateConsoleAccess::playerControlObject(),
                      setSoldierExitRotation, getSoldierExitRotation, kObjTemplGameConsoleTag)
+
+// Occupant entry/exit policy, ducking and seat setup. Retail registers each as a plain ObjectTemplate
+// property (or, for addTargetObjectTypeToWatch, a one-int method) gated on CID_PlayerControlObjectTemplate.
+BF2_CONSOLE_PROPERTY_FN(allowDucking, bool,
+                        getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                        GameTemplateConsoleAccess::getAllowDucking(),
+                        GameTemplateConsoleAccess::setAllowDucking, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(disableInputWhileDucking, bool,
+                        getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                        GameTemplateConsoleAccess::getDisableInputWhileDucking(),
+                        GameTemplateConsoleAccess::setDisableInputWhileDucking,
+                        kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(dontClearTeamOnExit, bool,
+                        getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                        GameTemplateConsoleAccess::getDontClearTeamOnExit(),
+                        GameTemplateConsoleAccess::setDontClearTeamOnExit, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(destroyOnExit, bool,
+                        getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                        GameTemplateConsoleAccess::getDestroyOnExit(),
+                        GameTemplateConsoleAccess::setDestroyOnExit, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(dontAllowExit, bool,
+                        getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                        GameTemplateConsoleAccess::getDontAllowExit(),
+                        GameTemplateConsoleAccess::setDontAllowExit, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(disableSpawnPointsOnEnter, bool,
+                        getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                        GameTemplateConsoleAccess::getDisableSpawnPointsOnEnter(),
+                        GameTemplateConsoleAccess::setDisableSpawnPointsOnEnter,
+                        kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(toggleWeapon, bool,
+                        getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                        GameTemplateConsoleAccess::getToggleWeapon(),
+                        GameTemplateConsoleAccess::setToggleWeapon, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(isOpenVehicle, bool,
+                        getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                        GameTemplateConsoleAccess::getIsOpenVehicle(),
+                        GameTemplateConsoleAccess::setIsOpenVehicle, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(crewKitIndex, int,
+                        getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                        GameTemplateConsoleAccess::getCrewKitIndex(),
+                        GameTemplateConsoleAccess::setCrewKitIndex, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(boundingRadiusModifierWhenOccupied, float,
+                        getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                        GameTemplateConsoleAccess::getBoundingRadiusModifierWhenOccupied(),
+                        GameTemplateConsoleAccess::setBoundingRadiusModifierWhenOccupied,
+                        kObjTemplGameConsoleTag)
+BF2_CONSOLE_METHOD_1_ACTIVE(addTargetObjectTypeToWatch,
+                            GameTemplateConsoleAccess::addTargetObjectTypeToWatch,
+                            getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                            int, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(seatParent, std::string,
+                        getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                        GameTemplateConsoleAccess::getSeatParent(),
+                        GameTemplateConsoleAccess::setSeatParent, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(seatLeftRotationLimit, float,
+                        getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                        GameTemplateConsoleAccess::getSeatLeftRotationLimit(),
+                        GameTemplateConsoleAccess::setSeatLeftRotationLimit, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(seatRightRotationLimit, float,
+                        getActiveTemplate(CID_PlayerControlObjectTemplate) != 0,
+                        GameTemplateConsoleAccess::getSeatRightRotationLimit(),
+                        GameTemplateConsoleAccess::setSeatRightRotationLimit, kObjTemplGameConsoleTag)
+
+// Grappling-rope simulation constants. Retail registers each as a float->float ObjectTemplate
+// property gated on the active GrapplingHookRopeTemplate (CID 40013; PE gate 0x4BC4A0, executor
+// field writes at PE +0x244..+0x290 and +0x294). The values drive the recovered rope simulation.
+BF2_CONSOLE_PROPERTY_FN(throwStrength, float,
+                        getActiveTemplate(CID_GrapplingHookRopeTemplate) != 0,
+                        GameTemplateConsoleAccess::getThrowStrength(),
+                        GameTemplateConsoleAccess::setThrowStrength, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(upThrowBoost, float,
+                        getActiveTemplate(CID_GrapplingHookRopeTemplate) != 0,
+                        GameTemplateConsoleAccess::getUpThrowBoost(),
+                        GameTemplateConsoleAccess::setUpThrowBoost, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(degradeThrowStrength, float,
+                        getActiveTemplate(CID_GrapplingHookRopeTemplate) != 0,
+                        GameTemplateConsoleAccess::getDegradeThrowStrength(),
+                        GameTemplateConsoleAccess::setDegradeThrowStrength, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(throwStrength2, float,
+                        getActiveTemplate(CID_GrapplingHookRopeTemplate) != 0,
+                        GameTemplateConsoleAccess::getThrowStrength2(),
+                        GameTemplateConsoleAccess::setThrowStrength2, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(upThrowBoost2, float,
+                        getActiveTemplate(CID_GrapplingHookRopeTemplate) != 0,
+                        GameTemplateConsoleAccess::getUpThrowBoost2(),
+                        GameTemplateConsoleAccess::setUpThrowBoost2, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(degradeThrowStrength2, float,
+                        getActiveTemplate(CID_GrapplingHookRopeTemplate) != 0,
+                        GameTemplateConsoleAccess::getDegradeThrowStrength2(),
+                        GameTemplateConsoleAccess::setDegradeThrowStrength2, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(dropStrength, float,
+                        getActiveTemplate(CID_GrapplingHookRopeTemplate) != 0,
+                        GameTemplateConsoleAccess::getDropStrength(),
+                        GameTemplateConsoleAccess::setDropStrength, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(upDropBoost, float,
+                        getActiveTemplate(CID_GrapplingHookRopeTemplate) != 0,
+                        GameTemplateConsoleAccess::getUpDropBoost(),
+                        GameTemplateConsoleAccess::setUpDropBoost, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(degradeDropStrength, float,
+                        getActiveTemplate(CID_GrapplingHookRopeTemplate) != 0,
+                        GameTemplateConsoleAccess::getDegradeDropStrength(),
+                        GameTemplateConsoleAccess::setDegradeDropStrength, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(linkAttachMovement, float,
+                        getActiveTemplate(CID_GrapplingHookRopeTemplate) != 0,
+                        GameTemplateConsoleAccess::getLinkAttachMovement(),
+                        GameTemplateConsoleAccess::setLinkAttachMovement, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(linkAttachTime, float,
+                        getActiveTemplate(CID_GrapplingHookRopeTemplate) != 0,
+                        GameTemplateConsoleAccess::getLinkAttachTime(),
+                        GameTemplateConsoleAccess::setLinkAttachTime, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(dismountCheckOffset, float,
+                        getActiveTemplate(CID_GrapplingHookRopeTemplate) != 0,
+                        GameTemplateConsoleAccess::getDismountCheckOffset(),
+                        GameTemplateConsoleAccess::setDismountCheckOffset, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(minYNormal, float,
+                        getActiveTemplate(CID_GrapplingHookRopeTemplate) != 0,
+                        GameTemplateConsoleAccess::getMinYNormal(),
+                        GameTemplateConsoleAccess::setMinYNormal, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(attachClimberRadius, float,
+                        getActiveTemplate(CID_GrapplingHookRopeTemplate) != 0,
+                        GameTemplateConsoleAccess::getAttachClimberRadius(),
+                        GameTemplateConsoleAccess::setAttachClimberRadius, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(climbingSpeed, float,
+                        getActiveTemplate(CID_GrapplingHookRopeTemplate) != 0,
+                        GameTemplateConsoleAccess::getClimbingSpeed(),
+                        GameTemplateConsoleAccess::setClimbingSpeed, kObjTemplGameConsoleTag)
+// Phase-1 deferred command, same rope block (PE +0x280).
+BF2_CONSOLE_PROPERTY_FN(elasticity, float,
+                        getActiveTemplate(CID_GrapplingHookRopeTemplate) != 0,
+                        GameTemplateConsoleAccess::getElasticity(),
+                        GameTemplateConsoleAccess::setElasticity, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(airFriction, float,
+                        getActiveTemplate(CID_GrapplingHookRopeTemplate) != 0,
+                        GameTemplateConsoleAccess::getAirFriction(),
+                        GameTemplateConsoleAccess::setAirFriction, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(climbableAngle, float,
+                        getActiveTemplate(CID_GrapplingHookRopeTemplate) != 0,
+                        GameTemplateConsoleAccess::getClimbableAngle(),
+                        GameTemplateConsoleAccess::setClimbableAngle, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(dismountAngle, float,
+                        getActiveTemplate(CID_GrapplingHookRopeTemplate) != 0,
+                        GameTemplateConsoleAccess::getDismountAngle(),
+                        GameTemplateConsoleAccess::setDismountAngle, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(climbersAttachForce, float,
+                        getActiveTemplate(CID_GrapplingHookRopeTemplate) != 0,
+                        GameTemplateConsoleAccess::getClimbersAttachForce(),
+                        GameTemplateConsoleAccess::setClimbersAttachForce, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(awakeTime, float,
+                        getActiveTemplate(CID_GrapplingHookRopeTemplate) != 0,
+                        GameTemplateConsoleAccess::getAwakeTime(),
+                        GameTemplateConsoleAccess::setAwakeTime, kObjTemplGameConsoleTag)
+
+// The template self-removal timeout, a float->float property at PE +0x240 of two different templates.
+// Retail registers it twice: `timeout` gated on the active GrapplingHookRopeTemplate (PE ctor
+// 0x4BA270, gate 0x4BC4A0, executor 0x4BA3C0) and `Timeout` gated on the active ZiplineTemplate (PE
+// ctor 0x4B9600, gate 0x4B9C30, executor 0x4B9750). The spellings differ only in case because retail
+// is case-sensitive; the registry lookup is not, so both rows share one key and the active template's
+// gate selects the matching one.
+BF2_CONSOLE_PROPERTY_FN(timeout, float,
+                        getActiveTemplate(CID_GrapplingHookRopeTemplate) != 0,
+                        GameTemplateConsoleAccess::getRopeTimeout(),
+                        GameTemplateConsoleAccess::setRopeTimeout, kObjTemplGameConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(Timeout, float,
+                        getActiveTemplate(CID_ZiplineTemplate) != 0,
+                        GameTemplateConsoleAccess::getZiplineTimeout(),
+                        GameTemplateConsoleAccess::setZiplineTimeout, kObjTemplGameConsoleTag)
+
+// DropVehicleTemplate: PE gate sub_4BE080 = getActiveTemplate(40020); the int executor stores the
+// recovered m_destroyVehicleTime at PE +0x210 (int -> int).
+BF2_CONSOLE_PROPERTY_FN(noPassengerTimeToLive, int,
+                        getActiveTemplate(CID_DropVehicleTemplate) != 0,
+                        GameTemplateConsoleAccess::getNoPassengerTimeToLive(),
+                        GameTemplateConsoleAccess::setNoPassengerTimeToLive, kObjTemplGameConsoleTag)
+
+// Ground-effect and destroyable-window bundle fields exposed as plain ObjectTemplate properties.
+namespace {
+GroundEffectBundleTemplate* activeGroundEffectBundle()
+{
+    return static_cast<GroundEffectBundleTemplate*>(
+        getActiveTemplate(CID_GroundEffectBundleTemplate));
+}
+DestroyableWindowsBundleTemplate* activeDestroyableWindowsBundle()
+{
+    return static_cast<DestroyableWindowsBundleTemplate*>(
+        getActiveTemplate(CID_DestroyableWindowsBundleTemplate));
+}
+// PE executor 0x4AAB70 writes the window count; the value is the int at template +568
+// (openBF2 DestroyableWindowsBundleTemplate::numWindows at +0x188).
+void objectTemplateSetNumWindows(int count)
+{
+    activeDestroyableWindowsBundle()->numWindows = count;
+}
+} // namespace
+BF2_CONSOLE_FIELD(maxTriggerDistance, float, activeGroundEffectBundle(),
+                  m_maxTriggerDistance, kObjTemplGameConsoleTag)
+BF2_CONSOLE_FIELD(clientHitDetection, bool, activeDestroyableWindowsBundle(),
+                  clientHitDetection, kObjTemplGameConsoleTag)
+// objectTemplate.setNumWindows - dedicated PE gate 0x4AAAF0 =
+// `getActiveTemplate(0xC4DC = CID_DestroyableWindowsBundleTemplate) != 0`; ctor 0x4AAA00,
+// executor 0x4AAB70, one int argument, void, file-static. Set-only: the shipped executor's only
+// arm is argc 1.
+BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(setNumWindows, objectTemplateSetNumWindows,
+                                   activeDestroyableWindowsBundle() != 0, int,
+                                   kObjTemplGameConsoleTag)
 
 // Stock parachutes preserve the soldier's camera pitch when entering and leaving the seat.
 BF2_CONSOLE_OBJECT("ObjectTemplate", 2, 15)
@@ -1231,14 +1575,12 @@ void objTemplSoldierCollisionBone(std::string name, int material, Vec3 offset,
     activeSoldierTempl()->setSkeletonCollisionBone(name, material, offset, radius, length);
 }
 } // namespace
-BF2_CONSOLE_PROPERTY_SETONLY(geometry1P, std::string,
-                             getActiveTemplate(CID_SoldierTemplate) != 0,
-                             GameTemplateConsoleAccess::setSoldierGeometry1P,
-                             kObjTemplGameConsoleTag)
-BF2_CONSOLE_PROPERTY_SETONLY(geometry3P, std::string,
-                             getActiveTemplate(CID_SoldierTemplate) != 0,
-                             GameTemplateConsoleAccess::setSoldierGeometry3P,
-                             kObjTemplGameConsoleTag)
+BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(geometry1P, GameTemplateConsoleAccess::setSoldierGeometry1P,
+                                   getActiveTemplate(CID_SoldierTemplate) != 0,
+                                   std::string, kObjTemplGameConsoleTag)
+BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(geometry3P, GameTemplateConsoleAccess::setSoldierGeometry3P,
+                                   getActiveTemplate(CID_SoldierTemplate) != 0,
+                                   std::string, kObjTemplGameConsoleTag)
 BF2_CONSOLE_METHOD_1_ACTIVE(skeleton1P, objTemplSoldierSkeleton1P, getActiveTemplate(CID_SoldierTemplate) != 0, std::string, kObjTemplGameConsoleTag)
 BF2_CONSOLE_METHOD_1_ACTIVE(skeleton3P, objTemplSoldierSkeleton3P, getActiveTemplate(CID_SoldierTemplate) != 0, std::string, kObjTemplGameConsoleTag)
 BF2_CONSOLE_METHOD_1_ACTIVE(animationSystem1P, objTemplSoldierAnimSystem1P, getActiveTemplate(CID_SoldierTemplate) != 0, std::string, kObjTemplGameConsoleTag)
@@ -1316,7 +1658,7 @@ BF2_CONSOLE_METHOD_1_ACTIVE(animationSystem3P, objTemplAnimatedBundleAnimSystem3
                             std::string, kObjTemplGameConsoleTag)
 
 // Kit loadout, geometry, ability and unlock properties. addKitVehicleMod takes a template name and modification value.
-BF2_CONSOLE_PROPERTY_FN(kitType, KitType, getActiveTemplate(CID_KitTemplate) != 0,
+BF2_CONSOLE_PROPERTY_FN(kitType, hfe::KitType, getActiveTemplate(CID_KitTemplate) != 0,
                         GameTemplateConsoleAccess::getKitType(),
                         GameTemplateConsoleAccess::setKitType, kObjTemplGameConsoleTag)
 BF2_CONSOLE_PROPERTY_FN(timeToLiveAfterDeath, float, getActiveTemplate(CID_KitTemplate) != 0,

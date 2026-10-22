@@ -55,6 +55,12 @@ public:
     // or beside the soldier, and the player's soldier seated in it as the driver. Soldier mode starts first when it is
     // off. The vehicle is destroyed with the soldier when soldier mode ends.
     bool drive(const std::string& templateName, std::string& result);
+    // The weapon test (the retail object editor's "enter a weapon": its editor soldier given the weapon): a soldier
+    // made with no kit where the editor camera stands, given the weapon template (Soldier::addItem by name) and
+    // holding it. Soldier mode starts again when it is on. The fire and ammo components read their template as
+    // they go, so a rate of fire or a reload time changed in the template reaches the held weapon at once; a
+    // magazine's size takes a new weapon (another test). Refused for a template that is not a GenericFireArm.
+    bool testWeapon(const std::string& templateName, std::string& result);
 
     // The team and kit the next soldier is made from (gameLogic.setKit's numbering: teams 1 and 2, kits 0-6).
     bool setKit(int team, int kit, std::string& result);
@@ -80,6 +86,10 @@ public:
     bool drivePlayTestVehicle(const std::string& templateName, std::string& result) override
     {
         return drive(templateName, result);
+    }
+    bool testPlayTestWeapon(const std::string& templateName, std::string& result) override
+    {
+        return testWeapon(templateName, result);
     }
     std::string describePlayTest() const override { return describe(); }
 
@@ -117,6 +127,7 @@ private:
     dice::hfe::WeakPtr<dice::hfe::world::IObject> m_soldier;
     dice::hfe::WeakPtr<dice::hfe::world::IObject> m_kitObject;
     std::vector<dice::hfe::WeakPtr<dice::hfe::world::IObject> > m_vehicles;   // made by drive()
+    bool               m_noKit = false;    // the next soldier takes no kit (a weapon test)
     int                m_team;
     int                m_kit;
     double             m_owed;              // real seconds not yet stepped

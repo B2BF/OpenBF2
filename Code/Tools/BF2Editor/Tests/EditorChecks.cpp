@@ -8,11 +8,17 @@
 
 #include "App/CommandLine.h"
 #include "Framework/AnimationSystemFile.h"
+#include "Framework/ArchiveRewrite.h"
 #include "Framework/BafHeader.h"
 #include "Framework/GameplayLayers.h"
 #include "Framework/LightSetupFile.h"
 #include "Framework/GroundPropertiesFile.h"
+#include "Framework/HudSetup.h"
+#include "Framework/TerrainRawCompile.h"
+#include "Framework/TerrainRawFile.h"
+#include "Framework/TextureEncode.h"
 #include "Framework/TerrainRawLayers.h"
+#include "Framework/TerrainLowDetail.h"
 #include "Framework/DdsImage.h"
 #include "Framework/CommandHistory.h"
 #include "Framework/DescFile.h"
@@ -26,6 +32,11 @@
 #include "Framework/LevelObjectFile.h"
 #include "Framework/LevelSettingsFile.h"
 #include "Framework/MapDescription.h"
+#include "Framework/NewLevel.h"
+#include "Framework/RoadFiles.h"
+#include "Framework/SavePlan.h"
+#include "Framework/TextDiff.h"
+#include "Framework/LightmapAtlas.h"
 #include "Framework/ModScaffold.h"
 #include "Framework/ObjectArchives.h"
 #include "Framework/ObjectLibrary.h"
@@ -45,11 +56,17 @@
 
 #include <windows.h>
 
+#include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <deque>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace bf2editor;
@@ -2795,7 +2812,7 @@ void checkTerrainRawLayers()
     TerrainRawLayers layers;
     std::string error;
     CHECK(layers.read(bytes, error));
-    CHECK(layers.version == 0x1A && layers.layers.size() == 6);
+    CHECK(layers.version == 0x1A && layers.layers.size() == 6 && layers.patchCount == 4);
     if (layers.layers.size() == 6)
     {
         CHECK(layers.layers[0].name == "common\\terrain\\textures\\detail\\detail_rock04" && layers.layers[0].planeMap == 1
@@ -2806,6 +2823,645 @@ void checkTerrainRawLayers()
     CHECK(layers.farSideTiling[0] == 5.0f && layers.farTopTilingHi == 24.0f);
     TerrainRawLayers broken;
     CHECK(!broken.read(bytes.substr(0, 100), error));
+}
+
+// The whole compiled terrain file (TerrainRawFile.h): the staged Karkand's terraindata.raw parsed to its last byte and
+// written back byte for byte, with its grid (4 x 4 patches of 128), 6 detail textures, 77 patch layers of 84 LOD
+// records each, the 8 ring sectors and 1365 culler nodes; a short or overlong file refused. With
+// BF2EDITOR_TERRAIN_SAMPLES set to a folder of .raw files (extract_terrain_samples.py copies stock ones), each is
+// written back byte for byte too.
+namespace
+{
+bool readWholeFile(const std::string& path, std::string& bytes)
+{
+    FILE* file = std::fopen(path.c_str(), "rb");
+    if (!file)
+        return false;
+    bytes.clear();
+    char buffer[65536];
+    size_t n = 0;
+    while ((n = std::fread(buffer, 1, sizeof(buffer), file)) > 0)
+        bytes.append(buffer, n);
+    std::fclose(file);
+    return true;
+}
+}
+
+void checkTerrainRawFile()
+{
+    const char* const level = std::getenv("BF2_EDITOR_KARKAND_DIR");
+    std::string bytes;
+    if (!level || !*level || !readWholeFile(std::string(level) + "/terraindata.raw", bytes))
+    {
+        std::printf("[terrain raw file] no staged Karkand: skipped\n");
+    }
+    else
+    {
+        TerrainRawFile raw;
+        std::string error;
+        CHECK(raw.parse(bytes, error));
+        CHECK(raw.render() == bytes);
+        CHECK(raw.patchSize == 128 && raw.patchCount == 4 && raw.detailTextures.size() == 6 && raw.patches.size() == 16
+              && raw.compactVertices == 0 && raw.ring.size() == 8 && raw.culler.size() == 1365);
+        size_t layers = 0;
+        bool lodRecords = true;
+        for (size_t p = 0; p < raw.patches.size(); ++p)
+        {
+            layers += raw.patches[p].layers.size();
+            for (size_t l = 0; l < raw.patches[p].layers.size(); ++l)
+                lodRecords = lodRecords && raw.patches[p].layers[l].lodWords.size() == 84 * 6;
+        }
+        CHECK(layers == 77 && lodRecords);
+        CHECK(raw.ring[1].normals.size() == 12 * raw.ringVertexCount(raw.ring[1].slot)
+              && raw.ring[0].heights.size() == 4 * raw.ringVertexCount(raw.ring[0].slot) && raw.ringVertexCount(0) != raw.ringVertexCount(1));
+        TerrainRawFile broken;
+        CHECK(!broken.parse(bytes.substr(0, bytes.size() - 1), error));
+        CHECK(!broken.parse(bytes + std::string(1, '\0'), error) && error == "1 bytes follow the culler");
+    }
+
+    char folder[MAX_PATH];
+    const DWORD n = GetEnvironmentVariableA("BF2EDITOR_TERRAIN_SAMPLES", folder, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH)
+        return;
+    WIN32_FIND_DATAA found;
+    HANDLE h = FindFirstFileA((std::string(folder) + "\\*.raw").c_str(), &found);
+    int files = 0, same = 0;
+    std::string first;
+    if (h != INVALID_HANDLE_VALUE)
+    {
+        do
+        {
+            std::string sample;
+            if (!readWholeFile(std::string(folder) + "\\" + found.cFileName, sample))
+                continue;
+            ++files;
+            TerrainRawFile raw;
+            std::string error;
+            if (raw.parse(sample, error) && raw.render() == sample)
+                ++same;
+            else if (first.empty())
+                first = std::string(found.cFileName) + (error.empty() ? std::string(": written back differently") : ": " + error);
+        } while (FindNextFileA(h, &found));
+        FindClose(h);
+    }
+    std::printf("[terrain raw file] %d of %d sample files written back byte for byte%s%s\n", same, files,
+                first.empty() ? "" : "; first difference: ", first.c_str());
+    CHECK(files > 0 && same == files);
+}
+
+// The terrain compile (TerrainRawCompile.h): the normal packing; one flat patch compiled from a synthetic template (a
+// single weight texel makes four cells present, two texels around each cell counting; flat ground has no geomorph
+// and an upright normal; the culler's patch-level root; a flat side sector); and every patch layer of the staged
+// Karkand rebuilt from its triangles alone, indices and LOD records byte for byte.
+void checkTerrainRawCompile()
+{
+    CHECK(packTerrainNormal(0.0f, 1.0f, 0.0f) == 0xFF7FFE7Fu && packTerrainNormal(-1.0f, 0.0f, 1.0f) == 0xFF007FFEu);
+
+    TerrainRawFile templ;
+    templ.patchSize = 128;
+    templ.patchCount = 1;
+    templ.primaryScale[0] = 2.0f;
+    templ.primaryScale[1] = 0.00457764f;
+    templ.primaryScale[2] = 2.0f;
+    templ.secondaryScale[0] = 4.0f;
+    templ.secondaryScale[1] = 1.17188f;
+    templ.secondaryScale[2] = 4.0f;
+    templ.patches.resize(1);
+    std::vector<unsigned char> weights(512 * 512, 0);
+    weights[200 + 512 * 300] = 255;
+    TerrainCompileSource source;
+    source.height = [](float, float) { return 100.0f; };
+    source.seaWaterLevel = 0.0f;
+    source.weights = [&weights](int, int layer) -> const unsigned char* { return layer == 0 ? &weights[0] : nullptr; };
+    source.ringSlots.push_back(1);
+    TerrainRawFile out;
+    std::string error;
+    CHECK(compileTerrainRaw(templ, source, out, error));
+    if (out.patches.size() == 1 && out.patches[0].layers.size() == 1)
+    {
+        const TerrainRawPatch& patch = out.patches[0];
+        const TerrainRawPatchLayer& layer = patch.layers[0];
+        CHECK(layer.detailIndex == 0 && layer.indices.size() == 24 && layer.word0C == 8 && layer.lodWords.size() == 84 * 6
+              && layer.lodWords[0] == 0 && layer.lodWords[1] == 24 && static_cast<unsigned>(layer.marker) == 0xEEEEEEEEu
+              && layer.bytes10[0] == 4);
+        // Cells x 49..50, z 74..75: their (a, b, c) triangles start at the cell's own vertex.
+        bool cells = true;
+        for (size_t t = 0; t < layer.indices.size(); t += 3)
+        {
+            const unsigned a = layer.indices[t + 1] - 1u;            // b is a + 1 in both triangles
+            cells = cells && a % 129 >= 49 && a % 129 <= 50 && a / 129 >= 74 && a / 129 <= 75;
+        }
+        CHECK(cells);
+        CHECK(patch.maxHeight == 100.0f && patch.minHeight == 100.0f && patch.sphereCentre[0] == 128.0f
+              && patch.sphereCentre[1] == 100.0f && std::fabs(patch.sphereRadius - 181.019f) < 0.01f);
+        const size_t vertex = 24 * (1 * 129 + 0);                     // row 1, column 0: an edge column
+        float h = 0.0f, morph[3] = { 1.0f, 1.0f, 1.0f };
+        unsigned normal = 0;
+        std::memcpy(&h, &patch.vertices[vertex + 4], 4);
+        std::memcpy(morph, &patch.vertices[vertex + 8], 12);
+        std::memcpy(&normal, &patch.vertices[vertex + 20], 4);
+        // The geomorph delta of flat ground keeps the writer's rounding residue (a float mean against a double height).
+        CHECK(patch.vertices.size() == 24 * 129 * 129 && patch.vertices[vertex] == 1 && patch.vertices[vertex + 1] == 1
+              && patch.vertices[vertex + 2] == 0 && std::fabs(h - 100.0f / 0.00457764f) < 0.5f && std::fabs(morph[0]) < 0.01f
+              && morph[1] == 0.0f && morph[2] == 0.0f && normal == 0xFF7FFE7Fu);
+    }
+    else
+        CHECK(!"one patch with one layer");
+    CHECK(out.maxHeight == 100.0f && out.minHeight == 100.0f);
+    CHECK(out.culler.size() == 85 && out.culler[0].hasPatchList == 1 && out.culler[0].patchIndex == 0
+          && out.culler[1].byteEC == 1 && out.culler[5].byteEE == 1 && out.culler[21].byteEE == 0
+          && out.culler[1].neighbour[4] == 2 && out.culler[1].neighbour[6] == 3 && out.culler[1].neighbour[7] == 4
+          && out.culler[1].neighbour[0] == 0xFFFF && out.culler[0].minimum[1] == 100.0f);
+    CHECK(out.ring.size() == 1 && out.ring[0].slot == 1 && out.ring[0].maxY == 100.0f && out.ring[0].minY == 100.0f
+          && out.ring[0].heights.size() == 4 * out.ringVertexCount(1) && out.ring[0].normals.size() == 12 * out.ringVertexCount(1));
+
+    const char* const level = std::getenv("BF2_EDITOR_KARKAND_DIR");
+    std::string bytes;
+    TerrainRawFile raw;
+    if (!level || !*level || !readWholeFile(std::string(level) + "/terraindata.raw", bytes) || !raw.parse(bytes, error))
+    {
+        std::printf("[terrain compile] no staged Karkand: the layer rebuild skipped\n");
+        return;
+    }
+    int layers = 0, same = 0;
+    for (size_t p = 0; p < raw.patches.size(); ++p)
+    {
+        for (size_t l = 0; l < raw.patches[p].layers.size(); ++l)
+        {
+            const TerrainRawPatchLayer& stock = raw.patches[p].layers[l];
+            // The triangles in the writer's scan order: cells row by row, (a, b, c) before (c, b, d).
+            std::vector<std::pair<unsigned, std::vector<unsigned short> > > triangles;
+            for (size_t t = 0; t + 2 < stock.indices.size(); t += 3)
+            {
+                const bool second = stock.indices[t + 2] == stock.indices[t] + 1;
+                const unsigned cell = second ? stock.indices[t] - 129u : stock.indices[t];
+                std::vector<unsigned short> tri(stock.indices.begin() + t, stock.indices.begin() + t + 3);
+                triangles.push_back(std::make_pair(cell * 2 + (second ? 1u : 0u), tri));
+            }
+            std::sort(triangles.begin(), triangles.end());
+            std::vector<unsigned short> indices;
+            for (size_t i = 0; i < triangles.size(); ++i)
+                indices.insert(indices.end(), triangles[i].second.begin(), triangles[i].second.end());
+            std::vector<unsigned> words;
+            orderLayerTriangles(indices, 128, 84, words);
+            ++layers;
+            if (indices == stock.indices && words == stock.lodWords)
+                ++same;
+        }
+    }
+    std::printf("[terrain compile] %d of %d Karkand patch layers rebuilt from their triangles byte for byte\n", same, layers);
+    CHECK(layers == 77 && same == layers);
+}
+
+// The texture encoders (TextureEncode.h): the box halving; R5G6B5 and DXT1 files with the stock files' headers and
+// sizes (a 256 R5G6B5 detail map 131200 bytes, a 256 DXT1 one 32896, a 512 DXT1 colormap with its ten levels 174904);
+// a smooth gradient and the staged Karkand's first colormap through DXT1 and back within a small mean error.
+namespace
+{
+unsigned headerWord(const std::string& dds, size_t offset)
+{
+    unsigned value = 0;
+    if (dds.size() >= offset + 4)
+        std::memcpy(&value, &dds[offset], 4);
+    return value;
+}
+
+double meanChannelError(const DdsImage& a, const DdsImage& b)
+{
+    if (a.width != b.width || a.height != b.height || a.pixels.empty())
+        return 1e9;
+    double sum = 0.0;
+    for (size_t i = 0; i < a.pixels.size(); ++i)
+        for (int shift = 0; shift < 24; shift += 8)
+            sum += std::abs(static_cast<int>((a.pixels[i] >> shift) & 0xFF) - static_cast<int>((b.pixels[i] >> shift) & 0xFF));
+    return sum / (a.pixels.size() * 3.0);
+}
+}
+
+void checkTextureEncode()
+{
+    DdsImage square;
+    square.width = 2;
+    square.height = 2;
+    square.pixels = { 0xFF000000u, 0xFF0000FFu, 0xFF00FF00u, 0xFFFF0000u };
+    const DdsImage half = halveBox(square);
+    CHECK(half.width == 1 && half.height == 1 && half.pixels.size() == 1 && half.pixels[0] == 0xFF404040u);
+
+    DdsImage flat;
+    flat.width = 256;
+    flat.height = 256;
+    flat.pixels.assign(256 * 256, 0xFFFF0000u);
+    const std::string r565 = encodeR5G6B5(flat);
+    unsigned short first565 = 0;
+    std::memcpy(&first565, &r565[128], 2);
+    CHECK(r565.size() == 131200 && headerWord(r565, 8) == 0x81007u && headerWord(r565, 20) == 131072u
+          && headerWord(r565, 28) == 0 && headerWord(r565, 80) == 0x40u && headerWord(r565, 88) == 16u
+          && headerWord(r565, 92) == 0xF800u && headerWord(r565, 108) == 0x1000u && first565 == 0xF800u);
+    const std::string dxtFlat = encodeDxt1(flat, false);
+    CHECK(dxtFlat.size() == 32896 && headerWord(dxtFlat, 8) == 0x81007u && headerWord(dxtFlat, 20) == 32768u
+          && headerWord(dxtFlat, 84) == 0x31545844u && headerWord(dxtFlat, 108) == 0x1000u);
+
+    DdsImage gradient;
+    gradient.width = 512;
+    gradient.height = 512;
+    gradient.pixels.resize(512 * 512);
+    for (int y = 0; y < 512; ++y)
+        for (int x = 0; x < 512; ++x)
+            gradient.pixels[y * 512 + x] = 0xFF000000u | (static_cast<unsigned>(x / 2) << 16) |
+                                           (static_cast<unsigned>(y / 2) << 8) | static_cast<unsigned>((x + y) / 4);
+    const std::string colormap = encodeDxt1(gradient, true);
+    CHECK(colormap.size() == 174904 && headerWord(colormap, 8) == 0xA1007u && headerWord(colormap, 28) == 10u
+          && headerWord(colormap, 108) == 0x401008u && headerWord(colormap, 20) == 131072u);
+    DdsImage back;
+    std::string error;
+    CHECK(back.read(colormap, error) && meanChannelError(gradient, back) < 3.0);
+
+    const char* const level = std::getenv("BF2_EDITOR_KARKAND_DIR");
+    std::string bytes;
+    DdsImage stock;
+    if (!level || !*level || !readWholeFile(std::string(level) + "/Colormaps/tx00x00.dds", bytes) || !stock.read(bytes, error))
+    {
+        std::printf("[texture encode] no staged Karkand: the colormap round trip skipped\n");
+        return;
+    }
+    DdsImage again;
+    CHECK(again.read(encodeDxt1(stock, true), error));
+    const double drift = meanChannelError(stock, again);
+    std::printf("[texture encode] Karkand's tx00x00 colormap through DXT1 again: mean channel error %.2f\n", drift);
+    CHECK(drift < 2.0);
+}
+
+// The low-detail map (TerrainLowDetail.h): the renderer's rule on two small detail maps - type 1 into red, type 2 into
+// blue, saturating, green and alpha 0, a missing map or one of another size adding nothing -, the types recovered from
+// maps built with known ones (a layer without weight left 0), and with the staged Karkand its stock types recovered
+// from its compiled maps (2 1 1 0 1 0) and a map built from them written with the stock low-detail header.
+void checkTerrainLowDetail()
+{
+    DdsImage first, second, wrong;
+    first.width = first.height = second.width = second.height = 2;
+    first.pixels = { 0x00302010u, 0x00FF8000u, 0x00000000u, 0x00C0C0C0u };     // layers 0, 1, 2 in bytes 0, 1, 2
+    second.pixels = { 0x00000005u, 0x00000000u, 0x00FFFFFFu, 0x00000040u };    // layers 3, 4, 5
+    wrong.width = wrong.height = 4;
+    wrong.pixels.assign(16, 0x00FFFFFFu);
+    const int types[6] = { 2, 1, 1, 0, 1, 0 };
+    const DdsImage* maps[2] = { &first, &second };
+    const DdsImage low = buildLowDetailMap(maps, types, 2);
+    CHECK(low.width == 2 && low.height == 2 && low.pixels.size() == 4);
+    if (low.pixels.size() == 4)
+        CHECK(low.pixels[0] == 0x00500010u && low.pixels[1] == 0x00FF0000u && low.pixels[2] == 0x00FF0000u
+              && low.pixels[3] == 0x00FF00C0u);
+    const DdsImage* withWrong[2] = { &first, &wrong };
+    const DdsImage* withNone[2] = { &first, 0 };
+    const DdsImage lowWrong = buildLowDetailMap(withWrong, types, 2);
+    const DdsImage lowNone = buildLowDetailMap(withNone, types, 2);
+    CHECK(lowWrong.pixels.size() == 4 && lowWrong.pixels[2] == 0u && lowWrong.pixels[3] == 0x00FF00C0u
+          && lowNone.pixels == lowWrong.pixels);
+
+    // Two 8 x 8 patches of pseudo-random weights, layer 5 weightless, their low-detail maps built with known types.
+    const int known[6] = { 1, 0, 2, 0, 1, 0 };
+    DdsImage detail[2][2], built[2];
+    unsigned seed = 12345u;
+    std::vector<LowDetailSample> samples(2);
+    for (int p = 0; p < 2; ++p)
+    {
+        for (int k = 0; k < 2; ++k)
+        {
+            detail[p][k].width = detail[p][k].height = 8;
+            for (int t = 0; t < 64; ++t)
+            {
+                unsigned texel = 0;
+                for (int c = 0; c < 3; ++c)
+                {
+                    seed = seed * 1103515245u + 12345u;
+                    const unsigned weight = (seed >> 16) % 160u;
+                    texel |= (k == 1 && c == 2 ? 0u : weight) << (8 * c);
+                }
+                detail[p][k].pixels.push_back(texel);
+            }
+        }
+        const DdsImage* patchMaps[2] = { &detail[p][0], &detail[p][1] };
+        built[p] = buildLowDetailMap(patchMaps, known, 8);
+        samples[p].detail[0] = &detail[p][0];
+        samples[p].detail[1] = &detail[p][1];
+        samples[p].lowDetail = &built[p];
+    }
+    int found[6] = { -1, -1, -1, -1, -1, -1 };
+    float error = -1.0f;
+    CHECK(inferLowDetailTypes(samples, found, error));
+    CHECK(std::equal(found, found + 6, known) && error == 0.0f);
+    CHECK(!inferLowDetailTypes(std::vector<LowDetailSample>(1), found, error));
+
+    const char* const level = std::getenv("BF2_EDITOR_KARKAND_DIR");
+    if (!level || !*level)
+    {
+        std::printf("[terrain low detail] no staged Karkand: its stock types skipped\n");
+        return;
+    }
+    std::deque<DdsImage> images;
+    std::vector<LowDetailSample> stock;
+    for (int z = 0; z < 4; ++z)
+    {
+        for (int x = 0; x < 4; ++x)
+        {
+            char name[16];
+            std::snprintf(name, sizeof(name), "%02ix%02i", x, z);
+            std::string bytes, readError;
+            DdsImage image;
+            if (!readWholeFile(std::string(level) + "/LowDetailmaps/tx" + name + ".dds", bytes) || !image.read(bytes, readError))
+                continue;
+            LowDetailSample sample;
+            images.push_back(image);
+            sample.lowDetail = &images.back();
+            for (int k = 0; k < 2; ++k)
+            {
+                if (readWholeFile(std::string(level) + "/Detailmaps/tx" + name + "_" + std::to_string(k + 1) + ".dds", bytes)
+                    && image.read(bytes, readError))
+                {
+                    images.push_back(image);
+                    sample.detail[k] = &images.back();
+                }
+            }
+            stock.push_back(sample);
+        }
+    }
+    const int karkand[6] = { 2, 1, 1, 0, 1, 0 };
+    CHECK(stock.size() == 16 && inferLowDetailTypes(stock, found, error));
+    CHECK(std::equal(found, found + 6, karkand) && error < 4.0f);
+    std::printf("[terrain low detail] Karkand's low-detail types from its compiled maps: %d %d %d %d %d %d, within %.2f "
+                "of 255\n", found[0], found[1], found[2], found[3], found[4], found[5], error);
+    if (!stock.empty())
+    {
+        const DdsImage* patchMaps[2] = { stock[0].detail[0], stock[0].detail[1] };
+        const std::string file = encodeDxt1(buildLowDetailMap(patchMaps, karkand, 256), true);
+        CHECK(file.size() == 43832 && headerWord(file, 8) == 0xA1007u && headerWord(file, 20) == 32768u
+              && headerWord(file, 28) == 9u && headerWord(file, 84) == 0x31545844u && headerWord(file, 108) == 0x401008u);
+    }
+}
+
+// A new level (NewLevel.h): the retail dialog's rules; the files of a small level (256 cells at 1 m, 10 m high, low-res
+// 128) against a stand-in LOD block; and, with BF2_EDITOR_NEWLEVEL_GOLDEN (the retail editor's new level: 1024 cells at
+// 2 m, 25 m high, low-res 256), BF2_EDITOR_TERRAIN_CONTENT (its default content) and the staged Karkand (the LOD block)
+// set, that level built again: every file the retail editor wrote outside its editor maps, byte for byte, except the
+// map description's texts, the lightmap atlas index's comment and the order of the terrain LOD block's indices.
+void checkNewLevel()
+{
+    std::string error;
+    NewLevelSettings settings;
+    settings.name = "GoldenNew";
+    CHECK(checkNewLevelSettings(settings, error) && settings.worldSize() == 2048 && settings.lowResScale() == 8
+          && settings.patchCount() == 8);
+    const auto refused = [](const NewLevelSettings& s) {
+        std::string why;
+        return !checkNewLevelSettings(s, why) && !why.empty();
+    };
+    NewLevelSettings bad = settings;
+    bad.name = "";
+    CHECK(refused(bad));
+    bad.name = "Two words";
+    CHECK(refused(bad));
+    bad = settings;
+    bad.size = 2048;
+    CHECK(refused(bad));
+    bad = settings;
+    bad.scale = 3;
+    CHECK(refused(bad));
+    bad = settings;
+    bad.defaultHeight = 101;
+    CHECK(refused(bad));
+    bad = settings;
+    bad.lowResSize = 64;
+    CHECK(refused(bad));
+    bad = settings;
+    bad.size = 256;
+    bad.scale = 1;
+    bad.lowResSize = 512;
+    CHECK(bad.lowResScale() == 0 && refused(bad));
+
+    NewLevelSettings small;
+    small.name = "Small";
+    small.size = 256;
+    small.scale = 1;
+    small.defaultHeight = 10;
+    small.lowResSize = 128;
+    NewLevelContent content;
+    content.colormap = "colormap";
+    content.detailmap1 = "detail 1";
+    content.detailmap2 = "detail 2";
+    content.ingameMap = "ingame";
+    content.commanderMap = "commander";
+    content.commanderMicromap = "micro";
+    content.shadowmap = "shadow";
+    TerrainRawFile lod;
+    lod.patchSize = 128;
+    lod.lodWords.assign(21 * 38 + 64 * 6, 0u);
+    lod.lodIndices.assign(3, 0);
+    std::vector<NewLevelFile> files;
+    CHECK(!buildNewLevel(small, content, TerrainRawFile(), files, error) && files.empty());
+    CHECK(buildNewLevel(small, content, lod, files, error));
+    const auto file = [&files](const std::string& path) -> const std::string* {
+        for (size_t i = 0; i < files.size(); ++i)
+        {
+            if (files[i].path == path)
+                return files[i].bytes.get();
+        }
+        return 0;
+    };
+    CHECK(files.size() == 46u && file("GameModes/gpm_cq/16/GamePlayObjects.con")
+          && file("GameModes/gpm_cq/16/GamePlayObjects.con")->compare(0, 4, "rem ") == 0);
+    const std::string* primary = file("HeightmapPrimary.raw");
+    CHECK(primary && primary->size() == 257u * 257u * 2u && (*primary)[0] == '\xA0' && (*primary)[1] == '\x0F'
+          && primary->substr(0, 2) == primary->substr(primary->size() - 2));
+    const std::string* secondary = file("HeightmapSecondary_R1D1.raw");
+    CHECK(secondary && *secondary == std::string(129 * 129, '\x0F'));
+    const std::string* material = file("HeightmapPrimary.mat");
+    CHECK(material && *material == std::string(257 * 257, '\0'));
+    const std::string* heightdata = file("Heightdata.con");
+    CHECK(heightdata && heightdata->find("heightmapcluster.setHeightmapSize 256\r\n") != std::string::npos
+          && heightdata->find("heightmap.setScale 2/0.64/2\r\nheightmap.setBitResolution 8\r\n") != std::string::npos
+          && heightdata->find("Levels/Small/HeightmapSecondary_L1U1.raw\r\n") != std::string::npos);
+    const std::string* sky = file("Sky.con");
+    CHECK(sky && sky->find("Levels/Small/groundhemi 0.000000/0.000000/0.000000 256.000000 500.000000\r\n")
+                     != std::string::npos);
+    CHECK(file("Colormaps/tx01x00.dds") && *file("Colormaps/tx01x00.dds") == "colormap"
+          && file("Detailmaps/tx00x01_2.dds") && *file("Detailmaps/tx00x01_2.dds") == "detail 2"
+          && file("SimpleShadowmapio.raw") && *file("SimpleShadowmapio.raw") == "shadow" && !file("Colormaps/tx02x00.dds"));
+    const std::string* lightmap = file("Lightmaps/tx01x01.dds");
+    CHECK(lightmap && lightmap->size() == 128u + 512u * 512u * 4u && headerWord(*lightmap, 8) == 0x1007u
+          && headerWord(*lightmap, 80) == 0x41u && headerWord(*lightmap, 108) == 0x1002u
+          && headerWord(*lightmap, 128) == 0xFFFFFFFFu);
+    const std::string* lowDetail = file("LowDetailmaps/tx00x00.dds");
+    CHECK(lowDetail && lowDetail->size() == 43832u && headerWord(*lowDetail, 8) == 0xA1007u);
+    TerrainRawFile raw;
+    const std::string* compiled = file("terraindata.raw");
+    CHECK(compiled && raw.parse(*compiled, error));
+    CHECK(raw.patchCount == 2 && raw.patches.size() == 4 && raw.patches[1].gridX == 0 && raw.patches[1].gridZ == -1
+          && raw.patches[2].gridX == -1 && raw.patches[2].gridZ == 0 && raw.ring.empty() && !raw.culler.empty()
+          && std::fabs(raw.maxHeight - 10.0f) < 1e-4f && std::fabs(raw.minHeight - 9.6f) < 1e-4f
+          && raw.primaryScale[0] == 1.0f && raw.secondaryScale[0] == 2.0f && raw.word2C == 0xCDCDCDCDu);
+    for (size_t p = 0; p < raw.patches.size(); ++p)
+        CHECK(raw.patches[p].layers.empty());
+
+    // Written into a fresh folder under the temp folder; refused over it, and over a staging folder left behind.
+    char tempRoot[MAX_PATH];
+    if (GetTempPathA(MAX_PATH, tempRoot) && compiled)
+    {
+        const std::string target = std::string(tempRoot) + "bf2editor_newlevel_" + std::to_string(GetCurrentProcessId());
+        CHECK(writeNewLevel(target, files, error));
+        std::string back;
+        CHECK(readWholeFile(target + "/terraindata.raw", back) && back == *compiled
+              && readWholeFile(target + "/Lightmaps/Objects/LightmapAtlas.tai", back)
+              && back == *file("Lightmaps/Objects/LightmapAtlas.tai"));
+        CHECK(!writeNewLevel(target, files, error) && error.find("exists already") != std::string::npos
+              && GetFileAttributesA((target + ".tmp").c_str()) == INVALID_FILE_ATTRIBUTES);
+        const std::string other = target + "_b";
+        CreateDirectoryA((other + ".tmp").c_str(), 0);
+        CHECK(!writeNewLevel(other, files, error) && error.find("interrupted") != std::string::npos
+              && GetFileAttributesA(other.c_str()) == INVALID_FILE_ATTRIBUTES);
+        RemoveDirectoryA((other + ".tmp").c_str());
+        for (size_t i = 0; i < files.size(); ++i)
+            DeleteFileA((target + "/" + files[i].path).c_str());
+        static const char* const kFolders[] = { "Lightmaps/Objects", "Lightmaps", "LowDetailmaps", "Detailmaps",
+                                                "Colormaps", "Editor", "Info", "Hud/Minimap", "Hud",
+                                                "GameModes/gpm_cq/16", "GameModes/gpm_cq", "GameModes" };
+        for (size_t i = 0; i < sizeof(kFolders) / sizeof(kFolders[0]); ++i)
+            RemoveDirectoryA((target + "/" + kFolders[i]).c_str());
+        RemoveDirectoryA(target.c_str());
+        CHECK(GetFileAttributesA(target.c_str()) == INVALID_FILE_ATTRIBUTES);
+    }
+
+    const char* const golden = std::getenv("BF2_EDITOR_NEWLEVEL_GOLDEN");
+    const char* const defaults = std::getenv("BF2_EDITOR_TERRAIN_CONTENT");
+    const char* const karkand = std::getenv("BF2_EDITOR_KARKAND_DIR");
+    if (!golden || !*golden || !defaults || !*defaults || !karkand || !*karkand)
+    {
+        std::printf("[new level] no staged retail new level, default content or Karkand: the golden comparison skipped\n");
+        return;
+    }
+    const std::string stockFolder(defaults);
+    NewLevelContent stock;
+    std::string karkandRaw;
+    CHECK(readWholeFile(stockFolder + "/defaultcolor.dds", stock.colormap)
+          && readWholeFile(stockFolder + "/defaultdetail_1.dds", stock.detailmap1)
+          && readWholeFile(stockFolder + "/defaultdetail_2.dds", stock.detailmap2)
+          && readWholeFile(stockFolder + "/defaultingamemap.dds", stock.ingameMap)
+          && readWholeFile(stockFolder + "/defaultcommandermap.dds", stock.commanderMap)
+          && readWholeFile(stockFolder + "/defaultcommandermicromap.dds", stock.commanderMicromap)
+          && readWholeFile(stockFolder + "/DefaultShadowmap/SimpleShadowmap.raw", stock.shadowmap)
+          && readWholeFile(std::string(karkand) + "/terraindata.raw", karkandRaw));
+    TerrainRawFile lodSource;
+    CHECK(lodSource.parse(karkandRaw, error));
+    CHECK(buildNewLevel(settings, stock, lodSource, files, error));
+
+    // The map description's lines, the briefing's and the mode descriptions' texts left out.
+    const auto descLines = [](const std::string& text) {
+        std::vector<std::string> out;
+        size_t start = 0;
+        while (start < text.size())
+        {
+            size_t end = text.find('\n', start);
+            if (end == std::string::npos)
+                end = text.size();
+            std::string line = text.substr(start, end - start);
+            const size_t open = line.find('>'), close = line.rfind('<');
+            if ((line.find("<briefing ") != std::string::npos || line.find("<maptype ") != std::string::npos)
+                && open != std::string::npos && close != std::string::npos && close > open)
+                line = line.substr(0, open + 1) + line.substr(close);
+            out.push_back(line);
+            start = end + 1;
+        }
+        return out;
+    };
+    std::vector<std::string> ours;
+    std::string differing;
+    int same = 0;
+    for (size_t i = 0; i < files.size(); ++i)
+    {
+        const NewLevelFile& f = files[i];
+        std::string lowered = f.path;
+        std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        ours.push_back(lowered);
+        std::string theirs;
+        const bool present = readWholeFile(std::string(golden) + "/" + f.path, theirs);
+        if (f.path.compare(0, 14, "LowDetailmaps/") == 0 || f.path.compare(0, 10, "GameModes/") == 0)
+        {
+            if (present)
+                differing += " " + f.path + " (the retail editor wrote none)";
+            continue;
+        }
+        if (!present)
+        {
+            differing += " " + f.path + " (not in the retail level)";
+            continue;
+        }
+        bool match = *f.bytes == theirs;
+        if (f.path == "terraindata.raw")
+        {
+            TerrainRawFile mine, retail;
+            match = mine.parse(*f.bytes, error) && retail.parse(theirs, error);
+            if (match)
+            {
+                std::vector<unsigned short> a = mine.lodIndices, b = retail.lodIndices;
+                std::sort(a.begin(), a.end());
+                std::sort(b.begin(), b.end());
+                mine.lodIndices = retail.lodIndices;
+                const std::string rendered = mine.render();
+                size_t at = 0;
+                while (at < rendered.size() && at < theirs.size() && rendered[at] == theirs[at])
+                    ++at;
+                match = a == b && mine.lodWords == retail.lodWords && rendered == theirs;
+                if (!match)
+                    std::printf("[new level] terraindata.raw: LOD index set %s, LOD words %s, first difference at byte %u "
+                                "of %u (retail %u)\n", a == b ? "same" : "differs",
+                                mine.lodWords == retail.lodWords ? "same" : "differ", static_cast<unsigned>(at),
+                                static_cast<unsigned>(rendered.size()), static_cast<unsigned>(theirs.size()));
+            }
+        }
+        else if (f.path == "Info/GoldenNew.desc")
+            match = descLines(*f.bytes) == descLines(theirs);
+        else if (f.path == "Lightmaps/Objects/LightmapAtlas.tai")
+            match = !f.bytes->empty() && (*f.bytes)[0] == '#' && !theirs.empty() && theirs[0] == '#';
+        if (match)
+            ++same;
+        else
+            differing += " " + f.path;
+    }
+    // Every file of the retail level is ours too, except the editor maps (left to the editor's first terrain save).
+    std::string missing;
+    int retailFiles = 0;
+    std::vector<std::string> folders(1, std::string());
+    while (!folders.empty())
+    {
+        const std::string folder = folders.back();
+        folders.pop_back();
+        WIN32_FIND_DATAA found;
+        HANDLE search = FindFirstFileA((std::string(golden) + "/" + folder + "*").c_str(), &found);
+        if (search == INVALID_HANDLE_VALUE)
+            continue;
+        do
+        {
+            const std::string name = found.cFileName;
+            if (name == "." || name == "..")
+                continue;
+            std::string path = folder + name;
+            std::transform(path.begin(), path.end(), path.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+            {
+                if (path != "editor/colormaps" && path != "editor/detailmaps")
+                    folders.push_back(path + "/");
+                continue;
+            }
+            ++retailFiles;
+            if (std::find(ours.begin(), ours.end(), path) == ours.end())
+                missing += " " + path;
+        } while (FindNextFileA(search, &found));
+        FindClose(search);
+    }
+    if (!differing.empty() || !missing.empty())
+        std::printf("[new level] differing:%s; missing:%s\n", differing.c_str(), missing.c_str());
+    CHECK(differing.empty() && missing.empty() && retailFiles == 281 && files.size() == 346u);
+    std::printf("[new level] the retail editor's new level built again: %d of its %d files (outside the editor maps) "
+                "the same; %u files with the low-detail maps and the gameplay layer\n", same, retailFiles,
+                static_cast<unsigned>(files.size()));
 }
 
 // A DDS image (DdsImage.h): 16-bit R5G6B5 by its masks, a DXT1 block, the A8R8G8B8 writer read back, the bilinear scale,
@@ -2822,6 +3478,472 @@ std::string ddsHeader(int w, int h, unsigned flags, unsigned fourCc, unsigned bi
     std::memcpy(&out[76], format, sizeof(format));
     return out;
 }
+}
+
+// The road files (Framework/RoadFiles): the retail writers' text for splines, roads and templates; console rows split
+// with quotes and editor branches; CompiledRoads.con written back unchanged; the chunk table of a synthetic road mesh
+// partitions its indices, each chunk's sphere holding its vertices. With the staged Karkand (BF2_EDITOR_KARKAND_DIR), its
+// CompiledRoads.con comes back byte for byte, every mesh it loads is read with its chunk table, and every road template
+// in its mod's Objects_server.zip is written back by the template writer exactly (line endings aside).
+namespace
+{
+
+std::string lowerText(std::string text)
+{
+    for (size_t i = 0; i < text.size(); ++i)
+        text[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(text[i])));
+    return text;
+}
+
+// A template as its rows make it (the rows the template writer writes).
+RoadTemplateRecord templateFromRows(const std::vector<ConsoleRow>& rows)
+{
+    RoadTemplateRecord t;
+    int layer = 0;
+    for (size_t i = 0; i < rows.size(); ++i)
+    {
+        std::string key = lowerText(rows[i].method);
+        if (key.compare(0, 3, "set") == 0)
+            key = key.substr(3);
+        const std::string arg = rows[i].args.empty() ? std::string() : rows[i].args[0];
+        const std::string object = lowerText(rows[i].object);
+        if (object == "roadtemplate")
+        {
+            if (key == "name")
+                t.name = arg;
+            else if (key == "width")
+                t.width = static_cast<float>(std::atof(arg.c_str()));
+            else if (key == "maxtesselatederror")
+                t.maxTesselatedError = static_cast<float>(std::atof(arg.c_str()));
+            else if (key == "blendfactor")
+                t.blendFactor = static_cast<float>(std::atof(arg.c_str()));
+            else if (key == "prio")
+                t.priority = std::atoi(arg.c_str());
+            else if (key == "material")
+                t.material = arg;
+            else if (key == "fadeoffdistance")
+                parseVec2(arg, t.fadeOffDistance);
+            else if (key == "isprimarytexture")
+                layer = std::atoi(arg.c_str()) ? 0 : 1;
+        }
+        else if (object == "roadtemplatetexture")
+        {
+            if (key == "texturefile")
+                t.textures[layer] = arg;
+            else if (key == "mirror")
+                t.mirror[layer] = std::atoi(arg.c_str()) != 0;
+            else if (key == "scale")
+                parseVec2(arg, t.scale[layer]);
+        }
+    }
+    return t;
+}
+
+void putBytes(std::string& data, const void* bytes, size_t size)
+{
+    data.append(static_cast<const char*>(bytes), size);
+}
+
+// A straight road of `quads` 2 m x 4 m quads along x, as a compiled mesh of the given minor version without a chunk table.
+std::string syntheticRoadMesh(unsigned short minor, int quads)
+{
+    std::string data;
+    const unsigned short major = 1;
+    const float origin[3] = { 100.0f, 10.0f, 2.0f };
+    const float radius = static_cast<float>(quads);
+    const float lo[3] = { 0.0f, 10.0f, 0.0f };
+    const float hi[3] = { 2.0f * quads, 10.0f, 4.0f };
+    const unsigned priority = 1;
+    const unsigned vertices = 2u * static_cast<unsigned>(quads + 1);
+    putBytes(data, &minor, 2);
+    putBytes(data, &major, 2);
+    putBytes(data, origin, 12);
+    putBytes(data, &radius, 4);
+    putBytes(data, lo, 12);
+    putBytes(data, hi, 12);
+    putBytes(data, &priority, 4);
+    putBytes(data, &vertices, 4);
+    for (int i = 0; i <= quads; ++i)
+        for (int side = 0; side < 2; ++side)
+        {
+            const float record[8] = { 2.0f * i - origin[0], 10.0f - origin[1], 4.0f * side - origin[2],
+                                      static_cast<float>(side), static_cast<float>(i), 0.0f, 0.0f, 1.0f };
+            putBytes(data, record, minor >= 3 ? 32 : 28);
+        }
+    const unsigned indices = 6u * static_cast<unsigned>(quads);
+    putBytes(data, &indices, 4);
+    for (int i = 0; i < quads; ++i)
+    {
+        const unsigned short a = static_cast<unsigned short>(2 * i), b = static_cast<unsigned short>(a + 1);
+        const unsigned short c = static_cast<unsigned short>(a + 2), d = static_cast<unsigned short>(a + 3);
+        const unsigned short triangle[6] = { a, b, c, b, d, c };
+        putBytes(data, triangle, 12);
+    }
+    return data;
+}
+
+std::string withoutCarriageReturns(std::string text)
+{
+    text.erase(std::remove(text.begin(), text.end(), '\r'), text.end());
+    return text;
+}
+
+} // namespace
+
+void checkRoadFiles()
+{
+    // A projection that came back flat: R3's road (inner points rising 2.8 m) with every changed height on one level
+    // counts; a ramp, a road whose inner points are level, and too few heights do not.
+    {
+        SplineRecord spline;
+        const float heights[5] = { 161.733f, 165.255f, 166.448f, 168.015f, 166.537f };
+        for (int i = 0; i < 5; ++i)
+        {
+            SplinePointRecord point;
+            point.position[1] = heights[i];
+            spline.points.push_back(point);
+        }
+        const std::vector<float> flat(288, 165.152f);
+        std::vector<float> ramp;
+        for (int i = 0; i < 214; ++i)
+            ramp.push_back(165.5f + 0.01f * static_cast<float>(i));
+        CHECK(roadProjectionCameBackFlat(spline, flat));
+        CHECK(!roadProjectionCameBackFlat(spline, ramp));
+        CHECK(!roadProjectionCameBackFlat(spline, std::vector<float>(5, 165.152f)));
+        for (int i = 1; i < 4; ++i)
+            spline.points[static_cast<size_t>(i)].position[1] = 166.0f;
+        CHECK(!roadProjectionCameBackFlat(spline, std::vector<float>(100, 165.9f)));
+    }
+    CHECK(formatConsoleFloat(0.01f) == "0.01");
+    CHECK(formatConsoleFloat(0.85f) == "0.85");
+    CHECK(formatConsoleFloat(5.0f) == "5");
+    CHECK(formatConsoleFloat(-99.9473f) == "-99.9473");
+    CHECK(formatConsoleFloat(163.404f) == "163.404");
+
+    // Splines.con: points only with their non-default trigger properties, an empty spline left out, a blank line last.
+    SplineRecord spline;
+    spline.id = 3;
+    spline.snapModes = 3;
+    SplinePointRecord point;
+    point.position[0] = 1.5f;
+    point.position[1] = 2.0f;
+    point.position[2] = -3.0f;
+    spline.points.push_back(point);
+    point.position[0] = 10.0f;
+    point.position[1] = 20.0f;
+    point.position[2] = 30.0f;
+    point.speed = 30.0f;
+    point.delay = 1.5f;
+    point.direction = 1;
+    point.sound = "s.wav";
+    spline.points.push_back(point);
+    SplineRecord emptySpline;
+    emptySpline.id = 4;
+    std::vector<SplineRecord> splines;
+    splines.push_back(spline);
+    splines.push_back(emptySpline);
+    CHECK(splinesConText(splines) ==
+          "rem ** [Spline] - 3 **\n"
+          "SplineManager.CreateInstance\n"
+          "SplineManager.SetId 3\n"
+          "SplineManager.SetControlPointSnapModes 3\n"
+          "SplineManager.setLineWidth 0.05\n"
+          "SplineManager.setStepSize 3\n"
+          "SplineManager.AddControlPoint 1.5/2/-3\n"
+          "SplineManager.AddControlPoint 10/20/30\n"
+          "SplineManager.SetSpeed 30\n"
+          "SplineManager.SetDelay 1.5\n"
+          "SplineManager.SetDirection 1\n"
+          "SplineManager.SetSound s.wav\n"
+          "SplineManager.End\n"
+          "\n"
+          "\n");
+    CHECK(splinesConText(std::vector<SplineRecord>()).empty());
+
+    // Roads.con.
+    RoadRecord road;
+    road.name = "tarmac1";
+    road.splineId = 3;
+    road.templateName = "highway";
+    road.seed = 1234;
+    CHECK(roadsConText(std::vector<RoadRecord>(1, road)) ==
+          "rem ** [Road] - tarmac1**\n"
+          "Road.CreateInstance \"tarmac1\" 3 \"highway\" 1234\n"
+          "Road.SetTextureScaleOffset 0/0\n"
+          "Road.SetPersistance 0.2\n"
+          "Road.SetRange -0.15/0.15\n"
+          "Road.SetOctaves 3\n"
+          "Road.Prio 0\n"
+          "Road.FadeDistAtStartLeft 0/3\n"
+          "Road.FadeDistAtStartRight 0/3\n"
+          "Road.FadeDistAtEndLeft 0/3\n"
+          "Road.FadeDistAtEndRight 0/3\n"
+          "\n"
+          "\n");
+    CHECK(roadsConText(std::vector<RoadRecord>()).empty());
+
+    // Rows: the editor branch only, quotes off, the else part and a nested block left out.
+    const std::string script = "rem a comment\n"
+                               "Road.Outside 1\n"
+                               "if v_arg1 == BF2Editor\n"
+                               "RoadTemplate.SetName \"my road\"\n"
+                               "if v_arg2 == x\n"
+                               "RoadTemplate.Nested 1\n"
+                               "endIf\n"
+                               "RoadTemplateTexture.SetScale 1/0.5\n"
+                               "else\n"
+                               "RoadTemplate.Game 1\n"
+                               "endIf\n";
+    int skipped = 0;
+    const std::vector<ConsoleRow> rows = consoleRows(script, "BF2Editor", skipped);
+    CHECK(rows.size() == 2 && skipped == 1);
+    CHECK(rows.size() == 2 && rows[0].object == "RoadTemplate" && rows[0].method == "SetName" && rows[0].args.size() == 1
+          && rows[0].args[0] == "my road" && rows[1].args.size() == 1 && rows[1].args[0] == "1/0.5");
+    CHECK(consoleRows(script, std::string(), skipped).size() == 5);
+    ConsoleRow row;
+    CHECK(splitConsoleRow("  Road.CreateInstance \"a b\" 3 \"t\" 7 ", row) && row.args.size() == 4 && row.args[0] == "a b"
+          && row.args[3] == "7");
+    CHECK(!splitConsoleRow("rem Road.CreateInstance", row) && !splitConsoleRow("endIf", row) && !splitConsoleRow("", row));
+
+    // A template's script read back by its rows makes the same script.
+    RoadTemplateRecord roadTemplate;
+    roadTemplate.name = "test_road";
+    roadTemplate.width = 6.0f;
+    roadTemplate.maxTesselatedError = 0.01f;
+    roadTemplate.blendFactor = 0.85f;
+    roadTemplate.priority = 2;
+    roadTemplate.material = "Dirt";
+    roadTemplate.textures[0] = "objects\\roads\\textures\\a";
+    roadTemplate.textures[1] = "objects\\roads\\textures\\b";
+    roadTemplate.mirror[1] = true;
+    roadTemplate.scale[1][1] = 0.5f;
+    roadTemplate.fadeOffDistance[0] = 150.0f;
+    const std::string templateText = roadTemplateConText(roadTemplate);
+    CHECK(templateText.find("RoadTemplate.SetFadeOffDistance 150/300\n") != std::string::npos);
+    CHECK(roadTemplateConText(templateFromRows(consoleRows(templateText, "BF2Editor", skipped))) == templateText);
+    RoadTemplateRecord plain = roadTemplate;
+    plain.fadeOffDistance[0] = 200.0f;
+    plain.material.clear();
+    const std::string plainText = roadTemplateConText(plain);
+    CHECK(plainText.find("FadeOffDistance") == std::string::npos && plainText.find("SetMaterial") == std::string::npos);
+
+    // CompiledRoads.con.
+    const std::string compiled = "object.create highway\r\n"
+                                 "object.geometry.loadMesh Levels\\X\\Roads\\tarmac8_compiled.mesh\r\n"
+                                 "object.absoluteposition 1/2/3\r\n"
+                                 "\r\n"
+                                 "object.create industrial\r\n"
+                                 "object.geometry.loadMesh Levels\\X\\Roads\\industrial_2_compiled.mesh\r\n"
+                                 "object.absoluteposition 4/5/6\r\n"
+                                 "\r\n";
+    const CompiledRoadsFile compiledFile = parseCompiledRoads(compiled);
+    CHECK(compiledFile.blocks.size() == 2 && compiledFile.newline == "\r\n" && compiledFile.preamble.empty()
+          && compiledFile.blocks[0].mesh == "Levels\\X\\Roads\\tarmac8_compiled.mesh");
+    CHECK(compiledRoadsText(compiledFile) == compiled);
+    CHECK(parseCompiledRoads(std::string()).blocks.empty() && compiledRoadsText(parseCompiledRoads(std::string())).empty());
+    CHECK(compiledMeshIsRoad("Levels\\X\\Roads\\tarmac8_compiled.mesh", "Tarmac8"));
+    CHECK(compiledMeshIsRoad("roads/tarmac8_compiled.mesh", "tarmac8"));
+    CHECK(!compiledMeshIsRoad("Levels\\X\\Roads\\xtarmac8_compiled.mesh", "tarmac8"));
+    CHECK(!compiledMeshIsRoad("Levels\\X\\Other\\tarmac8_compiled.mesh", "tarmac8"));
+
+    // The chunk table of a 200 m road: contiguous chunks covering every index, each sphere holding its vertices.
+    std::string mesh = syntheticRoadMesh(4, 100);
+    RoadMeshInfo info;
+    std::string error;
+    CHECK(readRoadMeshInfo(mesh, info, error) && !info.hasChunkTable && info.vertices == 202 && info.indices == 600);
+    const size_t tableAt = mesh.size();
+    CHECK(appendRoadMeshChunkTable(mesh, info, error) && info.hasChunkTable && info.chunks >= 3);
+    RoadMeshInfo again;
+    CHECK(readRoadMeshInfo(mesh, again, error) && again.hasChunkTable && again.chunks == info.chunks);
+    bool covered = mesh.size() == tableAt + 4 + 24 * info.chunks;
+    unsigned next = 0;
+    bool held = true;
+    for (unsigned c = 0; covered && c < info.chunks; ++c)
+    {
+        unsigned first = 0, count = 0;
+        float radius = 0.0f, centre[3];
+        std::memcpy(&first, mesh.data() + tableAt + 4 + 24 * c, 4);
+        std::memcpy(&count, mesh.data() + tableAt + 8 + 24 * c, 4);
+        std::memcpy(&radius, mesh.data() + tableAt + 12 + 24 * c, 4);
+        std::memcpy(centre, mesh.data() + tableAt + 16 + 24 * c, 12);
+        covered = covered && first == next && count % 3 == 0 && count > 0 && radius <= 40.0f;
+        next = first + count;
+        for (unsigned i = first; i < first + count && held; ++i)
+        {
+            unsigned short index = 0;
+            std::memcpy(&index, mesh.data() + 52 + 202 * 32 + 4 + 2 * i, 2);
+            const float x = 2.0f * (index / 2), z = 4.0f * (index % 2);
+            const float dx = x - centre[0], dy = 10.0f - centre[1], dz = z - centre[2];
+            held = std::sqrt(dx * dx + dy * dy + dz * dz) <= radius + 1e-3f;
+        }
+    }
+    CHECK(covered && next == 600 && held);
+    CHECK(!appendRoadMeshChunkTable(mesh, info, error) && error.find("already") != std::string::npos);
+    std::string older = syntheticRoadMesh(3, 4);
+    CHECK(!appendRoadMeshChunkTable(older, info, error) && error.find("1.3") != std::string::npos);
+    CHECK(!readRoadMeshInfo(mesh.substr(0, 40), info, error));
+
+    const char* const level = std::getenv("BF2_EDITOR_KARKAND_DIR");
+    if (!level)
+        return;
+    std::string stock;
+    if (readWholeFile(std::string(level) + "\\CompiledRoads.con", stock))
+    {
+        const CompiledRoadsFile stockFile = parseCompiledRoads(stock);
+        int meshes = 0, read = 0;
+        for (size_t b = 0; b < stockFile.blocks.size(); ++b)
+        {
+            const std::string& path = stockFile.blocks[b].mesh;
+            const size_t slash = path.find_last_of("\\/");
+            std::string data;
+            ++meshes;
+            RoadMeshInfo stockInfo;
+            if (readWholeFile(std::string(level) + "\\Roads\\" + path.substr(slash + 1), data)
+                && readRoadMeshInfo(data, stockInfo, error) && stockInfo.hasChunkTable && stockInfo.versionMinor == 4)
+                ++read;
+        }
+        std::printf("[road files] Karkand's CompiledRoads.con %s; %d of its %d meshes read with their chunk tables\n",
+                    compiledRoadsText(stockFile) == stock ? "written back byte for byte" : "written back DIFFERENTLY",
+                    read, meshes);
+        CHECK(compiledRoadsText(stockFile) == stock && stockFile.blocks.size() == 32 && read == meshes);
+    }
+    const std::string objects = std::string(level) + "\\..\\..\\Objects_server.zip";
+    unzFile unz = unzOpen(objects.c_str());
+    if (!unz)
+        return;
+    int templates = 0, same = 0;
+    std::string first;
+    for (int status = unzGoToFirstFile(unz); status == UNZ_OK; status = unzGoToNextFile(unz))
+    {
+        char name[256];
+        unz_file_info entry;
+        unzGetCurrentFileInfo(unz, &entry, name, sizeof(name), 0, 0, 0, 0);
+        const std::string low = lowerText(name);
+        if (low.compare(0, 14, "roads/splines/") != 0 || low.size() < 5 || low.compare(low.size() - 4, 4, ".con") != 0
+            || low.find("_compiled.con") != std::string::npos)
+            continue;
+        std::string text(entry.uncompressed_size, '\0');
+        unzOpenCurrentFile(unz);
+        const int got = text.empty() ? 0 : unzReadCurrentFile(unz, &text[0], static_cast<unsigned>(text.size()));
+        unzCloseCurrentFile(unz);
+        if (got != static_cast<int>(text.size()))
+            continue;
+        ++templates;
+        const std::string written = roadTemplateConText(templateFromRows(consoleRows(text, "BF2Editor", skipped)));
+        if (written == withoutCarriageReturns(text))
+            ++same;
+        else if (first.empty())
+            first = name;
+    }
+    unzClose(unz);
+    std::printf("[road files] %d of %d stock road templates written back exactly (line endings aside)%s%s\n", same,
+                templates, first.empty() ? "" : "; first difference: ", first.c_str());
+    CHECK(templates > 0 && same == templates);
+}
+
+// The object lightmap atlas (Framework/LightmapAtlas): an index line read; a texture cut out of a synthetic DXT1 page with
+// its mip chain, block for block; a rectangle off the blocks refused. With the staged Karkand, its LightmapAtlas.tai read
+// whole and every entry cut out of its page, each one's top level the page's blocks.
+void checkLightmapAtlas()
+{
+    std::vector<AtlasEntry> entries;
+    std::string error;
+    CHECK(parseAtlasIndex("# comment\n\nlevels/x/lightmaps/objects/a=00=1=2=3.dds\t\tlevels/x/lightmaps/objects/"
+                          "LightmapAtlas1.dds, 1, 0.5, 0.25, 0.25, 0.125\n", entries, error)
+          && entries.size() == 1 && entries[0].page == 1 && entries[0].rect[0] == 0.5f && entries[0].rect[3] == 0.125f
+          && atlasFileName(entries[0].texture) == "a=00=1=2=3.dds" && atlasFileName(entries[0].atlasFile) == "LightmapAtlas1.dds");
+    CHECK(!parseAtlasIndex("levels/x/a.dds\t\tpage.dds, 1, 0.5\n", entries, error));
+    // The pages an older, larger atlas left: only page 2 is named by no entry (case ignored; the index and the
+    // lightmaps are not pages).
+    {
+        std::vector<AtlasEntry> named(2);
+        named[0].atlasFile = "levels/x/lightmaps/objects/LightmapAtlas0.dds";
+        named[1].atlasFile = "levels/x/lightmaps/objects/lightmapatlas1.dds";
+        const char* const names[] = { "LightmapAtlas0.dds", "LIGHTMAPATLAS1.DDS", "LightmapAtlas2.dds", "LightmapAtlas.tai",
+                                      "a=00=1=2=3.dds" };
+        const std::vector<std::string> unnamed = unnamedAtlasPages(named, std::vector<std::string>(names, names + 5));
+        CHECK(unnamed.size() == 1 && unnamed[0] == "LightmapAtlas2.dds");
+    }
+
+    // A 64 x 64 DXT1 page of 7 levels, every block holding its level, column and row.
+    std::string page(128, '\0');
+    std::memcpy(&page[0], "DDS ", 4);
+    const unsigned header[] = { 124, 0x1007 | 0x20000, 64, 64, 2048, 0, 7 };
+    std::memcpy(&page[4], header, sizeof(header));
+    std::memcpy(&page[84], "DXT1", 4);
+    for (unsigned m = 0; m < 7; ++m)
+    {
+        const unsigned blocks = std::max(1u, (64u >> m) / 4u);
+        for (unsigned y = 0; y < blocks; ++y)
+            for (unsigned x = 0; x < blocks; ++x)
+            {
+                unsigned char block[8] = { static_cast<unsigned char>(m), static_cast<unsigned char>(x),
+                                           static_cast<unsigned char>(y), 0, 0, 0, 0, 0 };
+                page.append(reinterpret_cast<const char*>(block), 8);
+            }
+    }
+    AtlasEntry entry;
+    entry.rect[0] = 0.5f;                       // texels 32..47 across, 16..31 down: 16 x 16
+    entry.rect[1] = 0.25f;
+    entry.rect[2] = 0.25f;
+    entry.rect[3] = 0.25f;
+    std::string texture;
+    CHECK(cutAtlasTexture(page, entry, texture, error));
+    unsigned size[2] = { 0, 0 }, mips = 0;
+    std::memcpy(size, texture.data() + 12, 8);
+    std::memcpy(&mips, texture.data() + 28, 4);
+    // 16 x 16 has 5 levels: 4 x 4 blocks, 2 x 2, then one block each for 4, 2 and 1 texels.
+    CHECK(size[0] == 16 && size[1] == 16 && mips == 5 && texture.size() == 128 + (16 + 4 + 1 + 1 + 1) * 8);
+    bool same = texture.size() == 128 + 23 * 8;
+    size_t at = 128;
+    for (unsigned m = 0; same && m < 5; ++m)
+    {
+        const unsigned blocks = std::max(1u, (16u >> m) / 4u);
+        for (unsigned y = 0; same && y < blocks; ++y)
+            for (unsigned x = 0; same && x < blocks; ++x, at += 8)
+                same = static_cast<unsigned char>(texture[at]) == m
+                    && static_cast<unsigned char>(texture[at + 1]) == std::min((32u >> m) / 4u + x, std::max(1u, (64u >> m) / 4u) - 1)
+                    && static_cast<unsigned char>(texture[at + 2]) == std::min((16u >> m) / 4u + y, std::max(1u, (64u >> m) / 4u) - 1);
+    }
+    CHECK(same);
+    entry.rect[0] = 0.5f + 2.0f / 64.0f;        // two texels off the blocks
+    CHECK(!cutAtlasTexture(page, entry, texture, error));
+
+    const char* const level = std::getenv("BF2_EDITOR_KARKAND_DIR");
+    if (!level)
+        return;
+    const std::string folder = std::string(level) + "\\lightmaps\\Objects\\";
+    std::string index;
+    if (!readWholeFile(folder + "LightmapAtlas.tai", index))
+        return;
+    CHECK(parseAtlasIndex(index, entries, error));
+    std::map<std::string, std::string> pages;
+    int cut = 0, matching = 0;
+    for (size_t i = 0; i < entries.size(); ++i)
+    {
+        const std::string name = atlasFileName(entries[i].atlasFile);
+        if (!pages.count(name))
+            readWholeFile(folder + name, pages[name]);
+        const std::string& bytes = pages[name];
+        if (!cutAtlasTexture(bytes, entries[i], texture, error))
+            continue;
+        ++cut;
+        // The cut texture's top level is the page's blocks under its rectangle.
+        unsigned pageWidth = 0, w = 0, h = 0;
+        std::memcpy(&pageWidth, bytes.data() + 16, 4);
+        std::memcpy(&h, texture.data() + 12, 4);
+        std::memcpy(&w, texture.data() + 16, 4);
+        const unsigned x0 = static_cast<unsigned>(std::lround(entries[i].rect[0] * pageWidth)) / 4;
+        const unsigned y0 = static_cast<unsigned>(std::lround(entries[i].rect[1] * pageWidth)) / 4;
+        bool top = true;
+        for (unsigned y = 0; top && y < h / 4; ++y)
+            top = std::memcmp(texture.data() + 128 + y * (w / 4) * 8, bytes.data() + 128 + ((y0 + y) * (pageWidth / 4) + x0) * 8,
+                              (w / 4) * 8) == 0;
+        matching += top ? 1 : 0;
+    }
+    std::printf("[lightmap atlas] Karkand's LightmapAtlas.tai: %u entries, %d cut out of their pages, %d with the page's "
+                "blocks\n", static_cast<unsigned>(entries.size()), cut, matching);
+    CHECK(entries.size() == 1827 && cut == 1827 && matching == 1827);
 }
 
 void checkDdsImage()
@@ -3067,6 +4189,615 @@ void checkMaterialFiles()
           && stockMaterials.ids().size() == 143 && stockCells.cells().size() == 5054);
 }
 
+// The save preview's line diff (Framework/TextDiff): hunks and their numbers, line endings, and on random texts a diff
+// that rebuilds the new text and is as short as the longest common subsequence allows.
+void checkTextDiff()
+{
+    TextDiff same = diffTexts("a\nb\n", "a\nb\n");
+    CHECK(same.hunks.empty() && same.added == 0 && same.removed == 0);
+    TextDiff one = diffTexts("a\nb\nc\n", "a\nB\nc\n", 1);
+    CHECK(one.hunks.size() == 1 && one.removed == 1 && one.added == 1);
+    CHECK(one.hunks.size() == 1 && one.hunks[0].lines.size() == 4 && one.hunks[0].lines[0].kind == ' '
+          && one.hunks[0].lines[1].kind == '-' && one.hunks[0].lines[1].text == "b" && one.hunks[0].lines[2].kind == '+'
+          && one.hunks[0].lines[2].text == "B" && one.hunks[0].beforeStart == 1 && one.hunks[0].beforeCount == 3
+          && one.hunks[0].afterStart == 1 && one.hunks[0].afterCount == 3);
+    CHECK(unifiedDiff(one, "old", "new") == "--- old\n+++ new\n@@ -1,3 +1,3 @@\n a\n-b\n+B\n c\n");
+    TextDiff made = diffTexts("", "x\n");
+    CHECK(made.hunks.size() == 1 && made.hunks[0].beforeStart == 0 && made.hunks[0].beforeCount == 0
+          && made.hunks[0].afterStart == 1 && made.hunks[0].afterCount == 1 && made.added == 1);
+    TextDiff ending = diffTexts("a\nb", "a\nb\n");
+    CHECK(ending.removed == 1 && ending.added == 1 && ending.hunks.size() == 1 && ending.hunks[0].lines.size() == 4
+          && ending.hunks[0].lines[2].kind == '\\');
+    CHECK(diffTexts("a\r\n", "a\n").removed == 1);
+    std::string ten, twoApart, twoClose;
+    for (int i = 1; i <= 10; ++i)
+    {
+        ten += std::to_string(i) + "\n";
+        twoApart += (i == 2 || i == 9 ? "x" : std::to_string(i)) + "\n";
+        twoClose += (i == 2 || i == 4 ? "x" : std::to_string(i)) + "\n";
+    }
+    CHECK(diffTexts(ten, twoApart, 1).hunks.size() == 2 && diffTexts(ten, twoClose, 1).hunks.size() == 1);
+    CHECK(looksLikeText("Object.create a\r\n") && !looksLikeText(std::string("DDS \0\0", 6)));
+
+    unsigned seed = 12345;
+    const auto next = [&seed]() {
+        seed = seed * 1103515245u + 12345u;
+        return (seed >> 16) & 0x7fff;
+    };
+    bool rebuilt = true, shortest = true;
+    for (int round = 0; round < 300; ++round)
+    {
+        std::vector<std::string> a, b;
+        const int n = static_cast<int>(next() % 30), m = static_cast<int>(next() % 30);
+        for (int i = 0; i < n; ++i)
+            a.push_back(std::string(1, static_cast<char>('a' + next() % 4)));
+        for (int j = 0; j < m; ++j)
+            b.push_back(std::string(1, static_cast<char>('a' + next() % 4)));
+        std::string before, after;
+        for (size_t i = 0; i < a.size(); ++i)
+            before += a[i] + "\n";
+        for (size_t j = 0; j < b.size(); ++j)
+            after += b[j] + "\n";
+        const TextDiff diff = diffTexts(before, after, static_cast<int>(next() % 4));
+        // The new text from the old one and the hunks.
+        std::string out;
+        int at = 0;     // old lines taken so far
+        for (size_t h = 0; h < diff.hunks.size(); ++h)
+        {
+            const DiffHunk& hunk = diff.hunks[h];
+            const int start = hunk.beforeCount ? hunk.beforeStart - 1 : hunk.beforeStart;
+            for (; at < start; ++at)
+                out += a[static_cast<size_t>(at)] + "\n";
+            for (size_t l = 0; l < hunk.lines.size(); ++l)
+            {
+                if (hunk.lines[l].kind == ' ')
+                {
+                    out += hunk.lines[l].text + "\n";
+                    ++at;
+                }
+                else if (hunk.lines[l].kind == '-')
+                    ++at;
+                else if (hunk.lines[l].kind == '+')
+                    out += hunk.lines[l].text + "\n";
+            }
+        }
+        for (; at < n; ++at)
+            out += a[static_cast<size_t>(at)] + "\n";
+        rebuilt = rebuilt && out == after;
+        std::vector<std::vector<int> > lcs(static_cast<size_t>(n) + 1, std::vector<int>(static_cast<size_t>(m) + 1, 0));
+        for (int i = n - 1; i >= 0; --i)
+            for (int j = m - 1; j >= 0; --j)
+                lcs[i][j] = a[i] == b[j] ? lcs[i + 1][j + 1] + 1 : std::max(lcs[i + 1][j], lcs[i][j + 1]);
+        shortest = shortest && diff.removed + diff.added == n + m - 2 * lcs[0][0];
+    }
+    CHECK(rebuilt);
+    CHECK(shortest);
+}
+
+// Every file under a folder, with its path.
+void walkFiles(const std::string& folder, std::vector<std::string>& out)
+{
+    WIN32_FIND_DATAA found;
+    const HANDLE search = FindFirstFileA((folder + "\\*").c_str(), &found);
+    if (search == INVALID_HANDLE_VALUE)
+        return;
+    do
+    {
+        const std::string name = found.cFileName;
+        if (name == "." || name == "..")
+            continue;
+        if (found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+            walkFiles(folder + "\\" + name, out);
+        else
+            out.push_back(folder + "\\" + name);
+    } while (FindNextFileA(search, &found));
+    FindClose(search);
+}
+
+// The round-trip census of the stock levels' own files: with BF2EDITOR_LEVEL_SAMPLES set to the folder
+// extract_level_samples.py fills (each level's object, gameplay, settings and compiled-road files from its server.zip),
+// every file is parsed by the editor's file model and rendered back with no edit; each kind's count of files that come
+// back byte for byte is printed, and every file must.
+void checkLevelSamples()
+{
+    char samples[MAX_PATH] = "";
+    if (GetEnvironmentVariableA("BF2EDITOR_LEVEL_SAMPLES", samples, MAX_PATH) == 0)
+        return;
+    std::vector<std::string> files;
+    walkFiles(samples, files);
+    const char* const kinds[] = { "staticobjects.con", "ambientobjects.con", "gameplayobjects.con", "init.con", "sky.con",
+                                  "water.con", "compiledroads.con" };
+    const size_t kindCount = sizeof(kinds) / sizeof(kinds[0]);
+    int total[kindCount] = {}, same[kindCount] = {};
+    int moveTotal = 0, moveOne = 0, deleteTotal = 0, deleteOne = 0;
+    std::string error;
+    for (size_t i = 0; i < files.size(); ++i)
+    {
+        std::string name = files[i].substr(files[i].find_last_of('\\') + 1);
+        std::transform(name.begin(), name.end(), name.begin(), [](char c) { return static_cast<char>(std::tolower(static_cast<unsigned char>(c))); });
+        size_t kind = kindCount;
+        for (size_t k = 0; k < kindCount && kind == kindCount; ++k)
+            if (name == kinds[k])
+                kind = k;
+        std::string text;
+        if (kind == kindCount || !ObjectLibrary::readTextFile(files[i], text, error))
+            continue;
+        std::string back;
+        if (kind <= 2)
+        {
+            LevelObjectFile file;
+            file.parse(text);
+            back = file.render();
+            // One object moved a metre: only its position line changes. One deleted: only its own lines go.
+            if (file.recordCount() > 0)
+            {
+                const size_t record = file.recordCount() / 2;
+                LevelObjectFile moved;
+                moved.parse(text);
+                ObjectPlacement placement = moved.placement(record);
+                placement.position[0] += 1.0f;
+                moved.setPlacement(record, placement);
+                const TextDiff move = diffTexts(text, moved.render(), 0);
+                ++moveTotal;
+                if (move.removed == 1 && move.added == 1 && move.hunks.size() == 1)
+                    ++moveOne;
+                else
+                    std::printf("[level files] a move changed more than its line: %s (-%d +%d)\n",
+                                files[i].c_str() + std::strlen(samples), move.removed, move.added);
+                LevelObjectFile deleted;
+                deleted.parse(text);
+                deleted.setDeleted(record, true);
+                const TextDiff gone = diffTexts(text, deleted.render(), 0);
+                ++deleteTotal;
+                if (gone.added == 0 && gone.removed > 0 && gone.hunks.size() == 1)
+                    ++deleteOne;
+                else
+                    std::printf("[level files] a delete changed more than its block: %s (-%d +%d, %u hunks)\n",
+                                files[i].c_str() + std::strlen(samples), gone.removed, gone.added,
+                                static_cast<unsigned>(gone.hunks.size()));
+            }
+        }
+        else if (kind <= 5)
+        {
+            LevelSettingsFile file;
+            file.parse(text);
+            back = file.render();
+        }
+        else
+            back = compiledRoadsText(parseCompiledRoads(text));
+        ++total[kind];
+        if (back == text)
+            ++same[kind];
+        else
+            std::printf("[level files] written back DIFFERENTLY: %s (%u -> %u bytes)\n", files[i].c_str() + std::strlen(samples),
+                        static_cast<unsigned>(text.size()), static_cast<unsigned>(back.size()));
+    }
+    std::string line;
+    int all = 0, allSame = 0;
+    for (size_t k = 0; k < kindCount; ++k)
+    {
+        char part[96];
+        std::snprintf(part, sizeof(part), "%s%s %d/%d", k ? ", " : "", kinds[k], same[k], total[k]);
+        line += part;
+        all += total[k];
+        allSame += same[k];
+        CHECK(same[k] == total[k]);
+    }
+    std::printf("[level files] stock level files written back byte for byte: %d of %d (%s)\n", allSame, all, line.c_str());
+    std::printf("[level files] an object moved changes its position line alone in %d of %d object files; one deleted takes "
+                "only its own lines in %d of %d\n", moveOne, moveTotal, deleteOne, deleteTotal);
+    CHECK(total[0] >= 20 && total[2] >= 60);
+    CHECK(moveOne == moveTotal && deleteOne == deleteTotal);
+}
+
+// A folder tree of the checks' own removed.
+void removeCheckTree(const std::string& path)
+{
+    WIN32_FIND_DATAA found;
+    const HANDLE search = FindFirstFileA((path + "/*").c_str(), &found);
+    if (search != INVALID_HANDLE_VALUE)
+    {
+        do
+        {
+            const std::string name = found.cFileName;
+            if (name == "." || name == "..")
+                continue;
+            if (found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+                removeCheckTree(path + "/" + name);
+            else
+            {
+                SetFileAttributesA((path + "/" + name).c_str(), FILE_ATTRIBUTE_NORMAL);
+                DeleteFileA((path + "/" + name).c_str());
+            }
+        } while (FindNextFileA(search, &found));
+        FindClose(search);
+    }
+    RemoveDirectoryA(path.c_str());
+}
+
+// The save plan (Framework/SavePlan): parts, the files already as planned dropped, a write with its backup and
+// manifest, a part source control refuses, a failed write that puts every file back, a restore, and the oldest
+// backups removed.
+void checkSavePlan()
+{
+    char temp[MAX_PATH];
+    GetTempPathA(MAX_PATH, temp);
+    char unique[64];
+    std::snprintf(unique, sizeof(unique), "bf2editor_saveplan_%lu", static_cast<unsigned long>(GetCurrentProcessId()));
+    const std::string root = std::string(temp) + unique;
+    removeCheckTree(root);
+    const std::string game = root + "/game";
+    const std::string level = game + "/mods/bf2/Levels/Test";
+    const std::string backups = game + "/bf2editor/Backups/bf2/Test";
+    std::string error, text;
+    CHECK(ObjectLibrary::writeTextFile(level + "/a.con", "old a", error));
+    CHECK(ObjectLibrary::writeTextFile(level + "/b.con", "old b", error));
+    CHECK(ObjectLibrary::writeTextFile(level + "/d.con", "same", error));
+    CHECK(ObjectLibrary::writeTextFile(root + "/staged/b.con", "new b", error));
+    const auto read = [](const std::string& path) {
+        std::string bytes, ignored;
+        return ObjectLibrary::readTextFile(path, bytes, ignored) ? bytes : std::string("(missing)");
+    };
+
+    SavePlan plan;
+    bool objectsMarked = false, terrainMarked = false, refusedMarked = false;
+    SavePart& objects = plan.part("objects");
+    objects.add(level + "/a.con", "new a");
+    objects.add(level + "/A.CON", "newer a");
+    objects.onWritten([&objectsMarked]() { objectsMarked = true; });
+    objects.onReport([](const SavePart& p) { return "objects " + std::to_string(p.changed()); });
+    SavePart& terrain = plan.part("terrain");
+    terrain.addStaged(level + "/b.con", root + "/staged/b.con");
+    terrain.add(level + "/sub/c.con", "c");
+    terrain.add(level + "/d.con", "same");
+    terrain.onWritten([&terrainMarked]() { terrainMarked = true; });
+    terrain.onReport([](const SavePart& p) { return "terrain " + std::to_string(p.changed()) + " of " + std::to_string(p.planned()); });
+    SavePart& refused = plan.part("refused");
+    refused.add(level + "/e.con", "e");
+    refused.onWritten([&refusedMarked]() { refusedMarked = true; });
+    refused.refuse("refused NOT saved: a reason");
+    CHECK(objects.files().size() == 1 && objects.planned() == 1 && objects.files()[0].bytes == "newer a");
+    plan.dropUnchanged();
+    CHECK(terrain.planned() == 3 && terrain.changed() == 2 && plan.fileCount() == 3 && plan.anyRefused());
+
+    SaveBackupPolicy policy;
+    policy.root = backups;
+    policy.base = game;
+    policy.keep = 3;
+    policy.label = "check";
+    SaveWriteResult written;
+    CHECK(writeSavePlan(plan, policy, written) && written.error.empty() && written.written.size() == 3);
+    CHECK(read(level + "/a.con") == "newer a" && read(level + "/b.con") == "new b" && read(level + "/sub/c.con") == "c"
+          && read(level + "/e.con") == "(missing)");
+    CHECK(objectsMarked && terrainMarked && !refusedMarked);
+    CHECK(plan.answers() == "objects 1; terrain 2 of 3; refused NOT saved: a reason");
+    CHECK(read(level + "/a.con.editor-new") == "(missing)" && read(level + "/sub/c.con.editor-new") == "(missing)");
+    std::vector<SaveBackup> list = listSaveBackups(backups);
+    CHECK(list.size() == 1 && list[0].label == "check" && list[0].entries.size() == 3 && written.backup == list[0].folder);
+    if (list.size() == 1 && list[0].entries.size() == 3)
+    {
+        CHECK(list[0].entries[0].kind == "replaced" && list[0].entries[0].target == "mods/bf2/Levels/Test/a.con"
+              && read(list[0].folder + "/" + list[0].entries[0].stored) == "old a");
+        CHECK(list[0].entries[1].kind == "replaced" && read(list[0].folder + "/" + list[0].entries[1].stored) == "old b");
+        CHECK(list[0].entries[2].kind == "made" && list[0].entries[2].target == "mods/bf2/Levels/Test/sub/c.con");
+    }
+
+    // A read-only file: source control (the null provider) refuses its part, and the other part is written.
+    CHECK(ObjectLibrary::writeTextFile(level + "/ro.con", "kept", error));
+    SetFileAttributesA((level + "/ro.con").c_str(), FILE_ATTRIBUTE_READONLY);
+    SavePlan locked;
+    locked.part("locked").add(level + "/ro.con", "changed");
+    locked.part("free").add(level + "/f.con", "f");
+    locked.dropUnchanged();
+    CHECK(writeSavePlan(locked, policy, written) && read(level + "/ro.con") == "kept" && read(level + "/f.con") == "f");
+    CHECK(locked.parts()[0].refused() && locked.parts()[0].refusal().find("source control refused") != std::string::npos);
+    SetFileAttributesA((level + "/ro.con").c_str(), FILE_ATTRIBUTE_NORMAL);
+
+    // A target that cannot be replaced (a folder of that name): every file is put back and no backup is left.
+    CreateDirectoryA((level + "/folder.con").c_str(), 0);
+    SavePlan failing;
+    SavePart& both = failing.part("both");
+    both.add(level + "/a.con", "lost");
+    both.add(level + "/folder.con", "never");
+    bool failedMarked = false;
+    both.onWritten([&failedMarked]() { failedMarked = true; });
+    const size_t before = listSaveBackups(backups).size();
+    CHECK(!writeSavePlan(failing, policy, written) && written.error.find("nothing was saved") != std::string::npos);
+    CHECK(read(level + "/a.con") == "newer a" && read(level + "/a.con.editor-new") == "(missing)" && !failedMarked
+          && listSaveBackups(backups).size() == before);
+
+    // The first save restored: its replaced files back, the file it made taken away, the restore backed up too.
+    list = listSaveBackups(backups);
+    SavePlan restore;
+    SavePart& back = restore.part("restore");
+    CHECK(list.size() == 2 && planBackupRestore(list, 1, game, back, error));
+    restore.dropUnchanged();
+    policy.label = "restore";
+    CHECK(writeSavePlan(restore, policy, written));
+    CHECK(read(level + "/a.con") == "old a" && read(level + "/b.con") == "old b" && read(level + "/sub/c.con") == "(missing)"
+          && read(level + "/f.con") == "(missing)");
+    list = listSaveBackups(backups);
+    CHECK(list.size() == 3 && list[0].label == "restore");
+
+    // A fourth backup: the oldest of the three kept goes.
+    SavePlan another;
+    another.part("x").add(level + "/a.con", "again");
+    another.dropUnchanged();
+    CHECK(writeSavePlan(another, policy, written));
+    list = listSaveBackups(backups);
+    CHECK(list.size() == 3 && list[2].label == "check" && list[2].entries.size() == 1);
+
+    // Two parts planning one file: it is written once, with the later part's content, under the first spelling.
+    SavePlan twice;
+    twice.part("first").add(level + "/twice.con", "one");
+    twice.part("second").add(level + "/TWICE.CON", "two");
+    twice.dropUnchanged();
+    CHECK(twice.plans(level + "/Twice.con") && !twice.plans(level + "/thrice.con"));
+    CHECK(writeSavePlan(twice, policy, written) && written.error.empty() && written.written.size() == 1
+          && written.written[0] == level + "/twice.con" && read(level + "/twice.con") == "two");
+    removeCheckTree(root);
+}
+
+void checkArchiveRewrite()
+{
+    char temp[MAX_PATH];
+    GetTempPathA(MAX_PATH, temp);
+    char unique[64];
+    std::snprintf(unique, sizeof(unique), "bf2editor_rewrite_%lu", static_cast<unsigned long>(GetCurrentProcessId()));
+    const std::string root = std::string(temp) + unique;
+    removeCheckTree(root);
+    CreateDirectoryA(root.c_str(), 0);
+    const std::string source = root + "/source.zip", rewritten = root + "/rewritten.zip", refused = root + "/refused.zip";
+    std::string error, bytes;
+    std::string big;
+    for (int i = 0; i < 400; ++i)
+        big += "hudBuilder.setNodeColor 1 1 1 1\r\n";
+    {
+        ZipWriter writer;
+        CHECK(writer.open(source, error));
+        CHECK(writer.add("HUD/one.con", reinterpret_cast<const unsigned char*>(big.data()), big.size(), 0x6000, 0x5A21, error));
+        CHECK(writer.add("two.bin", reinterpret_cast<const unsigned char*>("\x01\x02\x03"), 3, 0, 0, error));
+        CHECK(writer.add("HUD/Sub/three.con", reinterpret_cast<const unsigned char*>("three"), 5, 0, 0, error));
+        CHECK(writer.close(error));
+    }
+    // One entry replaced (named in another case and with backslashes); the others copied as stored.
+    std::map<std::string, std::string> replaced;
+    replaced["hud\\SUB\\three.con"] = "three, edited";
+    std::vector<std::string> missing;
+    CHECK(rewriteArchive(source, rewritten, replaced, missing, error) && missing.empty());
+    CHECK(readArchiveEntry(rewritten, "HUD/Sub/three.con", bytes, error) && bytes == "three, edited");
+    CHECK(readArchiveEntry(rewritten, "HUD/one.con", bytes, error) && bytes == big);
+    CHECK(readArchiveEntry(rewritten, "two.bin", bytes, error) && bytes == "\x01\x02\x03");
+    // The untouched entries keep their stored form: the file up to the replaced entry is the source's, byte for byte.
+    std::string a, b;
+    ObjectLibrary::readTextFile(source, a, error);
+    ObjectLibrary::readTextFile(rewritten, b, error);
+    const size_t third = a.find("HUD/Sub/three.con");
+    CHECK(third != std::string::npos && third > 30 && a.compare(0, third - 30, b, 0, third - 30) == 0);
+    // An entry the archive does not have refuses the rewrite and leaves no file.
+    replaced["HUD/none.con"] = "x";
+    CHECK(!rewriteArchive(source, refused, replaced, missing, error) && missing.size() == 1 && missing[0] == "hud/none.con");
+    CHECK(GetFileAttributesA(refused.c_str()) == INVALID_FILE_ATTRIBUTES);
+
+    // The stock server menu archive (BF2EDITOR_MENU_ARCHIVE, read only): one HUD script replaced, every other entry the
+    // same as stored - the same CRC-32, method and sizes, in the same order.
+    char menu[MAX_PATH] = "";
+    if (GetEnvironmentVariableA("BF2EDITOR_MENU_ARCHIVE", menu, MAX_PATH) != 0)
+    {
+        const std::string copy = root + "/menu.zip";
+        std::map<std::string, std::string> hud;
+        hud["HUD/HudSetup/Vehicles/HudElementsM1A2Driver.con"] = "rem the M1A2's HUD, edited\r\n";
+        CHECK(rewriteArchive(menu, copy, hud, missing, error));
+        unzFile left = unzOpen(menu), right = unzOpen(copy.c_str());
+        size_t entries = 0, same = 0, differing = 0;
+        if (left && right)
+        {
+            int l = unzGoToFirstFile(left), r = unzGoToFirstFile(right);
+            for (; l == UNZ_OK && r == UNZ_OK; l = unzGoToNextFile(left), r = unzGoToNextFile(right))
+            {
+                unz_file_info x, y;
+                char nx[512], ny[512];
+                unzGetCurrentFileInfo(left, &x, nx, sizeof(nx), 0, 0, 0, 0);
+                unzGetCurrentFileInfo(right, &y, ny, sizeof(ny), 0, 0, 0, 0);
+                ++entries;
+                if (std::strcmp(nx, ny) == 0 && x.crc == y.crc && x.compression_method == y.compression_method
+                    && x.compressed_size == y.compressed_size && x.uncompressed_size == y.uncompressed_size
+                    && x.dosDate == y.dosDate)
+                    ++same;
+                else
+                    ++differing;
+            }
+            CHECK(l != UNZ_OK && r != UNZ_OK);
+        }
+        if (left)
+            unzClose(left);
+        if (right)
+            unzClose(right);
+        CHECK(entries > 100 && same + 1 == entries && differing == 1);
+        CHECK(readArchiveEntry(copy, "HUD/HudSetup/Vehicles/HudElementsM1A2Driver.con", bytes, error)
+              && bytes == "rem the M1A2's HUD, edited\r\n");
+        std::printf("[archive rewrite] the server menu archive: %u entries, %u as stored, 1 replaced\n",
+                    static_cast<unsigned>(entries), static_cast<unsigned>(same));
+    }
+
+    // A save whose target something holds open (a mounted archive): the part lets go of it just before the targets are
+    // replaced and takes it up again after, and the save goes through.
+    const std::string held = root + "/held.zip";
+    CHECK(ObjectLibrary::writeTextFile(held, "old", error));
+    HANDLE handle = CreateFileA(held.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, OPEN_EXISTING, 0, 0);
+    CHECK(handle != INVALID_HANDLE_VALUE);
+    std::vector<std::string> steps;
+    {
+        SavePlan plan;
+        SavePart& part = plan.part("held");
+        part.add(held, "new");
+        part.onReplacing([&]() { steps.push_back("replacing"); CloseHandle(handle); handle = INVALID_HANDLE_VALUE; });
+        part.onReplaced([&]() {
+            steps.push_back("replaced");
+            handle = CreateFileA(held.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, OPEN_EXISTING, 0, 0);
+        });
+        part.onWritten([&]() { steps.push_back("written"); });
+        SaveBackupPolicy policy;
+        policy.root = root + "/backups";
+        policy.base = root;
+        SaveWriteResult result;
+        CHECK(writeSavePlan(plan, policy, result) && result.error.empty());
+    }
+    CHECK(steps.size() == 3 && steps[0] == "replacing" && steps[1] == "replaced" && steps[2] == "written");
+    std::string now;
+    if (handle != INVALID_HANDLE_VALUE)
+        CloseHandle(handle);
+    CHECK(ObjectLibrary::readTextFile(held, now, error) && now == "new");
+    // Held open throughout, the replace fails: everything is put back, and the part still takes the file up again.
+    handle = CreateFileA(held.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, OPEN_EXISTING, 0, 0);
+    steps.clear();
+    {
+        SavePlan plan;
+        SavePart& part = plan.part("held");
+        part.add(held, "newer");
+        part.onReplacing([&]() { steps.push_back("replacing"); });
+        part.onReplaced([&]() { steps.push_back("replaced"); });
+        part.onWritten([&]() { steps.push_back("written"); });
+        SaveBackupPolicy policy;
+        policy.root = root + "/backups";
+        policy.base = root;
+        SaveWriteResult result;
+        CHECK(!writeSavePlan(plan, policy, result) && !result.error.empty());
+    }
+    CHECK(steps.size() == 2 && steps[0] == "replacing" && steps[1] == "replaced");
+    if (handle != INVALID_HANDLE_VALUE)
+        CloseHandle(handle);
+    CHECK(ObjectLibrary::readTextFile(held, now, error) && now == "new");
+    removeCheckTree(root);
+}
+
+void checkHudSetup()
+{
+    // A HUD script with the shapes the stock ones use: rem lines and a beginrem block, quoted words, a node selected
+    // again by setActiveObject, and no final line end.
+    const std::string sub =
+        "rem ** test HUD **\r\n"
+        "hudBuilder.createSplitNode\t\tGlobalHud TestHud\r\n"
+        "hudBuilder.setNodeShowVariable \t\tShowTest\r\n"
+        "hudBuilder.createPictureNode\t\tTestHud TestPic 10 20 30 40\r\n"
+        "hudBuilder.setPictureNodeTexture \tIngame/test.tga\r\n"
+        "hudBuilder.setNodeColor\t\t0 0.8 0 1\r\n"
+        "beginrem\r\n"
+        "hudBuilder.createTextNode\t\tTestHud Hidden 0 0 1 1\r\n"
+        "endrem\r\n"
+        "hudBuilder.createTextNode\t\tTestHud TestText 1 2 3 4\r\n"
+        "hudBuilder.setTextNodeString\t\"two words\"\r\n"
+        "hudBuilder.setActiveObject\t\tTestHud TestPic\r\n"
+        "hudBuilder.setNodeLogicShowVariable EQUAL GuiIndex 14\r\n"
+        "hudbuilder.setBarNodeTexture 1 \"\"";
+    const std::string main = "rem main\r\nrun \"Sub/Test.con\"\r\nrun Missing.con\r\n";
+    HudSetup setup;
+    std::string error;
+    const HudSetup::Reader read = [&](const std::string& path, std::string& text) {
+        if (path == "Menu/HudSetupMain.con") { text = main; return true; }
+        if (path == "Menu/Sub/Test.con") { text = sub; return true; }
+        return false;
+    };
+    CHECK(setup.load("Menu/HudSetupMain.con", read, error));
+    CHECK(setup.scriptCount() == 2 && setup.missing().size() == 1 && setup.missing()[0] == "Menu/Missing.con");
+    CHECK(setup.nodes().size() == 3 && setup.find("Hidden") < 0);
+    const int pic = setup.find("TestPic"), text = setup.find("TestText"), split = setup.find("TestHud");
+    CHECK(pic >= 0 && text >= 0 && split >= 0);
+    int rect[4] = {};
+    CHECK(setup.rect(pic, rect) && rect[0] == 10 && rect[1] == 20 && rect[2] == 30 && rect[3] == 40);
+    CHECK(!setup.rect(split, rect));
+    CHECK(setup.nodes()[pic].commands.size() == 4 && setup.nodes()[text].commands.size() == 1);
+    std::string parent, name;
+    CHECK(setup.liveSelection(setup.nodes()[pic].commands[0], parent, name) && parent == "TestHud"
+          && name == "TestPicPictureNode");
+    CHECK(setup.liveSelection(setup.nodes()[pic].commands[1], parent, name) && name == "TestPic");
+    CHECK(setup.liveSelection(setup.nodes()[pic].commands[2], parent, name) && name == "TestPic");
+    CHECK(setup.command(setup.nodes()[text].commands[0]).args[0].text == "two words");
+    const std::vector<HudShowCondition> show = setup.showConditions(pic);
+    CHECK(show.size() == 2 && show[0].variable == "GuiIndex" && show[0].type == "int" && show[0].value == "14"
+          && show[1].variable == "ShowTest" && show[1].node == "TestHud");
+    CHECK(setup.script(1).render() == sub && setup.changedScripts().empty());
+
+    // Edits rewrite words in place; an added line takes the create's separator; removing it restores the text.
+    const int moved[4] = { 11, 22, 33, 44 };
+    CHECK(setup.setRect(pic, moved, error));
+    CHECK(setup.script(1).line(3) == "hudBuilder.createPictureNode\t\tTestHud TestPic 11 22 33 44");
+    CHECK(setup.setWords(setup.nodes()[pic].commands[1], 0, { "1", "0", "0", "0.5" }, error));
+    CHECK(setup.script(1).line(5) == "hudBuilder.setNodeColor\t\t1 0 0 0.5");
+    CHECK(setup.setWords(setup.nodes()[text].commands[0], 0, { "three word text" }, error));
+    CHECK(setup.script(1).line(10) == "hudBuilder.setTextNodeString\t\"three word text\"");
+    CHECK(setup.setWords(setup.nodes()[pic].commands[1], 0, { "1", "1" }, error));
+    CHECK(setup.script(1).line(5) == "hudBuilder.setNodeColor\t\t1 1");
+    CHECK(setup.setWords(setup.nodes()[pic].commands[1], 0, { "1", "0", "0", "0.5" }, error));
+    const std::string edited = setup.script(1).render();
+    HudRef added = {};
+    CHECK(setup.addCommand(text, "setNodeColor", { "1", "1", "1", "1" }, added, error));
+    CHECK(setup.script(1).line(11) == "hudBuilder.setNodeColor\t1 1 1 1" && setup.nodes()[text].commands.size() == 2);
+    CHECK(setup.command(setup.nodes()[setup.find("TestText")].commands[1]).method == "setNodeColor");
+    CHECK(setup.removeCommand(added, error) && setup.script(1).render() == edited);
+    CHECK(setup.changedScripts().size() == 1 && setup.changedScripts()[0] == 1);
+    // A file without a final line end keeps its lack of one when a line goes after its last.
+    HudScript script;
+    script.parse("a 1\r\nb 2");
+    script.insertLine(1, "hudBuilder", "setNodeColor", { "1" });
+    CHECK(script.render() == "a 1\r\nb 2\r\nhudBuilder.setNodeColor 1");
+    script.removeLine(2);
+    CHECK(script.render() == "a 1\r\nb 2");
+
+    // The stock scripts (BF2EDITOR_HUD_SAMPLES: a HUD/HudSetup folder as Menu_client.zip has it): every script
+    // HudSetupMain.con runs reads back byte for byte, and every row resolves to the live selection it needs.
+    char samples[MAX_PATH] = "";
+    if (GetEnvironmentVariableA("BF2EDITOR_HUD_SAMPLES", samples, MAX_PATH) == 0)
+        return;
+    const std::string folder = samples;
+    const HudSetup::Reader disk = [&](const std::string& path, std::string& out) {
+        std::string err;
+        return ObjectLibrary::readTextFile(folder + "\\" + path, out, err);
+    };
+    HudSetup stock;
+    CHECK(stock.load("HudSetupMain.con", disk, error));
+    for (size_t i = 0; i < stock.missing().size(); ++i)
+        std::printf("[hud setup] run but not found (the game skips it too): %s\n", stock.missing()[i].c_str());
+    // Basic/HudSetupBasic.con runs HudElementsGameInfo.con from its own folder, but the file is one folder up.
+    CHECK(stock.missing().size() == 1 && stock.missing()[0] == "Basic/HudElementsGameInfo.con");
+    size_t same = 0, commands = 0, resolved = 0, withRect = 0, attached = 0;
+    for (size_t i = 0; i < stock.scriptCount(); ++i)
+    {
+        std::string original;
+        disk(stock.scriptPath(i), original);
+        same += stock.script(i).render() == original ? 1 : 0;
+    }
+    for (size_t i = 0; i < stock.nodes().size(); ++i)
+    {
+        withRect += stock.rect(i, rect) ? 1 : 0;
+        attached += stock.nodes()[i].commands.size();
+        for (size_t c = 0; c < stock.nodes()[i].commands.size(); ++c)
+        {
+            ++commands;
+            resolved += stock.liveSelection(stock.nodes()[i].commands[c], parent, name) ? 1 : 0;
+        }
+    }
+    CHECK(same == stock.scriptCount() && stock.scriptCount() >= 80);
+    CHECK(resolved == commands && stock.nodes().size() > 1500);
+    std::printf("[hud setup] %u scripts read back byte for byte, %u nodes (%u with a rectangle), %u rows on them\n",
+                static_cast<unsigned>(same), static_cast<unsigned>(stock.nodes().size()),
+                static_cast<unsigned>(withRect), static_cast<unsigned>(attached));
+    // The M1A2's crosshair: its node, its rectangle and what shows it.
+    const int crosshair = stock.find("M1A2Crosshair1");
+    CHECK(crosshair >= 0 && stock.rect(crosshair, rect) && rect[0] == 272 && rect[1] == 264);
+    if (crosshair >= 0)
+    {
+        const std::vector<HudShowCondition> needs = stock.showConditions(crosshair);
+        bool guiIndex = false, ingame = false;
+        for (size_t i = 0; i < needs.size(); ++i)
+        {
+            guiIndex = guiIndex || (needs[i].variable == "GuiIndex" && needs[i].value == "14");
+            ingame = ingame || needs[i].variable == "ShowIngameHud";
+        }
+        CHECK(guiIndex && ingame);
+    }
+}
+
 int main()
 {
     checkTokenizer();
@@ -3098,6 +4829,13 @@ int main()
     checkLightSetup();
     checkGroundProperties();
     checkTerrainRawLayers();
+    checkTerrainRawFile();
+    checkTerrainRawCompile();
+    checkTextureEncode();
+    checkTerrainLowDetail();
+    checkNewLevel();
+    checkRoadFiles();
+    checkLightmapAtlas();
     checkDdsImage();
     checkLevelObjectFile();
     checkLevelObjectFileStyles();
@@ -3110,6 +4848,11 @@ int main()
     checkLevelSettingsFile();
     checkMapDescription();
     checkLayerSummary();
+    checkTextDiff();
+    checkSavePlan();
+    checkArchiveRewrite();
+    checkHudSetup();
+    checkLevelSamples();
     std::printf("[bf2_editor_checks] %d passed, %d failed\n", g_passed, g_failed);
     return g_failed;
 }

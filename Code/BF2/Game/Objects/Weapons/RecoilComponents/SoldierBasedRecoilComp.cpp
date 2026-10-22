@@ -189,7 +189,8 @@ float SoldierBasedRecoilComp::getRecoil(float recoil)
     const std::size_t vectorIndex = getRecoilVector().size()
                                   - static_cast<std::size_t>(elapsed) - 1u;
     const float graphedRecoil = recoil * getRecoilVector()[vectorIndex];
-    return static_cast<GenericFireArm*>(m_initObject)->getMouseSpeedMod() * graphedRecoil;
+    // The scale is the firearm's getDevMod (always 1.0), not its zoom mouse-speed modifier.
+    return static_cast<GenericFireArm*>(m_initObject)->getDevMod() * graphedRecoil;
 }
 
 // .  The ancestor walk starts at the weapon's parent (not the weapon),

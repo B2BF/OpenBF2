@@ -9,6 +9,7 @@
 #include "../Core/Ids.h"
 #include "../Game/Objects/IObject.h"
 #include "../Game/Objects/IObjectTemplate.h"
+#include "../Game/Objects/Projectiles/GrenadeTrace.h"
 
 namespace dice {
 namespace hfe {
@@ -352,6 +353,20 @@ void PointPhysicsNode::updatePositionalPhysics(float dt)
     np.x = p.x + dt * m_linearIntegrationVelocity.x;
     np.y = p.y + dt * m_linearIntegrationVelocity.y;
     np.z = p.z + dt * m_linearIntegrationVelocity.z;
+    if (grenade_trace::selected(m_object))
+    {
+        grenade_trace::log(m_object, "physics",
+            "dt=%.9g from=(%.9g,%.9g,%.9g) to=(%.9g,%.9g,%.9g) "
+            "velocity=(%.9g,%.9g,%.9g) acceleration=(%.9g,%.9g,%.9g) "
+            "impulse_speed=(%.9g,%.9g,%.9g) integration=(%.9g,%.9g,%.9g) "
+            "drag=%.9g mass=%.9g gravity_modifier=%.9g",
+            dt, p.x, p.y, p.z, np.x, np.y, np.z,
+            m_positionalSpeed.x, m_positionalSpeed.y, m_positionalSpeed.z,
+            m_positionalAcceleration.x, m_positionalAcceleration.y, m_positionalAcceleration.z,
+            m_localLinearSpeed.x, m_localLinearSpeed.y, m_localLinearSpeed.z,
+            m_linearIntegrationVelocity.x, m_linearIntegrationVelocity.y, m_linearIntegrationVelocity.z,
+            m_drag, m_mass, m_gravityModifier);
+    }
     m_object->setAbsolutePosition(np);
 
     m_positionalAcceleration.x = m_positionalAcceleration.y = m_positionalAcceleration.z = 0.0f;

@@ -5708,6 +5708,19 @@ float __fastcall lm_getSkinnedMeshShaderLodDistance(void* self, void*)
 {
     return lmField<float>(self, 0x1B4);
 }
+// Primary +0x84/+0x88: the getter returns the field's address; the setter reads and stores the
+// second component before the first.
+const Vec2& __fastcall lm_getLightMapAmbientAlphaCutoffRange(void* self, void*)
+{
+    return lmField<Vec2>(self, 0x1FC);
+}
+void __fastcall lm_setLightMapAmbientAlphaCutoffRange(void* self, void*, const Vec2& range)
+{
+    const float second = range.y;
+    const float first = range.x;
+    lmField<float>(self, 0x200) = second;
+    lmField<float>(self, 0x1FC) = first;
+}
 
 // Simple-shadow settings and CPU map sampling. The packed map and bit-vector are populated by
 // loadSimpleShadowMaps; retail has no null/bounds fallback in these texel readers.
@@ -6115,6 +6128,11 @@ void lightManagerRestoreRendererTarget0()
     restoreRendererTarget0();
 }
 
+void lightManagerSetDepthStencil(IDirect3DSurface9* surface)
+{
+    setLightManagerDepthStencil(surface);
+}
+
 // Source-level LightManager implementation. The public type deliberately has ordinary virtual
 // methods: BF2.exe callers (notably LightSource) dispatch through the recovered primary interface,
 // while RendDX9 code can use the concrete type directly. The HostAbi adapters below exist only
@@ -6341,6 +6359,16 @@ void LightManager::setSkinnedMeshShaderLodDistance(float distance)
 float LightManager::getSkinnedMeshShaderLodDistance() const
 {
     return lm_getSkinnedMeshShaderLodDistance(const_cast<LightManager*>(this), 0);
+}
+
+const Vec2& LightManager::getLightMapAmbientAlphaCutoffRange() const
+{
+    return lm_getLightMapAmbientAlphaCutoffRange(const_cast<LightManager*>(this), 0);
+}
+
+void LightManager::setLightMapAmbientAlphaCutoffRange(const Vec2& range)
+{
+    lm_setLightMapAmbientAlphaCutoffRange(this, 0, range);
 }
 
 void LightManager::setBundledMeshShadowLod(int lod)
@@ -6709,6 +6737,10 @@ struct LightManager::HostAbi
 
 #undef BF2_LIGHT_HOST_FLOAT_PROPERTY
 
+    static const Vec2* __fastcall getLightMapAmbientAlphaCutoffRange(void* self, void*)
+    { return &object(self).LightManager::getLightMapAmbientAlphaCutoffRange(); }
+    static void __fastcall setLightMapAmbientAlphaCutoffRange(void* self, void*, const Vec2* range)
+    { object(self).LightManager::setLightMapAmbientAlphaCutoffRange(*range); }
     static void __fastcall setShadowSunHeightOverFade(void* self, void*, const Vec2* range)
     { object(self).LightManager::setShadowSunHeightOverFade(*range); }
     static const Vec2* __fastcall getShadowSunHeightOverFade(void* self, void*)
@@ -6867,8 +6899,8 @@ const void* const kPrimaryVtable[189] =
     reinterpret_cast<void*>(&LightManager::HostAbi::getMaxLightsPerTerrainPatch), // +0x078
     reinterpret_cast<void*>(&LightManager::HostAbi::setSkinnedMeshShaderLodDistance), // +0x07C
     reinterpret_cast<void*>(&LightManager::HostAbi::getSkinnedMeshShaderLodDistance), // +0x080
-    reinterpret_cast<void*>(&lm_unrecovered<0x084u>),
-    reinterpret_cast<void*>(&lm_unrecovered<0x088u>),
+    reinterpret_cast<void*>(&LightManager::HostAbi::getLightMapAmbientAlphaCutoffRange), // +0x084
+    reinterpret_cast<void*>(&LightManager::HostAbi::setLightMapAmbientAlphaCutoffRange), // +0x088
     reinterpret_cast<void*>(&LightManager::HostAbi::addLight), // +0x08C
     reinterpret_cast<void*>(&LightManager::HostAbi::removeLight), // +0x090
     reinterpret_cast<void*>(&LightManager::HostAbi::enableLight), // +0x094

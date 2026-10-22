@@ -510,7 +510,7 @@ public:
     }
 
     virtual void  reserved_getSingletonAs()               { fatal("getSingletonAs"); }
-    virtual void  reserved_registerSimpleSingleton()      { fatal("registerSimpleSingleton"); }
+    virtual void  registerSimpleSingleton(const HostString&, void*) { fatal("registerSimpleSingleton"); }
     virtual void  reserved_unregisterSimpleSingleton()    { fatal("unregisterSimpleSingleton"); }
     virtual void  reserved_getSimpleSingleton()           { fatal("getSimpleSingleton"); }
     virtual void  reserved_getPrintableSingletonList()    { fatal("getPrintableSingletonList"); }

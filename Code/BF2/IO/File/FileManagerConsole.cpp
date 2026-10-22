@@ -2,6 +2,7 @@
 #include "../../Core/ConsoleObjectMacro.h"
 #include "FileManager.h"
 #include "../SettingsManager.h"
+#include "../Console/Console.h"              // io::mainConsole - console.allowMultipleFileLoad's receiver
 #include "../../Core/SettingsRepostitory.h"
 #include "../../Core/EventManager.h"
 #include "../../Core/Types.h"
@@ -442,6 +443,53 @@ private:
 static ConsoleClass454_getActiveMethods s_consoleClass454;
 } // namespace
 
+// console.allowMultipleFileLoad - dedicated PE defaults 0x770C50 ("Console", 2, 0); ctor 0x646B37
+// (vtable off_7F17F8, property bool, m_isDynamic = 0). isObjectActive 0x70FC1B is unconditionally
+// true; executor 0x646BF6 dispatches IConsole +124/+128 (set/get, OldConsole fields at +0x120). The
+// receiver is the main console singleton; like the shipped executor it is not null-checked.
+namespace {
+class ConsoleClass_allowMultipleFileLoad : public ConsoleObjectBaseImpl
+{
+public:
+    ConsoleClass_allowMultipleFileLoad()
+    {
+        m_objectName = consoleDefaultName();
+        m_access = consoleDefaultAccess();
+        m_category = consoleDefaultCategory();
+        m_functionName = "allowMultipleFileLoad";
+        m_type = 1;
+        m_minNoArgs = 0;
+        m_maxNoArgs = 1;
+        m_returnType = "bool";
+        m_hasReturnValue = false;
+        m_isDynamic = false;
+        m_argTypes[0] = "bool";
+        m_argNeedsConversion[0] = -1;
+        consoleBindingList(kFileConsoleTag).push_back(this);
+    }
+    bool isObjectActive() const override { return true; }
+    void executeObjectMethod() override
+    {
+        if (m_argCount == 1)
+        {
+            m_hasReturnValue = false;
+            mainConsole->setAllowMultipleFileLoad(BF2_CC_ARG(bool, 0));
+        }
+        else if (m_argCount == 0)
+        {
+            m_hasReturnValue = true;
+            m_returnValue = mainConsole->getAllowMultipleFileLoad();
+        }
+    }
+    void setArgFromString(int index, const std::string& value) override { BF2_CC_CONVERT(bool, 1) }
+    BF2_CC_RETURN_AS_STRING
+    BF2_CC_COMMON_HOOKS
+private:
+    bool m_returnValue;
+};
+static ConsoleClass_allowMultipleFileLoad s_consoleAllowMultipleFileLoad;
+} // namespace
+
 // Binding defaults are set independently for each console object.
 BF2_CONSOLE_OBJECT("SettingsManager", 1, 0)
 namespace {
@@ -485,6 +533,113 @@ private:
 };
 static ConsoleClass503 s_settingsStringSet;
 }
+
+#if DEDICATED
+// SettingsManager.boolSet / SettingsManager.floatGet - dedicated PE defaults 0x770E66
+// ("SettingsManager", access 1, category 0); ctors 0x646FB9 / 0x647DFC (vtable off_7F1930 /
+// off_7F1D20, both file-static, m_isDynamic = 0). isObjectActive 0x70FC1B is unconditionally true.
+// boolSet takes (std::string, bool) and returns bool; floatGet takes std::string and returns float.
+// Both first require the name to be a registered variable and otherwise answer false / -1.0
+// (PE helpers 0x64715B / 0x647F5D), then delegate to settings->boolGet/boolSet and settings->floatGet.
+namespace {
+bool consoleSettingsBoolSet(std::string& name, bool value)
+{
+    if (settingsManager->m_registeredVars.find(name) == settingsManager->m_registeredVars.end())
+        return false;
+    const bool changed = settings->boolGet(name, false) != value;
+    settings->boolSet(name, value);
+    if (changed && eventManager)
+        eventManager->postEvent(EventCategory(5), 1, &name, 0.0f);
+    return true;
+}
+
+float consoleSettingsFloatGet(const std::string& name)
+{
+    if (settingsManager->m_registeredVars.find(name) == settingsManager->m_registeredVars.end())
+        return -1.0f;
+    return settings->floatGet(name, -1.0f);
+}
+} // namespace
+
+namespace {
+class ConsoleClass_boolSet : public ConsoleObjectBaseImpl
+{
+public:
+    ConsoleClass_boolSet()
+    {
+        m_objectName = consoleDefaultName();
+        m_access = consoleDefaultAccess();
+        m_category = consoleDefaultCategory();
+        m_functionName = "boolSet";
+        m_type = 0;
+        m_minNoArgs = 2;
+        m_maxNoArgs = 2;
+        m_returnType = "bool";
+        m_hasReturnValue = false;
+        m_isDynamic = false;
+        m_argTypes[0] = "std::string";
+        m_argTypes[1] = "bool";
+        m_argNeedsConversion[0] = 0;
+        m_argNeedsConversion[1] = -1;
+        consoleBindingList(kFileConsoleTag).push_back(this);
+    }
+    bool isObjectActive() const override { return true; }
+    void executeObjectMethod() override
+    {
+        if (m_argCount != 2) return;
+        std::string name = BF2_CC_ARG(std::string, 0);
+        const bool value = BF2_CC_ARG(bool, 1);
+        m_hasReturnValue = true;
+        m_returnValue = consoleSettingsBoolSet(name, value);
+    }
+    void setArgFromString(int index, const std::string& value) override
+    {
+        BF2_CC_CONVERT(std::string, 1)
+        BF2_CC_CONVERT(bool, 2)
+    }
+    BF2_CC_RETURN_AS_STRING
+    BF2_CC_COMMON_HOOKS
+private:
+    bool m_returnValue;
+};
+static ConsoleClass_boolSet s_settingsBoolSet;
+
+class ConsoleClass_floatGet : public ConsoleObjectBaseImpl
+{
+public:
+    ConsoleClass_floatGet()
+    {
+        m_objectName = consoleDefaultName();
+        m_access = consoleDefaultAccess();
+        m_category = consoleDefaultCategory();
+        m_functionName = "floatGet";
+        m_type = 0;
+        m_minNoArgs = 1;
+        m_maxNoArgs = 1;
+        m_returnType = "float";
+        m_hasReturnValue = false;
+        m_isDynamic = false;
+        m_argTypes[0] = "std::string";
+        m_argNeedsConversion[0] = 0;
+        consoleBindingList(kFileConsoleTag).push_back(this);
+    }
+    bool isObjectActive() const override { return true; }
+    void executeObjectMethod() override
+    {
+        if (m_argCount != 1) return;
+        std::string name = BF2_CC_ARG(std::string, 0);
+        m_hasReturnValue = true;
+        m_returnValue = consoleSettingsFloatGet(name);
+    }
+    void setArgFromString(int index, const std::string& value) override { BF2_CC_CONVERT(std::string, 1) }
+    BF2_CC_RETURN_AS_STRING
+    BF2_CC_COMMON_HOOKS
+private:
+    float m_returnValue;
+};
+static ConsoleClass_floatGet s_settingsFloatGet;
+} // namespace
+#endif
 
 #if !DEDICATED
 namespace {
@@ -588,6 +743,14 @@ BF2_CONSOLE_OBJECT("FileManager", 2, 0)
 
 // mountArchive accepts an optional contentCheck argument.
 BF2_CONSOLE_METHOD_2_3(mountArchive, consoleMountArchive, std::string, std::string, bool, kFileConsoleTag)
+// fileManager.fileExists - dedicated PE defaults 0x771186 ("FileManager", access 2, category 0);
+// ctor 0x64AC82 (vtable off_7F2D70, method, m_isDynamic = 1). isObjectActive 0x64B16F is
+// `fileManager != 0`; executor 0x64ACF6 dispatches IFileManager +0x1C (FileManager::fileExists).
+namespace {
+bool consoleFileExists(const std::string& name) { return fileManager->fileExists(name); }
+} // namespace
+BF2_CONSOLE_METHOD_1_RET_ACTIVE(fileExists, consoleFileExists, bool, fileManager != 0,
+                                std::string, kFileConsoleTag)
 // Returns the file-manager command list registered by ModuleIO.
 // unmountArchive is available only through C++, with no console binding.
 ConsoleObjectList& fileManagerConsoleObjects()

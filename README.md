@@ -1,9 +1,8 @@
-# BF2Rebuilt
+# OpenBF2
 
-BF2Rebuilt reconstructs the Battlefield 2 1.50 engine from the shipped Windows and Linux
-binaries. The goal is a stable dedicated server that an unmodified retail client can join,
-play on, reconnect to, and follow through a map reload. The repository also contains a
-client reconstruction, native 64-bit server ports, and a new level editor.
+OpenBF2 reconstructs the Battlefield 2 1.50 engine from the shipped Windows and Linux
+binaries. The goal is a stable & secure dedicated server, modern client(that works on modern operating systems) and proper editor.
+It should be indistinguishable from retail and provide all the features retail did.
 
 This is an independent reconstruction in progress. Parts of the engine remain incomplete;
 successful compilation or a diagnostic executable does not establish a playable game.
@@ -15,12 +14,10 @@ successful compilation or a diagnostic executable does not establish a playable 
 - [Development guide](docs/development.md): recovery evidence, code conventions, and validation.
 - [Documentation index](docs/README.md): public engineering guides and contribution workflow.
 
-The default Windows build produces the `bf2_recovered` static archive. The `msvc-x86`
-configuration is the retail-layout reference; `msvc-x64` and `linux-x64` are native server
-ports with their own object layouts. Game content is loaded from a separate Battlefield 2
-installation. Keep rebuilt binaries and reference binaries in different directories.
-
 ## Contributing
+
+Make sure to name precisely which retail gap your PR fills. If this is an extension on top
+of retail make sure to link the issue in which this was discussed.
 
 Read [AGENTS.md](AGENTS.md) before changing the tree; it contains the repository's working
 rules and validation requirements. Reconstructed code defaults to the observed engine behavior;

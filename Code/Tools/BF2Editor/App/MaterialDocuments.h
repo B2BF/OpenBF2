@@ -5,9 +5,9 @@
 // documents, edited in place. As with the object templates (App/TemplateDocuments), a file read from a mounted
 // archive is read-only: the stock files sit in Common_server.zip and Common_client.zip, which shadow any loose
 // copy, so they are edited with the Common archives extracted and left unmounted (+looseCommon 1). A save
-// writes the loose path the engine would write (FileManager::getWritePath: the mod's own folder), whole and
-// atomically, CRLF as the engine's text-mode writes leave it, after ISourceControl::openForEdit, and reads
-// it back. Editor-only code (D3).
+// plans the loose path the engine would write (FileManager::getWritePath: the mod's own folder), CRLF as the
+// engine's text-mode writes leave it; Framework/SavePlan writes it through source control, atomically, and
+// verifies it. Editor-only code (D3).
 #ifndef BF2EDITOR_APP_MATERIALDOCUMENTS_H
 #define BF2EDITOR_APP_MATERIALDOCUMENTS_H
 
@@ -19,6 +19,8 @@
 
 namespace bf2editor
 {
+
+class SavePart;
 
 class MaterialDocuments
 {
@@ -43,8 +45,9 @@ public:
     // Either file read from a mounted archive (so neither can be saved where the game would read it).
     bool archived() const { return m_define.archived || m_cells.archived; }
     bool modified() const;
-    // The modified files, written; nothing when none is. Refused while archived.
-    bool save(std::string& result);
+    // The modified files into `part`, taken as saved once written; nothing when none is. The part is refused
+    // (false) while the files are archived.
+    bool planSave(SavePart& part);
 
 private:
     struct File
@@ -57,7 +60,6 @@ private:
         File() : exists(false), archived(false) {}
     };
     bool read(File& file, const std::string& path, std::string& text);
-    bool write(File& file, const std::string& text, std::string& error);
 
     File               m_define;
     File               m_cells;

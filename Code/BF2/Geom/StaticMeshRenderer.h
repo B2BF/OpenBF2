@@ -96,6 +96,28 @@ bool staticMeshRendererTryLoadLightmapTexture(StaticMeshRenderer* self,
                                               float outOffset[4],
                                               dx9rend::EngineTexture** outTexture);
 
+// The object-lightmap atlas builders behind `StaticMeshRenderer.loadAllLightMapFiles` and
+// `StaticMeshRenderer.loadAllLightMapFilesDLL`. Both list `directory` ('/' appended when it ends in
+// neither separator) recursively through the FileManager and take every non-empty file whose name
+// contains `extension`, whose base name is exactly its stem plus `extension` and whose stem does not
+// contain "LightmapAtlas", as directory + name. The atlas is written under the
+// Editor_LevelSavePath setting (output and input root alike) as directory + "LightmapAtlas": its
+// .tai and its pages. Both pass no size and no DXT5 override, so the builder packs pages of up to
+// 2048 x 2048 in the source files' own format.
+//
+// The DLL form packs every file into one atlas and answers the builder's result (false for no
+// files). [INFERRED] names.
+bool staticMeshRendererLoadAllLightMapFilesDll(StaticMeshRenderer* self,
+                                               const vc71::string& directory,
+                                               const vc71::string& extension);
+// The batched form packs the files in batches, each sized so that a dice_TextureAtlasTool command
+// line naming them would stay under 32300 characters (the line is built, never run), into
+// "LightmapAtlas<N>" atlases numbered from 0. False when a batch fails, which includes an empty file
+// list; true once the last batch is written. [INFERRED] names.
+bool staticMeshRendererLoadAllLightMapFiles(StaticMeshRenderer* self,
+                                            const vc71::string& directory,
+                                            const vc71::string& extension);
+
 } // namespace geom
 } // namespace hfe
 } // namespace dice

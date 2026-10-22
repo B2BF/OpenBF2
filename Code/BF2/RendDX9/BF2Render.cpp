@@ -2918,6 +2918,18 @@ int rendererGetBundledMeshLod()
     return *reinterpret_cast<const int*>(static_cast<unsigned char*>(g_rendererBase) + 2016);
 }
 
+// renderer.drawHud (ctor 0x1005CB70, arms 0x1005CCC0): the byte the HudManager paint call and
+// hudManagerFramePrep's hudSetPaint read; the SET arm stores the parsed bool unchanged.
+bool rendererGetDrawHud()
+{
+    return static_cast<const unsigned char*>(g_rendererBase)[1713] != 0;
+}
+
+void rendererSetDrawHud(bool on)
+{
+    static_cast<unsigned char*>(g_rendererBase)[1713] = on;
+}
+
 void rendererCaptureHemiState(HemiRenderState& state)
 {
     unsigned char* const renderer = static_cast<unsigned char*>(g_rendererBase);

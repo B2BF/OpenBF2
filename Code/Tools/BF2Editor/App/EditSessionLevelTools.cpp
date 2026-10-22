@@ -7,6 +7,7 @@
 #include "App/EditorLevel.h"
 #include "App/LevelDocument.h"
 #include "Framework/EditorLog.h"
+#include "Framework/LightmapAtlas.h"
 #include "Framework/ObjectLibrary.h"
 
 #include "Game/Objects/IObject.h"
@@ -352,7 +353,7 @@ bool EditSession::cleanLightmapFolder(bool move, std::string& result)
         return false;
     }
     const std::string folder = levelDir + "Lightmaps/Objects";
-    std::vector<std::string> files;
+    std::vector<std::string> files, atlasPages;
     WIN32_FIND_DATAA found;
     HANDLE h = FindFirstFileA((folder + "/*.dds").c_str(), &found);
     if (h != INVALID_HANDLE_VALUE)
@@ -363,11 +364,17 @@ bool EditSession::cleanLightmapFolder(bool move, std::string& result)
             std::string lowered = name;
             for (size_t i = 0; i < lowered.size(); ++i)
                 lowered[i] = static_cast<char>(lowered[i] >= 'A' && lowered[i] <= 'Z' ? lowered[i] - 'A' + 'a' : lowered[i]);
-            if (!(found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && lowered.find("lightmapatlas") == std::string::npos)
-                files.push_back(name);
+            if (!(found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+                (lowered.find("lightmapatlas") == std::string::npos ? files : atlasPages).push_back(name);
         } while (FindNextFileA(h, &found));
         FindClose(h);
     }
+    // The pages an older, larger atlas left: the folder's index names every page the game reads.
+    std::vector<AtlasEntry> entries;
+    std::string index, why;
+    const bool indexRead = ObjectLibrary::readTextFile(folder + "/LightmapAtlas.tai", index, why)
+                           && parseAtlasIndex(index, entries, why);
+    const std::vector<std::string> stalePages = indexRead ? unnamedAtlasPages(entries, atlasPages) : std::vector<std::string>();
     // The objects by template (lower case) and truncated position.
     std::set<std::string> used;
     const std::map<unsigned int, IObject*>& roots = dice::hfe::world::objectManager->getAllObjectsFromGrid();
@@ -413,11 +420,27 @@ bool EditSession::cleanLightmapFolder(bool move, std::string& result)
             unused.push_back(name);
     }
     char text[200];
-    std::snprintf(text, sizeof(text), "%u object lightmap%s in %s (atlases left out), %u unused", static_cast<unsigned>(files.size()),
-                  files.size() == 1 ? "" : "s", folder.c_str(), static_cast<unsigned>(unused.size()));
-    result = text;
+    std::snprintf(text, sizeof(text), "%u object lightmap%s in ", static_cast<unsigned>(files.size()), files.size() == 1 ? "" : "s");
+    result = text + folder;
+    std::snprintf(text, sizeof(text), ", %u unused", static_cast<unsigned>(unused.size()));
+    result += text;
     for (size_t i = 0; i < unused.size(); ++i)
         result += (i ? ", " : ": ") + unused[i];
+    std::snprintf(text, sizeof(text), "; %u atlas page%s", static_cast<unsigned>(atlasPages.size()), atlasPages.size() == 1 ? "" : "s");
+    result += text;
+    if (!indexRead)
+        result += " (no LightmapAtlas.tai read: left out)";
+    else if (stalePages.empty())
+        result += ", all named by LightmapAtlas.tai";
+    else
+    {
+        std::snprintf(text, sizeof(text), ", %u named by no entry of LightmapAtlas.tai", static_cast<unsigned>(stalePages.size()));
+        result += text;
+        for (size_t i = 0; i < stalePages.size(); ++i)
+            result += (i ? ", " : ": ") + stalePages[i];
+    }
+    // Stale pages go aside with the unused lightmaps.
+    unused.insert(unused.end(), stalePages.begin(), stalePages.end());
     if (move && !unused.empty())
     {
         const std::string target = folder + "/Unused";

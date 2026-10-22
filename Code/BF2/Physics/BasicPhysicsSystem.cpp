@@ -4,6 +4,7 @@
 #include "BasicPhysicsSystem.h"
 
 #include "../Core/Ids.h"             // Interface ids
+#include "../Core/ConsoleObjectMacro.h"   // the `physics` console object
 // Use the concrete manager declaration for typed listProperties dispatch.
 #include "PhysicsNodeManager.h"
 
@@ -105,6 +106,25 @@ float BasicPhysicsSystem::getAirDensityZeroAtHeight()
 std::string BasicPhysicsSystem::listProperties()
 {
     return physicsNodeManager->listProperties();    // 0x835C41A, virtual, slot 11 / +0x2C
+}
+
+// The `physics` console object. gravity is a float property on the physics-system singleton
+// (dedicated PE executor 0x692420 dispatches the virtual set/get pair on the system pointer).
+namespace {
+const char* const kPhysicsConsoleTag = "world.physics";
+}
+BF2_CONSOLE_OBJECT("physics", 2, 0)
+BF2_CONSOLE_PROPERTY(gravity, float, static_cast<IPhysicsSystem*>(basicPhysicsSystem),
+                     setGravity, getGravity, kPhysicsConsoleTag)
+
+// airDensityZeroAtHeight - the altitude where air density reaches zero (dedicated PE gate
+// 0x6923B0 on the physics singleton, executor 0x6927E0 dispatches the virtual set/get pair).
+BF2_CONSOLE_PROPERTY(airDensityZeroAtHeight, float, static_cast<IPhysicsSystem*>(basicPhysicsSystem),
+                     setAirDensityZeroAtHeight, getAirDensityZeroAtHeight, kPhysicsConsoleTag)
+
+ConsoleObjectList& physicsConsoleObjects()
+{
+    return consoleBindingList(kPhysicsConsoleTag);
 }
 
 } // namespace world
