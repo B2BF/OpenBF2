@@ -153,6 +153,14 @@ static bool asLogEnabled()
     return s_on != 0;
 }
 
+static bool mouseLogEnabled() { return asLogEnabled() || inputLogEnabled(); }
+
+static void swiffInputLogCb(bool, const char* message)
+{
+    if (message && ::strncmp(message, "[mouse]", 7) == 0)
+        ::renddx9abi::logf("%s", message);
+}
+
 
 // [TEMP] [CHOSEN, not recovered] BF2_SWIFFPLAYER_STREAMLOG=N traces player inputs and displays.
 // Logs the first N displays, then every 100th; disabled unless configured.
@@ -2391,6 +2399,109 @@ void as_general_getListEntries(const gameswf::fn_call& fn)
         fn.result->set_as_object_interface(r.arr.get_ptr());
         return;
     }
+    if (tok[0] == "favouriteServers")
+    {
+        IGeneralSettings* settings = static_cast<IGeneralSettings*>(
+            classManager->getSingleton(renddx9abi::HostString("GeneralSettings")));
+        IModInfo* modInfo = static_cast<IModInfo*>(h->getModInfo());
+        r.begin();
+        unsigned int emitted = 0;
+        unsigned int total = 0;
+        const unsigned int window = static_cast<unsigned int>(end - start);
+        // The history pass deliberately starts at zero, even when start exceeds
+        // the favourites count. Both passes share the emitted-row budget.
+        for (int pass = 0; pass != 2; ++pass)
+        {
+            const bool favourite = pass == 0;
+            const char* kind = favourite ? "favourites" : "history";
+            const unsigned int count = serverRecordCount(h->getServerList(std::string(kind))->getRecords());
+            total += count;
+            for (unsigned int index = favourite ? static_cast<unsigned int>(start) : 0;
+                 index < count && emitted < window; ++index)
+            {
+                const ServerBrowserRecordList* records = h->getServerList(std::string(kind))->getRecords();
+                if (records->records.empty()) continue;
+                const ServerBrowserEntry& e = records->records[index].entry;
+                const IModInfo::Mod* mod = modInfo->getModFromName(e.gameVariant);
+                const std::string mapPath = modInfo->getMapPathFromMap(mod, e.mapName);
+                const IModInfo::Map* knownMap = modInfo->findMapFromMod(mod, mapPath);
+                char id[128];
+                ::_snprintf(id, sizeof(id) - 1, "%s %d %d", e.address.c_str(), e.queryPort, e.hostPort);
+                id[sizeof(id) - 1] = 0;
+                r.beginRowStr(id);
+                r.setString("ip", e.address.c_str());
+                r.setInt("port", e.queryPort);
+                r.setInt("pb", e.antiCheat ? 1 : 0);
+                const std::string ourVersion = h->getVersionStringValue();
+                const bool xpack1 = h->getExpansionPack(e.gameVariant) == 1;
+                const bool xpack2 = h->getExpansionPack(e.gameVariant) == 2;
+                if (e.maxPlayers <= 0 || (!mod && !xpack1 && !xpack2)
+                    || (mod && (e.gameVersion != ourVersion || !knownMap)))
+                    r.setInt("disabled", 1);
+                r.setInt("xpack1", xpack1 ? 1 : 0);
+                r.setInt("xpack2", xpack2 ? 1 : 0);
+                r.setInt("plasma", e.plasma ? 1 : 0);
+                if (!knownMap) r.setInt("mapnotinstalled", 1);
+                if (knownMap)
+                    r.setString("mapName", modInfo->getMapPathFromMap(mod, e.mapName).c_str());
+                else
+                    r.setString("mapName", " ");
+                r.setInt("mapMode", e.maxPlayers);
+                r.setString("gameMode", e.gameMode.c_str());
+                r.setInt("maxPlayers", e.maxPlayers);
+                r.setInt("mapSize", e.mapSize);
+                r.pushNarrow(e.fps >= 30.0f ? "images/serverIcons/Serverload_green.png"
+                           : e.fps >= 20.0f ? "images/serverIcons/Serverload_orange.png"
+                                            : "images/serverIcons/Serverload_red.png");
+                r.pushNarrow(serverOsIcon(e.os.c_str()));
+                if (mod)
+                {
+                    const std::string icon = "#" + mod->path + "/" + mod->icon;
+                    r.pushNarrow(icon.c_str());
+                }
+                else r.pushNarrow("images/serverIcons/modNotInstalled.png");
+                r.pushNarrow(e.ranked ? "images/serverIcons/ranked.png" : "");
+                r.pushNarrow(e.voip ? "images/serverIcons/battlecom.png" : "");
+                r.pushNarrow(e.antiCheat ? "images/serverIcons/punkbuster.png" : "");
+                r.pushNarrow(e.pure ? "images/serverIcons/PureContent.png" : "");
+                r.pushNarrow(e.password ? "images/serverIcons/passwordenabled.png" : "");
+                const GeneralServerEntry* saved = favourite
+                    ? settings->findFavouriteServer(e.address, e.queryPort)
+                    : settings->findServerHistory(e.address, e.queryPort);
+                if (e.maxPlayers == 0)
+                {
+                    // An unanswered record without a saved entry retains only
+                    // its icon columns, as in the shipped menu bridge.
+                    if (saved)
+                    {
+                        r.pushNarrow(saved->name.c_str());
+                        r.pushNarrow("-"); r.pushNarrow("-"); r.pushNarrow("-");
+                        r.pushNarrow(favourite ? "*" : "-");
+                    }
+                }
+                else
+                {
+                    r.pushNarrow(saved ? saved->name.c_str() : e.hostName.c_str());
+                    r.pushInt(e.ping);
+                    char players[64];
+                    ::_snprintf(players, sizeof(players) - 1, "%d/%d (%d)",
+                                e.numPlayers, e.maxPlayers, e.reservedSlots);
+                    players[sizeof(players) - 1] = 0;
+                    r.pushNarrow(players);
+                    r.pushNarrow(e.mapName.c_str());
+                    if (favourite) r.pushNarrow("*");
+                    else if (saved) r.pushInt(saved->lastPlayed);
+                    else r.pushNarrow("-");
+                }
+                r.setInt("password", e.password ? 1 : 0);
+                if (favourite) r.setInt("isFavourite", 1);
+                ++emitted;
+            }
+        }
+        r.setTotalCount(total);
+        fn.result->set_as_object_interface(r.arr.get_ptr());
+        return;
+    }
     if (tok[0] == "installedMaps")
     {
         // Lists current-mod maps supporting the selected mode, one row per map size.
@@ -3051,6 +3162,23 @@ void as_profile_logout(const gameswf::fn_call& fn)
     }
 }
 
+// Saves the active profile or global settings, then queues the host's quit request.
+// Requires the player and profile manager; ignores arguments and leaves the AS result untouched.
+void as_logic_quit(const gameswf::fn_call& fn)
+{
+    SWF_AS_TRACE("as_logic_quit");
+    BusyHost cursorHost = busyOpen();
+    ISwiffHost* host = g_swiffPlayerInstance->getSwiffHost();
+    ILocalProfileManager* profiles = static_cast<ILocalProfileManager*>(
+        classManager->getSingleton(renddx9abi::HostString("LocalProfileManager")));
+    if (profiles->getCurrentProfile())
+        (void)profiles->saveCurrentProfile();
+    else
+        (void)profiles->saveGlobalSettings();
+    (void)host->requestQuit();
+    busyClose(cursorHost);
+}
+
 void as_logic_disconnectGame(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_logic_disconnectGame");
@@ -3494,6 +3622,20 @@ void as_logic_enableScroller(const gameswf::fn_call& fn)
     SWF_AS_TRACE("as_logic_enableScroller");
     ISwiffHost* h = g_swiffPlayerInstance->getSwiffHost();
     h->setFlagF10(fn.arg(0).to_bool());
+}
+
+// Requeries the current list's existing records without replacing it with a master list.
+// Requires player/host; ignores arguments and leaves the ActionScript result untouched.
+void as_multiplay_refreshBrowser(const gameswf::fn_call& fn)
+{
+    SWF_AS_TRACE("as_multiplay_refreshBrowser");
+    ISwiffHost* h = g_swiffPlayerInstance->getSwiffHost();
+    IServerBrowser* list;
+    {
+        const std::string kind = h->getServerListKind();
+        list = h->getServerList(kind);
+    }
+    if (list) (void) list->requeueRecords();
 }
 
 // Stops updates on the current browser list when it exists. Requires player/host.
@@ -7235,8 +7377,18 @@ void as_logic_getTeamsConId(const gameswf::fn_call& fn)
 static std::map<int, vc71::string> s_filterValues;
 
 // unk_100F8810 - the DLL-global free-text filter clause, written by Multiplay.setFilter
-// (PE 100519C0, still unregistered here) and read - and rewritten in place - by the builder below.
+// and read - and rewritten in place - by the builder below.
 static vc71::string s_textFilter;
+
+// Stores the free-text browser clause; updateFilter applies it later.
+// Requires argument zero, fetches the player host, and leaves the AS result untouched.
+void as_multiplay_setFilter(const gameswf::fn_call& fn)
+{
+    SWF_AS_TRACE("as_multiplay_setFilter");
+    (void)g_swiffPlayerInstance->getSwiffHost();
+    const vc71::string filter(fn.arg(0).to_string());
+    s_textFilter = filter;
+}
 
 // Publishes whether any bit in the supplied filter mask is enabled.
 // Requires GeneralSettings and one numeric argument.
@@ -8919,6 +9071,7 @@ static void registerAsMethods(SwiffAsNamespace* general, SwiffAsNamespace** ns,
         else if (::strcmp(n, "Multiplay") == 0)
         {
             ns[i]->registerNativeCompatibleMethod<as_multiplay_isGameSpyAvailable>("isGameSpyAvailable");
+            ns[i]->registerNativeCompatibleMethod<as_multiplay_refreshBrowser>("refreshBrowser");
             ns[i]->registerNativeCompatibleMethod<as_multiplay_stopBrowser>("stopBrowser");
             ns[i]->registerNativeCompatibleMethod<as_multiplay_browse>("browse");
             ns[i]->registerNativeCompatibleMethod<as_multiplay_getBrowser>("getBrowser");
@@ -8935,6 +9088,7 @@ static void registerAsMethods(SwiffAsNamespace* general, SwiffAsNamespace** ns,
             ns[i]->registerNativeCompatibleMethod<as_multiplay_isBrowsing>("isBrowsing");
             ns[i]->registerNativeCompatibleMethod<as_multiplay_getToggleFilter>("getToggleFilter");
             ns[i]->registerNativeCompatibleMethod<as_multiplay_setToggleFilter>("setToggleFilter");
+            ns[i]->registerNativeCompatibleMethod<as_multiplay_setFilter>("setFilter");
             ns[i]->registerNativeCompatibleMethod<as_multiplay_updateFilter>("updateFilter");
             ns[i]->registerNativeCompatibleMethod<as_multiplay_setLeaderboardCategoryId>("setLeaderboardCategoryId");
             ns[i]->registerNativeCompatibleMethod<as_multiplay_getLeaderboardCategoryId>("getLeaderboardCategoryId");
@@ -8980,6 +9134,7 @@ static void registerAsMethods(SwiffAsNamespace* general, SwiffAsNamespace** ns,
         }
         else if (::strcmp(n, "Logic") == 0)
         {
+            ns[i]->registerNativeCompatibleMethod<as_logic_quit>("quit");
             ns[i]->registerNativeCompatibleMethod<as_logic_disconnectGame>("disconnectGame");
             ns[i]->registerNativeCompatibleMethod<as_logic_isGameRunning>("isGameRunning");
             ns[i]->registerNativeCompatibleMethod<as_logic_getActivateReason>("getActivateReason");
@@ -9299,7 +9454,8 @@ SwiffPlayer::SwiffPlayer()
     gameswf::register_fscommand_callback(swiffFsCommand);
     gameswf::set_render_handler(&render_handler);
 
-    // Off unless BF2_SWIFFPLAYER_ASLOG=1 - see asLogEnabled(). Retail registers no log callback.
+    // Retail registers no log callback. Preserve full AS tracing when explicitly selected;
+    // the separate input diagnostic admits only mouse-prefixed messages.
     if (asLogEnabled())
         gameswf::register_log_callback(swiffAsLogCb);
 
@@ -9603,7 +9759,7 @@ void SwiffPlayer::update(float deltaTime)
     // bridge consults before queuing a mouse press (sub_4A2D60/sub_4A2DD0 in BF2.exe); interactive run
     // drive10 lost every click after the multiplayer tab while mouse moves kept arriving. Logged on
     // change only, with the display count, so the AS lines around the flip name what set it.
-    if (swiff_host && asLogEnabled())
+    if (swiff_host && mouseLogEnabled())
     {
         static int s_busy = -1;
         const int busy = reinterpret_cast<int(__thiscall*)(void*)>(rcVtbl(swiff_host)[696/4])(swiff_host);
@@ -9686,13 +9842,19 @@ void SwiffPlayer::queueMouseState(int x, int y, int buttons)
     // queue depth then, plus a depth line every 2000th sample - drive12 showed the host's input-block
     // flag flat at 0 while no press reached the movie after the multiplayer tab; this says whether the
     // engine still queues presses (starvation in our drain) or stopped calling (engine-side routing).
-    if (asLogEnabled())
+    if (mouseLogEnabled())
     {
         static int s_lastButtons = 0; static unsigned s_samples = 0;
         const int depth = queued_mouse_begin ? (int)((static_cast<char*>(queued_mouse_end) - static_cast<char*>(queued_mouse_begin)) / (int)sizeof(MouseState)) : 0;
         ++s_samples;
         if (buttons != s_lastButtons || (s_samples % 2000) == 0)
-            ::renddx9abi::logf("[mouse] queued buttons %d -> %d at (%d,%d) depth=%d sample#%u", s_lastButtons, buttons, x, y, depth, s_samples);
+        {
+            unsigned width = 0, height = 0;
+            if (swiff_host)
+                hostGetViewportSize(swiff_host, &width, &height);
+            ::renddx9abi::logf("[mouse] queued buttons %d -> %d at (%d,%d) depth=%d sample#%u hostViewport=%ux%u movie=%dx%d",
+                s_lastButtons, buttons, x, y, depth, s_samples, width, height, movie_width, movie_height);
+        }
         s_lastButtons = buttons;
     }
     MouseState ms; ms.x = x; ms.y = y; ms.buttons = buttons;
@@ -9815,8 +9977,9 @@ void SwiffPlayer::notifyMouse(int x, int y, int buttons)
     // [TEMP] RW-89 mouse tracer (BF2_SWIFFPLAYER_ASLOG): every button transition the host delivers,
     // raw and in movie space - interactive run drive6 had an OK click that reached no handler and
     // the logs could not say whether the press ever arrived. [RETIRE-WHEN: RW-89]
-    if (asLogEnabled() && buttons != mouse_buttons)
-        ::renddx9abi::logf("[mouse] buttons %d -> %d at raw=(%d,%d) movie=(%d,%d)", mouse_buttons, buttons, x, y, mx, my);
+    if (mouseLogEnabled() && buttons != mouse_buttons)
+        ::renddx9abi::logf("[mouse] buttons %d -> %d at raw=(%d,%d) movie=(%d,%d) hostViewport=%ux%u movieSize=%dx%d",
+            mouse_buttons, buttons, x, y, mx, my, vpW, vpH, movie_width, movie_height);
     {   // [TEMP] stream tracer: the host viewport the mouse scale is derived from (first 3 + full frames)
         static int s_n = 0;
         if (streamLogEnabled() && (++s_n <= 3 || s_streamVerbose))

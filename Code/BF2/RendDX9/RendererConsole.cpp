@@ -13,6 +13,7 @@
 #include "../Core/Types.h"
 #include "../Math/Vec3.h"
 #include "RendDX9Base.h"
+#include "PostProductionFrameWork.h"
 
 namespace dice {
 namespace hfe {
@@ -30,6 +31,8 @@ void rendererSetSkinnedMeshLod(int lod);
 void rendererSetBundledMeshLod(int lod);
 int  rendererGetSkinnedMeshLod();
 int  rendererGetBundledMeshLod();
+int rendererGetDrawFps();
+void rendererSetDrawFps(int value);
 
 namespace {
 
@@ -75,6 +78,15 @@ void setWaterFogColor(const Vec3& v)
     postProductionSetWaterFogColor255(&v.x);
 }
 
+Vec3 getTVColor()
+{
+    Vec3 value;
+    postProductionGetTVColor(&value.x);
+    return value;
+}
+
+void setTVColor(const Vec3& value) { postProductionSetTVColor(&value.x); }
+
 
 // Native capture adapter. The renderer's compatibility path captures at a fixed 2048 square.
 
@@ -97,6 +109,21 @@ BF2_CONSOLE_PROPERTY_FN(presentSpinIfBusy, bool, g_rendererBase != 0,
 BF2_CONSOLE_METHOD_4_STATIC_ACTIVE(makeTopWorldScreen, consoleMakeTopWorldScreen, g_Renderer != 0,
                                    U32, std::string, Vec3, float, kRendererConsoleTag)
 
+BF2_CONSOLE_PROPERTY_FN(tvInterference, float, g_PostProductionFrameWorkOwner != 0,
+                        postProductionGetTVInterference(), postProductionSetTVInterference,
+                        kRendererConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(tvGranularity, float, g_PostProductionFrameWorkOwner != 0,
+                        postProductionGetTVGranularity(), postProductionSetTVGranularity,
+                        kRendererConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(tvAmbient, float, g_PostProductionFrameWorkOwner != 0,
+                        postProductionGetTVAmbient(), postProductionSetTVAmbient,
+                        kRendererConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(tvColor, Vec3, g_PostProductionFrameWorkOwner != 0,
+                        getTVColor(), setTVColor, kRendererConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(tvEnabled, bool, g_PostProductionFrameWorkOwner != 0,
+                        postProductionGetTVEnabled(), postProductionSetTVEnabled,
+                        kRendererConsoleTag)
+
 BF2_CONSOLE_PROPERTY_FN(fogColor, Vec3, g_PostProductionFrameWorkOwner != 0,
                         getFogColor(), setFogColor, kRendererConsoleTag)
 BF2_CONSOLE_PROPERTY_FN(waterFogColor, Vec3, g_PostProductionFrameWorkOwner != 0,
@@ -106,6 +133,10 @@ BF2_CONSOLE_PROPERTY_FN(forceSkinnedMeshLod, int, g_Renderer != 0,
                         rendererGetSkinnedMeshLod(), rendererSetSkinnedMeshLod, kRendererConsoleTag)
 BF2_CONSOLE_PROPERTY_FN(forceBundledMeshLod, int, g_Renderer != 0,
                         rendererGetBundledMeshLod(), rendererSetBundledMeshLod, kRendererConsoleTag)
+
+BF2_CONSOLE_OBJECT("renderer", 1, 0)
+BF2_CONSOLE_PROPERTY_FN(drawFps, int, g_Renderer != 0,
+                        rendererGetDrawFps(), rendererSetDrawFps, kRendererConsoleTag)
 
 } // anonymous namespace
 

@@ -9,6 +9,7 @@
 #include "RendDX9Base.h"
 #include "Texture.h"                   // textureGetLevelSurface (sub_10014950)
 #include "../RendMisc/IRenderView.h"   // the transparency-AA probe's getViewport
+#include "../Game/VideoSettings.h"
 #if BF2_PLUGIN_ABI_NATIVE
 #include "../Core/SettingsRepostitory.h"
 #endif
@@ -1238,7 +1239,11 @@ bool initializeD3DSubsystems(void* renderer)
     // constructor.
     videoOptionsInitialize(renderer);
 
-    // [FRONTIER] VideoSettings still lacks the VideoOptions handoff.
+    // The default profile has populated pending settings before the renderer exists.
+    IVideoSettings* videoSettings = static_cast<IVideoSettings*>(
+        classManager->getSingleton(renddx9abi::HostString("VideoSettings")));
+    videoSettings->applyToOptions(b->embeddedVideoOptions());
+
     // Construct StateManager before EffectManager so subsequent draws can publish state.
     if (!createStateManager(b->device))
         return false;

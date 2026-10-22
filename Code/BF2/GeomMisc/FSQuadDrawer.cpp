@@ -7,6 +7,8 @@
 #include "../RendDX9/RendDX9Base.h"
 #include "../RendDX9/ShaderParameter.h"
 #include "../RendDX9/Texture.h"
+#include "../RendDX9/PostProductionFrameWork.h"
+#include "../RendMisc/IRenderView.h"
 #include "../../RendDX9Abi/BfMemory.h"
 #include "../../RendDX9Abi/Frontier.h"
 #include "../../RendDX9Abi/Vc71Map.h"
@@ -166,12 +168,16 @@ public:
     virtual vc71::string getRenderPathListenerName() const;
     void drawHemiMap(dx9rend::EngineTexture* source,
                      dx9rend::EngineTexture* destination);
+    void drawCurrentEffect();
+    void blitToBackBuffer(dx9rend::EngineTexture* source);
+    void drawTexturePass(dx9rend::EngineTexture* source,
+                         dx9rend::EngineTexture* destination, unsigned pass, unsigned grid);
 
 private:
     unsigned char* findCacheNode(unsigned int key) const;
     unsigned char* insertCacheNode(unsigned int key);
-    DrawRecord* ensureHemiQuad(unsigned short width, unsigned short height);
-    void buildHemiQuad(unsigned short width, unsigned short height, DrawRecord* record);
+    DrawRecord* ensureHemiQuad(int width, int height, unsigned grid = 0);
+    void buildHemiQuad(int width, int height, DrawRecord* record, unsigned grid);
 
     /* 0x004 */ unsigned int       m_listenerState; // base ctor leaves this word unwritten
     /* 0x008 */ vc71::map_layout   m_dimensionCache;
@@ -388,6 +394,23 @@ unsigned char* FSQuadDrawer::insertCacheNode(unsigned int key)
     inserted[kCacheColorOffset] = 1; // black; no balancing is needed for the private lookup tree
     inserted[kCacheNilOffset] = 0;
 
+    // The cheap Gaussian pass reads four vec4 offsets from the dimension record.
+    const unsigned short width = static_cast<unsigned short>(key);
+    const unsigned short height = static_cast<unsigned short>(key >> 16);
+    const float inverseU = static_cast<float>(1.0 / width);
+    const float inverseV = static_cast<float>(1.0 / height);
+    const float halfU = static_cast<float>(0.5 / width);
+    const float halfV = static_cast<float>(0.5 / height);
+    float (*samples)[4] = reinterpret_cast<float (*)[4]>(inserted + 16 + 384);
+    unsigned sample = 0;
+    for (int x = -2; x < 2; x += 2)
+        for (int y = -2; y < 2; y += 2, ++sample)
+        {
+            samples[sample][0] = static_cast<float>(2.0 * x * inverseU + halfU);
+            samples[sample][1] = static_cast<float>(2.0 * y * inverseV + halfV);
+            samples[sample][2] = samples[sample][3] = 0.0f;
+        }
+
     if (parent == head)
     {
         cacheLink(head, 0) = inserted;
@@ -406,66 +429,126 @@ unsigned char* FSQuadDrawer::insertCacheNode(unsigned int key)
     return inserted;
 }
 
-DrawRecord* FSQuadDrawer::ensureHemiQuad(unsigned short width, unsigned short height)
+DrawRecord* FSQuadDrawer::ensureHemiQuad(int width, int height, unsigned grid)
 {
-    const unsigned int key = static_cast<unsigned int>(width)
-                           | (static_cast<unsigned int>(height) << 16);
+    const unsigned int key = static_cast<unsigned short>(width)
+                           | (static_cast<unsigned int>(static_cast<unsigned short>(height)) << 16);
     unsigned char* node = findCacheNode(key);
     if (node == cacheRaw(m_dimensionCache.head))
         node = insertCacheNode(key);
 
-    // node+16 begins the 1748-byte per-dimension value; its two 16-byte draw records begin at
-    // node+48.  HemiMapManager uses only grid index zero, so no other post-process record is exposed.
-    DrawRecord* const record = reinterpret_cast<DrawRecord*>(node + 48);
+    // The two cached grids share their dimension key and have separate draw records.
+    DrawRecord* const record = reinterpret_cast<DrawRecord*>(node + 48 + grid * 16);
     if (!record->primitiveCount)
-        buildHemiQuad(width, height, record);
+        buildHemiQuad(width, height, record, grid);
     return record;
 }
 
-void FSQuadDrawer::buildHemiQuad(unsigned short width, unsigned short height,
-                                 DrawRecord* record)
+void FSQuadDrawer::buildHemiQuad(int width, int height,
+                                 DrawRecord* record, unsigned grid)
 {
+    const unsigned cells = grid ? 10 : 1;
+    const unsigned side = cells + 1;
     record->baseVertex = m_vertexCursor;
-    record->vertexCount = 4;
+    record->vertexCount = side * side;
     record->startIndex = m_indexCursor;
-    record->primitiveCount = 2;
+    record->primitiveCount = cells * cells * 2;
 
     QuadVertex* const vertices = static_cast<QuadVertex*>(
-        dx9rend::vertexBufferLock(m_vertexBuffer, m_vertexCursor, 4, 0));
-    unsigned short* const indices = static_cast<unsigned short*>(
-        dx9rend::indexBufferLock(m_indexBuffer, m_indexCursor, 6, 0));
+        dx9rend::vertexBufferLock(m_vertexBuffer, m_vertexCursor, record->vertexCount, 0));
+    unsigned short* indices = static_cast<unsigned short*>(
+        dx9rend::indexBufferLock(m_indexBuffer, m_indexCursor, record->primitiveCount * 3, 0));
 
-    const float halfTexelU = 0.5f / static_cast<float>(width);
-    const float halfTexelV = 0.5f / static_cast<float>(height);
-    vertices[0].x = -1.0f; vertices[0].y =  1.0f; vertices[0].z = 0.0f; vertices[0].w = 1.0f;
-    vertices[0].u = halfTexelU;        vertices[0].v = halfTexelV;
-    vertices[1].x =  1.0f; vertices[1].y =  1.0f; vertices[1].z = 0.0f; vertices[1].w = 1.0f;
-    vertices[1].u = 1.0f + halfTexelU; vertices[1].v = halfTexelV;
-    vertices[2].x = -1.0f; vertices[2].y = -1.0f; vertices[2].z = 0.0f; vertices[2].w = 1.0f;
-    vertices[2].u = halfTexelU;        vertices[2].v = 1.0f + halfTexelV;
-    vertices[3].x =  1.0f; vertices[3].y = -1.0f; vertices[3].z = 0.0f; vertices[3].w = 1.0f;
-    vertices[3].u = 1.0f + halfTexelU; vertices[3].v = 1.0f + halfTexelV;
-
-    indices[0] = 0; indices[1] = 1; indices[2] = 2;
-    indices[3] = 2; indices[4] = 1; indices[5] = 3;
-
-    m_indexCursor += 6;
-    m_vertexCursor += 4;
+    const float halfTexelU = static_cast<float>(0.5 / static_cast<unsigned short>(width));
+    const float halfTexelV = static_cast<float>(0.5 / static_cast<unsigned short>(height));
+    for (unsigned y = 0; y != side; ++y)
+    {
+        const double v = static_cast<double>(y) / cells;
+        for (unsigned x = 0; x != side; ++x)
+        {
+            const double u = static_cast<double>(x) / cells;
+            QuadVertex& vertex = vertices[y * side + x];
+            vertex.x = static_cast<float>(u + u - 1.0);
+            vertex.y = static_cast<float>(-(v + v - 1.0));
+            vertex.z = 0.0f; vertex.w = 1.0f;
+            vertex.u = static_cast<float>(u + halfTexelU);
+            vertex.v = static_cast<float>(v + halfTexelV);
+        }
+    }
+    for (unsigned y = 0; y != cells; ++y)
+        for (unsigned x = 0; x != cells; ++x)
+        {
+            const unsigned base = y * side + x;
+            *indices++ = static_cast<unsigned short>(base);
+            *indices++ = static_cast<unsigned short>(base + 1);
+            *indices++ = static_cast<unsigned short>(base + side);
+            *indices++ = static_cast<unsigned short>(base + side);
+            *indices++ = static_cast<unsigned short>(base + 1);
+            *indices++ = static_cast<unsigned short>(base + side + 1);
+        }
+    m_indexCursor += record->primitiveCount * 3;
+    m_vertexCursor += record->vertexCount;
     dx9rend::indexBufferUnlock(m_indexBuffer);
     dx9rend::vertexBufferUnlock(m_vertexBuffer);
+}
+
+void FSQuadDrawer::drawCurrentEffect()
+{
+    const float* viewport = dx9rend::rendererGetRenderView()->getViewport();
+    const int height = static_cast<int>(viewport[3]);
+    const int width = static_cast<int>(viewport[2]);
+    dx9rend::vertexDeclarationBind(m_vertexDeclaration);
+    DrawRecord* record = ensureHemiQuad(width, height);
+    dx9rend::vertexBufferBindStream(m_vertexBuffer, 0);
+    dx9rend::indexBufferBind(m_indexBuffer);
+    dx9rend::rendererDrawIndexedPrimitive(record->primitiveCount, D3DPT_TRIANGLELIST,
+        static_cast<int>(record->baseVertex), 0, record->vertexCount, record->startIndex);
+}
+
+void FSQuadDrawer::blitToBackBuffer(dx9rend::EngineTexture* source)
+{
+    const unsigned short width = static_cast<unsigned short>(source->width);
+    const unsigned short height = static_cast<unsigned short>(source->height);
+    dx9rend::vertexDeclarationBind(m_vertexDeclaration);
+    DrawRecord* record = ensureHemiQuad(width, height);
+    dx9rend::vertexBufferBindStream(m_vertexBuffer, 0);
+    dx9rend::indexBufferBind(m_indexBuffer);
+    dx9rend::stateManagerPush();
+    IDirect3DSurface9* saved = *reinterpret_cast<IDirect3DSurface9**>(
+        static_cast<unsigned char*>(dx9rend::g_stateManager) + 0x1E90);
+    if (saved)
+        saved->AddRef();
+    dx9rend::rendererPostSelectBackBuffer();
+    m_parameters[0]->setValue(source, 0);
+    // Pass zero has no per-dimension parameter upload.
+    dx9rend::effectBegin(m_effect);
+    dx9rend::effectBeginPass(m_effect, 0);
+    dx9rend::rendererDrawIndexedPrimitive(record->primitiveCount, D3DPT_TRIANGLELIST,
+        static_cast<int>(record->baseVertex), 0, record->vertexCount, record->startIndex);
+    dx9rend::effectEnd(m_effect);
+    dx9rend::stateManagerSetRenderTarget(0, saved);
+    if (saved)
+        saved->Release();
+    dx9rend::stateManagerPop();
 }
 
 void FSQuadDrawer::drawHemiMap(dx9rend::EngineTexture* source,
                                dx9rend::EngineTexture* destination)
 {
-    static const unsigned int kHemiBlitPass = 17;
-    if (dx9rend::effectCurrentPassCount(m_effect) <= kHemiBlitPass)
+    drawTexturePass(source, destination, 17, 0);
+}
+
+void FSQuadDrawer::drawTexturePass(dx9rend::EngineTexture* source,
+                                  dx9rend::EngineTexture* destination,
+                                  unsigned pass, unsigned grid)
+{
+    if (dx9rend::effectCurrentPassCount(m_effect) <= pass)
         return;
 
     dx9rend::vertexDeclarationBind(m_vertexDeclaration);
     const unsigned short width = static_cast<unsigned short>(source->width);
     const unsigned short height = static_cast<unsigned short>(source->height);
-    DrawRecord* const record = ensureHemiQuad(width, height);
+    DrawRecord* const record = ensureHemiQuad(width, height, grid);
     dx9rend::vertexBufferBindStream(m_vertexBuffer, 0);
     dx9rend::indexBufferBind(m_indexBuffer);
 
@@ -490,10 +573,14 @@ void FSQuadDrawer::drawHemiMap(dx9rend::EngineTexture* source,
     if (multisampleActive())
         dx9rend::stateManagerSetDepthStencilSurface(0);
 
-    // PE sub_100846E0 has no case for pass 17: there are no per-dimension shader constants to
-    // upload between target selection and Effect::begin for this operation.
+    // Only the recovered history-capture pass uploads cached Gaussian offsets.
+    if (pass == 9)
+    {
+        const unsigned key = width | (static_cast<unsigned>(height) << 16);
+        m_parameters[8]->setValue(findCacheNode(key) + 16 + 384, 0);
+    }
     dx9rend::effectBegin(m_effect);
-    dx9rend::effectBeginPass(m_effect, kHemiBlitPass);
+    dx9rend::effectBeginPass(m_effect, pass);
     dx9rend::rendererDrawIndexedPrimitive(record->primitiveCount, D3DPT_TRIANGLELIST,
                                           static_cast<int>(record->baseVertex), 0,
                                           record->vertexCount, record->startIndex);
@@ -536,6 +623,18 @@ void fsQuadDrawerDrawHemiMap(dx9rend::EngineTexture* source,
 {
     // The retail HemiMapManager call likewise has no null guard around dword_10249978.
     g_FSQuadDrawer->drawHemiMap(source, destination);
+}
+
+void fsQuadDrawerDrawCurrentEffect() { g_FSQuadDrawer->drawCurrentEffect(); }
+void fsQuadDrawerBlitToBackBuffer(dx9rend::EngineTexture* source)
+{
+    g_FSQuadDrawer->blitToBackBuffer(source);
+}
+
+void fsQuadDrawerCaptureTinnitus(dx9rend::EngineTexture* source,
+                                dx9rend::EngineTexture* destination)
+{
+    g_FSQuadDrawer->drawTexturePass(source, destination, 9, 1);
 }
 
 } // namespace geom

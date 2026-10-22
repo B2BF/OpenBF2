@@ -14,6 +14,7 @@
 #include <cstring>
 #include <cstdio>                            // sprintf - autoCompletion pastes the argument match
 #include <cctype>                            // tolower - autoCompletion's common-prefix loop
+#include <cstdlib>
 
 
 // run() executes scripts in a nested scope; include() executes in the caller's scope and access level.
@@ -34,6 +35,48 @@ namespace io {
 
 extern OldConsole* mainConsole;              // _ZN4dice3hfe2io11mainConsoleE
 extern OldConsole* g_executingConsole;       // ds:0x8AC3C88 - see handleCommand
+
+namespace {
+#if !DEDICATED
+// [TEMP] [CHOSEN, not recovered] Local console testing requested by the owner.
+// Only keyboard Enter/Tab can establish this scope; calls outside that scope retain their
+// access policy. Scripts invoked by an unlocked command inherit its local scope.
+// [RETIRE-WHEN: client-console-testing] Remove after developer-console policy
+// is settled and its interactive and remote authorization checks are validated.
+thread_local OldConsole* s_unlockedInteractiveConsole = nullptr;
+
+bool interactiveFullAccessEnabled()
+{
+    const char* value = std::getenv("BF2_CLIENT_CONSOLE_FULL_ACCESS");
+    // Direct executable launches use the same temporary test policy as the launcher.
+    return !value || std::strcmp(value, "0") != 0;
+}
+
+class InteractiveAccessScope
+{
+public:
+    explicit InteractiveAccessScope(OldConsole* console)
+        : m_previous(s_unlockedInteractiveConsole)
+    {
+        if (interactiveFullAccessEnabled())
+            s_unlockedInteractiveConsole = console;
+    }
+    ~InteractiveAccessScope() { s_unlockedInteractiveConsole = m_previous; }
+private:
+    OldConsole* m_previous;
+};
+#endif
+
+bool isUnlockedInteractiveConsole(const OldConsole* console)
+{
+#if !DEDICATED
+    return s_unlockedInteractiveConsole == console;
+#else
+    (void)console;
+    return false;
+#endif
+}
+} // namespace
 
 // Shared mutable output sink for callers that discard console output.
 std::string Console::ignoredString_;
@@ -617,7 +660,11 @@ int OldConsole::handleCommand(const std::string& cmd, std::string& result, Acces
 
                 // Bindings carrying access bit 4 use the archive-specific policy; others require an intersecting caller access mask.
                 const int methodAccess = binding->getAccess();          // vtbl +0x18
-                if (methodAccess & 4)
+                if (isUnlockedInteractiveConsole(this))
+                {
+                    // The local testing scope bypasses access only, not activity or argument checks.
+                }
+                else if (methodAccess & 4)
                 {
                     // The privileged policy: the script must have come from an archive and the
                     // caller must hold bit 2.
@@ -872,7 +919,8 @@ std::string OldConsole::listConstants(const std::string& filter)
 }
 
 // Updates the edited line, history recall or scroll position from a key.
-// Enter and Tab temporarily use end-user access on mainConsole. Delete clears the whole line.
+// Enter and Tab use the local testing access policy, or end-user access on mainConsole
+// when that policy is disabled. Delete clears the whole line.
 // [UNRESOLVED] Return contract beyond the current void declaration.
 void OldConsole::updateAsciiKey(char key)
 {
@@ -880,12 +928,17 @@ void OldConsole::updateAsciiKey(char key)
     {
     case 13:                                    // Enter - execute the line
     {
+#if !DEDICATED
+        InteractiveAccessScope interactiveAccess(this);
+        if (isUnlockedInteractiveConsole(this))
+            output("[CHOSEN] Local client console full access enabled for this command.");
+#endif
         m_currentLineBuffer[m_currentLineLength]     = '\n';
         m_currentLineBuffer[m_currentLineLength + 1] = '\0';
 
         std::string result;
         const int savedAccess = mainConsole->getAccess();
-        mainConsole->setAccess(1);              // mainConsole, not this - see above
+        mainConsole->setAccess(isUnlockedInteractiveConsole(this) ? 2 : 1);
 
         executeLine(std::string(m_currentLineBuffer), result, true, true, true, false, false);
 
@@ -907,10 +960,13 @@ void OldConsole::updateAsciiKey(char key)
         m_currentLineLength    = 0;
         break;
 
-    case 9:                                     // Tab - autocomplete, also sandboxed at access 1
+    case 9:                                     // Tab - autocomplete with the same local access policy
     {
+#if !DEDICATED
+        InteractiveAccessScope interactiveAccess(this);
+#endif
         const int savedAccess = mainConsole->getAccess();
-        mainConsole->setAccess(1);
+        mainConsole->setAccess(isUnlockedInteractiveConsole(this) ? 2 : 1);
         autoCompletion();
         mainConsole->setAccess(savedAccess);
         break;
@@ -1101,7 +1157,7 @@ void OldConsole::autoCompletion()
 
             if (!obj->isActive())
                 continue;
-            if ((m_access & 2) == 0 && (obj->getAccess() & 2) != 0)
+            if (!isUnlockedInteractiveConsole(this) && (m_access & 2) == 0 && (obj->getAccess() & 2) != 0)
                 continue;
 
             // A hit assigns the stored candidate into `completion` and then does nothing with it -
@@ -1144,7 +1200,7 @@ void OldConsole::autoCompletion()
 
             if (!obj->isActive())
                 continue;
-            if ((m_access & 2) == 0 && (obj->getAccess() & 2) != 0)
+            if (!isUnlockedInteractiveConsole(this) && (m_access & 2) == 0 && (obj->getAccess() & 2) != 0)
                 continue;
             if (compareIgnoreCase(object.c_str(), obj->getObjectName()) != 0)
                 continue;

@@ -228,6 +228,7 @@ set SOURCES=^
  "%BF2%\GeomMisc\MenuRend\QuadDrawer.cpp"
 
 rem These sources use the rebuilt host's native std::string/list/map ABI.
+set SOURCES=!SOURCES! "%BF2%\Core\StringUtil.cpp"
 set SOURCES=!SOURCES! "%BF2%\Core\ConsoleObjectBase.cpp" "%ABI%\NativeConsoleObjects.cpp" "%BF2%\Geom\LightManagerConsole.cpp" "%BF2%\Geom\HemiMapManager\HemiMapManagerConsole.cpp" "%BF2%\Geom\SkyDomeConsole.cpp" "%BF2%\Geom\TerrainConsole.cpp" "%BF2%\RendDX9\RendererConsole.cpp" "%BF2%\Geom\NametagManagerConsole.cpp" "%BF2%\Geom\Overgrowth\OverGrowthConsole.cpp" "%BF2%\Geom\UndergrowthSystemConsole.cpp" "%BF2%\Geom\DecalSystem\DecalManagerConsole.cpp"
 rem RD1 (2026-09-30): the `Object.geometry.loadMesh` row - native console ABI, like the list above.
 set SOURCES=!SOURCES! "%BF2%\Geom\ObjectGeometryConsole.cpp"

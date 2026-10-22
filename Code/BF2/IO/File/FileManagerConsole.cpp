@@ -4,6 +4,7 @@
 #include "../SettingsManager.h"
 #include "../../Core/SettingsRepostitory.h"
 #include "../../Core/EventManager.h"
+#include "../../Core/Types.h"
 #include "../../Core/StringUtil.h"           // compareIgnoreCase - the Console reflection rows
 #include <cstdio>                           // sprintf - Console_getEnumName
 #include <string>
@@ -484,6 +485,105 @@ private:
 };
 static ConsoleClass503 s_settingsStringSet;
 }
+
+#if !DEDICATED
+namespace {
+// Typed settings commands only expose names registered by SettingsManager. Setters still
+// store equal values but publish the setting-change event only when the value changes.
+template<class T>
+bool consoleSettingsSet(std::string& name, const T& value, const T& fallback,
+                        const T& (SettingsRepostitory::*get)(const std::string&, const T&),
+                        void (SettingsRepostitory::*set)(const std::string&, const T&))
+{
+    if (settingsManager->m_registeredVars.find(name) == settingsManager->m_registeredVars.end())
+        return false;
+    const bool changed = (settings->*get)(name, fallback) != value;
+    (settings->*set)(name, value);
+    if (changed && eventManager)
+        eventManager->postEvent(EventCategory(5), 1, &name, 0.0f);
+    return true;
+}
+
+template<class T>
+T consoleSettingsGet(const std::string& name, const T& fallback,
+                     const T& (SettingsRepostitory::*get)(const std::string&, const T&))
+{
+    if (settingsManager->m_registeredVars.find(name) == settingsManager->m_registeredVars.end())
+        return fallback;
+    return (settings->*get)(name, fallback);
+}
+
+// These fixed-arity methods return values, unlike the void-command generator macros.
+#define SETTINGS_SET_BINDING(method, T, getter, setter, fallback) \
+class Settings_##method : public ConsoleObjectBaseImpl { \
+public: \
+    Settings_##method() { \
+        m_objectName = "SettingsManager"; m_functionName = #method; \
+        m_access = 1; m_category = 0; m_type = 0; m_minNoArgs = m_maxNoArgs = 2; \
+        m_returnType = "bool"; m_hasReturnValue = false; m_isDynamic = false; \
+        m_argTypes[0] = "std::string"; m_argTypes[1] = #T; \
+        m_argNeedsConversion[0] = 0; m_argNeedsConversion[1] = -1; \
+        consoleBindingList(kFileConsoleTag).push_back(this); \
+    } \
+    bool isObjectActive() const override { return true; } \
+    void executeObjectMethod() override { \
+        if (m_argCount != 2) return; \
+        std::string name = BF2_CC_ARG(std::string, 0); \
+        const T value = BF2_CC_ARG(T, 1); \
+        m_hasReturnValue = true; \
+        m_returnValue = consoleSettingsSet<T>(name, value, fallback, \
+            &SettingsRepostitory::getter, &SettingsRepostitory::setter); \
+    } \
+    void setArgFromString(int index, const std::string& value) override { \
+        BF2_CC_CONVERT(std::string, 1) BF2_CC_CONVERT(T, 2) \
+    } \
+    BF2_CC_RETURN_AS_STRING \
+    BF2_CC_COMMON_HOOKS \
+private: bool m_returnValue; \
+}; \
+static Settings_##method s_settings_##method;
+
+#define SETTINGS_GET_BINDING(method, T, getter, fallback) \
+class Settings_##method : public ConsoleObjectBaseImpl { \
+public: \
+    Settings_##method() { \
+        m_objectName = "SettingsManager"; m_functionName = #method; \
+        m_access = 1; m_category = 0; m_type = 0; m_minNoArgs = m_maxNoArgs = 1; \
+        m_returnType = #T; m_hasReturnValue = false; m_isDynamic = false; \
+        m_argTypes[0] = "std::string"; m_argNeedsConversion[0] = 0; \
+        consoleBindingList(kFileConsoleTag).push_back(this); \
+    } \
+    bool isObjectActive() const override { return true; } \
+    void executeObjectMethod() override { \
+        if (m_argCount != 1) return; \
+        const std::string name = BF2_CC_ARG(std::string, 0); \
+        m_hasReturnValue = true; \
+        m_returnValue = consoleSettingsGet<T>(name, fallback, &SettingsRepostitory::getter); \
+    } \
+    void setArgFromString(int index, const std::string& value) override { \
+        BF2_CC_CONVERT(std::string, 1) \
+    } \
+    BF2_CC_RETURN_AS_STRING \
+    BF2_CC_COMMON_HOOKS \
+private: T m_returnValue; \
+}; \
+static Settings_##method s_settings_##method;
+
+SETTINGS_SET_BINDING(boolSet, bool, boolGet, boolSet, false)
+SETTINGS_SET_BINDING(intSet, int, intGet, intSet, -1)
+SETTINGS_SET_BINDING(floatSet, float, floatGet, floatSet, -1.0f)
+SETTINGS_SET_BINDING(U32Set, U32, U32Get, U32Set, 0u)
+SETTINGS_GET_BINDING(stringGet, std::string, stringGet, std::string("UnSet"))
+SETTINGS_GET_BINDING(boolGet, bool, boolGet, false)
+SETTINGS_GET_BINDING(intGet, int, intGet, -1)
+SETTINGS_GET_BINDING(floatGet, float, floatGet, -1.0f)
+SETTINGS_GET_BINDING(U32Get, U32, U32Get, 0u)
+
+#undef SETTINGS_SET_BINDING
+#undef SETTINGS_GET_BINDING
+} // namespace
+#endif
+
 BF2_CONSOLE_OBJECT("FileManager", 2, 0)
 
 // mountArchive accepts an optional contentCheck argument.

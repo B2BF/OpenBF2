@@ -206,6 +206,10 @@ public:
     void* getShaderParameter(const vc71::string& name);
 
     bool         bind(void* d3dxEffect);
+    bool         reload(const vc71::string& name);
+    void         snapshotParameters();
+    void         resetTechniques();
+    void         rebindParameters();
     unsigned int populateParameters();
     void         flushPendingValues();
     int          validateTechniques();
@@ -353,25 +357,13 @@ bool Effect::bind(void* d3dxEffect)
 {
     if (m_d3dxEffect)
     {
-        // [FRONTIER] dice::hfe::dx9rend::Effect::bind - the rebind path. sub_1001E570 flushes,
-        // then OnLostDevice and Release run on the outgoing effect. Unreachable until an effect is
-        // recompiled over a live one.
-        RD9_FRONTIER("dice::hfe::dx9rend::Effect::bind (an effect is already bound - the "
-                     "flush/OnLostDevice/Release path is unwritten)", 0x00);
-        return false;
+        snapshotParameters();
+        typedef long (__stdcall* OnLostDeviceFn)(void*);
+        ::renddx9abi::d3dxSlot<OnLostDeviceFn>(m_d3dxEffect, 0x114)(m_d3dxEffect);
+        ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxReleaseFn>(m_d3dxEffect, 0x08)(m_d3dxEffect);
+        m_d3dxEffect = 0;
     }
-
-    // sub_1001DE30 - reset every cached technique record. Empty here, and the original's own
-    // `*head != head` guard is what makes that a no-op rather than a special case.
-    if (!m_techniques.empty())
-    {
-        RD9_FRONTIER("dice::hfe::dx9rend::Effect::bind (the technique cache is non-empty; "
-                     "sub_1001F200 per entry is unwritten)", 0x00);
-        return false;
-    }
-
-    if (!d3dxEffect)
-        return false;
+    resetTechniques();
 
     ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxAddRefFn>(d3dxEffect, 0x04)(d3dxEffect);
     m_d3dxEffect = d3dxEffect;
@@ -388,7 +380,11 @@ bool Effect::bind(void* d3dxEffect)
             d3dxEffect, g_stateManager);
     }
 
-    const unsigned int populated = m_parameters.size ? 0u : populateParameters();
+    unsigned int populated = 0;
+    if (m_parameters.size)
+        rebindParameters();
+    else
+        populated = populateParameters();
 
     flushPendingValues();
 
@@ -398,7 +394,91 @@ bool Effect::bind(void* d3dxEffect)
                        "validated (verdict %d)", ::renddx9abi::addr(d3dxEffect), populated,
                        static_cast<unsigned int>(m_techniques.size()), verdict);
 
-    return verdict != 3;
+    if (verdict == 3)
+        return false;
+    if (m_string38.size())
+    {
+        TechniqueMap::iterator selected = m_techniques.find(m_string38.c_str());
+        if (selected != m_techniques.end())
+            setTechniqueRecord(reinterpret_cast<unsigned char*>(&selected->second));
+    }
+    if (!m_currentTechnique && !m_techniques.empty())
+        setTechniqueRecord(reinterpret_cast<unsigned char*>(&m_techniques.begin()->second));
+    return true;
+}
+
+namespace {
+// The pending map retains its existing string-keyed node layout. Its mapped
+// value is the fixed D3DX snapshot buffer followed by the reflected byte count.
+struct PendingParameterValue
+{
+    unsigned char data[2048];
+    unsigned int bytes;
+};
+static_assert(sizeof(PendingParameterValue) == 2052, "pending value payload");
+PendingParameterValue& pendingParameterValue(vc71::map_node* node)
+{
+    return *reinterpret_cast<PendingParameterValue*>(node->value + sizeof(vc71::string));
+}
+}
+
+void Effect::snapshotParameters()
+{
+    typedef long (__stdcall* GetValueFn)(void*, void*, void*, unsigned int);
+    for (vc71::map_node* node = vc71::mapFirst(m_parameters); node;
+         node = vc71::mapNext(m_parameters, node))
+    {
+        ShaderParameter* parameter = static_cast<ShaderParameter*>(vc71::mapNodeValueRef(node));
+        D3dxParameterDescView desc;
+        ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxGetParameterDescFn>(m_d3dxEffect, 0x10)(
+            m_d3dxEffect, parameter->getD3DXParam(), &desc);
+        vc71::map_node* pending = vc71::mapInsert(m_pendingValues, 0x830, vc71::mapNodeKey(node));
+        PendingParameterValue& value = pendingParameterValue(pending);
+        value.bytes = desc.bytes;
+        ::renddx9abi::d3dxSlot<GetValueFn>(m_d3dxEffect, 0x54)(
+            m_d3dxEffect, parameter->getD3DXParam(), value.data, sizeof(value.data));
+    }
+}
+
+void Effect::resetTechniques()
+{
+    for (TechniqueMap::iterator i = m_techniques.begin(); i != m_techniques.end(); ++i)
+        for (EffectTechnique* record = &i->second; record; record = record->states)
+        {
+            record->handle = 0;
+            record->restore = 0;
+            record->passes = 0;
+            record->validated = false;
+            if (record->declaration)
+                vertexDeclarationRelease(record->declaration);
+            record->declaration = 0;
+        }
+}
+
+void Effect::rebindParameters()
+{
+    typedef void* (__stdcall* GetBySemanticFn)(void*, void*, const char*);
+    for (vc71::map_node* node = vc71::mapFirst(m_parameters); node;
+         node = vc71::mapNext(m_parameters, node))
+    {
+        void* handle = ::renddx9abi::d3dxSlot<GetBySemanticFn>(m_d3dxEffect, 0x28)(
+            m_d3dxEffect, 0, vc71::mapNodeKey(node));
+        ParameterOwner* owner;
+        if (handle)
+            owner = createFXParameter(this, handle);
+        else
+        {
+            owner = g_parameterOwner;
+            owner->addRef();
+        }
+        ShaderParameter* parameter = static_cast<ShaderParameter*>(vc71::mapNodeValueRef(node));
+        if (parameter->m_owner)
+            parameter->m_owner->release();
+        parameter->m_owner = owner;
+        owner->addRef();
+        owner->release();
+    }
+    m_byte74 = 1;
 }
 
 
@@ -457,22 +537,20 @@ unsigned int Effect::populateParameters()
 
 void Effect::flushPendingValues()
 {
-    if (!m_pendingValues.empty())
+    for (vc71::map_node* node = vc71::mapFirst(m_pendingValues); node;
+         node = vc71::mapNext(m_pendingValues, node))
     {
-        // [FRONTIER] dice::hfe::dx9rend::Effect::flushPendingValues - the per-entry apply
-        RD9_FRONTIER("dice::hfe::dx9rend::Effect::flushPendingValues (the queue is non-empty; the "
-                     "per-entry apply through vslot +0x0C is unwritten)", 0x00);
-        return;
+        vc71::map_node* parameterNode = vc71::mapFind(m_parameters, vc71::mapNodeKey(node));
+        if (parameterNode)
+        {
+            ShaderParameter* parameter = static_cast<ShaderParameter*>(vc71::mapNodeValueRef(parameterNode));
+            PendingParameterValue& value = pendingParameterValue(node);
+            ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxSetValueFn>(m_d3dxEffect, 0x50)(
+                m_d3dxEffect, parameter->getD3DXParam(), value.data, value.bytes);
+        }
     }
-
-    // The tail runs unconditionally: relink the sentinel and zero the count.
-    if (m_pendingValues.head)
-    {
-        m_pendingValues.head->parent = m_pendingValues.head;
-        m_pendingValues.head->left   = m_pendingValues.head;
-        m_pendingValues.head->right  = m_pendingValues.head;
-    }
-    m_pendingValues.size = 0;
+    while (vc71::map_node* node = vc71::mapFirst(m_pendingValues))
+        vc71::mapErase(m_pendingValues, node);
 }
 
 
@@ -1077,8 +1155,9 @@ void applyModPrefix(char* out, unsigned int outSize, const char* path)
 // The macro array ends with a null Name only. File-open failure logs and returns null;
 // this build does not show the compatibility runtime's retry dialog.
 
-void* compileEffectFromFile(const char* rawPath)
+static void* compileEffectFromFileWithErrors(const char* rawPath, void** errorsOut)
 {
+    *errorsOut = 0;
     RD9_TRACE_AT("dice::hfe::dx9rend::compileEffectFromFile", 0, 0x00);
 
     char path[512];
@@ -1127,6 +1206,8 @@ void* compileEffectFromFile(const char* rawPath)
                            include, flags, 0, &effect, &errors)
         : -1;
 
+    *errorsOut = errors;
+
     ::renddx9abi::freeEngineFile(file);
 
     if (hr < 0 || !effect)
@@ -1142,6 +1223,42 @@ void* compileEffectFromFile(const char* rawPath)
                        "%u macro pairs", path, ::renddx9abi::addr(effect), sourceBytes,
                        macroCount / 2);
     return effect;
+}
+
+void* compileEffectFromFile(const char* rawPath)
+{
+    void* errors = 0;
+    return compileEffectFromFileWithErrors(rawPath, &errors);
+}
+
+bool Effect::reload(const vc71::string& name)
+{
+    m_string0C = name;
+    static const bool maxValidation = readBoolSetting("GSMaxValidation", false);
+    for (;;)
+    {
+        void* errors = 0;
+        void* compiled = compileEffectFromFileWithErrors(m_string0C.c_str(), &errors);
+        if (!compiled || (maxValidation && errors))
+        {
+            // [TEMP] [CHOSEN, not recovered] The original offers Retry/Cancel
+            // with compiler text here. No dialog answer is invented.
+            // [RETIRE-WHEN: effect-reload-dialog] Recover path expansion and
+            // validate both compiler-error and GSMaxValidation warning choices.
+            techniqueDialogFrontier("dice::hfe::dx9rend::Effect::reload (compiler retry dialog)", this);
+        }
+        // Retail releases the compiler buffer only in its dialog branch.
+        // Warnings with GSMaxValidation disabled keep that ownership quirk.
+        const bool bound = bind(compiled);
+        ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxReleaseFn>(compiled, 0x08)(compiled);
+        if (bound)
+            return true;
+    }
+}
+
+bool effectReload(Effect* self, const vc71::string& name)
+{
+    return self->reload(name);
 }
 
 } // namespace dx9rend
