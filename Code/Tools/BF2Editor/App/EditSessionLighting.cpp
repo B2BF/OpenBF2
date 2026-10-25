@@ -1,4 +1,5 @@
 // Lighting and minimap bakes invoke renderer commands and write files immediately, outside undo (RW-273).
+// Terrain lightmaps are traced into the editable terrain's staging folder, then copied into the level.
 // Minimap capture disables shadow updates to avoid window-sized depth clipping.
 // Environment saves stage files before copying them into the level; the 1.50 EnvMapTemplate factory
 // returns null, so it currently produces no environment objects. Remove only the bake's temporary lightingTex.dds.
@@ -7,16 +8,23 @@
 
 #include "App/EditorLevel.h"
 #include "App/LevelDocument.h"
+#include "Framework/EditorConsole.h"
 #include "Framework/EditorLog.h"
+#include "Framework/NewLevel.h"
+#include "App/StagingFolder.h"
+#include "Framework/LightmapAtlas.h"
 
 #include "Core/SettingsRepostitory.h"
 #include "Core/SmartItf.h"
 #include "Geom/XpLightManager.h"
+#include "Scene/Object/ObjectManager.h"
 #include "IO/Console/Console.h"
 
 #include <windows.h>
 
+#include <cctype>
 #include <cstdio>
+#include <map>
 #include <vector>
 
 namespace bf2editor
@@ -172,6 +180,388 @@ bool EditSession::captureMinimap(int resolution, std::string& result)
     return true;
 }
 
+bool EditSession::generateLightmaps(int quality, const std::string& parts, const std::string& options,
+                                    std::string& result)
+{
+    std::string levelDir, levelPath;
+    if (!lightingLevel(levelDir, levelPath, result))
+        return false;
+    // The retail dialog's resolutions (Low, Medium, Final and the fourth), as its driver set the modifier.
+    static const float kModifiers[4] = { 0.25f, 0.5f, 1.0f, 2.0f };
+    if (quality < 0 || quality > 3)
+    {
+        result = "the quality is 0..3 (resolution 0.25, 0.5, 1 or 2)";
+        return false;
+    }
+    // The parts, joined by '+': the terrain's (primary, secondary, both) and the objects' (objects, or selected).
+    bool primary = false, surrounding = false, objects = false, selected = false;
+    for (size_t start = 0; start <= parts.size();)
+    {
+        size_t end = parts.find('+', start);
+        if (end == std::string::npos)
+            end = parts.size();
+        const std::string part = parts.substr(start, end - start);
+        if (part == "primary" || part == "both")
+            primary = true;
+        if (part == "secondary" || part == "both")
+            surrounding = true;
+        if (part == "objects")
+            objects = true;
+        else if (part == "selected")
+            selected = true;
+        else if (part != "primary" && part != "secondary" && part != "both")
+        {
+            result = "the parts are primary, secondary, both, objects or selected, joined by + (objects and selected not "
+                     "together)";
+            return false;
+        }
+        start = end + 1;
+    }
+    if (objects && selected)
+    {
+        result = "the parts are primary, secondary, both, objects or selected, joined by + (objects and selected not "
+                 "together)";
+        return false;
+    }
+    const bool terrain = primary || surrounding;
+    bool nearest = false, resume = false;
+    for (size_t start = 0; options != "-" && start <= options.size();)
+    {
+        size_t end = options.find('+', start);
+        if (end == std::string::npos)
+            end = options.size();
+        const std::string option = options.substr(start, end - start);
+        if (option == "nearest")
+            nearest = true;
+        else if (option == "resume")
+            resume = true;
+        else
+        {
+            result = "the options are - or nearest, resume, nearest+resume";
+            return false;
+        }
+        start = end + 1;
+    }
+    if (terrain && !m_editableTerrain.active())
+    {
+        result = "terrain lightmaps are traced on the editable terrain (start the editor with +editableTerrain 1)";
+        return false;
+    }
+    if (selected && m_selection.empty())
+    {
+        result = "no object is selected (the selected part traces the selected objects)";
+        return false;
+    }
+    // The generator set up as the retail editor's driver did it (EditorEngine's CompileManager::generateLightmaps):
+    // created, the resume log (removed first unless resuming), the resolution and onlyNearest, then the terrain
+    // lighting preset - the level's Editor/TerrainLight.con run with BF2Editor (its SkyManager's terrain mode). 1.50
+    // dropped the generator's includeWaterDepth, which the driver set from renderer.IsNightMap.
+    std::vector<std::string> lines;
+    lines.push_back("lightmapGeneration.init");
+    const char kLog[] = "Logs/LightmapGeneration.log";
+    CreateDirectoryA("Logs", 0);
+    if (!resume)
+        DeleteFileA(kLog);
+    lines.push_back(std::string("lightmapGeneration.useLog \"") + kLog + "\"");
+    char line[128];
+    std::snprintf(line, sizeof(line), "lightmapGeneration.resolutionModifier %f", kModifiers[quality]);
+    lines.push_back(line);
+    std::snprintf(line, sizeof(line), "lightmapGeneration.onlyNearest %d", nearest ? 1 : 0);
+    lines.push_back(line);
+    for (size_t i = 0; i < lines.size(); ++i)
+    {
+        const ConsoleLineResult r = runConsoleLine(lines[i]);
+        if (r.failed)
+        {
+            result = "lightmaps NOT generated: " + lines[i] + " answered '" + r.output + "'";
+            return false;
+        }
+    }
+    std::string summary;
+    if (terrain && !traceTerrainLightmaps(quality, primary, surrounding, nearest, resume, levelDir, levelPath, summary))
+    {
+        result = summary;
+        return false;
+    }
+    if (objects || selected)
+    {
+        std::string objectSummary;
+        if (!traceObjectLightmaps(quality, selected, objectSummary))
+        {
+            result = (summary.empty() ? std::string() : summary + "; ") + objectSummary;
+            return false;
+        }
+        summary += (summary.empty() ? std::string() : "; ") + objectSummary;
+    }
+    result = summary + " (written now: not an undoable edit)";
+    logLine(LogLevel::Info, "lighting: %s", result.c_str());
+    return true;
+}
+
+bool EditSession::traceTerrainLightmaps(int quality, bool primary, bool surrounding, bool nearest, bool resume,
+                                        const std::string& levelDir, const std::string& levelPath, std::string& result)
+{
+    static const float kModifiers[4] = { 0.25f, 0.5f, 1.0f, 2.0f };
+    std::vector<std::string> lines;
+    std::string preset;
+    if (fileThere(levelDir + "Editor/TerrainLight.con"))
+    {
+        lines.push_back("run " + levelPath + "/Editor/TerrainLight.con BF2Editor");
+        preset = "the level's Editor/TerrainLight.con";
+    }
+    else
+    {
+        // [CHOSEN] A level without the file (no stock level ships its Editor folder) is lit with the preset the retail
+        // editor writes for a new level.
+        const std::vector<std::string> defaults = terrainLightDefaults();
+        lines.insert(lines.end(), defaults.begin(), defaults.end());
+        preset = "the retail editor's preset for a new level (the level has no Editor/TerrainLight.con)";
+    }
+    for (size_t i = 0; i < lines.size(); ++i)
+    {
+        const ConsoleLineResult r = runConsoleLine(lines[i]);
+        if (r.failed)
+        {
+            result = "terrain lightmaps NOT generated: " + lines[i] + " answered '" + r.output + "'";
+            return false;
+        }
+    }
+    std::vector<std::pair<std::string, std::string> > files;
+    std::string error;
+    const DWORD start = GetTickCount();
+    if (!m_editableTerrain.traceLightmaps(primary, surrounding, files, error))
+    {
+        result = "terrain lightmaps NOT generated: " + error;
+        return false;
+    }
+    const unsigned long seconds = static_cast<unsigned long>((GetTickCount() - start) / 1000);
+    int written = 0;
+    if (!copyStagedFiles(files, written, error))
+    {
+        result = "the terrain lightmaps were traced, but not copied into the level: " + error;
+        return false;
+    }
+    char text[256];
+    std::snprintf(text, sizeof(text), "traced the terrain's lightmaps (%s patches, resolution %g%s%s) in %lu s: %u "
+                  "file%s, %d written into the level", primary && surrounding ? "primary and ring" : primary ? "primary"
+                  : "ring", static_cast<double>(kModifiers[quality]), nearest ? ", only the nearest block" : "",
+                  resume ? ", resumed" : "", seconds, static_cast<unsigned>(files.size()), files.size() == 1 ? "" : "s",
+                  written);
+    result = std::string(text) + "; lit with " + preset;
+    return true;
+}
+
+bool EditSession::traceObjectLightmaps(int quality, bool selectedOnly, std::string& result)
+{
+    std::string levelDir, levelPath;
+    if (!lightingLevel(levelDir, levelPath, result))
+        return false;
+    // As the retail driver: the High resolution traces objects at 1.0; then the level's object preset (its SkyManager's
+    // object mode ran Editor/ObjectLight.con with BF2Editor).
+    std::vector<std::string> lines;
+    if (quality == 3)
+        lines.push_back("lightmapGeneration.resolutionModifier 1.000000");
+    std::string preset;
+    if (fileThere(levelDir + "Editor/ObjectLight.con"))
+    {
+        lines.push_back("run " + levelPath + "/Editor/ObjectLight.con BF2Editor");
+        preset = "the level's Editor/ObjectLight.con";
+    }
+    else
+    {
+        // [CHOSEN] A level without the file (no stock level ships its Editor folder, and the retail editor's new level
+        // has none) is lit with the retail editor's terrain preset for a new level.
+        const std::vector<std::string> defaults = terrainLightDefaults();
+        lines.insert(lines.end(), defaults.begin(), defaults.end());
+        preset = "the retail editor's preset for a new level (the level has no Editor/ObjectLight.con)";
+    }
+    for (size_t i = 0; i < lines.size(); ++i)
+    {
+        const ConsoleLineResult r = runConsoleLine(lines[i]);
+        if (r.failed)
+        {
+            result = "object lightmaps NOT generated: " + lines[i] + " answered '" + r.output + "'";
+            return false;
+        }
+    }
+    // The samplers write <Editor_LevelSavePath>/<level path>/Lightmaps/Objects/<template>=<geom>=<position>.dds; the atlas
+    // reads that folder through the file manager and writes LightmapAtlas.tai and its pages beside the lightmaps. The
+    // folder starts with every object lightmap the level has - its atlas unpacked (a stock level has nothing else), then
+    // its own single lightmaps over them - so the atlas keeps the objects this trace does not reach.
+    std::string root, error;
+    if (!makeStagingFolder("lightmaps", root, error))
+    {
+        result = "object lightmaps NOT generated: " + error;
+        return false;
+    }
+    const std::string folder = levelPath + "/Lightmaps/Objects";
+    const std::string staged = root + "/" + folder + "/";
+    CreateDirectoryA((root + "/Levels").c_str(), 0);
+    CreateDirectoryA((root + "/" + levelPath).c_str(), 0);
+    CreateDirectoryA((root + "/" + levelPath + "/Lightmaps").c_str(), 0);
+    CreateDirectoryA((root + "/" + folder).c_str(), 0);
+    int unpacked = 0, kept = 0;
+    std::string index;
+    if (ObjectLibrary::readTextFile(levelDir + "Lightmaps/Objects/LightmapAtlas.tai", index, error))
+    {
+        std::vector<AtlasEntry> entries;
+        if (!parseAtlasIndex(index, entries, error))
+        {
+            result = "object lightmaps NOT generated: the level's LightmapAtlas.tai: " + error;
+            return false;
+        }
+        std::map<std::string, std::string> pages;
+        for (size_t i = 0; i < entries.size(); ++i)
+        {
+            const std::string pageName = atlasFileName(entries[i].atlasFile);
+            std::map<std::string, std::string>::iterator page = pages.find(pageName);
+            if (page == pages.end())
+            {
+                std::string bytes;
+                ObjectLibrary::readTextFile(levelDir + "Lightmaps/Objects/" + pageName, bytes, error);
+                page = pages.insert(std::make_pair(pageName, bytes)).first;
+            }
+            std::string texture;
+            if (cutAtlasTexture(page->second, entries[i], texture, error)
+                && ObjectLibrary::writeTextFile(staged + atlasFileName(entries[i].texture), texture, error))
+                ++unpacked;
+        }
+    }
+    std::vector<std::string> own;
+    listFolderFiles(levelDir + "Editor/Lightmaps/Objects", std::string(), own);
+    for (size_t i = 0; i < own.size(); ++i)
+    {
+        std::string data;
+        if (own[i].find('/') == std::string::npos
+            && ObjectLibrary::readTextFile(levelDir + "Editor/Lightmaps/Objects/" + own[i], data, error)
+            && ObjectLibrary::writeTextFile(staged + own[i], data, error))
+            ++kept;
+    }
+    FILETIME before;
+    GetSystemTimeAsFileTime(&before);
+    const DWORD start = GetTickCount();
+    int traced = 0;
+    std::string atlas;
+    {
+        StagingRedirect redirect(root);
+        if (selectedOnly)
+        {
+            dice::hfe::world::IObject* const active =
+                dice::hfe::world::objectManager ? dice::hfe::world::objectManager->getActiveObject() : 0;
+            const std::vector<unsigned> ids = m_selection.ids();
+            for (size_t i = 0; i < ids.size(); ++i)
+            {
+                std::string why;
+                if (!activateObject(ids[i], why))
+                    continue;
+                char line[96];
+                std::snprintf(line, sizeof(line), "lightmapGeneration.traceActiveObjectProgress %u %u",
+                              static_cast<unsigned>(i), static_cast<unsigned>(ids.size()));
+                const ConsoleLineResult r = runConsoleLine(line);
+                if (!r.failed && r.output == "1")
+                    ++traced;
+            }
+            if (dice::hfe::world::objectManager)
+                dice::hfe::world::objectManager->setActiveObject(active);
+        }
+        else
+        {
+            const ConsoleLineResult r = runConsoleLine("lightmapGeneration.traceAllObjects");
+            if (r.failed || r.output != "1")
+            {
+                result = "object lightmaps NOT generated: lightmapGeneration.traceAllObjects answered '" + r.output + "'";
+                return false;
+            }
+        }
+        // The atlas the game reads, packed from every lightmap in the folder.
+        const ConsoleLineResult r = runConsoleLine("StaticMeshRenderer.loadAllLightMapFilesDLL " + folder + "/ .dds");
+        if (r.failed || r.output != "1")
+            atlas = "the atlas NOT packed ('" + r.output + "')";
+    }
+    const unsigned long seconds = static_cast<unsigned long>((GetTickCount() - start) / 1000);
+    // The level gets the atlas (Lightmaps/Objects) and the lightmaps this trace wrote (Editor/Lightmaps/Objects: the
+    // packer leaves the Editor folder out of the game's archives).
+    std::vector<std::string> names;
+    listFolderFiles(root + "/" + folder, std::string(), names);
+    std::vector<std::pair<std::string, std::string> > files;
+    int lightmaps = 0, pages = 0;
+    for (size_t i = 0; i < names.size(); ++i)
+    {
+        const std::string path = staged + names[i];
+        std::string low = names[i];
+        for (size_t k = 0; k < low.size(); ++k)
+            low[k] = static_cast<char>(std::tolower(static_cast<unsigned char>(low[k])));
+        if (low.compare(0, 13, "lightmapatlas") == 0)
+        {
+            files.push_back(std::make_pair(path, "Lightmaps/Objects/" + names[i]));
+            pages += low.size() > 4 && low.compare(low.size() - 4, 4, ".dds") == 0 ? 1 : 0;
+            continue;
+        }
+        WIN32_FILE_ATTRIBUTE_DATA info;
+        if (GetFileAttributesExA(path.c_str(), GetFileExInfoStandard, &info)
+            && CompareFileTime(&info.ftLastWriteTime, &before) >= 0)
+        {
+            files.push_back(std::make_pair(path, "Editor/Lightmaps/Objects/" + names[i]));
+            ++lightmaps;
+        }
+    }
+    if (lightmaps == 0)
+    {
+        result = "object lightmaps NOT generated: the trace wrote none (each mesh's .samples file: the editor mounts "
+                 "bf2editor/LightmapSamples*.zip at Objects, or a mod's loose Objects folder holds them)";
+        return false;
+    }
+    if (atlas.empty() && pages == 0)
+        atlas = "the atlas NOT packed (no page written)";
+    if (atlas.empty())
+    {
+        char text[96];
+        std::snprintf(text, sizeof(text), "the atlas packed (%d pages)", pages);
+        atlas = text;
+    }
+    int written = 0;
+    if (!copyStagedFiles(files, written, error))
+    {
+        result = "the object lightmaps were traced, but not copied into the level: " + error;
+        return false;
+    }
+    // A smaller atlas leaves the old one's last pages in the folder, named by no entry now; the folder clean (L2)
+    // moves them aside.
+    size_t stale = 0;
+    std::vector<AtlasEntry> packed;
+    std::string packedIndex;
+    if (ObjectLibrary::readTextFile(levelDir + "Lightmaps/Objects/LightmapAtlas.tai", packedIndex, error)
+        && parseAtlasIndex(packedIndex, packed, error))
+    {
+        std::vector<std::string> listed, present;
+        listFolderFiles(levelDir + "Lightmaps/Objects", std::string(), listed);
+        for (size_t i = 0; i < listed.size(); ++i)
+            if (listed[i].find('/') == std::string::npos)   // not those moved into Unused
+                present.push_back(listed[i]);
+        stale = unnamedAtlasPages(packed, present).size();
+    }
+    char text[400];
+    std::snprintf(text, sizeof(text), "traced %s in %lu s: %d lightmaps written (%d unpacked from the level's atlas, %d of "
+                  "its own kept), %s; %d files written into the level",
+                  selectedOnly ? "the selected objects' lightmaps" : "the objects' lightmaps", seconds, lightmaps,
+                  unpacked, kept, atlas.c_str(), written);
+    result = std::string(text) + "; lit with " + preset;
+    if (stale)
+    {
+        std::snprintf(text, sizeof(text), "; %u pages of the old atlas are named by no entry now (EditorLighting.cleanLightmaps "
+                      "1 moves them into Lightmaps/Objects/Unused)", static_cast<unsigned>(stale));
+        result += text;
+    }
+    if (selectedOnly && traced < static_cast<int>(m_selection.size()))
+    {
+        char more[96];
+        std::snprintf(more, sizeof(more), "; %d of the %u selected objects traced", traced,
+                      static_cast<unsigned>(m_selection.size()));
+        result += more;
+    }
+    return true;
+}
+
 bool EditSession::generateEnvMaps(std::string& result)
 {
     std::string levelDir, levelPath;
@@ -205,21 +595,17 @@ bool EditSession::generateEnvMaps(std::string& result)
     dice::hfe::settings->stringSet(key, previous);
     std::vector<std::string> written;
     listFiles(staging, "", written);
+    // "Levels/<name>/Envmaps/x" -> "Envmaps/x" in the level, copied in as one backed-up save.
+    std::vector<std::pair<std::string, std::string> > files;
+    for (size_t i = 0; i < written.size(); ++i)
+        files.push_back(std::make_pair(staging + "/" + written[i], written[i].size() > levelPath.size() + 1
+                                                                       ? written[i].substr(levelPath.size() + 1) : written[i]));
     int copied = 0;
     std::string failed;
-    for (size_t i = 0; i < written.size(); ++i)
-    {
-        const std::string from = staging + "/" + written[i];
-        // "Levels/<name>/Envmaps/x" -> "<levelDir>Envmaps/x"
-        const std::string inLevel = written[i].size() > levelPath.size() + 1 ? written[i].substr(levelPath.size() + 1) : written[i];
-        const std::string to = levelDir + inLevel;
-        makeFolders(to);
-        if (CopyFileA(from.c_str(), to.c_str(), FALSE))
-            ++copied;
-        else
-            failed += (failed.empty() ? "" : ", ") + to;
-        DeleteFileA(from.c_str());
-    }
+    if (!files.empty() && !copyStagedFiles(files, copied, failed))
+        copied = 0;
+    for (size_t i = 0; i < files.size(); ++i)
+        DeleteFileA(files[i].first.c_str());
     if (written.empty())
     {
         // The save is a void row: an empty answer is its only one. In 1.50 EnvMapTemplate::createObject returns

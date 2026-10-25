@@ -769,6 +769,18 @@ void setCompressVertexData(bool value) { setTemplateBool(0x78, value); }
 int getMaxTextureRepeat() { return getTemplateInt(0x8C); }
 void setMaxTextureRepeat(int value) { setTemplateInt(0x88, value); }
 
+// setLightmapSizeAll geom lod size: the active template's setLightmapSize (+0x70) with the three
+// arguments as given; a StaticMesh template stores the size only while lightmapOverride is set.
+// The executor fetches the template again without a null check.
+void setLightmapSizeAll(int geom, int lod, int size)
+{
+    activeGeometryTemplate()->setLightmapSize(geom, lod, size);
+}
+
+BF2_CONSOLE_METHOD_3_STATIC_ACTIVE(setLightmapSizeAll, setLightmapSizeAll,
+                                   activeGeometryTemplate() != 0, int, int, int,
+                                   kGeometryTemplateConsoleTag)
+
 BF2_CONSOLE_PROPERTY_FN(lightmapOverride, bool, activeGeometryTemplate() != 0,
                         getLightmapOverride(), setLightmapOverride,
                         kGeometryTemplateConsoleTag)

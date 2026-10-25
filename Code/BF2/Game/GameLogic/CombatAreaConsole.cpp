@@ -1,6 +1,8 @@
 // Console bindings for authored combat boundaries and their active-area cursor.
 // create/active select the area modified by subsequent properties; registration order is retained.
-// [CHOSEN] Vehicle-category arguments use int, so reflection metadata differs from the retail enum name.
+// [CHOSEN, not recovered] Vehicle-category arguments use int: the shipped metadata names
+// world::VehicleCategory, but CombatAreaManager stores and exposes the value as int, so reflection
+// records the int the executors actually pass.
 #include "../../Core/BuildConfig.h"
 
 #include "../../Core/ConsoleObjectMacro.h"

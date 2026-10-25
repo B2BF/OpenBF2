@@ -168,6 +168,11 @@ public:
     void releaseRoadMask();
     void reloadLightmap();
     void paintColor(float x, float z, float radius, int strength, unsigned int color);
+    // The two TerrainLightSampling reads. [INFERRED] names.
+    // getFileIndices: (heightmapSize / patchSize) / 2 + grid position per axis, the "%02ix%02i" pair.
+    // getWorldBounds: the patch's world box at height 0; only min and max are written.
+    void getFileIndices(int* x, int* z);
+    void getWorldBounds(TerrainAabb& bounds);
     void renderRoadMask(int size);                                         // (+0x2F4)
     void burnRoadsInUndergrowth();
     void buildMaterialMap();

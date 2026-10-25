@@ -7,6 +7,7 @@
 
 #include "App/LevelDocument.h"
 #include "Framework/EditorLog.h"
+#include "Framework/Matrix4.h"
 #include "Framework/ObjectArchives.h"
 #include "Framework/ObjectLibrary.h"
 #include "Framework/SourceControl.h"
@@ -36,6 +37,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <list>
+#include <map>
 
 namespace bf2editor
 {
@@ -730,21 +732,32 @@ bool EditSession::applyObjectTemplateEdit(int id, const std::string& state, std:
     return true;
 }
 
-bool EditSession::saveObjectTemplates(std::string& result)
+void EditSession::planObjectTemplates(SavePlan& plan)
 {
     const std::vector<size_t> modified = m_templateDocuments.modified();
-    result.clear();
+    if (modified.empty())
+        return;
+    SavePart& part = plan.part("object templates");
+    std::string answer;
     for (size_t i = 0; i < modified.size(); ++i)
     {
         std::string error;
-        if (!m_templateDocuments.save(modified[i], error))
+        if (!m_templateDocuments.planSave(modified[i], part, error))
         {
-            result = "object template NOT saved: " + error;
-            return false;
+            part.refuse("object template NOT saved: " + error);
+            return;
         }
-        result += (i ? ", " : "saved the object template files ") + m_templateDocuments.document(modified[i]).writePath;
+        answer += (i ? ", " : "saved the object template files ") + m_templateDocuments.document(modified[i]).writePath;
     }
-    return true;
+    part.onReport([answer](const SavePart&) { return answer; });
+}
+
+bool EditSession::saveObjectTemplates(std::string& result)
+{
+    SavePlan plan;
+    planObjectTemplates(plan);
+    plan.dropUnchanged();
+    return writeSave(plan, "EditorObjectTemplate.save", result) && !plan.anyRefused();
 }
 
 // The mod's object archives (WP7 step 4)
@@ -1649,17 +1662,6 @@ bool fileTaken(const std::string& path, std::string& writePath)
         || GetFileAttributesA(writePath.c_str()) != INVALID_FILE_ATTRIBUTES;
 }
 
-// A new file written where the engine writes (the mod's own folder), then added to source control.
-bool writeNewFile(const std::string& writePath, const std::string& text, std::string& error)
-{
-    if (!ObjectLibrary::writeTextFile(writePath, text, error))
-        return false;
-    const ScmResult added = sourceControl().add(writePath);
-    if (!added.ok)
-        logLine(LogLevel::Warning, "source control did not add %s: %s", writePath.c_str(), added.message.c_str());
-    return true;
-}
-
 } // namespace
 
 bool EditSession::newTemplate(const std::string& className, const std::string& name, const std::string& folder,
@@ -1695,7 +1697,7 @@ bool EditSession::newTemplate(const std::string& className, const std::string& n
     }
     const std::string text = "ObjectTemplate.create " + realClass + " " + name + "\r\nObjectTemplate.saveInSeparateFile 1\r\n"
                              "ObjectTemplate.createdInEditor 1\r\n";
-    if (!writeNewFile(writePath, text, error))
+    if (!writeFilesNow("new template", { std::make_pair(writePath, text) }, error))
     {
         result = error;
         return false;
@@ -1769,8 +1771,12 @@ bool EditSession::cloneTemplate(const std::string& source, const std::string& na
         result = (fileTaken(conPath, conWrite) ? conPath : tweakPath) + " is there already: refused";
         return false;
     }
-    // The .tweak first, so the .con's include finds it.
-    if ((!clone.tweak.empty() && !writeNewFile(tweakWrite, clone.tweak, error)) || !writeNewFile(conWrite, clone.con, error))
+    // Both written as one save before the .con runs (its include needs the .tweak).
+    std::vector<std::pair<std::string, std::string> > written;
+    if (!clone.tweak.empty())
+        written.push_back(std::make_pair(tweakWrite, clone.tweak));
+    written.push_back(std::make_pair(conWrite, clone.con));
+    if (!writeFilesNow("template clone", written, error))
     {
         result = error;
         return false;
@@ -2817,6 +2823,180 @@ bool EditSession::geometryCommand(const std::string& action, const std::string& 
     const std::string label = (action == "set" ? "Set GeometryTemplate." : "Remove GeometryTemplate.") + spec + " of " + realName;
     recordTemplateEdit(edit, label);
     result = label + " in " + document.path + " (the geometry reads it when the level loads again)";
+    return true;
+}
+
+// ---- The preview's parts (the object editor's view) --------------------------------------------------------------
+// [added] (issue draft 14): retail's object editor placed a child through its tree's fields; here a part of the
+// previewed template - a child, or a seat's soldier exit point - is picked in the view and moved with the gizmo.
+
+namespace
+{
+
+dice::hfe::Mat4 product(const dice::hfe::Mat4& a, const dice::hfe::Mat4& b)
+{
+    dice::hfe::Mat4 out;
+    matrixMultiply(a.m, b.m, out.m);
+    return out;
+}
+
+// The height PlayerControlObject::_getExitPosition adds to the world point of a seat's exit.
+const float kExitLift = 0.5f;
+
+} // namespace
+
+std::vector<EditSession::PreviewPart> EditSession::previewParts()
+{
+    std::vector<PreviewPart> parts;
+    dice::hfe::world::IObject* preview = m_preview ? object(m_preview) : 0;
+    dice::hfe::world::IObjectTemplate* root =
+        preview && dice::hfe::world::objectTemplateManager ? dice::hfe::world::objectTemplateManager->getTemplate(m_previewTemplate)
+                                                           : 0;
+    if (root)
+        collectPreviewParts(root, preview->getAbsoluteTransformation(), 0, parts);
+    return parts;
+}
+
+void EditSession::collectPreviewParts(dice::hfe::world::IObjectTemplate* objectTemplate, const dice::hfe::Mat4& world,
+                                      int depth, std::vector<PreviewPart>& parts)
+{
+    if (!objectTemplate || depth > 12 || parts.size() > 1024)
+        return;
+    const std::string name = objectTemplate->getName();
+    if (objectTemplate->queryInterface(dice::hfe::world::IID_IPlayerControlObjectTemplate))
+        addExitParts(name, world, depth, parts);
+    dice::hfe::world::IBundleTemplate* bundle = bundleOf(objectTemplate);
+    if (!bundle)
+        return;
+    const auto lowered = [](std::string text) {
+        std::transform(text.begin(), text.end(), text.begin(), [](char c) { return static_cast<char>(std::tolower(static_cast<unsigned char>(c))); });
+        return text;
+    };
+    // The children a line of the template's files adds: the ones a part may be. The engine adds others of its own
+    // (a seat's S_<seat>_Ambient sounds), which no edit can move.
+    std::map<std::string, int> written;
+    std::vector<size_t> files;
+    std::string error;
+    const bool haveFiles = m_templateDocuments.filesOf(name, files, error);
+    for (size_t f = 0; haveFiles && f < files.size(); ++f)
+    {
+        const std::vector<TemplateChildLines> lines = m_templateDocuments.document(files[f]).file.children(name);
+        for (size_t c = 0; c < lines.size(); ++c)
+            ++written[lowered(lines[c].child)];
+    }
+    // A child is named as the child edits name it: its template and its occurrence among the children of that name.
+    std::map<std::string, int> seen;
+    for (int i = 0; i < bundle->getNoTemplates(); ++i)
+    {
+        const std::string child = bundle->getTemplate(i);
+        const std::string key = lowered(child);
+        const int occurrence = seen[key]++;
+        if (haveFiles && occurrence >= written[key])
+            continue;
+        dice::hfe::world::IObjectTemplate* childTemplate = dice::hfe::world::objectTemplateManager->getTemplate(child);
+        PreviewPart part;
+        part.kind = PreviewPart::Child;
+        part.owner = name;
+        part.child = child + "#" + std::to_string(occurrence);
+        part.label = child;
+        part.frame = world;
+        part.world = product(bundle->getTransformation(i), world);
+        part.depth = depth + 1;
+        part.seat = childTemplate && childTemplate->queryInterface(dice::hfe::world::IID_IPlayerControlObjectTemplate);
+        part.camera = childTemplate && childTemplate->getClassID() == dice::hfe::world::CID_CameraTemplate;
+        parts.push_back(part);
+        collectPreviewParts(childTemplate, part.world, depth + 1, parts);
+    }
+}
+
+void EditSession::addExitParts(const std::string& seat, const dice::hfe::Mat4& world, int depth, std::vector<PreviewPart>& parts)
+{
+    // The lines as the engine ran them: the defining file, then its .tweak - the last one sets the value.
+    std::vector<size_t> files;
+    std::string error, exit, alternative;
+    if (!m_templateDocuments.filesOf(seat, files, error))
+        return;
+    for (size_t f = 0; f < files.size(); ++f)
+    {
+        std::string value;
+        if (m_templateDocuments.document(files[f]).file.value(seat, "setSoldierExitLocation", value))
+            exit = value;
+        if (m_templateDocuments.document(files[f]).file.value(seat, "altSoldierExitPosition", value))
+            alternative = value;
+    }
+    const std::string texts[2] = { exit, alternative };
+    for (int k = 0; k < 2; ++k)
+    {
+        if (texts[k].empty())
+            continue;
+        const size_t blank = texts[k].find_first_of(" \t");
+        const dice::hfe::Vec3 local = vectorOf(texts[k].substr(0, blank));
+        // A zero point is no exit of the seat's own: the engine takes its parent seat's then.
+        if (!beyond(local, 0.0f))
+            continue;
+        PreviewPart part;
+        part.kind = k == 0 ? PreviewPart::Exit : PreviewPart::AltExit;
+        part.owner = seat;
+        part.label = k == 0 ? "exit" : "alternative exit";
+        if (k == 0 && blank != std::string::npos)
+            part.exitRotation = texts[k].substr(texts[k].find_first_not_of(" \t", blank));
+        part.frame = world;
+        part.world = dice::hfe::Mat4::getIdentity();
+        const float p[3] = { local.x, local.y, local.z };
+        for (int c = 0; c < 3; ++c)
+            part.world.m[12 + c] = p[0] * world.m[c] + p[1] * world.m[4 + c] + p[2] * world.m[8 + c] + world.m[12 + c];
+        part.world.m[13] += kExitLift;
+        part.depth = depth + 1;
+        parts.push_back(part);
+    }
+}
+
+bool EditSession::movePreviewPart(size_t index, const dice::hfe::Mat4& world, std::string& result)
+{
+    const std::vector<PreviewPart> parts = previewParts();
+    if (index >= parts.size())
+    {
+        result = "the preview has no part " + std::to_string(index) + " (EditorPreview.parts lists them)";
+        return false;
+    }
+    const PreviewPart& part = parts[index];
+    dice::hfe::Mat4 inverse;
+    if (!matrixInvertAffine(part.frame.m, inverse.m))
+    {
+        result = "the part's frame cannot be inverted";
+        return false;
+    }
+    bool moved = false;
+    if (part.kind == PreviewPart::Child)
+    {
+        const dice::hfe::Mat4 local = product(world, inverse);
+        dice::hfe::Vec3 position;
+        position.x = local.m[12];
+        position.y = local.m[13];
+        position.z = local.m[14];
+        moved = moveTemplateChild(part.owner, part.child, position, rotationOf(local), result);
+    }
+    else
+    {
+        const float p[3] = { world.m[12], world.m[13] - kExitLift, world.m[14] };
+        dice::hfe::Vec3 local;
+        local.x = p[0] * inverse.m[0] + p[1] * inverse.m[4] + p[2] * inverse.m[8] + inverse.m[12];
+        local.y = p[0] * inverse.m[1] + p[1] * inverse.m[5] + p[2] * inverse.m[9] + inverse.m[13];
+        local.z = p[0] * inverse.m[2] + p[1] * inverse.m[6] + p[2] * inverse.m[10] + inverse.m[14];
+        const std::string value = vectorText(local) + (part.kind == PreviewPart::Exit
+                                                           ? " " + (part.exitRotation.empty() ? std::string("0/0/0") : part.exitRotation)
+                                                           : std::string());
+        moved = setObjectTemplateProperty(part.owner, part.kind == PreviewPart::Exit ? "setSoldierExitLocation"
+                                                                                     : "altSoldierExitPosition",
+                                          value, result);
+    }
+    if (!moved)
+        return false;
+    // The preview made again from the template, so it shows the change; the same part stays picked.
+    std::string refreshed;
+    const int picked = m_pickedPart;
+    previewCommand("refresh", std::string(), refreshed);
+    m_pickedPart = picked;
     return true;
 }
 

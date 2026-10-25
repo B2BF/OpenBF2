@@ -6,7 +6,10 @@
 #include "Framework/DdsImage.h"
 #include "Framework/EditorConsole.h"
 #include "Framework/EditorLog.h"
+#include "Framework/TerrainLowDetail.h"
+#include "Framework/TerrainRawCompile.h"
 #include "Framework/TerrainRawLayers.h"
+#include "Framework/TextureEncode.h"
 
 #include "Core/ClassManager.h"
 #include "Core/SettingsRepostitory.h"
@@ -19,10 +22,14 @@
 
 #include <windows.h>
 
+#include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <deque>
 #include <list>
+#include <map>
 #include <sstream>
 
 namespace bf2editor
@@ -230,8 +237,26 @@ int ringSlot(int x, int z)
     return x < -1 || x > 1 || z < -1 || z > 1 ? -1 : kSlots[z + 1][x + 1];
 }
 
+// Whether the cluster holds a heightmap in sector x, z that is marked modified (Heightdata.con's setModified, or an
+// edit since). The retail terrain save compiles such a sector into the ring even when it is not shown; a new level's
+// surrounding heightmaps are not marked, so it has no ring.
+bool sectorModified(int x, int z)
+{
+    using namespace dice::hfe;
+    world::IHeightmapCluster* const cluster =
+        classManager ? static_cast<world::IHeightmapCluster*>(classManager->getSingleton("HeightmapCluster")) : 0;
+    const world::IHeightmap* const tile = cluster ? cluster->getHeightmapInSector(x, z) : 0;
+    return tile && tile->getModified();
+}
+
 // The editable terrain's detail-map size: Terrain's constructor default, which nothing an editor branch sets changes.
 const int kEditorDetailmapSize = 512;
+// The game low-detail maps' size: the renderer's default low-detail settings, "-dxt1c -prescale 256 256 -Box"
+// (TerrainEditable's constructor).
+const int kLowDetailmapSize = 256;
+// How closely recovered low-detail types must explain a level's low-detail maps: the mean difference of red and blue,
+// of 255 [CHOSEN]. Stock Karkand's types explain its maps to 2.6, its compression's error.
+const float kLowDetailFit = 10.0f;
 
 bool readWholeFile(const std::string& path, std::string& data)
 {
@@ -244,6 +269,24 @@ bool readWholeFile(const std::string& path, std::string& data)
     const BOOL ok = size == 0 || ReadFile(file, &data[0], size, &read, 0);
     CloseHandle(file);
     return ok && read == size;
+}
+
+// The .dds files of a folder by name, with their last-write times.
+std::map<std::string, unsigned long long> ddsWriteTimes(const std::string& folder)
+{
+    std::map<std::string, unsigned long long> times;
+    WIN32_FIND_DATAA found;
+    const HANDLE search = FindFirstFileA((folder + "*.dds").c_str(), &found);
+    if (search == INVALID_HANDLE_VALUE)
+        return times;
+    do
+    {
+        if (!(found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+            times[found.cFileName] = (static_cast<unsigned long long>(found.ftLastWriteTime.dwHighDateTime) << 32)
+                                   | found.ftLastWriteTime.dwLowDateTime;
+    } while (FindNextFileA(search, &found));
+    FindClose(search);
+    return times;
 }
 
 bool fileExists(const std::string& path)
@@ -314,6 +357,88 @@ int stageEditorCopies(const std::string& base, const char* folder, const std::st
     } while (FindNextFileA(search, &found));
     FindClose(search);
     return present;
+}
+
+const char kSavePathKey[] = "Editor_LevelSavePath";
+
+// Puts the staging folder in front of the engine's file paths for the lifetime of the object: relative writes land
+// in it, reads find its files before the mod's, and the editor save-path setting names it (the atlas builder's
+// folder). Both are restored on destruction.
+class StagingRedirect
+{
+public:
+    explicit StagingRedirect(const std::string& root)
+        : m_path(root + "/")
+        , m_previous(dice::hfe::settings->stringGet(kSavePathKey, std::string()))
+    {
+        dice::hfe::settings->stringSet(kSavePathKey, root);
+        dice::hfe::io::fileManager->addPath(m_path);
+    }
+    ~StagingRedirect()
+    {
+        dice::hfe::io::fileManager->removePath(m_path);
+        dice::hfe::settings->stringSet(kSavePathKey, m_previous);
+    }
+
+private:
+    StagingRedirect(const StagingRedirect&);
+    StagingRedirect& operator=(const StagingRedirect&);
+    std::string m_path;
+    std::string m_previous;
+};
+
+// The level's overgrowth folder as Overgrowth.path gives it, with '/' separators ("levels/<level>/overgrowth/").
+std::string overgrowthFolder()
+{
+    std::string path = trimmed(runConsoleLine("Overgrowth.path").output);
+    std::replace(path.begin(), path.end(), '\\', '/');
+    return path;
+}
+
+// Copies the atlas sources listed by `folder`OvergrowthAtlas.tai from the engine's files to `root`/<source>, since
+// the atlas builder reads plain files only. Returns the number staged; `missing` counts the sources the engine could
+// not read.
+int stageAtlasSources(const std::string& folder, const std::string& root, int& missing)
+{
+    missing = 0;
+    std::string tai;
+    if (!readEngineFile(folder + "OvergrowthAtlas.tai", tai))
+        return 0;
+    int staged = 0;
+    std::istringstream in(tai);
+    std::string line;
+    while (std::getline(in, line))
+    {
+        const std::string entry = trimmed(line);
+        if (entry.empty() || entry[0] == '#')
+            continue;
+        const std::string source = entry.substr(0, entry.find_first_of(" \t"));
+        if (lowered(source).find(".dds") == std::string::npos)
+            continue;
+        const std::string target = root + "/" + source;
+        std::string data;
+        if (fileExists(target) || (readEngineFile(source, data) && writeWhole(target, data)))
+            ++staged;
+        else
+            ++missing;
+    }
+    return staged;
+}
+
+// The lines of an Overgrowth.con that decide the atlas: the types and their geometries.
+std::vector<std::string> overgrowthTypeLines(const std::string& text)
+{
+    std::vector<std::string> out;
+    std::istringstream in(text);
+    std::string line;
+    while (std::getline(in, line))
+    {
+        const std::string entry = trimmed(line);
+        const std::string low = lowered(entry);
+        if (low.compare(0, 18, "overgrowth.addtype") == 0 || low.compare(0, 23, "overgrowthtype.geometry") == 0)
+            out.push_back(entry);
+    }
+    return out;
 }
 
 } // namespace
@@ -428,6 +553,7 @@ bool EditableTerrain::open(const std::string& level, std::string& report)
     // The settings, in the file's order; init with the staging folder as the save path.
     m_notApplied.clear();
     m_baseNames.clear();
+    m_lightmapBase.clear();
     const auto rememberBase = [this](const std::string& name) -> std::string {
         m_baseNames.push_back(name);
         return name;
@@ -461,7 +587,10 @@ bool EditableTerrain::open(const std::string& level, std::string& report)
         else if (command == "terrain.colormapbasename")
             editable->setColormapBaseName(rememberBase(unquoted(value)));
         else if (command == "terrain.lightmapbasename")
-            editable->setLightmapBaseName(rememberBase(unquoted(value)));
+        {
+            m_lightmapBase = unquoted(value);
+            editable->setLightmapBaseName(rememberBase(m_lightmapBase));
+        }
         else if (command == "terrain.terrainwatercolor" && parseVec3(value, v))
             editable->setTerrainWaterColor(v);
         else if (command == "terrain.init")
@@ -509,13 +638,14 @@ bool EditableTerrain::open(const std::string& level, std::string& report)
     }
     logLine(LogLevel::Info, "terrain: %d Sky.con terrain line%s applied to the editable terrain", skyLines,
             skyLines == 1 ? "" : "s");
-    // The surrounding sectors drawn, as the game draws them (retail showed a sector with its activation).
+    // The surrounding sectors the game draws: those marked modified, which the terrain save compiles into the ring
+    // (retail showed a sector with its activation).
     int ring = 0;
     for (int z = -1; z <= 1; ++z)
         for (int x = -1; x <= 1; ++x)
         {
             std::string ignored;
-            if ((x || z) && setSectorShown(x, z, true, ignored))
+            if ((x || z) && sectorModified(x, z) && setSectorShown(x, z, true, ignored))
                 ++ring;
         }
     logLine(LogLevel::Info, "terrain: %d surrounding sector%s shown", ring, ring == 1 ? "" : "s");
@@ -601,8 +731,48 @@ bool EditableTerrain::paint(const TerrainBrushSettings& brush, float x, float z,
         else
             m_editable->paintColor(x, z, radius, amount, brush.color);
     }
+    // The patches the stroke reaches, by grid place - the renderer paints a quarter of the radius; one heightmap cell
+    // more is kept in hand: the compile re-encodes their game textures.
+    const float cell = m_editable->getPrimaryWorldScale().x;
+    const float patchWorld = static_cast<float>(m_editable->getPatchSize()) * cell;
+    const float reach = radius * 0.25f + cell;
+    if (patchWorld > 0.0f)
+    {
+        const int x0 = static_cast<int>(std::floor((x - reach) / patchWorld));
+        const int x1 = static_cast<int>(std::floor((x + reach) / patchWorld));
+        const int z0 = static_cast<int>(std::floor((z - reach) / patchWorld));
+        const int z1 = static_cast<int>(std::floor((z + reach) / patchWorld));
+        for (int gz = z0; gz <= z1; ++gz)
+        {
+            for (int gx = x0; gx <= x1; ++gx)
+            {
+                if (detail)
+                {
+                    m_detailPainted.insert(std::make_pair(gx, gz));
+                    m_detailUnmerged.insert(std::make_pair(gx, gz));
+                }
+                if (colour)
+                    m_colorPainted.insert(std::make_pair(gx, gz));
+            }
+        }
+    }
     m_painted = true;
     return true;
+}
+
+void EditableTerrain::markCompiled()
+{
+    m_detailPainted.clear();
+    m_colorPainted.clear();
+    if (m_lowDetailTypesKnown)
+        for (int layer = 0; layer < 6; ++layer)
+            m_compiledLowDetailTypes[layer] = lowDetailType(layer);
+}
+
+int EditableTerrain::lowDetailType(int layer) const
+{
+    const std::map<int, GroundLayer>::const_iterator it = m_ground.layers.find(layer);
+    return it == m_ground.layers.end() ? 0 : it->second.lowDetailType;
 }
 
 bool EditableTerrain::mergeEdits(TerrainPaintMode mode, std::string& result)
@@ -613,7 +783,10 @@ bool EditableTerrain::mergeEdits(TerrainPaintMode mode, std::string& result)
         return false;
     }
     if (mode != TerrainPaintMode::Color)
+    {
         m_editable->commitDetailLayers();
+        m_detailUnmerged.clear();
+    }
     if (mode != TerrainPaintMode::Detail)
         m_editable->commitColorMapEdits();
     result = std::string("merged the ") + (mode == TerrainPaintMode::Both ? "detail and colour" : mode == TerrainPaintMode::Detail
@@ -629,7 +802,15 @@ bool EditableTerrain::clearEdits(TerrainPaintMode mode, std::string& result)
         return false;
     }
     if (mode != TerrainPaintMode::Color)
+    {
         m_editable->revertDetailLayers();
+        if (!m_detailUnmerged.empty())
+        {
+            m_detailPainted.insert(m_detailUnmerged.begin(), m_detailUnmerged.end());
+            m_painted = true;
+        }
+        m_detailUnmerged.clear();
+    }
     if (mode != TerrainPaintMode::Detail)
         m_editable->clearColorMapEdits();
     result = std::string("cleared the unmerged ") + (mode == TerrainPaintMode::Both ? "detail and colour"
@@ -757,6 +938,294 @@ bool EditableTerrain::saveMaps(std::vector<std::pair<std::string, std::string> >
     return true;
 }
 
+bool EditableTerrain::compileTerrain(std::vector<std::pair<std::string, std::string> >& files, std::string& result)
+{
+    using namespace dice::hfe;
+    files.clear();
+    if (!m_editable)
+    {
+        result = "the terrain is not editable (start with +editableTerrain 1)";
+        return false;
+    }
+    world::IHeightmapCluster* const cluster =
+        classManager ? static_cast<world::IHeightmapCluster*>(classManager->getSingleton("HeightmapCluster")) : 0;
+    world::IHeightmap* const primary = cluster ? cluster->getPrimaryHeightmap() : 0;
+    if (!primary)
+    {
+        result = "the level has no primary heightmap";
+        return false;
+    }
+    const std::string levelPath = "Levels/" + m_level + "/";
+    std::string bytes, error;
+    TerrainRawFile templ;
+    if (!readEngineFile(levelPath + "terraindata.raw", bytes) || !templ.parse(bytes, error))
+    {
+        result = "the level's terraindata.raw cannot be read" + (error.empty() ? std::string() : ": " + error);
+        return false;
+    }
+
+    // The weights: the staged editor detail maps <detail base with /Editor><XXxZZ>_1 and _2; layer 3k + c is byte c of
+    // map k's texels, as QuadPatchEditable::importLayer reads them. A patch without a map has no weight in its layers.
+    std::string detailBase;
+    for (size_t i = 0; i < m_baseNames.size() && detailBase.empty(); ++i)
+    {
+        const size_t at = m_baseNames[i].find("/Detailmaps");
+        if (at != std::string::npos)
+            detailBase = m_baseNames[i].substr(0, at) + "/Editor" + m_baseNames[i].substr(at);
+    }
+    if (detailBase.empty())
+    {
+        result = "the terrain has no detail map base name";
+        return false;
+    }
+    const int half = static_cast<int>(templ.patchCount) / 2;
+    std::vector<std::vector<unsigned char> > weights(templ.patches.size() * 6);
+    int maps = 0;
+    for (size_t p = 0; p < templ.patches.size(); ++p)
+    {
+        for (int k = 0; k < 2; ++k)
+        {
+            char name[32];
+            std::snprintf(name, sizeof(name), "%02ix%02i_%i.dds", templ.patches[p].gridX + half, templ.patches[p].gridZ + half,
+                          k + 1);
+            std::string data;
+            if (!readWholeFile(m_staging + "/" + detailBase + name, data))
+                continue;
+            DdsImage image;
+            if (!image.read(data, error) || image.width != kEditorDetailmapSize || image.height != kEditorDetailmapSize)
+            {
+                result = detailBase + name + " is not a " + std::to_string(kEditorDetailmapSize) + "-square detail map" +
+                         (error.empty() ? std::string() : ": " + error);
+                return false;
+            }
+            ++maps;
+            for (int c = 0; c < 3; ++c)
+            {
+                std::vector<unsigned char>& layer = weights[p * 6 + 3 * k + c];
+                layer.resize(image.pixels.size());
+                bool any = false;
+                for (size_t t = 0; t < layer.size(); ++t)
+                {
+                    layer[t] = static_cast<unsigned char>(image.pixels[t] >> (8 * c));
+                    any = any || layer[t] != 0;
+                }
+                if (!any)
+                    layer.clear();
+            }
+        }
+    }
+
+    TerrainCompileSource source;
+    source.height = [cluster](float x, float z) { return cluster->getHeightInWorldCoords(x, z); };
+    source.seaWaterLevel = cluster->getSeaWaterLevel();
+    int sizeX = 0, sizeZ = 0;
+    primary->getSize(sizeX, sizeZ);
+    source.heightmapSize = sizeX;
+    source.weightSize = kEditorDetailmapSize;
+    source.weights = [&weights](int patch, int layer) -> const unsigned char* {
+        const std::vector<unsigned char>& w = weights[static_cast<size_t>(patch) * 6 + layer];
+        return w.empty() ? 0 : &w[0];
+    };
+    // The ring: the surrounding sectors whose heightmap is marked modified, by ring slot (sector x, z). The retail save
+    // also wrote the sectors whose surrounding patch existed; here showing a sector is the view only, and activating
+    // it (EditorTerrain.sector) marks it.
+    static const int kSectors[8][2] = { { -1, 1 }, { 0, 1 }, { 1, 1 }, { 1, 0 }, { 1, -1 }, { 0, -1 }, { -1, -1 }, { -1, 0 } };
+    for (int slot = 0; slot < 8; ++slot)
+        if (sectorModified(kSectors[slot][0], kSectors[slot][1]))
+            source.ringSlots.push_back(slot);
+    // The ground properties' layers (the name as the compiled file holds it: no extension) and far terrain.
+    source.replaceDetailTextures = true;
+    source.detailTextures = templ.detailTextures;
+    source.detailTextures.resize(6);
+    for (std::map<int, GroundLayer>::const_iterator it = m_ground.layers.begin(); it != m_ground.layers.end(); ++it)
+    {
+        if (it->first < 0 || it->first > 5)
+            continue;
+        TerrainRawDetailTexture& texture = source.detailTextures[it->first];
+        std::string name = it->second.detailTexture;
+        if (name.size() > 4 && lowered(name.substr(name.size() - 4)) == ".dds")
+            name.erase(name.size() - 4);
+        texture.name = name;
+        texture.planeMap = static_cast<unsigned char>(it->second.planeMap);
+        texture.sideTiling[0] = it->second.sideTiling[0];
+        texture.sideTiling[1] = it->second.sideTiling[1];
+        texture.topTiling = it->second.topTiling;
+        texture.yOffset = it->second.yOffset;
+        texture.envMap = it->second.envMap ? 1 : 0;
+    }
+    source.replaceFar = true;
+    source.farSideTiling[0] = m_ground.misc.farSideTiling[0];
+    source.farSideTiling[1] = m_ground.misc.farSideTiling[1];
+    source.farTopTilingHi = m_ground.misc.farTopTilingHi;
+    source.farTopTilingLow = m_ground.misc.farTopTilingLow;
+    source.farYOffset = m_ground.misc.farYOffset;
+
+    TerrainRawFile compiled;
+    if (!compileTerrainRaw(templ, source, compiled, error))
+    {
+        result = error;
+        return false;
+    }
+    const std::string rawPath = m_staging + "/" + levelPath + "terraindata.raw";
+    makeFolders(rawPath);
+    if (!writeWhole(rawPath, compiled.render()))
+    {
+        result = "cannot write " + rawPath;
+        return false;
+    }
+    files.push_back(std::make_pair(rawPath, std::string("terraindata.raw")));
+
+    // The game textures of the painted patches; the others keep theirs. A detail map is written when one of its three
+    // layers has triangles, R5G6B5 when the patch draws a layer above 2 and DXT1 otherwise, from the editor detail map
+    // halved by the box filter, without mips (the retail writer's nvdxt settings). A colormap is the editor colormap as
+    // DXT1 with the box-filtered mip chain [CHOSEN, not recovered: the retail editor rendered the patch top-down, its
+    // roads drawn in, and compiled that with a Kaiser filter].
+    std::string colormapBase, lowDetailBase;
+    for (size_t i = 0; i < m_baseNames.size(); ++i)
+    {
+        if (colormapBase.empty() && m_baseNames[i].find("/Colormaps") != std::string::npos)
+            colormapBase = m_baseNames[i];
+        if (lowDetailBase.empty() && lowered(m_baseNames[i]).find("/lowdetailmaps") != std::string::npos)
+            lowDetailBase = m_baseNames[i];
+    }
+    const std::string gameDetailBase = detailBase.substr(0, detailBase.find("/Editor")) +
+                                       detailBase.substr(detailBase.find("/Editor") + 7);
+    // The low-detail maps: QuadPatchEditable::rebuildLowDetailMap over the editor detail maps, halved by the box filter
+    // to the renderer's default -prescale 256 256 and written as DXT1 with the mip chain (the retail writer's nvdxt
+    // settings). Every patch's when a layer's low-detail type changed since the level's maps were built, else those of
+    // the detail-painted patches; none while the types are unknown, so the level's stay.
+    int types[6];
+    bool typesChanged = false;
+    for (int layer = 0; layer < 6; ++layer)
+    {
+        types[layer] = lowDetailType(layer);
+        typesChanged = typesChanged || types[layer] != m_compiledLowDetailTypes[layer];
+    }
+    const bool lowDetail = m_lowDetailTypesKnown && !lowDetailBase.empty();
+    const bool lowDetailAll = lowDetail && typesChanged;
+    // The game textures are copied into the level by their path under it: a base name elsewhere is refused.
+    const auto inLevel = [&levelPath](const std::string& name) {
+        return name.empty() || lowered(name).compare(0, levelPath.size(), lowered(levelPath)) == 0;
+    };
+    const bool insideLevel = inLevel(gameDetailBase) && inLevel(colormapBase) && inLevel(lowDetailBase);
+    if (!insideLevel && (!m_detailPainted.empty() || !m_colorPainted.empty() || lowDetailAll))
+    {
+        result = "the terrain's texture base names lie outside " + levelPath + ": its game textures are not this level's";
+        return false;
+    }
+    int detailMaps = 0, colormaps = 0, lowDetailMaps = 0;
+    for (size_t p = 0; p < compiled.patches.size(); ++p)
+    {
+        const std::pair<int, int> place(compiled.patches[p].gridX, compiled.patches[p].gridZ);
+        char name[16];
+        std::snprintf(name, sizeof(name), "%02ix%02i", place.first + half, place.second + half);
+        if (m_detailPainted.count(place))
+        {
+            int highest = -1;
+            bool needed[2] = { false, false };
+            for (size_t l = 0; l < compiled.patches[p].layers.size(); ++l)
+            {
+                const unsigned index = compiled.patches[p].layers[l].detailIndex;
+                if (index > 5)
+                    continue;
+                highest = static_cast<int>(index) > highest ? static_cast<int>(index) : highest;
+                needed[index / 3] = true;
+            }
+            for (int k = 0; k < 2; ++k)
+            {
+                if (!needed[k])
+                    continue;
+                const std::string suffix = std::string(name) + "_" + std::to_string(k + 1) + ".dds";
+                std::string data;
+                DdsImage editor;
+                if (!readWholeFile(m_staging + "/" + detailBase + suffix, data) || !editor.read(data, error))
+                {
+                    result = "the editor detail map " + detailBase + suffix + " cannot be read";
+                    return false;
+                }
+                const DdsImage half256 = halveBox(editor);
+                const std::string target = m_staging + "/" + gameDetailBase + suffix;
+                makeFolders(target);
+                if (!writeWhole(target, highest >= 3 ? encodeR5G6B5(half256) : encodeDxt1(half256, false)))
+                {
+                    result = "cannot write " + target;
+                    return false;
+                }
+                files.push_back(std::make_pair(target, (gameDetailBase + suffix).substr(levelPath.size())));
+                ++detailMaps;
+            }
+        }
+        if (m_colorPainted.count(place) && !colormapBase.empty())
+        {
+            const size_t at = colormapBase.find("/Colormaps");
+            const std::string editorColormap = colormapBase.substr(0, at) + "/Editor" + colormapBase.substr(at) + name + ".dds";
+            std::string data;
+            DdsImage editor;
+            if (!readWholeFile(m_staging + "/" + editorColormap, data) || !editor.read(data, error))
+            {
+                result = "the editor colormap " + editorColormap + " cannot be read";
+                return false;
+            }
+            const std::string target = m_staging + "/" + colormapBase + name + ".dds";
+            makeFolders(target);
+            if (!writeWhole(target, encodeDxt1(editor, true)))
+            {
+                result = "cannot write " + target;
+                return false;
+            }
+            files.push_back(std::make_pair(target, (colormapBase + name + ".dds").substr(levelPath.size())));
+            ++colormaps;
+        }
+        if (lowDetail && (lowDetailAll || m_detailPainted.count(place)))
+        {
+            DdsImage editor[2];
+            const DdsImage* maps[2] = { 0, 0 };
+            for (int k = 0; k < 2; ++k)
+            {
+                const std::string suffix = std::string(name) + "_" + std::to_string(k + 1) + ".dds";
+                std::string data;
+                if (!readWholeFile(m_staging + "/" + detailBase + suffix, data))
+                    continue;                                   // a patch without the map: its layers weigh nothing
+                if (!editor[k].read(data, error) || editor[k].width != kEditorDetailmapSize
+                    || editor[k].height != kEditorDetailmapSize)
+                {
+                    result = "the editor detail map " + detailBase + suffix + " cannot be read";
+                    return false;
+                }
+                maps[k] = &editor[k];
+            }
+            DdsImage low = buildLowDetailMap(maps, types, kEditorDetailmapSize);
+            while (low.width > kLowDetailmapSize)
+                low = halveBox(low);
+            const std::string target = m_staging + "/" + lowDetailBase + name + ".dds";
+            makeFolders(target);
+            if (!writeWhole(target, encodeDxt1(low, true)))
+            {
+                result = "cannot write " + target;
+                return false;
+            }
+            files.push_back(std::make_pair(target, (lowDetailBase + name + ".dds").substr(levelPath.size())));
+            ++lowDetailMaps;
+        }
+    }
+
+    size_t layers = 0;
+    for (size_t p = 0; p < compiled.patches.size(); ++p)
+        layers += compiled.patches[p].layers.size();
+    const char* const lowDetailNote = lowDetailAll ? " (every patch's: a layer's low-detail type changed)"
+                                    : !lowDetail && !m_detailPainted.empty()
+                                    ? " (the level's kept: the layers' low-detail types are unknown)" : "";
+    char text[400];
+    std::snprintf(text, sizeof(text), "terrain compiled into the staging folder: %u patches (%u detail maps read), %u layer "
+                  "records, %u surrounding sectors, %u culler nodes; %d game detail map%s and %d colormap%s of painted "
+                  "patches, %d low-detail map%s%s", static_cast<unsigned>(compiled.patches.size()),
+                  static_cast<unsigned>(maps), static_cast<unsigned>(layers), static_cast<unsigned>(compiled.ring.size()),
+                  static_cast<unsigned>(compiled.culler.size()), detailMaps, detailMaps == 1 ? "" : "s", colormaps,
+                  colormaps == 1 ? "" : "s", lowDetailMaps, lowDetailMaps == 1 ? "" : "s", lowDetailNote);
+    result = text;
+    return true;
+}
+
 bool EditableTerrain::overgrowthAvailable(std::string& why) const
 {
     if (!m_editable)
@@ -822,6 +1291,184 @@ bool EditableTerrain::paintOvergrowth(const TerrainBrushSettings& brush, float x
     return true;
 }
 
+bool EditableTerrain::generateOvergrowth(std::string& result)
+{
+    if (!overgrowthAvailable(result))
+        return false;
+    const std::string folder = overgrowthFolder();
+    if (folder.empty() || folder[folder.size() - 1] != '/')
+    {
+        result = "the overgrowth's path '" + folder + "' is not a folder";
+        return false;
+    }
+    const std::string root = m_staging + "/overgrowth";
+    makeFolders(root + "/" + folder + "x");
+    int missing = 0;
+    const int sources = stageAtlasSources(folder, root, missing);
+    {
+        StagingRedirect redirect(root);
+        runConsoleLine("Overgrowth.editorEnable 1");
+        const ConsoleLineResult r = runConsoleLine("Overgrowth.generateAll");
+        if (r.failed || !r.output.empty())
+        {
+            result = "Overgrowth.generateAll answered '" + r.output + "'";
+            return false;
+        }
+    }
+    if (!fileExists(root + "/" + folder + "Overgrowth.raw"))
+    {
+        result = "the regenerated overgrowth was not written to " + root + "/" + folder;
+        return false;
+    }
+    char text[256];
+    std::snprintf(text, sizeof(text), "overgrowth regenerated from its maps (%d atlas source%s staged%s); the level's "
+                  "files change when it is saved", sources, sources == 1 ? "" : "s",
+                  missing ? (", " + std::to_string(missing) + " unreadable").c_str() : "");
+    result = text;
+    return true;
+}
+
+bool EditableTerrain::saveOvergrowth(std::vector<std::pair<std::string, std::string> >& files, std::string& result)
+{
+    files.clear();
+    if (!generateOvergrowth(result))
+        return false;
+    const std::string folder = overgrowthFolder();
+    const std::string root = m_staging + "/overgrowth";
+    {
+        StagingRedirect redirect(root);
+        const ConsoleLineResult r = runConsoleLine("Overgrowth.save");
+        if (r.failed || !r.output.empty())
+        {
+            result = "Overgrowth.save answered '" + r.output + "'";
+            return false;
+        }
+    }
+    const std::string levelPrefix = "levels/" + lowered(m_level) + "/";
+    if (lowered(folder).compare(0, levelPrefix.size(), levelPrefix) != 0)
+    {
+        result = "the overgrowth's path " + folder + " lies outside the level";
+        return false;
+    }
+    const std::string inLevel = folder.substr(levelPrefix.size());
+    static const char* const kData[] = { "Overgrowth.con", "Overgrowth.raw", "OvergrowthShadowmap.raw",
+                                         "OvergrowthCollision.con" };
+    for (size_t i = 0; i < sizeof(kData) / sizeof(kData[0]); ++i)
+    {
+        const std::string staged = root + "/" + folder + kData[i];
+        if (!fileExists(staged))
+        {
+            result = std::string("the overgrowth save did not write ") + kData[i];
+            files.clear();
+            return false;
+        }
+        files.push_back(std::make_pair(staged, inLevel + kData[i]));
+    }
+    // The atlas only follows a change of types: a rebuilt atlas of the same textures is left out of the level.
+    std::string stagedCon, levelCon;
+    readWholeFile(root + "/" + folder + "Overgrowth.con", stagedCon);
+    readEngineFile(folder + "Overgrowth.con", levelCon);
+    const bool typesChanged = overgrowthTypeLines(stagedCon) != overgrowthTypeLines(levelCon);
+    if (typesChanged)
+    {
+        // The builder writes its output path into the .tai's first (comment) line; the stock form names the mod's
+        // folder instead, so no local staging path reaches the level.
+        std::string tai;
+        const std::string taiPath = root + "/" + folder + "OvergrowthAtlas.tai";
+        if (readWholeFile(taiPath, tai) && !tai.empty() && tai[0] == '#')
+        {
+            const std::string mod = dice::hfe::settings->stringGet("GSModDirectory", std::string());
+            std::string stockFolder = folder;
+            std::replace(stockFolder.begin(), stockFolder.end(), '/', '\\');
+            size_t end = tai.find('\n');
+            if (end != std::string::npos && end > 0 && tai[end - 1] == '\r')
+                --end;
+            tai = "# " + mod + stockFolder + "OvergrowthAtlas.tai" + (end == std::string::npos ? std::string() : tai.substr(end));
+            writeWhole(taiPath, tai);
+        }
+        WIN32_FIND_DATAA found;
+        const HANDLE search = FindFirstFileA((root + "/" + folder + "OvergrowthAtlas*").c_str(), &found);
+        if (search != INVALID_HANDLE_VALUE)
+        {
+            do
+            {
+                if (!(found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+                    files.push_back(std::make_pair(root + "/" + folder + found.cFileName, inLevel + found.cFileName));
+            } while (FindNextFileA(search, &found));
+            FindClose(search);
+        }
+    }
+    result = typesChanged ? "the atlas rebuilt for the changed types" : "the atlas kept: the types are unchanged";
+    return true;
+}
+
+bool EditableTerrain::traceLightmaps(bool primary, bool surrounding,
+                                     std::vector<std::pair<std::string, std::string> >& files, std::string& result)
+{
+    using namespace dice::hfe;
+    files.clear();
+    if (!m_editable)
+    {
+        result = "the terrain is not editable (start with +editableTerrain 1)";
+        return false;
+    }
+    const std::string levelPrefix = "levels/" + lowered(m_level) + "/";
+    if (m_lightmapBase.empty() || lowered(m_lightmapBase).compare(0, levelPrefix.size(), levelPrefix) != 0)
+    {
+        result = "Terrain.con's lightmap base name does not lie in the level (" + m_lightmapBase + ")";
+        return false;
+    }
+    // The generator writes the patches' lightmaps under the lightmap base and the ring patches' under its editor
+    // variant ("/Editor" before "/Lightmap", as the renderer inserts it).
+    std::vector<std::string> folders(1, folderOf(m_lightmapBase));
+    const size_t at = m_lightmapBase.find("/Lightmap");
+    if (at != std::string::npos)
+        folders.push_back(folderOf(m_lightmapBase.substr(0, at) + "/Editor" + m_lightmapBase.substr(at)));
+    std::vector<std::map<std::string, unsigned long long> > before;
+    for (size_t i = 0; i < folders.size(); ++i)
+        before.push_back(ddsWriteTimes(m_staging + "/" + folders[i]));
+    const ConsoleLineResult primaryWas = runConsoleLine("terrain.drawPrimaryLightmaps");
+    const ConsoleLineResult surroundingWas = runConsoleLine("terrain.drawSurroundingLightmaps");
+    if (primaryWas.failed || surroundingWas.failed)
+    {
+        result = "the renderer binds no terrain.drawPrimaryLightmaps / drawSurroundingLightmaps (the editor's renderer "
+                 "flavour does): " + primaryWas.output + surroundingWas.output;
+        return false;
+    }
+    runConsoleLine(std::string("terrain.drawPrimaryLightmaps ") + (primary ? "1" : "0"));
+    runConsoleLine(std::string("terrain.drawSurroundingLightmaps ") + (surrounding ? "1" : "0"));
+    const std::string previous = settings->stringGet(kSavePathKey, std::string());
+    settings->stringSet(kSavePathKey, m_staging);
+    const ConsoleLineResult traced = runConsoleLine("lightmapGeneration.traceTerrain");
+    // The patches read their lightmaps again from the save path, the staging folder.
+    m_editable->rebuildTerrain();
+    settings->stringSet(kSavePathKey, previous);
+    runConsoleLine("terrain.drawPrimaryLightmaps " + trimmed(primaryWas.output));
+    runConsoleLine("terrain.drawSurroundingLightmaps " + trimmed(surroundingWas.output));
+    if (traced.failed || trimmed(traced.output) == "0")
+    {
+        result = "lightmapGeneration.traceTerrain answered '" + traced.output + "'";
+        return false;
+    }
+    for (size_t i = 0; i < folders.size(); ++i)
+    {
+        const std::map<std::string, unsigned long long> after = ddsWriteTimes(m_staging + "/" + folders[i]);
+        for (std::map<std::string, unsigned long long>::const_iterator it = after.begin(); it != after.end(); ++it)
+        {
+            const std::map<std::string, unsigned long long>::const_iterator old = before[i].find(it->first);
+            if (old == before[i].end() || old->second != it->second)
+                files.push_back(std::make_pair(m_staging + "/" + folders[i] + it->first,
+                                               folders[i].substr(levelPrefix.size()) + it->first));
+        }
+    }
+    if (files.empty())
+    {
+        result = "lightmapGeneration.traceTerrain wrote no lightmap";
+        return false;
+    }
+    return true;
+}
+
 bool EditableTerrain::setSectorShown(int x, int z, bool shown, std::string& result)
 {
     using namespace dice::hfe;
@@ -871,10 +1518,15 @@ void EditableTerrain::loadGround(const std::string& levelPath, const std::vector
 {
     m_ground = GroundProperties();
     std::string text, error;
+    std::string raw, rawError;
+    TerrainRawLayers compiled;
+    const bool haveCompiled = readEngineFile(levelPath + "terraindata.raw", raw) && compiled.read(raw, rawError);
     const std::string file = levelPath + "Editor/GroundProperties.con";
+    m_lowDetailTypesKnown = false;
     if (readEngineFile(file, text) && m_ground.parse(text, error))
     {
         m_groundSource = file;
+        m_lowDetailTypesKnown = true;
     }
     else
     {
@@ -897,9 +1549,7 @@ void EditableTerrain::loadGround(const std::string& levelPath, const std::vector
                 m_ground.setMisc(command.substr(8), value, ignored);
         }
         m_ground.misc.lodSwitchDistance = m_editable->getLodSwitchDistance();
-        std::string raw;
-        TerrainRawLayers compiled;
-        if (readEngineFile(levelPath + "terraindata.raw", raw) && compiled.read(raw, error))
+        if (haveCompiled)
         {
             for (size_t i = 0; i < compiled.layers.size() && i < 6; ++i)
             {
@@ -919,9 +1569,16 @@ void EditableTerrain::loadGround(const std::string& levelPath, const std::vector
         }
         else
         {
-            m_groundSource = "none (no Editor/GroundProperties.con, and terraindata.raw: " + error + ")";
+            m_groundSource = "none (no Editor/GroundProperties.con, and terraindata.raw: " + rawError + ")";
         }
     }
+    bool anyType = false;
+    for (std::map<int, GroundLayer>::const_iterator it = m_ground.layers.begin(); it != m_ground.layers.end(); ++it)
+        anyType = anyType || it->second.lowDetailType != 0;
+    if (!anyType && haveCompiled && recoverLowDetailTypes(compiled.patchCount))
+        m_lowDetailTypesKnown = true;
+    for (int layer = 0; layer < 6; ++layer)
+        m_compiledLowDetailTypes[layer] = lowDetailType(layer);
     m_groundSaved = m_ground;
     std::string notApplied;
     for (std::map<int, GroundLayer>::const_iterator it = m_ground.layers.begin(); it != m_ground.layers.end(); ++it)
@@ -934,6 +1591,76 @@ void EditableTerrain::loadGround(const std::string& levelPath, const std::vector
     logLine(LogLevel::Info, "terrain: ground properties from %s: %u layer%s%s%s", m_groundSource.c_str(),
             static_cast<unsigned>(m_ground.layers.size()), m_ground.layers.size() == 1 ? "" : "s",
             notApplied.empty() ? "" : ", not applied: ", notApplied.c_str());
+}
+
+// [added] The compiled terrain holds no low-detail types, and no stock level ships its ground properties: the types are
+// recovered from the level's game detail and low-detail maps (Framework/TerrainLowDetail), and taken when they explain
+// the low-detail maps to within kLowDetailFit.
+bool EditableTerrain::recoverLowDetailTypes(unsigned patchCount)
+{
+    std::string detailBase, lowDetailBase;
+    for (size_t i = 0; i < m_baseNames.size(); ++i)
+    {
+        const std::string name = lowered(m_baseNames[i]);
+        if (lowDetailBase.empty() && name.find("/lowdetailmaps") != std::string::npos)
+            lowDetailBase = m_baseNames[i];
+        else if (detailBase.empty() && name.find("/detailmaps") != std::string::npos)
+            detailBase = m_baseNames[i];
+    }
+    if (detailBase.empty() || lowDetailBase.empty() || patchCount == 0 || patchCount > 64)
+    {
+        logLine(LogLevel::Warning, "terrain: the layers' low-detail types are unknown (no detail or low-detail base name, "
+                "or %u patches per side): saving keeps the level's low-detail maps", patchCount);
+        return false;
+    }
+    std::deque<DdsImage> images;
+    std::vector<LowDetailSample> samples;
+    for (unsigned z = 0; z < patchCount; ++z)
+    {
+        for (unsigned x = 0; x < patchCount; ++x)
+        {
+            char name[16];
+            std::snprintf(name, sizeof(name), "%02ux%02u", x, z);
+            std::string data, error;
+            DdsImage image;
+            if (!readEngineFile(lowDetailBase + name + ".dds", data) || !image.read(data, error))
+                continue;
+            LowDetailSample sample;
+            images.push_back(image);
+            sample.lowDetail = &images.back();
+            for (int k = 0; k < 2; ++k)
+            {
+                if (readEngineFile(detailBase + name + "_" + std::to_string(k + 1) + ".dds", data) && image.read(data, error))
+                {
+                    images.push_back(image);
+                    sample.detail[k] = &images.back();
+                }
+            }
+            samples.push_back(sample);
+        }
+    }
+    int types[6] = { 0, 0, 0, 0, 0, 0 };
+    float error = 0.0f;
+    if (!inferLowDetailTypes(samples, types, error))
+    {
+        logLine(LogLevel::Warning, "terrain: the layers' low-detail types are unknown (no patch has both a low-detail map "
+                "and a detail map): saving keeps the level's low-detail maps");
+        return false;
+    }
+    char list[32];
+    std::snprintf(list, sizeof(list), "%d %d %d %d %d %d", types[0], types[1], types[2], types[3], types[4], types[5]);
+    if (error > kLowDetailFit)
+    {
+        logLine(LogLevel::Warning, "terrain: the layers' low-detail types are unknown (the closest, %s, miss the level's "
+                "low-detail maps by %.1f of 255): saving keeps the level's low-detail maps", list, error);
+        return false;
+    }
+    for (std::map<int, GroundLayer>::iterator it = m_ground.layers.begin(); it != m_ground.layers.end(); ++it)
+        if (it->first >= 0 && it->first < 6)
+            it->second.lowDetailType = types[it->first];
+    logLine(LogLevel::Info, "terrain: the layers' low-detail types recovered from the level's compiled maps (%u patches): "
+            "%s, within %.1f of 255", static_cast<unsigned>(samples.size()), list, error);
+    return true;
 }
 
 bool EditableTerrain::setGround(int layer, const std::string& name, const std::string& value, std::string& result)
@@ -963,6 +1690,8 @@ bool EditableTerrain::setGround(int layer, const std::string& name, const std::s
         result = error;
         return false;
     }
+    if (lowered(name) == "lowdetailtype")
+        m_lowDetailTypesKnown = true;
     const std::string missing = applyGroundLayer(m_editable, layer, m_ground.layers[layer]);
     std::string now;
     m_ground.getLayer(layer, name, now);

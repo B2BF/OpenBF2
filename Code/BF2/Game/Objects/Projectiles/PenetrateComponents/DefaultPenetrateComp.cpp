@@ -325,10 +325,9 @@ bool DefaultPenetrateComp::penetrate(IObject* target, const Vec3& direction,
         }
         else
         {
-            // THE failed-probe ARM calls getMaxDamageLoss AND discards IT, then pays the same
-            // flat minimum as the one-sided arm. The dead call is in the shipped body; preserved.
-            material->getMaxDamageLoss();
-            cost = material->getMinDamageLoss();
+            // A failed exit probe pays the material's maximum loss; with the 100000 default the
+            // round stops here.
+            cost = material->getMaxDamageLoss();
             exit.x = forward.x * 0.050000001f + entry.x;
             exit.y = forward.y * 0.050000001f + entry.y;
             exit.z = forward.z * 0.050000001f + entry.z;
@@ -343,6 +342,11 @@ bool DefaultPenetrateComp::penetrate(IObject* target, const Vec3& direction,
     if (minDamage * 0.1f > outDamage)
         return false;
 
+    // The exit point becomes the stored translation, so the round resumes just past the far
+    // face. Left at the end of this tick's sweep, it would skip everything behind the surface.
+    transform.m[12] = exit.x;
+    transform.m[13] = exit.y;
+    transform.m[14] = exit.z;
     projectile->setAbsoluteTransformation(transform);
     outPosition = exit;
 

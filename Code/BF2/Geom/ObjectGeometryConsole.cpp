@@ -1,6 +1,7 @@
 
-// Native Object.geometry.loadMesh binding for compiled roads.
-// Compatibility builds cannot share host ConsoleObject layouts and omit this binding.
+// Native Object.geometry bindings: GenerateLightmapForThisInstance (the active geometry's
+// lightmap-generation flag) and loadMesh for compiled roads.
+// Compatibility builds cannot share host ConsoleObject layouts and omit these bindings.
 
 #ifdef BF2_IMAGE_RENDDX9
 #include "../../RendDX9Abi/PluginAbi.h"
@@ -74,10 +75,35 @@ RoadCompiled* activeRoadCompiled()
     return reinterpret_cast<RoadCompiled*>(reinterpret_cast<unsigned char*>(geometry) - 4);
 }
 
+// geometry.GenerateLightmapForThisInstance: the active object's geometry flag behind IGeometry
+// +0xBC (get) / +0xB8 (set) - on a StaticMesh, bit 1 of its flags (StaticMesh::getFlagBit1 /
+// setFlagBit1). The executor fetches the geometry again without a null check.
+bool getGenerateLightmapForThisInstance()
+{
+    IBase* const geometry = activeObjectGeometry();
+    typedef bool (__thiscall* GetFn)(void*);
+    return reinterpret_cast<GetFn>(
+        (*reinterpret_cast<void***>(geometry))[0xBC / sizeof(void*)])(geometry);
+}
+
+void setGenerateLightmapForThisInstance(bool value)
+{
+    IBase* const geometry = activeObjectGeometry();
+    typedef void (__thiscall* SetFn)(void*, bool);
+    reinterpret_cast<SetFn>(
+        (*reinterpret_cast<void***>(geometry))[0xB8 / sizeof(void*)])(geometry, value);
+}
+
 } // anonymous namespace
 
 // `SetConsoleClassDefaults("Object", 2, 0)` - stored as "object", which is how the .con files spell it.
 BF2_CONSOLE_OBJECT("Object", 2, 0)
+
+// Object.geometry.GenerateLightmapForThisInstance - a bool property, active while the active object
+// has a geometry. Registered ahead of geometry.loadMesh, its neighbour in the shipped list.
+BF2_CONSOLE_PROPERTY_FN_NAMED("geometry.GenerateLightmapForThisInstance", bool,
+                              activeObjectGeometry() != 0, getGenerateLightmapForThisInstance(),
+                              setGenerateLightmapForThisInstance, kObjectGeometryConsoleTag)
 
 // Binds geometry.loadMesh to the active compiled road; requires one string argument.
 // The console checks activity before execution; the executor repeats the lookup without

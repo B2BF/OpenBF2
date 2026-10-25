@@ -59,6 +59,9 @@ private:
 // keyboardForView accepts keys when text entry is inactive and UI focus does not need them.
 bool pointerOverUi();
 bool keyboardForView();
+// A tool drawn over the view (the HUD editor's outlines) takes the view's mouse while `claimed`: pointerOverUi then
+// answers true, so the world's own tools step back.
+void claimViewMouse(bool claimed);
 
 } // namespace bf2editor
 

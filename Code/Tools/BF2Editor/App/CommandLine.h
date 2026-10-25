@@ -40,6 +40,7 @@ struct EditorOptions
     int         looseObjects;               // +looseObjects 0|1 (editor): leave the object archives unmounted; -1 = not given
     int         looseCommon;                // +looseCommon 0|1 (editor): leave the Common archives unmounted; -1 = not given
     int         editableTerrain;            // +editableTerrain 0|1 (editor): the renderer's TerrainEditable; -1 = not given
+    int         hud;                        // +hud 0|1 (editor): the game's HUD in the view (on unless 0); -1 = not given
     int         skipContentCheck;           // +skipBF2ContentCheck 0|1; -1 = not given
     bool        defaultContent;             // +defaultContent 1
     std::string customContent;              // +customContent <file>; ".ini" appended when it has no extension

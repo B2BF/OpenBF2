@@ -30,6 +30,16 @@ EffectProperties* activeEffectProperties()
         return value;
     return static_cast<WheelEffectBundleTemplate*>(getActiveTemplate(CID_WheelEffectBundleTemplate));
 }
+// The air-draft bundle is the only class gated by CID_AirDraftEffectBundleTemplate; its
+// engineInfluence / startDistance / maxDistance floats are the PE block behind that gate.
+AirDraftEffectBundleTemplate* activeAirDraftEffectBundle()
+{
+    return static_cast<AirDraftEffectBundleTemplate*>(
+        getActiveTemplate(CID_AirDraftEffectBundleTemplate));
+}
+void setAirDraftEngineInfluence(float v) { activeAirDraftEffectBundle()->m_field2C4 = v; }
+void setAirDraftStartDistance(float v) { activeAirDraftEffectBundle()->m_field2C8 = v; }
+void setAirDraftMaxDistance(float v) { activeAirDraftEffectBundle()->m_field2CC = v; }
 void addWorkOnMaterial(int material) { activeEffectBundle()->m_vec318.push_back(material); }
 void setEffectWaterHeight(float value)
 {
@@ -61,6 +71,17 @@ BF2_CONSOLE_FIELD(hasAltEffect, bool, activeEffectBundle(), m_byte339, kEffectCo
 BF2_CONSOLE_FIELD(isUnderwaterEffect, bool, activeEffectBundle(), m_byte33A, kEffectConsoleTag)
 BF2_CONSOLE_PROPERTY_FN(effectChangeWaterHeight, float, activeEffectBundle() != 0,
     getEffectWaterHeight(), setEffectWaterHeight, kEffectConsoleTag)
+
+// objectTemplate.engineInfluence / startDistance / maxDistance - dedicated PE gate sub_512000 =
+// `getActiveTemplate(0x9485 = CID_AirDraftEffectBundleTemplate) != 0`; executors 0x512400 / 0x512080
+// / 0x512240 read and write the PE floats +904 / +908 / +912, which are openBF2 m_field2C4 / m_field2C8
+// / m_field2CC (the constant +0xC4 delta). All three are set/get properties with m_isDynamic = 1.
+BF2_CONSOLE_PROPERTY_FN(engineInfluence, float, activeAirDraftEffectBundle() != 0,
+    activeAirDraftEffectBundle()->m_field2C4, setAirDraftEngineInfluence, kEffectConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(startDistance, float, activeAirDraftEffectBundle() != 0,
+    activeAirDraftEffectBundle()->m_field2C8, setAirDraftStartDistance, kEffectConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(maxDistance, float, activeAirDraftEffectBundle() != 0,
+    activeAirDraftEffectBundle()->m_field2CC, setAirDraftMaxDistance, kEffectConsoleTag)
 
 // The generated Vec2 and bool executor streams are identical except for their two virtual
 // call offsets. All 48 pairs were compared against ELF 871C2B0/871C840, including the

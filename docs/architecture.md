@@ -170,11 +170,90 @@ at its registration or loading boundary before adding fallback behavior. Python 
 use the embedded interpreter and native bindings; a fixture that bypasses those scripts
 does not validate production content loading.
 
+### The `openbf2` console extension
+
+`openbf2.*` is an OpenBF2 extension, not a recovered command; no retail image defines it. It is
+`[CHOSEN, not recovered]` under [issue #39](https://github.com/B2BF/OpenBF2/issues/39).
+`Game/Main/OpenBF2Console.cpp` registers it from `ModuleBF2::init`.
+
+`openbf2.addModDll <file>` loads a native module at run time: either an OpenBF2 plugin that exports
+`initDll(IClassManager*)` (initialized through the same handshake as `Core/PluginDll.cpp`, a false
+return unloads it) or a module that does its work in `DllMain` and exports no `initDll`, which is
+kept loaded. A bare name resolves to `.\<file>` on Windows and `lib<stem>.so` on Linux. The command:
+
+- exists only in the dedicated-server image; it compiles out of the client and editor, so a
+  downloaded map cannot reach it on a player's machine;
+- refuses any call dispatched from a mounted-archive script (`OldConsole::isDispatchingArchiveScript`),
+  so bundled map or mod `.con` files cannot load native code. Operator callers — a loose server
+  `.con`, rcon, Python, or the server console — are allowed.
+
+A module's `DllMain` runs on load, so an integration that patches the host from `DllMain` takes
+effect without an `initDll`. bf2hub is such a module: its `DllMain` patches the engine's `dice_py`
+import slots (`Py_InitModule4`, `PyImport_ImportModule`) so that its `bf2hublib` and `bf2.bf2hub`
+Python modules are injected when the engine registers its `host` module and imports `bf2`. This only
+takes effect when the module is loaded **before** Python initialization — load it from
+`ServerSettings.con` or `Init.con`, which run before `GameServer::init` calls
+`pythonHost()->initialize()`, not from a map script that runs afterward.
+
+This loader does not itself reroute sockets. bf2hub's GameSpy/master-server redirection relied on an
+install-time patch of the host's import table that a runtime load does not reproduce; point the
+engine at the correct master-server address in source instead.
+
 ## The editor
 
 The editor targets this engine's 1.50 content contract. Its application, UI, command history,
 and editing modules are new code. It shares engine code with the client and isolates
 editor-specific changes in shared translation units with `BF2_IMAGE_EDITOR`.
+
+Lightmap generation is shared renderer code recovered from the 1.50 RendDX9 image: the terrain's
+light sampler (`Geom/TerrainLightSampling.cpp`), the static-mesh light sampler
+(`Geom/LightmapGeneration/MeshLightSampling.cpp`) and the generator (`Geom/LightmapGeneration/`).
+1.50 never creates the generator. Only the editor's renderer flavour (`BF2_RENDDX9_EDITOR=1`)
+publishes the 2006 editor's `lightmapGeneration` console object over it, using the 2006 binding
+names (`init`, `traceTerrain`, the settings and `light.*` rows). This is chosen behaviour, not
+recovered 1.50 behaviour. Both traces are recovered: the intensity trace (the shipped default) and
+the colour trace (`enableIntensityLightmaps 0`), which writes RGB lightmaps from what each light's
+views see over the ambient colour. The colour trace has not yet been compared with a retail-editor
+golden.
+
+An object is traced from its mesh's precomputed sample grid: `<template path>/Meshes/<template
+name>.samples` for geom 0, lod 0, otherwise `.samp_<geom><lod>` (the SMP1 and SMP2 layouts and an
+older one without a magic word). No stock archive ships these files; the art exporters write them.
+A template with `lightmapOverride` caps the grid at its `setLightmapSizeAll` size. The sampler writes
+the object's lightmap, dilated and converted to DXT1 (DXT5 when `lightmapFormat` is not 1) with mips,
+as `<Editor_LevelSavePath>/<GSLevelDirectory><GSLoadLevel>/Lightmaps/Objects/<template>` plus the
+position suffix the game's loader expects. Outside the renderer's editor mode the game reads object
+lightmaps only from the level's atlas (`Lightmaps/Objects/LightmapAtlas.tai`). The 1.50 rows `StaticMeshRenderer.loadAllLightMapFilesDLL
+<directory> <extension>` (one atlas, named `LightmapAtlas`) and `StaticMeshRenderer.loadAllLightMapFiles
+<directory> <extension>` (numbered batches `LightmapAtlas0`, `LightmapAtlas1`, ...) pack a directory's
+lightmaps through TextureAtlasBuilder.dll, reading and writing under `Editor_LevelSavePath`; the
+directory is the level's object-lightmap directory relative to that root
+(`<GSLevelDirectory><GSLoadLevel>/Lightmaps/Objects/`) and the extension `.dds`. Both
+bind in the native and editor flavours, as do `GeometryTemplate.setLightmapSizeAll` and
+`Object.geometry.GenerateLightmapForThisInstance`; the retail-compatible flavour publishes no console
+rows. The editor mounts `bf2editor/LightmapSamples*.zip` at `Objects` when the object archives are
+mounted, as the retail editor's setup did. Its object trace starts from the level's own object
+lightmaps - the level's atlas cut back into single lightmaps (`Framework/LightmapAtlas`), then the
+single lightmaps the editor kept in `Editor/Lightmaps/Objects` - so the re-packed atlas keeps every
+object the trace does not reach; stock levels ship only their atlas. The re-packed atlas goes into
+`Lightmaps/Objects` and the traced single lightmaps into `Editor/Lightmaps/Objects`.
+The game's 1.50 `StaticMesh.fx` comments out its include of the lightmap-generation techniques the
+trace draws static meshes with as occluders; the editor's flavour compiles it with that include
+(`RendDX9/Effect.cpp`), as the retail editor's own shader did, so terrain lightmaps carry the
+objects' shadows. This is chosen behaviour for the editor; the game images are unchanged.
+
+Editable roads are shared renderer code recovered from the 1.50 RendDX9 image (`Geom/RoadEditable.cpp`,
+`Geom/RoadTemplate.cpp`, `Geom/RoadEditableRenderer.cpp`, `GeomMisc/EditorSpline.cpp`,
+`GeomMisc/PerlinNoise.cpp`); 1.50 binds no console rows for them. Their interfaces are declared in
+headers the renderer and the editor both include (`Geom/IRoadEditable.h`, `Geom/IRoadTemplate.h`,
+`Geom/IRoadEditableRenderer.h`, `GeomMisc/IEditorSpline.h`, `GeomMisc/IPerlinNoise.h`), whose strings
+are the renderer's host string in its image and `std::string` in the editor's. The editor's road
+module (`App/RoadNetwork`) makes the objects through the class manager, keeps them alive (a road holds
+no reference to its spline, template or noise) and implements the retail editor's road rows over them.
+In the editor's renderer flavour `RoadEditable` takes its buffers out of the buffer manager when it
+drops them: the shipped body releases a dropped vertex buffer a second time on its next rebuild, which
+the retail Memory.dll heap absorbed. This is chosen behaviour for the editor; the game images keep the
+shipped body.
 
 The editor's `App/` layer owns the window, engine host, editing session, and renderer
 integration. `Framework/` supplies command history, selection, settings, file readers and
@@ -192,3 +271,33 @@ Retail-compatible files and `.con` semantics are the editor's compatibility boun
 Compare output with retail-editor golden files. An unfinished operation reports its failure;
 it must not claim to have saved or compiled content. Follow the [editor build steps](building.md#editor)
 for its dependencies, checks, and output directories.
+
+
+Every editor save is planned before anything is written (`Framework/SavePlan`): each part of the
+level - its object and settings files, the gameplay layers, templates, materials, animation systems,
+descriptions, painted maps, compiled terrain, overgrowth, roads, lightmaps - adds the files it would
+write and the step that marks it saved, without writing. The plan can be shown first (File > Save,
+`EditorLevel.preview`, with a line diff of each text file). Writing it puts each new file beside its
+target, copies every file it replaces into the level's backup folder
+(`bf2editor/Backups/<mod>/<level>/<date and time>/`, with a manifest), and only then replaces the
+targets; if one cannot be replaced, the ones already replaced are put back, so a save never leaves the
+level half written. A part that cannot be saved (a file from a mounted archive, one source control
+refuses) is reported and left unsaved; the other parts are written. A backup can be put back with
+every save after it (`EditorLevel.restore`), which is itself a backed-up save. The retail editor wrote
+each file as it went and kept no backup; this is chosen behaviour for the editor.
+
+The HUD editor is an addition; the retail editor left HUD scripts to a separate tool. Unless started with
+`+hud 0`, the editor runs the client's own HUD start-up: the HUD's modules, the `HudManager` singleton the renderer
+takes its paint hook from, and `BF2HudManager::init`. The renderer then updates and paints the HUD
+itself. `App/HudEditor` decides whether the HUD is drawn through the renderer's retail
+`renderer.drawHud` row: in soldier mode, or while the panel previews it. A preview holds the
+selected part's show variables and runs the HUD's widget update, which the game runs only for a player
+in a vehicle. `Framework/HudSetup` keeps the scripts `HudSetupMain.con` runs as lossless lines and
+tracks hudBuilder's selection across them, so every row belongs to its node. An edit is a line edit
+through the undo history. A row the builder can safely take again is replayed on the live HUD; a
+failing builder row ends the process, so the editor checks the live object and the row's words first.
+`Bf2TransformNode` reports where each node is updated, so the view's outline follows the game's own
+layout; that hook is compiled only into the editor's copy of the file. The save rewrites the menu
+archives that hold the scripts (`Framework/ArchiveRewrite`). The engine keeps its archives open, so a
+save part may unmount them just before the save plan replaces its targets and mount them again
+afterwards.

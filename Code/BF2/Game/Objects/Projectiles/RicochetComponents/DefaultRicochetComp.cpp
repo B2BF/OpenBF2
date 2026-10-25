@@ -228,6 +228,11 @@ bool DefaultRicochetComp::ricochet(const Vec3& impactOffset,
     world.y = impactOffset.y + current.y;
     world.z = impactOffset.z + current.z;
 
+    // The bounce starts from the impact point: it is the stored translation, not the end of this
+    // tick's sweep.
+    frame.m[12] = world.x;
+    frame.m[13] = world.y;
+    frame.m[14] = world.z;
     projectile->setAbsoluteTransformation(frame);
     node->setPositionalSpeed(newSpeed);
 

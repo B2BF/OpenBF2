@@ -110,11 +110,13 @@ bool EditSession::previewCommand(const std::string& action, const std::string& a
     {
         float at[3];
         pointAtViewCentre(at);
+        m_pickedPart = -1;
         return makePreview(argument, at, 0.0f, result);
     }
     if (action == "clear")
     {
         m_turntable = 0.0f;
+        m_pickedPart = -1;
         return clearPreview(result);
     }
     IObject* preview = m_preview ? object(m_preview) : 0;
@@ -214,6 +216,93 @@ bool EditSession::previewCommand(const std::string& action, const std::string& a
                       static_cast<unsigned>(cameras.size()), m.m[12], m.m[13], m.m[14]);
         result = text;
         return true;
+    }
+    if (action == "showParts")
+    {
+        m_previewParts = std::atoi(argument.c_str()) != 0;
+        if (!m_previewParts)
+            m_pickedPart = -1;
+        result = m_previewParts ? "the preview's parts are shown: a click on one picks it, and the gizmo moves it"
+                                : "the preview's parts are hidden";
+        return true;
+    }
+    if (action == "parts")
+    {
+        // One part a row: its number, what it is, where it is in the world and in its line's frame.
+        const std::vector<PreviewPart> parts = previewParts();
+        result = m_previewTemplate + ": " + std::to_string(parts.size()) + " part" + (parts.size() == 1 ? "" : "s");
+        for (size_t i = 0; i < parts.size(); ++i)
+        {
+            char where[96];
+            std::snprintf(where, sizeof(where), " at %.2f/%.2f/%.2f", parts[i].world.m[12], parts[i].world.m[13],
+                          parts[i].world.m[14]);
+            const std::string what = parts[i].kind == PreviewPart::Child
+                                         ? parts[i].child + " of " + parts[i].owner + (parts[i].seat ? " (seat)" : "")
+                                               + (parts[i].camera ? " (camera)" : "")
+                                         : parts[i].label + " of " + parts[i].owner;
+            result += (i ? "; " : ": ") + std::to_string(i) + " " + what + where;
+        }
+        return true;
+    }
+    if (action == "pick")
+    {
+        const int index = std::atoi(argument.c_str());
+        const std::vector<PreviewPart> parts = previewParts();
+        if (index >= static_cast<int>(parts.size()))
+        {
+            result = "the preview has " + std::to_string(parts.size()) + " parts";
+            return false;
+        }
+        m_pickedPart = index < 0 ? -1 : index;
+        m_previewParts = m_previewParts || index >= 0;
+        result = index < 0 ? std::string("no part picked")
+                           : "picked part " + std::to_string(index) + ": "
+                                 + (parts[static_cast<size_t>(index)].kind == PreviewPart::Child
+                                        ? parts[static_cast<size_t>(index)].child
+                                        : parts[static_cast<size_t>(index)].label)
+                                 + " of " + parts[static_cast<size_t>(index)].owner;
+        return true;
+    }
+    if (action == "movePart" || action == "turnPart")
+    {
+        // "<n> <dx/dy/dz>": the part moved in the world by that much; "<n> <degrees>": turned about the world's up -
+        // as the view's gizmo moves and turns it.
+        const size_t blank = argument.find(' ');
+        const std::vector<PreviewPart> parts = previewParts();
+        const int index = std::atoi(argument.c_str());
+        if (blank == std::string::npos || index < 0 || index >= static_cast<int>(parts.size()))
+        {
+            result = "EditorPreview." + action + " takes a part's number (EditorPreview.parts) and "
+                     + (action == "movePart" ? "x/y/z metres" : "degrees");
+            return false;
+        }
+        dice::hfe::Mat4 world = parts[static_cast<size_t>(index)].world;
+        if (action == "movePart")
+        {
+            float delta[3] = { 0.0f, 0.0f, 0.0f };
+            std::sscanf(argument.c_str() + blank + 1, "%f/%f/%f", &delta[0], &delta[1], &delta[2]);
+            for (int k = 0; k < 3; ++k)
+                world.m[12 + k] += delta[k];
+        }
+        else
+        {
+            if (parts[static_cast<size_t>(index)].kind != PreviewPart::Child)
+            {
+                result = "an exit point has only a position to move";
+                return false;
+            }
+            const float radians = static_cast<float>(std::atof(argument.c_str() + blank + 1)) * 0.0174532925f;
+            const float c = std::cos(radians), s = std::sin(radians);
+            // Its axes turned about the world's up, its place kept.
+            for (int row = 0; row < 3; ++row)
+            {
+                const float x = world.m[row * 4 + 0], z = world.m[row * 4 + 2];
+                world.m[row * 4 + 0] = x * c + z * s;
+                world.m[row * 4 + 2] = -x * s + z * c;
+            }
+        }
+        m_pickedPart = index;
+        return movePreviewPart(static_cast<size_t>(index), world, result);
     }
     if (action == "info")
     {

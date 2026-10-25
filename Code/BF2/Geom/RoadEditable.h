@@ -125,6 +125,11 @@ public:
                     float width, float maxError, bool ghost);
     // (`retn 8`) - dice every pending polygon on the 2 m terrain grid, ear-clip the pieces.
     void splitAndTriangulate(std::vector<RoadEditableVertex>& vertices, std::vector<int>& indices);
+#if defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+    // [CHOSEN, not recovered] editor flavour only: both buffers released and removed from the buffer manager, the
+    // counts zeroed (invalidate and the destructor; see RoadEditable.cpp).
+    void releaseBuffersForEditor();
+#endif
 
     // data, in shipped order (the three vptrs precede)
     int                         m_refCount;                     // +0x0C

@@ -20,6 +20,7 @@ cl /nologo /EHsc /O2 /std:c++14 /permissive /Gy /DDEDICATED=1 /FI"%~dp0..\BF2\Co
   ..\BF2\Scene\Object\Object.cpp ^
   ..\BF2\Scene\Object\ObjectPredicator.cpp ^
   ..\BF2\Scene\Object\ObjectUtil.cpp ^
+  ..\BF2\Scene\Object\ObjectTypes\Game\IPlayerControlObject.cpp ^
   ..\BF2\Game\Utility\Vars.cpp ^
   ..\BF2\Physics\IPhysicsNode.cpp ^
   ..\BF2\Physics\IResponsePhysics.cpp ^

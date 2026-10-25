@@ -86,6 +86,21 @@ private:
     void drawUndergrowthCursor(EditSession& session, const float viewProjection[16]);
     // A bundle armed for placing: the click that places it, Esc, and where it would go.
     void handleBundlePlacement(EditSession& session, const float viewProjection[16]);
+    // The level's splines (EditorRoad.showSplines): each curve as the renderer's spline evaluates it (Catmull-Rom
+    // through every point), its points - the active spline's larger, its selected point green - and a label naming its
+    // road; a point being dragged is drawn where it would go.
+    void drawSplines(EditSession& session, const float viewProjection[16]);
+    // The road tool's mouse (EditSession::setRoadTool): true when it took the mouse this frame.
+    bool handleSplines(EditSession& session, const float viewProjection[16]);
+    // The template preview's parts (EditSession::previewParts, [added]): a mark and axes for each child, a figure
+    // for each seat's exit point, names for seats, cameras, exits and the picked part. A click on a mark picks it;
+    // the picked part gets the gizmo (a move, or a turn in the rotate mode, for a child), and letting go writes it
+    // (EditSession::movePreviewPart). True when the parts took the mouse this frame.
+    void drawPreviewParts(EditSession& session, const float viewProjection[16]);
+    bool handlePreviewParts(EditSession& session, const float view[16], const float projection[16],
+                            const float viewProjection[16]);
+    bool                  m_partDragging = false;
+    dice::hfe::Mat4       m_partPivot;      // the picked part's gizmo matrix while dragging
 
 public:
     // The Resources panel, told which templates were placed from it (its recent list).
@@ -158,6 +173,14 @@ private:
     // An undergrowth stroke under way: the button that holds it.
     bool                  m_undergrowthStroke;
     int                   m_undergrowthButton;
+    // A spline point dragged by the road tool: which, whether it moved, where it would go.
+    bool                  m_splineDrag = false;
+    bool                  m_splineMoved = false;
+    int                   m_splineDragId = -1;
+    int                   m_splineDragPoint = -1;
+    bool                  m_splineTargetValid = false;
+    float                 m_splineTarget[3] = { 0.0f, 0.0f, 0.0f };
+    float                 m_splinePress[2] = { 0.0f, 0.0f };
     // An object brush stroke under way: the button that holds it.
     bool                  m_brushStroke;
     int                   m_brushButton;

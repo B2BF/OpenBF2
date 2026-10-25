@@ -1,4 +1,5 @@
 // Tests material/geometry penetration and updates damage, exit position and lifetime through output arguments.
+// A successful penetration also moves the projectile to the exit point.
 // Water may bypass geometry and damage cost. damageLoss -1 refuses penetration.
 // Damage can be written before a later refusal; only the return value establishes penetration.
 // Deviation uses a stream separate from ricochet (RW-68). Source placement is [INFERRED].

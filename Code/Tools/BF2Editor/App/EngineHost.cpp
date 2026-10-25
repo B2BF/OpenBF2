@@ -18,6 +18,8 @@
 #include "Game/Utility/Vars.h"
 #include "Game/Objects/IObject.h"
 #include "Game/Objects/Game/SupplyDropManager.h"
+#include "Game/Objects/Fx/PersistentExplosionEffectManager.h"
+#include "Menu/BF2HudManager.h"
 #include "Core/System.h"
 #include "Core/SmartItf.h"
 #include "Core/ClassManager.h"
@@ -49,6 +51,12 @@ namespace hfe
 class ISettingsRepostitory { public: static void createSingleton(); };
 } // namespace hfe
 } // namespace dice
+
+namespace dice { namespace hfe {
+// Game/Main/BF2EngineSetup.cpp, editor flavour: the HUD's modules in the module list.
+void setEditorHudModules(bool on);
+extern hud::BF2HudManager* hudManager;          // Game/Main/BF2Engine.cpp
+} }
 
 namespace bf2editor
 {
@@ -276,6 +284,8 @@ bool EngineHost::boot(const EngineConfig& config)
     Vars::setValue("hack-ignore-asserts", config.ignoreAsserts ? "1" : "0");
 
     logLine(LogLevel::Info, "engine: modules");
+    // The HUD's modules join the list when the HUD is asked for (Game/Main/BF2EngineSetup.cpp, editor flavour).
+    setEditorHudModules(config.hud && config.window);
     if (!setup->initModules())
         return fail("BF2EngineSetup::initModules");
     initSettingsRepostitory();
@@ -337,6 +347,26 @@ bool EngineHost::boot(const EngineConfig& config)
         io::fileManager->permitMountArchives(true);
         runFullAccess("ServerArchives.con");
         runFullAccess("ClientArchives.con");
+        // The lightmap samples, as the retail editor's setup mounted them: bf2editor/LightmapSamples*.zip at Objects -
+        // the meshes' sample grids an object lightmap is traced from (Meshes/<mesh>.samples), which no game archive
+        // holds. Not with loose objects: an archive at Objects/ hides the loose folder from the file manager's listings,
+        // and the samples are then read from the mod's loose Objects folder like the rest.
+        WIN32_FIND_DATAA found;
+        const HANDLE search = FindFirstFileA("bf2editor/LightmapSamples*.zip", &found);
+        int samples = 0;
+        if (search != INVALID_HANDLE_VALUE)
+        {
+            do
+            {
+                if (!(found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+                    && io::fileManager->mountArchive(std::string("bf2editor/") + found.cFileName, "Objects", false))
+                    ++samples;
+            } while (FindNextFileA(search, &found));
+            FindClose(search);
+        }
+        if (samples)
+            logLine(LogLevel::Info, "engine: %d lightmap sample archive%s (bf2editor/LightmapSamples*.zip) at Objects",
+                    samples, samples == 1 ? "" : "s");
         io::fileManager->permitMountArchives(false);
     }
     else
@@ -353,8 +383,26 @@ bool EngineHost::boot(const EngineConfig& config)
         return fail("the ModInfo singleton");
     modInfo->init();                                        // result discarded, as in initEngine
 
+    // The HUD manager, as BF2Engine::init makes it for a client: published as the HudManager singleton before the
+    // renderer starts, which takes its paint hook from that singleton.
+    if (config.hud && config.window)
+    {
+        hudManager = new hud::BF2HudManager();
+        SingletonRegInfo info = { std::string("HudManager"), reinterpret_cast<IBase**>(&hudManager), 0, 0, 4 };
+        classManager->registerSingleton(info);
+    }
     if (config.window && !startRenderer(config))
         return fail("the renderer");
+    // Its widgets and Menu/HUD/HudSetup/HudSetupMain.con, where initEngine runs BF2HudManager::init (after the explosion
+    // manager the HUD scripts' variables need, as the client constructs it first).
+    if (hudManager)
+    {
+        if (!world::explosionEffectManager)
+            world::explosionEffectManager = new world::CPersistentExplosionEffectManager();
+        m_hudUp = hudManager->init();
+        logLine(m_hudUp ? LogLevel::Info : LogLevel::Warning, "engine: the HUD %s",
+                m_hudUp ? "is up (Menu/HUD/HudSetup/HudSetupMain.con)" : "did not start (BF2HudManager::init failed)");
+    }
     // Not started: the game's input devices and Controls.con (the editor takes input from its own
     // window and ImGui), the HUD, the menu event names, SwiffHost, LocalProfileManager and the music
     // player (the game's front end).
@@ -476,6 +524,12 @@ void EngineHost::shutdown()
 
     m_phase = PhaseDown;
     logLine(LogLevel::Info, "engine: down");
+}
+
+void EngineHost::hudLevelLoaded()
+{
+    if (m_hudUp && dice::hfe::hudManager)
+        dice::hfe::hudManager->onLevelLoaded();
 }
 
 } // namespace bf2editor

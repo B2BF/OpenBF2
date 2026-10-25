@@ -9,6 +9,7 @@
 #include <set>
 #include <string>
 #include "../IGameLogic.h"
+#include "../../Math/Vec3.h"      // completes Vec3 for the pre-spawn camera members
 #include "../IEventListener.h"     // the second base - see the note on the class below
 #include "../../IO/File/IFileSystem.h"   // NoCaseStringCompare for the reverse team-name map
 
@@ -131,6 +132,9 @@ public:
     virtual void  resetAllObjects();
     void          dropAllKits();                              // NON-virtual (direct call)
     void          destroyAllControlPoints();                  // snapshot + destroy
+    // Stores the pre-spawn camera transform, then re-seats the local human player's free camera.
+    // NON-virtual: the gameLogic.setBeforeSpawnCamera executor calls it directly.
+    void          setBeforeSpawnCamera(Vec3 position, Vec3 direction);
 
     // Marks root objects created-on-load so round resets preserve them. Returns false
     // if load cancellation interrupts the registry walk.
@@ -436,12 +440,8 @@ protected:
                                                    //   (0 means "no deadline"); StatusMonitor
                                                    //   subtracts getTickCount() from it to show the
                                                    //   countdown
-    float        m_beforeSpawnCameraPositionX = 0.0f;   // +0x198  Vec3 - the free camera's pre-spawn seat
-    float        m_beforeSpawnCameraPositionY = 150.0f; // +0x19C  (0x43160000 = 150.0 in the ctor)
-    float        m_beforeSpawnCameraPositionZ = 0.0f;   // +0x1A0
-    float        m_beforeSpawnCameraDirectionX = 0.0f;  // +0x1A4  Vec3
-    float        m_beforeSpawnCameraDirectionY = 0.0f;  // +0x1A8
-    float        m_beforeSpawnCameraDirectionZ = 0.0f;  // +0x1AC
+    Vec3         m_beforeSpawnCameraPosition{ 0.0f, 150.0f, 0.0f };  // +0x198  free camera's pre-spawn seat
+    Vec3         m_beforeSpawnCameraDirection{ 0.0f, 0.0f, 0.0f };   // +0x1A4
     bool         m_useActiveCombatArea = false;    // +0x1D0
     float        m_activeCombatArea1 = 0.0f;       // +0x1D4  IDB names activeCombatArea1..4 - the four
     float        m_activeCombatArea2 = 0.0f;       // +0x1D8  floats set/getActiveCombatArea carry;

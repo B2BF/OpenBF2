@@ -19,6 +19,8 @@
 #include "Game/Objects/IObjectTemplate.h"
 #include "Game/Objects/IPlayer.h"
 #include "Game/Objects/IPlayerControlObjectTemplate.h"
+#include "Game/Objects/ISoldier.h"
+#include "Game/Objects/IWeaponObject.h"
 #include "Game/Objects/ObjectSpawnerTemplate.h"
 #include "IO/Input/PlayerInput.h"
 #include "Math/Mat4.h"
@@ -271,9 +273,9 @@ bool PlayTest::enterSoldier(std::string& result)
         result = "no soldier template " + (skin.empty() ? std::string("us_light_soldier") : skin);
         return false;
     }
-    world::IObjectTemplate* kitOwner = kitName.empty() ? 0 : world::objectTemplateManager->getTemplate(kitName);
+    world::IObjectTemplate* kitOwner = kitName.empty() || m_noKit ? 0 : world::objectTemplateManager->getTemplate(kitName);
     void* const kitTemplate = kitOwner ? kitOwner->queryImplementation(world::CID_KitTemplate) : 0;
-    if (!kitTemplate)
+    if (!kitTemplate && !m_noKit)
     {
         char text[160];
         std::snprintf(text, sizeof(text), "team %d has no kit %d in this level (gameLogic.setKit)%s%s", m_team, m_kit,
@@ -330,7 +332,7 @@ bool PlayTest::enterSoldier(std::string& result)
     }
     local->setIsAlive(true);
 
-    world::IObject* const kitObject = m_game.createObjectOnAllClients(
+    world::IObject* const kitObject = !kitTemplate ? 0 : m_game.createObjectOnAllClients(
         static_cast<const world::IObjectTemplate*>(kitTemplate), position, rotation, true, 0, 0);
     if (kitObject)
     {
@@ -413,6 +415,7 @@ bool PlayTest::leave(std::string& result)
         serverInfo->m_block.allowNoseCam = m_savedViews[1];
     }
     m_active = false;
+    m_noKit = false;
     m_held.clear();
     m_camera.place(eye[0], eye[1], eye[2], yaw, pitch);
     char text[160];
@@ -568,6 +571,57 @@ int PlayTest::controlCategory() const
     return category == 2 ? 2 : (category == 3 ? 3 : 1);
 }
 
+bool PlayTest::testWeapon(const std::string& templateName, std::string& result)
+{
+    world::IObjectTemplate* const weapon =
+        world::objectTemplateManager ? world::objectTemplateManager->getTemplate(templateName) : 0;
+    if (!weapon)
+    {
+        result = "no template named " + templateName;
+        return false;
+    }
+    // Soldier::addItem by name does not check that the template makes an item (its queryInterface is unchecked).
+    if (weapon->getClassID() != world::CID_GenericFireArmTemplate)
+    {
+        result = weapon->getName() + " is not a weapon (a GenericFireArm template)";
+        return false;
+    }
+    std::string left;
+    if (m_active)
+        leave(left);
+    m_noKit = true;
+    if (!enterSoldier(result))
+    {
+        m_noKit = false;
+        return false;
+    }
+    world::IObject* const body = soldier();
+    world::ISoldier* const asSoldier =
+        body ? static_cast<world::ISoldier*>(body->queryInterface(world::IID_ISoldier)) : 0;
+    const int slot = asSoldier ? asSoldier->addItem(weapon->getName(), -1) : -1;
+    if (slot <= 0)
+    {
+        result = "the soldier did not take " + weapon->getName() + " (Soldier::addItem answered " + std::to_string(slot) + ")";
+        leave(left);
+        return false;
+    }
+    // Drawn as a player draws it: the slot's key for two steps.
+    if (slot <= 9)
+    {
+        Held held;
+        held.input = static_cast<int>(io::PIWeaponSelect1) + slot - 1;
+        held.value = 1.0f;
+        held.steps = 2;
+        m_held.push_back(held);
+    }
+    char text[200];
+    std::snprintf(text, sizeof(text), "testing %s: the soldier holds it in slot %d (fire with the left button, R reloads; "
+                  "a rate of fire or reload time set in the template reaches it at once)", weapon->getName().c_str(), slot);
+    result = text;
+    logLine(LogLevel::Info, "play-test: %s", text);
+    return true;
+}
+
 bool PlayTest::hold(const std::string& name, float value, int steps, std::string& result)
 {
     std::istringstream stream(name);
@@ -615,7 +669,21 @@ std::string PlayTest::describe() const
                   local->getIsAlive() ? "alive" : "not alive", m_active ? "soldier mode on" : "soldier mode off",
                   camera ? "yes" : "none", m_steps, WorldPref::getTickCount(), local->getTeam(), local->getKit(),
                   camera ? static_cast<int>(const_cast<world::ICameraObject*>(camera)->getViewMode()) : -1);
-    return text;
+    // The weapon in the soldier's hands: its rounds, magazines and reload.
+    std::string line = text;
+    world::ISoldier* const asSoldier = static_cast<world::ISoldier*>(vehicle->queryInterface(world::IID_ISoldier));
+    world::IObject* const held = asSoldier ? asSoldier->getActiveWeapon(0) : 0;
+    world::IWeaponObject* const weapon =
+        held ? static_cast<world::IWeaponObject*>(held->queryInterface(world::IID_IWeaponObject)) : 0;
+    if (weapon)
+    {
+        char more[200];
+        std::snprintf(more, sizeof(more), ", holding %s: %d of %d rounds, %d magazines%s", held->getTemplate()->getName().c_str(),
+                      weapon->getAmmoInMag(0), weapon->getMagSize(), weapon->getCurrentNrOfMags(),
+                      weapon->isReloading() ? ", reloading" : "");
+        line += more;
+    }
+    return line;
 }
 
 void PlayTest::frame(float seconds, const PlayTestInput& input)

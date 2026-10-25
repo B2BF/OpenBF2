@@ -61,6 +61,9 @@ public:
     // The saved level copied under a new name (Framework/LevelCopier); with `open`, the editor starts
     // again on the copy. Refused while there are unsaved changes.
     virtual bool saveLevelAs(const std::string& name, bool open, std::string& result) = 0;
+    // A new level beside the open one (Framework/NewLevel): `terrain` is "size/scale/height/lowResSize" or "default"
+    // (the retail dialog's 1024/2/25/256); with `open`, the editor starts again on it.
+    virtual bool createLevel(const std::string& name, const std::string& terrain, bool open, std::string& result) = 0;
     // Objects made and unmade (WP6): the user's edits, and the replays the history's scripts run.
     virtual bool createObject(const std::string& templateName, const dice::hfe::Vec3& position,
                               const dice::hfe::Vec3& yawPitchRoll, int layer, std::string& result) = 0;
@@ -272,6 +275,14 @@ public:
     virtual bool bakeGroundHemi(int resolution, const dice::hfe::Vec3& position, float size, std::string& result) = 0;
     virtual bool captureMinimap(int resolution, std::string& result) = 0;
     virtual bool generateEnvMaps(std::string& result) = 0;
+    // Terrain lightmaps (Compile > Generate lightmaps): `quality` 0..3 is the retail dialog's resolution (0.25, 0.5, 1, 2),
+    // `parts` primary, secondary or both, `options` - or nearest, resume, nearest+resume.
+    virtual bool generateLightmaps(int quality, const std::string& parts, const std::string& options,
+                                   std::string& result) = 0;
+    // Roads and splines (App/EditSessionRoads.cpp): `object` EditorRoad for the editor's own commands, or a retail row's
+    // object (SplineManager, Road, RoadTemplate, RoadTemplateTexture) with its method and arguments.
+    virtual bool roadCommand(const std::string& object, const std::string& method, const std::vector<std::string>& args,
+                             std::string& result) = 0;
     virtual bool effectAction(const std::string& action, std::string& result) = 0;
     virtual bool clearEffectPreview(std::string& result) = 0;
     virtual bool effectInfo(std::string& result) = 0;
@@ -311,6 +322,8 @@ public:
     virtual bool mouseMove(float x, float y, std::string& error) = 0;
     virtual bool mouseBy(float dx, float dy, std::string& error) = 0;
     virtual bool mouseToObject(unsigned id, std::string& result) = 0;
+    // The mouse to the mark of the template preview's part `index` (EditSession::previewParts).
+    virtual bool mouseToPart(int index, std::string& result) = 0;
     virtual bool mouseToAxis(int axis, float pixels, std::string& result) = 0;
     virtual bool mouseButton(int button, bool down, std::string& error) = 0;
     virtual bool mouseWheel(float steps, std::string& error) = 0;
@@ -348,11 +361,41 @@ public:
     virtual bool holdPlayTestInput(const std::string& name, float value, int steps, std::string& result) = 0;
     // An empty template name drives the selected object spawner's vehicle.
     virtual bool drivePlayTestVehicle(const std::string& templateName, std::string& result) = 0;
+    // A weapon template tested: the soldier holding it (EditorPlayTest.weapon).
+    virtual bool testPlayTestWeapon(const std::string& templateName, std::string& result) = 0;
     virtual std::string describePlayTest() const = 0;
 };
 void setPlayTest(IPlayTestCommands* playTest);
 // Whether soldier mode is on (the shell's Camera menu ticks it).
 bool playTestActive();
+
+// EditorHud.* (App/HudEditor, added): the game's HUD in the editor (+hud 1) and its HUD editor - info, preview <0|1>
+// (the HUD drawn without the play test), set <variable> <value> (a HUD variable held while previewing, "-" lets it
+// go), select <node> (the part the editor shows, what shows it held), node <node>, rect <node> <x/y/w/h>,
+// setRow <node> <n> <words>, addRow <node> <method> <words>, removeRow <node> <n>, changes, and the history's own
+// setLine|insertLine|removeLine <script> <line> [text, percent-encoded]. Set while the HUD is up.
+class IHudCommands
+{
+public:
+    virtual ~IHudCommands() {}
+    virtual std::string describeHud() const = 0;
+    virtual bool setHudPreview(bool on, std::string& result) = 0;
+    virtual bool setHudVariable(const std::string& name, const std::string& value, std::string& result) = 0;
+    virtual bool selectHudNode(const std::string& node, std::string& result) = 0;
+    virtual std::string describeHudNode(const std::string& node) const = 0;
+    // op 0 sets a line, 1 inserts one before `line`, 2 removes it.
+    virtual bool editHudLine(int op, int script, int line, const std::string& text, std::string& result) = 0;
+    virtual bool setHudRect(const std::string& node, int x, int y, int width, int height, std::string& result) = 0;
+    virtual bool setHudRow(const std::string& node, int row, const std::string& words, std::string& result) = 0;
+    virtual bool addHudRow(const std::string& node, const std::string& method, const std::string& words,
+                           std::string& result) = 0;
+    virtual bool removeHudRow(const std::string& node, int row, std::string& result) = 0;
+    virtual std::string describeHudChanges() const = 0;
+    // Where a part's outline stands in the window (pixels): its centre (0) or its size handle (1) - the test harness's
+    // EditorTest.mouseToHud. False with `error` when the part has no outline.
+    virtual bool hudScreenPoint(const std::string& node, int which, float& x, float& y, std::string& error) const = 0;
+};
+void setHudCommands(IHudCommands* hud);
 
 // EditorView.panel <name> <0|1> opens or closes a panel through this handler (the shell owns the
 // panels, not the edit session). False from the handler: no panel of that name.

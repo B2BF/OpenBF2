@@ -10,6 +10,8 @@
 
 #include "../Projectiles/GenericProjectile.h"
 #include "../Projectiles/GenericProjectileTemplate.h"
+#include "../Projectiles/GrenadeTrace.h"
+#include "../Projectiles/TVMissileTrace.h"
 #include "../GameLogicComp/ArmorGLComp.h"
 #include "../GameLogicComp/IArmorGLComp.h"            // predict's hit-point hand-over
 #include "../IObjectTemplate.h"                       // createObject - the interpolation proxy
@@ -390,6 +392,13 @@ void GenericProjectileNetworkable::updateStateMask(unsigned int* stateMask)
         if (rec->hitPointsCeil != prev->hitPointsCeil)
             *stateMask |= 0x10;
     }
+    if (world::tv_missile_trace::armed())
+        world::tv_missile_trace::log(projectile, "snapshot",
+            "launch_tick=%d mask=%u root=%u record=%u pos=%.9g,%.9g,%.9g "
+            "quat=%.9g,%.9g,%.9g,%.9g",
+            projectile->m_dword1BC, *stateMask, (L::flags(projectile) & 0x01000000u) ? 1u : 0u,
+            static_cast<unsigned int>(m_next), rec->position.x, rec->position.y, rec->position.z,
+            rec->rotation.x, rec->rotation.y, rec->rotation.z, rec->rotation.w);
 }
 
 // getNetUpdate - 0x8238020, 1,725 B - THE wire, sender side. See the file header for the map.
@@ -501,6 +510,27 @@ bool GenericProjectileNetworkable::getNetUpdate(io::BitStream& stream, io::BaseL
         return false;
     }
     m_stats.m_writeBits += static_cast<int>(stream.getBitPosition() - m_updateStartBitPos);
+    if (world::tv_missile_trace::armed())
+        world::tv_missile_trace::log(m_object, "encode_candidate",
+            "stream=%p mask=%u pos=%.9g,%.9g,%.9g quat=%.9g,%.9g,%.9g,%.9g "
+            "bit_start=%u bit_end=%u",
+            static_cast<void*>(&stream), mask, rec->position.x, rec->position.y, rec->position.z,
+            rec->rotation.x, rec->rotation.y, rec->rotation.z, rec->rotation.w,
+            m_updateStartBitPos, stream.getBitPosition());
+    if (world::grenade_trace::armed() && world::grenade_trace::begin(m_object))
+    {
+        const Vec3& reference = stream.getCompressionVector();
+        world::grenade_trace::log(m_object, "net_send",
+            "mask=%u pos_requested=%u rot_requested=%u pos=%.9g,%.9g,%.9g "
+            "quat=%.9g,%.9g,%.9g,%.9g record_time=%.9g "
+            "compression=%u reference=%.9g,%.9g,%.9g bit_start=%u bit_end=%u",
+            mask, (mask & 2u) ? 1u : 0u, (mask & 1u) ? 1u : 0u,
+            rec->position.x, rec->position.y, rec->position.z,
+            rec->rotation.x, rec->rotation.y, rec->rotation.z, rec->rotation.w,
+            rec->time, stream.hasCompressionVector() ? 1u : 0u,
+            reference.x, reference.y, reference.z,
+            m_updateStartBitPos, stream.getBitPosition());
+    }
     return true;
 }
 
@@ -599,6 +629,20 @@ void GenericProjectileNetworkable::setNetUpdate(io::BitStream& stream, float upd
     }
 
     m_stats.m_readBits += static_cast<int>(stream.getBitPosition() - m_updateStartBitPos);
+    if (world::grenade_trace::armed() && world::grenade_trace::begin(m_object))
+    {
+        const Vec3& reference = stream.getCompressionVector();
+        world::grenade_trace::log(m_object, "net_receive",
+            "mask=%u pos_requested=%u rot_requested=%u pos=%.9g,%.9g,%.9g "
+            "quat=%.9g,%.9g,%.9g,%.9g record_time=%.9g full=%u "
+            "compression=%u reference=%.9g,%.9g,%.9g bit_start=%u bit_end=%u",
+            mask, (mask & 2u) ? 1u : 0u, (mask & 1u) ? 1u : 0u,
+            rec->position.x, rec->position.y, rec->position.z,
+            rec->rotation.x, rec->rotation.y, rec->rotation.z, rec->rotation.w,
+            rec->time, isFullUpdate ? 1u : 0u, stream.hasCompressionVector() ? 1u : 0u,
+            reference.x, reference.y, reference.z,
+            m_updateStartBitPos, stream.getBitPosition());
+    }
 
     // THE apply
     if (isFullUpdate)

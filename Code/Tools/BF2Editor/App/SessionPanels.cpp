@@ -159,6 +159,8 @@ void SessionPanels::draw(EditSession& session)
         drawGameplayLayers(session);
     if (m_showTerrain)
         m_terrain.draw(session, &m_showTerrain);
+    if (m_showRoads)
+        m_roadPanel.draw(session, &m_showRoads);
     if (m_showLibrary)
         m_library.draw(session, &m_showLibrary);
     if (m_showObjectTemplates)
@@ -261,6 +263,7 @@ void SessionPanels::loadSettings(const EditorSettings& settings)
     m_showLevelSettings = settings.getBool("panels.levelSettings", m_showLevelSettings);
     m_showGameplayLayers = settings.getBool("panels.gameplayLayers", m_showGameplayLayers);
     m_showTerrain = settings.getBool("panels.terrain", m_showTerrain);
+    m_showRoads = settings.getBool("panels.roads", m_showRoads);
     m_showLibrary = settings.getBool("panels.library", m_showLibrary);
     m_showObjectTemplates = settings.getBool("panels.objectTemplates", m_showObjectTemplates);
     m_showWizard = settings.getBool("panels.wizard", m_showWizard);
@@ -292,6 +295,7 @@ void SessionPanels::saveSettings(EditorSettings& settings) const
     settings.setBool("panels.levelSettings", m_showLevelSettings);
     settings.setBool("panels.gameplayLayers", m_showGameplayLayers);
     settings.setBool("panels.terrain", m_showTerrain);
+    settings.setBool("panels.roads", m_showRoads);
     settings.setBool("panels.library", m_showLibrary);
     settings.setBool("panels.objectTemplates", m_showObjectTemplates);
     settings.setBool("panels.wizard", m_showWizard);
@@ -322,6 +326,7 @@ std::vector<std::string> SessionPanels::openPanels() const
     if (m_showLevelSettings) open.push_back("Level settings");
     if (m_showGameplayLayers) open.push_back("Gameplay layers");
     if (m_showTerrain) open.push_back("Terrain");
+    if (m_showRoads) open.push_back("Roads");
     if (m_showLibrary) open.push_back("Bundles and brushes");
     if (m_showObjectTemplates) open.push_back("Object templates");
     if (m_showWizard) open.push_back("Object wizard");
@@ -340,7 +345,7 @@ bool SessionPanels::setPanelVisible(const std::string& name, bool visible)
         { "CombatAreas", &m_showCombatAreas }, { "Combat areas", &m_showCombatAreas }, { "Sounds", &m_showSounds },
         { "LevelSettings", &m_showLevelSettings }, { "Level settings", &m_showLevelSettings },
         { "GameplayLayers", &m_showGameplayLayers }, { "Gameplay layers", &m_showGameplayLayers },
-        { "Terrain", &m_showTerrain },
+        { "Terrain", &m_showTerrain }, { "Roads", &m_showRoads },
         { "Library", &m_showLibrary }, { "Bundles and brushes", &m_showLibrary }, { "BundlesAndBrushes", &m_showLibrary },
         { "ObjectTemplates", &m_showObjectTemplates }, { "Object templates", &m_showObjectTemplates },
         { "Wizard", &m_showWizard }, { "ObjectWizard", &m_showWizard }, { "Object wizard", &m_showWizard },
@@ -373,6 +378,7 @@ void SessionPanels::viewMenuItems()
     ImGui::MenuItem("Level settings", 0, &m_showLevelSettings);
     ImGui::MenuItem("Gameplay layers", 0, &m_showGameplayLayers);
     ImGui::MenuItem("Terrain", 0, &m_showTerrain);
+    ImGui::MenuItem("Roads", 0, &m_showRoads);
     ImGui::MenuItem("Bundles and brushes", 0, &m_showLibrary);
     ImGui::MenuItem("Object templates", 0, &m_showObjectTemplates);
     ImGui::MenuItem("Object wizard", 0, &m_showWizard);

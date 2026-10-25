@@ -124,7 +124,45 @@ bool ZipWriter::add(const std::string& name, const unsigned char* data, size_t s
     const bool stored = !size || packed.size() >= size;
     entry.method = stored ? 0 : 8;
     entry.compressedSize = stored ? entry.size : static_cast<unsigned long>(packed.size());
+    return writeEntry(entry, stored ? static_cast<const void*>(data)
+                                    : static_cast<const void*>(packed.empty() ? 0 : &packed[0]), error);
+}
 
+bool ZipWriter::addRaw(const std::string& name, unsigned method, unsigned long crc, unsigned long size,
+                       const unsigned char* packed, size_t packedSize, unsigned dosTime, unsigned dosDate,
+                       std::string& error)
+{
+    if (!m_file || m_failed)
+    {
+        error = "the archive is not open for writing";
+        return false;
+    }
+    if (name.empty() || name.size() > 0xFFFF || packedSize > 0xFFFFFFF0UL || m_entries.size() >= 0xFFFF
+        || m_offset > 0xFFFFFFF0ULL)
+    {
+        error = "'" + name + "' does not fit a ZIP archive without ZIP64";
+        return false;
+    }
+    if (method != 0 && method != 8)
+    {
+        error = "'" + name + "' is stored with a method this writer does not copy";
+        return false;
+    }
+    Entry entry;
+    entry.name = name;
+    entry.method = method;
+    entry.dosTime = dosTime & 0xFFFF;
+    entry.dosDate = dosDate & 0xFFFF;
+    entry.crc = crc;
+    entry.size = size;
+    entry.compressedSize = static_cast<unsigned long>(packedSize);
+    entry.offset = static_cast<unsigned long>(m_offset);
+    return writeEntry(entry, packedSize ? packed : 0, error);
+}
+
+bool ZipWriter::writeEntry(const Entry& entry, const void* payload, std::string& error)
+{
+    const std::string& name = entry.name;
     std::vector<unsigned char> header;
     put32(header, kLocalHeader);
     put16(header, kVersion);
@@ -138,9 +176,7 @@ bool ZipWriter::add(const std::string& name, const unsigned char* data, size_t s
     put16(header, static_cast<unsigned>(name.size()));
     put16(header, 0);                   // no extra field
     header.insert(header.end(), name.begin(), name.end());
-    if (!write(&header[0], header.size())
-        || !write(stored ? static_cast<const void*>(data) : static_cast<const void*>(packed.empty() ? 0 : &packed[0]),
-                  entry.compressedSize))
+    if (!write(&header[0], header.size()) || !write(payload, entry.compressedSize))
     {
         error = "writing " + name + " failed";
         return false;

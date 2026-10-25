@@ -272,6 +272,13 @@ BF2_CONSOLE_METHOD_0_1_RET_STATIC_ACTIVE(listObjectsOfTemplate, objectTemplateAd
                                          world::objectTemplateManager->getActiveObjectTemplate(),
                                          kToolObjectConsoleTag)
 
+// Object.info (dedicated PE ctor 0x6D2050, executor 0x6D21B0, gate 0x4921F0 = always active): one
+// getObjectInfo row for the named or active object. No argument dumps objectManager's active object;
+// a proxy dumps that object (a null proxy prints the shipped "No object").
+BF2_CONSOLE_METHOD_0_1_RET_STATIC_ACTIVE(info, objectTemplateAdm.getObjectInfo, std::string, true,
+                                         world::IObject_ptrproxy,
+                                         world::objectManager->getActiveObject(), kToolObjectConsoleTag)
+
 // Selects an active template from class name and template arguments. The class lookups
 // are performed but their results are discarded; activeSafe does not enforce class equality.
 BF2_CONSOLE_OBJECT("ObjectTemplate", 2, 0)

@@ -41,7 +41,7 @@ const char *qr2_registered_key_list[MAX_REGISTERED_KEYS] =
 	"pid_",			//27
 	"team_t",		//28
 	"score_t",		//29
-	"nn_groupid",	//30
+	"AIBot_",	//30
 
 	// Query From Master Only keys
 	"country",		//31

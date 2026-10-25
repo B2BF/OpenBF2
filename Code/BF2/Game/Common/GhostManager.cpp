@@ -11,6 +11,7 @@
 #include "GhostObject.h"                         // GhostLessComp - the send order
 #include "ClientConnection.h"                    // PacketStatus
 #include "../Objects/IObject.h"                  // the flags bit-5 skip
+#include "../Objects/Projectiles/TVMissileTrace.h"
 #include "../../Scene/Object/PlayerManager.h"    // readData's action-3 arm
 #include "../../IO/Network/INetworkable.h"       // m_ghostActive, m_basePriority
 #include "../../IO/Network/NetworkManager.h"     // networkManager->getObject
@@ -1407,6 +1408,13 @@ bool GhostManager::sendData(io::BitStream& stream, GhostAction action, GhostObje
 
     if (!writeData(stream, action, ghost, flag))
     {
+        if (world::tv_missile_trace::armed() && action == 1)
+            world::tv_missile_trace::log(object, "ghost_rejected",
+                "connection=%d stream=%p packet_tick=%u priority=%.9g accumulated=%.9g "
+                "bit_start=%u bit_limit=%u",
+                m_connectionId, static_cast<void*>(&stream), m_tickCount,
+                ghost->m_priority, ghost->m_accumulatedPriority,
+                stream.m_positionCache, stream.m_bitLimit);
         // the roll-back: put everything back and report failure.
         stream.setPosition(*reinterpret_cast<io::BSPosition*>(&stream.m_dword3C));
         stream.m_byte38        = false;
@@ -1431,6 +1439,13 @@ bool GhostManager::sendData(io::BitStream& stream, GhostAction action, GhostObje
         ghost->m_stateMask[i] = 0;
 
     ++m_ghostsThisPacket;                                // the 8-bit header field, 0x809CC75
+    if (world::tv_missile_trace::armed() && action == 1)
+        world::tv_missile_trace::log(object, "ghost_selected",
+            "connection=%d stream=%p packet_tick=%u priority=%.9g accumulated=%.9g "
+            "bit_start=%u bit_end=%u bit_limit=%u",
+            m_connectionId, static_cast<void*>(&stream), m_tickCount,
+            ghost->m_priority, ghost->m_accumulatedPriority,
+            stream.m_positionCache, stream.getBitPosition(), stream.m_bitLimit);
     return true;
 }
 

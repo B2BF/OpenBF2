@@ -8,6 +8,7 @@
 #include "App/FrameCapture.h"
 #include "App/FrozenFrame.h"
 #include "App/FreeCamera.h"
+#include "App/HudEditor.h"
 #include "App/ImGuiHost.h"
 #include "App/LevelDocument.h"
 #include "App/PlayTest.h"
@@ -311,6 +312,7 @@ bool EditorApp::bootEngine()
     config.useArchives = m_options.useArchives != 0;               // on unless +useArchives 0
     config.looseObjects = m_options.looseObjects == 1;              // +looseObjects 1
     config.looseCommon = m_options.looseCommon == 1;                // +looseCommon 1
+    config.hud = m_options.hud != 0;                                // on unless +hud 0
     // +enableAsserts decides; without it, batch runs ignore asserts (as retail's *AndClose did) and
     // interactive runs keep the game's default, where an Assert is fatal.
     config.ignoreAsserts = m_options.enableAsserts == 0 || (m_options.enableAsserts < 0 && m_options.isBatch());
@@ -366,6 +368,21 @@ int EditorApp::runBatch()
             logLine(LogLevel::Error, "document: %s", error.c_str());
         if (!registerEditorConsole(&session))
             logLine(LogLevel::Error, "console: the editor's console commands could not be registered");
+        // The terrain and overgrowth saves compile and generate through the editable terrain: opened for them, or
+        // when +editableTerrain 1 asks for it (a script's height or paint edits).
+        const bool terrainParts = (m_options.batchSaveParts & (SaveAll | SaveTerrain | SaveOvergrowth)) != 0;
+        if (m_options.editableTerrain == 1 || (m_options.editableTerrain != 0 && terrainParts))
+        {
+            std::string report;
+            if (session.editableTerrain().open(level.name(), report))
+                logLine(LogLevel::Info, "terrain: %s", report.c_str());
+            else
+                logLine(LogLevel::Warning, "terrain: the compiled terrain stays: %s", report.c_str());
+        }
+        // The level's editable roads (App/RoadNetwork), and the mod's road templates.
+        std::string roads;
+        if (!session.openRoads(level.name(), roads))
+            logLine(LogLevel::Warning, "%s", roads.c_str());
     }
     else if (m_options.batchSaveParts)
     {
@@ -383,6 +400,36 @@ int EditorApp::runBatch()
     }
 
     const unsigned parts = m_options.batchSaveParts;
+    // The terrain and overgrowth parts first: the level save after them then finds them saved and does not compile
+    // the terrain a second time.
+    if (parts & (SaveAll | SaveTerrain))
+    {
+        std::string report;
+        const bool saved = session.saveTerrainPart(report);
+        logLine(saved ? LogLevel::Info : LogLevel::Error, "save: %s", report.c_str());
+        if (!saved)
+            result = ExitEngineFailed;
+    }
+    if (parts & (SaveAll | SaveOvergrowth))
+    {
+        std::string report;
+        const bool saved = session.saveOvergrowthPart((parts & SaveOvergrowth) != 0, report);
+        logLine(saved ? LogLevel::Info : LogLevel::Error, "save: %s",
+                report.empty() ? "the level has no overgrowth to save" : report.c_str());
+        if (!saved)
+            result = ExitEngineFailed;
+    }
+    // The roads before the level: its save then finds them saved. The part compiles every editable road even
+    // unchanged (the retail part save rewrote them); a level with none saves nothing.
+    if (parts & (SaveAll | SaveRoads))
+    {
+        std::string report;
+        const bool saved = session.saveRoads(true, report);
+        logLine(saved ? LogLevel::Info : LogLevel::Error, "save: %s",
+                report.empty() ? "the level has no editable roads to save" : report.c_str());
+        if (!saved)
+            result = ExitEngineFailed;
+    }
     if (parts & (SaveAll | SaveObjects))
     {
         std::string report;
@@ -390,18 +437,6 @@ int EditorApp::runBatch()
         logLine(saved ? LogLevel::Info : LogLevel::Error, "save: %s", report.c_str());
         if (!saved)
             result = ExitEngineFailed;
-    }
-    // +saveAndClose asks for every part; this version writes only the object files.
-    unsigned unwritten = parts & (SaveTerrain | SaveRoads | SaveOvergrowth);
-    if (parts & SaveAll)
-        unwritten |= SaveTerrain | SaveRoads | SaveOvergrowth;
-    if (unwritten)
-    {
-        reportFrontier("bf2editor::EditorApp::runBatch",
-                       ("saving " + savePartNames(unwritten) + " is not written yet (terrain WP9; roads and "
-                        "overgrowth later): only the object files were saved").c_str());
-        if (result == ExitOk)
-            result = ExitNotImplemented;
     }
     if (level.isOpen())
         unregisterEditorConsole();
@@ -532,6 +567,7 @@ int EditorApp::runInteractive()
     // be edited, but not saved (the log says why).
     LevelDocument document;
     std::unique_ptr<PlayTest> playTest;     // soldier mode (App/PlayTest.h), once a level is open
+    std::unique_ptr<HudEditor> hud;         // the game's HUD and the HUD editor, once the HUD is up
     if (level.isOpen())
     {
         int made = 0;
@@ -561,6 +597,14 @@ int EditorApp::runInteractive()
             playTest.reset(new PlayTest(session, camera, *level.editorGame()));
             setPlayTest(playTest.get());
         }
+        m_engine.hudLevelLoaded();          // the game's HUD: its map and the level's own settings
+        if (m_engine.hudUp())
+        {
+            hud.reset(new HudEditor(session));
+            setHudCommands(hud.get());
+            shell.setHudEditor(hud.get());
+            session.setHudDocument(hud.get());      // its scripts are saved with the level
+        }
         // The level's terrain becomes the renderer's TerrainEditable (Terrain.con's editor branch), as the retail editor
         // showed it, unless +editableTerrain 0 keeps the compiled one.
         if (m_options.editableTerrain != 0)
@@ -570,6 +614,12 @@ int EditorApp::runInteractive()
                 logLine(LogLevel::Info, "terrain: %s", report.c_str());
             else
                 logLine(LogLevel::Warning, "terrain: the compiled terrain stays: %s", report.c_str());
+        }
+        // The level's editable roads (App/RoadNetwork), and the mod's road templates.
+        {
+            std::string roads;
+            if (!session.openRoads(level.name(), roads))
+                logLine(LogLevel::Warning, "%s", roads.c_str());
         }
         // Tools > Options: the start-up command, once the level is open (never in a hidden run, which
         // reads no settings).
@@ -719,7 +769,11 @@ int EditorApp::runInteractive()
                 dice::hfe::world::objectManager->handleFrameUpdates(dt);
         }
         if (level.isOpen())
+        {
             session.update();               // hidden layers follow edits, undos and redos
+            if (hud)
+                hud->update(dt, playing);   // the game's HUD: drawn in the play test and the preview
+        }
         LARGE_INTEGER afterWorld, afterUi;
         QueryPerformanceCounter(&afterWorld);
 
@@ -912,6 +966,13 @@ int EditorApp::runInteractive()
     timeEndPeriod(1);
 
     m_window.setMouseCaptured(false);
+    if (hud)
+    {
+        setHudCommands(0);
+        shell.setHudEditor(0);
+        session.setHudDocument(0);
+        hud.reset();
+    }
     if (playTest)
     {
         setPlayTest(0);

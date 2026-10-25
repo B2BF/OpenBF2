@@ -1,7 +1,6 @@
-// Voice server settings and player-routing packets. Enabled voice initialization
-// remains a named frontier. Routing is inert while the channel pointer is null.
-// The padded layout models only accessed fields; std::string size shifts later
-// fields between platforms.
+// Voice server settings and player-routing packets. Enabled voice initializes the voice channel and,
+// for local voice, the in-process voice server; routing is inert while the channel pointer is null.
+// The padded layout models only accessed fields; std::string size shifts later fields between platforms.
 
 #ifndef GAME_GAMESERVER_VOIPSERVERCONNECTION_H     // [INFERRED] guard style
 #define GAME_GAMESERVER_VOIPSERVERCONNECTION_H
@@ -28,7 +27,7 @@ public:
 
     // Returns bool: both binaries explicitly materialize 0/1 at the shared epilogue. Itanium does
     // not encode the return type, which is why the earlier void declaration compiled unnoticed.
-    bool Init();                                   // settings/disabled prefix recovered
+    bool Init();                                   // settings copy, then InitEnabledVoip when voice is on
     int  ResetPlayerRouting();                     // transcribed
 
     //  / PE 0x54B3B0, 839 B. Both ports explicitly return false when the
@@ -36,15 +35,18 @@ public:
     // player null check. Squad state setters are its three shipped callers.
     bool UpdatePlayerRouting(world::IPlayer* player);
 
-    // [FRONTIER] Session allocation requires the unfinished socket path. The original ignores playerId.
-    int  CreateClientSessionId(int playerId);      //  ignores playerId
+    // A random 16-bit session id, collision-rescanned against the live players. The original
+    // ignores playerId.
+    int  CreateClientSessionId(int playerId);
 
     // the fields recovered bodies touch; pads hold the attested ELF offsets
     // PE offsets match through +0x43FC, then shift by its 0x18-larger std::string. This portable
     // representation uses named fields instead of making the current compiler's STL layout an ABI
     // claim; see the [CHOSEN] note below.
     io::UDPSocket* m_channel;                      // +0x04 - the exact class Init allocates
-    unsigned char m_packet[0x4314 - 0x08];         // +0x08 packet scratch + unrecovered state
+    unsigned char m_packet[0x430C - 0x08];         // +0x08 packet scratch + unrecovered state
+    float         m_fullRoutingTimer;              // +0x430C  full-routing resend timer; ctor 0, +5 s per send
+    unsigned char _pad4310[4];                     // +0x4310  ctor 0
     unsigned char m_infoByte4314;                  // +0x4314  enabled, ctor 0
     unsigned char m_infoByte4315;                  // +0x4315  remote-server mode, ctor 0
     unsigned char _pad4316[2];
@@ -74,16 +76,12 @@ public:
     bool GetVoipServerSettings(class IGameServerSettings* settings);
 #endif
 
-    // [FRONTIER] The shipped code following Init's enabled test creates the channel/socket and,
-    // for a local voice server, the server object. Deliberately unresolved: disabled startup never
-    // reaches it, while enabling voice still faults by this explicit name rather than succeeding
-    // through an empty production stub.
-    bool InitEnabledVoip();                        // [TEMP] named stop - see the .cpp and RW-28
+    // Creates the voice channel/socket and, for local voice, the in-process voice server.
+    bool InitEnabledVoip();
 
-    //  / PE 0x54B080: local owner first, routing log second, channel last.
-    // Log/channel close, delete and null stores are recovered; only the live local-owner branch
-    // stops at [FRONTIER] VoipServerInternal::Stop/destructor. The ordinary string destructor
-    // remains the compiler-generated tail. This named helper is a chosen extraction of that body.
+    // PE 0x54B080: local owner first, routing log second, channel last. This named helper is a
+    // chosen extraction of the destructor's cleanup body; the ordinary string destructor remains
+    // the compiler-generated tail.
     void ReleaseEnabledVoipResources();
 
     //  / PE 0x54AB80, 160 B. The mangling's ERi is int&, not int*.
@@ -92,11 +90,31 @@ public:
 
     // The per-tick entry GameServer::update calls: 0x81278E0, 78 B, read - gated on
     // the +0x4314 byte (0 from the ctor, raised by Init), so a server that never Init'ed VoIP
-    // does nothing here. Past the gate: the three [FRONTIER] members below.
+    // does nothing here. Past the gate the PE resends the full routing table periodically, then
+    // drains the channel (PE 0x54B900: FullRoutingUpdate then Receive).
     void Update(float dt);
-    void FullRoutingUpdate(float dt);              // 0x8127... [FRONTIER] - unread
-    static void UpdateDebugLogging();              // [FRONTIER] - unread (no `this` in the ELF call)
-    void Receive();                                // [FRONTIER] - unread
+
+    // PE 0x54B700, 502 B. Every ~5 s rebuilds the 65-slot routing table, appends the invariant
+    // version/session header and sends it as message 103.
+    void FullRoutingUpdate(float dt);
+
+    // ELF 0x81275d0. Reads the trailing packet-id byte into packetId and decrements length; reports
+    // false when length is already zero (nothing read).
+    int ExtractPacketId(unsigned char* buffer, int& length, unsigned char& packetId);
+
+    // PE 0x54B000, ~0x7e / ELF 0x8127810. Non-blocking recv on m_channel plus a peer-address
+    // materialisation; a datagram whose trailing id byte is 104 is the BFVoipChallengeString
+    // handshake, which recomputes the session stored in m_textBuffer.
+    void Receive();
+
+    // The challenge response (PE 0x54AEA0 / ELF 0x8127600): MD5(challenge + shared secret),
+    // truncated to 20 bytes. Retail aborts on any other length, a remote DoS reachable from an
+    // unauthenticated datagram; a non-10 length is dropped instead (intentional departure).
+    void HandlePacketChallengeString(char* data, int length);
+
+    // Declared from the ELF per-tick path; the PE Update calls only the two above, so no body is
+    // recovered for it yet.
+    static void UpdateDebugLogging();
 };
 
 } // namespace hfe

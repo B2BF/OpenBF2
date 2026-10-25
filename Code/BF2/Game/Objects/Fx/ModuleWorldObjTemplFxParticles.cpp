@@ -42,12 +42,36 @@ SpriteParticleSystemTemplateBase* activeParticleSpriteBase()
     return activeNsaParticle();
 }
 }
+
+// [CHOSEN, not recovered] Console metadata alias for a three-float colour; the generated colour
+// executors move three dwords (the Math type of the same name holds four floats).
+typedef Math::Vec3 Vec3ColorFloatIntensity;
+
+namespace {
+void spriteSetAnimationFrameWidthRelative(float value)
+{
+    activeSpriteParticle()->setAnimationFrameWidthRelative(value);
+}
+void spriteSetAnimationFrameHeightRelative(float value)
+{
+    activeSpriteParticle()->setAnimationFrameHeightRelative(value);
+}
+void nsaSetAnimationFrameWidthRelative(float value)
+{
+    activeNsaParticle()->setAnimationFrameWidthRelative(value);
+}
+void nsaSetAnimationFrameHeightRelative(float value)
+{
+    activeNsaParticle()->setAnimationFrameHeightRelative(value);
+}
+} // namespace
+
 BF2_CONSOLE_OBJECT("ObjectTemplate", 2, 0)
 BF2_CONSOLE_FIELD(showInFirstPerson, bool, activeParticleBase(), m_byte40, kParticleConsoleTag)
 BF2_CONSOLE_FIELD(showInThirdPerson, bool, activeParticleBase(), m_byte41, kParticleConsoleTag)
 BF2_CONSOLE_PROPERTY(emitterType, std::string, activeParticleBase(), setEmitterType, getEmitterType, kParticleConsoleTag)
 BF2_CONSOLE_PROPERTY(emitPrio, std::string, activeParticleBase(), setEmitPrio, getEmitPrio, kParticleConsoleTag)
-BF2_CONSOLE_PROPERTY(lodDistance, std::string, activeParticleBase(), setLodDistance, getLodDistance, kParticleConsoleTag)
+BF2_CONSOLE_PROPERTY(LodDistance, std::string, activeParticleBase(), setLodDistance, getLodDistance, kParticleConsoleTag)
 BF2_CONSOLE_PROPERTY(qualityLevel, std::string, activeParticleBase(), setQualityLevel, getQualityLevel, kParticleConsoleTag)
 BF2_CONSOLE_PROPERTY(isLocalSystem, bool, activeParticleBase(), setIsLocalSystem, getIsLocalSystem, kParticleConsoleTag)
 BF2_CONSOLE_PROPERTY(radialDirection, float, activeParticleBase(), setRadialDirection, getRadialDirection, kParticleConsoleTag)
@@ -83,8 +107,8 @@ BF2_CONSOLE_PROPERTY(preWarmTime, float, activeParticleBase(), setPreWarmTime, g
 BF2_CONSOLE_PROPERTY(transparencyGraph, Vec4, activeParticleSpriteBase(), setTransparencyGraph, getTransparencyGraph, kParticleConsoleTag)
 BF2_CONSOLE_PROPERTY(lightMapIntensityOffset, float, activeParticleSpriteBase(), setLightMapIntensityOffset, getLightMapIntensityOffset, kParticleConsoleTag)
 BF2_CONSOLE_PROPERTY(particleMaxSize, float, activeParticleSpriteBase(), setParticleMaxSize, getParticleMaxSize, kParticleConsoleTag)
-BF2_CONSOLE_PROPERTY(color1, Vec3, activeParticleSpriteBase(), setColor1, getColor1, kParticleConsoleTag)
-BF2_CONSOLE_PROPERTY(color2, Vec3, activeParticleSpriteBase(), setColor2, getColor2, kParticleConsoleTag)
+BF2_CONSOLE_PROPERTY(color1, Vec3ColorFloatIntensity, activeParticleSpriteBase(), setColor1, getColor1, kParticleConsoleTag)
+BF2_CONSOLE_PROPERTY(color2, Vec3ColorFloatIntensity, activeParticleSpriteBase(), setColor2, getColor2, kParticleConsoleTag)
 BF2_CONSOLE_PROPERTY(colorBlendGraph, Vec4, activeParticleSpriteBase(), setColorBlendGraph, getColorBlendGraph, kParticleConsoleTag)
 BF2_CONSOLE_PROPERTY(sizeGraph, Vec4, activeParticleSpriteBase(), setSizeGraph, getSizeGraph, kParticleConsoleTag)
 BF2_CONSOLE_PROPERTY(randomSize, float, activeParticleSpriteBase(), setRandomSize, getRandomSize, kParticleConsoleTag)
@@ -106,10 +130,10 @@ BF2_CONSOLE_PROPERTY(animationEnable, bool, activeSpriteParticle(), setAnimation
 BF2_CONSOLE_PROPERTY(animationPlayOnce, bool, activeSpriteParticle(), setAnimationPlayOnce, getAnimationPlayOnce, kParticleConsoleTag)
 BF2_CONSOLE_PROPERTY(animationRandomizedStartFrame, bool, activeSpriteParticle(), setAnimationRandomizedStartFrame, getAnimationRandomizedStartFrame, kParticleConsoleTag)
 BF2_CONSOLE_PROPERTY(animationSpeed, float, activeSpriteParticle(), setAnimationSpeed, getAnimationSpeed, kParticleConsoleTag)
-BF2_CONSOLE_PROPERTY(animationFrameCount, unsigned int, activeSpriteParticle(), setAnimationFrameCount, getAnimationFrameCount, kParticleConsoleTag)
-BF2_CONSOLE_PROPERTY(animationFrameCountX, unsigned int, activeSpriteParticle(), setAnimationFrameCountX, getAnimationFrameCountX, kParticleConsoleTag)
-BF2_CONSOLE_PROPERTY_SETONLY(setAnimationFrameWidthRelative, float, activeSpriteParticle() != 0, activeSpriteParticle()->setAnimationFrameWidthRelative, kParticleConsoleTag)
-BF2_CONSOLE_PROPERTY_SETONLY(setAnimationFrameHeightRelative, float, activeSpriteParticle() != 0, activeSpriteParticle()->setAnimationFrameHeightRelative, kParticleConsoleTag)
+BF2_CONSOLE_PROPERTY(animationFrameCount, int, activeSpriteParticle(), setAnimationFrameCount, getAnimationFrameCount, kParticleConsoleTag)
+BF2_CONSOLE_PROPERTY(animationFrameCountX, int, activeSpriteParticle(), setAnimationFrameCountX, getAnimationFrameCountX, kParticleConsoleTag)
+BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(setAnimationFrameWidthRelative, spriteSetAnimationFrameWidthRelative, activeSpriteParticle() != 0, float, kParticleConsoleTag)
+BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(setAnimationFrameHeightRelative, spriteSetAnimationFrameHeightRelative, activeSpriteParticle() != 0, float, kParticleConsoleTag)
 
 // Non-screen-aligned sprites have their own retail overloads and descriptor-tail slots.
 BF2_CONSOLE_PROPERTY(textureName, std::string, activeNsaParticle(), setTextureName, getTextureName, kParticleConsoleTag)
@@ -122,15 +146,23 @@ BF2_CONSOLE_PROPERTY(animationEnable, bool, activeNsaParticle(), setAnimationEna
 BF2_CONSOLE_PROPERTY(animationPlayOnce, bool, activeNsaParticle(), setAnimationPlayOnce, getAnimationPlayOnce, kParticleConsoleTag)
 BF2_CONSOLE_PROPERTY(animationRandomizedStartFrame, bool, activeNsaParticle(), setAnimationRandomizedStartFrame, getAnimationRandomizedStartFrame, kParticleConsoleTag)
 BF2_CONSOLE_PROPERTY(animationSpeed, float, activeNsaParticle(), setAnimationSpeed, getAnimationSpeed, kParticleConsoleTag)
-BF2_CONSOLE_PROPERTY(animationFrameCount, unsigned int, activeNsaParticle(), setAnimationFrameCount, getAnimationFrameCount, kParticleConsoleTag)
-BF2_CONSOLE_PROPERTY(animationFrameCountX, unsigned int, activeNsaParticle(), setAnimationFrameCountX, getAnimationFrameCountX, kParticleConsoleTag)
-BF2_CONSOLE_PROPERTY_SETONLY(setAnimationFrameWidthRelative, float, activeNsaParticle() != 0, activeNsaParticle()->setAnimationFrameWidthRelative, kParticleConsoleTag)
-BF2_CONSOLE_PROPERTY_SETONLY(setAnimationFrameHeightRelative, float, activeNsaParticle() != 0, activeNsaParticle()->setAnimationFrameHeightRelative, kParticleConsoleTag)
+BF2_CONSOLE_PROPERTY(animationFrameCount, int, activeNsaParticle(), setAnimationFrameCount, getAnimationFrameCount, kParticleConsoleTag)
+BF2_CONSOLE_PROPERTY(animationFrameCountX, int, activeNsaParticle(), setAnimationFrameCountX, getAnimationFrameCountX, kParticleConsoleTag)
+BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(setAnimationFrameWidthRelative, nsaSetAnimationFrameWidthRelative, activeNsaParticle() != 0, float, kParticleConsoleTag)
+BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(setAnimationFrameHeightRelative, nsaSetAnimationFrameHeightRelative, activeNsaParticle() != 0, float, kParticleConsoleTag)
 
 namespace {
 TrailSystemTemplate* activeTrailParticle()
 {
     return static_cast<TrailSystemTemplate*>(getActiveTemplate(CID_TrailSystemTemplate));
+}
+void trailSetAnimationFrameWidthRelative(float value)
+{
+    activeTrailParticle()->setAnimationFrameWidthRelative(value);
+}
+void trailSetAnimationFrameHeightRelative(float value)
+{
+    activeTrailParticle()->setAnimationFrameHeightRelative(value);
 }
 }
 
@@ -139,8 +171,8 @@ TrailSystemTemplate* activeTrailParticle()
 BF2_CONSOLE_PROPERTY(textureName, std::string, activeTrailParticle(), setTextureName, getTextureName, kParticleConsoleTag)
 BF2_CONSOLE_PROPERTY(animationEnable, bool, activeTrailParticle(), setAnimationEnable, getAnimationEnable, kParticleConsoleTag)
 BF2_CONSOLE_PROPERTY(animationSpeed, float, activeTrailParticle(), setAnimationSpeed, getAnimationSpeed, kParticleConsoleTag)
-BF2_CONSOLE_PROPERTY_SETONLY(setAnimationFrameWidthRelative, float, activeTrailParticle() != 0, activeTrailParticle()->setAnimationFrameWidthRelative, kParticleConsoleTag)
-BF2_CONSOLE_PROPERTY_SETONLY(setAnimationFrameHeightRelative, float, activeTrailParticle() != 0, activeTrailParticle()->setAnimationFrameHeightRelative, kParticleConsoleTag)
+BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(setAnimationFrameWidthRelative, trailSetAnimationFrameWidthRelative, activeTrailParticle() != 0, float, kParticleConsoleTag)
+BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(setAnimationFrameHeightRelative, trailSetAnimationFrameHeightRelative, activeTrailParticle() != 0, float, kParticleConsoleTag)
 BF2_CONSOLE_PROPERTY(animationFrameCount, int, activeTrailParticle(), setAnimationFrameCount, getAnimationFrameCount, kParticleConsoleTag)
 BF2_CONSOLE_PROPERTY(animationFrameCountX, int, activeTrailParticle(), setAnimationFrameCountX, getAnimationFrameCountX, kParticleConsoleTag)
 BF2_CONSOLE_PROPERTY(fadeInFactor, float, activeTrailParticle(), setFadeInFactor, getFadeInFactor, kParticleConsoleTag)

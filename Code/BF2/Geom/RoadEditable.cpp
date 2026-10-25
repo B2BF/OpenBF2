@@ -352,10 +352,16 @@ RoadEditable::~RoadEditable()
         m_edge1->release();
     dx9rend::textureReleaseRef(m_texture0);
     dx9rend::textureReleaseRef(m_texture1);
+#if defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+    // [CHOSEN, not recovered] editor flavour: the buffers leave the buffer manager too (the shipped body releases them
+    // only, leaving both in the manager for good); see invalidate.
+    releaseBuffersForEditor();
+#else
     if (m_vertexBuffer)
         dx9rend::vertexBufferRelease(m_vertexBuffer);
     if (m_indexBuffer)
         dx9rend::indexBufferRelease(m_indexBuffer);
+#endif
     if (m_paramFogRange)
         m_paramFogRange->release();
     if (m_paramFogColor)
@@ -601,11 +607,21 @@ bool RoadEditable::getGhost()                     { return m_ghost != 0; }
 // behavior. Missing inputs also leave the old vertex count and pointer available to draw.
 void RoadEditable::invalidate()
 {
+#if defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+    // [CHOSEN, not recovered] editor flavour: both buffers are released, taken out of the buffer manager and forgotten,
+    // with the counts draw reads, as buildGeometry does with live buffers. The shipped body keeps the released vertex
+    // buffer's pointer, so the next rebuild releases it again and the buffer manager writes into the freed wrapper -
+    // which retail's Memory.dll heap absorbed and the editor's CRT heap does not - and leaves every index buffer in the
+    // manager. A road whose spline or template is missing then draws nothing instead of the freed buffer. The game
+    // flavours keep the shipped body.
+    releaseBuffersForEditor();
+#else
     if (m_vertexBuffer)
         dx9rend::vertexBufferRelease(m_vertexBuffer);
     if (m_indexBuffer)
         dx9rend::indexBufferRelease(m_indexBuffer);
     m_indexBuffer = 0;
+#endif
     if (m_spline && m_template)
     {
         const bool ghost = m_ghost != 0;
@@ -615,6 +631,31 @@ void RoadEditable::invalidate()
         buildGeometry(width, maxError, ghost);
     }
 }
+
+
+#if defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+// [CHOSEN, not recovered] editor flavour (see invalidate): each buffer released and removed from the buffer manager,
+// in the pool buildGeometry made it in.
+void RoadEditable::releaseBuffersForEditor()
+{
+    const int savedPool = dx9rend::bufferManagerSwapPool(1);
+    if (m_vertexBuffer)
+    {
+        dx9rend::vertexBufferRelease(m_vertexBuffer);
+        dx9rend::bufferManagerRemoveVertexBuffer(m_vertexBuffer);
+        m_vertexBuffer = 0;
+    }
+    if (m_indexBuffer)
+    {
+        dx9rend::indexBufferRelease(m_indexBuffer);
+        dx9rend::bufferManagerRemoveIndexBuffer(m_indexBuffer);
+        m_indexBuffer = 0;
+    }
+    dx9rend::bufferManagerSwapPool(savedPool);
+    m_vertexCount = 0;
+    m_triangleCount = 0;
+}
+#endif
 
 
 // Rebuilds road buffers and bounds from at least four control points.
@@ -817,6 +858,8 @@ bool RoadEditable::compileTemplates(const ::renddx9abi::HostString&, RoadTemplat
 // produces no geometry. The spline count is queried before the null check.
 // The float target writes a debug DDS without updating heights. Target allocation failure
 // preserves the existing held buffers/open state bracket, and pixel traversal ignores pitch.
+// The editor flavour takes the 8-bit target, sizes it to the footprint, retries a smaller one when
+// the copy back fails, cleans up when none works, and reads at the pitch (see the body).
 void RoadEditable::projectToTerrain()
 {
     if (m_spline->getControlPointCount() < 4 || !m_spline || !m_template)
@@ -891,8 +934,30 @@ void RoadEditable::projectToTerrain()
     int size = deviceCapsMaxTextureHeight();
     if (size <= 1024)
         size = 1024;
+#if defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+    // [CHOSEN, not recovered] editor flavour: the target sized to the footprint - the smallest power of two from 1024
+    // holding two texels per metre of its larger side, at most the card's limit - not the card's limit itself. The heights
+    // are read back at one texel per metre, and the card's limit (8192 or more) asks the 32-bit editor for a 256 MB copy.
+    {
+        const float extent = maximum.x - minimum.x > maximum.z - minimum.z ? maximum.x - minimum.x : maximum.z - minimum.z;
+        int wanted = 1024;
+        while (wanted < size && static_cast<float>(wanted) < 2.0f * extent)
+            wanted *= 2;
+        size = wanted;
+    }
+#endif
     size = size * 2;
+#if defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+    // [CHOSEN, not recovered] editor flavour: always the 8-bit target, as the 2006 editor hard-wired it. The shipped
+    // body takes the float target wherever the device renders G32R32F - every current card - and on that path writes
+    // no height at all (it saves a debug c:\tbmTest.dds instead). The game flavours keep the shipped choice.
+    const bool floatTarget = false;
+#else
     const bool floatTarget = dx9rend::deviceCapsSupportsTextureFormat(115u); // sub_100013D0, G32R32F
+#endif
+#if defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+    bool projected = false;
+#endif
     for (;;)
     {
         size >>= 1;
@@ -955,7 +1020,20 @@ void RoadEditable::projectToTerrain()
             dx9rend::rendererDrawPrimitive(static_cast<unsigned int>(triangles), 5u, 0u);
         }
         dx9rend::effectEnd(m_effect);
+#if defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+        // [CHOSEN, not recovered] editor flavour: the shipped body ignores EndScene, whose copy into the system-memory
+        // surface can fail (E_OUTOFMEMORY in the 32-bit editor); the surface then stays zero, every texel reads as the
+        // footprint at its lowest point and the whole rectangle is flattened. A failed copy tries the next size down,
+        // the footprint buffers kept.
+        if (target->EndScene(0) != 0)
+        {
+            rendering->Release();
+            target->Release();
+            continue;
+        }
+#else
         target->EndScene(0);
+#endif
 
         dx9rend::vertexBufferRelease(positions);
         dx9rend::bufferManagerRemoveVertexBuffer(positions);
@@ -992,7 +1070,14 @@ void RoadEditable::projectToTerrain()
                 {
                     if (floatTarget)
                         continue;
+#if defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+                    // [CHOSEN, not recovered] editor flavour: the row at the surface's pitch (the shipped body steps
+                    // by the width, which misreads a padded surface).
+                    const unsigned char* const texel =
+                        bits + static_cast<size_t>(locked.Pitch) * static_cast<size_t>(rowStart / columns) + 4 * i;
+#else
                     const unsigned char* const texel = bits + 4 * (i + rowStart);
+#endif
                     if (texel[3] != 0)
                         continue;
                     float height = static_cast<float>(static_cast<int>(texel[1])) * 0.0039215689f
@@ -1025,8 +1110,26 @@ void RoadEditable::projectToTerrain()
         node->setAffectedArea(area);
         ::dice::hfe::eventManager->postEvent(ECEditor, reinterpret_cast<EventNode*>(node), 0.0f);
 #endif
+#if defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+        projected = true;
+#endif
         break;
     }
+#if defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+    // [CHOSEN, not recovered] editor flavour: when no size worked, the footprint buffers are released and the state
+    // bracket closed (the shipped body leaves both).
+    if (!projected)
+    {
+        dx9rend::vertexBufferRelease(positions);
+        dx9rend::bufferManagerRemoveVertexBuffer(positions);
+        if (footprintIndices)
+        {
+            dx9rend::indexBufferRelease(footprintIndices);
+            dx9rend::bufferManagerRemoveIndexBuffer(footprintIndices);
+        }
+        dx9rend::stateManagerPop();
+    }
+#endif
 }
 
 

@@ -6,11 +6,17 @@
 #include "ObjectTypes/Base/ObjectTemplateManager.h"
 #include "../../Game/Objects/IObject.h"
 #include "../../Game/Objects/IObjectTemplate.h"
+#include "PlayerManager.h"                      // playerManager - Player.active's receiver
+#include "../../Game/Objects/IPlayer.h"         // world::IPlayer - Player.active's argument/result
+#include "WindManager.h"                        // world::windManager - WindManager.*'s receiver
+#include "ObjectUtil.h"                         // Object.setIsDisabledRecursive - updateFlagsRecursive
 #include "../../Game/Objects/ObjectLayoutAccess.h"   // Object.togglePause - the raw +0x14 template read
 #include "../../Game/Objects/Fx/EffectBundle.h"      // Object.togglePause - EffectBundle::togglePause
 #include "../../Core/Ids.h"                           // CID_EffectBundleTemplate
 #include "../../Math/Mat4.h"                     // get/setRotationZXY - Object.rotation
 #include "../../Math/Vec3.h"
+#include <list>                                 // ObjectTemplate.list - getGlobalTemplateList
+#include <sstream>
 #include <string>
 
 namespace dice {
@@ -51,7 +57,6 @@ void objTemplSaveInSeparateFileSet(bool v)
 BF2_CONSOLE_PROPERTY_FN(saveInSeparateFile, bool, objectTemplateManager->getActiveObjectTemplate() != 0, (objectTemplateManager->getActiveObjectTemplate()->getFlags() & 1) != 0, objTemplSaveInSeparateFileSet, kObjectManagerConsoleTag)
 
 // Boolean properties update the active template's flags; an unused retail scratch store is omitted.
-// createNotInGrid and createInvisible stay held until their grid/visibility effects are play-tested together.
 // castsDynamicShadow is held under RW-261. Retail duplicates active-template queries; this helper uses one.
 // The create command's current category differs from retail (2,0); this block uses (2,11).
 namespace {
@@ -71,6 +76,10 @@ bool objTemplFlagGet()
 }
 } // namespace
 BF2_CONSOLE_PROPERTY_FN(createVisibleInEditor, bool, objectTemplateManager->getActiveObjectTemplate() != 0, objTemplFlagGet<0x8>(), objTemplFlagSet<0x8>, kObjectManagerConsoleTag)
+// createNotInGrid and createInvisible set/clear template flag bits 2 and 4 (dedicated PE executors
+// 0x6CE8C0 / 0x6CEAE0); makeScript writes them back from the same bits.
+BF2_CONSOLE_PROPERTY_FN(createNotInGrid, bool, objectTemplateManager->getActiveObjectTemplate() != 0, objTemplFlagGet<0x2>(), objTemplFlagSet<0x2>, kObjectManagerConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(createInvisible, bool, objectTemplateManager->getActiveObjectTemplate() != 0, objTemplFlagGet<0x4>(), objTemplFlagSet<0x4>, kObjectManagerConsoleTag)
 
 // Read/write bit 0x10 on the active template, excluding it from editor saveAll output.
 namespace {
@@ -234,6 +243,226 @@ BF2_CONSOLE_METHOD_1_ACTIVE(setLightSourceMask, objectSetLightSourceMask, object
 // slot 81). No null guard in either arm - it dereferences what isObjectActive vouched for, the
 // block's majority behaviour.
 BF2_CONSOLE_PROPERTY(disableChildren, bool, objectManager->getActiveObject(), setDisableChildren, getDisableChildren, kObjectManagerConsoleTag)
+
+// Object.setIsDisabledRecursive <bool> - dedicated PE ctor sub_6CDB10 (vtable off_7FDB20, m_type = 0,
+// argc 1, arg "bool", return "void", m_isDynamic = 0). isObjectActive sub_6CDC00 selects flag 1 and
+// returns `getActiveObject() != 0` (ObjectManager vtable +0x90). Executor sub_6CDC90 -> sub_6CC160 ->
+// sub_6D8D80 applies `updateFlags(selector, 0)` to the active object and every descendant, or
+// `updateFlags(0, selector)` when clearing; the walk follows getChild (+0xEC) and the +0x2C sibling
+// link. Selector 1 is OFIsDisabled: the sibling command setIsVisibleRecursive shares the same shape
+// with selector 2 (OFIsVisible), fixing the mapping. `world::updateFlagsRecursive` is that walk.
+namespace {
+void objectSetIsDisabledRecursive(bool disable)
+{
+    const unsigned int mask = IObject::OFIsDisabled;
+    updateFlagsRecursive(objectManager->getActiveObject(),
+                         disable ? mask : 0u, disable ? 0u : mask);
+}
+} // namespace
+BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(setIsDisabledRecursive, objectSetIsDisabledRecursive, objectManager->getActiveObject() != 0, bool, kObjectManagerConsoleTag)
+
+// Player.active - get or select the active player. Written out rather than through a macro because
+// the two argument counts differ in their return: argc 0 returns the active player, argc 1 sets it
+// and publishes no value. Dedicated PE defaults 0x773610; ctor 0x6CFF50 (vtable off_7FE598,
+// +0xA1 = 0); isObjectActive 0x4921F0 is unconditionally true; executor 0x6D0090 reads the active
+// player through playerManager +0x80 / writes it through +0x84. A name argument resolves through
+// playerManager->getPlayerFromName (PE parser 0x6DB5D0, slot +0x1C); the getter formats the player's
+// name, or NoPlayer when null (PE formatter 0x6DB5A0). Registered on the objectManager/world-Module
+// list, matching the retail translation unit.
+BF2_CONSOLE_OBJECT("Player", 2, 0)
+namespace {
+class ConsoleClassPlayerActive : public ::dice::hfe::ConsoleObjectBaseImpl
+{
+public:
+    ConsoleClassPlayerActive()
+    {
+        m_objectName     = ::dice::hfe::consoleDefaultName();
+        m_access         = ::dice::hfe::consoleDefaultAccess();
+        m_category       = ::dice::hfe::consoleDefaultCategory();
+        m_functionName   = "active";
+        m_type           = 1;
+        m_minNoArgs      = 0;
+        m_maxNoArgs      = 1;
+        m_returnType     = "IPlayer*";
+        m_hasReturnValue = false;
+        m_isDynamic      = false;
+        m_argTypes[0]    = "IPlayer*";
+        m_argNeedsConversion[0] = (std::string(m_argTypes[0]) == "std::string") ? 0 : -1;
+        ::dice::hfe::consoleBindingList(kObjectManagerConsoleTag).push_back(this);
+    }
+    virtual bool isObjectActive() const { return true; }
+    virtual void executeObjectMethod()
+    {
+        if (m_argCount == 0)
+        {
+            m_hasReturnValue = true;
+            m_returnValue = playerManager->getActivePlayer();
+        }
+        else if (m_argCount == 1)
+        {
+            m_hasReturnValue = false;
+            playerManager->setActivePlayer(BF2_CC_ARG(IPlayer*, 0));
+        }
+    }
+    virtual std::string getReturnValueAsString() const
+    {
+        if (!m_hasReturnValue)
+            return std::string();
+        if (!m_returnValue)
+            return std::string("NoPlayer");
+        return m_returnValue->getName();
+    }
+    virtual void setArgFromString(int index, const std::string& value)
+    {
+        if (index == 1)
+        {
+            static IPlayer* s = 0;
+            std::string name;
+            std::istringstream in(value);
+            in >> name;
+            s = playerManager->getPlayerFromName(name);
+            m_args[0] = reinterpret_cast<std::string*>(&s);
+        }
+    }
+    BF2_CC_COMMON_HOOKS
+private:
+    IPlayer* m_returnValue;
+};
+static ConsoleClassPlayerActive s_consoleClassPlayerActive;
+} // namespace
+
+// windManager.globalWindSpeed / globalWindDirection - dedicated PE defaults 0x772E9E
+// ("WindManager", access 2, category 0); ctors 0x6C8BD0 / 0x6C8D80 (vtable off_7FC5A8 / off_7FC640,
+// set/get properties, m_isDynamic = 1). isObjectActive 0x6C8E80 is `dword_89AE54 != 0` (windManager);
+// executors 0x6C8D20 / 0x6C8F10 dispatch WindManager +0x1C/+0x20 (speed get/set) and +0x24/+0x28
+// (direction get/set). Retail appends these to the objectManager/world-Module list (0x89B270).
+BF2_CONSOLE_OBJECT("WindManager", 2, 0)
+namespace {
+WindManager* activeWindManager() { return static_cast<WindManager*>(windManager); }
+void setGlobalWindSpeed(float speed) { activeWindManager()->setGlobalWindSpeed(speed); }
+void setGlobalWindDirection(const Vec3& direction)
+{
+    activeWindManager()->setGlobalWindDirection(direction);
+}
+} // namespace
+BF2_CONSOLE_PROPERTY_FN(globalWindSpeed, float, activeWindManager() != 0,
+                        activeWindManager()->getGlobalWindSpeed(), setGlobalWindSpeed,
+                        kObjectManagerConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(globalWindDirection, Vec3, activeWindManager() != 0,
+                        activeWindManager()->getGlobalWindDirection(), setGlobalWindDirection,
+                        kObjectManagerConsoleTag)
+
+// objectTemplate.name / objectTemplate.list - dedicated PE defaults 0x7733DE ("ObjectTemplate",
+// access 2, category 0); both registered on the objectManager/world-Module list (0x89B270).
+namespace {
+IObjectTemplate* activeObjectTemplate()
+{
+    return objectTemplateManager->getActiveObjectTemplate();   // +0x50
+}
+
+// Newline-joined names of every registered template whose name starts with filter (all of them when
+// filter is empty), matching PE helper 0x6F1200's iteration of objectTemplateManager +52.
+std::string objectTemplateList(const std::string& filter)
+{
+    std::string result;
+    std::list<IObjectTemplate*>* templates = objectTemplateManager->getGlobalTemplateList();   // +0x64
+    if (!templates)
+        return result;
+    for (std::list<IObjectTemplate*>::const_iterator it = templates->begin(); it != templates->end(); ++it)
+    {
+        IObjectTemplate* t = *it;
+        if (!t)
+            continue;
+        const std::string& name = t->getName();                // +0x28
+        if (name.compare(0, filter.size(), filter) == 0)
+        {
+            result += name;
+            result += "\n";
+        }
+    }
+    return result;
+}
+} // namespace
+
+// ctor 0x6CE090 (vtable off_7FDCE0, m_type = 2, argc 0, returns std::string, m_isDynamic = 1).
+// isObjectActive 0x6CE130 = `getActiveObjectTemplate() != 0`; executor 0x6CE150 returns the active
+// template's name.
+BF2_CONSOLE_OBJECT("objectTemplate", 2, 0)
+namespace {
+class ConsoleClassObjectTemplateName : public ConsoleObjectBaseImpl
+{
+public:
+    ConsoleClassObjectTemplateName()
+    {
+        m_objectName = consoleDefaultName();
+        m_access = consoleDefaultAccess();
+        m_category = consoleDefaultCategory();
+        m_functionName = "name";
+        m_type = 2;
+        m_minNoArgs = 0;
+        m_maxNoArgs = 0;
+        m_returnType = "std::string";
+        m_hasReturnValue = false;
+        m_isDynamic = true;
+        consoleBindingList(kObjectManagerConsoleTag).push_back(this);
+    }
+    bool isObjectActive() const override { return activeObjectTemplate() != 0; }
+    void executeObjectMethod() override
+    {
+        if (m_argCount != 0) return;
+        m_hasReturnValue = true;
+        m_returnValue = activeObjectTemplate()->getName();
+    }
+    void setArgFromString(int, const std::string&) override { }
+    BF2_CC_RETURN_AS_STRING
+    BF2_CC_COMMON_HOOKS
+private:
+    std::string m_returnValue;
+};
+static ConsoleClassObjectTemplateName s_consoleObjectTemplateName;
+} // namespace
+
+// ctor 0x6D4140 (vtable off_7FFE28, method, argc 0..1, arg std::string, returns std::string,
+// m_isDynamic = 0). isObjectActive 0x4921F0 is unconditionally true; executor 0x6D5A70 forwards the
+// argument (empty when omitted) to the template-list helper.
+namespace {
+class ConsoleClassObjectTemplateList : public ConsoleObjectBaseImpl
+{
+public:
+    ConsoleClassObjectTemplateList()
+    {
+        m_objectName = consoleDefaultName();
+        m_access = consoleDefaultAccess();
+        m_category = consoleDefaultCategory();
+        m_functionName = "list";
+        m_type = 0;
+        m_minNoArgs = 0;
+        m_maxNoArgs = 1;
+        m_returnType = "std::string";
+        m_hasReturnValue = false;
+        m_isDynamic = false;
+        m_argTypes[0] = "std::string";
+        m_argNeedsConversion[0] = 0;
+        consoleBindingList(kObjectManagerConsoleTag).push_back(this);
+    }
+    bool isObjectActive() const override { return true; }
+    void executeObjectMethod() override
+    {
+        if (m_argCount > 1) return;
+        std::string filter;
+        if (m_argCount == 1)
+            filter = BF2_CC_ARG(std::string, 0);
+        m_hasReturnValue = true;
+        m_returnValue = objectTemplateList(filter);
+    }
+    void setArgFromString(int index, const std::string& value) override { BF2_CC_CONVERT(std::string, 1) }
+    BF2_CC_RETURN_AS_STRING
+    BF2_CC_COMMON_HOOKS
+private:
+    std::string m_returnValue;
+};
+static ConsoleClassObjectTemplateList s_consoleObjectTemplateList;
+} // namespace
 
 // Handed to the console registry by world::Module::init, the way the original registers 0x8B1B944.
 ConsoleObjectList& objectManagerConsoleObjects()

@@ -248,6 +248,16 @@ public:
         return old;
     }
 
+    // GetRenderTargetData(source, destination) on the manager's device; a failure is logged and
+    // answered false.
+    bool copyRenderTargetToSurface(IDirect3DSurface9* source, IDirect3DSurface9* destination)
+    {
+        if (m_device->GetRenderTargetData(source, destination) >= 0)
+            return true;
+        ::renddx9abi::logf("TextureManager.cpp:594: Failed to copy pRenderTarget to pDestSurface.");
+        return false;
+    }
+
     // sub_100191C0 - evict BY value: find the cache node holding `tex`, release the cache's ref
     // (destroying the texture if that was the last), erase the node. Meme's release paths call it
     // when their own decrement left other holders.
@@ -1533,6 +1543,36 @@ void textureManagerEvictFromCache(void* tex)
     TextureManager* tm = static_cast<TextureManager*>(g_textureManager);
     if (tm && tex)
         tm->evictFromCache(static_cast<EngineTexture*>(tex));
+}
+
+// A manager member in the image, reached through the global manager without a null test.
+// A null `source` reads the renderer's current swap chain back buffer (the base+0xE0 vector's
+// first entry at +0xE4, indexed by +0xF0 - RendDX9Init.cpp's swapChainVectorPushBack); the source
+// surface is fetched before the destination's, and both references are released afterwards.
+bool textureManagerCopyRenderTarget(EngineTexture* source, EngineTexture* destination,
+                                    unsigned int level, unsigned int face)
+{
+    if (!destination)
+        return false;
+    TextureManager* const tm = static_cast<TextureManager*>(g_textureManager);
+    IDirect3DSurface9* sourceSurface = 0;
+    if (!source)
+    {
+        unsigned char* const base = static_cast<unsigned char*>(g_rendererBase);
+        IDirect3DSwapChain9* const* const chains =
+            *reinterpret_cast<IDirect3DSwapChain9* const* const*>(base + 0xE4);
+        const unsigned int current = *reinterpret_cast<const unsigned int*>(base + 0xF0);
+        chains[current]->GetBackBuffer(0, D3DBACKBUFFER_TYPE_MONO, &sourceSurface);
+    }
+    else
+        sourceSurface = textureGetLevelSurface(source, level, face);
+    IDirect3DSurface9* const destinationSurface = textureGetLevelSurface(destination, level, face);
+    const bool copied = tm->copyRenderTargetToSurface(sourceSurface, destinationSurface);
+    if (sourceSurface)
+        sourceSurface->Release();
+    if (destinationSurface)
+        destinationSurface->Release();
+    return copied;
 }
 
 

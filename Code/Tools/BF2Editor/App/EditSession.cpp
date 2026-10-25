@@ -850,6 +850,11 @@ void EditSession::runRedo()
 
 void EditSession::runSave()
 {
+    if (m_previewBeforeSave)
+    {
+        m_saveRequested = true;
+        return;
+    }
     const ConsoleLineResult r = runConsoleLine("EditorLevel.save");
     logLine(r.failed ? LogLevel::Error : LogLevel::Info, "save: %s", r.output.c_str());
 }
@@ -901,133 +906,101 @@ bool EditSession::resaveLevel(std::string& result)
 
 bool EditSession::saveLevelFiles(std::string& result, bool everything)
 {
+    dropPendingSave();
+    SavePlan plan;
+    if (!planLevelSave(plan, everything, result))
+        return false;
+    plan.dropUnchanged();
+    return writeLevelSave(plan, everything, result);
+}
+
+bool EditSession::planLevelSave(SavePlan& plan, bool everything, std::string& error)
+{
     if (!m_document || !m_document->isOpen())
     {
-        result = "no level document to save: see the log from when the level opened";
+        error = "no level document to save: see the log from when the level opened";
         return false;
     }
+    if (m_restored)
+    {
+        error = "the level's files were put back from a backup: open the level again before saving (EditorLevel.open)";
+        return false;
+    }
+    // The level's own files, one part each, under a part that answers for them all.
+    SavePart& level = plan.part("level");
+    const size_t first = plan.parts().size();
     LevelDocument::Report report;
-    std::string error;
-    int files = 0;
-    if (!(everything ? m_document->saveEverything(report, error, files) : m_document->save(report, error)))
-    {
-        result = error;
+    if (!m_document->planSave(plan, report, everything, error))
         return false;
-    }
+    const size_t last = plan.parts().size();
     const std::string written = m_document->describe(report, false);
-    if (everything)
-    {
+    const SavePlan* const planned = &plan;
+    level.onReport([planned, first, last, everything, written](const SavePart&) {
+        if (!everything)
+            return written == "no changes" ? std::string("nothing to write: no changes") : "saved " + written;
+        int files = 0;
+        for (size_t p = first; p < last; ++p)
+            if (!planned->parts()[p].refused())
+                files += static_cast<int>(planned->parts()[p].changed());
         char count[96];
         std::snprintf(count, sizeof(count), "resaved %d level file%s", files, files == 1 ? "" : "s");
-        result = count + std::string(written == "no changes" ? " (none had changes)" : "; changes: " + written);
-    }
-    else
-        result = written == "no changes" ? std::string("nothing to write: no changes") : "saved " + written;
+        return count + std::string(written == "no changes" ? " (none had changes)" : "; changes: " + written);
+    });
+    // Written what can be; the rest stays modified, and the save says so.
     if (!report.unsaved.empty())
-    {
-        // Written what could be; the rest stays modified, and the save says so.
-        result += "; NOT saved - changed objects that belong to no file this editor writes yet: "
-                  + objectList(report.unsaved);
-        return false;
-    }
+        plan.part("unsaved objects").refuse("NOT saved - changed objects that belong to no file this editor writes yet: "
+                                            + objectList(report.unsaved));
     // The retail layer model (E14): the editor file is saved; every game-mode file the layers make, and Layer.con.
     size_t gameplay = 0;
     if (m_layerModel.active() && m_document->gameplayFile(gameplay))
     {
-        std::string generated;
-        int generatedFiles = 0;
-        if (!m_layerModel.writeGenerated(m_document->objects(gameplay).render(), generated, generatedFiles))
-        {
-            result += "; " + generated;
-            return false;
-        }
-        if (!generated.empty())
-        {
-            const std::string nothing = "nothing to write: no changes";
-            result = result == nothing ? generated : result + "; " + generated;
-        }
+        const bool editorFilePlanned = plan.plans(m_layerModel.editorPath());
+        m_layerModel.planGenerated(m_document->objects(gameplay).render(), plan.part("gameplay layers"), editorFilePlanned);
     }
+    // What the terrain compile below follows, taken before the parts on the way are marked saved.
+    const bool heightsChanged = m_terrain.changedSinceSave();
+    const bool surfaceChanged = m_editableTerrain.active() && (m_editableTerrain.painted() || m_editableTerrain.groundChanged());
     // The undergrowth density map, and the object templates edited with the level (the object editor, WP7).
-    std::string undergrowth;
-    if (!saveUndergrowth(undergrowth))
-    {
-        result += "; " + undergrowth;
-        return false;
-    }
-    if (!undergrowth.empty())
-        result += "; " + undergrowth;
-    std::string templates;
-    if (!saveObjectTemplates(templates))
-    {
-        result += "; " + templates;
-        return false;
-    }
-    if (!templates.empty())
-        result += "; " + templates;
-    // The material files edited with the level (the material editor).
-    std::string materials;
-    if (!saveMaterialFiles(materials))
-    {
-        result += "; " + materials;
-        return false;
-    }
-    if (!materials.empty())
-        result += "; " + materials;
-    // The animation systems edited with the level (the animation editor).
-    std::string animations;
-    if (!saveAnimationFiles(animations))
-    {
-        result += "; " + animations;
-        return false;
-    }
-    if (!animations.empty())
-        result += "; " + animations;
-    // The terrain's ground properties (Editor/GroundProperties.con), when a setting changed.
-    std::string ground;
-    if (!saveGroundProperties(ground))
-    {
-        result += "; " + ground;
-        return false;
-    }
-    if (!ground.empty())
-        result += "; " + ground;
-    // The painted terrain maps (the editor's own detail maps and colormaps).
-    std::string maps;
-    if (!saveTerrainMaps(maps))
-    {
-        result += "; " + maps;
-        return false;
-    }
-    if (!maps.empty())
-        result += "; " + maps;
+    planUndergrowth(plan);
+    planObjectTemplates(plan);
+    // The material files and animation systems edited with the level (the material and animation editors).
+    planMaterialFiles(plan);
+    planAnimationFiles(plan);
+    // The terrain's ground properties (Editor/GroundProperties.con) and the painted terrain maps (its detail maps and
+    // colormaps).
+    planGroundProperties(plan);
+    planTerrainMaps(plan);
     // The mod's and the level's description files (the mod manager's pages).
-    std::string descriptions;
-    if (!m_descriptions.save(descriptions))
-    {
-        result += "; " + descriptions;
+    if (m_descriptions.modified())
+        m_descriptions.planSave(plan.part("descriptions"));
+    // The terrain the game draws, compiled when its heights, paint or ground properties changed; the heights are saved
+    // with it or not at all - heights alone would leave the game walking on one ground and drawing another.
+    planCompiledTerrain(plan, heightsChanged, surfaceChanged);
+    // The painted overgrowth (its maps, regenerated plants and collision script).
+    if (m_editableTerrain.active() && m_editableTerrain.overgrowthPainted())
+        planOvergrowth(plan, true);
+    // The editable roads (their files, the compiled roads and the changed road templates).
+    planRoads(plan, false);
+    // The HUD scripts edited with the level (the HUD editor).
+    if (m_hudDocument)
+        m_hudDocument->planSave(plan);
+    // Every part written: the history's saved point is now.
+    plan.part("history").onWritten([this, planned]() {
+        if (!planned->anyRefused())
+            m_history.markSaved();
+    });
+    return true;
+}
+
+bool EditSession::writeLevelSave(SavePlan& plan, bool everything, std::string& result)
+{
+    if (!writeSave(plan, everything ? "EditorLevel.resave" : "EditorLevel.save", result))
         return false;
-    }
-    if (!descriptions.empty())
-        result += "; " + descriptions;
-    // The terrain is saved with its compiled render data or not at all: heights alone would leave the
-    // game walking on one ground and drawing another. The compile is the renderer's TerrainEditable.
-    if (m_terrain.changedSinceSave())
-    {
-        result += "; terrain NOT saved: saving it needs the renderer's editable terrain (TerrainEditable), "
-                  "which is not recovered yet";
-        return false;
-    }
-    if (m_editableTerrain.overgrowthPainted())
-    {
-        result += "; overgrowth NOT saved: the overgrowth save (Overgrowth.save and its atlas) is not wired yet";
-        return false;
-    }
     // The level's own files unchanged but other documents written: the answer says what was written.
     const std::string nothing = "nothing to write: no changes; ";
     if (result.compare(0, nothing.size(), nothing) == 0)
         result.erase(0, nothing.size());
-    m_history.markSaved();
-    return true;
+    return !plan.anyRefused();
 }
 
 std::string EditSession::unsavedSummary()
@@ -1039,13 +1012,19 @@ std::string EditSession::unsavedSummary()
     if (!report.unsaved.empty())
         text += " Changed but not savable in this version: " + objectList(report.unsaved) + ".";
     if (m_terrain.changedSinceSave())
-        text += " The terrain has changed; this version cannot save terrain yet.";
+        text += m_editableTerrain.active() ? " The terrain heights have changed."
+                                           : " The terrain heights have changed; saving them needs the editable terrain "
+                                             "(+editableTerrain 1).";
     if (undergrowthChanged())
         text += " The undergrowth has been painted.";
     if (m_editableTerrain.painted())
         text += " The terrain has been painted.";
     if (m_editableTerrain.overgrowthPainted())
-        text += " The overgrowth has been painted; this version cannot save it yet.";
+        text += " The overgrowth has been painted.";
+    if (m_roads.changed())
+        text += " The roads changed.";
+    if (m_hudDocument)
+        text += m_hudDocument->unsavedText();
     const std::vector<size_t> templates = m_templateDocuments.modified();
     for (size_t i = 0; i < templates.size(); ++i)
         text += (i ? ", " : " Object template files changed: ") + m_templateDocuments.document(templates[i]).path
@@ -1068,7 +1047,7 @@ bool EditSession::hasUnsavedChanges()
     if (m_terrain.changedSinceSave() || !m_templateDocuments.modified().empty() || undergrowthChanged()
         || m_materials.modified() || m_descriptions.modified() || animationsModified()
         || (m_layerModel.active() && m_layerModel.layersChanged()) || m_editableTerrain.groundChanged()
-        || m_editableTerrain.painted() || m_editableTerrain.overgrowthPainted())
+        || m_editableTerrain.painted() || m_editableTerrain.overgrowthPainted() || m_roads.changed())
         return true;
     if (!m_document || !m_document->isOpen())
         return m_history.isDirty();
@@ -2952,7 +2931,8 @@ bool EditSession::duplicateLayer(const std::string& gameMode, int size, std::str
     }
     std::string error;
     bool listed = false;
-    if (!m_document->duplicateLayer(gameMode, size, listed, error))
+    std::vector<std::pair<std::string, std::string> > files;
+    if (!m_document->duplicateLayer(gameMode, size, files, listed, error) || !writeFilesNow("layer copy", files, error))
     {
         result = "copying the layer: " + error;
         return false;

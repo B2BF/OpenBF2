@@ -50,7 +50,8 @@ const BrushHelp kBrushes[] = {
       "Left paints the selected overgrowth material (or the shadow map's value) into the level's overgrowth maps, "
       "middle (or Shift+left) erases; the circle is what the renderer paints. The Overgrowth looks show the maps. Not "
       "undoable (the maps live in the renderer, as in retail); the plants themselves change when the overgrowth is "
-      "generated, and saving it is not wired yet. Needs the editable terrain and a level with overgrowth." },
+      "generated, and the level's save writes the maps and the regenerated plants. Needs the editable terrain and a "
+      "level with overgrowth." },
 };
 
 // A sector's name as the heightmap files spell it (HeightmapSecondary_<name>.raw).
@@ -332,6 +333,10 @@ void TerrainPanel::draw(EditSession& session, bool* open)
         const int look = brush.overgrowthShadow ? 6 : 5;
         if (session.editableTerrain().technique() != look && ImGui::SmallButton("Show the overgrowth map"))
             session.runCommand("EditorTerrain.technique " + std::to_string(look), "terrain");
+        if (ImGui::SmallButton("Generate the plants"))
+            session.runCommand("EditorTerrain.generateOvergrowth", "terrain");
+        ImGui::SetItemTooltip("Regrows the plants from the painted maps (in the editor's staging folder; the level's "
+                              "overgrowth files are written when the level is saved).");
     }
     else if (brush.mode == TerrainBrush::Paint)
     {

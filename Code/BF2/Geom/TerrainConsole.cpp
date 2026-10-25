@@ -84,6 +84,18 @@ void setWaterSunIntensity(float intensity)
     ::memcpy(static_cast<unsigned char*>(terrain()->m_materialParameters) + 0x4C, record, sizeof(record));
 }
 
+#if defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+// drawPrimaryLightmaps / drawSurroundingLightmaps - the 2006 retail editor's bool properties (its renderer's binding
+// constructors 0x101DD570 / 0x101DDBF0, which set and read its Terrain +0x261 / +0x263); 1.50 binds neither. The
+// retail editor set them before tracing the terrain's lightmaps. They switch the two gates the terrain light sampler
+// reads when it gathers its patches - +0x358 the primary patches, +0x359 the ring patches - which also gate the
+// terrain's draw. [CHOSEN, not recovered] bound in the editor's flavour only; [INFERRED] the 1.50 fields they map to.
+bool getDrawPrimaryLightmaps() { return terrain()->m_drawMain != 0; }
+void setDrawPrimaryLightmaps(bool on) { terrain()->m_drawMain = on ? 1 : 0; }
+bool getDrawSurroundingLightmaps() { return terrain()->m_flag359 != 0; }
+void setDrawSurroundingLightmaps(bool on) { terrain()->m_flag359 = on ? 1 : 0; }
+#endif
+
 BF2_CONSOLE_OBJECT("terrain", 2, 0)
 
 BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(create, consoleCreateTerrain, true, std::string, kTerrainConsoleTag)
@@ -95,6 +107,12 @@ BF2_CONSOLE_PROPERTY_FN(sunColor, Vec3, terrain() != 0, getSunColor(), setSunCol
 BF2_CONSOLE_PROPERTY_FN(GIColor, Vec3, terrain() != 0, getGIColor(), setGIColor, kTerrainConsoleTag)
 BF2_CONSOLE_METHOD_0_STATIC_ACTIVE(init, consoleInitTerrain, terrain() != 0, kTerrainConsoleTag)
 BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(load, consoleLoadTerrain, terrain() != 0, std::string, kTerrainConsoleTag)
+#if defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+BF2_CONSOLE_PROPERTY_FN(drawPrimaryLightmaps, bool, terrain() != 0,
+                        getDrawPrimaryLightmaps(), setDrawPrimaryLightmaps, kTerrainConsoleTag)
+BF2_CONSOLE_PROPERTY_FN(drawSurroundingLightmaps, bool, terrain() != 0,
+                        getDrawSurroundingLightmaps(), setDrawSurroundingLightmaps, kTerrainConsoleTag)
+#endif
 
 } // anonymous namespace
 

@@ -20,7 +20,9 @@ public:
     EditorLevel();
     ~EditorLevel();
 
-    // gameMode / maxPlayers pick the gameplay-object layer (GameModes/<mode>/<size>/).
+    // gameMode / maxPlayers pick the gameplay-object layer (GameModes/<mode>/<size>/). As the retail
+    // editor's load (Init.con's editor branch) has it, the overgrowth is put into editor mode before the
+    // post-load event, and the objects the level's Overgrowth/OvergrowthCollision.con made are removed.
     bool open(const std::string& name, const std::string& gameMode, int maxPlayers);
     void close();
 

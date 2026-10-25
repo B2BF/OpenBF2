@@ -267,7 +267,8 @@ bool EditSession::hostTool(const std::string& action, const std::string& argumen
         }
         const std::string objectPath = levelDir + "Editor/ObjectList.txt";
         const std::string materialPath = levelDir + "Editor/MaterialList.txt";
-        if (!ObjectLibrary::writeTextFile(objectPath, objectList, error) || !ObjectLibrary::writeTextFile(materialPath, materialList, error))
+        if (!writeFilesNow("object and material lists", { std::make_pair(objectPath, objectList),
+                                                          std::make_pair(materialPath, materialList) }, error))
         {
             result = error;
             return false;
@@ -375,6 +376,14 @@ bool EditSession::hostTool(const std::string& action, const std::string& argumen
         }
         return m_editableTerrain.setSectorShown(std::atoi(a.c_str()), std::atoi(b.c_str()), c == "1", result);
     }
+    if (action == "overgrowthGenerate")
+        return m_editableTerrain.generateOvergrowth(result);
+    if (action == "terrainCompile")
+    {
+        // The painted maps are written into the staging folder first, so the compile reads the current weights.
+        std::vector<std::pair<std::string, std::string> > files;
+        return m_editableTerrain.saveMaps(files, result) && m_editableTerrain.compileTerrain(files, result);
+    }
     if (action == "terrainShownSectors")
     {
         result.clear();
@@ -449,6 +458,8 @@ bool EditSession::hostTool(const std::string& action, const std::string& argumen
     }
     if (action == "resave")
         return resaveLevel(result);
+    if (action.compare(0, 5, "save.") == 0)
+        return saveCommand(action.substr(5), argument, result);
     if (action == "lastOffsetCopy")
         return lastOffsetCopy(result);
     if (action.compare(0, 8, "preview.") == 0)

@@ -1,4 +1,4 @@
-﻿@rem ===========================================================================
+@rem ===========================================================================
 @rem SCAFFOLDING - NOT RECOVERED SOURCE. NOT PART OF THE BF2 BUILD.
 @rem
 @rem Reproduces the MSVC syntax-only check of the recovered Game/Main sources.
@@ -268,6 +268,34 @@ if errorlevel 1 set /a RC+=1
 @rem SoldierTemplate.h using Vec3 without including it).
 cl %FLAGS% "%~dp0header_check.cpp"
 if errorlevel 1 set /a RC+=1
+@rem The BF2VoipServer public headers (Phase 0 declarations). They are not reached by an engine
+@rem translation unit yet, so this scaffolding TU compiles them the way header_check.cpp does.
+cl %FLAGS% "%~dp0voip_header_check.cpp"
+if errorlevel 1 set /a RC+=1
+@rem The BF2VoipServer image's exported facade TU. Phase 0 bodies are named [FRONTIER] stops.
+cl %FLAGS% "%~dp0..\BF2\VoipServer\VoipServer.cpp"
+if errorlevel 1 set /a RC+=1
+@rem The VOIP container library (Phase 1).
+cl %FLAGS% "%~dp0..\BF2\VoipServer\VoipClients.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\VoipServer\VoipOutgoingChannels.cpp"
+if errorlevel 1 set /a RC+=1
+@rem The VOIP routing core (Phase 2).
+cl %FLAGS% "%~dp0..\BF2\VoipServer\VoipRouter.cpp"
+if errorlevel 1 set /a RC+=1
+@rem The voice-server instance, its diagnostics and the Timer dependency (Phase 3).
+cl %FLAGS% "%~dp0..\BF2\VoipServer\VoipDebug.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\VoipServer\VoipServerInstance.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\Core\Timer.cpp"
+if errorlevel 1 set /a RC+=1
+@rem The in-process voice server + the engine wiring that drives it (Phase 7).
+cl %FLAGS% "%~dp0..\BF2\Game\GameServer\VoipServerInternal.cpp"
+if errorlevel 1 set /a RC+=1
+@rem The standalone shell entry point (the BF2VoipServerShell.cpp equivalent).
+cl %FLAGS% "%~dp0..\BF2\VoipServer\BF2VoipServerShell.cpp"
+if errorlevel 1 set /a RC+=1
 cl %FLAGS% "%~dp0..\BF2\Animation\BoneAnimation\Skeleton.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS% "%~dp0..\BF2\Animation\BoneAnimation\Ik2bSolver\AwPoint.cpp"
@@ -524,6 +552,8 @@ if errorlevel 1 set /a RC+=1
 cl %FLAGS% "%~dp0..\BF2\Game\GameServer\BanList.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS% "%~dp0..\BF2\Game\GameServer\BanListConsole.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\Game\Main\OpenBF2Console.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS% "%~dp0..\BF2\Game\Common\DataBlockManager.cpp"
 cl %FLAGS% "%~dp0..\BF2\Game\Common\StringManager.cpp"
@@ -1191,6 +1221,20 @@ if errorlevel 1 set /a RC+=1
 cl %FLAGS0% /DBF2_IMAGE_RENDDX9 "%~dp0..\BF2\Geom\QuadPatchEditable.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS0% /DBF2_IMAGE_RENDDX9 "%~dp0..\BF2\Geom\SurroundingPatchEditable.cpp"
+if errorlevel 1 set /a RC+=1
+@rem Terrain and object lightmaps (2026-10-05): the terrain light sampler, the generator, the mesh
+@rem light sampler, the editor flavour's `lightmapGeneration` rows (empty without BF2_IMAGE_EDITOR, so
+@rem it is checked with it too) and the native-only StaticMeshRenderer atlas rows (renddx9.cmd builds
+@rem all five).
+cl %FLAGS0% /DBF2_IMAGE_RENDDX9 "%~dp0..\BF2\Geom\TerrainLightSampling.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS0% /DBF2_IMAGE_RENDDX9 "%~dp0..\BF2\Geom\LightmapGeneration\LightmapGeneration.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS0% /DBF2_IMAGE_RENDDX9 "%~dp0..\BF2\Geom\LightmapGeneration\MeshLightSampling.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS0% /DBF2_IMAGE_RENDDX9 /DBF2_IMAGE_EDITOR=1 "%~dp0..\BF2\Geom\LightmapGeneration\LightmapGenerationConsole.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS0% /DBF2_IMAGE_RENDDX9 "%~dp0..\BF2\Geom\StaticMeshRendererConsole.cpp"
 if errorlevel 1 set /a RC+=1
 @rem IO/Tokenizer.cpp (RW-240): dice::hfe::Tokenizer, whose bodies compile only under BF2_IMAGE_RENDDX9 (renddx9.cmd builds it).
 cl %FLAGS0% /DBF2_IMAGE_RENDDX9 "%~dp0..\BF2\IO\Tokenizer.cpp"

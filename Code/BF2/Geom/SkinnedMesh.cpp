@@ -599,6 +599,12 @@ void vectorAssignRaw(vc71::vector_layout& dst, const vc71::vector_layout& src, u
 }
 
 
+// Copies the base queue payload, including nested 64-byte and 16-byte record vectors.
+// Ref-counted pointers release before addRef; keep the old != new guards for self-assignment.
+// The two references are COM interfaces: Release (+0x08) and AddRef (+0x04) are __stdcall with the
+// interface pushed, as the shipped copy calls them - not __fastcall with it in ECX, which hands the
+// callee a stack word as its `this` (a skinned mesh lit by a muzzle flash crashed in d3d9.dll so).
+
 void renderQueueEntryCopyPayload(void* destEntry, void* sourceEntry)
 {
     unsigned char* const d = static_cast<unsigned char*>(destEntry);
@@ -606,19 +612,20 @@ void renderQueueEntryCopyPayload(void* destEntry, void* sourceEntry)
     if (d == a)
         return;
 
+    typedef unsigned long(__stdcall * RefFn)(void*);
     struct Local
     {
         static void swapRef(unsigned char* dst, const unsigned char* src, unsigned int at)
         {
             void* const  oldRef = *reinterpret_cast<void* const*>(dst + at);
-            if (oldRef == *reinterpret_cast<void* const*>(src + at))
+            void* const  newRef = *reinterpret_cast<void* const*>(src + at);
+            if (oldRef == newRef)
                 return;
             if (oldRef)   // release first - shipped, and safe only behind the test above
-                static_cast<IUnknown*>(oldRef)->Release();
-            void* const newRef = *reinterpret_cast<void* const*>(src + at);
+                reinterpret_cast<RefFn>((*reinterpret_cast<void***>(oldRef))[0x08 / 4])(oldRef);
             *reinterpret_cast<void**>(dst + at) = newRef;
             if (newRef)
-                static_cast<IUnknown*>(newRef)->AddRef();
+                reinterpret_cast<RefFn>((*reinterpret_cast<void***>(newRef))[0x04 / 4])(newRef);
         }
     };
 

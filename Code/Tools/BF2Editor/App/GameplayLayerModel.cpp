@@ -3,7 +3,7 @@
 #include "App/GameplayLayerModel.h"
 
 #include "Framework/EditorLog.h"
-#include "Framework/SourceControl.h"
+#include "Framework/SavePlan.h"
 
 #include <windows.h>
 
@@ -62,50 +62,6 @@ std::vector<std::string> subfolders(const std::string& folder)
     } while (FindNextFileA(search, &found));
     FindClose(search);
     return names;
-}
-
-// Whole, to a temporary file beside it, then over the old one (or new) in one step; read back.
-bool writeFile(const std::string& path, const std::string& text, std::string& error)
-{
-    const bool existed = isFile(path);
-    if (existed)
-    {
-        const ScmResult edit = sourceControl().openForEdit(path);
-        if (!edit.ok)
-        {
-            error = "source control refused " + path + ": " + edit.message;
-            return false;
-        }
-    }
-    const std::string temporary = path + ".editor-tmp";
-    {
-        std::ofstream out(temporary.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
-        out.write(text.data(), static_cast<std::streamsize>(text.size()));
-        if (!out)
-        {
-            error = "cannot write " + temporary;
-            return false;
-        }
-    }
-    if (!MoveFileExA(temporary.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
-    {
-        DeleteFileA(temporary.c_str());
-        error = "cannot replace " + path;
-        return false;
-    }
-    std::string back;
-    if (!readWhole(path, back) || back != text)
-    {
-        error = path + " does not hold what was written";
-        return false;
-    }
-    if (!existed)
-    {
-        const ScmResult added = sourceControl().add(path);
-        if (!added.ok)
-            logLine(LogLevel::Warning, "layers: source control did not add %s: %s", path.c_str(), added.message.c_str());
-    }
-    return true;
 }
 
 } // namespace
@@ -274,39 +230,30 @@ std::vector<std::string> GameplayLayerModel::missingObjectLines(const std::funct
     return lines;
 }
 
-bool GameplayLayerModel::writeGenerated(const std::string& editorText, std::string& report, int& written)
+bool GameplayLayerModel::planGenerated(const std::string& editorText, SavePart& part, bool editorFilePlanned)
 {
-    report.clear();
     if (!m_active)
         return true;
     GameplaySet set;
     std::string error;
     if (!set.parse(editorText, error))
     {
-        report = "the gameplay editor file is not in the retail layout (" + error + "): no game-mode file was written";
+        part.refuse("the gameplay editor file is not in the retail layout (" + error + "): no game-mode file was written");
         return false;
     }
-    std::string done;
     // An imported stock level writes no file of its own until its gameplay objects or its layers change: an untouched
     // save changes nothing, and the next open imports the same. Then the editor file and Layer.con are written
     // together, so every layer id in the one is named in the other.
     const bool create = !m_editorFileExists && (editorText != m_editorText || layerFileText() != m_savedLayerText);
     if (create || (m_editorFileExists && editorText != m_editorText))
     {
-        CreateDirectoryA(m_editorPath.substr(0, m_editorPath.rfind('/')).c_str(), 0);
-        if (!isFile(m_editorPath) || editorText != m_editorText)
-        {
-            std::string current;
-            if (!isFile(m_editorPath) || !readWhole(m_editorPath, current) || current != editorText)
-            {
-                if (!writeFile(m_editorPath, editorText, report))
-                    return false;
-                ++written;
-                done += (done.empty() ? "" : ", ") + m_editorPath.substr(m_levelDirectory.size());
-            }
-        }
-        m_editorFileExists = true;
-        m_editorText = editorText;
+        std::string current;
+        if (!editorFilePlanned && (!isFile(m_editorPath) || !readWhole(m_editorPath, current) || current != editorText))
+            part.add(m_editorPath, editorText);
+        part.onWritten([this, editorText]() {
+            m_editorFileExists = true;
+            m_editorText = editorText;
+        });
     }
     // Every game-mode file the layers make: the universe of filters and the files there are, never one left.
     std::vector<std::pair<std::string, std::string> > buckets;
@@ -339,13 +286,7 @@ bool GameplayLayerModel::writeGenerated(const std::string& editorText, std::stri
         std::string current;
         if (exists && readWhole(path, current) && current == text)
             continue;
-        CreateDirectoryA(modesFolder.c_str(), 0);
-        CreateDirectoryA(modeFolder.c_str(), 0);
-        CreateDirectoryA(sizeFolder.c_str(), 0);
-        if (!writeFile(path, text, report))
-            return false;
-        ++written;
-        done += (done.empty() ? "" : ", ") + path.substr(m_levelDirectory.size());
+        part.add(path, text);
     }
     // Layer.con, when the layers changed or the editor file was made.
     const std::string layers = layerFileText();
@@ -355,14 +296,16 @@ bool GameplayLayerModel::writeGenerated(const std::string& editorText, std::stri
         std::string path = childOnDisk(folder + "/", "Layer.con");
         if (path.empty())
             path = folder + "/Layer.con";
-        if (!writeFile(path, layers, report))
-            return false;
-        m_savedLayerText = layers;
-        ++written;
-        done += (done.empty() ? "" : ", ") + path.substr(m_levelDirectory.size());
+        part.add(path, layers, true);
+        part.onWritten([this, layers]() { m_savedLayerText = layers; });
     }
-    if (!done.empty())
-        report = "gameplay layers wrote " + done;
+    const std::string level = m_levelDirectory;
+    part.onReport([level](const SavePart& written) {
+        std::string done;
+        for (size_t i = 0; i < written.files().size(); ++i)
+            done += (done.empty() ? "" : ", ") + written.files()[i].target.substr(level.size());
+        return done.empty() ? std::string() : "gameplay layers wrote " + done;
+    });
     return true;
 }
 

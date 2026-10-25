@@ -13,6 +13,9 @@
 namespace dice { namespace hfe {
 class ConsoleObject;                                        // Core/ConsoleObject.h
 std::list<ConsoleObject*>& gameConsoleObjects();            // Game/Main/GameConsole.cpp
+#if DEDICATED
+std::list<ConsoleObject*>& openBf2ConsoleObjects();         // Game/Main/OpenBF2Console.cpp [CHOSEN, not recovered]
+#endif
 std::list<ConsoleObject*>& serverSettingsConsoleObjects();  // Game/GameServer/ServerSettingsConsole.cpp
 std::list<ConsoleObject*>& mapListConsoleObjects();         // Game/MapListConsole.cpp
 std::list<ConsoleObject*>& gameLogicConsoleObjects();       // Game/GameLogic/GameLogicConsole.cpp
@@ -40,6 +43,7 @@ std::list<ConsoleObject*>& objTemplVehicleConsoleObjects(); // Game/Objects/Vehi
 void addConstantHelper(const std::string& name, unsigned int value);   // world:: twin of io::'s below - ELF 0x8576C50, defined in ModuleWorldObjTemplGame.cpp (its TU key)
 std::list<ConsoleObject*>& heightmapConsoleObjects();       // Physics/HeightmapConsole.cpp
 std::list<ConsoleObject*>& collisionManagerConsoleObjects();// Physics/CollisionManager.cpp
+std::list<ConsoleObject*>& physicsConsoleObjects();         // Physics/BasicPhysicsSystem.cpp
 std::list<ConsoleObject*>& gameLogicCompConsoleObjects();   // Game/Objects/GameLogicComp/ModuleGameLogicComp.cpp (RW-31)
 std::list<ConsoleObject*>& materialSystemConsoleObjects();  // Game/GameLogic/MaterialSystem/ModuleMaterialSystem.cpp (RW-31)
 std::list<ConsoleObject*>& scoreSystemConsoleObjects();     // Game/GameLogic/ScoreSystem/ModuleScoreSystem.cpp
@@ -944,12 +948,20 @@ bool ModuleBF2::init()
 {
     consoleObjects()->registerConsoleObjects(listAt(0x8AD45A8));
     consoleObjects()->registerConsoleObjects(gameConsoleObjects());
+#if DEDICATED
+    // [CHOSEN, not recovered] OpenBF2's own openbf2.* console object (Game/Main/OpenBF2Console.cpp,
+    // B2BF/OpenBF2#39). Dedicated-server image only; not a recovered retail registration.
+    consoleObjects()->registerConsoleObjects(openBf2ConsoleObjects());
+#endif
     return true;
 }
 bool ModuleBF2::close()
 {
     consoleObjects()->unregisterConsoleObjects(listAt(0x8AD45A8));
     consoleObjects()->unregisterConsoleObjects(gameConsoleObjects());
+#if DEDICATED
+    consoleObjects()->unregisterConsoleObjects(openBf2ConsoleObjects());
+#endif
     return true;
 }
 
@@ -1638,6 +1650,7 @@ bool PhysicsModule::init()
     consoleObjects()->registerConsoleObjects(listAt(0x8B278D8));
     consoleObjects()->registerConsoleObjects(heightmapConsoleObjects());
     consoleObjects()->registerConsoleObjects(collisionManagerConsoleObjects());
+    consoleObjects()->registerConsoleObjects(physicsConsoleObjects());
     return true;
 }
 bool PhysicsModule::close()
@@ -1645,6 +1658,7 @@ bool PhysicsModule::close()
     consoleObjects()->unregisterConsoleObjects(listAt(0x8B278D8));
     consoleObjects()->unregisterConsoleObjects(heightmapConsoleObjects());
     consoleObjects()->unregisterConsoleObjects(collisionManagerConsoleObjects());
+    consoleObjects()->unregisterConsoleObjects(physicsConsoleObjects());
     return true;
 }
 

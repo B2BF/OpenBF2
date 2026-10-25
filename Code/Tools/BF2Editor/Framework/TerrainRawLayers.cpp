@@ -60,10 +60,10 @@ bool TerrainRawLayers::read(const std::string& bytes, std::string& error)
     }
     version = words[0];
     hasVersion = words[1];
-    // Two world scales (2 x 12), the four header words (16), the subdivide byte, the patch count and the two map
-    // sizes (12) - Terrain::load's reads, not needed here.
+    // Two world scales (2 x 12), the four header words (16) and the subdivide byte, then the patch count and the two
+    // map sizes - Terrain::load's reads; of them only the patch count is kept.
     std::string ignored;
-    if (!r.skip(24 + 16 + 1 + 12))
+    if (!r.skip(24 + 16 + 1) || !r.raw(&patchCount, 4) || !r.skip(8))
     {
         error = "the header ends early";
         return false;

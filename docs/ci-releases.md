@@ -52,7 +52,9 @@ retail companions are excluded.
 | `openbf2-windows-x64-server.zip` | `bf2_w64ded.exe`, `dice_py.dll` |
 | `openbf2-linux-x64-server.zip` | `bf2`, `libdice_py.so` |
 
-Every ZIP has a matching `.zip.sha256` checksum. Inside a package-named directory are
+Every ZIP has a matching `.zip.sha256` checksum written with LF line endings on all
+platforms, so Linux `sha256sum --check` can verify Windows-built packages too.
+Inside a package-named directory are
 the binaries, license notices, a runtime README and `build-info.json` recording the
 source commit, source URL, link contract and hashes of the runtime files. Linux ZIP
 entries retain executable permission bits; an extractor that ignores these may need
@@ -96,6 +98,12 @@ platforms or source revisions.
 3. The workflow rebuilds that tagged commit, then attaches all five ZIP/checksum pairs
    only after every platform succeeds. Re-running the release workflow replaces the
    same named assets on that release; it never creates or edits a release's notes.
+
+[Workflow reruns](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs)
+use the original commit. Pushing a packaging fix to the default branch does not change
+an existing release run; a new release tag must include the fix. For manual recovery of
+older artifacts with CRLF checksums, convert only the checksum files to LF, verify every
+ZIP with `sha256sum --check`, then upload the ZIP/checksum pairs to the existing release.
 
 The build jobs have `contents: read`. Only the asset-upload job has `contents: write`,
 using the built-in `GITHUB_TOKEN`; no personal token or signing secret is needed. Actions

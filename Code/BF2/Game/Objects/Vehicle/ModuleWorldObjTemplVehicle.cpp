@@ -294,6 +294,12 @@ BF2_CONSOLE_OBJECT("ObjectTemplate", 2, 1) // fullAccess, COCPhysics
 // Engine-type constants must be registered before integer property parsing.
 BF2_CONSOLE_PROPERTY(engineType, int, activeEngine(), setEngineType, getEngineType, kObjTemplVehicleConsoleTag)
 
+// Propeller rotation axis (EngineTemplate, dedicated PE executor writes the raw field via the
+// template's accessor pair) and the spring axis-fixation flag.
+BF2_CONSOLE_PROPERTY(propRotAxis, int, activeEngine(), setPropRotAxis, getPropRotAxis,
+                     kObjTemplVehicleConsoleTag)
+BF2_CONSOLE_FIELD(fixAxisSpring, bool, activeSpring(), m_fixAxisSpring, kObjTemplVehicleConsoleTag)
+
 // The gear block - the three named dwords of the six-dword gap between the two
 // OverTimeDistributions (EngineTemplate.h +0x3C8/+0x3CC/+0x3D0, names proven by the engine
 // objects that consume them: getGearRatio walks curveB over g / numberOfGears, getCurrentRatio =
@@ -380,7 +386,11 @@ BF2_CONSOLE_PROPERTY_FN(gearChangeTime, float, activeEngine() != 0,
                         objTemplGetGearChangeTime(), objTemplSetGearChangeTime,
                         kObjTemplVehicleConsoleTag)
 
-// Engine input bindings. accumulate takes a float but stores a Boolean.
+// Engine input bindings. [CHOSEN, not recovered] The shipped console metadata presents accumulate
+// as a Boolean and remoteEngineInput as an int, but the recovered accessors are a float
+// (EngineTemplate::setAccumulate) and an io::PlayerInputMap. The accessor-matching types are kept
+// so each command binds the function signature it actually calls; a bool would discard the stored
+// magnitude and an int the mapping identity, so the retail metadata spelling is not reproduced.
 namespace {
 io::PlayerInputMap objTemplGetRemoteEngineInput()
 {
@@ -411,6 +421,8 @@ BF2_CONSOLE_PROPERTY_FN(trackTurnAcceleration, float, activeEngine() != 0,
 BF2_CONSOLE_PROPERTY_FN(trackTurnSpeed, float, activeEngine() != 0,
                         objTemplGetTrackTurnSpeed(), objTemplSetTrackTurnSpeed,
                         kObjTemplVehicleConsoleTag)
+// [CHOSEN, not recovered] Retail registers remoteEngineInput as int; the accessor is the
+// io::PlayerInputMap enum, so the enum is kept (see the binding note above).
 BF2_CONSOLE_PROPERTY_FN(remoteEngineInput, io::PlayerInputMap, activeEngine() != 0,
                         objTemplGetRemoteEngineInput(), objTemplSetRemoteEngineInput,
                         kObjTemplVehicleConsoleTag)
@@ -504,7 +516,7 @@ BF2_CONSOLE_PROPERTY_FN(rotationAxle, int, activeRotor() != 0, activeRotor()->m_
 // signed floats, using the shared slash-delimited stream conversion.
 
 BF2_CONSOLE_FIELD(pitchOffset, float, activeWing(), m_pitchOffset, kObjTemplVehicleConsoleTag)
-BF2_CONSOLE_FIELD(positionOffset, Vec3, activeWing(), m_positionOffset, kObjTemplVehicleConsoleTag)
+BF2_CONSOLE_FIELD(positionOffset, Math::Vec3, activeWing(), m_positionOffset, kObjTemplVehicleConsoleTag)
 BF2_CONSOLE_FIELD(wingLift, float, activeWing(), m_wingLift, kObjTemplVehicleConsoleTag)
 BF2_CONSOLE_FIELD(flapLift, float, activeWing(), m_flapLift, kObjTemplVehicleConsoleTag)
 BF2_CONSOLE_FIELD(liftRegulated, bool, activeWing(), m_liftRegulated, kObjTemplVehicleConsoleTag)

@@ -54,6 +54,34 @@ bool pointOnPlane(const FreeCamera& camera, int width, int height, float x, floa
     return true;
 }
 
+// A point of the Catmull-Rom segment from p1 to p2 (the tangents half the neighbours' differences), as the renderer's
+// EditorSpline samples its curve (GeomMisc/EditorSpline.cpp, catmullRomPoint).
+void catmullRom(const float p0[3], const float p1[3], const float p2[3], const float p3[3], float t, float out[3])
+{
+    const float t2 = t * t, t3 = t2 * t;
+    const float h00 = 2.0f * t3 - 3.0f * t2 + 1.0f, h01 = 3.0f * t2 - 2.0f * t3;
+    const float h10 = t3 - 2.0f * t2 + t, h11 = t3 - t2;
+    for (int k = 0; k < 3; ++k)
+        out[k] = p1[k] * h00 + p2[k] * h01 + 0.5f * (p2[k] - p0[k]) * h10 + 0.5f * (p3[k] - p1[k]) * h11;
+}
+
+// The curve samples of a spline's segment i (to the next point), `steps` + 1 of them.
+void splineSegment(const SplineRecord& spline, size_t i, int steps, std::vector<std::vector<float> >& out)
+{
+    const size_t n = spline.points.size();
+    const float* p0 = spline.points[i ? i - 1 : 0].position;
+    const float* p1 = spline.points[i].position;
+    const float* p2 = spline.points[i + 1].position;
+    const float* p3 = spline.points[i + 2 < n ? i + 2 : n - 1].position;
+    out.clear();
+    for (int k = 0; k <= steps; ++k)
+    {
+        std::vector<float> p(3);
+        catmullRom(p0, p1, p2, p3, static_cast<float>(k) / static_cast<float>(steps), &p[0]);
+        out.push_back(p);
+    }
+}
+
 // A world point to window pixels through view * projection; false when it lies behind the camera.
 bool project(const float viewProjection[16], const float p[3], float width, float height, ImVec2& out)
 {
@@ -188,8 +216,10 @@ void ViewportTools::draw(EditSession& session, const FreeCamera& camera, dice::h
     session.setGridStep(m_moveSnap);
     m_camera = &camera;
     drawCombatAreas(session, viewProjection);
+    drawSplines(session, viewProjection);
     drawCompareLayer(session, viewProjection);
     drawOverlays(session, viewProjection);
+    drawPreviewParts(session, viewProjection);
     drawMarkers(session, viewProjection);
     drawSounds(session, viewProjection);
     drawOutlines(session, viewProjection);
@@ -248,6 +278,26 @@ void ViewportTools::draw(EditSession& session, const FreeCamera& camera, dice::h
         m_gizmoShown = false;
         m_pressed = false;
         handleMeasure(session);
+    }
+    else if (session.roadToolActive() || m_splineDrag)
+    {
+        // The road tool has the mouse: no gizmo, no object picks.
+        if (m_dragging)
+            finishDrag(session);
+        m_areaDrag = false;
+        m_soundDrag = false;
+        m_gizmoShown = false;
+        m_pressed = false;
+        handleSplines(session, viewProjection);
+    }
+    // The template preview's parts take a press first while they are shown: a mark picks a part, and a picked part
+    // has the gizmo.
+    else if (handlePreviewParts(session, worldToView, projection->m, viewProjection))
+    {
+        if (m_dragging)
+            finishDrag(session);
+        m_gizmoShown = false;
+        m_pressed = false;
     }
     // A combat area's point handle, then an ambient sound's marker, take a press before the gizmo and
     // the pick do.
@@ -582,6 +632,218 @@ bool ViewportTools::handleCombatAreas(EditSession& session, const float viewProj
         return false;
     std::snprintf(line, sizeof(line), "EditorCombatArea.insertPoint %s %d %.3f %.3f", area.name.c_str(), edge + 1, at[0], at[2]);
     session.runCommand(line, "combat area");
+    return true;
+}
+
+// Splines and the road tool (App/RoadNetwork)
+
+void ViewportTools::drawSplines(EditSession& session, const float viewProjection[16])
+{
+    RoadNetwork& roads = session.roads();
+    if (!session.splinesShown() || !roads.isOpen())
+        return;
+    const ImGuiIO& io = ImGui::GetIO();
+    ImDrawList* list = ImGui::GetBackgroundDrawList();
+    const int active = session.activeSpline();
+    const int activePoint = session.activeSplinePoint();
+    const std::vector<int> ids = roads.splineIds();
+    std::vector<std::vector<float> > samples;
+    for (size_t s = 0; s < ids.size(); ++s)
+    {
+        SplineRecord spline;
+        if (!roads.splineRecord(ids[s], spline) || spline.points.empty())
+            continue;
+        const size_t n = spline.points.size();
+        if (m_splineDrag && m_splineMoved && m_splineTargetValid && ids[s] == m_splineDragId && m_splineDragPoint >= 0
+            && static_cast<size_t>(m_splineDragPoint) < n)
+            for (int k = 0; k < 3; ++k)
+                spline.points[static_cast<size_t>(m_splineDragPoint)].position[k] = m_splineTarget[k];
+        const bool isActive = ids[s] == active;
+        const std::string road = roads.roadOnSpline(ids[s]);
+        const ImU32 colour = isActive ? IM_COL32(255, 200, 40, 255)
+                                      : !road.empty() ? IM_COL32(120, 200, 255, 220) : IM_COL32(210, 210, 210, 200);
+        for (size_t i = 0; i + 1 < n; ++i)
+        {
+            splineSegment(spline, i, 8, samples);
+            ImVec2 previous;
+            bool havePrevious = false;
+            for (size_t k = 0; k < samples.size(); ++k)
+            {
+                ImVec2 at;
+                const bool on = project(viewProjection, &samples[k][0], io.DisplaySize.x, io.DisplaySize.y, at);
+                if (on && havePrevious)
+                    list->AddLine(previous, at, colour, isActive ? 2.5f : 1.5f);
+                previous = at;
+                havePrevious = on;
+            }
+        }
+        for (size_t i = 0; i < n; ++i)
+        {
+            ImVec2 at;
+            if (!project(viewProjection, spline.points[i].position, io.DisplaySize.x, io.DisplaySize.y, at))
+                continue;
+            const bool selected = isActive && static_cast<int>(i) == activePoint;
+            const float radius = selected ? 6.0f : isActive ? 4.5f : 3.0f;
+            list->AddCircleFilled(at, radius, selected ? IM_COL32(60, 255, 60, 255) : colour);
+            list->AddCircle(at, radius, IM_COL32(0, 0, 0, 200));
+        }
+        ImVec2 at;
+        if (project(viewProjection, spline.points[0].position, io.DisplaySize.x, io.DisplaySize.y, at))
+        {
+            char text[160];
+            std::snprintf(text, sizeof(text), "spline %d%s%s", ids[s], road.empty() ? "" : ": ", road.c_str());
+            list->AddText(ImVec2(at.x + 7.0f, at.y - 18.0f), colour, text);
+        }
+    }
+}
+
+bool ViewportTools::handleSplines(EditSession& session, const float viewProjection[16])
+{
+    RoadNetwork& roads = session.roads();
+    const ImGuiIO& io = ImGui::GetIO();
+    if (!roads.isOpen())
+    {
+        m_splineDrag = false;
+        return false;
+    }
+    char line[256];
+    if (m_splineDrag)
+    {
+        if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
+        {
+            const float dx = io.MousePos.x - m_splinePress[0], dy = io.MousePos.y - m_splinePress[1];
+            if (dx * dx + dy * dy > kBoxThreshold * kBoxThreshold)
+                m_splineMoved = true;
+            if (m_splineMoved)
+                m_splineTargetValid = session.terrainUnderPixel(io.MousePos.x, io.MousePos.y, m_splineTarget);
+            return true;
+        }
+        // Released: moved, one undoable edit; in place, the point is selected.
+        m_splineDrag = false;
+        session.setActiveSpline(m_splineDragId, m_splineDragPoint);
+        if (m_splineMoved && m_splineTargetValid)
+        {
+            std::snprintf(line, sizeof(line), "EditorRoad.splineMove %d %d %.3f/%.3f/%.3f", m_splineDragId,
+                          m_splineDragPoint, m_splineTarget[0], m_splineTarget[1], m_splineTarget[2]);
+            session.runCommand(line, "road tool");
+        }
+        return true;
+    }
+    if (pointerOverUi() || ImGui::GetDragDropPayload())
+        return false;
+    const int active = session.activeSpline();
+    // Delete: the selected point goes.
+    if (active >= 0 && session.activeSplinePoint() >= 0 && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
+    {
+        std::snprintf(line, sizeof(line), "EditorRoad.splineRemovePoint %d %d", active, session.activeSplinePoint());
+        session.runCommand(line, "road tool");
+        session.setActiveSpline(active, -1);
+        return true;
+    }
+    if (!ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        return false;
+    // A press on any spline's point: Ctrl removes it, otherwise it is dragged (and its spline becomes the active one).
+    int bestSpline = -1, bestPoint = -1;
+    float best = 8.0f * 8.0f;
+    const std::vector<int> ids = roads.splineIds();
+    for (size_t s = 0; s < ids.size(); ++s)
+    {
+        SplineRecord spline;
+        if (!roads.splineRecord(ids[s], spline))
+            continue;
+        for (size_t i = 0; i < spline.points.size(); ++i)
+        {
+            ImVec2 at;
+            if (!project(viewProjection, spline.points[i].position, io.DisplaySize.x, io.DisplaySize.y, at))
+                continue;
+            const float dx = at.x - io.MousePos.x, dy = at.y - io.MousePos.y;
+            if (dx * dx + dy * dy < best || (dx * dx + dy * dy == best && ids[s] == active))
+            {
+                best = dx * dx + dy * dy;
+                bestSpline = ids[s];
+                bestPoint = static_cast<int>(i);
+            }
+        }
+    }
+    if (bestSpline >= 0)
+    {
+        session.selection().clear();
+        if (io.KeyCtrl)
+        {
+            std::snprintf(line, sizeof(line), "EditorRoad.splineRemovePoint %d %d", bestSpline, bestPoint);
+            session.runCommand(line, "road tool");
+            session.setActiveSpline(bestSpline, -1);
+            return true;
+        }
+        m_splineDrag = true;
+        m_splineMoved = false;
+        m_splineTargetValid = false;
+        m_splineDragId = bestSpline;
+        m_splineDragPoint = bestPoint;
+        m_splinePress[0] = io.MousePos.x;
+        m_splinePress[1] = io.MousePos.y;
+        session.setActiveSpline(bestSpline, bestPoint);
+        return true;
+    }
+    float at[3];
+    if (!session.terrainUnderPixel(io.MousePos.x, io.MousePos.y, at))
+        return false;
+    // Alt+click near the active spline's curve: a point inserted in that segment.
+    SplineRecord current;
+    if (io.KeyAlt && active >= 0 && roads.splineRecord(active, current) && current.points.size() >= 2)
+    {
+        int segment = -1;
+        best = 10.0f * 10.0f;
+        std::vector<std::vector<float> > samples;
+        for (size_t i = 0; i + 1 < current.points.size(); ++i)
+        {
+            splineSegment(current, i, 8, samples);
+            for (size_t k = 0; k + 1 < samples.size(); ++k)
+            {
+                ImVec2 a, b;
+                if (!project(viewProjection, &samples[k][0], io.DisplaySize.x, io.DisplaySize.y, a)
+                    || !project(viewProjection, &samples[k + 1][0], io.DisplaySize.x, io.DisplaySize.y, b))
+                    continue;
+                const float vx = b.x - a.x, vy = b.y - a.y;
+                const float lengthSquared = vx * vx + vy * vy;
+                float t = lengthSquared > 0.0f ? ((io.MousePos.x - a.x) * vx + (io.MousePos.y - a.y) * vy) / lengthSquared
+                                               : 0.0f;
+                t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+                const float px = a.x + vx * t - io.MousePos.x, py = a.y + vy * t - io.MousePos.y;
+                if (px * px + py * py < best)
+                {
+                    best = px * px + py * py;
+                    segment = static_cast<int>(i);
+                }
+            }
+        }
+        if (segment >= 0)
+        {
+            std::snprintf(line, sizeof(line), "EditorRoad.splineInsert %d %d %.3f/%.3f/%.3f", active, segment + 1, at[0],
+                          at[1], at[2]);
+            session.runCommand(line, "road tool");
+            session.setActiveSpline(active, segment + 1);
+            return true;
+        }
+    }
+    // A click on the ground: a point at the end of the active spline, a new spline when there is none.
+    int target = active;
+    if (target < 0)
+    {
+        target = roads.nextSplineId();
+        std::snprintf(line, sizeof(line), "EditorRoad.splineCreateAs %d", target);
+        const ConsoleLineResult made = runConsoleLine(line);
+        if (made.failed || !roads.hasSpline(target))
+        {
+            logLine(LogLevel::Warning, "road tool: %s", made.output.c_str());
+            return true;
+        }
+    }
+    SplineRecord before;
+    roads.splineRecord(target, before);
+    std::snprintf(line, sizeof(line), "EditorRoad.splineAdd %d %.3f/%.3f/%.3f", target, at[0], at[1], at[2]);
+    session.runCommand(line, "road tool");
+    session.setActiveSpline(target, static_cast<int>(before.points.size()));
     return true;
 }
 
@@ -2109,6 +2371,180 @@ void ViewportTools::drawUndergrowthCursor(EditSession& session, const float view
     else
         std::snprintf(text, sizeof(text), "undergrowth material %d within %.1f m", session.undergrowthMaterial(), radius);
     list->AddText(ImVec2(io.MousePos.x + 16.0f, io.MousePos.y + 14.0f), IM_COL32(210, 255, 180, 255), text);
+}
+
+// ---- The template preview's parts ([added], EditSession::previewParts) ---------------------------------------------
+
+namespace
+{
+
+const float kPartRadius = 9.0f;             // pixels round a part's mark that pick it
+const float kPartAxis = 0.35f;              // metres of each axis drawn on a child
+const float kExitFigure = 1.7f;             // metres of the figure standing on an exit point
+
+// The part under the cursor within kPartRadius, the nearest; -1 for none.
+int partUnder(const std::vector<EditSession::PreviewPart>& parts, const float viewProjection[16], const ImVec2& mouse)
+{
+    const ImGuiIO& io = ImGui::GetIO();
+    int nearest = -1;
+    float best = kPartRadius * kPartRadius;
+    for (size_t i = 0; i < parts.size(); ++i)
+    {
+        const float p[3] = { parts[i].world.m[12], parts[i].world.m[13], parts[i].world.m[14] };
+        ImVec2 at;
+        if (!project(viewProjection, p, io.DisplaySize.x, io.DisplaySize.y, at))
+            continue;
+        const float dx = at.x - mouse.x, dy = at.y - mouse.y;
+        if (dx * dx + dy * dy <= best)
+        {
+            best = dx * dx + dy * dy;
+            nearest = static_cast<int>(i);
+        }
+    }
+    return nearest;
+}
+
+} // namespace
+
+void ViewportTools::drawPreviewParts(EditSession& session, const float viewProjection[16])
+{
+    if (!session.previewPartsShown() || !session.templatePreview())
+        return;
+    const std::vector<EditSession::PreviewPart> parts = session.previewParts();
+    const ImGuiIO& io = ImGui::GetIO();
+    ImDrawList* list = ImGui::GetBackgroundDrawList();
+    const int picked = session.pickedPreviewPart();
+    const int hovered = pointerOverUi() ? -1 : partUnder(parts, viewProjection, io.MousePos);
+    for (size_t i = 0; i < parts.size(); ++i)
+    {
+        const EditSession::PreviewPart& part = parts[i];
+        const bool isPicked = static_cast<int>(i) == picked;
+        const Mat4& world = isPicked && m_partDragging ? m_partPivot : part.world;
+        const float p[3] = { world.m[12], world.m[13], world.m[14] };
+        ImVec2 at;
+        if (!project(viewProjection, p, io.DisplaySize.x, io.DisplaySize.y, at))
+            continue;
+        const int alpha = isPicked || static_cast<int>(i) == hovered ? 255 : 170;
+        ImU32 colour = IM_COL32(235, 235, 235, alpha);
+        if (part.kind == EditSession::PreviewPart::Child)
+        {
+            // Its axes, red X, green Y, blue Z, as the child's place turns them.
+            const ImU32 axes[3] = { IM_COL32(230, 70, 70, alpha), IM_COL32(80, 210, 80, alpha), IM_COL32(80, 130, 240, alpha) };
+            for (int k = 0; k < 3; ++k)
+            {
+                const float tip[3] = { p[0] + world.m[k * 4 + 0] * kPartAxis, p[1] + world.m[k * 4 + 1] * kPartAxis,
+                                       p[2] + world.m[k * 4 + 2] * kPartAxis };
+                ImVec2 end;
+                if (project(viewProjection, tip, io.DisplaySize.x, io.DisplaySize.y, end))
+                    list->AddLine(at, end, axes[k], 1.5f);
+            }
+            if (part.seat)
+                colour = IM_COL32(255, 160, 40, alpha);
+            else if (part.camera)
+                colour = IM_COL32(80, 220, 255, alpha);
+            list->AddCircleFilled(at, part.seat || part.camera ? 4.5f : 3.0f, colour, 12);
+        }
+        else
+        {
+            // A figure standing where a soldier leaving the seat is put.
+            colour = part.kind == EditSession::PreviewPart::Exit ? IM_COL32(90, 230, 120, alpha) : IM_COL32(170, 240, 120, alpha);
+            const float head[3] = { p[0], p[1] + kExitFigure, p[2] };
+            ImVec2 top;
+            if (project(viewProjection, head, io.DisplaySize.x, io.DisplaySize.y, top))
+            {
+                list->AddLine(at, top, colour, 2.0f);
+                if (part.kind == EditSession::PreviewPart::Exit)
+                    list->AddCircleFilled(top, 4.0f, colour, 12);
+                else
+                    list->AddCircle(top, 4.0f, colour, 12, 1.5f);
+            }
+            list->AddCircle(at, 4.0f, colour, 12, 1.5f);
+        }
+        if (isPicked)
+            list->AddCircle(at, kPartRadius, IM_COL32(255, 230, 60, 255), 16, 2.0f);
+        if (isPicked || static_cast<int>(i) == hovered || part.seat || part.camera || part.kind != EditSession::PreviewPart::Child)
+        {
+            const std::string text = part.kind == EditSession::PreviewPart::Child ? part.label : part.label + " (" + part.owner + ")";
+            list->AddText(ImVec2(at.x + 7.0f, at.y - 15.0f), colour, text.c_str());
+        }
+    }
+}
+
+bool ViewportTools::handlePreviewParts(EditSession& session, const float view[16], const float projection[16],
+                                       const float viewProjection[16])
+{
+    if (!session.previewPartsShown() || !session.templatePreview())
+    {
+        m_partDragging = false;
+        return false;
+    }
+    const std::vector<EditSession::PreviewPart> parts = session.previewParts();
+    int picked = session.pickedPreviewPart();
+    if (picked >= static_cast<int>(parts.size()))
+    {
+        session.pickPreviewPart(-1);
+        picked = -1;
+    }
+    const ImGuiIO& io = ImGui::GetIO();
+    if (picked >= 0 && !m_partDragging && ImGui::IsKeyPressed(ImGuiKey_Escape, false) && !io.WantCaptureKeyboard)
+    {
+        session.pickPreviewPart(-1);
+        return true;
+    }
+    bool overGizmo = false;
+    if (picked >= 0)
+    {
+        // The gizmo's frame, as handleGizmo sets it (this handler runs instead of it).
+        ImGuizmo::BeginFrame();
+        ImGuizmo::SetDrawlist(ImGui::GetBackgroundDrawList());
+        ImGuizmo::SetOrthographic(false);
+        ImGuizmo::AllowAxisFlip(false);
+        ImGuizmo::SetRect(0.0f, 0.0f, io.DisplaySize.x, io.DisplaySize.y);
+        const EditSession::PreviewPart& part = parts[static_cast<size_t>(picked)];
+        Mat4 pivot = m_partDragging ? m_partPivot : part.world;
+        // A child moves or turns, as the gizmo mode says; an exit point only moves, in world axes.
+        const bool child = part.kind == EditSession::PreviewPart::Child;
+        const bool rotate = child && session.gizmoMode() == GizmoMode::Rotate;
+        const ImGuizmo::MODE space = child && session.gizmoSpace() == GizmoSpace::Local ? ImGuizmo::LOCAL : ImGuizmo::WORLD;
+        float snap[3];
+        for (int k = 0; k < 3; ++k)
+            snap[k] = rotate ? m_rotateSnap : m_moveSnap;
+        ImGuizmo::Enable(m_partDragging || !pointerOverUi());
+        ImGuizmo::Manipulate(view, projection, rotate ? ImGuizmo::ROTATE : ImGuizmo::TRANSLATE, space, pivot.m, 0,
+                             m_snap != io.KeyShift ? snap : 0);
+        if (ImGuizmo::IsUsing())
+        {
+            m_partDragging = true;
+            m_partPivot = pivot;
+            return true;
+        }
+        if (m_partDragging)
+        {
+            // Let go: the template's line written, one undoable edit.
+            m_partDragging = false;
+            std::string result;
+            const bool moved = session.movePreviewPart(static_cast<size_t>(picked), m_partPivot, result);
+            logLine(moved ? LogLevel::Info : LogLevel::Warning, "part: %s", result.c_str());
+            return true;
+        }
+        overGizmo = ImGuizmo::IsOver();
+    }
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !pointerOverUi() && !overGizmo)
+    {
+        const int under = partUnder(parts, viewProjection, io.MousePos);
+        if (under >= 0)
+        {
+            session.pickPreviewPart(under);
+            const EditSession::PreviewPart& part = parts[static_cast<size_t>(under)];
+            logLine(LogLevel::Info, "part: picked %d, %s of %s", under,
+                    (part.kind == EditSession::PreviewPart::Child ? part.child : part.label).c_str(), part.owner.c_str());
+            return true;
+        }
+        // A click elsewhere lets the part go and is the view's again.
+        session.pickPreviewPart(-1);
+        return false;
+    }
+    return picked >= 0;
 }
 
 } // namespace bf2editor

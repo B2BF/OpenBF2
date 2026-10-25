@@ -62,7 +62,12 @@ static std::vector<IModule*> s_modules;         // [INFERRED] name; ELF .bss 0x8
 
 // Null-terminated late-module array, distinct from the normal module vector.
 // [INFERRED] Name and capacity. [UNRESOLVED] Which registration path populates it.
-static IModule* s_lateModules[4];               // [INFERRED] name and bound; ELF .bss 0x8AACC08
+static IModule* s_lateModules[4];
+#if defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+// [CHOSEN, not recovered] The editor's HUD (its play test and HUD editor, App/EngineHost.cpp): set before initModules.
+static bool s_editorHud = false;
+void setEditorHudModules(bool on) { s_editorHud = on; }
+#endif               // [INFERRED] name and bound; ELF .bss 0x8AACC08
 
 extern ClassManager* classManager;              //  = _ZN4dice3hfe12classManagerE
 
@@ -126,7 +131,16 @@ bool BF2EngineSetup::initModules()
         s_modules.push_back(new hud::ProfileConsoleModule());           // table89B110
     }
 #endif
-    // [CHOSEN, not recovered] The editor omits client front-end modules, HUD, and
+#if defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+    // [CHOSEN, not recovered] The editor's HUD, when it asked for it (setEditorHudModules): the HUD's components (the
+    // templates' WeaponHud and VehicleHud) and its console module, as the client registers them; never the profiles.
+    if (s_editorHud)
+    {
+        s_modules.push_back(new world::HudCompModule());
+        s_modules.push_back(new hud::HudConsoleModule());
+    }
+#endif
+    // [CHOSEN, not recovered] The editor omits client front-end modules, HUD (unless asked), and
     // profiles. Register the remaining modules' class servers for lazy construction.
     for (size_t i = 0; i < s_modules.size(); ++i)
         classManager->registerServer(s_modules[i]);

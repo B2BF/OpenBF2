@@ -1803,20 +1803,22 @@ bool GameLogic::isLevelLoadedXP()
 //  / 0x80C6910, 41 B each: three loads through the sret pointer - Vec3 BY value.
 Vec3 GameLogic::getBeforeSpawnCameraPosition() const
 {
-    Vec3 v;
-    v.x = m_beforeSpawnCameraPositionX;                // +0x198
-    v.y = m_beforeSpawnCameraPositionY;                // +0x19C
-    v.z = m_beforeSpawnCameraPositionZ;                // +0x1A0
-    return v;
+    return m_beforeSpawnCameraPosition;                // +0x198
 }
 
 Vec3 GameLogic::getBeforeSpawnCameraDirection() const
 {
-    Vec3 v;
-    v.x = m_beforeSpawnCameraDirectionX;               // +0x1A4
-    v.y = m_beforeSpawnCameraDirectionY;               // +0x1A8
-    v.z = m_beforeSpawnCameraDirectionZ;               // +0x1AC
-    return v;
+    return m_beforeSpawnCameraDirection;               // +0x1A4
+}
+
+// Linux64 server ELF 0x475CF0 / win32 client 0x4ECBA0. Writes the position and direction, then
+// dispatches the virtual resetPlayerFreeCameraPosition (vslot +0x214) on
+// playerManager->getLocalHumanPlayer (+0x30). The shipped body does not null-check playerManager.
+void GameLogic::setBeforeSpawnCamera(Vec3 position, Vec3 direction)
+{
+    m_beforeSpawnCameraPosition = position;            // +0x198
+    m_beforeSpawnCameraDirection = direction;          // +0x1A4
+    resetPlayerFreeCameraPosition(world::playerManager->getLocalHumanPlayer());   // vslot +0x214
 }
 
 //  / 0x80D6580 / 0x80D6590 and 0x80D6360 / 0x80D63A0 / 0x80D63B0 - the projectile and

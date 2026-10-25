@@ -4,7 +4,7 @@
 // what the engine loads, from a mounted archive or a loose file - and kept as a Framework/AnimationSystemFile,
 // edited in place. A system read from a mounted archive is read-only (a loose copy would stay shadowed), as the
 // object editor's archived files are; `+looseObjects 1` after EditorObjects.extract edits them. The level save
-// writes the modified ones (source control, a temporary file, a read-back). Editor-only code (D3).
+// plans the modified ones (Framework/SavePlan). Editor-only code (D3).
 #ifndef BF2EDITOR_APP_ANIMATIONDOCUMENTS_H
 #define BF2EDITOR_APP_ANIMATIONDOCUMENTS_H
 
@@ -17,6 +17,8 @@
 
 namespace bf2editor
 {
+
+class SavePart;
 
 struct AnimationDocument
 {
@@ -39,8 +41,9 @@ public:
     const AnimationDocument& document(size_t index) const { return m_documents[index]; }
     int find(const std::string& path) const;
     std::vector<size_t> modified() const;
-    // The modified ones written; "saved <paths>" in `result`, "" when none was. Refused for an archived one.
-    bool save(std::string& result);
+    // The modified ones into `part`, taken as saved once written; its answer "saved the animation systems <paths>".
+    // The part is refused (false) when one of them is archived.
+    bool planSave(SavePart& part);
     void clear() { m_documents.clear(); }
 
 private:

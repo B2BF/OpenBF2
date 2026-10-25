@@ -1,8 +1,8 @@
 // Tracks the open level's source records and their loaded objects for saving.
 // StaticObjects.con is required; missing ambient/gameplay files are logged and leave related edits
 // unsaved. Records bind at most one object and unmatched records retain their original text.
-// Save renders changed files, opens them through source control, writes atomically and verifies by
-// reading back. Unserializable edits keep the document modified and are reported. Editor-only.
+// A save plans the changed files (Framework/SavePlan), which writes them atomically through source control and
+// verifies them. Unserializable edits keep the document modified and are reported. Editor-only.
 #ifndef BF2EDITOR_APP_LEVELDOCUMENT_H
 #define BF2EDITOR_APP_LEVELDOCUMENT_H
 
@@ -24,6 +24,7 @@ namespace bf2editor
 {
 
 class GameplayLayerModel;
+class SavePlan;
 
 class LevelDocument
 {
@@ -60,9 +61,11 @@ public:
     // folder is spelled, sorted.
     std::vector<std::pair<std::string, int> > layersOnDisk() const;
     // A copy of the open gameplay layer, as saved, as GameModes/<mode>/<size>/GamePlayObjects.con - which
-    // must not exist yet (source control adds it) - listed in the level's map description too
-    // (`listed` says whether it was). False with `error` when the copy cannot be made.
-    bool duplicateLayer(const std::string& gameMode, int size, bool& listed, std::string& error);
+    // must not exist yet - and the level's map description listing it (`listed` says whether it can): the files
+    // to write, {path, content} each, for the caller to write as one save. False with `error` when the copy
+    // cannot be made.
+    bool duplicateLayer(const std::string& gameMode, int size, std::vector<std::pair<std::string, std::string> >& files,
+                        bool& listed, std::string& error);
     // Another layer's GamePlayObjects.con, read and parsed (never run); false when it is not on disk.
     bool readLayer(const std::string& gameMode, int size, LevelObjectFile& out) const;
     // The layers the level's map description (Info/<level>.desc) lists; false when it has none.
@@ -147,13 +150,11 @@ public:
     // with a change, or all of them when `everyFile`; "no changes" when there is nothing to list.
     std::string describe(const Report& report, bool everyFile) const;
 
-    // Writes every file that changed. False with `error` when one could not be written (the others are
-    // still written); `report` says what was written and what was not.
-    bool save(Report& report, std::string& error);
-    // File > Resave: every object and settings file written, changed or not (an
-    // unchanged one gets the same bytes back, through source control and the read-back check);
-    // `written` counts the files written.
-    bool saveEverything(Report& report, std::string& error, int& written);
+    // The files a save writes, as parts of `plan` (Framework/SavePlan), one per file so that one that cannot be
+    // written does not keep the others from being saved: every file that changed, or every file with `always`
+    // (File > Resave: an unchanged one gets the same bytes back). Each part binds its file's records to the text
+    // once it is written. `report` says what the save does. False with `error` when no document is open.
+    bool planSave(SavePlan& plan, Report& report, bool always, std::string& error);
 
 private:
     struct Snapshot
@@ -181,7 +182,9 @@ private:
     void pullFromEngine();
     void updatePreload();
     bool changedSinceOpen(unsigned id) const;
-    bool saveFile(size_t file, std::string& error, bool always, int& written);
+    void planFile(SavePlan& plan, size_t file, bool always);
+    // The written file is the document now: its records in the order they were written, bound again.
+    void bindWritten(size_t file, const std::string& text, const std::vector<size_t>& order);
     void indexIds(size_t file);
 
     struct SettingsFile
@@ -191,8 +194,7 @@ private:
         LevelSettingsFile file;
     };
     std::vector<SettingsFile>      m_settings;
-    bool saveSettingsFile(SettingsFile& settings, std::string& error, bool always, int& written);
-    bool saveFiles(Report& report, std::string& error, bool always, int& written);
+    void planSettingsFile(SavePlan& plan, size_t index, bool always);
     bool                           m_open;
     std::string                    m_levelDirectory;
     std::vector<File>              m_files;

@@ -5,6 +5,8 @@ compiling the recovered source and running focused checks. An executable produce
 `/FORCE` can still contain unresolved calls; its existence does not establish that a
 server, client, or editor session will complete.
 
+This code builds standalone, however to build the client/editor you will need the DirectX 9 sdk.
+
 ## Pick your starting point
 
 | Work | Build | Read next |

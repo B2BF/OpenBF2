@@ -29,6 +29,10 @@ public:
     // `name` as the archive stores it ('/' separators); `dosTime`/`dosDate` the entry's time (0 for none).
     bool add(const std::string& name, const unsigned char* data, size_t size, unsigned dosTime, unsigned dosDate,
              std::string& error);
+    // An entry copied as another archive stores it: its compressed bytes (`method` 0 stored or 8 deflated), CRC-32,
+    // size and time unchanged - an archive written again keeps the entries it does not change byte for byte.
+    bool addRaw(const std::string& name, unsigned method, unsigned long crc, unsigned long size,
+                const unsigned char* packed, size_t packedSize, unsigned dosTime, unsigned dosDate, std::string& error);
     // Writes the central directory and closes the file; false when anything failed on the way.
     bool close(std::string& error);
     size_t entryCount() const { return m_entries.size(); }
@@ -50,6 +54,8 @@ private:
         unsigned long offset;       // of its local header
     };
     bool write(const void* data, size_t size);
+    // The entry's local header, then its stored bytes; recorded for the central directory.
+    bool writeEntry(const Entry& entry, const void* payload, std::string& error);
 
     std::FILE*          m_file;
     std::vector<Entry>  m_entries;

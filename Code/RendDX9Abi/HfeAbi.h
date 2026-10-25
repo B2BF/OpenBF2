@@ -124,7 +124,10 @@ public:
     virtual IBase* getSingleton(const renddx9abi::HostString& name) = 0;        // +0x48  read initDll x19
 
     virtual void  reserved_getSingletonAs() = 0;                            // +0x4C
-    virtual void  reserved_registerSimpleSingleton() = 0;                   // +0x50
+    // Publishes `object` under `name` (Core/ClassManager.h: registerSimpleSingleton(const
+    // std::string&, void*), ELF +0x54). LightmapGeneration's creator calls it.
+    virtual void  registerSimpleSingleton(const renddx9abi::HostString& name,
+                                          void* object) = 0;                // +0x50  read 0x100A8759
     virtual void  reserved_unregisterSimpleSingleton() = 0;                 // +0x54
     virtual void  reserved_getSimpleSingleton() = 0;                        // +0x58
     virtual void  reserved_getPrintableSingletonList() = 0;                 // +0x5C

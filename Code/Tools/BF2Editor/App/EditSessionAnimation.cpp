@@ -555,9 +555,18 @@ bool EditSession::applyAnimationEdit(int id, const std::string& state, std::stri
     return true;
 }
 
+void EditSession::planAnimationFiles(SavePlan& plan)
+{
+    if (!m_animations.modified().empty())
+        m_animations.planSave(plan.part("animation systems"));
+}
+
 bool EditSession::saveAnimationFiles(std::string& result)
 {
-    return m_animations.save(result);
+    SavePlan plan;
+    planAnimationFiles(plan);
+    plan.dropUnchanged();
+    return writeSave(plan, "EditorAnimation.save", result) && !plan.anyRefused();
 }
 
 bool EditSession::animationTimeline(const std::string& bundle, AnimationTimeline& timeline, std::string& error)
@@ -1018,28 +1027,20 @@ bool EditSession::animationEdit(const std::string& action, const std::vector<std
                 return false;
             }
         }
-        // Written at once, as a clone is; the template lines are undoable template edits.
+        // Written at once (one backed-up save), as a clone is; the template lines are undoable template edits.
         std::string written;
+        std::vector<std::pair<std::string, std::string> > files;
         for (int p = 0; p < 2; ++p)
         {
             if (newPath[p].empty())
                 continue;
-            const std::string writePath = targetWrite + "/" + nameOf(newPath[p]);
-            std::string readBack;
-            if (!ObjectLibrary::writeTextFile(writePath, newText[p], error) || !ObjectLibrary::readTextFile(writePath, readBack, error)
-                || readBack != newText[p])
-            {
-                result = error.empty() ? writePath + " does not hold what was written" : error;
-                return false;
-            }
-            // A new file: source control is told after it exists (SourceControl.h).
-            const ScmResult add = sourceControl().add(writePath);
-            if (!add.ok)
-            {
-                result = "wrote " + writePath + ", but source control refused to add it: " + add.message;
-                return false;
-            }
+            files.push_back(std::make_pair(targetWrite + "/" + nameOf(newPath[p]), newText[p]));
             written += (written.empty() ? "" : " and ") + newPath[p];
+        }
+        if (!writeFilesNow("animation copy", files, error))
+        {
+            result = error;
+            return false;
         }
         std::string pointed;
         for (int p = 0; p < 2; ++p)

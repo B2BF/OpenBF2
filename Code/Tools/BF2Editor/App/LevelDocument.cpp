@@ -6,6 +6,7 @@
 #include "App/GameplayLayerModel.h"
 #include "Framework/EditorLog.h"
 #include "Framework/MapDescription.h"
+#include "Framework/SavePlan.h"
 #include "Framework/SourceControl.h"
 
 #include "Game/GameLogic/CombatArea.h"
@@ -131,42 +132,15 @@ LevelSettingsFile* LevelDocument::settingsFile(const std::string& name)
     return 0;
 }
 
-bool LevelDocument::saveSettingsFile(SettingsFile& settings, std::string& error, bool always, int& written)
+void LevelDocument::planSettingsFile(SavePlan& plan, size_t index, bool always)
 {
+    SettingsFile& settings = m_settings[index];
     const std::string text = settings.file.render();
     if (text == settings.file.text() && !always)
-        return true;
-    const ScmResult edit = sourceControl().openForEdit(settings.path);
-    if (!edit.ok)
-    {
-        error = "source control refused " + settings.path + ": " + edit.message;
-        return false;
-    }
-    const std::string temporary = settings.path + ".editor-tmp";
-    {
-        std::ofstream out(temporary.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
-        out.write(text.data(), static_cast<std::streamsize>(text.size()));
-        if (!out)
-        {
-            error = "cannot write " + temporary;
-            return false;
-        }
-    }
-    if (!MoveFileExA(temporary.c_str(), settings.path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
-    {
-        DeleteFileA(temporary.c_str());
-        error = "cannot replace " + settings.path;
-        return false;
-    }
-    std::string readBack;
-    if (!readWhole(settings.path, readBack) || readBack != text)
-    {
-        error = settings.path + " does not hold what was written";
-        return false;
-    }
-    settings.file.parse(text);
-    ++written;
-    return true;
+        return;
+    SavePart& part = plan.part(settings.name);
+    part.add(settings.path, text, always);
+    part.onWritten([this, index, text]() { m_settings[index].file.parse(text); });
 }
 
 bool LevelDocument::ambientFile(size_t& file) const
@@ -244,9 +218,12 @@ bool LevelDocument::describedLayers(std::vector<std::pair<std::string, int> >& l
     return true;
 }
 
-bool LevelDocument::duplicateLayer(const std::string& gameMode, int size, bool& listed, std::string& error)
+bool LevelDocument::duplicateLayer(const std::string& gameMode, int size,
+                                   std::vector<std::pair<std::string, std::string> >& files, bool& listed,
+                                   std::string& error)
 {
     listed = false;
+    files.clear();
     size_t file = 0;
     if (!m_open || !gameplayFile(file))
     {
@@ -283,20 +260,7 @@ bool LevelDocument::duplicateLayer(const std::string& gameMode, int size, bool& 
         error = target + " exists already";
         return false;
     }
-    CreateDirectoryA(modeFolder.c_str(), 0);
-    CreateDirectoryA(sizeFolder.c_str(), 0);
-    std::ofstream out(target.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
-    out.write(m_files[file].text.data(), static_cast<std::streamsize>(m_files[file].text.size()));
-    out.close();
-    std::string written;
-    if (!out || !readWhole(target, written) || written != m_files[file].text)
-    {
-        error = "cannot write " + target;
-        return false;
-    }
-    const ScmResult added = sourceControl().add(target);
-    if (!added.ok)
-        logLine(LogLevel::Warning, "document: source control did not add %s: %s", target.c_str(), added.message.c_str());
+    files.push_back(std::make_pair(target, m_files[file].text));
 
     // The map description lists the new layer, or the game does not offer it.
     const std::string description = descriptionPath();
@@ -308,20 +272,7 @@ bool LevelDocument::duplicateLayer(const std::string& gameMode, int size, bool& 
     }
     if (!addMapDescriptionLayer(xml, gameMode, size))
         return true;                                        // listed already, or no modes to add it to
-    const ScmResult edit = sourceControl().openForEdit(description);
-    const std::string temporary = description + ".editor-tmp";
-    {
-        std::ofstream descOut(temporary.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
-        descOut.write(xml.data(), static_cast<std::streamsize>(xml.size()));
-    }
-    std::string check;
-    if (!edit.ok || !MoveFileExA(temporary.c_str(), description.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)
-        || !readWhole(description, check) || check != xml)
-    {
-        DeleteFileA(temporary.c_str());
-        logLine(LogLevel::Warning, "document: %s could not be updated to list the new layer", description.c_str());
-        return true;
-    }
+    files.push_back(std::make_pair(description, xml));
     listed = true;
     return true;
 }
@@ -466,18 +417,38 @@ bool LevelDocument::open(const std::string& mod, const std::string& level, const
     // The level's own folder under the mod. A level the mod takes from bf2 would be written into bf2,
     // so it is not opened for saving.
     const std::string inMod = "mods/" + mod + "/Levels/" + level + "/StaticObjects.con";
-    std::string staticPath;
+    std::string staticPath, initPath, archivePath;
     if (!onDisk(inMod, staticPath) || !isFile(staticPath))
     {
-        if (_stricmp(mod.c_str(), "bf2") != 0 && isFile("mods/bf2/Levels/" + level + "/StaticObjects.con"))
-            error = "the level comes from mods/bf2, not from mods/" + mod + "; copy it into the mod to save it";
+        // A new level (EditorLevel.create, as the retail editor made one) has no objects file until its first
+        // save: a loose level folder with its Init.con and no archives starts with an empty StaticObjects.con.
+        const std::string folder = "mods/" + mod + "/Levels/" + level + "/";
+        if (onDisk(folder + "Init.con", initPath) && isFile(initPath) && !onDisk(folder + "server.zip", archivePath))
+        {
+            m_levelDirectory = initPath.substr(0, initPath.rfind('/') + 1);
+            File file;
+            file.path = m_levelDirectory + "StaticObjects.con";
+            file.name = "StaticObjects.con";
+            file.objects.parse(file.text);
+            m_files.push_back(file);
+            logLine(LogLevel::Info, "document: %sStaticObjects.con is not there yet (a new level): the first save of an "
+                    "object writes it", m_levelDirectory.c_str());
+        }
         else
-            error = inMod + " is not a file: the level may be packed in archives - extract it to save it";
-        return false;
+        {
+            if (_stricmp(mod.c_str(), "bf2") != 0 && isFile("mods/bf2/Levels/" + level + "/StaticObjects.con"))
+                error = "the level comes from mods/bf2, not from mods/" + mod + "; copy it into the mod to save it";
+            else
+                error = inMod + " is not a file: the level may be packed in archives - extract it to save it";
+            return false;
+        }
     }
-    m_levelDirectory = staticPath.substr(0, staticPath.rfind('/') + 1);
-    if (!openFile("StaticObjects.con", true, error))
-        return false;
+    else
+    {
+        m_levelDirectory = staticPath.substr(0, staticPath.rfind('/') + 1);
+        if (!openFile("StaticObjects.con", true, error))
+            return false;
+    }
     std::string warning;
     if (!openFile("AmbientObjects.con", false, warning))
         logLine(LogLevel::Warning, "document: %s", warning.c_str());
@@ -904,49 +875,29 @@ std::string LevelDocument::describe(const Report& report, bool everyFile) const
     return text.empty() ? std::string("no changes") : text;
 }
 
-bool LevelDocument::saveFile(size_t f, std::string& error, bool always, int& written)
+void LevelDocument::planFile(SavePlan& plan, size_t f, bool always)
 {
     File& file = m_files[f];
     std::vector<size_t> order;
     const std::string text = file.objects.render(&order);
     if (text == file.text && !always)
-        return true;                                        // nothing in this file changed
+        return;                                             // nothing in this file changed
+    SavePart& part = plan.part(file.name);
+    // The text must read back as the records it is written from, or they could not be bound to it again.
+    LevelObjectFile check;
+    check.parse(text);
+    if (check.recordCount() != order.size())
+    {
+        part.refuse(file.path + " NOT saved: it would read back with a different number of objects");
+        return;
+    }
+    part.add(file.path, text, always);
+    part.onWritten([this, f, text, order]() { bindWritten(f, text, order); });
+}
 
-    const ScmResult edit = sourceControl().openForEdit(file.path);
-    if (!edit.ok)
-    {
-        error = "source control refused " + file.path + ": " + edit.message;
-        return false;
-    }
-    // Whole, to a temporary file beside it, then over the original in one step (the folder made for a new file:
-    // a stock level's first Editor/GamePlayObjects.con).
-    CreateDirectoryA(file.path.substr(0, file.path.rfind('/')).c_str(), 0);
-    const std::string temporary = file.path + ".editor-tmp";
-    {
-        std::ofstream out(temporary.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
-        out.write(text.data(), static_cast<std::streamsize>(text.size()));
-        if (!out)
-        {
-            error = "cannot write " + temporary;
-            return false;
-        }
-    }
-    if (!MoveFileExA(temporary.c_str(), file.path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
-    {
-        char code[32];
-        std::snprintf(code, sizeof(code), " (error %lu)", GetLastError());
-        DeleteFileA(temporary.c_str());
-        error = "cannot replace " + file.path + code;
-        return false;
-    }
-    std::string readBack;
-    if (!readWhole(file.path, readBack) || readBack != text)
-    {
-        error = file.path + " does not hold what was written";
-        return false;
-    }
-
-    // The saved file is the document now: the records in the order they were written, bound again.
+void LevelDocument::bindWritten(size_t f, const std::string& text, const std::vector<size_t>& order)
+{
+    File& file = m_files[f];
     std::vector<unsigned> ids;
     for (size_t k = 0; k < order.size(); ++k)
         ids.push_back(file.ids[order[k]]);
@@ -961,8 +912,9 @@ bool LevelDocument::saveFile(size_t f, std::string& error, bool always, int& wri
     if (file.objects.recordCount() != ids.size())
     {
         m_open = false;
-        error = file.path + " was written, but reads back with a different number of objects; reopen the level";
-        return false;
+        logLine(LogLevel::Error, "document: %s was written, but reads back with a different number of objects; reopen the level",
+                file.path.c_str());
+        return;
     }
     file.ids = ids;
     indexIds(f);
@@ -973,23 +925,9 @@ bool LevelDocument::saveFile(size_t f, std::string& error, bool always, int& wri
             continue;
         m_snapshot[file.ids[r]] = snapshotOf(object);
     }
-    ++written;
-    return true;
 }
 
-bool LevelDocument::save(Report& report, std::string& error)
-{
-    int written = 0;
-    return saveFiles(report, error, false, written);
-}
-
-bool LevelDocument::saveEverything(Report& report, std::string& error, int& written)
-{
-    written = 0;
-    return saveFiles(report, error, true, written);
-}
-
-bool LevelDocument::saveFiles(Report& report, std::string& error, bool always, int& written)
+bool LevelDocument::planSave(SavePlan& plan, Report& report, bool always, std::string& error)
 {
     if (!m_open)
     {
@@ -997,25 +935,10 @@ bool LevelDocument::saveFiles(Report& report, std::string& error, bool always, i
         return false;
     }
     report = inspect();
-    // Each file on its own: one that cannot be written does not keep the others from being saved.
-    std::string failures;
-    for (size_t f = 0; f < m_files.size() && m_open; ++f)
-    {
-        std::string fileError;
-        if (!saveFile(f, fileError, always, written))
-            failures += (failures.empty() ? "" : "; ") + fileError;
-    }
-    for (size_t i = 0; i < m_settings.size() && m_open; ++i)
-    {
-        std::string fileError;
-        if (!saveSettingsFile(m_settings[i], fileError, always, written))
-            failures += (failures.empty() ? "" : "; ") + fileError;
-    }
-    if (!failures.empty())
-    {
-        error = failures;
-        return false;
-    }
+    for (size_t f = 0; f < m_files.size(); ++f)
+        planFile(plan, f, always);
+    for (size_t i = 0; i < m_settings.size(); ++i)
+        planSettingsFile(plan, i, always);
     return true;
 }
 

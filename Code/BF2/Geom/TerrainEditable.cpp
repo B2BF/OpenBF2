@@ -1,7 +1,6 @@
 // Terrain editing, rendering, saving and heightmap-modified event handling.
 // [CHOSEN, not recovered] BF2_IMAGE_EDITOR initializes the legacy grid and skips water drawing
 // without a culler; game images retain their existing behavior.
-// createLightSampler remains a diagnostic-and-abort [FRONTIER] (RW-277).
 #ifdef BF2_IMAGE_RENDDX9
 
 #include "TerrainEditable.h"
@@ -9,6 +8,7 @@
 #include "SurroundingPatchEditable.h"
 #include "QuadPatch.h"
 #include "Terrain.h"
+#include "TerrainLightSampling.h"             // createLightSampler's TerrainLightSampler
 #include "XpLightManager.h"                   // LightManager::getSinglePointColor (+0x1F0)
 #include "StaticMesh.h"                       // staticMeshPackVec4 (sub_1008DD80)
 #include "UndergrowthSystem.h"                // g_UndergrowthSystem, slot +0x54
@@ -490,18 +490,6 @@ vc71::string pathDirectoryOf(const vc71::string& path, char separator)
 }
 
 } // anonymous namespace
-
-
-// The diagnostic-and-abort of every unwritten TerrainEditable-family body (TerrainEditable.h).
-// [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: RW-277]
-
-void terrainEditableFrontier(const char* qualifiedName)
-{
-    std::fprintf(stderr, "[FRONTIER] %s reached\n", qualifiedName);
-    std::fflush(stderr);
-    ::renddx9abi::logf("[FRONTIER] %s reached", qualifiedName);
-    std::abort();
-}
 
 
 // TerrainDetailTextureEditable - the 0x78-byte record (table 0x1021B780).
@@ -1493,8 +1481,9 @@ bool TerrainEditable::makeScript(::dice::hfe::io::IStream*) { return false; }
 
 bool TerrainEditable::isLightSampleable() { return true; }
 
-// release the sampler through its IBase slot +0x08.
-bool TerrainEditable::destroyLightSampler(IBase* sampler)
+// release the sampler through its IBase slot +0x08 (the TerrainLightSampler's last block was written
+// by its storeResults).
+bool TerrainEditable::destroyLightSampler(ILightSampling* sampler)
 {
     if (!sampler)
         return false;
@@ -2634,11 +2623,22 @@ void TerrainEditable::writePatchLayersAndCompile(TerrainRawReader& raw, QuadPatc
 }
 
 
-// [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: RW-277]
-// Reports [FRONTIER] and aborts until TerrainLightSampling implements the sampler.
+// The ring patches leave engine mode first (E+0x118 with false); the sampler is made on the
+// engine heap over the primary object and its +0x1C takes the argument - the allocation is not
+// tested, as shipped. A failed init destroys and frees the sampler.
 
-IBase* TerrainEditable::createLightSampler(int)                                                     // L+0x14 0x10107C10 (phase F)
-{ terrainEditableFrontier("dice::hfe::geom::TerrainEditable::createLightSampler"); }
+ILightSampling* TerrainEditable::createLightSampler(float resolutionModifier)
+{
+    setSurroundingTerrainEngineMode(false);                                   // E+0x118
+    void* const storage = ::renddx9abi::engineAlloc(sizeof(TerrainLightSampler));
+    TerrainLightSampler* const sampler = storage ? new (storage) TerrainLightSampler(this) : 0;
+    sampler->m_resolutionModifier = resolutionModifier;                       // +0x1C
+    if (sampler->init())
+        return sampler;
+    sampler->~TerrainLightSampler();
+    ::renddx9abi::engineFree(sampler);
+    return 0;
+}
 
 
 // The reflection factory - RefFactory_geom_TerrainEditable an outer object is refused,

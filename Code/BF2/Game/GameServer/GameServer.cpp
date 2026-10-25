@@ -259,6 +259,23 @@ bool GameServer::init()
     if (ranked)
         m_statsManager->connect(); // result deliberately discarded before Python initialization
 
+    // [CHOSEN, not recovered] Run the active mod's optional openbf2.con before Python init, so an
+    // openbf2.* command in it (e.g. addModDll of a dice_py-hooking shim such as bf2hub) takes effect
+    // before the Python host comes up. Absent file is not an error. Loaded with relative paths off
+    // and full access, mirroring ServerSettings::load. B2BF/OpenBF2#39.
+    {
+        const std::string openBf2Con =
+            settings->stringGet(std::string("GSModDirectory"), std::string("mods/bf2")) + "/openbf2.con";
+        if (io::fileManager->fileExists(openBf2Con))
+        {
+            const bool useRelative = io::mainConsole->getUseRelativePaths();
+            io::mainConsole->setUseRelativePaths(false);
+            std::string out;
+            io::mainConsole->runFullAccess(openBf2Con, "", "", "", "", "", "", "", "", out);
+            io::mainConsole->setUseRelativePaths(useRelative);
+        }
+    }
+
     if (!python::pythonHost()->initialize(false))
         Debug(DEBUGTYPE_6, "Game/GameServer/GameServer.cpp", 669)
             << "failed to initialize python host";

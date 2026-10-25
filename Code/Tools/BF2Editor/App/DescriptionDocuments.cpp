@@ -4,6 +4,7 @@
 
 #include "Framework/DescFile.h"
 #include "Framework/ObjectLibrary.h"
+#include "Framework/SavePlan.h"
 #include "Framework/SourceControl.h"
 
 #include <windows.h>
@@ -124,45 +125,24 @@ std::string DescriptionDocuments::modifiedList() const
     return list;
 }
 
-bool DescriptionDocuments::write(File& f, std::string& error)
+void DescriptionDocuments::planSave(SavePart& part)
 {
-    const ScmResult edit = sourceControl().openForEdit(f.path);
-    if (!edit.ok)
-    {
-        error = "source control refused " + f.path + ": " + edit.message;
-        return false;
-    }
-    if (!ObjectLibrary::writeTextFile(f.path, f.text, error))
-        return false;
-    std::string readBack;
-    if (!readWhole(f.path, readBack) || readBack != f.text)
-    {
-        error = f.path + " does not hold what was written";
-        return false;
-    }
-    f.savedText = f.text;
-    return true;
-}
-
-bool DescriptionDocuments::save(std::string& result)
-{
-    result.clear();
     const std::string list = modifiedList();
     if (list.empty())
-        return true;
-    std::string error;
-    if (m_mod.exists && m_mod.text != m_mod.savedText && !write(m_mod, error))
+        return;
+    if (m_mod.exists && m_mod.text != m_mod.savedText)
     {
-        result = error;
-        return false;
+        const std::string text = m_mod.text;
+        part.add(m_mod.path, text);
+        part.onWritten([this, text]() { m_mod.savedText = text; });
     }
-    if (m_level.exists && m_level.text != m_level.savedText && !write(m_level, error))
+    if (m_level.exists && m_level.text != m_level.savedText)
     {
-        result = error;
-        return false;
+        const std::string text = m_level.text;
+        part.add(m_level.path, text);
+        part.onWritten([this, text]() { m_level.savedText = text; });
     }
-    result = "saved " + list;
-    return true;
+    part.onReport([list](const SavePart&) { return "saved " + list; });
 }
 
 } // namespace bf2editor

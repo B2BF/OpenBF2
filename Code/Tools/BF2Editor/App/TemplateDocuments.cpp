@@ -3,6 +3,7 @@
 #include "App/TemplateDocuments.h"
 
 #include "Framework/ObjectLibrary.h"
+#include "Framework/SavePlan.h"
 #include "Framework/SourceControl.h"
 
 #include "Game/Objects/IObjectTemplate.h"
@@ -163,7 +164,7 @@ std::vector<size_t> TemplateDocuments::modified() const
     return list;
 }
 
-bool TemplateDocuments::save(size_t index, std::string& error)
+bool TemplateDocuments::planSave(size_t index, SavePart& part, std::string& error)
 {
     TemplateDocument& document = m_documents[index];
     const std::string text = document.file.render();
@@ -174,21 +175,8 @@ bool TemplateDocuments::save(size_t index, std::string& error)
         error = document.path + " is read from a mounted archive: not saved";
         return false;
     }
-    const ScmResult edit = sourceControl().openForEdit(document.writePath);
-    if (!edit.ok)
-    {
-        error = "source control refused " + document.writePath + ": " + edit.message;
-        return false;
-    }
-    if (!ObjectLibrary::writeTextFile(document.writePath, text, error))
-        return false;
-    std::string written;
-    if (!ObjectLibrary::readTextFile(document.writePath, written, error) || written != text)
-    {
-        error = document.writePath + " does not hold what was written";
-        return false;
-    }
-    document.savedText = text;
+    part.add(document.writePath, text);
+    part.onWritten([this, index, text]() { m_documents[index].savedText = text; });
     return true;
 }
 

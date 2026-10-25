@@ -11,6 +11,7 @@
 #include "App/FrameProfile.h"
 #include "App/MinimapPanel.h"
 #include "App/ResourceBrowser.h"
+#include "App/SavePreviewPanel.h"
 #include "App/SessionPanels.h"
 
 #include <string>
@@ -18,6 +19,8 @@
 
 namespace bf2editor
 {
+
+class HudEditor;
 
 // What the shell shows about the running editor, filled in by EditorApp each frame.
 struct ShellStatus
@@ -60,6 +63,10 @@ struct ShellOptions
     // with the other options). The editor runs with +noSound 1, so both wait for it.
     int         masterVolume = 100;
     bool        soundOn = true;
+    // [CHOSEN, not recovered] (issue draft 13): File > Save shows what it writes first, and how many backups of its
+    // saves a level keeps (0: every one).
+    bool        previewSave = true;
+    int         backupsKept = 10;
     ShellOptions() : rememberCamera(true), viewDistance(1500.0f), style(0), logToFile(false), mouseSensitivity(1.0f),
                      pauseOnFocusLoss(false) {}
 };
@@ -113,6 +120,8 @@ public:
 
     // With a level open: the Edit menu and the Selection, Objects, History and Console panels (WP5).
     void setSession(EditSession* session) { m_session = session; }
+    // The HUD editor (+hud 1, App/HudEditor), once the HUD is up; 0 hides its panel and menu item.
+    void setHudEditor(HudEditor* hud) { m_hud = hud; }
     SessionPanels& panels() { return m_panels; }
     // The Profiler panel's data; the frame loop adds one frame's phases each frame.
     FrameProfile& profile() { return m_profile; }
@@ -153,6 +162,10 @@ private:
     void drawPackPopup();
     // File > Save level as: the new name, then EditorLevel.saveAs.
     void drawSaveAsPopup();
+    // File > New level: the retail Create new terrain dialog's values, then EditorLevel.create.
+    void drawNewLevelPopup();
+    // Compile > Generate lightmaps: the retail lightmap dialog's terrain options, then EditorLighting.lightmaps.
+    void drawLightmapsPopup();
     // The Light menu (the retail host's light presets and the sun from the camera), and its save popup.
     void drawLightMenu();
     void drawLightPresetPopup();
@@ -166,14 +179,17 @@ private:
     ResourceBrowser m_resources;
     MinimapPanel    m_minimap;
     SessionPanels   m_panels;
+    SavePreviewPanel m_savePreview;
     FrameProfile    m_profile;
     EditSession*    m_session;
+    HudEditor*      m_hud = 0;
     float           m_view[4];
     bool m_showLog;
     bool m_showEngine;
     bool m_showResources;
     bool m_showProfiler;
     bool m_showMinimap;
+    bool m_showHudEditor = false;
     bool m_renderPaused;
     bool m_updatePaused;
     bool m_levelViewDistance;
@@ -201,6 +217,24 @@ private:
     char m_saveAsName[80];
     bool m_saveAsOpen;
     std::string m_saveAsResult;
+    bool m_openNewLevel = false;
+    char m_newLevelName[80] = "";
+    int  m_newLevelSize = 2;         // index into 256, 512, 1024
+    int  m_newLevelScale = 1;        // index into 1, 2, 4
+    int  m_newLevelHeight = 25;
+    int  m_newLevelLowRes = 1;       // index into 128, 256, 512, 1024
+    bool m_newLevelOpen = true;
+    std::string m_newLevelResult;
+    bool m_openLightmaps = false;
+    int  m_lightmapQuality = 1;        // the retail dialog's resolutions: 0.25, 0.5, 1, 2
+    bool m_lightmapPrimary = true;
+    bool m_lightmapSecondary = true;
+    bool m_lightmapTerrain = true;      // the terrain part (Primary / Secondary)
+    bool m_lightmapObjects = false;     // the objects' part
+    bool m_lightmapSelected = false;    // the objects' part: the selected ones only
+    bool m_lightmapNearest = false;
+    bool m_lightmapResume = false;
+    std::string m_lightmapResult;
     std::string m_capturing;        // the action whose new key the Keyboard shortcuts window waits for
     int  m_captureCooldown;         // frames left in which shortcuts stay off after a capture
     bool m_quit;

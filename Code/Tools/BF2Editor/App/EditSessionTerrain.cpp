@@ -15,6 +15,8 @@
 
 #include <windows.h>
 
+#include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 
@@ -27,6 +29,13 @@ namespace
 // A script's tick: 1/30 s, so a scripted Modify stroke of 30 ticks raises by strength * 0.5 metres at
 // the centre - one second of the retail brush.
 const float kScriptTick = 1.0f / 30.0f;
+
+std::string lowerCase(std::string text)
+{
+    for (size_t i = 0; i < text.size(); ++i)
+        text[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(text[i])));
+    return text;
+}
 
 std::string brushText(const TerrainBrushSettings& b)
 {
@@ -634,98 +643,197 @@ std::string EditSession::groundListing() const
     return text;
 }
 
-bool EditSession::saveGroundProperties(std::string& result)
+void EditSession::planGroundProperties(SavePlan& plan)
 {
-    result.clear();
     if (!m_editableTerrain.active() || !m_editableTerrain.groundChanged())
-        return true;
+        return;
+    SavePart& part = plan.part("ground properties");
     if (!m_document || !m_document->isOpen())
     {
-        result = "no level document: the ground properties live in the level's Editor folder";
-        return false;
+        part.refuse("no level document: the ground properties live in the level's Editor folder");
+        return;
     }
-    const std::string folder = m_document->levelDirectory() + "Editor/";
-    const std::string path = folder + "GroundProperties.con";
-    CreateDirectoryA(folder.substr(0, folder.size() - 1).c_str(), 0);
-    const bool existed = GetFileAttributesA(path.c_str()) != INVALID_FILE_ATTRIBUTES;
-    if (existed)
-    {
-        const ScmResult edit = sourceControl().openForEdit(path);
-        if (!edit.ok)
-        {
-            result = "source control refused " + path + ": " + edit.message;
-            return false;
-        }
-    }
-    const std::string text = m_editableTerrain.ground().render();
-    std::string back, error;
-    if (!ObjectLibrary::writeTextFile(path, text, error) || !ObjectLibrary::readTextFile(path, back, error) || back != text)
-    {
-        result = error.empty() ? path + " does not hold what was written" : error;
-        return false;
-    }
-    if (!existed)
-        sourceControl().add(path);
-    m_editableTerrain.markGroundSaved();
-    result = "ground properties saved (Editor/GroundProperties.con)";
-    return true;
+    part.add(m_document->levelDirectory() + "Editor/GroundProperties.con", m_editableTerrain.ground().render());
+    part.onWritten([this]() { m_editableTerrain.markGroundSaved(); });
+    part.onReport([](const SavePart&) { return std::string("ground properties saved (Editor/GroundProperties.con)"); });
 }
 
-bool EditSession::saveTerrainMaps(std::string& result)
+void EditSession::planTerrainMaps(SavePlan& plan)
 {
-    result.clear();
     if (!m_editableTerrain.active() || !m_editableTerrain.painted())
-        return true;
+        return;
+    SavePart& part = plan.part("painted terrain");
     if (!m_document || !m_document->isOpen())
     {
-        result = "no level document: the painted maps live in the level's Editor folder";
-        return false;
+        part.refuse("no level document: the painted maps live in the level's Editor folder");
+        return;
     }
     std::vector<std::pair<std::string, std::string> > files;
     std::string error;
     if (!m_editableTerrain.saveMaps(files, error))
     {
-        result = "painted terrain NOT saved: " + error;
+        part.refuse("painted terrain NOT saved: " + error);
+        return;
+    }
+    addStagedFiles(part, files);
+    part.onWritten([this]() { m_editableTerrain.markMapsSaved(); });
+    part.onReport([](const SavePart& written) {
+        char text[256];
+        std::snprintf(text, sizeof(text), "painted terrain saved (%d file%s in the level's Editor folder)",
+                      static_cast<int>(written.changed()), written.changed() == 1 ? "" : "s");
+        return std::string(text);
+    });
+}
+
+void EditSession::planCompiledTerrain(SavePlan& plan, bool heights, bool surface)
+{
+    if (!heights && !surface)
+        return;
+    SavePart& part = plan.part("terrain");
+    if (!m_editableTerrain.active())
+    {
+        part.refuse("terrain NOT saved: saving it compiles the terrain the game draws, which needs the editable terrain "
+                    "(start the editor with +editableTerrain 1)");
+        return;
+    }
+    if (!m_document || !m_document->isOpen())
+    {
+        part.refuse("no level document: the terrain lives in the level's folder");
+        return;
+    }
+    std::vector<std::pair<std::string, std::string> > files;
+    std::string note;
+    if (!m_editableTerrain.compileTerrain(files, note))
+    {
+        part.refuse("terrain NOT saved: " + note);
+        return;
+    }
+    const size_t compiledFiles = files.size();
+    if (heights)
+    {
+        // "mods/<mod>/Levels/<name>/" -> the level path Heightdata.con names ("Levels/<name>").
+        const std::string& levelDir = m_document->levelDirectory();
+        const size_t levels = levelDir.find("Levels/");
+        std::string levelPath = levels == std::string::npos ? std::string() : levelDir.substr(levels);
+        if (!levelPath.empty() && levelPath[levelPath.size() - 1] == '/')
+            levelPath.erase(levelPath.size() - 1);
+        char stamp[32];
+        std::snprintf(stamp, sizeof(stamp), "/heightmaps_%lu", static_cast<unsigned long>(GetTickCount()));
+        const std::string root = m_editableTerrain.stagingRoot() + stamp;
+        std::vector<std::string> written;
+        std::string error;
+        if (levelPath.empty() || !m_terrain.saveHeightmaps(root, levelPath, written, error))
+        {
+            part.refuse("terrain NOT saved: " + (error.empty() ? "no Levels/ in " + levelDir : error));
+            return;
+        }
+        const std::string prefix = lowerCase(levelPath + "/");
+        for (size_t i = 0; i < written.size(); ++i)
+        {
+            std::string path = written[i];
+            std::replace(path.begin(), path.end(), '\\', '/');
+            if (lowerCase(path).compare(0, prefix.size(), prefix) == 0)
+                files.push_back(std::make_pair(root + "/" + path, path.substr(prefix.size())));
+        }
+    }
+    addStagedFiles(part, files);
+    part.onWritten([this, heights]() {
+        m_editableTerrain.markCompiled();
+        if (heights)
+            m_terrain.markSaved();
+    });
+    part.onReport([compiledFiles, heights](const SavePart& written) {
+        char text[256];
+        std::snprintf(text, sizeof(text), "terrain compiled and saved (%d of %u files changed: terraindata.raw, %u game "
+                      "texture%s%s)", static_cast<int>(written.changed()), static_cast<unsigned>(written.planned()),
+                      static_cast<unsigned>(compiledFiles - 1), compiledFiles == 2 ? "" : "s", heights ? ", the heightmaps" : "");
+        return std::string(text);
+    });
+}
+
+void EditSession::addStagedFiles(SavePart& part, const std::vector<std::pair<std::string, std::string> >& files) const
+{
+    for (size_t i = 0; i < files.size(); ++i)
+        part.addStaged(m_document->levelDirectory() + files[i].second, files[i].first);
+}
+
+bool EditSession::copyStagedFiles(const std::vector<std::pair<std::string, std::string> >& files, int& written,
+                                  std::string& error)
+{
+    written = 0;
+    if (!m_document || !m_document->isOpen())
+    {
+        error = "no level document: nothing can be written into the level";
         return false;
     }
-    // Only the files that differ from the level's.
-    int written = 0;
-    for (size_t i = 0; i < files.size(); ++i)
+    SavePlan plan;
+    SavePart& part = plan.part("level files");
+    addStagedFiles(part, files);
+    plan.dropUnchanged();
+    const size_t changed = part.changed();
+    std::string result;
+    if (!writeSave(plan, "lighting", result) || plan.anyRefused())
     {
-        std::string data, old;
-        if (!ObjectLibrary::readTextFile(files[i].first, data, error))
-        {
-            result = "painted terrain NOT saved: " + error;
-            return false;
-        }
-        const std::string target = m_document->levelDirectory() + files[i].second;
-        const bool existed = GetFileAttributesA(target.c_str()) != INVALID_FILE_ATTRIBUTES;
-        if (existed && ObjectLibrary::readTextFile(target, old, error) && old == data)
-            continue;
-        if (existed)
-        {
-            const ScmResult edit = sourceControl().openForEdit(target);
-            if (!edit.ok)
-            {
-                result = "source control refused " + target + ": " + edit.message;
-                return false;
-            }
-        }
-        if (!ObjectLibrary::writeTextFile(target, data, error))
-        {
-            result = "painted terrain NOT saved: " + error;
-            return false;
-        }
-        if (!existed)
-            sourceControl().add(target);
-        ++written;
+        error = result;
+        return false;
     }
-    m_editableTerrain.markMapsSaved();
-    char text[256];
-    std::snprintf(text, sizeof(text), "painted terrain saved (%d file%s in the level's Editor folder; the game draws the "
-                  "paint after a terrain compile, which this version cannot do yet)", written, written == 1 ? "" : "s");
-    result = text;
+    written = static_cast<int>(changed);
     return true;
+}
+
+void EditSession::planOvergrowth(SavePlan& plan, bool required)
+{
+    if (!m_editableTerrain.active())
+    {
+        plan.part("overgrowth").refuse("overgrowth NOT saved: it is generated with the editable terrain (+editableTerrain 1)");
+        return;
+    }
+    std::string why;
+    if (!m_editableTerrain.overgrowthAvailable(why))
+    {
+        if (required)
+            plan.part("overgrowth").refuse("overgrowth NOT saved: " + why);
+        return;
+    }
+    SavePart& part = plan.part("overgrowth");
+    if (!m_document || !m_document->isOpen())
+    {
+        part.refuse("no level document: the overgrowth lives in the level's folder");
+        return;
+    }
+    std::vector<std::pair<std::string, std::string> > files;
+    std::string note;
+    if (!m_editableTerrain.saveOvergrowth(files, note))
+    {
+        part.refuse("overgrowth NOT saved: " + note);
+        return;
+    }
+    addStagedFiles(part, files);
+    part.onWritten([this]() { m_editableTerrain.markOvergrowthSaved(); });
+    part.onReport([note](const SavePart& written) {
+        char text[256];
+        std::snprintf(text, sizeof(text), "overgrowth saved (%d file%s in the level's overgrowth folder; %s)",
+                      static_cast<int>(written.changed()), written.changed() == 1 ? "" : "s", note.c_str());
+        return std::string(text);
+    });
+}
+
+bool EditSession::saveTerrainPart(std::string& result)
+{
+    SavePlan plan;
+    planGroundProperties(plan);
+    planTerrainMaps(plan);
+    planCompiledTerrain(plan, m_terrain.changedSinceSave(), true);
+    plan.dropUnchanged();
+    return writeSave(plan, "terrain", result) && !plan.anyRefused();
+}
+
+bool EditSession::saveOvergrowthPart(bool required, std::string& result)
+{
+    SavePlan plan;
+    planOvergrowth(plan, required);
+    plan.dropUnchanged();
+    return writeSave(plan, "overgrowth", result) && !plan.anyRefused();
 }
 
 bool EditSession::terrainApplyChange(int id, const std::string& state, std::string& error)

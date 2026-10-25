@@ -224,6 +224,23 @@ set(bf2_aidll_only_sources
 )
 list(REMOVE_ITEM bf2_engine_sources ${bf2_aidll_only_sources})
 
+# These translation units belong to BF2VoipServer_w32ded.dll, not bf2_w32ded.exe. The whole
+# Code/BF2/VoipServer subtree is a THIRD server-side image (the bf2_voipserver target, below); the
+# glob above discovers its units but they never link into the engine. Code/Build/build.cmd mirrors
+# this with a directory rule. Add each VoipServer file here as it lands.
+set(bf2_voipserver_only_sources
+    "${BF2_ROOT}/VoipServer/VoipServer.cpp"
+    "${BF2_ROOT}/VoipServer/VoipServerInstance.cpp"
+    "${BF2_ROOT}/VoipServer/VoipRouter.cpp"
+    "${BF2_ROOT}/VoipServer/VoipClients.cpp"
+    "${BF2_ROOT}/VoipServer/VoipOutgoingChannels.cpp"
+    "${BF2_ROOT}/VoipServer/VoipDebug.cpp"
+)
+list(REMOVE_ITEM bf2_engine_sources ${bf2_voipserver_only_sources})
+
+# BF2VoipServerShell.cpp carries the standalone exe's main; it belongs only to bf2_voipserver_standalone.
+list(REMOVE_ITEM bf2_engine_sources "${BF2_ROOT}/VoipServer/BF2VoipServerShell.cpp")
+
 # CLIENT-ONLY translation units. A TU that exists only in BF2.exe belongs to the client image and must not
 # enter bf2_w32ded - list it here, the same discipline as the AIDLL list above (Code/Build/build.cmd
 # carries the mirror list). Client-only REGIONS of shared TUs are not a manifest matter: they sit
@@ -976,6 +993,11 @@ if(BF2_BUILD_LINUX)
     if(TARGET dice_py)
         target_link_libraries("${BF2_DEDICATED_TARGET}" PRIVATE dice_py)
     endif()
+    # The Linux image statically links the voice-server module (the win32 image is the side DLL).
+    # Its MD5Digest dependency arrives through bf2_gamespy_objects, which md5c.c is already part of.
+    target_sources("${BF2_DEDICATED_TARGET}" PRIVATE
+        ${bf2_voipserver_only_sources}
+    )
 elseif(EXISTS "${BF2_DICE_PY_LIB}")
     target_link_libraries("${BF2_DEDICATED_TARGET}" PRIVATE "${BF2_DICE_PY_LIB}")
 else()
@@ -1220,6 +1242,132 @@ target_link_options(bf2_aidll PRIVATE
 )
 
 # =================================================================================================
+# bf2_voipserver - THE VOICE-SERVER SIDE-DLL IMAGE.
+#
+# BF2VoipServer_w32ded.dll is a THIRD server-side image built from this tree (the AIDLL precedent
+# above). bf2_w32ded.exe imports eleven CBF2VoipServer members by decorated name;
+# Code/VoipServerAbi/BF2VoipServer_w32ded.def pins them to the shipped ordinals. The routing library
+# underneath (VOIP::CVoipRouterInstance and its containers) is what the instance drives.
+#
+# EXCLUDE_FROM_ALL, and /FORCE for the same reason as bf2_aidll: unwritten members link at RVA 0 and
+# fault BY NAME on the path that reaches them. The facade bodies are Phase 0 [FRONTIER] stops until
+# the facade phase replaces them (Code/BF2/VoipServer/VoipServer.cpp). OUTPUT stays in the build
+# tree's bin/, NEVER the game folder - the original reference binary lives there.
+# =================================================================================================
+# The module sources plus the engine support the win32 image statically links (the same support
+# exists in libdice; compiling it here keeps the side image self-contained). Shared by the dedicated
+# and client voice DLL targets.
+set(bf2_voipserver_sources
+    "${BF2_ROOT}/Core/Timer.cpp"
+    "${BF2_ROOT}/Core/Mutex.cpp"        # the facade's instance-registry lock
+    "${BF2_ROOT}/Core/Debug.cpp"        # UDPSocket's diagnostics dependency
+    "${BF2_ROOT}/Core/StringUtil.cpp"   # Debug's StringHashFunc dependency
+    "${BF2_ROOT}/Core/SystemInfo.cpp"   # InitChallengeString's systemInfo()
+    "${BF2_ROOT}/IO/Network/NetworkLayer/Socket/UDPSocket.cpp"
+    "${BF2_ROOT}/IO/Network/SocketManager.cpp"
+    "${BF2_ROOT}/External/GameSpy/md5c.c"   # InitChallengeString's MD5Digest
+    "${BF2_ROOT}/VoipServer/VoipServer.cpp"
+    "${BF2_ROOT}/VoipServer/VoipServerInstance.cpp"
+    "${BF2_ROOT}/VoipServer/VoipDebug.cpp"
+    "${BF2_ROOT}/VoipServer/VoipRouter.cpp"
+    "${BF2_ROOT}/VoipServer/VoipClients.cpp"
+    "${BF2_ROOT}/VoipServer/VoipOutgoingChannels.cpp"
+)
+
+add_library(bf2_voipserver SHARED EXCLUDE_FROM_ALL
+    ${bf2_voipserver_sources}
+)
+set_target_properties(bf2_voipserver PROPERTIES
+    LINKER_LANGUAGE CXX
+    OUTPUT_NAME BF2VoipServer_w32ded
+    PREFIX ""
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/bin"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin"
+    RUNTIME_OUTPUT_DIRECTORY_RECONSTRUCTION "${CMAKE_BINARY_DIR}/bin"
+    PDB_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    FOLDER "BF2"
+)
+bf2_configure_cpp_target(bf2_voipserver)
+bf2_set_image(bf2_voipserver 1)
+target_link_libraries(bf2_voipserver PRIVATE kernel32 user32 advapi32 ws2_32)
+target_link_options(bf2_voipserver PRIVATE
+    /FORCE
+    /DEBUG
+    # The shipped image's preferred base; cosmetic under ASLR, kept for a readable RVA diff.
+    /BASE:0x10000000
+    "/DEF:${CMAKE_CURRENT_SOURCE_DIR}/Code/VoipServerAbi/BF2VoipServer_w32ded.def"
+    "/MAP:${CMAKE_BINARY_DIR}/bin/BF2VoipServer_w32ded.map"
+    /IGNORE:4006,4088,4098
+)
+
+# The dedicated server imports the CBF2VoipServer members from BF2VoipServer_w32ded.dll (the six
+# decorated names in Code/VoipServerAbi/BF2VoipServer_w32ded.def). Linking the DLL target gives the
+# exe its import library and forces the DLL to build first; both land in bin/.
+if(TARGET bf2_voipserver)
+    target_link_libraries("${BF2_DEDICATED_TARGET}" PRIVATE bf2_voipserver)
+endif()
+
+# =================================================================================================
+# bf2_voipserver_client - THE CLIENT LISTEN-SERVER VOICE DLL.
+#
+# BF2.exe can host a listen server and loads BF2VoipServer.dll. Its export set is identical to the
+# dedicated image - the same eleven CBF2VoipServer members in the same ordinals - so it is the same
+# module source compiled as the client image (/DDEDICATED=0). It stages beside BF2.exe in bin_client/.
+# =================================================================================================
+add_library(bf2_voipserver_client SHARED EXCLUDE_FROM_ALL
+    ${bf2_voipserver_sources}
+)
+set_target_properties(bf2_voipserver_client PROPERTIES
+    LINKER_LANGUAGE CXX
+    OUTPUT_NAME BF2VoipServer
+    PREFIX ""
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin_client"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/bin_client"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin_client"
+    RUNTIME_OUTPUT_DIRECTORY_RECONSTRUCTION "${CMAKE_BINARY_DIR}/bin_client"
+    PDB_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin_client"
+    FOLDER "BF2"
+)
+bf2_configure_cpp_target(bf2_voipserver_client)
+bf2_set_image(bf2_voipserver_client 0)
+target_link_libraries(bf2_voipserver_client PRIVATE kernel32 user32 advapi32 ws2_32)
+target_link_options(bf2_voipserver_client PRIVATE
+    /FORCE
+    /DEBUG
+    /BASE:0x10000000
+    # Same export names; the image name comes from OUTPUT_NAME (no LIBRARY line in the .def).
+    "/DEF:${CMAKE_CURRENT_SOURCE_DIR}/Code/VoipServerAbi/BF2VoipServer_w32ded.def"
+    "/MAP:${CMAKE_BINARY_DIR}/bin_client/BF2VoipServer.map"
+    /IGNORE:4006,4088,4098
+)
+
+# =================================================================================================
+# bf2_voipserver_standalone - THE VOICE SERVER AS ITS OWN PROCESS.
+#
+# The shipped BF2VoipServer.exe shell (Patch_1_50 BF2VoipServerShell.cpp): read Voip.con, create one
+# instance per port, tick the facade. It drives the recovered DLL through its import library, so a
+# retail game server can point at it with sv.voipServerRemote 1 and only UDP packets cross the
+# boundary - avoiding the MSVCP71 std::string ABI that rules out driving this DLL from the retail
+# shell. Run it beside BF2VoipServer_w32ded.dll in bin/.
+# =================================================================================================
+add_executable(bf2_voipserver_standalone EXCLUDE_FROM_ALL
+    Code/BF2/VoipServer/BF2VoipServerShell.cpp
+)
+set_target_properties(bf2_voipserver_standalone PROPERTIES
+    OUTPUT_NAME BF2VoipServerStandalone
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/bin"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin"
+    RUNTIME_OUTPUT_DIRECTORY_RECONSTRUCTION "${CMAKE_BINARY_DIR}/bin"
+    PDB_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    FOLDER "BF2"
+)
+bf2_configure_cpp_target(bf2_voipserver_standalone)
+bf2_set_image(bf2_voipserver_standalone 1)
+target_link_libraries(bf2_voipserver_standalone PRIVATE bf2_voipserver kernel32 user32 advapi32 ws2_32)
+
+# =================================================================================================
 # bf2_client - THE CLIENT LINK-REACH IMAGE (2026-09-03).
 #
 # This is a real /DDEDICATED=0 image. Modern link.exe does
@@ -1266,11 +1414,11 @@ bf2_set_image(bf2_client 0)
 target_compile_definitions(bf2_client PRIVATE BF2_PLUGIN_ABI_NATIVE=1 _ITERATOR_DEBUG_LEVEL=0)
 set_target_properties(bf2_client PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${BF2_GAME_DIR}"
-    VS_DEBUGGER_COMMAND_ARGUMENTS "+modPath mods/bf2 +fullscreen 0 +multi 1 +restart 1"
+    VS_DEBUGGER_COMMAND_ARGUMENTS "+modPath mods/bf2 +fullscreen 0 +multi 1"
 )
 
-# Owner-requested intro skip; the movie implementation and its frontier remain intact.
-set(BF2_CLIENT_RUN_ARGS "+modPath;mods/bf2;+fullscreen;0;+multi;1;+restart;1"
+# Normal startup includes the movies; +restart remains an optional explicit skip.
+set(BF2_CLIENT_RUN_ARGS "+modPath;mods/bf2;+fullscreen;0;+multi;1"
     CACHE STRING "Arguments for the diagnostic bf2_client_run target (a CMake ;-list).")
 add_custom_target(bf2_client_run
     COMMAND "$<TARGET_FILE:bf2_client>" ${BF2_CLIENT_RUN_ARGS}
@@ -1445,10 +1593,15 @@ add_custom_target(bf2_client_plugins
 # point where it hurts, which is a live debugging session.
 add_dependencies(bf2_client_plugins bf2_textureatlas_native bf2_renddx9_native bf2_swiffplayer_native bf2_bf2audio_native)
 add_dependencies(bf2_client bf2_client_plugins)
-# System imports present in the retail BF2.exe. VoIP remains intentionally omitted.
+# System imports present in the retail BF2.exe.
 target_link_libraries(bf2_client PRIVATE
     advapi32 crypt32 dbghelp dinput8 dsound dxguid gdi32 ole32 psapi shell32 user32 winmm ws2_32
 )
+# BF2.exe hosts a listen server, so it imports the CBF2VoipServer members from BF2VoipServer.dll
+# (the client voice image built by bf2_voipserver_client above).
+if(TARGET bf2_voipserver_client)
+    target_link_libraries(bf2_client PRIVATE bf2_voipserver_client)
+endif()
 target_link_options(bf2_client PRIVATE
     /FORCE
     /INCREMENTAL:NO

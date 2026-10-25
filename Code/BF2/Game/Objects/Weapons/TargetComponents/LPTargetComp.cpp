@@ -17,6 +17,7 @@
 #include "../../IObjectTemplate.h"
 #include "../../IPlayer.h"
 #include "../../Projectiles/GenericProjectile.h"
+#include "../../Projectiles/TVMissileTrace.h"
 #include "../../../GameEvents/TargetDirectionEvent.h"
 #include "../../../IGame.h"
 #include "../../../IGameLogic.h"
@@ -346,6 +347,10 @@ void LPTargetComp::setTargetObject(IObject* target, bool locked, IObject* vehicl
 
 void LPTargetComp::setTargetDirection(Vec3 start, Vec3 end)
 {
+    if (tv_missile_trace::armed() && getTargetSystem() == TSTVGuided && gameLogic->isServer())
+        tv_missile_trace::log(m_currentProjectile.get(), "steer_dispatch",
+            "start=%.9g,%.9g,%.9g end=%.9g,%.9g,%.9g",
+            start.x, start.y, start.z, end.x, end.y, end.z);
     if (getTargetSystem() == TSTVGuided && !gameLogic->isServer())
     {
         IObjectTemplate* const projectileTemplate = firearm()->getProjectileTemplate();

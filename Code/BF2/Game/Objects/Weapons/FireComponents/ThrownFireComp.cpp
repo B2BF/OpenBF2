@@ -13,6 +13,7 @@
 #include "../../IObject.h"
 #include "../../IPlayer.h"
 #include "../../ObjectLayoutAccess.h"
+#include "../../Projectiles/GrenadeTrace.h"
 #include "../../../../Core/Ids.h"
 #include "../../../../Core/System.h"
 #include "../../../../IO/Stream/IStream.h"
@@ -344,6 +345,23 @@ bool ThrownFireComp::launchProjectile()
         };
         // Retail does not null-guard a fired projectile's physics node.
         projectileNode->setPositionalSpeed(launchVelocity);
+
+        if (grenade_trace::armed() && grenade_trace::begin(projectile))
+        {
+            grenade_trace::log(projectile, "launch",
+                "origin=%.9g/%.9g/%.9g origin_forward=%.9g/%.9g/%.9g "
+                "position=%.9g/%.9g/%.9g forward=%.9g/%.9g/%.9g "
+                "weapon_speed=%.9g strength=%.9g inherited=%.9g/%.9g/%.9g "
+                "velocity=%.9g/%.9g/%.9g",
+                m_thrownProjectileOrigin.m[12], m_thrownProjectileOrigin.m[13],
+                m_thrownProjectileOrigin.m[14], m_thrownProjectileOrigin.m[8],
+                m_thrownProjectileOrigin.m[9], m_thrownProjectileOrigin.m[10],
+                projectileTransform.m[12], projectileTransform.m[13], projectileTransform.m[14],
+                projectileTransform.m[8], projectileTransform.m[9], projectileTransform.m[10],
+                weaponVelocity, m_fireStrength,
+                inheritedVelocity.x, inheritedVelocity.y, inheritedVelocity.z,
+                launchVelocity.x, launchVelocity.y, launchVelocity.z);
+        }
 
         const Vec3& startRotation = m_thrownTemplate->getProjectileStartRotation();
         if (startRotation.x * startRotation.x

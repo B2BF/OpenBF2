@@ -48,8 +48,16 @@ bool registerDecalManagerConsoleObjects();      // Geom/DecalSystem/DecalManager
 bool unregisterDecalManagerConsoleObjects();
 bool registerOverGrowthConsoleObjects();        // Geom/Overgrowth/OverGrowthConsole.cpp - `Overgrowth`, `OvergrowthType`
 bool unregisterOverGrowthConsoleObjects();
-bool registerObjectGeometryConsoleObjects();   // Geom/ObjectGeometryConsole.cpp - `Object.geometry.loadMesh`
+bool registerObjectGeometryConsoleObjects();   // Geom/ObjectGeometryConsole.cpp - `Object.geometry.*`
 bool unregisterObjectGeometryConsoleObjects();
+bool registerStaticMeshRendererConsoleObjects();   // Geom/StaticMeshRendererConsole.cpp - the atlas rows
+bool unregisterStaticMeshRendererConsoleObjects();
+#endif
+#if BF2_PLUGIN_ABI_NATIVE && defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+// Geom/LightmapGeneration/LightmapGenerationConsole.cpp - the 2006 editor's `lightmapGeneration`
+// rows, editor flavour only ([CHOSEN, not recovered]: 1.50 publishes none).
+bool registerLightmapGenerationConsoleObjects();
+bool unregisterLightmapGenerationConsoleObjects();
 #endif
 
 // Both already in Code/BF2/Core/Ids.h from the ELF, and both confirmed here:
@@ -108,7 +116,11 @@ IBase* __fastcall createBundledMeshTemplate(unsigned int iid, IBase* outer);
 // Factory for mesh-particle templates, published with MeshParticlesRenderer.
 IBase* __fastcall createMeshParticleMeshTemplate(unsigned int iid, IBase* outer);
 
-// Factory for scene traversal, object occlusion and geometry submission.
+// Factory for scene traversal and geometry submission. Occlusion fallback reports and
+// continues with all frustum-visible candidates.
+// [RETIRE-WHEN:
+//     RW-objectdrawer-occluders] Replace the fallback after silhouette construction and
+// occluder culling are implemented and validated.
 IBase* __fastcall createObjectDrawer(unsigned int iid, IBase* outer);
 
 // Factory for the manager coordinating nametag updates and renderer buffering.
@@ -568,6 +580,10 @@ bool ModuleGeom::init()
     registerDecalManagerConsoleObjects();
     registerOverGrowthConsoleObjects();
     registerObjectGeometryConsoleObjects();
+    registerStaticMeshRendererConsoleObjects();
+#endif
+#if BF2_PLUGIN_ABI_NATIVE && defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+    registerLightmapGenerationConsoleObjects();
 #endif
 
     // EventManager::registerEventHandler registers this module's instruction-proven one-slot
@@ -618,7 +634,11 @@ bool ModuleGeom::close()
             static_cast<EventCategory>(10),
             reinterpret_cast<IEventListener*>(static_cast<ECCoreEventHandler*>(this)));
     }
+#if BF2_PLUGIN_ABI_NATIVE && defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+    unregisterLightmapGenerationConsoleObjects();
+#endif
 #if BF2_PLUGIN_ABI_NATIVE
+    unregisterStaticMeshRendererConsoleObjects();
     unregisterObjectGeometryConsoleObjects();
     unregisterOverGrowthConsoleObjects();
     unregisterDecalManagerConsoleObjects();

@@ -10,6 +10,9 @@
 #include <cstring>
 #include <new>
 namespace dice { namespace meme {
+#if defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+void (*editorHudNodeUpdated)(Bf2TransformNode*, float, float, float, float) = nullptr;
+#endif
 namespace {
 bool sumNotLess(float first, float second, float limit) // 7C1ED1..7C1EEE, unordered passes
 {
@@ -135,6 +138,10 @@ bool Bf2TransformNode::update(System* system, const NodeState* state,
     // nonzero offset therefore accumulates on every update, exactly as in PE.
     m_position.x += static_cast<float>(m_offsetX);
     m_position.y += static_cast<float>(m_offsetY);
+#if defined(BF2_IMAGE_EDITOR) && BF2_IMAGE_EDITOR
+    if (editorHudNodeUpdated)
+        editorHudNodeUpdated(this, bounds->x + m_position.x, bounds->y + m_position.y, m_size.x, m_size.y);
+#endif
 
     hfe::Vec2 position = m_position;
     hfe::Vec2 size = m_size;

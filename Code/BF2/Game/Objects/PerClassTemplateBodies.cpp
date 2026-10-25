@@ -610,27 +610,27 @@ GrapplingHookRopeTemplate::GrapplingHookRopeTemplate()
     _float174 = 14.0f;                           // +0x174
     _dword178 = 28;                              // +0x178 (0x1C)
 
-    _ropeParams[ 0] = 40.0f;                     // +0x17C
-    _ropeParams[ 1] = 0.00125f;                  // +0x180
-    _ropeParams[ 2] = 0.5f;                      // +0x184
-    _ropeParams[ 3] = 0.8f;                      // +0x188
-    _ropeParams[ 4] = 0.0012f;                   // +0x18C
-    _ropeParams[ 5] = 0.39f;                     // +0x190
-    _ropeParams[ 6] = 0.98f;                     // +0x194
-    _ropeParams[ 7] = 0.35f;                     // +0x198
-    _ropeParams[ 8] = 0.9f;                      // +0x19C
-    _ropeParams[ 9] = 0.96f;                     // +0x1A0
-    _ropeParams[10] = 0.05f;                     // +0x1A4
-    _ropeParams[11] = 0.5f;                      // +0x1A8
-    _ropeParams[12] = 0.25f;                     // +0x1AC
-    _ropeParams[13] = 0.5f;                      // +0x1B0
-    _ropeParams[14] = 3.7f;                      // +0x1B4
-    _ropeParams[15] = 2.5f;                      // +0x1B8
-    _ropeParams[16] = 1.1f;                      // +0x1BC
-    _ropeParams[17] = 0.98f;                     // +0x1C0
-    _ropeParams[18] = 0.5f;                      // +0x1C4
-    _ropeParams[19] = 0.75f;                     // +0x1C8
-    _ropeParams[20] = 0.14f;                     // +0x1CC
+    m_ropeUnusedLifetime = 40.0f;                // +0x17C (no console property)
+    m_throwStrength = 0.00125f;                  // +0x180
+    m_upThrowBoost = 0.5f;                       // +0x184
+    m_degradeThrowStrength = 0.8f;               // +0x188
+    m_throwStrength2 = 0.0012f;                  // +0x18C
+    m_upThrowBoost2 = 0.39f;                     // +0x190
+    m_degradeThrowStrength2 = 0.98f;             // +0x194
+    m_dropStrength = 0.35f;                      // +0x198
+    m_upDropBoost = 0.9f;                        // +0x19C
+    m_degradeDropStrength = 0.96f;               // +0x1A0
+    m_linkAttachMovement = 0.05f;                // +0x1A4
+    m_linkAttachTime = 0.5f;                     // +0x1A8
+    m_dismountCheckOffset = 0.25f;               // +0x1AC
+    m_minYNormal = 0.5f;                         // +0x1B0
+    m_attachClimberRadius = 3.7f;                // +0x1B4
+    m_climbingSpeed = 2.5f;                      // +0x1B8
+    m_elasticity = 1.1f;                         // +0x1BC
+    m_airFriction = 0.98f;                       // +0x1C0
+    m_climbableAngle = 0.5f;                     // +0x1C4
+    m_dismountAngle = 0.75f;                     // +0x1C8
+    m_climbersAttachForce = 0.14f;               // +0x1CC
 
     updateFlags(0x40, 0);
 }

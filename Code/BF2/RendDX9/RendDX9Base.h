@@ -458,6 +458,11 @@ void  textureManagerEvictFromCache(void* tex);
 // sub_10017F90 - save `texture` as "<name>.dds" through the FileManager's write path (D3DXIFF_DDS);
 // true only on D3D_OK. A TextureManager member whose body never reads the manager (TextureManager.cpp).
 bool  textureManagerSaveTexture(EngineTexture* texture, const vc71::string& name);
+// Reads level `level` (face `face`) of render target `source` back into the same
+// level of `destination` through GetRenderTargetData; a null `source` reads the current swap
+// chain's back buffer. False when `destination` is null or the copy fails (logged).
+bool  textureManagerCopyRenderTarget(EngineTexture* source, EngineTexture* destination,
+                                     unsigned int level, unsigned int face);
 
 // The menu atlas cache (dword_10249EF0, a 0x2C-byte object owned by TextureManager.cpp).
 bool  atlasCacheExists();                                  // dword_10249EF0 != 0

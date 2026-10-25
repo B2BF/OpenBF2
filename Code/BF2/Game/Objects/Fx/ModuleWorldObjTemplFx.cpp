@@ -7,6 +7,8 @@
 #include "DecalTemplate.h"                                // the Decal block's accessor receivers
 
 namespace dice { namespace hfe { namespace world {
+// [CHOSEN, not recovered] Console metadata alias for the numeric material/paint flags.
+typedef unsigned int uint;
 namespace {
 const char* const kObjTemplFxConsoleTag = "world.objTemplFx";
 EmitterTemplate* activeEmitter()
@@ -344,8 +346,7 @@ ParticleCurveConsole<&ParticleTemplate::m_gravityModifierOverTime>
 ParticleCurveConsole<&ParticleTemplate::m_dragOverTime> particleDragOverTimeConsole("dragOverTime");
 ParticleCurveConsole<&ParticleTemplate::m_alphaOverTime> particleAlphaOverTimeConsole("alphaOverTime");
 } // namespace
-// The retail metadata spells both numeric argTypes "uint"; this registers "unsigned int", the
-// same caveat as the SimpleObject twin (only autoCompletion and getTypeDescription read them).
+// The retail metadata spells both numeric argTypes "uint"; the local alias above registers it.
 BF2_CONSOLE_METHOD_3_STATIC_ACTIVE(mapMaterial, particleMapMaterial, activeParticle() != 0,
-    unsigned int, std::string, unsigned int, kObjTemplFxConsoleTag)
+    uint, std::string, uint, kObjTemplFxConsoleTag)
 } } } // namespace dice::hfe::world

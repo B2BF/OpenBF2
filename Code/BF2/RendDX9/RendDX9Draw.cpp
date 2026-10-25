@@ -50,6 +50,13 @@ void statsBeginFrame()
 
 } // anonymous namespace
 
+// Published for LightmapGeneration.cpp, whose trace rolls the statistics once per batch on the
+// block IRenderer::getRenderStats answers.
+void rendererStatsBeginFrame()
+{
+    statsBeginFrame();
+}
+
 // sub_1000D360 - swap the counters-enabled byte, returning the old value. renderFrame brackets the
 // AI overlay event with it so those draws stay out of the frame's counters.
 unsigned char statsSwapEnabled(unsigned char value)

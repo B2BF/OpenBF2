@@ -53,6 +53,12 @@ public:
     virtual world::IObject* spawnObject(const world::IObjectTemplate* objectTemplate, Vec3 position,
                                         Vec3 rotation, int team);
 
+    // The `gameLogic.createObject` body (ELF 0x4a8020, dedicated PE 0x455B60). Its only caller is
+    // the ConsoleClass195 executor. Non-virtual and server-only: ClientGameLogic::createObject is
+    // an empty stub. Looks the template up by name, spawns it at the local player's vehicle (or
+    // free camera), activates a projectile result, then applies the debug +0x274 spawn scale.
+    void createObject(std::string name);
+
     // Processes player input actions each tick. PlayerInput is passed by value; the
     // trailing flag is forwarded only to weapon selection.
     virtual void  checkPlayerTriggers(world::IPlayer* player, world::IObject* vehicle,

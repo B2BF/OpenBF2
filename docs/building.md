@@ -238,6 +238,10 @@ available through `bf2_syntaxcheck` and `bf2_gap_report`. The latter invokes the
 diagnostic build: set `BF2_BUILD_OUT` to a unique directory because that script cleans
 its output directory. Do not reuse another contributor's output or logs.
 
+`bf2_runtime_pair` uses the same explicit source list as `Code/Tests/runtime_pair.cmd`
+and links without `/FORCE`. When extending this fixture, keep both source lists in sync
+so the CMake check used by CI links the same implementations as the batch check.
+
 After configuring with `-B`, build that exact directory as shown above. Build presets
 use their preset's default directory (`out/build/<preset>`), not your custom `-B` path.
 The authoritative target definitions are in the [root CMake file](../CMakeLists.txt)

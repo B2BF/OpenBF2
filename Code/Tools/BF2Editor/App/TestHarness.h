@@ -36,6 +36,7 @@ public:
     bool mouseMove(float x, float y, std::string& error);
     bool mouseBy(float dx, float dy, std::string& error);
     bool mouseToObject(unsigned id, std::string& result);
+    bool mouseToPart(int index, std::string& result);
     bool mouseToAreaPoint(const std::string& area, int index, std::string& result);
     bool mouseToAreaEdge(const std::string& area, int index, std::string& result);
     bool mouseToSound(const std::string& name, std::string& result);

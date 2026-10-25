@@ -8,6 +8,7 @@
 #ifndef BF2_GEOMMISC_PERLINNOISE_H
 #define BF2_GEOMMISC_PERLINNOISE_H
 
+#include "IPerlinNoise.h"                  // IPerlinNoise, shared with the editor
 #include "../../RendDX9Abi/HfeAbi.h"
 #include "../IO/Console/IConsoleSaveable.h"
 #include "../Math/Vec3.h"                  // Vec2 - the output range (two floats, 0x1009F470)
@@ -18,30 +19,6 @@ namespace dice {
 namespace hfe {
 namespace geom {
 
-
-// Noise generator interface. Method names are [INFERRED] from behavior and editor settings.
-
-class IPerlinNoise : public IBase
-{
-public:
-    virtual void  setSeed(int seed) = 0;                                        // +0x10
-    virtual int   getSeed() = 0;                                                // +0x14
-    virtual void  setDimension(int dimension) = 0;                              // +0x18
-    virtual int   getDimension() = 0;                                           // +0x1C
-    virtual void  setSmoothing(int mode) = 0;                                   // +0x20
-    virtual int   getSmoothing() = 0;                                           // +0x24
-    virtual void  setInterpolation(int mode) = 0;                               // +0x28
-    virtual int   getInterpolation() = 0;                                       // +0x2C
-    virtual void  setOctaves(int octaves) = 0;                                  // +0x30
-    virtual int   getOctaves() = 0;                                             // +0x34
-    virtual void  setPersistence(float persistence) = 0;                        // +0x38
-    virtual float getPersistence() = 0;                                         // +0x3C
-    virtual void  setOutputRange(const Vec2& range) = 0;                 // +0x40
-    virtual const Vec2& getOutputRange() = 0;                            // +0x44
-    // `retn 10h` - four floats; only the first is read (the 1D path). RoadEditable calls it as
-    // sample(x, 0, 0, 0).
-    virtual float sample(float x, float y, float z, float w) = 0;               // +0x48
-};
 
 class PerlinNoise : public IPerlinNoise, public ::dice::hfe::io::IConsoleSaveable
 {

@@ -79,7 +79,7 @@ std::string getOS()
 #ifdef _WIN32
     return "win32";
 #else
-    return "linux";
+    return "linux-64";
 #endif
 }
 

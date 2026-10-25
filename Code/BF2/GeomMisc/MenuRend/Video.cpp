@@ -52,9 +52,9 @@ extern "C" long __stdcall D3DXCreateTexture(IDirect3DDevice9* dev, unsigned int 
 // [INFERRED] Local class IDs are chosen; creation resolves the identified class names.
 // Interface IDs match queryInterface and callers.
 extern const unsigned int CID_Video        = 81048u;
-extern const unsigned int IID_IVideo       = 0xB8032904u;
+extern const unsigned int IID_IVideo       = 0xB801DD04u;
 extern const unsigned int CID_VideoTarget  = 81049u;
-extern const unsigned int IID_IVideoTarget = 0xB8032903u;
+extern const unsigned int IID_IVideoTarget = 0xB801DD03u;
 
 typedef ::renddx9abi::HostString HostString;
 
@@ -286,10 +286,12 @@ public:
     unsigned int width() const  { return m_width; }      // vslot +0x10 sub_1015A8D0
     unsigned int height() const { return m_height; }     // vslot +0x14 sub_1015A8E0
     bool         open(const char* path);                 // vslot +0x18 sub_1015AA90
-    VideoTarget* frame() const { return m_target; }      // vslot +0x1C sub_1015A930
+    VideoTarget* frame() const { return m_target; }      // borrowed by internal texture readers
+    VideoTarget* acquireFrame() const;                  // vslot +0x1C: caller owns a reference
     void         doFrame();                              // vslot +0x20 sub_1015A950
     const HostString& path() const { return m_path; }    // vslot +0x24 sub_1015A9E0
     bool         initSound();                            // vslot +0x28 sub_1015A8F0
+    void         shutdownSound() {}                      // shipped sound-shutdown slot is empty
     bool         isDone() const;                         // vslot +0x30 sub_1015A920
     void         dtor(char flags);                       // vslot +0x34 sub_1015ACD0
     void         onDeviceLost();                         // listener +0x00, 0x1015A890
@@ -462,6 +464,14 @@ bool Video::initSound()
     return true;
 }
 
+// Returns an owned reference to the current frame target, or null before a successful open.
+VideoTarget* Video::acquireFrame() const
+{
+    if (m_target)
+        m_target->addRef();
+    return m_target;
+}
+
 // sub_1015A920 - `FrameNum >= Frames`, read straight off the handle.
 bool Video::isDone() const
 {
@@ -516,7 +526,7 @@ void Video::dtor(char flags)
         ::renddx9abi::engineFree(this);
 }
 
-// Video_queryInterfaceById 0x1015AC80: iid 1 and iid 0xB8032904, nothing else.
+// Accepts the base and movie interfaces without changing the object pointer.
 void* Video::queryInterface(unsigned int iid) const
 {
     if (iid == RD9_IID_IBASE || iid == IID_IVideo)
@@ -534,13 +544,13 @@ unsigned int  __fastcall vid_getWidth(void* s, void*)  { return static_cast<Vide
 unsigned int  __fastcall vid_getHeight(void* s, void*) { return static_cast<Video*>(s)->height(); }
 unsigned char __fastcall vid_open(void* s, void*, const HostString* path)
 { return static_cast<Video*>(s)->open(path ? path->c_str() : 0) ? 1 : 0; }
-void* __fastcall vid_getFrame(void* s, void*) { return static_cast<Video*>(s)->frame(); }
+void* __fastcall vid_getFrame(void* s, void*) { return static_cast<Video*>(s)->acquireFrame(); }
 void  __fastcall vid_doFrame(void* s, void*)  { static_cast<Video*>(s)->doFrame(); }
 const HostString* __fastcall vid_getPath(void* s, void*)
 { return &static_cast<Video*>(s)->path(); }
 unsigned char __fastcall vid_initSound(void* s, void*)
 { return static_cast<Video*>(s)->initSound() ? 1 : 0; }
-void  __fastcall vid_nullsub(void*, void*) {}
+void  __fastcall vid_shutdownSound(void* s, void*) { static_cast<Video*>(s)->shutdownSound(); }
 int   __fastcall vid_isDone(void* s, void*) { return static_cast<Video*>(s)->isDone() ? 1 : 0; }
 void* __fastcall vid_dtor(void* s, void*, char flags)
 { static_cast<Video*>(s)->dtor(flags); return s; }
@@ -559,7 +569,7 @@ const void* kVideoVtable[14] =
     reinterpret_cast<void*>(&vid_doFrame),         // +0x20 sub_1015A950
     reinterpret_cast<void*>(&vid_getPath),         // +0x24 sub_1015A9E0
     reinterpret_cast<void*>(&vid_initSound),       // +0x28 sub_1015A8F0
-    reinterpret_cast<void*>(&vid_nullsub),         // +0x2C nullsub_77
+    reinterpret_cast<void*>(&vid_shutdownSound),   // +0x2C nullsub_77
     reinterpret_cast<void*>(&vid_isDone),          // +0x30 sub_1015A920
     reinterpret_cast<void*>(&vid_dtor),            // +0x34 sub_1015ACD0
 };
@@ -606,6 +616,10 @@ IBase* __fastcall createVideoTarget(unsigned int iid, IBase* outer)
 
 // Seams: the Video* comes back from createInstanceByName as an IBase* that is the Video (QI returns
 // this), so a plain cast is valid.
+void  videoInitSound(void* video)              { static_cast<Video*>(video)->initSound(); }
+void  videoShutdownSound(void* video)          { static_cast<Video*>(video)->shutdownSound(); }
+void* videoAcquireFrame(void* video)           { return static_cast<Video*>(video)->acquireFrame(); }
+void* videoTargetD3DTexture(void* target)       { return static_cast<VideoTarget*>(target)->d3dTexture(); }
 bool  videoOpen(void* video, const char* path) { return video && static_cast<Video*>(video)->open(path); }
 void  videoDoFrame(void* video)                { if (video) static_cast<Video*>(video)->doFrame(); }
 int   videoIsDone(void* video)                 { return video && static_cast<Video*>(video)->isDone() ? 1 : 0; }

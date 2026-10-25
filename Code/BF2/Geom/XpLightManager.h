@@ -23,6 +23,7 @@
 // headers and never calls those slots - needs no more than this declaration. The ground-hemi getter
 // (+0x48) returns the renderer's own VC7.1 string by reference on the same terms.
 namespace vc71 { struct vector_layout; class string; }
+struct IDirect3DSurface9;   // lightManagerSetDepthStencil
 
 namespace dice {
 namespace hfe {
@@ -110,7 +111,11 @@ public:
     // Getter constness follows this interface's read-only accessor convention [INFERRED].
     virtual void setSkinnedMeshShaderLodDistance(float distance);           // +0x07C
     virtual float getSkinnedMeshShaderLodDistance() const;                  // +0x080
-    BF2_LIGHT_RESERVED(084); BF2_LIGHT_RESERVED(088);
+    // The luminance range (constructor 0.1 .. 0.5, field +0x1FC) the mesh light sampler's colour
+    // packing maps onto the lightmap's alpha. `LightManager.lightMapAmbientAlphaCutoffRange` GET and
+    // SET; in this pair the getter precedes the setter. Getter constness [INFERRED].
+    virtual const Vec2& getLightMapAmbientAlphaCutoffRange() const;         // +0x084
+    virtual void setLightMapAmbientAlphaCutoffRange(const Vec2& range);     // +0x088
     virtual void addLight(world::LightSource* light);                      // +0x08C
     virtual void removeLight(world::LightSource* light);                   // +0x090
     virtual void enableLight(world::LightSource* light);                   // +0x094
@@ -277,6 +282,9 @@ IBase* __fastcall createLightManager(unsigned int iid, IBase* outer);
 // (Geom/TerrainDraw.cpp): sub_10005920 with a texture argument, and sub_10028070.
 void lightManagerSetRenderTargetTexture(unsigned int index, dx9rend::EngineTexture* texture);
 void lightManagerRestoreRendererTarget0();
+// Binds `surface` as the renderer's depth stencil; null binds the renderer's own (+0x770).
+// Published for LightmapGeneration.cpp.
+void lightManagerSetDepthStencil(IDirect3DSurface9* surface);
 
 #endif // BF2_IMAGE_RENDDX9
 
