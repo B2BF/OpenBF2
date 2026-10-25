@@ -1982,6 +1982,7 @@ void Bf2MenuMapNode::paintMapIcon(hfe::Vec2 position, float rotation,
                                   const Rect* adjusted, const Rect* bounds,
                                   const Color* color, RenderContext* context)
 {
+    // [CHOSEN, not recovered]
     if (texture == 0) return;
     position.x -= static_cast<float>(std::floor(position.x + 0.5f));
     position.y -= static_cast<float>(std::floor(position.y + 0.5f));
