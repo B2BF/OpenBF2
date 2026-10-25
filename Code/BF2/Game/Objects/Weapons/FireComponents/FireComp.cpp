@@ -448,6 +448,7 @@ void FireComp::setFirebuttonLastHeldAtTick(io::PlayerInputMap input, unsigned in
 
 bool FireComp::requestFire(bool released, bool)
 {
+    // [CHOSEN, not recovered]
     IPlayer* const player = firearm()->getPlayer();
     if (!player)
         return false;
