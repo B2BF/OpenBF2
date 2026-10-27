@@ -3,6 +3,7 @@
 // [CHOSEN] named storage wraps the fixed owner layout; TV and tinnitus rendering are recovered.
 
 #ifdef BF2_IMAGE_RENDDX9
+#include "../Math/Vec3.h"
 
 #include "../../RendDX9Abi/HfeAbi.h"
 #include "../../RendDX9Abi/ModuleCommon.h"
@@ -454,11 +455,11 @@ float postProductionGetTVGranularity() { return F(g_PostProductionFrameWorkOwner
 void postProductionSetTVGranularity(float value) { F(g_PostProductionFrameWorkOwner, 184) = value; }
 float postProductionGetTVAmbient() { return F(g_PostProductionFrameWorkOwner, 188); }
 void postProductionSetTVAmbient(float value) { F(g_PostProductionFrameWorkOwner, 188) = value; }
-void postProductionGetTVColor(float rgb[3])
+void postProductionGetTVColor(Math::Vec3 rgb)
 {
     memcpy(rgb, reinterpret_cast<char*>(g_PostProductionFrameWorkOwner) + 196, 12);
 }
-void postProductionSetTVColor(const float rgb[3])
+void postProductionSetTVColor(const Math::Vec3 rgb)
 {
     memcpy(reinterpret_cast<char*>(g_PostProductionFrameWorkOwner) + 196, rgb, 12);
 }
