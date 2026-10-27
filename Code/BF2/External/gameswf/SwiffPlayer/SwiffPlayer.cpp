@@ -153,6 +153,12 @@ static bool asLogEnabled()
     return s_on != 0;
 }
 
+static bool inputLogEnabled()
+{
+    const char* value = ::getenv("BF2_SWIFFPLAYER_INPUTLOG");
+    return value && value[0] == '1' && value[1] == '\0';
+}
+
 static bool mouseLogEnabled() { return asLogEnabled() || inputLogEnabled(); }
 
 static void swiffInputLogCb(bool, const char* message)
