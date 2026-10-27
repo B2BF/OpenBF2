@@ -579,6 +579,12 @@ class IRenderView;
 IRenderView* rendererGetRenderView();
 IRenderView* rendererGetRenderViewDup();
 IVideoOptions* rendererGetVideoOptions();
+// [CHOSEN, not recovered] owner-TU access to concrete Renderer +0x6CC, the mapped shader-path
+// index emitted as RAPATH. It is not the independent GSRenderPath listener selection. Callers
+// preserve their original null handling.
+int rendererGetShaderPath(const void* renderer);
+// PE 0x100286C0 stores the path and immediately refreshes Renderer shader defines.
+void rendererSetShaderPathAndUpdate(void* renderer, int path);
 
 // PE HemiMapManager::makeHemiMap collaborators.
 IRenderView* rendererGetHemiPrimaryView();

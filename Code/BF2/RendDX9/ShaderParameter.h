@@ -57,6 +57,7 @@ public:
     unsigned int getTypeCode() const;
 
 private:
+    friend class Effect;
     int             m_refCount; // +0x04
     ParameterOwner* m_owner;    // +0x08
 };

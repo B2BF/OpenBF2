@@ -3158,6 +3158,15 @@ namespace gameswf
 		log_error("[mouse] %s -> %s\n", what, swf_trace_path(ch));
 	}
 
+	// [TEMP] [CHOSEN, not recovered] Input-only diagnostics never inspect script values.
+	// [RETIRE-WHEN: ea-popup-input] Remove after live login/Close input is verified.
+	static bool swf_trace_input_enabled()
+	{
+		const char* value = ::getenv("BF2_SWIFFPLAYER_INPUTLOG");
+		return value && value[0] == '1' && value[1] == '\0';
+	}
+	static bool s_trace_mouse_pass = false;
+
 	struct sprite_instance : public character
 	{
 		smart_ptr<movie_definition_sub>	m_def;
@@ -3509,8 +3518,8 @@ namespace gameswf
 		//
 		// The shipped pass, per frame, per sprite:
 		//
-		//   1. its own state machine runs only while nobody holds the pointer or this sprite does (the
-		//      root's active entity). `consumed` - a sibling above already claimed the point - leaves
+		//   1. its own state machine runs while this sprite holds the pointer, or while nobody does
+		//      and this is not the root movie. `consumed` - a sibling above claimed the point - leaves
 		//      both state bits clear, so the sprite sees "up, outside"; otherwise bit 1 is a button
 		//      down and bit 0 is point_test_world on the pointer in world twips;
 		//   2. the first frame only latches, and nothing fires unless m_mouse_enabled;
@@ -3532,7 +3541,19 @@ namespace gameswf
 			smart_ptr<as_object_interface>	this_ptr(this);
 
 			movie*	active = m_root->get_active_entity();
-			if (active == this || active == NULL)
+			const bool trace_root = this == m_root->get_root_movie() && swf_trace_input_enabled();
+			if (trace_root)
+			{
+				static int previous_buttons = -1;
+				int x, y, buttons;
+				m_root->get_mouse_state(&x, &y, &buttons);
+				s_trace_mouse_pass = buttons != previous_buttons;
+				previous_buttons = buttons;
+				if (s_trace_mouse_pass)
+					log_error("[mouse] dispatch at=(%d,%d) buttons=%d capture=%s\n", x, y, buttons,
+						active ? swf_trace_path(active->cast_to_character()) : "none");
+			}
+			if (active == this || (active == NULL && this != m_root->get_root_movie()))
 			{
 				m_prev_mouse_flags = m_mouse_flags;
 				m_mouse_flags = 0;
@@ -3554,6 +3575,10 @@ namespace gameswf
 					m_prev_mouse_flags = m_mouse_flags;
 					m_first_mouse_frame = false;
 				}
+				if (s_trace_mouse_pass && (m_mouse_flags & 1) && m_mouse_enabled)
+					log_error("[mouse] hit %s id=%d depth=%d frame=%d flags=%u previous=%u dead=%d\n",
+						swf_trace_path(this), get_id(), get_depth(), get_current_frame(),
+						m_mouse_flags, m_prev_mouse_flags, m_dead);
 				if (m_mouse_enabled && m_mouse_flags != m_prev_mouse_flags)
 				{
 					switch (m_mouse_flags | (m_prev_mouse_flags << 2))
@@ -3625,10 +3650,15 @@ namespace gameswf
 					character*	ch = dobj.m_ref ? dobj.m_character.get_ptr() : NULL;
 					if (ch != NULL && ch->get_visible())
 					{
+						const bool was_consumed = consumed;
 						consumed = ch->mouse_update(consumed) || consumed;
+						if (s_trace_mouse_pass && consumed && !was_consumed)
+							log_error("[mouse] consumed by %s id=%d depth=%d\n",
+								swf_trace_path(ch), ch->get_id(), ch->get_depth());
 					}
 				}
 			}
+			if (trace_root) s_trace_mouse_pass = false;
 			return consumed || ((m_mouse_flags & 1) != 0 && m_mouse_enabled);
 		}
 

@@ -86,10 +86,13 @@ int rendererField(unsigned int byteOffset)
 int rendererLodSkipBase()   { return rendererField(2020); }
 int rendererLodSkipBias()   { return rendererField(2028); }
 
-// readMaterials / initTechniques: g_Renderer + 1740 (0x6CC) - the shader quality index.
-unsigned int rendererShaderQuality()
+// readMaterials / initTechniques use the renderer's mapped shader-path index.
+unsigned int rendererShaderPath()
 {
-    return static_cast<unsigned int>(rendererField(1740));
+    return ::dice::hfe::dx9rend::g_Renderer
+        ? static_cast<unsigned int>(::dice::hfe::dx9rend::rendererGetShaderPath(
+              ::dice::hfe::dx9rend::g_Renderer))
+        : 0u;
 }
 
 // sub_1000D950 on dword_1023B988 - the ResourceManager byte at +0x04. TextureManager.cpp has the
@@ -723,10 +726,10 @@ bool staticMeshBuildTechniqueMasks(const vc71::string& mfxPath,
 
     // 0x10192316 - `quality = g_Renderer[0x6CC]; if (maskVector.size() < quality) quality = size`.
 
-    // THE clamp IS `<`, NOT `<=`, SO IT clamps TO size() AND NOT size()-1. A renderer quality
-    // index at or past the number of mask entries indexes one element past the end, twice, just
+    // THE clamp IS `<`, NOT `<=`, SO IT clamps TO size() AND NOT size()-1. A shader-path index at
+    // or past the number of mask entries indexes one element past the end, twice, just
     // below. Preserved: it is the shipped comparison (`cmp eax, esi; jnb short`).
-    unsigned int quality = rendererShaderQuality();
+    unsigned int quality = rendererShaderPath();
     const unsigned int maskCount = vectorSizeBytes(maskVector) / sizeof(unsigned int);
     if (maskCount < quality)
         quality = maskCount;
@@ -884,6 +887,17 @@ void staticMeshInitTechniques()
 }
 
 } // anonymous namespace
+
+// Keep the shared technique gate and initializer in their existing owner.
+void staticMeshRearmTechniques()
+{
+    g_staticMeshTechniquesPending = 1;
+}
+
+void staticMeshPrimeTechniques()
+{
+    staticMeshInitTechniques();
+}
 
 
 // Exposed for Geom/StaticMesh.cpp's post-load (sub_100FC190), which resizes the instance's own two
