@@ -363,6 +363,8 @@ bool Effect::bind(void* d3dxEffect)
         ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxReleaseFn>(m_d3dxEffect, 0x08)(m_d3dxEffect);
         m_d3dxEffect = 0;
     }
+    if (!d3dxEffect)
+        return false;
     resetTechniques();
 
     ::renddx9abi::d3dxSlot< ::renddx9abi::D3dxAddRefFn>(d3dxEffect, 0x04)(d3dxEffect);
