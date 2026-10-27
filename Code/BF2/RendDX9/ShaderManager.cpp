@@ -937,9 +937,9 @@ void shaderManagerReloadEffects(void* shaderManager)
     for (vc71::map_node* node = vc71::mapFirst(sm->effectCache); node;
          node = vc71::mapNext(sm->effectCache, node))
     {
-        vc71::string filename(*reinterpret_cast<const vc71::string*>(node->value));
-        filename += ".fx";
-        reloadCachedEffect(sm, filename);
+vc71::string filename(vc71::mapNodeKey(node));
+filename += ".fx";
+reloadCachedEffect(sm, filename);
     }
     for (vc71::map_node* node = vc71::mapFirst(sm->map54); node;
          node = vc71::mapNext(sm->map54, node))
