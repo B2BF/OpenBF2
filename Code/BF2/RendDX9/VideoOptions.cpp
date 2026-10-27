@@ -1230,8 +1230,8 @@ void __fastcall videoOptions_handleECCoreEvent(void* self, void*, int category, 
         static_cast<unsigned char*>(self) - offsetof(VideoOptions, vptrEventHandler));
     if (id == 2)
     {
-        vo->gameLoaded = 1;
         videoOptionsApplySettings(vo);
+        vo->gameLoaded = 1;
         if (vo->dirty115)
         {
             geom::geometryTemplateManagerClear();
