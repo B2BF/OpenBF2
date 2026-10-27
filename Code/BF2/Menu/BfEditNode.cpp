@@ -283,8 +283,7 @@ bool BfEditNode::onEvent1(System* system, const Rect* rect, const NodeState* sta
         m_cursor = 0;
         updateVisibleStart(system, rect);
         break;
-    case 10:
-        m_cursor = length - 1;
+        m_cursor = length;
         updateVisibleStart(system, rect);
         break;
     case 14:
