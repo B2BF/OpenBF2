@@ -220,9 +220,10 @@ void DebugTextWriter::draw()
 {
     IBase* const font = static_cast<IBase*>(m_font);
     if (!m_fontLoaded)
-        m_fontLoaded = fontPortedLoad(font, vc71::string("Fonts/BF1942.font"));
-    if (!m_fontLoaded)
+    {
+        clear();
         return;
+    }
     const unsigned previousColour = fontPortedGetColour(font);
     for (DebugTextLine* line : m_lines)
     {
