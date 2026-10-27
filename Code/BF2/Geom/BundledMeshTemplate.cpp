@@ -666,7 +666,11 @@ dx9rend::Ra::RaShader* bundledMeshShaderForBits(unsigned int bits)
     renddx9abi::logf("BundledMeshTemplate.cpp:1123: Couldn't find shader default"); return 0;
 }
 unsigned int bundledMeshQualityMask(unsigned int index) { return data<unsigned int>(g_qualityMasks)[index]; }
-unsigned int bundledMeshQualityMask() { return bundledMeshQualityMask(rendererInt(1740)); }
+unsigned int bundledMeshQualityMask()
+{
+    return bundledMeshQualityMask(static_cast<unsigned int>(
+        dx9rend::rendererGetShaderPath(dx9rend::g_Renderer)));
+}
 
 } } }
 #endif

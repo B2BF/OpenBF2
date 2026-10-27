@@ -421,9 +421,9 @@ void EffectManager::rebuildShaderDefines()
     m_shaderDefines += (psMajor() < 3 || vsMajor() < 3) ? "#define SM30 0\n" : "#define SM30 1\n";
     m_shaderDefines += (psMajor() < 2 || vsMajor() < 2) ? "#define SM20 0\n" : "#define SM20 1\n";
 
-    // base[435] - byte 1740, the same field updateShaderDefines prints as rapath.
-    const unsigned int raPath =
-        base ? *reinterpret_cast<const unsigned int*>(reinterpret_cast<const unsigned char*>(base) + 1740) : 0u;
+    // The same mapped path that ShaderManager::updateShaderDefines emits as RAPATH.
+    const unsigned int raPath = base
+        ? static_cast<unsigned int>(rendererGetShaderPath(base)) : 0u;
     ::sprintf_s(line, "#define RAPATH %i \n", raPath);
     m_shaderDefines += line;
 

@@ -193,15 +193,6 @@ void rendererUpdateShaderDefines(void* renderer)
     reinterpret_cast<Fn>(vtbl[0xC4 / 4])(renderer);
 }
 
-// sub_100286C0: writes +0x6CC then does exactly what sub_100278A0 does.
-void rendererSetShaderPathAndUpdate(void* renderer, int value)
-{
-    if (!renderer)
-        return;
-    writeRendererInt(renderer, 0x6CC, value);
-    rendererUpdateShaderDefines(renderer);
-}
-
 // A virtual call with one integer argument, on an object reached through a raw vtable offset.
 inline void callSlotInt(void* obj, unsigned slot, int arg)
 {

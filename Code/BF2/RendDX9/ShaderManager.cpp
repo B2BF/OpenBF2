@@ -252,11 +252,8 @@ void updateShaderDefines(void* shaderManager, void* base)
         // The nine special cases, in the body's own strcmp order.
         if (::strcmp(name, "RAPATH") == 0)
         {
-            // The active quality path is stored by VideoOptions::apply.
-            const int path = g_Renderer
-                ? *reinterpret_cast<const int*>(
-                    reinterpret_cast<const unsigned char*>(g_Renderer) + 0x6CC)
-                : 0;
+            // VideoOptions maps its shader-quality setting onto the renderer's RAPATH index.
+            const int path = g_Renderer ? rendererGetShaderPath(g_Renderer) : 0;
             ::_snprintf_s(buf, sizeof(buf), _TRUNCATE, "%i", path);
             pushDefine(sm, buf);
         }

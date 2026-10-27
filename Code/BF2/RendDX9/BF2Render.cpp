@@ -403,6 +403,13 @@ public:
     // which the native plugin cannot express as a host carrier - see rendererApplyCurrentDisplayMode.
     bool applyCurrentDisplayMode();
 
+    // The RAPATH index selected from VideoOptions shader quality. This is distinct from the
+    // GSRenderPath listener state. The setter is PE 0x100286C0 and refreshes shader defines.
+    // [INFERRED] member and accessor names. The field layout and setter are recovered; the getter
+    // is [CHOSEN, not recovered] owner-TU plumbing that keeps raw layout arithmetic out of callers.
+    int getShaderPath() const;
+    void setShaderPathAndUpdate(int path);
+
 private:
     // Step 6 factors the two identical debug-text-writer calls; see its definition.
     void setDebugTextWriterFont(const char* singletonName, const char* fontPath);
@@ -449,7 +456,9 @@ private:
     void*        m_rainManager;          // +0x5D8  (374)
     char         m_tail1bBeforeFrameRate[0x600 - 0x5DC];   // +0x5DC .. +0x5FF [FRONTIER]
     double       m_frameRate;                              // +0x600 measured FPS
-    char         m_tail1bAfterFrameRate[0x774 - 0x608];    // +0x608 .. +0x773 [FRONTIER]
+    char         m_tail1bBeforeShaderPath[0x6CC - 0x608];  // +0x608 .. +0x6CB [FRONTIER]
+    int          m_shaderPath;                             // +0x6CC RAPATH index
+    char         m_tail1bAfterShaderPath[0x774 - 0x6D0];   // +0x6D0 .. +0x773 [FRONTIER]
     EngineTexture* m_hemiScratchTexture;                 // +0x774 accumulation/Hemi scratch target
     char         m_tail1bAfterHemiScratch[0x884 - 0x778]; // +0x778 .. +0x883 [FRONTIER]
     void*        m_lazy884;              // +0x884  (545) ctor: 0; initialize lazily allocates it
@@ -845,8 +854,11 @@ Renderer::Renderer()
     for (unsigned int i = 0; i < sizeof(m_tail1bBeforeFrameRate); ++i)
         m_tail1bBeforeFrameRate[i] = 0;
     m_frameRate = 0.0;
-    for (unsigned int i = 0; i < sizeof(m_tail1bAfterFrameRate); ++i)
-        m_tail1bAfterFrameRate[i] = 0;
+    for (unsigned int i = 0; i < sizeof(m_tail1bBeforeShaderPath); ++i)
+        m_tail1bBeforeShaderPath[i] = 0;
+    m_shaderPath = 0;       // PE 0x1002D721: mov [esi+6CCh], ebx (ebx == 0)
+    for (unsigned int i = 0; i < sizeof(m_tail1bAfterShaderPath); ++i)
+        m_tail1bAfterShaderPath[i] = 0;
     m_hemiScratchTexture = 0;
     for (unsigned int i = 0; i < sizeof(m_tail1bAfterHemiScratch); ++i)
         m_tail1bAfterHemiScratch[i] = 0;
@@ -3751,7 +3763,7 @@ unsigned int Renderer::getRenderAheadLimit()
 
 bool Renderer::isExpansionPack()
 {
-    return m_tail1bAfterFrameRate[0x764 - 0x608] != 0;
+    return m_tail1bAfterShaderPath[0x764 - 0x6D0] != 0;
 }
 
 
@@ -3759,9 +3771,9 @@ bool Renderer::isExpansionPack()
 
 bool Renderer::setExpansionPack(unsigned char value)
 {
-    if (static_cast<unsigned char>(m_tail1bAfterFrameRate[0x764 - 0x608]) == value)
+    if (static_cast<unsigned char>(m_tail1bAfterShaderPath[0x764 - 0x6D0]) == value)
         return false;
-    m_tail1bAfterFrameRate[0x764 - 0x608] = static_cast<char>(value);
+    m_tail1bAfterShaderPath[0x764 - 0x6D0] = static_cast<char>(value);
     return true;
 }
 
@@ -3771,7 +3783,7 @@ bool Renderer::setExpansionPack(unsigned char value)
 
 unsigned int Renderer::slot_0xB0()
 {
-    return *reinterpret_cast<const unsigned int*>(&m_tail1bAfterFrameRate[0x768 - 0x608]);
+    return *reinterpret_cast<const unsigned int*>(&m_tail1bAfterShaderPath[0x768 - 0x6D0]);
 }
 RD9_RENDERER_FRONTIER(slot_0xB4,   0xB4)
 
@@ -3850,6 +3862,39 @@ bool Renderer::waitWhileAppInactive()
 bool Renderer::isAppInactive()
 {
     return reinterpret_cast<const RendDX9Base*>(this)->appActive == 0;
+}
+
+
+// Returns the mapped shader-path index used by RAPATH and geometry quality-mask tables.
+
+int Renderer::getShaderPath() const
+{
+    return m_shaderPath;
+}
+
+
+// PE 0x100286C0: store the path, then dispatch Renderer slot +0xC4.
+
+void Renderer::setShaderPathAndUpdate(int path)
+{
+    m_shaderPath = path;
+    refreshShaderDefines();
+}
+
+
+// [CHOSEN, not recovered] owner-TU seams keep the concrete Renderer layout out of renderer
+// clients. The getter preserves retail's non-null precondition; the setter wrapper retains
+// VideoOptions' existing null handling.
+
+int rendererGetShaderPath(const void* renderer)
+{
+    return static_cast<const Renderer*>(renderer)->getShaderPath();
+}
+
+void rendererSetShaderPathAndUpdate(void* renderer, int path)
+{
+    if (renderer)
+        static_cast<Renderer*>(renderer)->setShaderPathAndUpdate(path);
 }
 
 
