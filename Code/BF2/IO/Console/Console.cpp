@@ -47,9 +47,7 @@ thread_local OldConsole* s_unlockedInteractiveConsole = nullptr;
 
 bool interactiveFullAccessEnabled()
 {
-    const char* value = std::getenv("BF2_CLIENT_CONSOLE_FULL_ACCESS");
-    // Direct executable launches use the same temporary test policy as the launcher.
-    return !value || std::strcmp(value, "0") != 0;
+    return value && std::strcmp(value, "0") != 0;
 }
 
 class InteractiveAccessScope
