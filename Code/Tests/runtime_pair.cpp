@@ -157,6 +157,13 @@ unsigned int Random::getRaw()
     return m_seed;
 }
 
+// [TEMP] The grenade trace in PointPhysicsNode.cpp reads the tick count, and its production
+// definition sits in Core/System.cpp, which this harness does not link. Tests here leave the trace
+// disarmed, so the counter only has to exist.
+namespace WorldPref {
+unsigned int mTickCount = 0;
+} // namespace WorldPref
+
 namespace world {
 
 ClassManager* classManager = 0;
