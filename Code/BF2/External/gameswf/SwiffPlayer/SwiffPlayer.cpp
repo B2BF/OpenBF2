@@ -2077,6 +2077,8 @@ static void listLeaderboardPlayers(const gameswf::fn_call& fn, ListResult& r, Li
 static void listLeaderboardTop(const gameswf::fn_call& fn, ListResult& r, ListHost h);
 static void listMapList(const gameswf::fn_call& fn, ListResult& r, ListHost h, int start, int end);
 static void listGameModes(const gameswf::fn_call& fn, ListResult& r, ListHost h, int start, int end, bool withAll);
+static void listDemos(const gameswf::fn_call& fn, ListResult& r, ListHost h, int start, int end);
+static void listDemoBookmarks(const gameswf::fn_call& fn, ListResult& r, ListHost h, int start, int end);
 
 void as_general_getListEntries(const gameswf::fn_call& fn)
 {
@@ -3001,6 +3003,8 @@ void as_general_getListEntries(const gameswf::fn_call& fn)
     // Local-server game modes and browser-filter game modes with an additional All choice.
     if (tok[0] == "gmodes")           { listGameModes(fn, r, h, start, end, false); return; }
     if (tok[0] == "sfgmodes")         { listGameModes(fn, r, h, start, end, true); return; }
+    if (tok[0] == "demos")            { listDemos(fn, r, h, start, end); return; }
+    if (tok[0] == "demobm")           { listDemoBookmarks(fn, r, h, start, end); return; }
     if (tok[0] == "cmapbg" || tok[0] == "cmapgm" || tok[0] == "buddiesOnline" || tok[0] == "buddies"
         || tok[0] == "buddyRequests" || tok[0] == "buddyMessages" || tok[0] == "gamespyNicknameSuggestions")
     {
@@ -6803,7 +6807,95 @@ static void listGameModes(const gameswf::fn_call& fn, ListResult& r, ListHost h,
     r.setTotalCount(static_cast<int>(emitted));
     fn.result->set_as_object_interface(r.arr.get_ptr());
 }
-} // anonymous namespace (the mapList and game-mode lists)
+
+// The shipped test also rewrites the caller's string; both callers pass a copy.
+static void underscoresToSpaces(std::string& s)
+{
+    for (std::string::size_type i = 0; i < s.size(); ++i)
+        if (s[i] == '_')
+            s[i] = ' ';
+}
+static bool modListsMap(const IModInfo::Mod* mod, std::string& name)
+{
+    underscoresToSpaces(name);
+    for (unsigned int i = 0; i < mod->maps.size(); ++i)
+    {
+        std::string display(mod->maps[i].name);
+        std::string path(mod->maps[i].path);
+        underscoresToSpaces(display);
+        underscoresToSpaces(path);
+        if (::_stricmp(display.c_str(), name.c_str()) == 0)
+            return true;
+        if (::_stricmp(path.c_str(), name.c_str()) == 0)
+            return true;
+    }
+    return false;
+}
+
+// As shipped, a row outside the window is counted whatever its map, and neither the library nor
+// the mod is null-tested.
+static void listDemos(const gameswf::fn_call& fn, ListResult& r, ListHost h, int start, int end)
+{
+    r.begin();
+    int total = 0;
+    const unsigned int count = static_cast<IDemoLibrary*>(h->getDemoLibrary())->getNumEntries();
+    for (unsigned int i = 0; i < count; ++i)
+    {
+        if (i < static_cast<unsigned int>(start) || i >= static_cast<unsigned int>(end))
+        {
+            ++total;
+            continue;
+        }
+        const DemoLibraryEntry* entry = static_cast<IDemoLibrary*>(h->getDemoLibrary())->getEntry(i);
+        const IModInfo::Mod* mod = static_cast<IModInfo*>(h->getModInfo())->getCurrentMod();
+        std::string map(entry->mapName);
+        if (!modListsMap(mod, map))
+            continue;
+        r.beginRow(static_cast<int>(i));
+        r.pushNarrow(entry->dateTime.c_str());
+        r.pushNarrow(entry->name.c_str());
+        const std::string mapName = static_cast<IModInfo*>(h->getModInfo())->getMapNameFromMap(entry->mapName);
+        r.pushNarrow(mapName.c_str());
+        if (entry->version != 3153)
+            r.setInt("disabled", 1);
+        ++total;
+    }
+    r.setTotalCount(total);
+    fn.result->set_as_object_interface(r.arr.get_ptr());
+}
+
+// Unlike listDemos, the mod check runs on the map's display name. The singleton is not
+// null-tested, as shipped.
+static void listDemoBookmarks(const gameswf::fn_call& fn, ListResult& r, ListHost h, int start, int end)
+{
+    ILocalProfileManager* profiles = static_cast<ILocalProfileManager*>(
+        classManager->getSingleton(renddx9abi::HostString("LocalProfileManager")));
+    r.begin();
+    int total = 0;
+    const unsigned int count = profiles->getNumDemoBookmarks();
+    for (unsigned int i = 0; i < count; ++i)
+    {
+        if (i < static_cast<unsigned int>(start) || i >= static_cast<unsigned int>(end))
+        {
+            ++total;
+            continue;
+        }
+        const LocalDemoBookmark* bookmark = profiles->getDemoBookmark(i);
+        const IModInfo::Mod* mod = static_cast<IModInfo*>(h->getModInfo())->getCurrentMod();
+        std::string shown = static_cast<IModInfo*>(h->getModInfo())->getMapNameFromMap(bookmark->field1c);
+        if (!modListsMap(mod, shown))
+            continue;
+        r.beginRow(static_cast<int>(i));
+        r.pushNarrow(bookmark->field54.c_str());
+        r.pushNarrow(bookmark->field00.c_str());
+        const std::string mapName = static_cast<IModInfo*>(h->getModInfo())->getMapNameFromMap(bookmark->field1c);
+        r.pushNarrow(mapName.c_str());
+        ++total;
+    }
+    r.setTotalCount(total);
+    fn.result->set_as_object_interface(r.arr.get_ptr());
+}
+} // anonymous namespace (the mapList, game-mode and BattleRecorder lists)
 
 // sub_10055C40 - dice.bf2.Multiplay.getMapNameFromId(id): the player's host; id = arg 0; the
 // current mod (host +0x120 getModInfo -> +0x1C getCurrentMod, NOT null-tested, as shipped) and a
@@ -7131,6 +7223,33 @@ void as_multiplay_setHasNewBookmark(const gameswf::fn_call& fn)
     const bool value = fn.arg(0).to_bool();
     IDemoLibrary* demos = static_cast<IDemoLibrary*>(g_swiffPlayerInstance->getSwiffHost()->getDemoLibrary());
     demos->setFlagA4(value);
+}
+
+// Menu event 12 becomes BF2Engine::playDemo(false, path).
+void as_multiplay_playDemo(const gameswf::fn_call& fn)
+{
+    SWF_AS_TRACE("as_multiplay_playDemo");
+    BusyHost busy = busyOpen();
+    ISwiffHost* h = g_swiffPlayerInstance->getSwiffHost();
+    const int index = (int) fn.arg(0).to_number();
+    const DemoLibraryEntry* entry =
+        static_cast<IDemoLibrary*>(h->getDemoLibrary())->getEntry(static_cast<unsigned int>(index));
+    if (entry)
+    {
+        MenuEvent event;
+        event.type = 12;
+        event.args.push_back(entry->path);
+        h->pushEvent(event);
+    }
+    busyClose(busy);
+}
+
+void as_multiplay_deleteDemo(const gameswf::fn_call& fn)
+{
+    SWF_AS_TRACE("as_multiplay_deleteDemo");
+    ISwiffHost* h = g_swiffPlayerInstance->getSwiffHost();
+    const int index = (int) fn.arg(0).to_number();
+    (void) static_cast<IDemoLibrary*>(h->getDemoLibrary())->removeEntry(static_cast<unsigned int>(index));
 }
 
 
@@ -8967,6 +9086,8 @@ static void registerAsMethods(SwiffAsNamespace* general, SwiffAsNamespace** ns,
             ns[i]->registerNativeCompatibleMethod<as_multiplay_getJoinPassword>("getJoinPassword");
             ns[i]->registerNativeCompatibleMethod<as_multiplay_getHasNewBookmark>("getHasNewBookmark");
             ns[i]->registerNativeCompatibleMethod<as_multiplay_setHasNewBookmark>("setHasNewBookmark");
+            ns[i]->registerNativeCompatibleMethod<as_multiplay_playDemo>("playDemo");
+            ns[i]->registerNativeCompatibleMethod<as_multiplay_deleteDemo>("deleteDemo");
             // Hosting a server: the create-server page's rows.
             ns[i]->registerNativeCompatibleMethod<as_multiplay_setCurrentMap>("setCurrentMap");
             ns[i]->registerNativeCompatibleMethod<as_multiplay_setMapList>("setMapList");                           // nullsub_4 0x10050E80

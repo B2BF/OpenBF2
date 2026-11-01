@@ -1,7 +1,6 @@
 // [INFERRED] path. Full client PE410742/4C2510/4C25D0/4C2590/479830/4C3030/4C2A60/4C1D90/4C1FF0/
-// /4C1B90/689430/4C1BA0/4C1BB0/4C1BC0/4B3AB0/4B1C80/4C1C00/4C1DB0 read; the HTTP-side
-// bodies 4C2DF0/4C1B70/4C1B80/4C1BD0 read and left as diagnostic stops at their first use of the
-// withheld HTTPRequest base.
+// /4C1B90/689430/4C1BA0/4C1BB0/4C1BC0/4B3AB0/4B1C80/4C1C00/4C1DB0 read; download remains a
+// diagnostic stop.
 #include "DemoLibrary.h"
 #if !DEDICATED
 #include "DemoHeader.h"
@@ -22,16 +21,15 @@ extern ClassManager* classManager;
 
 DemoLibraryEntry::DemoLibraryEntry() : version(0) {} // constructs the five strings; the int is written by refresh
 
-// (124 B): the withheld base's constructor (59C390) runs first in retail; then the table,
-// refcount 1, the empty entry vector, the four strings, progress 0, the two flags clear and the
-// pending bookmark -1.
+// (124 B): the HTTPRequest constructor runs first; then the two tables, refcount 1, the empty
+// entry vector, the four strings, progress 0, the two flags clear and the pending bookmark -1.
 DemoLibrary::DemoLibrary()
     : m_refCount(1), m_downloadProgress(0.0f), m_flagA4(false), m_pendingBookmark(-1), m_downloadFailed(false)
 {
 }
 
 // (131 B): the four strings in reverse order, the entry rows and their storage, then the
-// withheld base's destructor (59C3C0).
+// HTTPRequest destructor (59C3C0).
 DemoLibrary::~DemoLibrary() {}
 
 // (66 B): the settings-factory shape - aggregation refused, 176 retail bytes, construction
@@ -47,7 +45,7 @@ IBase* DemoLibrary::create(unsigned int iid, IBase* outer)
 }
 void DemoLibrary::addRef() { ++m_refCount; }
 int DemoLibrary::getRef() { return m_refCount; }
-// (26 B): decrement, destroy at zero through the destructor slot of the withheld base's table.
+// (26 B): decrement, destroy at zero through the destructor slot of the HTTPRequest table.
 int DemoLibrary::release()
 {
     const int references = --m_refCount;
@@ -114,11 +112,11 @@ bool DemoLibrary::refreshEntries()
     return true;
 }
 
-// [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: demo-library-http-request]
-// Stops until the HTTP request base and transfer lifecycle are recovered.
+// [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: demo-library-download]
+// Stops until the body that starts a transfer over the HTTPRequest base is recovered.
 bool DemoLibrary::download(const std::string&, const std::string&, const std::string&)
 {
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::DemoLibrary::download: the HTTPRequest base (Game/Persistence/HTTPRequest.cpp, PE59C390) that PE4C2DF0 tests first is unrecovered\n");
+    std::fprintf(stderr, "[FRONTIER] dice::hfe::DemoLibrary::download: the transfer start (PE4C2DF0) is unrecovered\n");
     std::fflush(stderr);
     std::abort();
 }
@@ -147,26 +145,48 @@ bool DemoLibrary::removeEntry(unsigned int index)
     return true;
 }
 
-// [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: demo-library-http-request]
-// / 4C1B80 / 4C1BD0 forward to the withheld base (59C420 think, 59C400 busy, 59C440 cancel
-// followed by the target file's deletion).
-int DemoLibrary::update()
+void DemoLibrary::update()
 {
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::DemoLibrary::update: HTTPRequest 59C420 (PE4C1B70) is unrecovered\n");
-    std::fflush(stderr);
-    std::abort();
+    HTTPRequest::update();
 }
 bool DemoLibrary::isDownloading()
 {
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::DemoLibrary::isDownloading: HTTPRequest 59C400 (PE4C1B80) is unrecovered\n");
-    std::fflush(stderr);
-    std::abort();
+    return isUpdating();
 }
+// The cancel result is not read, as shipped.
 bool DemoLibrary::cancelDownload()
 {
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::DemoLibrary::cancelDownload: HTTPRequest 59C440 (PE4C1BD0) is unrecovered\n");
-    std::fflush(stderr);
-    std::abort();
+    if (!isDownloading())
+        return false;
+    cancel();
+    io::fileManager->deleteFile(m_downloadPath);
+    return true;
+}
+
+void DemoLibrary::onGetFailure(const std::string& message)
+{
+    m_downloadFailed = true;
+    HTTPRequest::onGetFailure(message);
+    if (message != "")
+        reportError(message);
+    io::fileManager->deleteFile(m_downloadPath);
+}
+void DemoLibrary::onGetFileComplete()
+{
+    m_downloadFailed = false;
+    HTTPRequest::onGetFileComplete();
+    if (m_pendingBookmark != -1)
+    {
+        IBase* manager = classManager->getSingleton(std::string("LocalProfileManager"));
+        if (manager)
+            static_cast<ILocalProfileManager*>(manager)->removeDemoBookmark(m_pendingBookmark);
+        m_pendingBookmark = -1;
+    }
+    refreshEntries();
+}
+void DemoLibrary::onProgress(float progress)
+{
+    m_downloadProgress = progress;
 }
 
 const std::string& DemoLibrary::getDownloadName() { return m_downloadName; }

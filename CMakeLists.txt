@@ -1853,6 +1853,31 @@ if(BUILD_TESTING AND MSVC)
     target_compile_options(bf2_runtime_pair PRIVATE /Gy)
     target_link_options(bf2_runtime_pair PRIVATE /OPT:REF)
 
+    # Demo playback read path. Unreached record/render paths stay unresolved, as in the bundle
+    # checks.
+    bf2_add_check(bf2_demo_playback_read
+        "${BF2_STUB_ROOT}/demo_playback_read.cpp"
+        "${BF2_ROOT}/Game/DemoRecorder/DemoRecorder.cpp"
+        "${BF2_ROOT}/Game/DemoRecorder/DemoSpectatorCamera.cpp"
+        "${BF2_ROOT}/Game/DemoRecorder/DemoHeader.cpp"
+        "${BF2_ROOT}/Game/DemoRecorder/DemoConfig.cpp"
+        "${BF2_ROOT}/Game/Utility/Vars.cpp"
+        "${BF2_ROOT}/IO/Stream/ZStream.cpp"
+        "${BF2_ROOT}/IO/ZUtil.cpp"
+        "${BF2_ROOT}/IO/BitStream.cpp"
+        "${BF2_ROOT}/IO/File/FileManager.cpp"
+        "${BF2_ROOT}/Core/System.cpp"
+        "${BF2_ROOT}/Core/Debug.cpp"
+        "${BF2_ROOT}/Core/StringUtil.cpp"
+        $<TARGET_OBJECTS:bf2_zlib_objects>
+    )
+    target_include_directories(bf2_demo_playback_read PRIVATE
+        "${BF2_EXTERNAL_ROOT}/zlib-1.2.3"
+        "${BF2_EXTERNAL_ROOT}/zlib-1.2.3/contrib/minizip"
+    )
+    target_compile_options(bf2_demo_playback_read PRIVATE /Gy)
+    target_link_options(bf2_demo_playback_read PRIVATE /OPT:REF /FORCE:UNRESOLVED)
+
     add_custom_target(bf2_run_checks
         COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure -C $<CONFIG>
         DEPENDS
@@ -1861,6 +1886,7 @@ if(BUILD_TESTING AND MSVC)
             bf2_bundle_template_core
             bf2_bundle_serialization
             bf2_runtime_pair
+            bf2_demo_playback_read
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
         USES_TERMINAL
         VERBATIM

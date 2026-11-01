@@ -327,12 +327,9 @@ bool GameClient::load()
 {
     DemoRecorder* const recorder = m_demoRecorder;
     m_isReady = false;
-    if (recorder)
-    {
-        // ..4D2EBD: `recorder+0xC4 && !recorder+0xCD` (54B8F0) and the byte at +0x105 - the
-        // DemoRecorder's PE layout is not mapped onto the tree's ELF-recovered class.
-        GAMECLIENT_FRONTIER("load", "DemoRecorder playback predicate (54B8F0, bytes +0xC4/+0xCD/+0x105) is unmapped");
-    }
+    // A restarted demo keeps the level it already loaded.
+    if (recorder && recorder->isOpenForPlayback() && recorder->playbackPlaying)
+        return true;
 
     if (squadManager)
         static_cast<ISquadManager*>(squadManager)->reAddDynamicSpawnGroups();     // +0x14
@@ -400,9 +397,7 @@ bool GameClient::update(int steps, float dt)
         static_cast<Player*>(local)->update(static_cast<float>(delta));
     }
 
-    const bool demoPlaying = m_demoRecorder != 0;    // : recorder && 54B8F0(recorder)
-    if (demoPlaying)
-        GAMECLIENT_FRONTIER("update", "DemoRecorder playback predicate (54B8F0) is unmapped");
+    const bool demoPlaying = m_demoRecorder && m_demoRecorder->isOpenForPlayback();
     if (!demoPlaying)
     {
         if (steps)
@@ -442,8 +437,14 @@ bool GameClient::update(int steps, float dt)
             world::responsePhysicsManager->startFrame();                    // +0x2C
             if (i == steps - 1)
             {
-                if (demoPlaying)
-                    GAMECLIENT_FRONTIER("update", "the demo listener transform (440B20 / 54BC20) is unmapped");
+                // The shipped body tests playback again here instead of reading demoPlaying.
+                if (m_demoRecorder && m_demoRecorder->isOpenForPlayback())
+                {
+                    Mat4 listener = Mat4::getIdentity();
+                    m_demoRecorder->getPlaybackMatrixAndFOV(&listener, 0);
+                    const Vec3 velocity = { 0.0f, 0.0f, 0.0f };
+                    g_bfSound->update(steps, listener, velocity, false);
+                }
                 else
                     g_bfSound->update(steps);                               // PE +0x18
             }
@@ -869,9 +870,11 @@ bool GameClient::receive(float dt)
             code = m_netClient->receive(m_bitStream);
         else
         {
-            // ..4D4FF8: the demo playback read - 4C4420()'s recorder stream through 54C3B0 into
-            // m_bitStream; a non-empty stream is a packet (0), else 8.
-            GAMECLIENT_FRONTIER("receive", "the demo playback packet read (4C4420 / 54C3B0) is unmapped");
+            // The recorder is not null-tested, as shipped.
+            if (m_demoRecorder->readData(WorldPref::getTickCount(), m_bitStream))
+                code = m_bitStream->m_highWaterBits != 0 ? 0 : 8;
+            else
+                code = 8;
         }
         switch (code)
         {
@@ -1462,14 +1465,13 @@ bool GameClient::isPlayingDemo()
     return demo != 0 && demo->isPlayback;
 }
 
-// setSimulationRate - 4D3110, 62 B: only while a demo plays - a rate other than 100 runs
-// IBfSound PE +0xC4, then 5965B0(rate) (the recorder's rate).
 void GameClient::setSimulationRate(int rate)
 {
-    (void) rate;
-    if (!m_demoRecorder)
+    if (!m_demoRecorder || !m_demoRecorder->isOpenForPlayback())
         return;
-    GAMECLIENT_FRONTIER("setSimulationRate", "DemoRecorder playback predicate and rate (54B8F0 / 5965B0) are unmapped");
+    if (rate != 100)
+        g_bfSound->setForceUpdate();
+    g_system->setSimulationRate(rate);
 }
 int  GameClient::getSimulationRate() { return g_system->getSimulationRate(); }   //  (11 B, shared with GameServer)
 void GameClient::debugShowActiveGhosts(int) {}                                  // : empty
@@ -1603,9 +1605,8 @@ bool GameClient::handleControlObjectState(io::BitStream*, unsigned short network
 // networkables, and client statistics. Returns false if connection setup fails.
 bool GameClient::playDemo(DemoRecorder* recorder)
 {
-    // ..4D41EA: io::inputManager->+0x2C("InfantryPlayerInputControlMap") - the tree's
-    // InputManager carries no such slot yet.
-    GAMECLIENT_FRONTIER("playDemo", "io::InputManager PE +0x2C (the control-map selector) is unmapped");
+    static_cast<io::IInputManager*>(io::inputManager)
+        ->setPlayerControlMap(std::string("InfantryPlayerInputControlMap"));
     m_demoRecorder = recorder;
     world::objectManager->destroyObjects();
     m_netClient = 0;
@@ -2060,39 +2061,51 @@ std::string GameClient::getServerAddress()     { return m_serverAddress; }     /
 std::string GameClient::getServerAddressCopy() { return m_serverAddress; }     // the folded twin, +0x78
 void        GameClient::slot44(int)            {}                              // > nullsub_2
 
-// The demo group - 4D2650 (109 B), 4D26C0 (57 B), 4D2700 (36 B), 4D2730 (39 B), 4D2760 (38 B),
-//  (25 B), 4D3D60 (257 B). Every one reads DemoRecorder bytes by PE offset (+0xC4, +0xCD,
-// +0xE8, +0xEC, +0x105 and the object at +0xE8) that the tree's ELF-recovered DemoRecorder does
-// not map; a null recorder is the only arm transcribed.
+// The demo slots act only while the recorder is open for playback.
+
+// restartPlayback marks the stream playing, so load() and handleDataBlock keep the loaded level.
 void GameClient::restartDemo()
 {
-    if (!m_demoRecorder) return;
-    GAMECLIENT_FRONTIER("restartDemo", "DemoRecorder PE members (+0xC4/+0xCD/+0x105) are unmapped");
+    if (!m_demoRecorder || !m_demoRecorder->isOpenForPlayback())
+        return;
+    gameLogic->reset();
+    destroyAllPlayers();
+    g_bfSound->engine()->stopAllSamples();
+    gameLogic->restartDemoPlayback();
+    m_connection->m_gameEventManager->reset();
+    m_connection->m_ghostManager->reset();
+    m_demoRecorder->restartPlayback();
 }
-void GameClient::setDemoPaused(bool)
+void GameClient::selectDemoPlayer(bool next)
 {
-    if (!m_demoRecorder) return;
-    GAMECLIENT_FRONTIER("setDemoPaused", "DemoRecorder pause/resume (54BC90 / 54BCB0) are unmapped");
+    if (!m_demoRecorder || !m_demoRecorder->isOpenForPlayback())
+        return;
+    if (next)
+        m_demoRecorder->nextPlayer();
+    else
+        m_demoRecorder->previousPlayer();
 }
-void GameClient::slot50()
+void GameClient::nextDemoCamera()
 {
-    if (!m_demoRecorder) return;
-    GAMECLIENT_FRONTIER("slot50", "DemoRecorder +0xE8 and 62AA10 are unmapped");
+    if (m_demoRecorder && m_demoRecorder->isOpenForPlayback())
+        m_demoRecorder->nextCamera();
 }
-int GameClient::slot54()
+int GameClient::getCurrentDemoPlayerId()
 {
-    if (!m_demoRecorder) return -1;
-    GAMECLIENT_FRONTIER("slot54", "DemoRecorder +0xE8 and 68E7B0 are unmapped");
+    if (m_demoRecorder && m_demoRecorder->isOpenForPlayback())
+        return m_demoRecorder->getCurrentDemoPlayerId();
+    return -1;
 }
-bool GameClient::slot58()
+bool GameClient::getIsDemoFreeFlying()
 {
-    if (!m_demoRecorder) return false;
-    GAMECLIENT_FRONTIER("slot58", "DemoRecorder +0xE8 (+0x10) is unmapped");
+    if (m_demoRecorder && m_demoRecorder->isOpenForPlayback())
+        return m_demoRecorder->getIsFreeFlying();
+    return false;
 }
-bool GameClient::isDemoPlaying()
+// No playback test, as shipped.
+bool GameClient::isDemoAtEnd()
 {
-    if (!m_demoRecorder) return false;
-    GAMECLIENT_FRONTIER("isDemoPlaying", "DemoRecorder +0xEC is unmapped");
+    return m_demoRecorder && m_demoRecorder->endOfStream;
 }
 void GameClient::slot6C(int, int)
 {
@@ -2101,11 +2114,10 @@ void GameClient::slot6C(int, int)
 
 // togglePause - 4D2790: setPause(!getPause()), both through the +0xA8 table.
 void GameClient::togglePause() { setPause(!getPause()); }
-// setPause - 4D27B0, 71 B: pausing always sticks; unpausing only while no demo plays. The rate goes
-// to 0 or 100 through IGame::setSimulationRate (primary +0xE0).
+// Unpausing is refused once the demo has run out.
 void GameClient::setPause(bool paused)
 {
-    if (paused || !isDemoPlaying())
+    if (paused || !isDemoAtEnd())
     {
         m_paused = paused;
         setSimulationRate(paused ? 0 : 100);
@@ -2291,8 +2303,9 @@ void GameClient::handleEvent(EventCategory category, unsigned int id, EventNode*
 void GameClient::handleDataBlock(EventNode* node, void* data)
 {
     (void) data;
-    if (m_demoRecorder)
-        GAMECLIENT_FRONTIER("handleDataBlock", "DemoRecorder playback predicate (54B8F0) is unmapped");
+    // A restarted demo ignores the blocks its stream replays.
+    if (m_demoRecorder && m_demoRecorder->isOpenForPlayback() && m_demoRecorder->playbackPlaying)
+        return;
 
     DataBlockReadyEvent* const block = static_cast<DataBlockReadyEvent*>(node);
     const unsigned int   type  = block->m_blockEventId;            // PE +0x2C
@@ -2317,7 +2330,9 @@ void GameClient::handleDataBlock(EventNode* node, void* data)
         }
         if (serverInfo->m_block.voipEnabled)                                    // +0x31
             gameLogic->startupVoipClient();                                     // +0x25C
-        if (serverInfo->getRequestResponse())                                   // the server wants our ClientInfo
+        // A demo has no server to answer.
+        if (serverInfo->getRequestResponse()
+            && !(m_demoRecorder && m_demoRecorder->isOpenForPlayback()))
         {
             ClientInfo info;
             info.m_playerNameHash = AntiHacks::instance()->m_playerNameHash;   //  +0x00 -> info +0x38
@@ -2365,9 +2380,13 @@ void GameClient::handleDataBlock(EventNode* node, void* data)
         m_commanderEnabled = m_mapInfo.getCommanderEnabled();                     // > +0x154
         gameLogic->setNoVehiclesMode(serverInfo->m_block.noVehicles != 0);        // PE +0x88 <- serverInfo +0x58
         eventManager->postEvent(ECHud, 63, &m_commanderEnabled, 4.0f);            // +0x10
-        if (load())                                                               // PE +0x1C = ELF +0x20
+        if (!load())                                                              // PE +0x1C = ELF +0x20
         {
-            // the demo predicate again (a null recorder here - see the top), then the proceed event
+            m_isRunning = false;
+            gameLogic->unload();
+        }
+        else if (!(m_demoRecorder && m_demoRecorder->isOpenForPlayback()))
+        {
             GameEvent* const loaded =
                 new (std::nothrow) PostRemoteEvent(ECNetwork, 2, false, 0, 0, 0.0f);   // 0x54
             sendGameEvent(0xFFFFFFFFu, loaded);                                   // PE +0x8C = ELF +0x90
@@ -2382,11 +2401,6 @@ void GameClient::handleDataBlock(EventNode* node, void* data)
                     sendGameEvent(0xFFFFFFFFu, check);                            // a failed new sends NULL
                 }
             }
-        }
-        else
-        {
-            m_isRunning = false;
-            gameLogic->unload();
         }
         break;
     }

@@ -137,6 +137,8 @@ cl %FLAGS% "%~dp0..\BF2\Physics\SoldierResponse.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS% "%~dp0..\BF2\Game\DemoRecorder\DemoRecorder.cpp"
 if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\Game\DemoRecorder\DemoSpectatorCamera.cpp"
+if errorlevel 1 set /a RC+=1
 cl %FLAGS% "%~dp0..\BF2\Game\Objects\Base\Camera.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS% "%~dp0..\BF2\Game\Objects\Fx\EffectBundle.cpp"

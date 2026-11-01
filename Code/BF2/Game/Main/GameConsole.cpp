@@ -7,6 +7,7 @@
 #include "BF2Engine.h"
 #include "Game.h"               // operator>>(istream&, TargetChannel&) - game.radioMessage's converter
 #include "../IGameServer.h"     // IGameServer::sayAll/sayTeam - game.sayAll/sayTeam's receiver interface
+#include "../IGameClient.h"
 #include "../Utility/Vars.h"    // vars.set's receiver - Vars::set(std::string, std::string)
 #include "../../Scene/Object/PlayerManager.h"   // game.radioMessage's sender - the local human
 #if !DEDICATED
@@ -176,6 +177,36 @@ BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(recordDemo, demoRecord, ::dice::hfe::bf2Engin
 BF2_CONSOLE_METHOD_0_STATIC_ACTIVE(stopRecording, demoStopRecording, ::dice::hfe::bf2Engine != 0,
                                    kGameConsoleTag)
 #endif
+
+// Demo playback commands, run by the HUD's demo radio menus.
+BF2_CONSOLE_OBJECT("Demo", 1, 0)
+namespace {
+void demoShutdown() { ::dice::hfe::bf2Engine->shutdownDemo(); }
+} // namespace
+BF2_CONSOLE_METHOD_0_STATIC_ACTIVE(shutdownDemo, demoShutdown, ::dice::hfe::bf2Engine != 0,
+                                   kGameConsoleTag)
+
+// The executors do not null-test the client, as shipped.
+BF2_CONSOLE_OBJECT("Demo", 2, 0)
+namespace {
+IGameClient* queryGameClient()                          // [CHOSEN] name
+{
+    return ::dice::hfe::game
+        ? static_cast<IGameClient*>(::dice::hfe::game->queryInterface(IID_IGameClient)) : 0;
+}
+
+void demoRestart() { queryGameClient()->restartDemo(); }
+void demoTogglePlayer(bool next) { queryGameClient()->selectDemoPlayer(next); }
+void demoToggleCamera() { queryGameClient()->nextDemoCamera(); }
+void demoTogglePauseOrPlay() { queryGameClient()->togglePause(); }
+} // namespace
+BF2_CONSOLE_METHOD_0_STATIC_ACTIVE(restartDemo, demoRestart, queryGameClient() != 0, kGameConsoleTag)
+BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(togglePlayerDemo, demoTogglePlayer, queryGameClient() != 0, bool,
+                                   kGameConsoleTag)
+BF2_CONSOLE_METHOD_0_STATIC_ACTIVE(toggleCameraDemo, demoToggleCamera, queryGameClient() != 0,
+                                   kGameConsoleTag)
+BF2_CONSOLE_METHOD_0_STATIC_ACTIVE(toggleDemoPauseOrPlay, demoTogglePauseOrPlay, queryGameClient() != 0,
+                                   kGameConsoleTag)
 
 // Handed to the console registry by ModuleBF2::init, the way the original registers 0x8AD45A8.
 ConsoleObjectList& gameConsoleObjects()

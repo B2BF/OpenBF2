@@ -292,7 +292,7 @@ void updateMenuPause(int& state, bool menuUp)
     if (menuUp && (!gameLogic || gameLogic->getGameStatus() != 2))  // +0x158
         wantPause = true;
     else
-        wantPause = playingDemo && client && static_cast<IGameClient*>(client)->isDemoPlaying();   // +0x68
+        wantPause = playingDemo && client && static_cast<IGameClient*>(client)->isDemoAtEnd();   // +0x68
     if (wantPause == (state >= 0))
         return;                                                     // nothing to change
     if (!wantPause)
@@ -2328,7 +2328,10 @@ bool BF2Engine::playDemo(bool fromConfigName, const std::string& name)
 
         if (started)
         {
-            // (*(void*)0)[9](0, 0);                      // 0x8137D91 - see the header block
+#if !DEDICATED
+            // The dedicated ELF makes this call through a null global; that build leaves it out.
+            hudManager->setPaint(false);
+#endif
             return true;
         }
     }
