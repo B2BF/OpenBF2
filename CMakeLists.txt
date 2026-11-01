@@ -1005,6 +1005,13 @@ else()
         "${BF2_DEDICATED_TARGET}: ${BF2_DICE_PY_LIB} is missing. "
         "${BF2_DICE_PY_BUILD_HINT}.")
 endif()
+if(BF2_BUILD_X64 AND NOT BF2_BUILD_LINUX)
+    # [CHOSEN, not recovered] The native x64 Windows port links the voice-server module statically,
+    # as the Linux image does; the BF2VoipServer_w32ded.dll side image exists only for x86.
+    target_sources("${BF2_DEDICATED_TARGET}" PRIVATE
+        ${bf2_voipserver_only_sources}
+    )
+endif()
 # dice_py IS A REAL DLL, so linking dice_py.lib is only half the job - the DLL has to be FOUND at
 # run time. Windows searches the executable's own directory before the working directory, and the
 # run target deliberately sets the working directory to the GAME folder, so the only place that
