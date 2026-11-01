@@ -32,6 +32,9 @@ PlayerActionManager::PlayerActionManager()
     std::memset(&zeroInput, 0, sizeof(zeroInput));
 
     PlayerAction zeroAction;
+    // set() does not write m_inputIndex, so the index is cleared first. transmit sends slot 0's
+    // index as the packet's base index while add() is still sliding these placeholders out.
+    zeroAction.m_inputIndex = 0;
     zeroAction.set(zeroInput);
 
     for (int i = 0; i < 3; ++i)
