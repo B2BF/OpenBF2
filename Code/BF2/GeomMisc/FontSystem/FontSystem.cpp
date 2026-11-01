@@ -86,13 +86,13 @@ public:
                                   unsigned int colour);     // +0x14  0x10087A90   written
     virtual void drawText(float x, float y, const vc71::string& text);   // +0x18  0x10087130  written
     virtual int  getHeight();                               // +0x1C  0x10087150   written
-    // [FRONTIER] Remaining character metrics, scaling and default-color virtuals need typed implementations.
-    virtual void slot_0x20();
-    virtual void slot_0x24();
+    virtual int getCharacterWidth(unsigned char character);
+    virtual int getTextWidth(const vc71::string& text);
+    // [FRONTIER] The two scaling virtuals still require typed recovery.
     virtual void slot_0x28();
     virtual void slot_0x2C();
-    virtual void slot_0x30();
-    virtual void slot_0x34();                               // 0x10087210   the last slot
+    virtual void setColour(unsigned colour);
+    virtual unsigned getColour();
 
     // , `retn 10h` - not a vtable slot. Its only caller in the image is
     // NameTagRenderer::bufferItem (0x101B2467), which blits a player's name into the name texture.
@@ -468,18 +468,30 @@ int FontPorted::getHeight()
     return m_height;
 }
 
+int FontPorted::getCharacterWidth(unsigned char character)
+{
+    return character == ' ' ? m_spaceWidth : static_cast<int>(m_glyphs[character].width) + m_betweenWidth;
+}
+
+int FontPorted::getTextWidth(const vc71::string& text)
+{
+    int width = 0;
+    for (unsigned i = 0; i < text.size(); ++i)
+        width += getCharacterWidth(static_cast<unsigned char>(text.c_str()[i]));
+    return width;
+}
+
+void FontPorted::setColour(unsigned colour) { m_colour = colour; }
+unsigned FontPorted::getColour() { return m_colour; }
+
 #define RD9_FP_FRONTIER(method, slotOffset)                                     \
     void FontPorted::method()                                                   \
     {                                                                           \
         RD9_FRONTIER("dice::hfe::geom::Font::Ported::" #method, slotOffset);    \
     }
 
-RD9_FP_FRONTIER(slot_0x20, 0x20)
-RD9_FP_FRONTIER(slot_0x24, 0x24)
 RD9_FP_FRONTIER(slot_0x28, 0x28)
 RD9_FP_FRONTIER(slot_0x2C, 0x2C)
-RD9_FP_FRONTIER(slot_0x30, 0x30)
-RD9_FP_FRONTIER(slot_0x34, 0x34)
 
 #undef RD9_FP_FRONTIER
 
@@ -589,6 +601,13 @@ void fontPortedDrawText(IBase* font, float x, float y, const vc71::string& text)
 {
     static_cast<FontPorted*>(font)->drawText(x, y, text);
 }
+
+int fontPortedGetTextWidth(IBase* font, const vc71::string& text)
+{ return static_cast<FontPorted*>(font)->getTextWidth(text); }
+unsigned fontPortedGetColour(IBase* font)
+{ return static_cast<FontPorted*>(font)->getColour(); }
+void fontPortedSetColour(IBase* font, unsigned colour)
+{ static_cast<FontPorted*>(font)->setColour(colour); }
 
 } // namespace geom
 } // namespace hfe

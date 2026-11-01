@@ -5229,6 +5229,18 @@ namespace gameswf
 	// onDoublePress.
 	const tu_string&	event_id::get_function_name() const
 	{
+		// Bind the DICE events by enum value: the retained upstream socket-event
+		// enum has an extra entry absent from its positional name table below.
+		if (m_id == CONSTRUCT)
+		{
+			static const tu_string name("onConstruct");
+			return name;
+		}
+		if (m_id == DOUBLE_PRESS)
+		{
+			static const tu_string name("onDoublePress");
+			return name;
+		}
 		static tu_string	s_function_names[EVENT_COUNT] =
 		{
 			"INVALID",		 // INVALID

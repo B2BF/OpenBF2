@@ -74,9 +74,9 @@ public:
     virtual bool hasUpdate() const { return false; }
     virtual void handleUpdate(float) {}
 
-    virtual int getGuiIndex(bool selected)
+    virtual int getGuiIndex(bool sprinting)
     {
-        if (selected && m_template->getDisplaySelectOnActivation())
+        if (sprinting && m_template->getDisableOnSprint())
             return 0;
         if (m_template->getAltGuiIndex() == -1)
             return m_template->getGuiIndex();

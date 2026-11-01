@@ -2495,7 +2495,8 @@ void StaticMesh::drawVanilla()
     // 7. the materials
     if (!m_byte356)
     {
-        unsigned int maskIndex = rendererDword(0x6CC);
+        unsigned int maskIndex = static_cast<unsigned int>(
+            dx9rend::rendererGetShaderPath(dx9rend::g_Renderer));
         if (rendererByte(0x6D0))
         {
             const unsigned int maskCount = g_staticMeshQualityMasks.first

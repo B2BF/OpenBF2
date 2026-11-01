@@ -5,6 +5,7 @@
 #include "BundledMeshStateManager.h"
 #include "../../RendDX9Abi/BfMemory.h"
 #include "../../RendDX9Abi/Frontier.h"
+#include "../RendDX9/RendDX9Base.h"
 #include "../RendDX9/Texture.h"
 #include <cstring>
 #include <new>
@@ -250,7 +251,7 @@ BundledMeshState* BundledMeshStateManager::read(void* effect, const vc71::string
                 mapName = "@@ABSOLUTE@@Common/Textures/SpecularLUT_pow36.dds";
 
             if (!skipTextures &&
-                (*reinterpret_cast<const int*>(reinterpret_cast<const char*>(dx9rend::g_Renderer) + 0x6CC) == 0 ||
+                (dx9rend::rendererGetShaderPath(dx9rend::g_Renderer) == 0 ||
                  !contains(mapName, "_b.dds")))
             {
                 vc71::string full(prefix);

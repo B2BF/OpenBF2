@@ -204,7 +204,7 @@ extern const unsigned int g_shaderComboFlags[16];
 // StaticMeshStateManager.cpp and filled by the StaticMesh technique initialisation (sub_101921D0).
 extern vc71::vector_layout g_staticMeshQualityMasks;
 
-// `dword_1025B8AC[g_Renderer->+0x6CC]`, reproduced with no bounds check because retail has none.
+// Indexed by the renderer's mapped shader path, with no bounds check because retail has none.
 unsigned int staticMeshQualityMask();
 
 // Owns static mesh LODs, materials, vertex streams and occluder groups.

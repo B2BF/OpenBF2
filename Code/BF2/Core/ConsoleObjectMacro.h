@@ -27,6 +27,25 @@ const char*   consoleDefaultName();
 unsigned int  consoleDefaultAccess();
 unsigned char consoleDefaultCategory();
 
+template<class T>
+struct ConsoleArgumentParseType
+{
+    typedef T Type;
+    static void store(T& target, const Type& value) { target = value; }
+};
+
+#if defined(_WIN32) && !DEDICATED
+// The shipped Windows client parsed scalar floats through a double before
+// narrowing. Direct modern float extraction can change near-midpoint values
+// and reject values that only exceed the float range. Preserve failed reads.
+template<>
+struct ConsoleArgumentParseType<float>
+{
+    typedef double Type;
+    static void store(float& target, double value) { target = static_cast<float>(value); }
+};
+#endif
+
 // Token paste with __LINE__ needs two levels, or you paste the literal text
 #define BF2_CC_CAT2(a, b)  a##b
 #define BF2_CC_CAT(a, b)   BF2_CC_CAT2(a, b)
@@ -45,11 +64,11 @@ unsigned char consoleDefaultCategory();
         if (index == (oneBasedIndex))                                                              \
         {                                                                                          \
             static T s;                                                                            \
-            T tmp = s;                                                                             \
+            typename ::dice::hfe::ConsoleArgumentParseType<T>::Type tmp = s;                       \
             std::istringstream in(value);                                                          \
             in >> tmp;                                                                             \
             if (!in.fail())                                                                        \
-                s = tmp;                                                                           \
+                ::dice::hfe::ConsoleArgumentParseType<T>::store(s, tmp);                            \
             m_args[(oneBasedIndex) - 1] = reinterpret_cast<std::string*>(&s);                      \
         }
 

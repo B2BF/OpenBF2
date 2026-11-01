@@ -11,14 +11,15 @@ class Action;
 class BfEditNode : public Node
 {
     friend class BfEditData;
+    friend bool dispatchNodeEvent16(Node*, System*, const Rect*, const NodeState*);
 public:
     BfEditNode();                                      // 7AAE90; no owned resources
     TypeDescriptor* getType() override;               // 7AC340 [FRONTIER] Node suffix
     unsigned int getObjectSize() override;
     bool streamProperties(System*, Stream*) override;
     bool updateSelf(System*, const NodeState*, const Rect*, float) override;
-    void paintSelf(System*, const NodeState*, const Rect*, const Rect*, RenderContext*) override; // 7AAEF0 [FRONTIER]
-    bool onEvent1(System*, const Rect*, const NodeState*, int first, int index, int second) override; // 7AB5F0 [FRONTIER]
+    void paintSelf(System*, const NodeState*, const Rect*, const Rect*, RenderContext*) override;
+    bool onEvent1(System*, const Rect*, const NodeState*, int first, int index, int second) override;
     bool onEvent4(System*, const Rect*, const NodeState*, int first, int index, int second) override;
     void updateVisibleStart(System*, const Rect*);
     static TypeDescriptor* getClassType();             // 7AC340, metadata934DA0

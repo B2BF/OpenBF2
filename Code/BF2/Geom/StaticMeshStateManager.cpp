@@ -11,6 +11,7 @@
 #include "../../RendDX9Abi/HostFileAbi.h"
 #include "../../RendDX9Abi/Vc71String.h"
 #include "../../RendDX9Abi/Vc71Vector.h"
+#include "../RendDX9/RendDX9Base.h"
 #include "../RendDX9/Texture.h"
 #include "StaticMeshTemplate.h"
 
@@ -21,8 +22,7 @@ namespace dice {
 namespace hfe {
 
 namespace dx9rend {
-// BF2Render.cpp, PE 0x1023B96C. The shader-quality index lives at +0x6CC; VideoOptions.cpp
-// reaches the very same field by documented raw offset, and so does this file.
+// BF2Render.cpp, PE 0x1023B96C. Geometry mask selection uses the renderer's mapped shader path.
 extern IBase* g_Renderer;
 // TextureManager.cpp - declared here rather than pulled in through RendDX9Base.h, the same way
 // MeshTemplate.cpp declares the BufferManager entry points it needs.
@@ -46,7 +46,7 @@ extern const unsigned int g_shaderComboFlags[16] =
 };
 
 
-// Quality masks indexed without bounds checks by the renderer's shader quality.
+// Quality masks indexed without bounds checks by the renderer's mapped shader path.
 // Technique initialization must populate this vector before any material uses it.
 // [CHOSEN, not recovered] Storage is owned by this translation unit.
 // [RETIRE-WHEN: the STM technique init fills it.]
@@ -55,14 +55,10 @@ vc71::vector_layout g_staticMeshQualityMasks = { 0, 0, 0, 0 };
 
 namespace {
 
-// g_Renderer + 0x6CC, the renderer's shader-quality index. BF2Render.cpp keeps the Renderer's tail
-// opaque, so this field is reached by documented raw offset - the same treatment VideoOptions.cpp's
-// rendererSetShaderPathAndUpdate gives the identical dword (PE 0x100286C0).
-inline int rendererShaderQualityIndex()
+inline int rendererShaderPathIndex()
 {
-    const unsigned char* const base =
-        reinterpret_cast<const unsigned char*>(::dice::hfe::dx9rend::g_Renderer);
-    return *reinterpret_cast<const int*>(base + 0x6CC);
+    return ::dice::hfe::dx9rend::rendererGetShaderPath(
+        ::dice::hfe::dx9rend::g_Renderer);
 }
 
 // vc71::string carries no find/compare of its own (it is an ABI carrier, not a container), so the
@@ -86,7 +82,7 @@ unsigned int staticMeshQualityMask()
 {
     // PE: mov eax, g_Renderer / mov ecx, [eax+6CCh] / mov edx, dword_1025B8AC / mov ebx, [edx+ecx*4]
     return reinterpret_cast<const unsigned int*>(
-        g_staticMeshQualityMasks.first)[rendererShaderQualityIndex()];
+        g_staticMeshQualityMasks.first)[rendererShaderPathIndex()];
 }
 
 // dword_102651C0. Null until StaticMeshRenderer's constructor creates it; nulled again only by that

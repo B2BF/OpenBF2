@@ -492,45 +492,46 @@ void GeometryTemplateManager::loadUsedTemplates()
 
 // Technique initialization gates start pending and clear after successful initialization.
 // [INFERRED] Owns the skinned and bundled technique gates.
-// [FRONTIER] Static-mesh re-arming needs access to its existing file-local gate;
-// expose that gate or an accessor and verify shader changes across level reloads.
-// Do not create a second store: current static-mesh tables otherwise retain the first shader set.
+void staticMeshRearmTechniques();
+void staticMeshPrimeTechniques();
+void bundledMeshInitTechniques();
+void skinnedMeshInitTechniques();
 
 unsigned char g_skinnedMeshTechniquesPending = 1;          // byte_102397D4, initial value 1
 unsigned char g_bundledMeshTechniquesPending = 1;          // byte_10239294, initial value 1
 
 // Re-arms geometry technique initialization after shader archives change.
-// [INFERRED] slot name. Static-mesh re-arming still reports a missing cross-file store.
-// An empty registry returns after re-arming; a nonempty registry reaches the temp_rel
-// priming [FRONTIER] until template creation and all three technique initializers are callable.
+// [INFERRED] slot name. A nonempty registry primes each shared table through a temporary
+// template, preserving the factory, active-template and removal side effects.
 void GeometryTemplateManager::slot_0x48()
 {
-    // The three once-gates.  [INFERRED] placement for the two that have no rebuilt owner yet: this
-    // translation unit holds their only writer, and their readers (the BundledMesh and SkinnedMesh
-    // initTechniques bodies) are not recovered, so they move to those files when those land.
+    staticMeshRearmTechniques();
     g_skinnedMeshTechniquesPending  = 1;   // byte_102397D4
     g_bundledMeshTechniquesPending  = 1;   // byte_10239294
-
-    // byte_1023982C - see the block above. Named and counted rather than written to a second store.
-    // No value is fabricated: the shipped store is a plain byte nothing in this slot reads back.
-    {
-        static unsigned int hits = 0;
-        ++hits;
-        if (hits <= 4u || (hits & (hits - 1u)) == 0u)
-            ::renddx9abi::logf("[FRONTIER] dice::hfe::geom - the byte_1023982C re-arm "
-                               "(g_staticMeshTechniquesPending) reached from "
-                               "GeometryTemplateManager::slot_0x48 (hit #%u) - SKIPPED: the store "
-                               "is file-local to Geom/StaticMeshTemplate.cpp's anonymous "
-                               "namespace. Retail would set it to 1 so the next material read "
-                               "rebuilds the static-mesh technique tables", hits);
-    }
 
     if (m_templates.size == 0)             // cmp [esi+10h], 0 / jbe loc_1015D652 - unsigned
         return;                            // `result` is still the 1 loaded at 1015D536
 
-    RD9_FRONTIER("dice::hfe::geom::GeometryTemplateManager::slot_0x48 "
-                 "(the temp_rel priming tail: createTemplate is a frontier and the three "
-                 "initTechniques bodies are unrecovered)", 0x48);
+    createTemplate(0x870CA653u, ::renddx9abi::HostString("temp_rel"));
+    staticMeshPrimeTechniques();
+    removeTemplate(::renddx9abi::HostString("temp_rel"));
+    createTemplate(0x870CA651u, ::renddx9abi::HostString("temp_rel"));
+    bundledMeshInitTechniques();
+    removeTemplate(::renddx9abi::HostString("temp_rel"));
+    createTemplate(0x870CA652u, ::renddx9abi::HostString("temp_rel"));
+    skinnedMeshInitTechniques();
+    removeTemplate(::renddx9abi::HostString("temp_rel"));
+}
+
+// Internal bridges retain typed virtual dispatch without exposing the private concrete class.
+void geometryTemplateManagerClear()
+{
+    static_cast<GeometryTemplateManager*>(g_GeometryTemplateManager)->clear();
+}
+
+void geometryTemplateManagerRearmTechniques()
+{
+    static_cast<GeometryTemplateManager*>(g_GeometryTemplateManager)->slot_0x48();
 }
 
 bool GeometryTemplateManager::registerOptimizer(const vc71::string& className,

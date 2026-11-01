@@ -1929,8 +1929,8 @@ void SkinnedMesh::draw(void*, void*, void*)
         const unsigned int mask = buildShaderDefineMask(material, false, quality);
 
         // Only the alternate path clamps this index, and it clamps to the LOD index.
-        unsigned int index = *reinterpret_cast<const unsigned int*>(
-            reinterpret_cast<const unsigned char*>(dx9rend::g_Renderer) + 0x6CC);
+        unsigned int index = static_cast<unsigned int>(
+            dx9rend::rendererGetShaderPath(dx9rend::g_Renderer));
         if (rendererFlagAt(0x6D0))
         {
             const unsigned int available = shaderMaskTableSize();

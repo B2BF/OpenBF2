@@ -28,7 +28,7 @@ namespace dx9rend {
 // StaticMesh.cpp both do; the texture manager publishes no header for it.
 int textureManagerSwapDefaultMipClass(int value);
 
-// The Renderer console object - its +0x6CC is the shader-quality index the texture gate reads.
+// The Renderer console object owns the mapped shader-path index the texture gate reads.
 extern IBase* g_Renderer;
 } // namespace dx9rend
 
@@ -779,13 +779,13 @@ void SkinnedMeshTemplate::readMaterials(::renddx9abi::HostNonlinearStream* strea
                     if (std::strstr(name.c_str(), "SpecularLUT_pow36"))
                         name = "@@ABSOLUTE@@Common/Textures/SpecularLUT_pow36.dds";
 
-                    // Skip bump maps at nonzero shader quality, and skip all textures for omitted LODs.
-                    const unsigned int shaderQuality = *reinterpret_cast<const unsigned int*>(
-                        reinterpret_cast<const unsigned char*>(::dice::hfe::dx9rend::g_Renderer)
-                        + 0x6CC);
+                    // Skip bump maps at a nonzero shader path, and all textures for omitted LODs.
+                    const unsigned int shaderPath = static_cast<unsigned int>(
+                        ::dice::hfe::dx9rend::rendererGetShaderPath(
+                            ::dice::hfe::dx9rend::g_Renderer));
                     const bool isBumpName = std::strstr(name.c_str(), "_b.dds") != 0
                                          || std::strstr(name.c_str(), "_b_os.dds") != 0;
-                    if (lodsToSkip <= 0 && (!shaderQuality || !isBumpName))
+                    if (lodsToSkip <= 0 && (!shaderPath || !isBumpName))
                     {
                         vc71::string full(prefix);
                         full += name;

@@ -15,6 +15,7 @@
 #include "../../RendDX9Abi/Frontier.h"
 #include "../Game/Main/IVideoOptions.h"
 #include "../Core/EventManager.h"
+#include "../Core/StringUtil.h"
 #if BF2_PLUGIN_ABI_NATIVE
 // The ECCore CEPreLoad hook hands two of the host's own records to ModInfo::parseMapDesc. In the
 // native flavour the host IS this toolchain, so the recovered declarations are the right types; the
@@ -47,6 +48,7 @@
 #endif
 #include "RendDX9Base.h"
 #include "Texture.h"
+#include "PostProductionFrameWork.h"
 // RW-266: the host classes the frame loop dispatches into, typed - see hostCalls below.
 // System, WindManager and PlayerManager carry no STL across the calls made on them, so both flavours
 // include them; the Menu class, ISwiffHost and ModInfo are native-only (their calls carry the host's
@@ -64,6 +66,12 @@
 
 namespace dice {
 namespace hfe {
+namespace geom {
+extern IBase* g_DebugTextWriter;
+unsigned fontPortedGetColour(IBase* font);
+void debugTextWriterSetColour(IBase* writer, unsigned colour);
+void debugTextWriterQueueText(IBase* writer, int x, int y, const vc71::string& text, int alignment);
+}
 
 // PluginEntry.cpp - four more cached host singletons the frame loop drives (defined there with the
 // other nineteen; only the boot set is in PluginEntry.h).
@@ -206,6 +214,7 @@ void resourceManagerSetReady(unsigned char value);
 // ShaderManager.cpp - what vtable slot +0xC4 tail-calls into.
 extern void* g_shaderManager;
 void updateShaderDefines(void* shaderManager, void* base);
+void shaderManagerReloadEffects(void* shaderManager);
 
 // StateManager singleton and its device listener.
 extern void* g_stateManager;
@@ -394,6 +403,13 @@ public:
     // which the native plugin cannot express as a host carrier - see rendererApplyCurrentDisplayMode.
     bool applyCurrentDisplayMode();
 
+    // The RAPATH index selected from VideoOptions shader quality. This is distinct from the
+    // GSRenderPath listener state. The setter is PE 0x100286C0 and refreshes shader defines.
+    // [INFERRED] member and accessor names. The field layout and setter are recovered; the getter
+    // is [CHOSEN, not recovered] owner-TU plumbing that keeps raw layout arithmetic out of callers.
+    int getShaderPath() const;
+    void setShaderPathAndUpdate(int path);
+
 private:
     // Step 6 factors the two identical debug-text-writer calls; see its definition.
     void setDebugTextWriterFont(const char* singletonName, const char* fontPath);
@@ -440,7 +456,9 @@ private:
     void*        m_rainManager;          // +0x5D8  (374)
     char         m_tail1bBeforeFrameRate[0x600 - 0x5DC];   // +0x5DC .. +0x5FF [FRONTIER]
     double       m_frameRate;                              // +0x600 measured FPS
-    char         m_tail1bAfterFrameRate[0x774 - 0x608];    // +0x608 .. +0x773 [FRONTIER]
+    char         m_tail1bBeforeShaderPath[0x6CC - 0x608];  // +0x608 .. +0x6CB [FRONTIER]
+    int          m_shaderPath;                             // +0x6CC RAPATH index
+    char         m_tail1bAfterShaderPath[0x774 - 0x6D0];   // +0x6D0 .. +0x773 [FRONTIER]
     EngineTexture* m_hemiScratchTexture;                 // +0x774 accumulation/Hemi scratch target
     char         m_tail1bAfterHemiScratch[0x884 - 0x778]; // +0x778 .. +0x883 [FRONTIER]
     void*        m_lazy884;              // +0x884  (545) ctor: 0; initialize lazily allocates it
@@ -836,8 +854,11 @@ Renderer::Renderer()
     for (unsigned int i = 0; i < sizeof(m_tail1bBeforeFrameRate); ++i)
         m_tail1bBeforeFrameRate[i] = 0;
     m_frameRate = 0.0;
-    for (unsigned int i = 0; i < sizeof(m_tail1bAfterFrameRate); ++i)
-        m_tail1bAfterFrameRate[i] = 0;
+    for (unsigned int i = 0; i < sizeof(m_tail1bBeforeShaderPath); ++i)
+        m_tail1bBeforeShaderPath[i] = 0;
+    m_shaderPath = 0;       // PE 0x1002D721: mov [esi+6CCh], ebx (ebx == 0)
+    for (unsigned int i = 0; i < sizeof(m_tail1bAfterShaderPath); ++i)
+        m_tail1bAfterShaderPath[i] = 0;
     m_hemiScratchTexture = 0;
     for (unsigned int i = 0; i < sizeof(m_tail1bAfterHemiScratch); ++i)
         m_tail1bAfterHemiScratch[i] = 0;
@@ -1605,8 +1626,7 @@ void frameTimerTick(void* timer)
         static_cast<double>(*reinterpret_cast<LONGLONG*>(t + 16)) * invFreq;
 }
 
-// sub_1004F1C0 - is post-production active. Reads the owner object's flags; the rebuilt owner is
-// 548 zeroed bytes, so every term is false - the at-rest state of a real one.
+// Reads the current postproduction owner flags.
 bool postProductionActive()
 {
     unsigned char* o = reinterpret_cast<unsigned char*>(g_PostProductionFrameWorkOwner);
@@ -1870,6 +1890,8 @@ void Renderer::geometryStreamTick()
 // environment-map loop collapses to one iteration because the EnvMapManager at base+0x3F4 is
 // withheld - exactly the paths a shipped build takes with those pieces absent.
 
+void rendererDrawFpsOverlay(void* renderer);
+
 bool Renderer::renderFrame(double time, float deltaTime)
 {
     unsigned char* self = reinterpret_cast<unsigned char*>(this);
@@ -2032,8 +2054,7 @@ bool Renderer::renderFrame(double time, float deltaTime)
         if (self[1717] && g_PostProductionFrameWorkOwner
             && (!self[1441] || postProductionActive()))
         {
-            RD9_FRONTIER_AT("dice::hfe::dx9rend::Renderer::renderFrame (sub_1004F210 - the "
-                            "post-production prepare)", this, 0x28);
+            postProductionPrepare();
         }
 
         if (beginScene(0, 0))
@@ -2291,8 +2312,7 @@ bool Renderer::renderFrame(double time, float deltaTime)
             if (self[1717] && g_PostProductionFrameWorkOwner
                 && (!self[1441] || postProductionActive()))
             {
-                RD9_FRONTIER_AT("dice::hfe::dx9rend::Renderer::renderFrame (sub_1004FCD0 - the "
-                                "post-production pass)", this, 0x28);
+                postProductionPass();
             }
 
             if (self[1440])
@@ -2328,6 +2348,10 @@ bool Renderer::renderFrame(double time, float deltaTime)
 
             // The multisample depth detach/reattach pair skips (not multisampled), and the
             // depth-stencil round trip with it.
+
+            if (self[1717] && g_PostProductionFrameWorkOwner
+                && (!self[1441] || postProductionActive()))
+                postProductionFinish();
 
             if (self[1704])
             {
@@ -2402,12 +2426,9 @@ bool Renderer::renderFrame(double time, float deltaTime)
                     }
                 }
 
-                // [FRONTIER] Separate debug flags gate frame-time and culling text overlays.
+                // Separate debug flags gate frame-time and culling text overlays.
                 if (dw[427])                                   // +0x6AC
-                {
-                    RD9_FRONTIER_AT("dice::hfe::dx9rend::Renderer::renderFrame (sub_10029C50 - the "
-                                    "frame-time debug overlay, gated on +0x6AC)", this, 0x28);
-                }
+                    rendererDrawFpsOverlay(this);
                 // Native object vectors shift the fields following them; use the flag member.
                 if (g_ObjectDrawer
                     && reinterpret_cast<const geom::ObjectDrawer*>(g_ObjectDrawer)->isCullingDebugEnabled())
@@ -2484,6 +2505,33 @@ bool Renderer::renderFrame(double time, float deltaTime)
     hostCalls::systemFrameEnd();
     m_frameWallTime = hostCalls::systemWallClockTime() - m_frameStartTime;
     return true;
+}
+
+int rendererGetDrawFps()
+{
+    return rendererField<int>(g_Renderer, 0x6AC);
+}
+
+void rendererSetDrawFps(int value)
+{
+    rendererField<int>(g_Renderer, 0x6AC) = value;
+}
+
+// Queue the frame-rate display; the text manager draws it before EndScene.
+void rendererDrawFpsOverlay(void* renderer)
+{
+    const unsigned char previousStats = statsSwapEnabled(0);
+    IBase* const font = rendererField<IBase*>(renderer, 0x5CC);
+    const unsigned previousColour = geom::fontPortedGetColour(font);
+    geom::debugTextWriterSetColour(geom::g_DebugTextWriter, rendererField<unsigned>(renderer, 0x1C));
+    if (rendererField<int>(renderer, 0x6AC) == 1)
+    {
+        const double fps = rendererField<double>(renderer, 0x600);
+        const std::string formatted = formatString("%.1f / %.1f", fps, 1000.0 / fps);
+        geom::debugTextWriterQueueText(geom::g_DebugTextWriter, 6, 6, vc71::string(formatted.c_str()), 0);
+    }
+    geom::debugTextWriterSetColour(geom::g_DebugTextWriter, previousColour);
+    statsSwapEnabled(previousStats);
 }
 
 // The seam the flush's parameter upload uses. Renderer::getRenderView is recovered, so consumers
@@ -2591,6 +2639,70 @@ void rendererSetHemiTarget(EngineTexture* texture)
     stateManagerSetRenderTarget(0, selected);
     if (selected)
         selected->Release();
+}
+
+bool rendererPostMultisampleActive() { return isMultisampleActive(); }
+
+EngineTexture* rendererPostSceneTexture()
+{
+    return *reinterpret_cast<EngineTexture**>(reinterpret_cast<char*>(g_Renderer) + 1928);
+}
+
+EngineTexture* rendererPostHistoryTexture(unsigned index)
+{
+    return reinterpret_cast<EngineTexture**>(reinterpret_cast<char*>(g_Renderer) + 1912)[index];
+}
+
+double rendererPostTime()
+{
+    const char* timer = *reinterpret_cast<char**>(reinterpret_cast<char*>(g_Renderer) + 1500);
+    return *reinterpret_cast<const double*>(timer + 32);
+}
+
+void rendererPostSelectBackBuffer()
+{
+    unsigned char* raw = static_cast<unsigned char*>(g_rendererBase);
+    IDirect3DSurface9* surface = *reinterpret_cast<IDirect3DSurface9**>(raw + 0xF4);
+    if (!surface)
+        surface = *reinterpret_cast<IDirect3DSurface9**>(raw + 0x76C);
+    if (surface)
+        surface->AddRef();
+    stateManagerSetRenderTarget(0, surface);
+    if (surface)
+        surface->Release();
+}
+
+void rendererPostSetTarget(EngineTexture* texture)
+{
+    EngineTexture*& retained = *reinterpret_cast<EngineTexture**>(
+        reinterpret_cast<char*>(g_Renderer) + 2004);
+    if (retained == texture)
+        return;
+    EngineTexture* previous = retained;
+    textureReleaseRef(previous);
+    retained = texture;
+    if (texture)
+        textureAddRef(texture);
+    if (texture)
+    {
+        IDirect3DSurface9* surface = textureGetLevelSurface(texture, 0, 0x7FFFFFFFu);
+        stateManagerSetRenderTarget(0, surface);
+        if (surface)
+            surface->Release();
+    }
+    else
+        rendererPostSelectBackBuffer();
+}
+
+void rendererPostResolveScene()
+{
+    IDirect3DDevice9* device = *reinterpret_cast<IDirect3DDevice9**>(
+        static_cast<char*>(g_rendererBase) + 12);
+    IDirect3DSurface9* destination = textureGetLevelSurface(rendererPostSceneTexture(), 0, 0x7FFFFFFFu);
+    IDirect3DSurface9* source = *reinterpret_cast<IDirect3DSurface9**>(
+        reinterpret_cast<char*>(g_Renderer) + 1900);
+    device->StretchRect(source, 0, destination, 0, D3DTEXF_NONE);
+    destination->Release();
 }
 
 EngineTexture* Renderer::getHemiScratchTexture() const
@@ -3651,7 +3763,7 @@ unsigned int Renderer::getRenderAheadLimit()
 
 bool Renderer::isExpansionPack()
 {
-    return m_tail1bAfterFrameRate[0x764 - 0x608] != 0;
+    return m_tail1bAfterShaderPath[0x764 - 0x6D0] != 0;
 }
 
 
@@ -3659,9 +3771,9 @@ bool Renderer::isExpansionPack()
 
 bool Renderer::setExpansionPack(unsigned char value)
 {
-    if (static_cast<unsigned char>(m_tail1bAfterFrameRate[0x764 - 0x608]) == value)
+    if (static_cast<unsigned char>(m_tail1bAfterShaderPath[0x764 - 0x6D0]) == value)
         return false;
-    m_tail1bAfterFrameRate[0x764 - 0x608] = static_cast<char>(value);
+    m_tail1bAfterShaderPath[0x764 - 0x6D0] = static_cast<char>(value);
     return true;
 }
 
@@ -3671,7 +3783,7 @@ bool Renderer::setExpansionPack(unsigned char value)
 
 unsigned int Renderer::slot_0xB0()
 {
-    return *reinterpret_cast<const unsigned int*>(&m_tail1bAfterFrameRate[0x768 - 0x608]);
+    return *reinterpret_cast<const unsigned int*>(&m_tail1bAfterShaderPath[0x768 - 0x6D0]);
 }
 RD9_RENDERER_FRONTIER(slot_0xB4,   0xB4)
 
@@ -3750,6 +3862,39 @@ bool Renderer::waitWhileAppInactive()
 bool Renderer::isAppInactive()
 {
     return reinterpret_cast<const RendDX9Base*>(this)->appActive == 0;
+}
+
+
+// Returns the mapped shader-path index used by RAPATH and geometry quality-mask tables.
+
+int Renderer::getShaderPath() const
+{
+    return m_shaderPath;
+}
+
+
+// PE 0x100286C0: store the path, then dispatch Renderer slot +0xC4.
+
+void Renderer::setShaderPathAndUpdate(int path)
+{
+    m_shaderPath = path;
+    refreshShaderDefines();
+}
+
+
+// [CHOSEN, not recovered] owner-TU seams keep the concrete Renderer layout out of renderer
+// clients. The getter preserves retail's non-null precondition; the setter wrapper retains
+// VideoOptions' existing null handling.
+
+int rendererGetShaderPath(const void* renderer)
+{
+    return static_cast<const Renderer*>(renderer)->getShaderPath();
+}
+
+void rendererSetShaderPathAndUpdate(void* renderer, int path)
+{
+    if (renderer)
+        static_cast<Renderer*>(renderer)->setShaderPathAndUpdate(path);
 }
 
 
@@ -4028,13 +4173,7 @@ void Renderer::handleLevelPreLoad(const char* levelName)
         // dword_1023B970, which is g_rendererBase - the same Renderer this method is running on.
         updateShaderDefines(g_shaderManager, g_rendererBase);
 
-        {
-            static unsigned int hits = 0;
-            eccoreSeam(hits, this, "dice::hfe::dx9rend::ShaderManager - sub_10023540 (the cached-"
-                                   "effect reload sweep)",
-                       "re-read every entry of the effect cache and of the +0x54 map and reload it "
-                       "through sub_10023330/sub_100229C0");
-        }
+        shaderManagerReloadEffects(g_shaderManager);
         // Reset is repeated inside the load pass. Keep both calls; loading registers
         // metashaders required before geometry technique masks are built.
         Ra::effectManagerResetEffects();
@@ -4126,9 +4265,7 @@ void DX9RendModule::getSingletonList(RD9_HOST_VECTOR_PARAMETER(SingletonRegInfo,
     }
 }
 
-// Defined in PostProductionFrameWork.cpp: the recovered 0x1004FFA0 constructor. Takes the
-// pre-allocated 548-byte block, installs the three interface vtables + scalar defaults, and defers
-// the resource acquisition / listener registration. Returns the owner.
+// Initializes the preallocated owner, including shader resources and event/device listeners.
 void* postProductionFrameWorkOwnerCtor(void* mem);
 
 
@@ -4170,8 +4307,7 @@ bool DX9RendModule::init()
     return true;     // the body ends "return 1"
 }
 
-// PostProductionFrameWork.cpp - the head of the owner's destructor body (0x10050830): restore the three
-// tables and detach the owner's device-lost listener (0x10050852).
+// Destroys the postproduction owner's listeners, resources and private containers.
 void postProductionFrameWorkOwnerDetach(void* owner);
 
 
@@ -4189,9 +4325,7 @@ bool DX9RendModule::close()
 
     if (g_PostProductionFrameWorkOwner)
     {
-        // Detach the device listener before freeing the owner to avoid a dangling entry.
-        // [FRONTIER] The remaining PostProductionFrameWorkOwner destructor is unavailable;
-        // direct storage release currently omits its remaining teardown.
+        // Destroy retained resources and listeners before releasing owner storage.
         postProductionFrameWorkOwnerDetach(g_PostProductionFrameWorkOwner);
         ::renddx9abi::engineFree(g_PostProductionFrameWorkOwner);
         g_PostProductionFrameWorkOwner = 0;

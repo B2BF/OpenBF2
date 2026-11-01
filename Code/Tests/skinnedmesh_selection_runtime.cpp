@@ -132,6 +132,7 @@ void* g_rendererBase = 0;
 void* g_renderQueues = 0;
 void* g_shaderManager = 0;
 IBase* g_Renderer = 0;
+int rendererGetShaderPath(const void*) { unexpected("rendererGetShaderPath"); }
 unsigned int rendererFrameOrdinal() { unexpected("rendererFrameOrdinal"); }
 bool deviceCapsIsNvidia() { unexpected("deviceCapsIsNvidia"); }
 void* shaderManagerGetEffect(void*, const char*) { unexpected("shaderManagerGetEffect"); }

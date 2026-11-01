@@ -14,6 +14,7 @@ namespace geom {
 
 // DebugTextWriter.cpp. Declared rather than pulled through a header - three symbols.
 IBase* __fastcall createDebugTextWriter(unsigned int iid, IBase* outer);
+IBase* __fastcall createDebugTextWriterManager(unsigned int iid, IBase* outer);
 extern const unsigned int IID_IDebugTextWriter;
 extern const unsigned int CID_DebugTextWriter;
 
@@ -90,6 +91,12 @@ void ModuleGeomMisc::getClassList(RD9_HOST_VECTOR_PARAMETER(ClassRegInfo, hostVe
     info.name    = "dice.hfe.geom.DebugTextWriter";
     info.create  = RD9_CLASS_FACTORY(&createDebugTextWriter);
     out.push_back(info);
+
+    ClassRegInfo writerManager;
+    writerManager.classId = 81042u;
+    writerManager.name = "dice.hfe.geom.DebugTextWriterManager";
+    writerManager.create = RD9_CLASS_FACTORY(&createDebugTextWriterManager);
+    out.push_back(writerManager);
 
     // Font implementation used by the console overlay.
     ClassRegInfo font;

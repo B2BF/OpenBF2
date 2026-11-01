@@ -1,7 +1,7 @@
 // Terrain visibility, shader constants, diffuse passes and water rendering.
 // The grid-water path is selected when ShaderVersion is zero, as in stock shaders.
 // Remaining boundaries include detail lighting, dynamic-shadow range gathering (RW-261),
-// Ra water submission, failed-effect cache sweep and low-quality reload. Profiling is omitted.
+// Ra water submission and low-quality reload. Profiling is omitted.
 #ifdef BF2_IMAGE_RENDDX9
 
 #include "../../RendDX9Abi/PluginAbi.h"
@@ -42,6 +42,7 @@ extern void* g_raShaderConstants;  // RenderQueues.cpp  - dword_1023DDBC (the Ra
 
 bool  effectHasTechnique(void* effect, const vc71::string& name);          // Effect.cpp,  sub_1001DC20
 void  updateShaderDefines(void* shaderManager, void* base);                // ShaderManager.cpp, 0x10023730
+void  shaderManagerReloadEffects(void* shaderManager);
 void  renderQueueFlush(unsigned int slotByteOffset, int flushArg);         // RenderQueues.cpp
 void  vertexBufferBindStream(void* wrapper, unsigned int stream);          // BufferManager.cpp, sub_100146C0
 void  indexBufferBind(void* wrapper);
@@ -720,8 +721,7 @@ void Terrain::drawMain()
             // ShaderManager_updateShaderDefines(dword_1023B97C, this) as shipped - the callee
             // re-reads the renderer base from its global, which is what the tree's signature takes.
             dx9rend::updateShaderDefines(dx9rend::g_shaderManager, dx9rend::g_rendererBase);
-            RD9_FRONTIER("dice::hfe::dx9rend::ShaderManager - sub_10023540 (the cached-effect sweep "
-                         "Terrain::drawMain runs when Hi_Terrain does not validate)", 0xB8);
+            dx9rend::shaderManagerReloadEffects(dx9rend::g_shaderManager);
             if (dx9rend::effectHasTechnique(m_effect, vc71::string("Hi_Terrain")))
                 technique = "Hi_Terrain";
             else

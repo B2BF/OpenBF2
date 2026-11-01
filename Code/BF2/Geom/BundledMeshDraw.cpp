@@ -28,6 +28,7 @@
 #undef CORE_CLASSMANAGER_H
 #endif
 #include "../RendDX9/Texture.h"
+#include "../RendDX9/RendDX9Base.h"
 #include <cmath>
 #include <cstring>
 #include <new>
@@ -444,9 +445,10 @@ void BundledMesh::draw(void*,void*,void*)
         BundledMeshState* const state=material->m_state;
         unsigned int mask=materialFeatures(material,false,caps);
         if(inside && !(mask&0x1000))mask=(mask&~0x100u)|0x200u;
-        unsigned int quality=field<unsigned int>(dx9rend::g_Renderer,0x6CC);
-        if(field<unsigned char>(dx9rend::g_Renderer,0x708) && m_shaderLod>quality)quality=m_shaderLod;
-        const unsigned int qualityMask=bundledMeshQualityMask(quality);
+        unsigned int shaderPath=static_cast<unsigned int>(
+            dx9rend::rendererGetShaderPath(dx9rend::g_Renderer));
+        if(field<unsigned char>(dx9rend::g_Renderer,0x708) && m_shaderLod>shaderPath)shaderPath=m_shaderLod;
+        const unsigned int qualityMask=bundledMeshQualityMask(shaderPath);
         mask&=qualityMask;if(!(mask&0x5F))mask|=1;
         RenderQueueEntry* const entry=dx9rend::renderEntryPoolAcquire();
         RaLightRecord* const sun=static_cast<RaLightRecord*>(entry->lightArray.lights.value);

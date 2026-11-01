@@ -21,6 +21,7 @@ public:
     const char* getName() override;
     bool setName(const char*) override;
     bool slot_0x24() override;                            // 5A5E20, true
+    bool update(System*, const NodeState*, const Rect*, float) override;
     static TypeDescriptor* getClassType();                // 7D18B0, metadata9390B0
 
     // [CHOSEN, not recovered] Native transform-list property access.
@@ -43,7 +44,7 @@ protected:
     int* m_positionBinding1;                              // +20, every other index
     int m_count;                                          // +24, the fourth argument
     int m_offsetX, m_offsetY;                             // +28/+2C
-    std::uint32_t m_field030;                             // +30, constructor0
+    float m_field030;                                     // +30, horizontal direction, constructor0
     float m_field034;                                     // +34, constructor 1.0
     float m_positionX, m_positionY;                       // +38/+3C
 };

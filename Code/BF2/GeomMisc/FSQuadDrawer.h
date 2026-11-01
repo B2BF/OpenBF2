@@ -1,5 +1,5 @@
-// Draws pass 17 as a source-to-destination blit, bracketed by StateManager.
-// Other private pass and parameter paths are not implemented.
+// Fullscreen grids for hemi blits, TV rendering and tinnitus history capture.
+// Other private shader passes and parameter paths remain unimplemented.
 
 #ifndef BF2_GEOMMISC_FSQUADDRAWER_H
 #define BF2_GEOMMISC_FSQUADDRAWER_H
@@ -28,6 +28,14 @@ void destroyFSQuadDrawer();
 // FSQuadDrawer submission method.  This is that exact, deliberately narrow operation.
 void fsQuadDrawerDrawHemiMap(dx9rend::EngineTexture* source,
                              dx9rend::EngineTexture* destination);
+
+// Draws the viewport-sized quad with the effect/pass already selected by the caller.
+void fsQuadDrawerDrawCurrentEffect();
+// Pass zero, with state push/pop and temporary-backbuffer selection.
+void fsQuadDrawerBlitToBackBuffer(dx9rend::EngineTexture* source);
+// Quarter-size temporal history capture using the stock cheap Gaussian pass.
+void fsQuadDrawerCaptureTinnitus(dx9rend::EngineTexture* source,
+                                dx9rend::EngineTexture* destination);
 
 } // namespace geom
 } // namespace hfe

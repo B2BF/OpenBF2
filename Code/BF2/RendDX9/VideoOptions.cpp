@@ -21,7 +21,7 @@
 #include <cstddef>      // offsetof - the retail-ABI display-block assertions in sub_1000F8D0
 #include <intrin.h>     // __rdtsc / __cpuid - the CPU-speed benchmark inside detectQualityLevel (+0x34)
 #include <cstdio>       // _snprintf - the "%ix%i@%iHz" / "%dSamples" formatters
-#include <cstdlib>      // abort - the explicit ECCore callback frontier
+#include <cstdlib>
 #include <cstring>      // _strnicmp - setDynamicOption's prefix match
 #if BF2_PLUGIN_ABI_NATIVE
 #include <string>       // the host-shaped dynamic-option carriers, below
@@ -85,7 +85,15 @@ static HostDynamicOptionList    s_nativeOptionList[2];
 // pulled in through a header because these are image globals, not an interface.
 extern IBase* g_Renderer;                    // BF2Render.cpp,   0x1023B96C
 extern void*  g_textureManager;              // TextureManager.cpp, dword_1023B974
-namespace Ra { extern void* g_effectManager; }   // dword_1023D954
+namespace Ra {
+extern void* g_effectManager;
+void effectManagerResetEffects();
+}
+extern void* g_shaderManager;
+void updateShaderDefines(void* shaderManager, void* base);
+void shaderManagerReloadEffects(void* shaderManager);
+void textureManagerSweep();
+void resourceManagerSetReady(unsigned char value);
 
 // BF2Render.cpp, dword_10258F38. The ECCore handler's case 2 publishes the level-scoped
 // OverGrowth owner. apply changes its recovered +0xF4 fog/view-distance scalar when present.
@@ -94,6 +102,8 @@ extern void* g_OverGrowth;
 } // namespace dx9rend
 
 namespace geom {
+void geometryTemplateManagerClear();
+void geometryTemplateManagerRearmTechniques();
 extern LightManager* g_LightManager;
 extern IBase* g_ParticleSystemManager;
 extern IBase* g_DecalManager;
@@ -148,20 +158,6 @@ int __fastcall videoOptions_getQuality(void* self, void*, int index)
 
 namespace {
 
-// [TEMP] [CHOSEN, not recovered] Resolution changes remain a logged skip during login.
-// Reports hits 1..4 and powers of two. [RETIRE-WHEN: rc-login-reset-hold]
-// Restore both calls after a live device reset verifies all default-pool resources are released.
-inline void noteResChangeHeld(int resIndex, int aaIndex)
-{
-    static unsigned int hits = 0;
-    ++hits;
-    if (hits > 4u && (hits & (hits - 1u)) != 0u)
-        return;
-    ::renddx9abi::logf("VideoOptions::apply: resolution/AA changed (res#%d, aa#%d); the resolution "
-                       "change sub_1000F8D0 is HELD (RC, RW-251) - the device keeps its current mode; "
-                       "the change is marked applied (hit #%u)", resIndex, aaIndex, hits);
-}
-
 // clamp(v - 1, 0, 1), the shape the original open-codes five times in a row.
 inline int clampMinusOne(int v)
 {
@@ -195,15 +191,6 @@ void rendererUpdateShaderDefines(void* renderer)
     void** vtbl = *reinterpret_cast<void***>(renderer);
     typedef void (__thiscall* Fn)(void*);
     reinterpret_cast<Fn>(vtbl[0xC4 / 4])(renderer);
-}
-
-// sub_100286C0: writes +0x6CC then does exactly what sub_100278A0 does.
-void rendererSetShaderPathAndUpdate(void* renderer, int value)
-{
-    if (!renderer)
-        return;
-    writeRendererInt(renderer, 0x6CC, value);
-    rendererUpdateShaderDefines(renderer);
 }
 
 // A virtual call with one integer argument, on an object reached through a raw vtable offset.
@@ -365,20 +352,10 @@ void videoOptionsChangeResolution(VideoOptions* vo, const Mode40* mode)
 
 } // anonymous namespace
 
-void __fastcall videoOptions_apply(void* self, void*)
+// Applies quality state internally, including during the level-load notification.
+// Public apply has a separate loaded-game refusal; the event handler bypasses only that wrapper.
+void videoOptionsApplySettings(VideoOptions* vo)
 {
-    RD9_TRACE_AT("dice::hfe::dx9rend::VideoOptions::apply", self, 0x2C);
-
-    VideoOptions* vo = static_cast<VideoOptions*>(self);
-
-    // The early-out, and the diagnostic quotes VideoOptions.cpp:243.
-    if (vo->gameLoaded)
-    {
-        ::renddx9abi::logf("VideoOptions.cpp:243 Not allowed to apply video options when a game "
-                           "is loaded!");
-        return;
-    }
-
     void* const renderer = ::dice::hfe::dx9rend::g_Renderer;
 
     // index 6: the mip level
@@ -632,18 +609,19 @@ void __fastcall videoOptions_apply(void* self, void*)
     if (terrain)
         writeRendererByte(terrain, 0x41C, 1);
 
-    // [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: rc-login-reset-hold]
-    // Resolution and AA resets remain held; applied-state bookkeeping still advances.
-    // Restore reset calls after the login path survives device reset and resource rebinding.
+    // Apply the selected mode before advancing the applied resolution/AA indices.
+    // A combined change resets once; an AA-only change takes the second branch.
     if (!vo->gameLoaded && vo->minusOneD4 != vo->minusOneDC)
     {
-        noteResChangeHeld(vo->minusOneDC, vo->minusOneD8);                          // 0x10010365 held
+        videoOptionsChangeResolution(vo,
+            reinterpret_cast<const Mode40*>(vo->modeCache.first) + vo->minusOneDC);
         vo->minusOneD4 = vo->minusOneDC;   // applied resolution = selected
         vo->minusOneD0 = vo->minusOneD8;   // applied AA = selected
     }
     if (!vo->gameLoaded && vo->minusOneD0 != vo->minusOneD8)
     {
-        noteResChangeHeld(vo->minusOneDC, vo->minusOneD8);                          // 0x100103AE held
+        videoOptionsChangeResolution(vo,
+            reinterpret_cast<const Mode40*>(vo->modeCache.first) + vo->minusOneDC);
         vo->minusOneD0 = vo->minusOneD8;   // applied AA = selected
     }
 
@@ -656,6 +634,19 @@ void __fastcall videoOptions_apply(void* self, void*)
 
     // The return expression: one more updateShaderDefines.
     rendererUpdateShaderDefines(renderer);
+}
+
+void __fastcall videoOptions_apply(void* self, void*)
+{
+    RD9_TRACE_AT("dice::hfe::dx9rend::VideoOptions::apply", self, 0x2C);
+    VideoOptions* const vo = static_cast<VideoOptions*>(self);
+    if (vo->gameLoaded)
+    {
+        ::renddx9abi::logf("VideoOptions.cpp:243 Not allowed to apply video options when a game "
+                           "is loaded!");
+        return;
+    }
+    videoOptionsApplySettings(vo);
 }
 
 
@@ -1229,16 +1220,50 @@ void* const kVideoOptionsVtable[15] =
 
 // 101DDFFC is exactly one slot, 100103F0. The ECCore subobject is at +04;
 // its void(category, id, EventNode*, userData) call uses four stack words.
-// [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: renddx9-video-options-eccore]
-// The complete callback is read, but its geometry/shader cleanup dependencies
-// remain unimplemented. Keep the existing registration boundary unchanged;
-// if this correctly shaped subobject is called, stop before reading arguments.
-void __fastcall videoOptions_handleECCoreEvent(void*, void*, int, unsigned int,
+// Level load applies pending quality values before refreshing their dependent resource caches.
+void __fastcall videoOptions_handleECCoreEvent(void* self, void*, int category, unsigned int id,
                                                void*, void*)
 {
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::dx9rend::VideoOptions::handleECCoreEvent reached (PE 0x100103F0)\n");
-    std::fflush(stderr);
-    std::abort();
+    if (category != ECCore)
+        return;
+    VideoOptions* const vo = reinterpret_cast<VideoOptions*>(
+        static_cast<unsigned char*>(self) - offsetof(VideoOptions, vptrEventHandler));
+    if (id == 2)
+    {
+        videoOptionsApplySettings(vo);
+        vo->gameLoaded = 1;
+        if (vo->dirty115)
+        {
+            geom::geometryTemplateManagerClear();
+            vo->dirty115 = 0;
+        }
+        if (vo->dirty114)
+        {
+            const bool wasReady = resourceManagerIsReady();
+            resourceManagerSetReady(1);
+            textureManagerSweep();
+            resourceManagerSetReady(wasReady);
+            vo->dirty114 = 0;
+        }
+        if (vo->dirty117)
+        {
+            if (vo->dirty116)
+                Ra::effectManagerResetEffects();
+            geom::geometryTemplateManagerRearmTechniques();
+            vo->dirty117 = 0;
+            vo->dirty116 = 0;
+        }
+        if (vo->dirty118)
+        {
+            updateShaderDefines(g_shaderManager, g_rendererBase);
+            shaderManagerReloadEffects(g_shaderManager);
+            vo->dirty118 = 0;
+        }
+    }
+    else if (id == 3)
+        videoOptionsApplySettings(vo);
+    else if (id == 13)
+        vo->gameLoaded = 0;
 }
 
 void* const kVideoOptionsEventVtable[1] =
@@ -1291,15 +1316,9 @@ void videoOptionsInitialize(void* base)
     VideoOptions* vo = reinterpret_cast<VideoOptions*>(
         reinterpret_cast<unsigned char*>(b) + 1016);
 
-    // skipped (1 of 3): the ECCore event registration.
-    // The original registers `this + 4` - the ECCoreEventHandler subobject - with the host's
-    // EventManager at priority -1000000, and logs VideoOptions.cpp:129 if that fails. We do not
-    // register while the now-constructed one-slot callback remains a diagnostic stop.
-    // [CHOSEN, not recovered] [RETIRE-WHEN: renddx9-video-options-eccore]
-    // Retire the callback stop and this pre-existing withheld registration together
-    // when the complete callback dependencies and typed registration are recovered.
-    ::renddx9abi::logf("VideoOptions::initialize: not registering as an ECCore handler - "
-                       "VideoOptions::handleECCoreEvent remains a named frontier");
+    IEventListener* const listener = reinterpret_cast<IEventListener*>(&vo->vptrEventHandler);
+    if (!eventManager->registerEventHandler(ECCore, listener, -1000000))
+        ::renddx9abi::logf("VideoOptions.cpp:129 Failed to register VideoOptions as event handler for ECCore.");
 
     // The four settings, with the defaults the body passes.
     vo->windowSizeX    = readIntSetting("GSWindowSizeX",   0);

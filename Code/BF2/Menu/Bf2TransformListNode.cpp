@@ -2,6 +2,8 @@
 #include "Bf2TransformListNode.h"
 #if !DEDICATED
 #include "Bf2TransformNode.h"
+#include "../External/BFMeme/Style.h"
+#include "../External/BFMeme/System.h"
 #include "../External/BFMeme/TypeDescriptor.h"
 #include <cstring>
 namespace dice { namespace meme {
@@ -60,6 +62,55 @@ bool Bf2TransformListNode::setName(const char* name)
     return true;
 }
 bool Bf2TransformListNode::slot_0x24() { return true; }
+
+// Arrange the borrowed transforms before the ordinary Node update traversal.
+bool Bf2TransformListNode::update(System* system, const NodeState* state,
+                                  const Rect* bounds, float delta)
+{
+    if (m_positionBinding0) m_positionX = static_cast<float>(*m_positionBinding0);
+    if (m_positionBinding1) m_positionY = static_cast<float>(*m_positionBinding1);
+    m_positionX += static_cast<float>(m_offsetX);
+    m_positionY += static_cast<float>(m_offsetY);
+
+    float width = 0.0f;
+    float height = 0.0f;
+    const float gapY = static_cast<float>(m_count) * m_field034;
+    const float gapX = static_cast<float>(m_count) * m_field030;
+    for (Bf2TransformNode* child : m_children) {
+        if (m_field030 > 0.0f) {
+            width += child->getSize().x;
+            if (height < child->getSize().y) height = child->getSize().y;
+        } else {
+            height += child->getSize().y;
+            if (width < child->getSize().x) width = child->getSize().x;
+        }
+        width += gapX;
+        height += gapY;
+    }
+
+    // The far edges are captured before either near-edge clamp. Even an
+    // oversized list therefore follows the original two independent tests.
+    const float right = width + m_positionX;
+    const float bottom = height + m_positionY;
+    if (system->getWidth() * 0.5f + bounds->x > m_positionX)
+        m_positionX = system->getWidth() * 0.5f + bounds->x;
+    if (system->getWidth() * 0.5f + bounds->x + bounds->width < right)
+        m_positionX = system->getWidth() * 0.5f + bounds->x + bounds->width - width;
+    if (system->getHeight() * 0.5f + bounds->y > m_positionY)
+        m_positionY = system->getHeight() * 0.5f + bounds->y;
+    if (system->getHeight() * 0.5f + bounds->height + bounds->y < bottom)
+        m_positionY = system->getHeight() * 0.5f + bounds->height + bounds->y - height;
+
+    float x = m_positionX;
+    float y = m_positionY;
+    for (Bf2TransformNode* child : m_children) {
+        child->setPositionForHud(x, y);
+        const float childStepY = child->getSize().y * m_field034;
+        x = m_field030 * child->getSize().x + x + gapX;
+        y = childStepY + y + gapY;
+    }
+    return Node::update(system, state, bounds, delta);
+}
 
 namespace {
 TypeDescriptor* const registeredBf2TransformListNodeType = Bf2TransformListNode::getClassType();
