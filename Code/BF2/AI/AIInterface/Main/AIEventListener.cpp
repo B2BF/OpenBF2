@@ -1,6 +1,7 @@
 
 #include "AIEventListener.h"
 
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -10,7 +11,11 @@
 #include "../../../Game/Objects/IPlayer.h"          // world::IPlayer::getId / getIsAIPlayer
 #include "../SingletonServer.h"                     // BFSingletonServer::m_iaiEventCourier
 #include "../BFKnowledge/BFGame.h"                  // IAIGame::setIsPrecaching / isPlaying
-#include "../BFKnowledge/AIPlayerFactory.h"         // IAIPlayerFactory
+#include "../BFKnowledge/AIPlayerFactory.h"         // IAIPlayerFactory, isOccupiedObject
+#include "../BFKnowledge/IAIObject.h"               // the vehicle and armament arms
+#include "../BFKnowledge/IAIObjectPlugIn.h"         // IAIObjectUnit / IAIObjectPhysical
+#include "../Module/BFConsole.h"                    // BFConsole::getAIMessageSettings (radio)
+#include "../../AIDLL/AI/AIKnowledge/BFInformationCourier.h"  // IAIInformationCourier armament
 #include "../../AIDLL/AI/Main/CommonSingletonServer.h"
 #include "../../AIDLL/AI/Main/AIEventCourier.h"     // IAIEventCourier - 55 named slots
 #include "../../AIDLL/AI/Main/AISettingsInterfaces.h"  // IAISettings::getDraw
@@ -75,17 +80,90 @@ void AIEventListener::registerEvents()
 
 namespace {
 
-// [FRONTIER] [TEMP] [CHOSEN, not recovered] - one per unwritten arm, each naming its own
-// (category, id) so the next person knows exactly which dispatch entry is wanted rather than only
-// that `handleEvent` was reached. [RETIRE-WHEN: aidll-01-adapters]
-void unwrittenArm(const char* what, int category, unsigned int id)
+// Category 3 id 0x16 (enemy spotted): SpottedEvent::executeServer's eight-byte stack block, an AI
+// object pointer followed by the low byte of the team. The x86 layout is retail's (team at +4);
+// the struct keeps the team after the full pointer on native x64.
+struct SpottedPayload
 {
-    std::fprintf(stderr,
-                 "[FRONTIER] dice::hfe::ai::AIEventListener::handleEvent - %s" "\n"
-                 "           category=%d id=%u" "\n",
-                 what, category, id);
-    std::fflush(stderr);
-    std::abort();
+    IAIObject*    aiObject;     // +0x00
+    unsigned char team;         // +0x04
+};
+#if defined(_M_IX86)
+static_assert(offsetof(SpottedPayload, team) == 4, "retail spotted-event team byte");
+#endif
+
+// Category 3 ids 1 and 2 (seat entered / left): the five-dword block Soldier::enter posts
+// (Soldier.cpp SoldierAiSeatPayload). The arms read +0x10 as a byte (`cmpb $0x0, 0x10(%esi)`).
+struct SeatPayload
+{
+    IAIObject* object;   // +0x00 the entered object (id 1) / the leaving soldier (id 2)
+    IAIObject* other;    // +0x04 id 1: the armament lender; id 2: the vehicle left
+    int        team;     // +0x08
+    int        playerId; // +0x0C
+    int        flag;     // +0x10 low byte tested
+};
+
+// Category 3 id 0 (player killed): two ints, then the object whose borrowed armament is returned.
+struct KilledPayload
+{
+    int        a;        // +0x00 eventPlayerKilled's second argument
+    int        b;        // +0x04 its first
+    IAIObject* object;   // +0x08
+};
+
+// Category 3 ids 6 / 7 (man down / revived): Soldier.cpp SoldierAiPlayerPayload.
+struct ObjectPlayerPayload
+{
+    IAIObject* object;   // +0x00
+    int        playerId; // +0x04
+};
+
+// Category 3 ids 3 and 17: an int followed by an object.
+struct IntObjectPayload
+{
+    int        value;    // +0x00 id 3: eventPlayerExitVehicle's int; id 17: the bridge's int
+    IAIObject* object;   // +0x04
+};
+
+// Category 3 id 10 (radio): the message key and two ints, all forwarded.
+struct RadioPayload
+{
+    int message;         // +0x00 BFConsole::getAIMessageSettings key
+    int a;               // +0x04
+    int b;               // +0x08
+};
+
+// Category 3 id 15 (commander request), 68 bytes copied to the stack whole (bf2 0x842FE75).
+// Only +0x00 (type), +0x30, +0x34 and +0x38 are read; the rest is [UNRESOLVED].
+struct CommanderRequestPayload
+{
+    int            type;        // +0x00 0 artillery, 1 UAV, 2 vehicle drop, 3 supply
+    unsigned short unknown04;   // +0x04
+    Vec3           unknown08[3];// +0x08
+    unsigned char  unknown2C;   // +0x2C
+    int            a;           // +0x30
+    int            b;           // +0x34
+    Vec3           position;    // +0x38
+};
+static_assert(sizeof(CommanderRequestPayload) == 0x44, "retail 68-byte commander request");
+
+#if defined(_M_IX86)
+static_assert(sizeof(SeatPayload) == 20 && offsetof(KilledPayload, object) == 8
+              && offsetof(IntObjectPayload, object) == 4, "retail ECAI payloads");
+#endif
+
+IAIInformationCourier* informationCourier()
+{
+    return static_cast<IAIInformationCourier*>(CommonSingletonServer::m_iaiInformationCourier);
+}
+
+// The armament hand-back of ids 0, 2 and 14 once the unit must borrow armament: reset it, and the
+// information courier resets both sides' handles (1 then 2).
+void returnArmament(IAIObject* object)
+{
+    object->resetArmament();                                         // +0x80
+    informationCourier()->resetArmament(object->getHandle(1));      // +0x30
+    informationCourier()->resetArmament(object->getHandle(2));
 }
 
 } // anonymous namespace
@@ -253,9 +331,9 @@ void AIEventListener::handleEvent(EventCategory category,
 
         case 0x16u:
             {
-                // The payload is an object pointer followed by a team byte at offset 4.
-                const unsigned char* const bytes = static_cast<const unsigned char*>(userData);
-                courier->event_enemySpotted(*static_cast<IAIObject* const*>(userData), bytes[4]);
+                // The payload is an object pointer followed by a team byte (offset 4 on x86).
+                const SpottedPayload* const payload = static_cast<const SpottedPayload*>(userData);
+                courier->event_enemySpotted(payload->aiObject, payload->team);
             }
             return;
 
@@ -263,56 +341,179 @@ void AIEventListener::handleEvent(EventCategory category,
             courier->event_isRepaired(*static_cast<const int*>(userData));
             return;
 
-        // the arms that dereference the payload as a world::IObject
-        // Each of these walks a vehicle or a pathfinding map through `world::IObject` vtable slots
-        // this tree does not name yet (decimal +116, +124, +128, +148, +152, +200, +204, +208, +252
-        // and +296). Naming them is a `world::IObject` slot-map job, not an AI one, and guessing
-        // them would put ten wrong method names in the tree. Each stop below says which arm it is.
+        // bf2 0x842F7BE: the kill, then a non-null unit object's borrowed armament goes back
+        // (isUnit +0x74 gates the getUnit dereference).
         case 0u:
-            unwrittenArm("category 3 id 0 - player killed, plus the vehicle's armament release",
-                         (int)category, id);
+            {
+                const KilledPayload* const p = static_cast<const KilledPayload*>(userData);
+                courier->eventPlayerKilled(p->b, p->a);
+                IAIObject* const object = p->object;
+                if (object && object->isUnit()                        // no getUnit null test here
+                    && object->getUnit()->mustBorrowArmament(object))
+                    returnArmament(object);
+            }
             return;
+
+        // bf2 0x842F870: entering a seat. The entered object takes the team (setSide +0x128), its
+        // primary object's physics are enabled for that team (IAIObjectPhysical +0x74), a unit that
+        // must borrow armament borrows the lender's (+0x7C) and the information courier links both
+        // sides' handles (+0x2C lender, borrower), the lender leaves the grid (+0xC8), and the AI
+        // hears eventPlayerEnterVehicle(playerId, object, lender).
         case 1u:
-            unwrittenArm("category 3 id 1 - player entered vehicle (and the 'not prepared for use"
-                         " with AI' Debug at line 166)", (int)category, id);
+            {
+                const SeatPayload* const p = static_cast<const SeatPayload*>(userData);
+                IAIObject* const object = p->object;
+                if (!object)
+                {
+                    if (static_cast<unsigned char>(p->flag))
+                        return;
+                    // The image logs and carries on into the null object (line 166).
+                    Debug(DebugTypeError, "AI/AIInterface/Main/AIEventListener.cpp", 166, "")
+                        << "You have tried to enter a vehicle that is not prepared for use with AI."
+                           " Game will crash.";
+                }
+                IAIObject* const primary = object->getPrimaryObject();
+                IAIObject* const lender = p->other;
+                object->setSide(p->team);
+                if (primary)
+                {
+                    IAIObjectPhysical* const physical = primary->getPhysical();
+                    if (physical)
+                        physical->enablePhysics(p->team);
+                }
+                if (lender && object->getUnit() && object->getUnit()->mustBorrowArmament(object))
+                {
+                    object->borrowArmament(lender);
+                    {
+                        const unsigned int borrower = object->getHandle(1);
+                        informationCourier()->borrowArmament(lender->getHandle(1), borrower);
+                    }
+                    {
+                        const unsigned int borrower = object->getHandle(2);
+                        informationCourier()->borrowArmament(lender->getHandle(2), borrower);
+                    }
+                }
+                if (p->other)
+                    p->other->removeFromGrid();
+                courier->eventPlayerEnterVehicle(p->playerId, p->object, p->other);
+            }
             return;
+
+        // bf2 0x842FAB0: leaving a seat. The vehicle left returns borrowed armament and, when
+        // nobody else occupies it, goes neutral (setSide 0); the soldier re-enters the grid.
         case 2u:
-            unwrittenArm("category 3 id 2 - player exited vehicle", (int)category, id);
+            {
+                const SeatPayload* const p = static_cast<const SeatPayload*>(userData);
+                if (static_cast<unsigned char>(p->flag))
+                    return;
+                IAIObject* const vehicle = p->other;
+                IAIObject* const soldier = p->object;
+                if (vehicle)
+                {
+                    if (vehicle->getUnit() && vehicle->getUnit()->mustBorrowArmament(vehicle))
+                        returnArmament(vehicle);
+                    if (!isOccupiedObject(vehicle, vehicle))
+                        vehicle->setSide(0);
+                }
+                if (soldier)
+                    soldier->reInsertInGrid();                       // +0xCC
+            }
             return;
+
+        // bf2 0x842FB84.
         case 3u:
-            unwrittenArm("category 3 id 3 - eventPlayerExitVehicle", (int)category, id);
+            {
+                const IntObjectPayload* const p = static_cast<const IntObjectPayload*>(userData);
+                courier->eventPlayerExitVehicle(p->object, p->value);
+            }
             return;
+
+        // bf2 0x842FBE9: the payload is the AI object (Soldier's kit pick-up); update +0x4C.
         case 5u:
-            unwrittenArm("category 3 id 5 - object slot +76", (int)category, id);
+            static_cast<IAIObject*>(userData)->update();
             return;
+
+        // bf2 0x842FBF6.
         case 6u:
-            unwrittenArm("category 3 id 6 - man down", (int)category, id);
+            {
+                const ObjectPlayerPayload* const p = static_cast<const ObjectPlayerPayload*>(userData);
+                courier->eventManDown(p->playerId, p->object);
+            }
             return;
+
+        // bf2 0x842FC16: the object is updated first.
         case 7u:
-            unwrittenArm("category 3 id 7 - revived", (int)category, id);
+            {
+                const ObjectPlayerPayload* const p = static_cast<const ObjectPlayerPayload*>(userData);
+                p->object->update();
+                courier->eventRevived(p->playerId, p->object);
+            }
             return;
+
+        // bf2 0x842FD3F: a known message (BFConsole::m_instance, read directly) is forwarded.
         case 0xAu:
-            unwrittenArm("category 3 id 10 - radio message (needs BFConsole::getAIMessageSettings,"
-                         " itself a frontier)", (int)category, id);
+            {
+                const RadioPayload* const p = static_cast<const RadioPayload*>(userData);
+                AIRadioMessageSettings settings;
+                if (BFConsole::m_instance->getAIMessageSettings(p->message, settings))
+                    courier->eventRadioMessage(settings, p->a, p->b);
+            }
             return;
+
+        // bf2 0x842FDF7: armament release of a non-null object.
         case 0xEu:
-            unwrittenArm("category 3 id 14 - vehicle armament release", (int)category, id);
+            {
+                IAIObject* const object = static_cast<IAIObject*>(userData);
+                if (object && object->getUnit() && object->getUnit()->mustBorrowArmament(object))
+                    returnArmament(object);
+            }
             return;
+
+        // bf2 0x842FE75: the commander's requests by type; others are logged at line 449.
         case 0xFu:
-            unwrittenArm("category 3 id 15 - commander request (artillery/uav/supply/vehicle drop),"
-                         " a 68-byte payload struct", (int)category, id);
+            {
+                const CommanderRequestPayload request = *static_cast<const CommanderRequestPayload*>(userData);
+                switch (request.type)
+                {
+                case 0: courier->event_receivedArtilleryRequest(request.a, request.b, request.position); break;
+                case 1: courier->event_receivedUavRequest(request.a, request.b, request.position); break;
+                case 2: courier->event_receivedVehicleDropRequest(request.a, request.b, request.position); break;
+                case 3: courier->event_receivedSupplyRequest(request.a, request.b, request.position); break;
+                default:
+                    Debug(DebugTypeError, "AI/AIInterface/Main/AIEventListener.cpp", 449, "")
+                        << "AI received unknown request type: " << request.type;
+                    break;
+                }
+            }
             return;
+
+        // bf2 0x84301D9: while playing (IAIGame +0x60), the bridge's map position id is destroyed
+        // (with a null object) and the bridge reported destroyed.
         case 0x11u:
-            unwrittenArm("category 3 id 17 - bridge destroyed", (int)category, id);
+            if (static_cast<IAIGame*>(CommonSingletonServer::m_iaiGame)->isPlaying())
+            {
+                const IntObjectPayload* const p = static_cast<const IntObjectPayload*>(userData);
+                IAIObject* const bridge = p->object;
+                courier->event_pathfindingMapIdDestroyed(bridge->getPhysical()->getMapPosId(), 0);
+                courier->event_bridgeDestroyed(bridge, p->value);
+            }
             return;
+
+        // bf2 0x843023F: the payload is the AI object (ArmorGLComp's repair post).
         case 0x12u:
-            unwrittenArm("category 3 id 18 - bridge repaired", (int)category, id);
+            {
+                IAIObject* const bridge = static_cast<IAIObject*>(userData);
+                courier->event_pathfindingMapIdRestored(bridge->getPhysical()->getMapPosId());
+                courier->event_bridgeRepaired(bridge);
+            }
             return;
+
+        // bf2 0x8430280 / 0x843028A: the payload is the AI object.
         case 0x13u:
-            unwrittenArm("category 3 id 19 - object slot +204", (int)category, id);
+            static_cast<IAIObject*>(userData)->reInsertInGrid();
             return;
         case 0x14u:
-            unwrittenArm("category 3 id 20 - object slot +200", (int)category, id);
+            static_cast<IAIObject*>(userData)->removeFromGrid();
             return;
 
         default:

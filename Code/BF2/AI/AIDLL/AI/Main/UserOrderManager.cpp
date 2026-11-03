@@ -1,8 +1,9 @@
-// [RETIRE-WHEN: aidll-02-skeleton] Complete and validate the remaining UserOrderManager operations.
+// static init: ELF 0x3521D0 (__tcf_0 0x352230, _GLOBAL__I 0x352260): <iostream>'s Init object only.
+#include <iostream>
 
 #include "UserOrderManager.h"
 
-#include "AIDllFrontier.h"
+#include "../AIUtils/checkPointer.h"
 #include "../AIStrategicEntity/GuardPosition.h"
 #include "../AIStrategicEntity/PatrolPath.h"
 
@@ -13,7 +14,7 @@ namespace ai {
 // ds:, plain .bss.
 UserOrderManager* UserOrderManager::m_instance = 0;
 
-// Initializes patrol-path and guard-position maps and registers the order manager.
+// ELF 0x351510 / 0x351690. Initializes maps and registers the first order manager.
 UserOrderManager::UserOrderManager()
     : m_activePatrolPath(0)
     , m_patrolCursor(m_patrolPaths.end())
@@ -26,7 +27,7 @@ UserOrderManager::UserOrderManager()
         m_instance = this;
 }
 
-// Deletes owned patrol paths before guard positions, advancing iterators after deletion
+// ELF 0x351750 / 0x351900. Deletes patrol paths before guard positions, advancing after deletion
 // and re-reading end(). Clears a matching singleton after pointee cleanup; map members
 // then release their nodes in reverse declaration order.
 UserOrderManager::~UserOrderManager()
@@ -46,54 +47,85 @@ UserOrderManager::~UserOrderManager()
 // the four accessors, 10- each
 // Each hands out a reference or a raw pointer straight into a member, with no copy and no guard.
 
+// ELF 0x351D30.
 PatrolPath* UserOrderManager::getActivePatrolPath() const
 {
     return m_activePatrolPath;
 }
 
+// ELF 0x351FE0.
 GuardPosition* UserOrderManager::getActiveGuardPosition() const
 {
     // Indeterminate until something assigns it - see the constructor.
     return m_activeGuardPosition;
 }
 
+// ELF 0x3520F0.
 const std::map<std::string, PatrolPath*>& UserOrderManager::getPatrolPaths() const
 {
     return m_patrolPaths;
 }
 
+// ELF 0x351FD0.
 const std::map<std::string, GuardPosition*>& UserOrderManager::getGuardPositions() const
 {
     return m_guardPositions;
 }
 
-// [FRONTIER] Advances one patrol path or guard position per tick, with an idle phase between sweeps.
-// The current body stops because PatrolPath::update and GuardPosition::update remain unimplemented.
-// [UNRESOLVED] Purpose of the idle phase.
-// [RETIRE-WHEN: aidll-02-skeleton] Implement and validate both dependent updates before enabling the cursor.
+// ELF 0x352100. Each phase resets its exhausted cursor before advancing to the next phase.
 void UserOrderManager::update()
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::UserOrderManager::update");
+    switch (m_updatePhase)
+    {
+    case 0:
+        if (m_patrolCursor == m_patrolPaths.end())
+        {
+            m_patrolCursor = m_patrolPaths.begin();
+            m_updatePhase = 1;
+        }
+        else
+        {
+            m_patrolCursor->second->update();
+            ++m_patrolCursor;
+        }
+        break;
+    case 1:
+        if (m_guardCursor == m_guardPositions.end())
+        {
+            m_updatePhase = 2;
+            m_guardCursor = m_guardPositions.begin();
+        }
+        else
+        {
+            m_guardCursor->second->update();
+            ++m_guardCursor;
+        }
+        break;
+    case 2:
+        m_updatePhase = 0;
+        break;
+    }
 }
 
-// [FRONTIER] the two creation bodies. `createPatrolPath` and `createGuardPosition`
-// build the objects the two maps hold; their construction and behaviour remain unwritten.
-// [RETIRE-WHEN: aidll-02-skeleton]
-void UserOrderManager::createPatrolPath(const std::string&, CombatStrengthType, int)
+// ELF 0x351AB0. A duplicate name still replaces the active pointer and leaks the new path.
+void UserOrderManager::createPatrolPath(const std::string& name, CombatStrengthType strength, int side)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::UserOrderManager::createPatrolPath");
+    m_activePatrolPath = checkPointer(new PatrolPath(strength, side));
+    m_patrolPaths.insert(std::pair<const std::string, PatrolPath*>(name, m_activePatrolPath));
 }
 
-void UserOrderManager::createGuardPosition(const std::string&, const Vec2&, CombatStrengthType,
-                                           int, int)
+// ELF 0x351D40. Duplicate names likewise leave an unregistered active position.
+void UserOrderManager::createGuardPosition(const std::string& name, const Vec2& position,
+                                           CombatStrengthType strength, int side, int kit)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::UserOrderManager::createGuardPosition");
+    m_activeGuardPosition = checkPointer(new GuardPosition(position, strength, side, kit));
+    m_guardPositions.insert(std::pair<const std::string, GuardPosition*>(name, m_activeGuardPosition));
 }
 
-// Guard positions take priority over patrol paths; each map is traversed in key order.
+// ELF 0x351FF0. Guard positions take priority over patrol paths; maps are traversed in key order.
 // Preserve short-circuit predicate order and reload end after each rejected entry.
 // Only exhausted maps return false. Retail's selected arm calls recruit(bot) and returns true
-// independent of that call's result; its callback/plan dependencies remain unrecovered here.
+// independent of that call's result.
 bool UserOrderManager::recruitBot(Bot* bot, int side)
 {
     for (std::map<std::string, GuardPosition*>::iterator i = m_guardPositions.begin();
@@ -102,9 +134,8 @@ bool UserOrderManager::recruitBot(Bot* bot, int side)
         GuardPosition* const position = i->second;
         if (position->active() && position->getSide() == side && position->needBot())
         {
-            // [FRONTIER] [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: aidll-02-skeleton]
-            // ELF GuardPosition::recruit ; bot is passed unchanged.
-            BF2_AI_FRONTIER("dice::hfe::ai::UserOrderManager::recruitBot (GuardPosition::recruit)");
+            position->recruit(bot);
+            return true;
         }
     }
 
@@ -114,9 +145,8 @@ bool UserOrderManager::recruitBot(Bot* bot, int side)
         PatrolPath* const path = i->second;
         if (path->active() && path->getSide() == side && path->neededResources() > 0)
         {
-            // [FRONTIER] [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: aidll-02-skeleton]
-            // ELF PatrolPath::recruit ; bot is passed unchanged.
-            BF2_AI_FRONTIER("dice::hfe::ai::UserOrderManager::recruitBot (PatrolPath::recruit)");
+            path->recruit(bot);
+            return true;
         }
     }
     return false;

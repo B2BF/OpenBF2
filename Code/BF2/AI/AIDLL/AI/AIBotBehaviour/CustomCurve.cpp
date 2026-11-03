@@ -2,7 +2,11 @@
 
 #include "CustomCurve.h"
 
+#include <cassert>     // CustomCurve: the image asserts
+
 #include <cmath>       // isfinite - SCurve's guard only
+#include <iostream>
+// static init: ELF 0x36E0E0, 0x36E140, 0x36E170: CustomCurve.cpp's iostream Init only.
 
 namespace dice {
 namespace hfe {
@@ -452,6 +456,162 @@ void DecleiningSlopeCurve::init()
 
     curveValues[100] = 1.0f;
 
+}
+
+// ELF 0x36D630
+CustomCurve::CustomCurve(Function function, float min, float max, float step)
+    : m_function(function)
+    , m_table(0)
+    , m_min(min)
+    , m_max(max)
+    , m_step(step)
+{
+    init();
+}
+
+// ELF 0x36D7D0
+CustomCurve::~CustomCurve()
+{
+    if (m_table)
+        delete[] m_table;
+}
+
+// ELF 0x36D800. The image asserts (expression "0") when x is outside [min, max] and when the
+// interpolated index has no successor.
+float CustomCurve::calculate(float x, bool interpolate) const
+{
+    if (m_min > x || x > m_max)
+        assert(0);
+    // The image keeps the step, offset and fraction on the x87 stack; doubles stand in for that.
+    const double step = (static_cast<double>(m_max) - m_min) / static_cast<double>(static_cast<float>(m_size));
+    const double offset = static_cast<double>(x) - m_min;
+    const int index = static_cast<int>(static_cast<float>(offset / step));
+    if (!interpolate)
+        return m_table[index];
+    const double fraction = (offset - static_cast<double>(static_cast<float>(index)) * step) / step;
+    if (index >= m_size)
+        assert(0);
+    return static_cast<float>(m_table[index] + (static_cast<double>(m_table[index + 1]) - m_table[index]) * fraction);
+}
+
+// ELF 0x36DFB0. Samples m_size + 1 points, then writes the two ends again from min and max exactly.
+void CustomCurve::init()
+{
+    if (0.0f >= m_step)
+        assert(0);
+    if (m_table)
+        delete[] m_table;
+    m_size = static_cast<int>(static_cast<float>((static_cast<double>(m_max) - m_min) / m_step));
+    m_table = new float[m_size + 1];
+    const double delta = (static_cast<double>(m_max) - m_min) / static_cast<double>(static_cast<float>(m_size));
+    for (int i = 0; i <= m_size; ++i)
+        m_table[i] = m_function(m_min + static_cast<float>(i * delta));
+    m_table[0] = m_function(m_min);
+    m_table[m_size] = m_function(m_max);
+}
+
+// ELF 0x36D680 (C2), 0x36D6D0 (C1): resamples the function instead of copying table entries.
+CustomCurve::CustomCurve(const CustomCurve& other)
+    : m_function(other.m_function), m_table(0), m_min(other.m_min), m_max(other.m_max), m_step(other.m_step)
+{
+    init();
+}
+
+// ELF 0x36D720. Shipped quirk: returns a new, resampled curve by value, even on self-assignment.
+CustomCurve CustomCurve::operator=(const CustomCurve& other)
+{
+    if (this != &other)
+    {
+        if (m_table) delete[] m_table;
+        m_table = 0;
+        m_function = other.m_function;
+        m_min = other.m_min;
+        m_max = other.m_max;
+        m_step = other.m_step;
+        init();
+    }
+    return *this;
+}
+
+// ELF 0x36D8F0: zero-valued function samples contribute no error but still count in the divisor.
+float CustomCurve::testAccuracy(float density, bool interpolate) const
+{
+    if (0.0f >= density) assert(0);
+    float error = 0.0f;
+    const float width = m_max - m_min;
+    const int count = static_cast<int>(static_cast<float>(m_size) * density);
+    const float divisor = static_cast<float>(count);
+    const float step = width / divisor;
+    for (int i = 0; i < count; ++i)
+    {
+        const float position = m_min + static_cast<float>(i) * step;
+        const float actual = m_function(position);
+        const float estimated = calculate(position, interpolate);
+        if (actual != 0.0f) error += std::fabs(estimated - actual);
+    }
+    return error / divisor;
+}
+
+// ELF 0x36DA40. Shipped defect: the second pass also asks for interpolation.
+bool CustomCurve::testBounds(float density, float minimum, float maximum) const
+{
+    if (0.0f >= density) assert(0);
+    bool valid = true;
+    for (float position = m_min; position < m_max;
+         position += (m_max - m_min) / (static_cast<float>(m_size) * density))
+    {
+        const float value = calculate(position, true);
+        if (value < minimum || value > maximum)
+        {
+            std::cout << "Interpolated value[" << position << "] = " << value
+                      << " is out of boundary (" << minimum << "," << maximum << ")\n";
+            valid = false;
+        }
+    }
+    for (float position = m_min; position < m_max;
+         position += (m_max - m_min) / (static_cast<float>(m_size) * density))
+    {
+        const float value = calculate(position, true);
+        if (value < minimum || value > maximum)
+        {
+            std::cout << "Non-interpolated value[" << position << "] = " << value
+                      << " is out of boundary (" << minimum << "," << maximum << ")\n";
+            valid = false;
+        }
+    }
+    if (valid)
+        std::cout << "All values are within bounds (" << minimum << "," << maximum << ")\n";
+    else
+        std::cout << "BOUNDS CHECK : Failed\n";
+    return valid;
+}
+
+// ELF 0x36DD60.
+void CustomCurve::accuracyTest(float density) const
+{
+    std::cout << "\nACCURACY TESTS:\n";
+    const float interpolated = testAccuracy(density, true);
+    const float direct = testAccuracy(density, false);
+    std::cout << "Curve is " << (1.0f - direct) * 100.0f << "% accurate without interpolation\n";
+    std::cout << "Curve is " << (1.0f - interpolated) * 100.0f << "% accurate with interpolation\n";
+}
+
+// ELF 0x36DE60: the fourth argument is unused; the byte estimate omits the final table element.
+void CustomCurve::getStatistics(float density, float minimum, float maximum, int /*flags*/) const
+{
+    std::cout << "\nCUSTOMCURVE STATISTICS\n----------------------\n";
+    std::cout << "Curve has " << m_size << " elements and uses a total of "
+              << sizeof(CustomCurve) + m_size * sizeof(float) << " bytes.\n\n";
+    testBounds(density, minimum, maximum);
+    accuracyTest(density);
+}
+
+// ELF 0x36DF50: preserves negative zero and unordered values.
+float CustomCurve::calculateEstimation(float value, bool& nonnegative) const
+{
+    if (value < 0.0f) { nonnegative = false; return -value; }
+    nonnegative = true;
+    return value;
 }
 
 } // namespace ai

@@ -16,7 +16,7 @@ class BAPEntry
 {
 public:
     BAPEntry() {}
-    virtual ~BAPEntry();
+    virtual ~BAPEntry() {}   // weak in the image (emitted in EntryBoatMoveTo.cpp)
 
     // execute reports success as bool; getTargetId returns the entry's integer target id.
     virtual bool execute(BotScript *, Bot *, bool&, bool&) = 0;

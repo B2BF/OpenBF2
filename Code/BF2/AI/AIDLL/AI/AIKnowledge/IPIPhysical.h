@@ -40,7 +40,9 @@ public:
 
     virtual Vec3   getSphereLocalOffset() const = 0;                    // +12 by value (corrected)
     virtual float  getSmallestRadius() const = 0;                       // +13
-    virtual void   getSubSpheres2d(std::vector<Vec2>&) const = 0;       // +14
+    // float: IPIPhysicalReal/Known (ELF 0x2F0CA0 / 0x2F05F0) leave the engine call's x87 result
+    // as theirs (no pop), and IPIPhysicalDummy (ELF 0x2F0000) loads 0.0f.
+    virtual float  getSubSpheres2d(std::vector<Vec2>&) const = 0;       // +14 float (corrected)
     virtual float  getArmour(Vec3&) = 0;                                // +15
     virtual float  getBestArmour() = 0;                                 // +16
     virtual int    getStrengthType() = 0;                               // +17

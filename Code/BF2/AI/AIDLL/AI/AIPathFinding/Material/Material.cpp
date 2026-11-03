@@ -2,6 +2,10 @@
 
 #include "Material.h"
 
+// <iostream>'s ios_base::Init object is this TU's static initialisation and teardown (ELF
+// 0x3227D0, __tcf_0 0x322830, _GLOBAL__I 0x322860).
+#include <iostream>
+
 #include "../../../../../Core/Debug.h"
 #include "../../../../../Core/StringUtil.h"
 
@@ -12,6 +16,7 @@ namespace dice {
 namespace hfe {
 namespace ai {
 
+// ELF 0x322220.
 std::istream& operator>>(std::istream& stream, materialId& material)
 {
     std::string token;
@@ -37,9 +42,9 @@ std::istream& operator>>(std::istream& stream, materialId& material)
         material = 9;
     else
     {
-        // Both ports report this exact source line and abort through DebugTypeError. There is no
+        // The image reports source line 66 and aborts through DebugTypeError. There is no
         // fallback assignment for an unknown token.
-        Debug(DebugTypeError, __FILE__, __LINE__, "")
+        Debug(DebugTypeError, "AI/AIDLL/AI/AIPathFinding/Material/Material.cpp", 66, "")
             << token << " is not recognised as a proper materialId.";
     }
 

@@ -106,7 +106,7 @@ public:
     typedef BotPriorityQueue<BotSensingPriorityPred> SensingQueue;
 
     BotManager();
-    // Virtual destruction is inherited from both interfaces; ordered teardown remains a named stop.
+    // Virtual destruction is inherited from both interfaces.
     virtual ~BotManager();
 
     // the tick
@@ -197,14 +197,19 @@ public:
     virtual void enableBotScriptDebugger(bool enable);                                              // +0x128
 
     // population, and not part of either base
-    // These five are absent from both vtables, so they are BotManager's own non-virtual API.
-    void addBot(int side, int id, float* weights, IAIObject* obj);
+    // These methods are absent from both vtables, so they are BotManager's own non-virtual API.
+    bool addBot(int playerId, int side, float* weights, IAIObject* object);
+    void buildObjectMap();
     // Adds an unspawned bot for playerId and side using personality weights; returns true.
     bool addUnspawnedBot(int playerId, int side, float* personality);
     // Returns whether the player's bot was reactivated on the requested side.
     bool reactivateBot(int playerId, int side, const std::string& name);
-    void deactivateBot(int id);
-    void deactivateBotFromPlayerId(int playerId);                   // indexes m_botByPlayerId
+    // Both answer the deactivated bot's id, or -1 (ELF 0x3DD240 / 0x3DD450).
+    int deactivateBot(int side);
+    int deactivateBotFromPlayerId(int playerId);                    // indexes m_botByPlayerId
+
+    // ELF .bss 0x4CE8F8 (4 bytes); increaseTabLevel / decreaseTabLevel step it. [INFERRED] type int.
+    static int s_tabLevel;
 
 private:
 // Three priority queues hold pending bot work. Native container sizes depend on the compiler ABI.
@@ -254,8 +259,9 @@ private:
     /* 192 */ void*  m_ptr192;               // = 0
     /* 196 */ void*  m_ptr196;               // = 0
     /* 200 */ void*  m_ptr200;               // = 0
-    // [UNRESOLVED] Map key and value types; the declarations preserve the observed storage width.
-    /* 204 */ std::map<int, void*> m_map204;  // +204 node, +208 count, +212 comparator
+    // Object -> bot id, std::map<IAIObject*, unsigned int> by the shipped instantiations
+    // (ELF getBot(IAIObject*) 0x3DB120 find, updateBotVehicle 0x3E0100 insert_unique). Name [INFERRED].
+    /* 204 */ std::map<IAIObject*, unsigned int> m_vehicleBots;  // +204 node, +208 count, +212 comparator
     // [INFERRED] Shared scratch selection, cleared and filled from queues by decision-making
     // and sensing passes before they process the selected bots.
     /* 216 */ std::vector<BotInfo*> m_selectedBots;

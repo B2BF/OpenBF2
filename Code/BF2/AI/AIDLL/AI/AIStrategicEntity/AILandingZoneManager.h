@@ -1,6 +1,5 @@
 // Owns AI landing zones. Constructed when the DLL loads and destroyed by BF2AI::clear.
 // reset is its only virtual method; the destructor is nonvirtual.
-// [RETIRE-WHEN: aidll-02-skeleton] Remove when the corresponding implementation is complete and validated.
 // [INFERRED] Source placement.
 
 #ifndef AI_AIDLL_AI_AISTRATEGICENTITY_AILANDINGZONEMANAGER_H      // [INFERRED] guard style
@@ -10,6 +9,8 @@
 #include <string>
 #include <vector>
 
+#include "../../../../Math/Vec3.h"
+
 // Vec2 and Vec3 are Math aliases, so do not forward-declare them as classes in this namespace.
 namespace dice {
 namespace hfe {
@@ -17,7 +18,7 @@ namespace ai {
 
 class AILandingZone;
 
-// [UNRESOLVED] enumerators - one dword at `createLandingZone`'s last parameter.
+// Defined, with its enumerators, in AILandingZone.h.
 enum LandingZoneDirection : int;
 
 // sizeof is 40 (0x28) in retail, from the `operator new(0x28)` in this file's static initialiser
@@ -27,20 +28,36 @@ class AILandingZoneManager
 public:
     AILandingZoneManager();
 
-    // not virtual - see the header block. , .
-    ~AILandingZoneManager();                         // [FRONTIER]
+    // Not virtual. Deletes the zones.
+    ~AILandingZoneManager();                         // ELF 0x399C50 (D1; D0 0x399D60)
 
     // The class's only virtual, and the only entry in its vtable.
-    virtual void reset();                            // [FRONTIER]
+    // ELF 0x39A350: deletes the zones and answers true (`mov $0x1,%eax`).
+    virtual bool reset();
 
-    // - written inline because the shipped body is the vector size and nothing
-    // else. This is the method `AIRenderUtil`'s constructor calls.
-    int getNumberOfLandingZones() const
-    {
-        return static_cast<int>(m_zones.size());
-    }
+    // ELF 0x399E70 / 0x399E90 / 0x399ED0: the active zone's name, or "No valid zone is active"
+    // when there is none; the int and name forms first select the zone (0 when not found).
+    const std::string& activeZone();
+    const std::string& activeZone(int index);
+    const std::string& activeZone(const std::string& name);
+    AILandingZone* getActiveZone();                  // ELF 0x399F40
 
-    // [FRONTIER] Remaining landing-zone operations require implementation.
+    // ELF 0x399F50: 0 for an index out of range.
+    AILandingZone* getAILandingZone(int index);
+    // ELF 0x399F80: the zone registered under the name, 0 when there is none.
+    AILandingZone* getAILandingZone(const std::string& name);
+    // ELF 0x399FE0. This is the method `AIRenderUtil`'s constructor calls.
+    int getNumberOfLandingZones() const;
+
+    // ELF 0x39A000: a new zone with the next id, registered by name and made active.
+    AILandingZone* createLandingZone(const std::string& name, const Vec2& minCorner,
+                                     const Vec2& maxCorner, float height,
+                                     LandingZoneDirection beachDirection);
+    // ELF 0x39A460 / 0x39A4A0: the first zone containing the position.
+    bool isInsideLandingZone(const Vec3& position) const;
+    bool isInsideLandingZone(const Vec3& position, AILandingZone*& zone) const;
+    // ELF 0x39A510: "<name> <min> <max> <beach direction>" per zone.
+    std::string listZones();
 
     // set by this file'S static initialiser, not by any `init`. See the header block.
     static AILandingZoneManager* m_instance;
@@ -50,8 +67,9 @@ private:
     /* +0x04 */ std::map<std::string, AILandingZone*> m_zonesByName;
     /* +0x10 */ std::vector<AILandingZone*> m_zones;      // what getNumberOfLandingZones measures
 
-    // [UNRESOLVED] Two words initialized to zero; their roles are not yet established.
-    /* +0x1C */ int m_unresolved1C;
+    // The active zone (activeZone / createLandingZone), 0 for none.
+    /* +0x1C */ AILandingZone* m_activeZone;
+    // [UNRESOLVED] Initialized to zero; no reader in this class.
     /* +0x20 */ int m_unresolved20;
 
     // constructed from A literal, and the literal is the class's whole personality:

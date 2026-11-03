@@ -1,6 +1,10 @@
 #include "BotSpawner.h"
 #include <cfloat>
 #include <cmath>
+// <iostream>'s ios_base::Init object, m_kitWeightVector and m_pointWeightVector, in that order, are
+// this TU's static initialisation (ELF 0x35ED80, _GLOBAL__I 0x35EF60) and teardown (__tcf_0
+// 0x35EE60, __tcf_1 0x35EE90, __tcf_2 0x35EEF0).
+#include <iostream>
 #include "../Main/AIDllFrontier.h"
 #include "../Main/AIMain.h"
 #include "../Main/AIRandom.h"
@@ -24,11 +28,13 @@
 #include "../AIStrategicEntity/AIStrategicObjectManager.h"
 #include "../../../AIInterface/BFKnowledge/AIPlayer.h"
 #include "../../../AIInterface/BFKnowledge/BFGame.h"
+#include "../../../AIInterface/BFKnowledge/IAIObject.h"     // getInformation(side)
 #include "../../../AIInterface/BFKnowledge/KitTemplateManager.h"
 #include "../../../AIInterface/BFKnowledge/KitTemplate.h"
 
 namespace dice { namespace hfe { namespace ai {
 
+std::vector<KitWeight> BotSpawner::m_kitWeightVector;
 std::vector<SpawnChoice> BotSpawner::m_pointWeightVector;
 
 namespace {
@@ -164,6 +170,82 @@ bool BotSpawner::findSuitableSpawnGroup(float* enemyStrengths, float* enemyCount
     else
         bot->setSpawnTarget(group, kit);
     return true;
+}
+
+// ELF 0x35D1B0. Spawn selection for a bot that must come back near a position (PatrolPath::botIsDead
+// is the only caller and discards the result): the eligible spawn point nearest in XZ, then the
+// strategic object closest to that point's position. The strength rows come from the bot's SAI by
+// bot id. The game singleton is read twice, as shipped: once for the eligibility and empty-list
+// checks, again for the search. Returns true unless the side has no spawn points; a bot that
+// already has a spawn group, or whose own spawn point is still eligible, is left as it is.
+bool BotSpawner::findSuitableSpawnGroup(const Vec3& position, Bot* bot)
+{
+    Vec3 spawnPosition = { 0.0f, 0.0f, 0.0f };
+    const int side = bot->getSide();
+    SAI* const sai = IAIMain::m_instance->getSAI(side);
+    const int botId = bot->getBotId();
+    float* const enemyStrengths = sai->getEnemyStrengths(botId);
+    float* const enemyCounts = sai->getEnemyTypes(botId);
+    float* const friendlyStrengths = sai->getFriendlyStrengths(botId);
+    float* const friendlyCounts = sai->getFriendlyTypes(botId);
+    if (bot->getPlayer()->getSpawnGroup() > 0)
+        return true;
+
+    IAIGame* const game = static_cast<IAIGame*>(CommonSingletonServer::m_iaiGame);
+    if (game->isEligibleSpawnpoint(side, bot->getSpawnPoint()))
+    {
+        sai->addSpawnToPoint(bot->getSpawnPoint());
+        return true;
+    }
+    if (game->getSpawnPointList(side).empty())
+    {
+        bot->setSpawnTarget(-1, 13);
+        return false;
+    }
+
+    IAIGame* const searchGame = static_cast<IAIGame*>(CommonSingletonServer::m_iaiGame);
+    const std::list<int>& groups = searchGame->getSpawnPointList(side);
+    int group = 0;
+    float best = 1.0e9f;
+    for (std::list<int>::const_iterator it = groups.begin(); it != groups.end(); ++it)
+    {
+        if (searchGame->isEligibleSpawnpoint(side, *it))
+        {
+            const float distance = distXZSqr(searchGame->getSpawnPointPosition(*it), position);
+            if (distance < best)
+            {
+                best = distance;
+                group = *it;
+                spawnPosition = searchGame->getSpawnPointPosition(group);
+            }
+        }
+    }
+
+    AIStrategicObject* const object =
+        AIStrategicObjectManager::getInstance()->getClosestObject(spawnPosition, side);
+    const int kit = findSuitableKit(enemyStrengths, enemyCounts, friendlyStrengths,
+        friendlyCounts, object, side, bot);
+    if (object)
+        bot->setSpawnTarget(object->getIndex(), group, kit);
+    else
+        bot->setSpawnTarget(group, kit);
+    return true;
+}
+
+// ELF 0x35DDE0. Over the six strength types: the squared shortfall of values below counts goes
+// to sqrDist, the surplus (including NaN differences) to excess. No caller in the image.
+void BotSpawner::sqrDistAndExcess(float* values, int* counts, float& sqrDist, float& excess)
+{
+    sqrDist = 0.0f;
+    excess = 0.0f;
+    for (int i = 0; i < 6; ++i)
+    {
+        const float difference = values[i] - static_cast<float>(counts[i]);
+        if (difference < 0.0f)
+            sqrDist += difference * difference;
+        else
+            excess += difference;
+    }
 }
 
 // Empty input returns 0 without touching the output or static candidates. A
@@ -356,9 +438,19 @@ KitType BotSpawner::GetRandomKit(SquadMember*)
 #endif
 }
 
+// ELF 0x35ED30. Squad leaders may not take kits 4 and 5; everyone else may take any kit. No
+// caller in the image.
+bool BotSpawner::isAllowedKit(SquadMember* member, KitType kit)
+{
+    bool allowed = true;
+    if (member->isSquadLeader() && static_cast<unsigned int>(kit - 4) <= 1u)
+        allowed = false;
+    return allowed;
+}
+
 // Chooses a kit from squad needs and nearby equipment. Always consumes the initial
 // random-kit selection; only nonleaders can take the medic early return.
-// Assigned-squad equipment remains an unimplemented boundary.
+// The assigned-squad arm scores the squad's area (ELF 0x35E3C0).
 int BotSpawner::findSuitableKit(const float*, const float*, const float*, const float*,
     AIStrategicObject* object, int side, Bot* bot)
 {
@@ -553,10 +645,87 @@ int BotSpawner::findSuitableKit(const float*, const float*, const float*, const 
         }
         if (squad->isSquadAssignedToAnyArea())
         {
-            // [FRONTIER] [TEMP] [CHOSEN, not recovered]
-            // [RETIRE-WHEN: aidll-02-skeleton] Recover the assigned squad's
-            // equipment scan, area geometry and scoring (the kitCounts consumer).
-            BF2_AI_FRONTIER("dice::hfe::ai::BotSpawner::findSuitableKit [assigned-squad equipment]");
+            // ELF 0x35E3C0..0x35E6F4: the members' current vehicles are counted (strength types
+            // 1/2/4 vehicles, damaged below 0.5f health; 0 infantry, health read and discarded),
+            // then the enemies around the assigned area (rectangle centre - 2 (pos - centre),
+            // the object arm uses 3), then the same kit ladder as the object arm with an integer
+            // infantry comparison and a vehicle-repair test against kitCounts[4].
+            int friendlyVehicles = 0, damagedFriendlyVehicles = 0, friendlyInfantry = 0;
+            for (int i = 0; i < members; ++i)
+            {
+                IAIObject* const vehicle = squad->getSquadMember(i)->getPlayer()->getCurrentVehicle();
+                if (!vehicle)
+                    continue;
+                Information* const entry = informationManager->getInformation(vehicle->getInformation(side));
+                if (!entry || !entry->getUnit())
+                    continue;
+                IPIPhysical* const physical = entry->getPhysical();
+                switch (physical->getStrengthType())
+                {
+                case 1: case 2: case 4:
+                    ++friendlyVehicles;
+                    if (physical->getHealth() < 0.5f)
+                        ++damagedFriendlyVehicles;
+                    break;
+                case 0:
+                    ++friendlyInfantry;
+                    physical->getHealth();      // shipped discarded call
+                    break;
+                }
+            }
+            AIStrategicObject* const area = AIStrategicObjectManager::getInstance()->getStrategicObject(
+                squad->getSquadStrategicAreaAssignment()->getIndex());
+            Vec2 minimum = static_cast<AIStrategicArea*>(area)->m_centre;
+            const Vec2 position = area->getPosition(side);
+            const double dx = static_cast<double>(position.x) - minimum.x;
+            const double dy = static_cast<double>(position.y) - minimum.y;
+            minimum.x = static_cast<float>(static_cast<double>(minimum.x) - dx * 2.0f);
+            minimum.y = static_cast<float>(static_cast<double>(minimum.y) - dy * 2.0f);
+            Vec2 maximum = {};
+            maximum = getBoxMaxCorner(minimum, position, maximum);
+            IAIInformationEnvironment* const environment =
+                static_cast<IAIInformationEnvironment*>(AISingletonServer::m_iaiInformationEnvironment);
+            environment->getObjectsWithinRectangle(information, minimum, maximum, side, true, 0);
+            int enemyVehicles = 0, enemyInfantry = 0;
+            const int enemySide = (side == 1) + 1;
+            std::vector<unsigned int>::const_iterator end = information.end();
+            for (std::vector<unsigned int>::const_iterator it = information.begin(); it != end; ++it)
+            {
+                Information* const entry = informationManager->getInformation(*it);
+                if (!entry)
+                    continue;
+                IPIPhysical* const physical = entry->getPhysical();
+                if (vehicleOccupied(*it, side) && entry->getSide() == enemySide)
+                {
+                    switch (physical->getStrengthType())
+                    {
+                    case 0: ++enemyInfantry; break;
+                    case 1: case 2: case 4: ++enemyVehicles; break;
+                    }
+                }
+                end = information.end();        // ELF refreshes after every nonnull record
+            }
+            if (enemyVehicles > friendlyVehicles + kitCounts[6] && templates[6])
+                return 6;
+            if (enemyInfantry > friendlyInfantry)
+            {
+                AIRandom* const random = AIRandom::m_instance;
+                if (static_cast<unsigned int>(random->m_index) >= AIRandom::kStateSize)
+                    random->generateNumbers();
+                const double draw = static_cast<double>(random->next()) * (1.0 / 4294967296.0);
+                if (draw > 0.85f && templates[0])
+                    return 0;
+                if (draw > 0.55f && templates[2])
+                    return 2;
+                if (draw > 0.25f && templates[3])
+                    return 3;
+                if (templates[4])
+                    return 4;
+            }
+            else if (damagedFriendlyVehicles + friendlyVehicles > kitCounts[4] * 2 && templates[4])
+            {
+                return 4;
+            }
         }
     }
 

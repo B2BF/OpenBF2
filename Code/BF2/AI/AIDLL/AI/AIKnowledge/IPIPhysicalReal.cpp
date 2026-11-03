@@ -1,6 +1,10 @@
 
 #include "IPIPhysicalReal.h"
 
+// <iostream>'s ios_base::Init object is this TU's static initialisation and teardown (ELF
+// 0x2F0D60, __tcf_0 0x2F0DC0, _GLOBAL__I 0x2F0DF0).
+#include <iostream>
+
 #include "Information.h"
 #include "../AIBotBehaviour/CustomCurve.h"                          // SCurve::calculate (static)
 #include "../Main/CommonSingletonServer.h"
@@ -104,9 +108,10 @@ float IPIPhysicalReal::getSmallestRadius() const
     return m_information->getAIObject()->getPhysical()->getSmallestRadius();          // +0x44
 }
 
-void IPIPhysicalReal::getSubSpheres2d(std::vector<Vec2>& out) const
+// ELF 0x2F0CA0: forwards, returning the engine plug-in's answer.
+float IPIPhysicalReal::getSubSpheres2d(std::vector<Vec2>& out) const
 {
-    m_information->getAIObject()->getPhysical()->getSubSpheres2d(out);                // +0x48
+    return m_information->getAIObject()->getPhysical()->getSubSpheres2d(out);                // +0x48
 }
 
 float IPIPhysicalReal::getArmour(Vec3& direction)

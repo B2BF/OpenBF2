@@ -3,9 +3,18 @@
 
 #include "BFInformationEnvironment.h"
 
+// <iostream>'s ios_base::Init object is this TU's static initialisation and teardown (ELF
+// 0x2E7AD0, __tcf_0 0x2E7B30, _GLOBAL__I 0x2E7B60).
+#include <iostream>
+
 #include <string>
 
 #include "AIInformationGrid.h"                             // the grids the constructor builds
+#include "Information.h"                                   // removeAllContacts
+#include "InformationManager.h"                            // the information pool
+#include "IPIMobile.h"                                     // getCover's search radius
+#include "../AIBot/BotMain.h"                              // Bot +0xD8 / +0xE0
+#include "../AIUtils/VehicleOccupancy.h"                   // InfoEnemyPredicate
 #include "../AIUtils/checkPointer.h"                       // inlined four times by the constructor
 #include "../../../../Core/ClassManager.h"
 #include "../../../../Core/SmartItf.h"           // the classManager global
@@ -97,48 +106,230 @@ BFInformationEnvironment::BFInformationEnvironment()
 // [FRONTIER] Unimplemented environment queries and modifiers stop by name.
 // [RETIRE-WHEN: aidll-02-skeleton] Remove when the corresponding implementation is complete and validated.
 
+// ELF 0x2E6C30. Deletes every grid of the second vector, then of the first (null slots skipped,
+// the end re-read after each delete); the vectors free themselves.
 BFInformationEnvironment::~BFInformationEnvironment()
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFInformationEnvironment::~BFInformationEnvironment");
+    for (std::vector<IAIInformationGrid*>::iterator i = m_gridsB.begin(); i != m_gridsB.end(); ++i)
+    {
+        if (*i != 0)
+            delete *i;
+    }
+    for (std::vector<IAIInformationGrid*>::iterator i = m_gridsA.begin(); i != m_gridsA.end(); ++i)
+    {
+        if (*i != 0)
+            delete *i;
+    }
 }
 
-void BFInformationEnvironment::getFriendlyUnits(std::vector<unsigned int>&, const Vec3&, Bot*, float) const
+namespace {
+
+// The query predicates of this TU (anonymous in retail: vtables ELF 0x4BE548..0x4BE5A8, bodies
+// 0x2E7E80..0x2E8040, all weak). +4 is each one's single field.
+
+// Units of one side.
+class InfoSideUnitPredicate : public IAIInformationGridPredicate
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFInformationEnvironment::getFriendlyUnits");
-}
+public:
+    explicit InfoSideUnitPredicate(int side) : m_side(side) {}
+    // ELF 0x2E7F20. The side first, then the unit plug-in.
+    virtual bool includeInformation(Information* information) const
+    {
+        return information->getSide() == m_side && information->getUnit() != 0;
+    }
+    int m_side;
+};
 
-void BFInformationEnvironment::getFriendlyAndNeutralUnits(std::vector<unsigned int>&, const Vec3&, Bot*, float) const
+// Units of one side or of side 0.
+class InfoSideAndNeutralUnitPredicate : public IAIInformationGridPredicate
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFInformationEnvironment::getFriendlyAndNeutralUnits");
-}
+public:
+    explicit InfoSideAndNeutralUnitPredicate(int side) : m_side(side) {}
+    // ELF 0x2E7F70. The unit plug-in first; getSide is called a second time for the 0 test.
+    virtual bool includeInformation(Information* information) const
+    {
+        if (information->getUnit() == 0)
+            return false;
+        return information->getSide() == m_side || information->getSide() == 0;
+    }
+    int m_side;
+};
 
-void BFInformationEnvironment::getCover(const Bot&, std::vector<unsigned int>&) const
+// Any unit.
+class InfoUnitPredicate : public IAIInformationGridPredicate
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFInformationEnvironment::getCover");
-}
+public:
+    // ELF 0x2E7F00.
+    virtual bool includeInformation(Information* information) const
+    {
+        return information->getUnit() != 0;
+    }
+};
 
-void BFInformationEnvironment::getHardware(std::vector<unsigned int>&, const Vec3&, Bot*) const
+// Everything but one record.
+class InfoCullSelfPredicate : public IAIInformationGridPredicate
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFInformationEnvironment::getHardware");
-}
+public:
+    explicit InfoCullSelfPredicate(Information* self) : m_self(self) {}
+    // ELF 0x2E8020.
+    virtual bool includeInformation(Information* information) const
+    {
+        return m_self != information;
+    }
+    Information* m_self;
+};
 
-void BFInformationEnvironment::getHardware(std::vector<unsigned int>&, const Vec3&, float, int, Information*) const
+// Both of two predicates, the first first.
+class CompositeInfoPredicate : public IAIInformationGridPredicate
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFInformationEnvironment::getHardware (Information*)");
-}
+public:
+    CompositeInfoPredicate(IAIInformationGridPredicate* first, IAIInformationGridPredicate* second)
+        : m_first(first), m_second(second)
+    {
+    }
+    // ELF 0x2E7FC0.
+    virtual bool includeInformation(Information* information) const
+    {
+        return m_first->includeInformation(information) && m_second->includeInformation(information);
+    }
+    IAIInformationGridPredicate* m_first;    // +4
+    IAIInformationGridPredicate* m_second;   // +8
+};
 
-void BFInformationEnvironment::getEnemyObjects(std::vector<unsigned int>&, Bot*, float) const
+// Cover objects of one side or of side 0. Flag 0x40000 accepts any side; 0x10 and 0x80 reject.
+// The flag names are [UNRESOLVED]; the bits are the record's object-type flags (+4).
+class InfoCoverPredicate : public IAIInformationGridPredicate
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFInformationEnvironment::getEnemyObjects");
-}
+public:
+    explicit InfoCoverPredicate(int side) : m_side(side) {}
+    // ELF 0x2E7E80.
+    virtual bool includeInformation(Information* information) const
+    {
+        if ((information->getObjectTypeFlags() & 0x4000) == 0 || information->getCover() == 0)
+            return false;
+        if ((information->getObjectTypeFlags() & 0x40000) != 0)
+            return true;
+        const int side = information->getSide();
+        const bool sideOk = m_side == side || side == 0;
+        return sideOk && (information->getObjectTypeFlags() & 0x10) == 0
+               && (information->getObjectTypeFlags() & 0x80) == 0;
+    }
+    int m_side;
+};
 
-void BFInformationEnvironment::getObjectsWithinRadius(std::vector<unsigned int>&, float, const Bot&,
-                                                     bool, IAIInformationGridPredicate*) const
+// Units of another side, when vehicleOccupied says the record counts for that side.
+class InfoEnemyPredicate : public IAIInformationGridPredicate
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFInformationEnvironment::getObjectsWithinRadius (Bot&)");
+public:
+    explicit InfoEnemyPredicate(int side) : m_side(side) {}
+    // ELF 0x2E8040.
+    virtual bool includeInformation(Information* information) const
+    {
+        if (information->getUnit() == 0 || m_side == information->getSide())
+            return false;
+        return vehicleOccupied(information->getHandle(), m_side);
+    }
+    int m_side;
+};
+
+// The bot's own record through Bot +0xD8 (getCurrentEquipment).
+Information* informationOf(const Bot* bot)
+{
+    return informationManager->getInformation(bot->getCurrentEquipment());
 }
 
-// flatten XZ, then delegate
+} // anonymous namespace
+
+// ELF 0x2E6F40. `out` is cleared after the lookup; a bot without a record gets nothing. The
+// bot's side is read twice (predicate, then the query's side argument).
+void BFInformationEnvironment::getFriendlyUnits(std::vector<unsigned int>& out,
+                                                const Vec3& position, Bot* bot, float radius) const
+{
+    Information* const self = informationOf(bot);
+    out.erase(out.begin(), out.end());
+    if (self == 0)
+        return;
+    InfoSideUnitPredicate keep(bot->getSide());
+    getObjectsWithinRadius(out, position, radius, bot->getSide(), true, &keep);
+}
+
+// ELF 0x2E7030. As getFriendlyUnits, side-0 units included.
+void BFInformationEnvironment::getFriendlyAndNeutralUnits(std::vector<unsigned int>& out,
+                                                          const Vec3& position, Bot* bot,
+                                                          float radius) const
+{
+    Information* const self = informationOf(bot);
+    out.erase(out.begin(), out.end());
+    if (self == 0)
+        return;
+    InfoSideAndNeutralUnitPredicate keep(bot->getSide());
+    getObjectsWithinRadius(out, position, radius, bot->getSide(), true, &keep);
+}
+
+// ELF 0x2E7120. Both grids (`which` true, then false) within the bot's mobile plug-in's cover
+// search radius; `out` is appended to. Retail reads the record's mobile plug-in without testing
+// the record for null.
+void BFInformationEnvironment::getCover(const Bot& bot, std::vector<unsigned int>& out) const
+{
+    Information* const self = informationOf(&bot);
+    IPIMobile* const mobile = self->getMobile();
+    if (mobile == 0)
+        return;
+    const float radius = mobile->getCoverSearchRadius();
+    InfoCoverPredicate keep(bot.getSide());
+    getObjectsWithinRadius(out, radius, bot, true, &keep);
+    getObjectsWithinRadius(out, radius, bot, false, &keep);
+}
+
+// ELF 0x2E7220. Units within 75 m except the bot's own record; 0 (and nothing) without a record.
+float BFInformationEnvironment::getHardware(std::vector<unsigned int>& out, const Vec3& position,
+                                            Bot* bot) const
+{
+    Information* const self = informationOf(bot);
+    if (self == 0)
+        return 0.0f;
+    return getHardware(out, position, 75.0f, bot->getSide(), self);
+}
+
+// ELF 0x2E72C0. Units within `radius` (minus `self` when given), side `side` and side 0 of the
+// first grid; answers the radius.
+float BFInformationEnvironment::getHardware(std::vector<unsigned int>& out, const Vec3& position,
+                                            float radius, int side, Information* self) const
+{
+    InfoUnitPredicate units;
+    InfoCullSelfPredicate notSelf(self);
+    CompositeInfoPredicate both(&units, &notSelf);
+    IAIInformationGridPredicate* const keep =
+        self != 0 ? static_cast<IAIInformationGridPredicate*>(&both) : &units;
+    getObjectsWithinRadius(out, position, radius, side, true, keep);
+    return radius;
+}
+
+// ELF 0x2E7360. A negative radius means 600 m when the bot's record has object flag 0x10 and
+// 75 m otherwise (retail does not test the record for null there).
+void BFInformationEnvironment::getEnemyObjects(std::vector<unsigned int>& out, Bot* bot,
+                                               float radius) const
+{
+    Information* const self = informationOf(bot);
+    if (radius < 0.0f)
+        radius = (self->getObjectTypeFlags() & 0x10) != 0 ? 600.0f : 75.0f;
+    InfoEnemyPredicate keep(bot->getSide());
+    getObjectsWithinRadius(out, radius, *bot, true, &keep);
+}
+
+// ELF 0x2E7430. Around the bot's record position, for its side; nothing without a record.
+void BFInformationEnvironment::getObjectsWithinRadius(std::vector<unsigned int>& out, float radius,
+                                                     const Bot& bot, bool which,
+                                                     IAIInformationGridPredicate* keep) const
+{
+    Information* const self = informationOf(&bot);
+    if (self == 0)
+        return;
+    const int side = bot.getSide();
+    getObjectsWithinRadius(out, self->getPosition(), radius, side, which, keep);
+}
+
+// ELF 0x2E74F0: flatten XZ, then delegate
 // virtually to the Vec2 overload (ELF +0x28 / PE +0x1C).
 void BFInformationEnvironment::getObjectsWithinRadius(std::vector<unsigned int>& out,
                                                      const Vec3& position, float radius,
@@ -152,7 +343,7 @@ void BFInformationEnvironment::getObjectsWithinRadius(std::vector<unsigned int>&
     getObjectsWithinRadius(out, flat, radius, side, which, keep);
 }
 
-// Query side zero first
+// ELF 0x2E7570. Query side zero first
 // then look up the requested side after that callback. Both calls remain when
 // side is zero. The grid query is const; output is appended to, never cleared.
 void BFInformationEnvironment::getObjectsWithinRadius(std::vector<unsigned int>& out,
@@ -176,10 +367,14 @@ void BFInformationEnvironment::getObjectsWithinRectangle(std::vector<unsigned in
     getInformationGrid(side, which)->getInformationWithinRectangle(out, min, max, keep);
 }
 
-void BFInformationEnvironment::getObjectsWithinFrustum(std::vector<unsigned int>&, const Frustum&,
-                                                      int, bool, IAIInformationGridPredicate*) const
+// ELF 0x2E76E0. Side 0 first, then `side` (side 0 twice when asked for it), as the radius and
+// rectangle queries.
+void BFInformationEnvironment::getObjectsWithinFrustum(std::vector<unsigned int>& out,
+                                                      const Frustum& frustum, int side, bool which,
+                                                      IAIInformationGridPredicate* keep) const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFInformationEnvironment::getObjectsWithinFrustum");
+    getInformationGrid(0, which)->getInformationWithinFrustum(out, frustum, keep);
+    getInformationGrid(side, which)->getInformationWithinFrustum(out, frustum, keep);
 }
 
 void BFInformationEnvironment::getAllInformation(std::vector<unsigned int>& out, int side, bool which,
@@ -213,24 +408,35 @@ void BFInformationEnvironment::addAndUpdatePosition(int side, bool which, unsign
     getInformationGrid(side, which)->addAndUpdatePosition(handle);
 }
 
-void BFInformationEnvironment::updatePosition(int, bool, unsigned int)
+// ELF 0x2E78E0: the grid's +5 updatePosition (ELF +0x14). The ELF zero-extends the grid's bool
+// into its own result; every caller in both images drops it, so the declared void stays.
+void BFInformationEnvironment::updatePosition(int side, bool which, unsigned int handle)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFInformationEnvironment::updatePosition");
+    getInformationGrid(side, which)->updatePosition(handle);
 }
 
-void BFInformationEnvironment::removeInfo(int, bool, unsigned int)
+// ELF 0x2E7930: the information's +8 removeAllContacts first, then the grid's +3 removeInfo
+// (ELF +0x0C). The handle is resolved through the information pool inline; a stale handle
+// yields null and the shipped call dereferences it unguarded.
+void BFInformationEnvironment::removeInfo(int side, bool which, unsigned int handle)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFInformationEnvironment::removeInfo");
+    informationManager->getInformation(handle)->removeAllContacts();
+    getInformationGrid(side, which)->removeInfo(handle);
 }
 
-void BFInformationEnvironment::safeRemoveInfo(int, bool, unsigned int)
+// ELF 0x2E79C0: as removeInfo, but through the grid's +4 safeRemoveInfo (ELF +0x10) with a null
+// removal predicate. The grid's bool is not used.
+void BFInformationEnvironment::safeRemoveInfo(int side, bool which, unsigned int handle)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFInformationEnvironment::safeRemoveInfo");
+    informationManager->getInformation(handle)->removeAllContacts();
+    getInformationGrid(side, which)->safeRemoveInfo(handle, nullptr);
 }
 
-void BFInformationEnvironment::destroyRemoveInfo(int, bool, unsigned int)
+// ELF 0x2E7A50: the grid's +4 safeRemoveInfo with a null predicate, without touching the
+// information's contacts.
+void BFInformationEnvironment::destroyRemoveInfo(int side, bool which, unsigned int handle)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFInformationEnvironment::destroyRemoveInfo");
+    getInformationGrid(side, which)->safeRemoveInfo(handle, nullptr);
 }
 
 // Selects one of two grid sets by which, then indexes it by side.

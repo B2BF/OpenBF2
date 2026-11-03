@@ -34,7 +34,7 @@ public:
     virtual int respawnBot(IAIPlayer* player) = 0;
     virtual void forceSpawnBot(IAIPlayer* player, const Vec3& position, const Vec3& rotation) = 0;
     virtual int giveDamage(IAIObject* target, world::IPlayer* from, int type, float amount) = 0;
-    virtual int playEffect(const Vec3& position, int a, int b) = 0;
+    virtual void playEffect(const Vec3& position, int a, int b) = 0;
     virtual void playSoundEffects(double dt) = 0;
     virtual int suicide(IAIPlayer* player) = 0;
 };
@@ -53,15 +53,22 @@ public:
     virtual int respawnBot(IAIPlayer* player);
     virtual void forceSpawnBot(IAIPlayer* player, const Vec3& position, const Vec3& rotation);
     virtual int giveDamage(IAIObject* target, world::IPlayer* from, int type, float amount);
-    virtual int playEffect(const Vec3& position, int a, int b);
+    virtual void playEffect(const Vec3& position, int a, int b);
     virtual void playSoundEffects(double dt);
     virtual int suicide(IAIPlayer* player);
 
 private:
+    void queueSoundEffect(const Vec3& position, int a, int b);
+
+    // [INFERRED] Element name. Both ELF destructors iterate in 20-byte steps.
+    // [UNRESOLVED] Entry fields: the ELF queue/play methods are empty, so no writer exists.
+    struct SoundEffect
+    {
+        unsigned char unread[20];
+    };
+
     /* +0x00 */ // vptr
-    /* +0x04 */ int m_unknown04;         // [UNRESOLVED] - the constructor zeroes all three
-    /* +0x08 */ int m_unknown08;
-    /* +0x0C */ int m_unknown0C;
+    /* +0x04 */ std::vector<SoundEffect> m_soundEffects; // [INFERRED] name; native STL layout
 };
 
 } // namespace ai

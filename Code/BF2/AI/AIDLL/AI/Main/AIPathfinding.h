@@ -1,6 +1,5 @@
 // Pathfinding queries and map lifecycle through separate query and setup interfaces.
 // Use typed interface conversions for the secondary base subobject.
-// [RETIRE-WHEN: aidll-02-skeleton] Remove when the corresponding implementation is complete and validated.
 
 #ifndef AI_AIDLL_AI_MAIN_AIPATHFINDING_H
 #define AI_AIDLL_AI_MAIN_AIPATHFINDING_H
@@ -16,6 +15,7 @@
 #include "../AIPathFinding/NavMesh/QuadTreeManager.h"    // and one of these
 #include "AIPathfindingSearchTypes.h"            // QTPath, ClusterNodePath, PathfindingEngine
 #include "IAIPathfinding.h"
+#include "../../../AIInterface/BFKnowledge/BFObjectEnvironment.h"
 
 namespace dice {
 namespace hfe {
@@ -42,24 +42,24 @@ public:
         virtual ~MapContainer();
 
         // IMapContainer, slots 2..29, in vtable order
-        virtual const std::string& getName();
-        virtual int getMinPolygonsInLeaf();
+        virtual const std::string& getName() const;
+        virtual int getMinPolygonsInLeaf() const;
         virtual void setMinPolygonsInLeaf(int);
-        virtual int getMaxDepthInTree();
+        virtual int getMaxDepthInTree() const;
         virtual void setMaxDepthInTree(int);
-        virtual float getMaxSlope();
+        virtual float getMaxSlope() const;
         virtual void setMaxSlope(float);
         virtual void setHeadClearance(float);
-        virtual float getHeadClearance();
+        virtual float getHeadClearance() const;
         virtual void setRadius(float);
-        virtual float getRadius();
+        virtual float getRadius() const;
         virtual void setAllowedHeightDiff(float);
-        virtual float getAllowedHeightDiff();
-        virtual void draw();
-        virtual void undraw();
-        virtual void drawCluster();
-        virtual void undrawCluster();
-        virtual void drawClusterNeighbourIndices(const Vec3&);
+        virtual float getAllowedHeightDiff() const;
+        virtual void draw() const;
+        virtual void undraw() const;
+        virtual void drawCluster() const;
+        virtual void undrawCluster() const;
+        virtual void drawClusterNeighbourIndices(const Vec3&) const;
         virtual void loadGTSDebugMeshes();
         virtual void buildDebugMeshes();
         virtual void unloadDebugMeshes();
@@ -78,7 +78,7 @@ public:
         bool isValidPosition(const Vec3&, MaterialManager *, bool) const;
         bool isValidPosition(const Vec3&, MaterialManager *, unsigned int, bool) const;
         bool isValidPosition(const Vec3&, MaterialManager *, unsigned int, unsigned int, bool) const;
-        bool getPolygon(std::vector<const Vec3*>&, Vec3&, unsigned int&, unsigned int&, MaterialManager *) const;
+        bool getPolygon(std::vector<const Vec3*>&, const Vec3&, unsigned int&, unsigned int&, MaterialManager *) const;
         bool getPolygon(std::vector<const Vec3*>&, unsigned int, unsigned int) const;
         bool getPolygon(const Vec3&, unsigned int&, unsigned int&, MaterialManager *) const;
         bool getPolygon(const Vec3&, unsigned int&, unsigned int&, unsigned int, unsigned int, MaterialManager *) const;
@@ -89,13 +89,13 @@ public:
         bool getMaterial(unsigned int, unsigned int, unsigned char&) const;
         bool setMaterial(unsigned int, unsigned int, unsigned char);
         void getPolygonCentre(Vec3&, unsigned int, unsigned int) const;
-        void getEdge(Vec3&, Vec3&, unsigned int, unsigned int, unsigned int) const;
+        bool getEdge(Vec3&, Vec3&, unsigned int, unsigned int, unsigned int) const;
         bool trace(unsigned int&, unsigned int&, const Vec3&, const Vec3&, Vec3&, unsigned int&, int, float, MaterialManager *, unsigned char, unsigned char *) const;
         bool traceKnown(unsigned int, unsigned int, const Vec3&, const Vec3&, Vec3&, unsigned int&, int, float, MaterialManager *, unsigned char, unsigned char *) const;
         bool getLineIntersectionWithPolygon(Vec3&, unsigned int, unsigned int, const Vec3&, const Vec3&) const;
         void drawPolygon(unsigned int, unsigned int, float *, float) const;
         bool findClosestValidPolygon(unsigned int&, unsigned int&, Vec3&, const Vec3&, const Vec3&, unsigned int, MaterialManager *) const;
-        void updateClusterPortalCosts(unsigned int&, triple<unsigned short, unsigned short, unsigned short>&, unsigned int, unsigned short);
+        bool updateClusterPortalCosts(unsigned int&, triple<unsigned short, unsigned short, unsigned short>&, unsigned int, unsigned short);
 
         // the layout, from the 720-byte constructor
         /*  +4 */ int m_id;                          // = the caller's index into AIPathfinding::m_maps
@@ -126,26 +126,26 @@ public:
     virtual bool isValidPosition(int, int, const Vec3&, bool) const;
     virtual bool isValidPosition(int, int, const Vec3&, unsigned int, bool) const;
     virtual bool isValidPosition(int, int, const Vec3&, unsigned int, unsigned int, bool) const;
-    virtual int getPolygon(std::vector<const Vec3*>&, int, const Vec3&, int) const;
-    virtual int getPolygon(std::vector<const Vec3*>&, int, const Vec3&, unsigned int&, unsigned int&, int) const;
-    virtual int getPolygon(std::vector<const Vec3*>&, int, unsigned int, unsigned int) const;
+    virtual bool getPolygon(std::vector<const Vec3*>&, int, const Vec3&, int) const;
+    virtual bool getPolygon(std::vector<const Vec3*>&, int, const Vec3&, unsigned int&, unsigned int&, int) const;
+    virtual bool getPolygon(std::vector<const Vec3*>&, int, unsigned int, unsigned int) const;
     virtual bool getPolygon(const Vec3&, int, unsigned int&, unsigned int&, int) const;
     virtual bool getPolygon(const Vec3&, int, unsigned int&, unsigned int&, unsigned int, unsigned int, int) const;
     virtual void getPolygonsInRadius(std::list<unsigned int>&, int, unsigned int, unsigned int, const Vec3&, float) const;
     virtual void getPolygonsInTriangle(std::list<unsigned int>&, int, unsigned int, unsigned int, const Vec3&, const Vec3&, const Vec3&) const;
-    virtual int getPolygonFromIsland(const Vec3&, int, unsigned int&, unsigned int, int) const;
+    virtual bool getPolygonFromIsland(const Vec3&, int, unsigned int&, unsigned int, int) const;
     virtual bool getMaterial(const Vec3&, int, int, unsigned char&) const;
     virtual bool getMaterial(int, unsigned int, unsigned int, unsigned char&) const;
-    virtual void setMaterial(int, unsigned int, unsigned int, unsigned char) const;
+    virtual bool setMaterial(int, unsigned int, unsigned int, unsigned char) const;
     virtual void* getQuadTree(int, unsigned int) const;
     virtual void* getClusterGraph(int, unsigned int) const;
     virtual void getPolygonCentre(Vec3&, int, unsigned int, unsigned int) const;
-    virtual void getEdge(Vec3&, Vec3&, int, unsigned int, unsigned int, unsigned int) const;
+    virtual bool getEdge(Vec3&, Vec3&, int, unsigned int, unsigned int, unsigned int) const;
     virtual bool getLineIntersectionWithPolygon(Vec3&, int, unsigned int, unsigned int, const Vec3&, const Vec3&) const;
     virtual void drawPolygon(int, unsigned int, unsigned int, float *, float) const;
     virtual int getClusterOfPolygon(int, unsigned int, unsigned int) const;
     virtual bool areNeighbouringClusters(int, unsigned int, unsigned short, unsigned short) const;
-    virtual void updateClusterPortalCosts(unsigned int&, triple<unsigned short, unsigned short, unsigned short>&, int, unsigned int, unsigned short);
+    virtual bool updateClusterPortalCosts(unsigned int&, triple<unsigned short, unsigned short, unsigned short>&, int, unsigned int, unsigned short);
     virtual bool trace(int, const Vec3&, const Vec3&, Vec3&, unsigned int&, int, int, float, unsigned char, unsigned char *) const;
     virtual bool trace(unsigned int, unsigned int, int, const Vec3&, const Vec3&, Vec3&, unsigned int&, int, int, float, unsigned char, unsigned char *) const;
     virtual bool trace(BotNavigation *, bool, const Vec3&, Vec3&, unsigned int&, int, int, float, unsigned char, unsigned char *) const;
@@ -173,14 +173,14 @@ public:
     virtual void restoreMapPart(int);
     virtual void resetOriginalMaterialOfDestroyableMapPart(int);
     virtual void searchPointSelected(bool);
-    virtual bool tryPath(const Vec3&, const Vec3&);
-    virtual bool tryClusterPath(const Vec3&, const Vec3&);
+    virtual void tryPath(const Vec3&, const Vec3&);
+    virtual void tryClusterPath(const Vec3&, const Vec3&);
     virtual void setClusterSearch(bool);
     virtual bool getClusterSearch() const;
     virtual void setActivatePathfindingDebugTool(bool);
     virtual bool getActivatePathfindingDebugTool() const;
     virtual void setPathfindingDebugToolVehicle(const std::string&);
-    virtual void* getPathfindingDebugToolVehicle() const;
+    virtual const std::string& getPathfindingDebugToolVehicle() const;
     virtual void setPathfindingDebugToolVehicleId(int);
     virtual int getClusterCostType(int, unsigned int) const;
 
@@ -199,10 +199,12 @@ public:
     virtual void loadGTSData();
     virtual bool exportGTSMeshes() const;
     virtual bool exportGTSMeshesWithinBoundary(const Vec2&, const Vec2&) const;
-    // 18,942 bytes. The offline level-compile path: it turns the level's meshes, water and
-    // destroyable add-ons into GTS files. Editor work; nothing on a server route reaches it.
-    virtual bool createGTSFiles(std::list<void*>&, std::list<void*>&, std::map<const IAIObject*, void*>&,
-                                std::list<void*>&, IAITerrain *, unsigned char) const;
+    // Exports level meshes, water, ladders and destroyable add-ons for navigation generation.
+    virtual bool createGTSFiles(std::list<IAIObjectEnvironment::MeshAndBoundingBox>&,
+                               std::list<IAIObjectEnvironment::WaterMesh>&,
+                               std::map<const IAIObject*, IAIObjectEnvironment::DestroyableAddOnMesh>&,
+                               std::list<IAIObjectEnvironment::MeshAndBoundingBox>&,
+                               IAITerrain*, unsigned char) const;
     virtual IAIPathfindingSetup::IMapContainer* getActiveMapContainer() const;
     virtual std::string getMapList();
     virtual void setMaxWaterDepth(float);
@@ -219,7 +221,19 @@ public:
     ClusterNodePath* getDebugClusterPath() const;
     Vec3* getSearchPoint(int) const;
     bool isValidClusterType(int, unsigned int) const;
-    void* getEquipmentTypeFromClusterCostType(int, unsigned short) const;
+    // ELF 0x3A5E10. The blocking variant for ClusterGraph::calculatePortalCosts: acquires its own
+    // resource, runs the search to completion and appends one cost to `costs`; see the definition.
+    void getPortalCost(std::vector<float>& costs, unsigned short costType, int map,
+                       unsigned int island, const Vec3& from, unsigned int fromPolygon,
+                       const Vec3& to, unsigned int toPolygon,
+                       const std::set<unsigned short>& allowedClusters);
+    // ELF 0x3A63B0. One portal-to-portal local search for ClusterGraph::updatePortalCosts; see
+    // the definition. False while the search is still running.
+    bool getPortalCost(float& cost, unsigned int resource, int map, unsigned int island,
+                       unsigned short costType, const Vec3& from, unsigned int fromPolygon,
+                       const Vec3& to, unsigned int toPolygon,
+                       const std::set<unsigned short>& allowedClusters);
+    int getEquipmentTypeFromClusterCostType(int, unsigned short) const;
 
 private:
     // The original layout has base-interface vptrs at +0 and +4; secondary-base calls
@@ -233,7 +247,7 @@ private:
     /*  +20 */ Vec3* m_searchPoint[2];
     /*  +28 */ QTPath* m_debugPath;                   // = new QTPath
     /*  +32 */ ClusterNodePath* m_debugClusterPath;   // = new ClusterNodePath
-    /*  +36 */ double m_d36;                          // = -1000.0; reset and tryPath restore it [UNRESOLVED]
+    /*  +36 */ double m_d36;                          // Last debug endpoint selection time; reset sentinel -1000.0.
     /*  +44 */ bool m_clusterSearch;                  // = false; the debug tool's cluster/local toggle
     /*  +48 */ PathfindingEngine<QTSearchNode, QTSearchNodeManager, QTSearchNode,
                                  unsigned short, QTPath>* m_engine;

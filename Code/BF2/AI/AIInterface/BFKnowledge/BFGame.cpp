@@ -8,8 +8,14 @@
 #include "../../../Core/Debug.h"        // the no-settings report
 
 #include "AIFrontier.h"
+#include "../../../Game/Objects/ISpawnPoint.h"   // getSpawnPointPositions
+#include "../../../Game/Objects/IObject.h"
 
 #include "../../AIDLL/AI/Main/CommonSingletonServer.h"
+#include "../../AIDLL/AI/Main/AISettingsInterfaces.h"    // IAISettings, the menu arm's override
+#include "../../../Game/GeneralSettings.h"                 // IGeneralSettings, the menu arm
+#include "../../../Game/LocalProfileManager.h"             // ILocalProfileManager, the menu arm
+#include "../../../Core/StringUtil.h"                      // compareIgnoreCase (0x431950)
 #include "../../../Core/ClassManager.h"
 #include "../../../Game/GameServer/ServerSettings.h"
 #include "../../../Game/IGame.h"       // the `game` global and queryInterface (+0x0C)
@@ -23,6 +29,16 @@
 #include "../../../Game/GameLogic/SpawnSystem/SpawnManager.h"
 #include "../../../Game/GameLogic/SpawnSystem/SpawnGroup.h"
 
+#include "../../../Game/Objects/Projectiles/IProjectileObject.h"
+#include "../../../Game/Objects/Projectiles/GenericProjectile.h"   // getTeam, IProjectileDetonationComp
+#include "../../../Game/Objects/ObjectLayoutAccess.h"              // IObject +0x34, the AI object
+#include "../../../Game/Objects/IPlayer.h"                         // getCloseMines, getId
+#include "../../../IO/Network/INetworkable.h"                      // m_networkableId
+#include "../../../Math/Vec3.h"                                    // vec3ToVec2XZ, insideCentreBox
+#include "AIPlayer.h"
+#include "IAIObject.h"
+
+#include <algorithm>                                        // std::find over the ignore list
 #include <map>                                              // the control-point map's own type
 
 namespace dice {
@@ -65,14 +81,54 @@ int BFGame::getMaxNumberOfPlayers() const
 }
 
 // Copies game settings into the AI configuration, including bot population and team balance.
-// [RETIRE-WHEN: aidll-01-adapters] Remove when the corresponding implementation is complete and validated.
+// BF2.exe 0x815C50 (530 B, RET 0xC). With a "GeneralSettings" singleton (the client hosting a game
+// from the menu) the values come from the profile's GeneralSettings; otherwise from serverSettings.
+// The menu arm, in order:
+//   1. "LocalProfileManager" (string 0x87FD98) must exist and have a current profile (+0x44);
+//      otherwise return false (0x815DB4) and leave a/b/c alone.
+//   2. settings +0x40 stringGet("GSGameMode", "gpm_cq") (0x880688 / 0x89B4D0); when it equals
+//      "sp1" (0x89B200, compareIgnoreCase 0x431950), the bot count is forced: 16, or
+//      IAISettings (CommonSingletonServer, 0xA3867C) slot 0 getMaxNBots when IAISettings exists
+//      and its slot +0xB8 overrideMenuSettings() answers true; then GeneralSettings +0xB4
+//      setMaxBots(count).
+//   3. a = +0xB0 getMaxBots, b = +0xB8 getMaxBotsIncludeHumans, c = +0xC0 getBotSkill (stored
+//      through the x87 stack as a float); return true.
 int BFGame::getAISettingsFromGame(int& a, bool& b, float& c) const
 {
-    if (classManager->getSingleton(std::string("GeneralSettings")))
+    IBase* general = classManager->getSingleton(std::string("GeneralSettings"));
+#if DEDICATED
+    // The dedicated images declare no GeneralSettings (Game/GeneralSettings.h is client-only), and
+    // no dedicated module registers the singleton, so this arm cannot be reached there.
+    if (general)
     {
         BF2_AI_FRONTIER("dice::hfe::ai::BFGame::getAISettingsFromGame"
-                        " - the MENU arm; this image has no GeneralSettings slots");
+                        " - the MENU arm in a dedicated image (no GeneralSettings interface)");
     }
+#else
+    if (general)
+    {
+        IGeneralSettings* generalSettings = static_cast<IGeneralSettings*>(general);
+        ILocalProfileManager* profiles = static_cast<ILocalProfileManager*>(
+            classManager->getSingleton(std::string("LocalProfileManager")));
+        if (!profiles || !profiles->getCurrentProfile())                            // +0x44
+            return 0;
+        const std::string gameMode(settings->stringGet(std::string("GSGameMode"),    // +0x40
+                                                       std::string("gpm_cq")));
+        if (compareIgnoreCase(gameMode, std::string("sp1")) == 0)
+        {
+            int count = 16;
+            const IAISettings* aiSettings =
+                static_cast<const IAISettings*>(CommonSingletonServer::m_iaiSettings);
+            if (aiSettings && aiSettings->overrideMenuSettings())                    // +0xB8
+                count = aiSettings->getMaxNBots();                                    // +0x00
+            generalSettings->setMaxBots(count);                                       // +0xB4
+        }
+        a = generalSettings->getMaxBots();                                            // +0xB0
+        b = generalSettings->getMaxBotsIncludeHumans();                               // +0xB8
+        c = generalSettings->getBotSkill();                                           // +0xC0
+        return 1;
+    }
+#endif
 
     // no settings and no menu is A reported failure, not A silent zero - and the caller honours
     // the false by leaving the script's values alone.
@@ -107,9 +163,71 @@ int BFGame::getTickets(int team) const
     return static_cast<world::IScoreManager*>(world::scoreManager)->getTeamScore(team)->m_tickets;
 }
 
+// bf2 0x83FF9B0 (ELF listing, Ghidra pseudo-code as cross-check). Walks the player's close mines
+// (IPlayer +0x32C) for at most 100 entries, counting skipped ones. A mine counts when its
+// projectile team (IProjectileObject +0x64) differs from the bot's side (IAIPlayer +0x6C) and its
+// object id is not in `ignore`; the nearest by squared distance wins. For each new best, in this
+// order: id, position (IObject +0x6C), normal = the transformation's third row (+0x84, bytes
+// 0x20..0x28), found = true, then found = false when the detonation component's
+// getRadiusTriggerType (+0x78) is 2. Neither the projectile face nor the component is null-tested.
+// The return value is whether any mine was taken (a byte; the caller tests %al).
 int BFGame::getClosestHostileMine(IAIPlayer* player, Vec3 from, bool& found, Vec3& position, Vec3& normal, unsigned int& id, std::vector<unsigned int>& ignore) const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFGame::getClosestHostileMine");
+    bool any = false;
+    world::IPlayer* const owner = player->getPlayer();                                    // +0x0C
+    const int side = player->getSide();                                                   // +0x6C
+    std::vector<world::IObject*> mines;
+    owner->getCloseMines(mines);                                                          // +0x32C
+    int count = 0;
+    Vec3 minePosition;
+    minePosition.x = 0.0f;
+    minePosition.y = 0.0f;
+    minePosition.z = 0.0f;
+    float best = 3.4028235e38f;
+    if (!mines.empty())
+    {
+        for (std::vector<world::IObject*>::iterator it = mines.begin(); it != mines.end(); ++it)
+        {
+            if (++count > 100)
+                break;
+            world::IObject* const mine = *it;
+            // GenericProjectile is IProjectileObject's only implementor; the typed downcast is the
+            // retail +0x64 subtable dispatch (thunk _ZThn316_ ... getTeam at vtable +0x37C).
+            world::GenericProjectile* const projectile = static_cast<world::GenericProjectile*>(
+                static_cast<world::IProjectileObject*>(
+                    mine->queryInterface(world::IID_IProjectileObject)));                 // +0x0C
+            if (projectile->getTeam() == side)                                            // +0x64
+                continue;
+            const unsigned int mineId = mine->getObjectId();                              // +0x10
+            if (std::find(ignore.begin(), ignore.end(), mineId) != ignore.end())
+                continue;
+            minePosition = mine->getAbsolutePosition();                                   // +0x6C
+            const Vec3 at = from;
+            const float dx = at.x - minePosition.x;
+            const float dy = at.y - minePosition.y;
+            const float dz = at.z - minePosition.z;
+            const float distance = dx * dx + dy * dy + dz * dz;
+            if (distance < best)
+            {
+                any = true;
+                id = mineId;
+                best = distance;
+                position = minePosition;
+                const float* const m = mine->getAbsoluteTransformation().m;              // +0x84
+                normal.x = m[8];
+                normal.y = m[9];
+                normal.z = m[10];
+                world::IProjectileDetonationComp* const detonation =
+                    static_cast<world::IProjectileDetonationComp*>(
+                        mine->queryComponent(world::IID_IProjectileDetonationComp,
+                                             world::IID_IProjectileDetonationComp));      // +0x5C
+                found = true;
+                if (detonation->getRadiusTriggerType() == 2)                              // +0x78
+                    found = false;
+            }
+        }
+    }
+    return any;
 }
 
 // Only gameLogic is guarded.
@@ -189,12 +307,25 @@ bool BFGame::getControlPointInfo(unsigned int index, Vec3& position, float& radi
     return active;
 }
 
-// [FRONTIER] Finds a control point within the horizontal box defined by a and b.
-// [RETIRE-WHEN: aidll-01-adapters] Implement and validate insideCentreBox before enabling this query.
+// bf2 0x83FF350. The id of the first control point (key order) whose XZ position lies in the box
+// insideCentreBox(position, a, b) (bf2 0x83F7A20, same code as the AI image's) describes; -1 when
+// there is none or no game logic. The Vec2 scratch is zeroed once, before the walk.
 int BFGame::findControlPoint(const Vec2& a, const Vec2& b) const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFGame::findControlPoint"
-                    " - the walk is read; dice::hfe::insideCentreBox is not");
+    Vec2 position;
+    position.x = 0.0f;
+    position.y = 0.0f;
+    if (!gameLogic)
+        return -1;
+    typedef std::map<unsigned int, world::IObject*> ControlPointMap;
+    ControlPointMap* const points = gameLogic->getControlPointMap();                      // +0x174
+    for (ControlPointMap::iterator it = points->begin(); it != points->end(); ++it)
+    {
+        vec3ToVec2XZ(it->second->getAbsolutePosition(), position);                        // +0x6C
+        if (insideCentreBox(position, a, b))
+            return static_cast<int>(it->first);
+    }
+    return -1;
 }
 
 // The returned list is
@@ -219,14 +350,43 @@ int BFGame::getControlPointId(int index) const
     return static_cast<int>(static_cast<SpawnManager*>(spawnManager)->getSpawnGroup(index)->getControlPointId());
 }
 
-int BFGame::getSpawnPointPositions(std::vector<Vec3>& out, unsigned char team) const
+// bf2 0x83FF800. Every group's spawn points (copied vector, ISpawnGroup +0x40) that are neither
+// AI-enter-on-spawn (+0x24), enter-on-spawn (+0x20) nor human-only (+0x50) add their spawn
+// position (+0x34, checkAI true, from a zero Vec3). The team is not read.
+// [CHOSEN, not recovered] The ELF leaves the last call's EAX; no caller reads it, 0 here.
+int BFGame::getSpawnPointPositions(std::vector<Vec3>& out, unsigned char) const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFGame::getSpawnPointPositions");
+    const std::map<int, ISpawnGroup*>& groups =
+        static_cast<SpawnManager*>(spawnManager)->getSpawnGroups();
+    for (std::map<int, ISpawnGroup*>::const_iterator group = groups.begin();
+         group != groups.end(); ++group)
+    {
+        const std::vector<ISpawnPoint*> points = group->second->getSpawnPoints();
+        for (std::vector<ISpawnPoint*>::const_iterator it = points.begin(); it != points.end(); ++it)
+        {
+            ISpawnPoint* const point = *it;
+            if (point->getAIEnterOnSpawn() || point->getEnterOnSpawn() || point->getOnlyForHuman())
+                continue;
+            Vec3 position;
+            position.x = 0.0f;
+            position.y = 0.0f;
+            position.z = 0.0f;
+            point->getSpawnPosition(position, true);
+            out.push_back(position);
+        }
+    }
+    return 0;
 }
 
-void BFGame::getControlPointPositions(std::vector<Vec3>& out, unsigned char team) const
+// bf2 0x83FFCB0: every control point's absolute position (IObject +0x6C), from the game logic's
+// control-point map (IGameLogic +0x174); nothing without a game logic. The team is not read.
+void BFGame::getControlPointPositions(std::vector<Vec3>& out, unsigned char) const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFGame::getControlPointPositions");
+    if (!gameLogic)
+        return;
+    std::map<unsigned int, world::IObject*>* const points = gameLogic->getControlPointMap();
+    for (std::map<unsigned int, world::IObject*>::iterator it = points->begin(); it != points->end(); ++it)
+        out.push_back(it->second->getAbsolutePosition());
 }
 
 // Capture team before
@@ -250,14 +410,37 @@ bool BFGame::isEligibleSpawnpoint(int team, int groupId) const
     return active;
 }
 
+// bf2 0x83FF530. Group 0 or an unknown group is false; otherwise the group's AI spawn point
+// (ISpawnGroup +0x44, true) answers enter-on-spawn (+0x20) or AI-enter-on-spawn (+0x24). The
+// returned point is not null-tested.
 bool BFGame::isEnterOnSpawnSpawnpoint(int index) const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFGame::isEnterOnSpawnSpawnpoint");
+    if (index == 0)
+        return false;
+    ISpawnGroup* const group = static_cast<SpawnManager*>(spawnManager)->getSpawnGroup(index);  // +0x28
+    if (!group)
+        return false;
+    ISpawnPoint* const point = group->getSpawnPoint(true);                                 // +0x44
+    return point->getEnterOnSpawn() || point->getAIEnterOnSpawn();                          // +0x20 / +0x24
 }
 
+// bf2 0x83FF5B0. 0 for group 0 or an unknown group; otherwise the AI spawn point's object to
+// enter (ISpawnPoint +0x28, (true, side)) and that object's AI object (IObject +0x34): -1 without
+// one, else its getInformation(side) (IAIObject +0xB8). Neither the point nor the object is
+// null-tested.
 int BFGame::getEnterOnSpawnSpawnpointObject(int a, int b) const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFGame::getEnterOnSpawnSpawnpointObject");
+    if (a == 0)
+        return 0;
+    ISpawnGroup* const group = static_cast<SpawnManager*>(spawnManager)->getSpawnGroup(a);  // +0x28
+    if (!group)
+        return 0;
+    world::IObject* const object = group->getSpawnPoint(true)->getObjectToEnter(true, b);   // +0x44, +0x28
+    IAIObject* const aiObject =
+        static_cast<IAIObject*>(world::object_detail::LayoutAccess::aiObject(object));     // +0x34
+    if (!aiObject)
+        return -1;
+    return static_cast<int>(aiObject->getInformation(b));                                  // +0xB8
 }
 
 // Returns the level directory joined with the configured level name.
@@ -329,9 +512,25 @@ bool BFGame::getIsPrecaching() const
     return m_isPrecaching;
 }
 
+// bf2 0x83FFE30. Without a game nothing happens. Otherwise the spotted object's networkable id
+// (IObject +0xD8, the u16 at +0x04; 0 without one) goes out as a spotted message with a zero Vec2
+// and vehicle type 26 (IGame +0xD0), and the game's spotted text for that id (+0xCC) is sent as a
+// team radio message from the player (+0x58, (TCTeam, text, player id, 0, false, false)).
+// [UNRESOLVED] the name of VehicleType 26.
 void BFGame::enemySpottedByAI(world::IPlayer* player, world::IObject* object) const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFGame::enemySpottedByAI");
+    if (!game)
+        return;
+    unsigned short networkableId = 0;
+    if (io::INetworkable* const networkable = object->getNetworkable())                  // +0xD8
+        networkableId = networkable->m_networkableId;
+    Vec2 zero;
+    zero.x = 0.0f;
+    zero.y = 0.0f;
+    game->sendSpottedMessage(player, networkableId, zero, static_cast<world::VehicleType>(26));  // +0xD0
+    const unsigned int playerId = static_cast<unsigned int>(player->getId());            // +0x54
+    const std::string message = game->getSpottedMessage(networkableId);                  // +0xCC
+    game->radioMessageFromPlayer(TCTeam, message, playerId, 0, false, false);            // +0x58
 }
 
 } // namespace ai

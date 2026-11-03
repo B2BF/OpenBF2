@@ -1,4 +1,7 @@
 
+// static init: ELF 0x3B36E0 (__tcf_0 0x3B3740, _GLOBAL__I 0x3B3770): <iostream>'s Init object only.
+#include <iostream>
+
 #include "AIRandom.h"
 
 #include "CommonSingletonServer.h"

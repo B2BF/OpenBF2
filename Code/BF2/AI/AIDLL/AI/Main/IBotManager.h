@@ -12,7 +12,7 @@ namespace dice {
 namespace hfe {
 namespace ai {
 
-class AIRadioMessageSettings;
+struct AIRadioMessageSettings;
 class Bot;
 class IAIObject;
 

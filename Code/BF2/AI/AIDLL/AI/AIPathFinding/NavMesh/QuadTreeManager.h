@@ -1,5 +1,4 @@
 // Owns navigation quad trees and loads their per-map data.
-// [RETIRE-WHEN: aidll-02-skeleton] Remove when the corresponding implementation is complete and validated.
 
 #ifndef AI_AIDLL_AI_AIPATHFINDING_NAVMESH_QUADTREEMANAGER_H
 #define AI_AIDLL_AI_AIPATHFINDING_NAVMESH_QUADTREEMANAGER_H
@@ -23,9 +22,26 @@ class QuadTree;
 class QuadTreeManager
 {
 public:
-    // Opaque nested debug mesh, referenced by pointer here. Teardown must release six
-    // arrays at original offsets +12..+32 and its primitive handle at +36.
-    class DebugMesh;
+    // One debug mesh: up to 0x5555 polygons of the islands in one static mesh. 40 bytes on the
+    // ELF (operator new(0x28)), no virtual members. Field names [INFERRED] from buildDebugMeshes,
+    // which allocates and fills every array, and draw, which hands them to createStaticMesh.
+    class DebugMesh
+    {
+    public:
+        DebugMesh();
+        void lockSize();
+
+        /* +0x00 */ int            m_numberOfVertices;
+        /* +0x04 */ int            m_numberOfPolygons;
+        /* +0x08 */ int            m_numberOfIndices;
+        /* +0x0C */ unsigned int*  m_firstIndices;      // per polygon: where its indices start
+        /* +0x10 */ unsigned int*  m_vertexCounts;      // per polygon
+        /* +0x14 */ Vec3*          m_vertices;
+        /* +0x18 */ unsigned int*  m_indices;
+        /* +0x1C */ unsigned char* m_materials;         // per polygon
+        /* +0x20 */ unsigned int*  m_colours;           // per polygon, the mesh's colour argument
+        /* +0x24 */ DrawPrimitive* m_mesh;              // the static mesh handle while drawn
+    };
 
     QuadTreeManager();
     ~QuadTreeManager();
@@ -40,12 +56,12 @@ public:
     void destroyQuadTrees();
     void saveQuadTrees(const std::string&);
     void loadQuadTrees(const std::string&);
-    void loadGTSData(const std::string&, int, int, int, float);
+    bool loadGTSData(const std::string&, int, int, int, float);
     void recalculatePortalCosts(int);
-    void draw();
-    void undraw();
+    void draw() const;
+    void undraw() const;
     void drawCluster();
-    void undrawCluster();
+    void undrawCluster() const;
     void drawClusterNeighbourIndices(const Vec3&);
     void buildDebugMeshes(const std::string&);
     void buildDebugClusterMeshes(const std::string&);
@@ -58,7 +74,7 @@ public:
     unsigned int findPolygon(const Vec3&, unsigned int&, MaterialManager*, float);
     unsigned int findPolygon(const Vec3&, unsigned int&, unsigned int, unsigned int,
                              MaterialManager*, float);
-    void printPolygonsInNode(const Vec3&, unsigned int&, MaterialManager *, float) const;
+    void printPolygonsInNode(const Vec3&, unsigned int&, MaterialManager *, float);
     unsigned short getCluster(unsigned int, unsigned int) const;
     void getClusterPortals(unsigned int, unsigned short, unsigned short, std::list<ClusterPortal*>&) const;
     void getPolygonsInRadius(std::list<unsigned int>&, unsigned int, unsigned int, const Vec3&, float) const;
@@ -68,7 +84,7 @@ public:
     void restoreMapPart(int);
     void resetOriginalMaterialOfDestroyableMapPart(int);
     void resetDestroyableMapParts();
-    void validateNeighbourRelations();
+    void validateNeighbourRelations() const;
 
     // Offsets describe the original 32-byte ELF object; STL layouts vary by compiler.
 

@@ -31,8 +31,9 @@ public:
     virtual void getFriendlyUnits(std::vector<unsigned int>&, const Vec3&, Bot*, float) const = 0;
     virtual void getFriendlyAndNeutralUnits(std::vector<unsigned int>&, const Vec3&, Bot*, float) const = 0;
     virtual void getCover(const Bot&, std::vector<unsigned int>&) const = 0;
-    virtual void getHardware(std::vector<unsigned int>&, const Vec3&, Bot*) const = 0;
-    virtual void getHardware(std::vector<unsigned int>&, const Vec3&, float, int, Information*) const = 0;
+    // Both return the search radius in st0 (ELF 0x2E7220 / 0x2E72C0), not void.
+    virtual float getHardware(std::vector<unsigned int>&, const Vec3&, Bot*) const = 0;
+    virtual float getHardware(std::vector<unsigned int>&, const Vec3&, float, int, Information*) const = 0;
     virtual void getEnemyObjects(std::vector<unsigned int>&, Bot*, float) const = 0;
     virtual void getObjectsWithinRadius(std::vector<unsigned int>&, float, const Bot&, bool,
                                         IAIInformationGridPredicate*) const = 0;
@@ -79,8 +80,8 @@ public:
     virtual void getFriendlyUnits(std::vector<unsigned int>&, const Vec3&, Bot*, float) const;
     virtual void getFriendlyAndNeutralUnits(std::vector<unsigned int>&, const Vec3&, Bot*, float) const;
     virtual void getCover(const Bot&, std::vector<unsigned int>&) const;
-    virtual void getHardware(std::vector<unsigned int>&, const Vec3&, Bot*) const;
-    virtual void getHardware(std::vector<unsigned int>&, const Vec3&, float, int, Information*) const;
+    virtual float getHardware(std::vector<unsigned int>&, const Vec3&, Bot*) const;
+    virtual float getHardware(std::vector<unsigned int>&, const Vec3&, float, int, Information*) const;
     virtual void getEnemyObjects(std::vector<unsigned int>&, Bot*, float) const;
     virtual void getObjectsWithinRadius(std::vector<unsigned int>&, float, const Bot&, bool,
                                         IAIInformationGridPredicate*) const;
@@ -99,7 +100,7 @@ public:
     virtual void getAllInformation(std::vector<unsigned int>&, int, bool, IAIInformationGridPredicate*,
                                    IAIInformationGridPredicate*);
 
-    // IAIInformationEnvironmentModifiers. All [FRONTIER].
+    // IAIInformationEnvironmentModifiers.
     virtual void addInfo(int, bool, unsigned int);
     virtual void addAndUpdatePosition(int, bool, unsigned int);
     virtual void updatePosition(int, bool, unsigned int);

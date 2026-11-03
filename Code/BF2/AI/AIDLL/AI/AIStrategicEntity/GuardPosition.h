@@ -16,19 +16,38 @@ enum CombatStrengthType : int;
 class GuardPosition
 {
 public:
-    // Attested signatures, declaration-only: no default or fixture constructor in production.
-    GuardPosition(const Vec2&, CombatStrengthType, int side, int value36);
-    // > : only AreaCondition vector/string cleanup.
-    // The borrowed bot is not deleted and no callback is invoked.
-    ~GuardPosition() = default;
+    // The position is `position` on the terrain, one metre up; the facing starts at (1, 0, 0).
+    GuardPosition(const Vec2& position, CombatStrengthType strengthType, int side, int kit);
+    // Member cleanup only: the borrowed bot is not deleted and no callback is invoked.
+    ~GuardPosition();
 
-    bool active() const { return m_active; }       // byte +28
-    int getSide() const { return m_side; }         // int +32
-    bool needBot() const
-    {
-        // Both images test the byte first. Neither active nor side participates in this predicate.
-        return !m_flag48 && m_bot == 0;
-    }
+    CombatStrengthType getStrengthType() const;
+    const Vec3& getPosition() const;
+    void setRotation(const Vec3& rotation);
+    const Vec3& getRotation() const;
+    void setActive(bool active);
+    bool getActive() const;
+    bool active() const;
+    void setSide(int side);
+    int getSide() const;
+    void setMinDistance(float distance);
+    float getMinDistance() const;
+    // True while no bot was ever recruited: the recruited flag is tested before the bot.
+    bool needBot() const;
+    // Takes `bot`: installs this position's death and spawn callbacks, then either spawns a dead
+    // bot here or sends a living one on its way.
+    void recruit(Bot* bot);
+    // Gives the bot a waypoint list that walks to the position.
+    void botIsAlive(Bot* bot);
+    void botIsDead(Bot* bot);
+    // Sets the bot's spawn target (group 1, this position's kit) and force-spawns it here.
+    void spawnBot(Bot* bot);
+    // Hands the bot back to the bot pool. The recruited flag stays set.
+    void lostBot();
+    // Releases the bot when any abort condition holds: an area of the position's side with the
+    // condition's status. Area indices are resolved by name on first use.
+    void update();
+    void addStrategicAreaAbortCondition(const std::string& areaName, StatusMap::Status status);
 
 private:
     // Area abort condition. New entries start with areaIndex -1.
@@ -46,10 +65,10 @@ private:
     /* +24 */ CombatStrengthType m_strengthType;
     /* +28 */ bool m_active;
     /* +32 */ int m_side;
-    /* +36 */ int m_value36;                 // [UNRESOLVED] constructor's final parameter
+    /* +36 */ int m_kit;                     // spawnBot's setSpawnTarget kit [INFERRED name]
     /* +40 */ float m_minDistance;
     /* +44 */ Bot* m_bot;
-    /* +48 */ bool m_flag48;                 // [UNRESOLVED] name; recruit sets true
+    /* +48 */ bool m_recruited;              // [INFERRED] name; recruit sets it, nothing clears it
     /* +52 */ std::vector<AreaCondition> m_areaConditions;
 };
 

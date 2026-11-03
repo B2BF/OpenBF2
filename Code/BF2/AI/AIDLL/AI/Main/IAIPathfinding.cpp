@@ -1,5 +1,13 @@
-
+#include <ios>
 #include "IAIPathfinding.h"
+
+namespace {
+// The two original translation units are combined here; local object names are [INFERRED].
+// static init: ELF 0x3E6990 (__tcf_0 0x3E69F0, _GLOBAL__I 0x3E6A20), IAIPathfinding.cpp.
+std::ios_base::Init pathfindingStreamInit;
+// static init: ELF 0x3E6B40 (__tcf_0 0x3E6BA0, _GLOBAL__I 0x3E6BD0), IAIPathfindingSetup.cpp.
+std::ios_base::Init pathfindingSetupStreamInit;
+}
 
 namespace dice {
 namespace hfe {

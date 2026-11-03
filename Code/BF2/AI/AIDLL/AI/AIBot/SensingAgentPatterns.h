@@ -1,6 +1,5 @@
-// [CHOSEN, not recovered] Grouped sensing-pattern declarations.
-// Split into their individual translation units when their plan creation is implemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Remove when the corresponding implementation is complete and validated.
+// The sensing agent's plan patterns (libaidll.so 0x1C0490..0x1C3250). [CHOSEN, not recovered]: the
+// four classes stay grouped in one header and one source file.
 
 #ifndef AI_AIDLL_AI_AIBOT_SENSINGAGENTPATTERNS_H
 #define AI_AIDLL_AI_AIBOT_SENSINGAGENTPATTERNS_H
@@ -25,8 +24,8 @@ public:
 
     // Preserve virtual order: reset precedes the other pattern operations.
     virtual void reset(int) = 0;                                        // +0x08
-    virtual void createPlan(SensingAgent *, Bot *, const Vec3&) = 0;    // +0x0C
-    virtual void createPlan(SensingAgent *, Bot *, unsigned int) = 0;   // +0x10
+    virtual BotScript* createPlan(SensingAgent *, Bot *, const Vec3&) = 0;    // +0x0C
+    virtual BotScript* createPlan(SensingAgent *, Bot *, unsigned int) = 0;   // +0x10
     virtual int getId() const = 0;                                      // +0x14
 
     // Uninitialised by construction - see the block above.
@@ -42,8 +41,8 @@ public:
 
     // Preserve virtual order: reset occupies the first slot.
     virtual void reset(int);
-    virtual void createPlan(SensingAgent *, Bot *, const Vec3&);
-    virtual void createPlan(SensingAgent *, Bot *, unsigned int);
+    virtual BotScript* createPlan(SensingAgent *, Bot *, const Vec3&);
+    virtual BotScript* createPlan(SensingAgent *, Bot *, unsigned int);
     virtual int getId() const;
 };
 
@@ -56,8 +55,8 @@ public:
 
     // Preserve virtual order: reset occupies the first slot.
     virtual void reset(int);
-    virtual void createPlan(SensingAgent *, Bot *, const Vec3&);
-    virtual void createPlan(SensingAgent *, Bot *, unsigned int);
+    virtual BotScript* createPlan(SensingAgent *, Bot *, const Vec3&);
+    virtual BotScript* createPlan(SensingAgent *, Bot *, unsigned int);
     virtual int getId() const;
 };
 
@@ -70,16 +69,18 @@ public:
 
     // Preserve virtual order: reset occupies the first slot.
     virtual void reset(int);
-    virtual void createPlan(SensingAgent *, Bot *, const Vec3&);
-    virtual void createPlan(SensingAgent *, Bot *, unsigned int);
+    virtual BotScript* createPlan(SensingAgent *, Bot *, const Vec3&);
+    virtual BotScript* createPlan(SensingAgent *, Bot *, unsigned int);
     virtual int getId() const;
 
-    // Non-virtual, and unique to this pattern: it brackets the plan it builds.
-    void initPlan(SensingAgent *, Bot *, IPIControlInfo *&, BotScript *&);
-    void endPlan(BAPALook *, Bot *);
+    // Unique to this pattern and virtual (vtable 0x4B7640 slots +0x18 / +0x1C): they bracket the
+    // plan it builds. initPlan (ELF 0x1C1F60) finds the control info; endPlan (0x1C2050) wraps the
+    // look in a parallel combiner with BAPAMergeSoldierInputs.
+    virtual bool initPlan(SensingAgent *, Bot *, IPIControlInfo *&, BotScript *&);
+    virtual BotScript* endPlan(BAPALook *, Bot *);
 };
 
-// The null object. Both createPlan overloads are and do nothing useful.
+// The null object: both createPlan overloads build (or keep) a BAPAResetControls.
 class SensingAgentNullPattern : public ISensingAgentPattern
 {
 public:
@@ -88,8 +89,8 @@ public:
 
     // Preserve virtual order: reset occupies the first slot.
     virtual void reset(int);
-    virtual void createPlan(SensingAgent *, Bot *, const Vec3&);
-    virtual void createPlan(SensingAgent *, Bot *, unsigned int);
+    virtual BotScript* createPlan(SensingAgent *, Bot *, const Vec3&);
+    virtual BotScript* createPlan(SensingAgent *, Bot *, unsigned int);
     virtual int getId() const;
 };
 

@@ -1,5 +1,4 @@
 // Owns patrol paths and guard positions and assigns bots to user orders.
-// [RETIRE-WHEN: aidll-02-skeleton] Remove when the corresponding implementation is complete and validated.
 // [INFERRED] Source placement.
 
 #ifndef AI_AIDLL_AI_MAIN_USERORDERMANAGER_H
@@ -39,11 +38,10 @@ public:
     // the round-robin tick
     void update();
 
-    // [FRONTIER]
+    // Creation selects the new object even if a duplicate name prevents its registration.
     void createPatrolPath(const std::string&, CombatStrengthType, int);
     void createGuardPosition(const std::string&, const Vec2&, CombatStrengthType, int, int);
-    // Returns false when the bot should fall back to its side's SAI. Selection is implemented;
-    // eligible guard/path recruitment still stops at the missing operation.
+    // Returns false when no eligible guard or patrol accepts this side, allowing fallback to SAI.
     bool recruitBot(Bot* bot, int side);
 
     // First-wins, set by the constructor; `BF2AI::clear` deletes through it.

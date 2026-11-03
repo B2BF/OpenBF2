@@ -2,11 +2,20 @@
 
 #include "BFStrategicEnvironment.h"
 
+// <iostream>'s ios_base::Init object is this TU's static initialisation and teardown (ELF 0x2E8D50,
+// __tcf_0 0x2E8DB0, _GLOBAL__I 0x2E8DE0).
+#include <iostream>
+
 #include <string>
 
 #include "../../../../Core/ClassManager.h"
 #include "../Main/CommonSingletonServer.h"
 #include "../Main/AIDllFrontier.h"
+#include "../Main/AIMain.h"                             // IAIMain::m_instance->getSAI
+#include "../AIBot/BotMain.h"                           // Bot::getSide / getBotId
+#include "../AIStrategic/SAI.h"
+#include "../AIStrategicEntity/AIStrategicObject.h"
+#include "../AIStrategicEntity/AIStrategicObjectManager.h"
 
 namespace dice {
 namespace hfe {
@@ -39,64 +48,85 @@ BFStrategicEnvironment::~BFStrategicEnvironment()
 {
 }
 
-int BFStrategicEnvironment::getEnemyStrengths(Bot *)
+// ELF 0x2E8860 / 0x2E88D0: the bot's side SAI rows (ISAI +0x30 / +0x34, by bot id).
+float* BFStrategicEnvironment::getEnemyStrengths(Bot* bot) const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFStrategicEnvironment::getEnemyStrengths");
+    const int id = bot->getBotId();
+    return IAIMain::m_instance->getSAI(bot->getSide())->getEnemyStrengths(id);
 }
 
-int BFStrategicEnvironment::getEnemyTypes(Bot *)
+float* BFStrategicEnvironment::getEnemyTypes(Bot* bot) const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFStrategicEnvironment::getEnemyTypes");
+    const int id = bot->getBotId();
+    return IAIMain::m_instance->getSAI(bot->getSide())->getEnemyTypes(id);
 }
 
-int BFStrategicEnvironment::getTemperature(Bot *)
+// The Bot* overloads: the bot's current strategic object (ISAI::getBotCurrentPos, +0xB4) through
+// the (object, side) overload of this vtable. The (object, side) overloads read the object's
+// per-side float (+0xA0/+0xB0/+0xB8/+0xC0/+0xC8 + 4 side), or 0.0f (security: 1.0f) without one.
+float BFStrategicEnvironment::getTemperature(Bot* bot)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFStrategicEnvironment::getTemperature");
+    const int side = bot->getSide();
+    const int id = bot->getBotId();
+    return getTemperature(IAIMain::m_instance->getSAI(side)->getBotCurrentPos(id), side);
 }
 
-float BFStrategicEnvironment::getTemperature(int, int)
+float BFStrategicEnvironment::getTemperature(int object, int side)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFStrategicEnvironment::getTemperature");
+    AIStrategicObject* const o = AIStrategicObjectManager::getInstance()->getStrategicObject(object);
+    return o ? o->m_f164[side - 1] : 0.0f;
 }
 
-int BFStrategicEnvironment::getSecurity(Bot *)
+float BFStrategicEnvironment::getSecurity(Bot* bot)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFStrategicEnvironment::getSecurity");
+    const int side = bot->getSide();
+    const int id = bot->getBotId();
+    return getSecurity(IAIMain::m_instance->getSAI(side)->getBotCurrentPos(id), side);
 }
 
-float BFStrategicEnvironment::getSecurity(int, int)
+float BFStrategicEnvironment::getSecurity(int object, int side)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFStrategicEnvironment::getSecurity");
+    AIStrategicObject* const o = AIStrategicObjectManager::getInstance()->getStrategicObject(object);
+    return o ? o->m_needCurveInput[side - 1] : 1.0f;
 }
 
-int BFStrategicEnvironment::getControl(Bot *)
+float BFStrategicEnvironment::getControl(Bot* bot)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFStrategicEnvironment::getControl");
+    const int side = bot->getSide();
+    const int id = bot->getBotId();
+    return getControl(IAIMain::m_instance->getSAI(side)->getBotCurrentPos(id), side);
 }
 
-float BFStrategicEnvironment::getControl(int, int)
+float BFStrategicEnvironment::getControl(int object, int side)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFStrategicEnvironment::getControl");
+    AIStrategicObject* const o = AIStrategicObjectManager::getInstance()->getStrategicObject(object);
+    return o ? o->m_friendlyRatio[side - 1] : 0.0f;
 }
 
-int BFStrategicEnvironment::getFriendlyBattleStr(Bot *)
+float BFStrategicEnvironment::getFriendlyBattleStr(Bot* bot)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFStrategicEnvironment::getFriendlyBattleStr");
+    const int side = bot->getSide();
+    const int id = bot->getBotId();
+    return getFriendlyBattleStr(IAIMain::m_instance->getSAI(side)->getBotCurrentPos(id), side);
 }
 
-float BFStrategicEnvironment::getFriendlyBattleStr(int, int)
+float BFStrategicEnvironment::getFriendlyBattleStr(int object, int side)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFStrategicEnvironment::getFriendlyBattleStr");
+    AIStrategicObject* const o = AIStrategicObjectManager::getInstance()->getStrategicObject(object);
+    return o ? o->m_friendlyBattleStrength[side - 1] : 0.0f;
 }
 
-int BFStrategicEnvironment::getHostileBattleStr(Bot *)
+float BFStrategicEnvironment::getHostileBattleStr(Bot* bot)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFStrategicEnvironment::getHostileBattleStr");
+    const int side = bot->getSide();
+    const int id = bot->getBotId();
+    return getHostileBattleStr(IAIMain::m_instance->getSAI(side)->getBotCurrentPos(id), side);
 }
 
-float BFStrategicEnvironment::getHostileBattleStr(int, int)
+float BFStrategicEnvironment::getHostileBattleStr(int object, int side)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFStrategicEnvironment::getHostileBattleStr");
+    AIStrategicObject* const o = AIStrategicObjectManager::getInstance()->getStrategicObject(object);
+    return o ? o->m_enemyBattleStrength[side - 1] : 0.0f;
 }
 
 } // namespace ai

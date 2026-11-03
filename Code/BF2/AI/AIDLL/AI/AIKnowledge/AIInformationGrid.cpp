@@ -1,6 +1,10 @@
 
 #include "AIInformationGrid.h"
 
+// <iostream>'s ios_base::Init object is this TU's static initialisation and teardown (ELF
+// 0x2D74C0, __tcf_0 0x2D7520, _GLOBAL__I 0x2D7550).
+#include <iostream>
+
 #include "Information.h"
 #include "IPIPhysical.h"
 #include "InformationManager.h"

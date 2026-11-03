@@ -40,16 +40,20 @@ DebugRenderer::~DebugRenderer()
 {
 }
 
-// 5 bytes - a bare ret. Empty in the dedicated image.
+// ELF 0x842E780: shipped dedicated no-op. The client body remains unrecovered.
 void DebugRenderer::drawAll()
 {
+#if !DEDICATED
     BF2_AI_FRONTIER("dice::hfe::ai::DebugRenderer::drawAll");
+#endif
 }
 
-// - likewise empty.
+// ELF 0x842E790: shipped dedicated no-op. The client body remains unrecovered.
 void DebugRenderer::reset()
 {
+#if !DEDICATED
     BF2_AI_FRONTIER("dice::hfe::ai::DebugRenderer::reset");
+#endif
 }
 
 int DebugRenderer::drawLine(const std::vector<Vec3>& points, unsigned int colour, float width) const
@@ -57,7 +61,7 @@ int DebugRenderer::drawLine(const std::vector<Vec3>& points, unsigned int colour
     BF2_AI_FRONTIER("dice::hfe::ai::DebugRenderer::drawLine");
 }
 
-int DebugRenderer::drawCircle(const Vec3& centre, const Vec3& normal, float radius, unsigned int colour, bool filled, int segments) const
+int DebugRenderer::drawCircle(const Vec3& normal, const Vec3& centre, float radius, unsigned int colour, bool filled, int segments) const
 {
     BF2_AI_FRONTIER("dice::hfe::ai::DebugRenderer::drawCircle");
 }

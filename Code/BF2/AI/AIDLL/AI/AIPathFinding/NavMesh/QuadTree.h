@@ -1,13 +1,15 @@
 // Navigation quad tree with file loading, polygon lookup and destroyable-map-part state.
-// [RETIRE-WHEN: aidll-02-skeleton] Remove when the corresponding implementation is complete and validated.
 
 #ifndef AI_AIDLL_AI_AIPATHFINDING_NAVMESH_QUADTREE_H
 #define AI_AIDLL_AI_AIPATHFINDING_NAVMESH_QUADTREE_H
 
+#include <list>
 #include <vector>
+#include <utility>
 
 #include "../../Main/AIDllTypes.h"      // Vec2, Vec3, DrawPrimitive
 #include "QuadTreeNode.h"
+#include "../../../../../Math/DoubleVec3.h"
 
 namespace dice {
 namespace hfe {
@@ -17,6 +19,7 @@ namespace io { class File; }
 namespace ai {
 
 class ClusterGraph;
+class GTSDataOptimiser;
 class MaterialManager;
 
 // Polygon - one navigation-mesh polygon, 20 bytes on disk and in memory. The array is constructed
@@ -51,16 +54,19 @@ public:
     bool m_destroyed;                                // [INFERRED] name
 };
 
-// [INFERRED] source name. readGTSDataFromFileDoubles allocates exactly 24 bytes per element and
-// getPolygonsWithinBoundaryDoubles reads three consecutive doubles from each one.
-struct DoubleVec3
+// Double-precision GTS polygon: ELF 0x303316 allocates 32 bytes per element.
+class DoublePolygon
 {
-    double x;
-    double y;
-    double z;
+public:
+    DoublePolygon() : m_normal() {}
+    /* +0x00 */ unsigned char m_numberOfVertices;
+    /* +0x01 */ unsigned char m_material;
+    /* +0x02 */ unsigned short m_cluster;
+    /* +0x04 */ unsigned int m_firstIndex;
+    /* +0x08 */ DoubleVec3 m_normal;
 };
 
-typedef char DoubleVec3IsTheFileRecord[sizeof(DoubleVec3) == 24 ? 1 : -1];
+typedef char DoublePolygonIsTheFileRecord[sizeof(DoublePolygon) == 32 ? 1 : -1];
 
 class QuadTree
 {
@@ -69,13 +75,67 @@ public:
     ~QuadTree();
 
     void clean();
+    void saveToFile(io::File& file);
     void readFromFile(io::File& file);
+    void readGTSDataFromFileDoubles(io::File& file);
+    void readGTSDataFromFile(io::File& file);
+    void optimiseGTSData(ClusterGraph* graph);
+    void buildQuadTreeMeshFromOptMesh(GTSDataOptimiser* optimiser);
+    void buildQuadTree(const std::vector<unsigned int>& polygons);
+    void removeDuplicateVerticesFromOptMesh();
+    void buildQuadTreesForDuplicateVertices(std::vector<std::pair<bool, unsigned int> >&,
+                                            unsigned int&);
+    void initialDivideQuadsAndTestForDuplicateVertices(std::vector<Vec3*>*,
+        std::vector<unsigned int>*, std::vector<std::pair<Vec2, Vec2> >&);
+    void divideQuadsAndTestForDuplicateVertices(const Vec2&, const Vec2&,
+        const std::vector<Vec3*>&, const std::vector<unsigned int>&,
+        std::vector<Vec3*>*, std::vector<unsigned int>*, std::vector<std::pair<Vec2, Vec2> >&);
+    void recurseQuadTreeForDuplicateVertices(const std::vector<Vec3*>&,
+        const std::vector<unsigned int>&, const std::pair<Vec2, Vec2>&, unsigned int,
+        std::vector<std::pair<bool, unsigned int> >&, unsigned int&);
+    void draw() const;
     void undraw() const;
+    void drawPolygonIds() const;
+    void drawPolygon(unsigned int polygon, float* height, float time);
+    void drawPolygonEdge(unsigned int polygon, unsigned char edge) const;
+    void validateNeighbourRelations() const;
 
     bool findPolygon(const Vec3&, unsigned int&, MaterialManager*, float) const;
+    void printPolygonsInNode(const Vec3&, unsigned int&, MaterialManager*, float) const;
+    Vec3 getPolygonMidPoint(unsigned int polygon);
     bool isPointInPolygon(const Vec3&, unsigned int, float, MaterialManager*) const;
     void getVerticiesOfPolygon(std::vector<const Vec3*>&, unsigned int) const;
     unsigned char getMaterialOfPolygon(unsigned int polygon) const;
+    void setMaterialOfPolygon(unsigned int polygon, unsigned char material);
+
+    // ClusterGraph's GTS importer writes cluster ids through both returned pointers.
+    Polygon* getPolygon(unsigned int polygon) const;
+    DoublePolygon* getPolygonDouble(unsigned int polygon) const;
+    unsigned int getNeighbourOfPolygon(unsigned int polygon, unsigned char edge) const;
+    bool isNeighbourOfPolygon(unsigned int polygon, unsigned int neighbour) const;
+    unsigned int getSafeNeighbourOfPolygon(unsigned int polygon, unsigned char edge) const;
+    const Vec3* getVertexForPolygon(unsigned int polygon, unsigned char corner) const;
+    bool isVertexOfPolygon(unsigned int polygon, unsigned int vertex) const;
+    const Vec3* getSafeVertexForPolygon(unsigned int polygon, unsigned char corner) const;
+    unsigned int getVertexIndexForPolygon(unsigned int polygon, unsigned char corner) const;
+    unsigned int getSafeVertexIndexForPolygon(unsigned int polygon, unsigned char corner) const;
+    void getCentreOfPolygon(Vec3& centre, unsigned int polygon) const;
+    const Vec3* getNormalOfPolygon(unsigned int polygon) const;
+    bool getNeighbourIndexForPolygon(unsigned char& edge, unsigned int polygon,
+                                     unsigned int neighbour) const;
+    // Where the XZ ray from `origin` along `direction` leaves the polygon; see the definition.
+    bool getLineIntersectionOnEdgeInPolygon(Vec3& intersection, unsigned int polygon,
+                                            unsigned char& edge, unsigned int previousPolygon,
+                                            const Vec3& origin, const Vec3& direction,
+                                            float* edgeClearance, float*) const;
+
+    // Flood fills from `polygon` over neighbours: the start polygon always, then every polygon a
+    // vertex or edge of which lies within the radius (XYZ) / that overlaps the triangle (XZ, with
+    // a 2 m height window); see the definitions.
+    void getPolygonsInRadius(std::list<unsigned int>& polygons, unsigned int polygon,
+                             const Vec3& centre, float radius) const;
+    void getPolygonsInTriangle(std::list<unsigned int>& polygons, unsigned int polygon,
+                               const Vec3& a, const Vec3& b, const Vec3& c) const;
 
     void initializeDestroyableMapPart(int, bool, const Vec3&, const Vec3&, const Mat4&,
                                       ClusterGraph*, bool);
@@ -85,8 +145,15 @@ public:
     void resetOriginalMaterialOfDestroyableMapPart(int, ClusterGraph*);
 
 private:
+    friend class GTSDataOptimiser;
     friend class QuadTreeNode;
+    friend class QuadTreeManager;
+    friend class ClusterGraph;
 
+    void getPolygonsInRadiusInternal(std::list<unsigned int>& polygons, unsigned int polygon,
+                                     const Vec3& centre, float radius) const;
+    void getPolygonsInTriangleInternal(std::list<unsigned int>& polygons, unsigned int polygon,
+                                       const Vec3& a, const Vec3& b, const Vec3& c) const;
     bool withinPolygon(Polygon*, const Vec3&, float&, float) const;
     bool pointWithinPolygonEdges(Polygon*, const Vec3&) const;
     void getPolygonsWithinBoundary(const Vec3&, const Vec3&, const Mat4&,
@@ -95,14 +162,17 @@ private:
                                           std::vector<unsigned int>&) const;
 
     // Left-hand offsets are the ELF's (sizeof 196; `operator new(0xC4)` in loadQuadTrees).
-    // [UNRESOLVED] roles for the four vectors, the two byte arrays and the four doubles: only the
-    // GTS generation path (not written) fills them; the constructor empties them, clean() frees the
-    // arrays and the destructor the vectors.
+    // [UNRESOLVED] roles of the scratch vectors except m_vector18, which accumulates leaf
+    // polygon ids during tree construction. The doubles store min X/Z, max X/Z and extent;
+    // GTS-only arrays hold double vertices and polygons. clean frees these arrays.
     /* +0x00 */ std::vector<Vec3>         m_vector00;          // 12-byte elements, trivial destructor
     /* +0x0C */ std::vector<unsigned int> m_vector0C;
     /* +0x18 */ std::vector<unsigned int> m_vector18;
     /* +0x24 */ std::vector<unsigned int> m_vector24;
-    /* +0x30 */ unsigned char             m_unwritten30[12];   // no constructor, clean or destructor touches it
+    // Set by QuadTreeManager::loadGTSData; construction and clean leave these untouched.
+    /* +0x30 */ int m_minPolygonsInLeaf;  // [INFERRED] names from the map setup parameters
+    /* +0x34 */ int m_maxDepthInTree;
+    /* +0x38 */ int m_gtsBuildValue;      // [INFERRED] name; maximum-depth stop applies only at or above this depth
     /* +0x3C */ Vec2           m_min;                // [INFERRED] the island's bounds - Dalian Infantry
     /* +0x44 */ Vec2           m_max;                //   (-351.75, -466.75) .. (382.65, 340.53)
     /* +0x4C */ float          m_size;               // [INFERRED] the root square's edge - 807.28 there, the larger extent
@@ -120,7 +190,7 @@ private:
     /* +0x7C */ unsigned int*  m_vertexIndices;
     /* +0x80 */ unsigned int*  m_neighbours;
     /* +0x84 */ DoubleVec3*    m_array84;            // GTS-only double-precision vertex array
-    /* +0x88 */ unsigned char* m_array88;
+    /* +0x88 */ DoublePolygon* m_array88;
     /* +0x8C */ double         m_double8C;
     /* +0x94 */ double         m_double94;
     /* +0x9C */ double         m_double9C;

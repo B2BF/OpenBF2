@@ -2,6 +2,10 @@
 
 #include "IPIMobileKnown.h"
 
+// <iostream>'s ios_base::Init object is this TU's static initialisation and teardown (ELF
+// 0x2EF6C0, __tcf_0 0x2EF720, _GLOBAL__I 0x2EF750).
+#include <iostream>
+
 #include <cmath>
 
 #include "Information.h"
@@ -111,6 +115,7 @@ void IPIMobileKnown::getPositionEstimate(Vec3& position)
             position);
 }
 
+// ELF 0x2EF4B0.
 void IPIMobileKnown::getPositionEstimate(double time, Vec3& position)
 {
 #if defined(_MSC_VER)

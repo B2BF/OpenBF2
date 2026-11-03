@@ -25,18 +25,19 @@ class IAIStrategicEnvironment
 public:
     IAIStrategicEnvironment();
     virtual ~IAIStrategicEnvironment();
-    virtual int getEnemyStrengths(Bot *) = 0;
-    virtual int getEnemyTypes(Bot *) = 0;
-    virtual int getTemperature(Bot *) = 0;
-    virtual float getTemperature(int, int) = 0;
-    virtual int getSecurity(Bot *) = 0;
-    virtual float getSecurity(int, int) = 0;
-    virtual int getControl(Bot *) = 0;
-    virtual float getControl(int, int) = 0;
-    virtual int getFriendlyBattleStr(Bot *) = 0;
-    virtual float getFriendlyBattleStr(int, int) = 0;
-    virtual int getHostileBattleStr(Bot *) = 0;
-    virtual float getHostileBattleStr(int, int) = 0;
+    // Return types and constness from the ELF bodies (x87 returns, the ISAI row pointers).
+    virtual float* getEnemyStrengths(Bot* bot) const = 0;
+    virtual float* getEnemyTypes(Bot* bot) const = 0;
+    virtual float getTemperature(Bot* bot) = 0;
+    virtual float getTemperature(int object, int side) = 0;
+    virtual float getSecurity(Bot* bot) = 0;
+    virtual float getSecurity(int object, int side) = 0;
+    virtual float getControl(Bot* bot) = 0;
+    virtual float getControl(int object, int side) = 0;
+    virtual float getFriendlyBattleStr(Bot* bot) = 0;
+    virtual float getFriendlyBattleStr(int object, int side) = 0;
+    virtual float getHostileBattleStr(Bot* bot) = 0;
+    virtual float getHostileBattleStr(int object, int side) = 0;
 };
 
 // BFStrategicEnvironment - sizeof == 4, from BF2AI::init step 6.
@@ -47,18 +48,18 @@ public:
     virtual ~BFStrategicEnvironment();
 
     // IAIStrategicEnvironment
-    virtual int getEnemyStrengths(Bot *);
-    virtual int getEnemyTypes(Bot *);
-    virtual int getTemperature(Bot *);
-    virtual float getTemperature(int, int);
-    virtual int getSecurity(Bot *);
-    virtual float getSecurity(int, int);
-    virtual int getControl(Bot *);
-    virtual float getControl(int, int);
-    virtual int getFriendlyBattleStr(Bot *);
-    virtual float getFriendlyBattleStr(int, int);
-    virtual int getHostileBattleStr(Bot *);
-    virtual float getHostileBattleStr(int, int);
+    virtual float* getEnemyStrengths(Bot* bot) const;          // ELF 0x2E8860
+    virtual float* getEnemyTypes(Bot* bot) const;              // ELF 0x2E88D0
+    virtual float getTemperature(Bot* bot);                    // ELF 0x2E8940
+    virtual float getTemperature(int object, int side);        // ELF 0x2E89C0
+    virtual float getSecurity(Bot* bot);                       // ELF 0x2E8A10
+    virtual float getSecurity(int object, int side);           // ELF 0x2E8A90
+    virtual float getControl(Bot* bot);                        // ELF 0x2E8AE0
+    virtual float getControl(int object, int side);            // ELF 0x2E8B60
+    virtual float getFriendlyBattleStr(Bot* bot);              // ELF 0x2E8BB0
+    virtual float getFriendlyBattleStr(int object, int side);  // ELF 0x2E8C30
+    virtual float getHostileBattleStr(Bot* bot);               // ELF 0x2E8C80
+    virtual float getHostileBattleStr(int object, int side);   // ELF 0x2E8D00
 
 };
 

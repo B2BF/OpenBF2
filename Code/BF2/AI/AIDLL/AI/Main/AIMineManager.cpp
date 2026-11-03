@@ -1,4 +1,5 @@
-// [RETIRE-WHEN: aidll-02-skeleton] Complete and validate the remaining AIMineManager operations.
+// static init: ELF 0x2E17C0 (__tcf_0 0x2E1820, _GLOBAL__I 0x2E1850): <iostream>'s Init object only.
+#include <iostream>
 
 #include "AIMineManager.h"
 
@@ -8,7 +9,6 @@
 #include "../../../../Core/ClassManager.h"
 #include "../../../AIInterface/BFKnowledge/BFObjectEnvironment.h"   // IAIObjectEnvironment::isAsleep
 #include "../../../AIInterface/BFKnowledge/BFTimer.h"               // IBFTimer::getGameTime
-// AIDllFrontier.h is no longer included - this file has no frontier body left.
 #include "AIRandom.h"
 #include "CommonSingletonServer.h"
 #include "IAIPathfinding.h"
@@ -34,6 +34,7 @@ inline const Vec3& translationOf(const Mat4& m)
 } // anonymous namespace
 
 // IAIMineManager
+// ELF 0x2E9700 / 0x2E97A0
 IAIMineManager::IAIMineManager()
 {
     // the guard reads the roster static, not the registry. Reproduced.
@@ -41,6 +42,7 @@ IAIMineManager::IAIMineManager()
         classManager->registerSimpleSingleton("IAIMineManager", this);
 }
 
+// ELF 0x2E9840 / 0x2E98D0 / 0x2E9960
 IAIMineManager::~IAIMineManager()
 {
     if (CommonSingletonServer::m_iAIMineManager == this)
@@ -48,12 +50,14 @@ IAIMineManager::~IAIMineManager()
 }
 
 // Polygon counter records default to zero and support memberwise copying.
+// ELF 0x2DEDD0 / 0x2DEDF0
 AIMineManager::PolygonData::PolygonData()
     : m_mines(0)
     , m_otherMines(0)
 {
 }
 
+// ELF 0x2DEE10 / 0x2DEE30
 AIMineManager::PolygonData::PolygonData(const PolygonData& other)
     : m_mines(other.m_mines)
     , m_otherMines(other.m_otherMines)
@@ -61,6 +65,7 @@ AIMineManager::PolygonData::PolygonData(const PolygonData& other)
 }
 
 // Creates an empty mine record with invalid ID, quad-tree and polygon sentinels.
+// ELF 0x2DE2C0 / 0x2DE420
 AIMineManager::MineInfo::MineInfo()
     : m_id(-1)
     , m_mineType(0)
@@ -84,6 +89,7 @@ AIMineManager::MineInfo::MineInfo()
 }
 
 // Creates a circular mine record. mineAtRest() must fill its quad-tree and polygon indices before use.
+// ELF 0x2DE4D0 / 0x2DE610
 AIMineManager::MineInfo::MineInfo(unsigned int id, MineType type, const Mat4& transform,
                                   float radius)
     : m_id(static_cast<int>(id))
@@ -105,6 +111,7 @@ AIMineManager::MineInfo::MineInfo(unsigned int id, MineType type, const Mat4& tr
 
 // Builds an anti-personnel mine from its triangular footprint. Leaves the quad-tree id,
 // polygon id, and radius uninitialized; the anti-personnel path does not read radius.
+// ELF 0x2DE750 / 0x2DE8B0
 AIMineManager::MineInfo::MineInfo(unsigned int id, MineType type, const Mat4& transform,
                                   const Vec3& corner1, const Vec3& corner2)
     : m_id(static_cast<int>(id))
@@ -119,13 +126,28 @@ AIMineManager::MineInfo::MineInfo(unsigned int id, MineType type, const Mat4& tr
     m_corner2 = corner2;
 }
 
+// ELF 0x2DEA10 / 0x2DEBF0
+AIMineManager::MineInfo::MineInfo(const MineInfo& other)
+    : m_id(other.m_id)
+    , m_mineType(other.m_mineType)
+    , m_quadTree(other.m_quadTree)
+    , m_polygon(other.m_polygon)
+    , m_polygons(other.m_polygons)
+    , m_radius(other.m_radius)
+{
+    for (int i = 0; i < 16; ++i)
+        m_transform.m[i] = 0.0f;
+    m_transform = other.m_transform;
+    m_corner1 = other.m_corner1;
+    m_corner2 = other.m_corner2;
+}
+
 // Initializes mine tracking with one outer-vector entry for each of the two sides.
+// ELF 0x2DEE50 / 0x2DF140
 AIMineManager::AIMineManager()
     : m_nextUpdateTime(-1000000000.0)
     , m_int60(-1)
-    , m_int72(0)
-    , m_int76(0)
-    , m_int80(0)
+    , m_missingMinePosition{0.0f, 0.0f, 0.0f}
     , m_flag84(false)
 {
     // Leaves m_gap64 uninitialized. Creates entries for anti-personnel and anti-tank mines;
@@ -138,11 +160,13 @@ AIMineManager::AIMineManager()
 // map, the resting map, then the two nested vectors - and touches none of the six trailing scalars.
 // That is what proves +72..+83 are three plain ints rather than another vector, and it is all a C++
 // destructor does on its own, so the body is empty.
+// ELF 0x2DF430 / 0x2DF6D0 / 0x2DF970
 AIMineManager::~AIMineManager()
 {
 }
 
 // Sizes navigation-island tracking for the given mine type. The type must be valid.
+// ELF 0x2DFC10
 void AIMineManager::init(MineType type, unsigned int islandCount)
 {
     m_minedPolygons[type].resize(islandCount);
@@ -150,6 +174,7 @@ void AIMineManager::init(MineType type, unsigned int islandCount)
 }
 
 // Resets scheduling and scalar state while retaining both mine maps and polygon indices.
+// ELF 0x2DFDE0
 void AIMineManager::reset()
 {
     m_int60 = -1;
@@ -159,30 +184,33 @@ void AIMineManager::reset()
 
 // Returns a reference to the indexed polygon set. Both indices must be valid; a later
 // init that grows the inner vector can invalidate the reference.
-const std::set<unsigned int>& AIMineManager::getMinedPolygons(MineType type, unsigned int map)
+// ELF 0x2E16F0
+const std::set<unsigned int>& AIMineManager::getMinedPolygons(MineType type, unsigned int map) const
 {
     return m_minedPolygons[type][map];
 }
 
-// Writes the latest recorded quad tree and polygon for the mine, or -1 to both outputs when absent.
-void AIMineManager::getPathfindingPositionOfMine(unsigned int mineId, MineType /*type*/,
-                                                 unsigned int& quadTree, unsigned int& polygon)
+// Returns the latest recorded mine position and writes its quad tree and polygon; absent mines return the zero fallback.
+// ELF 0x2E1720
+const Vec3& AIMineManager::getPathfindingPositionOfMine(unsigned int mineId, MineType /*type*/,
+                                                 unsigned int& quadTree, unsigned int& polygon) const
 {
     const std::map<unsigned int, std::list<MineInfo> >::const_iterator i = m_mines.find(mineId);
     if (i == m_mines.end())
     {
         quadTree = 0xFFFFFFFFu;
         polygon  = 0xFFFFFFFFu;
-        return;
+        return m_missingMinePosition;
     }
 
-    const MineInfo& info = i->second.back();
-    quadTree = info.m_quadTree;
-    polygon  = info.m_polygon;
+    quadTree = i->second.back().m_quadTree;
+    polygon  = i->second.back().m_polygon;
+    return translationOf(i->second.back().m_transform);
 }
 
 // Processes pending mine state at two updates per second.
 // The deadline test is strict: an update runs only when now is greater than m_nextUpdateTime.
+// ELF 0x2E0390
 void AIMineManager::update()
 {
     IBFTimer* const timer = static_cast<IBFTimer*>(CommonSingletonServer::m_iBFTimer);
@@ -211,6 +239,7 @@ void AIMineManager::update()
 }
 
 // Registers a resting mine as a pathfinding hazard and updates affected polygon counts.
+// ELF 0x2E08B0
 void AIMineManager::mineAtRest(const MineInfo& info)
 {
     MineInfo local(info);
@@ -302,6 +331,7 @@ void AIMineManager::mineAtRest(const MineInfo& info)
 // Probes seven positions along the mine's facing axis, from zero through six metres.
 // Stops when both polygon and quad-tree ids are valid; returns the final seed otherwise,
 // which may still be the invalid handle.
+// ELF 0x2E04D0
 unsigned int AIMineManager::findSeedPolygonForAPMine(MineInfo& info)
 {
     unsigned int seed = 0xFFFFFFFFu;
@@ -326,6 +356,7 @@ unsigned int AIMineManager::findSeedPolygonForAPMine(MineInfo& info)
 }
 
 // Tries up to fifteen random positions around the mine to find a seed polygon.
+// ELF 0x2E05C0
 unsigned int AIMineManager::findSeedPolygonForATMine(MineInfo& info)
 {
     AIRandom* const random = AIRandom::m_instance;
@@ -355,6 +386,7 @@ unsigned int AIMineManager::findSeedPolygonForATMine(MineInfo& info)
 }
 
 // Adds a mine to a polygon's counters. Material changes occur on an existing counter's zero-to-one transition.
+// ELF 0x2E1090
 void AIMineManager::addNewMineToPolygon(MineType type, unsigned int quadTree, unsigned int polygon)
 {
     const std::pair<std::map<unsigned int, PolygonData>::iterator, bool> result =
@@ -372,6 +404,7 @@ void AIMineManager::addNewMineToPolygon(MineType type, unsigned int quadTree, un
     ++result.first->second.m_mines;
 }
 
+// ELF 0x2E11D0
 void AIMineManager::addNewOtherMineToPolygon(MineType type, unsigned int quadTree,
                                              unsigned int polygon)
 {
@@ -391,6 +424,7 @@ void AIMineManager::addNewOtherMineToPolygon(MineType type, unsigned int quadTre
 }
 
 // Removes a mine from an existing polygon entry. The caller must ensure the entry exists.
+// ELF 0x2E14B0
 void AIMineManager::removeMineFromPolygon(MineType type, unsigned int quadTree,
                                           unsigned int polygon)
 {
@@ -407,6 +441,7 @@ void AIMineManager::removeMineFromPolygon(MineType type, unsigned int quadTree,
     }
 }
 
+// ELF 0x2E15D0
 void AIMineManager::removeOtherMineFromPolygon(MineType type, unsigned int quadTree,
                                                unsigned int polygon)
 {
@@ -423,6 +458,7 @@ void AIMineManager::removeOtherMineFromPolygon(MineType type, unsigned int quadT
 }
 
 // Queues a newly placed mine for later processing; it does not update navigation polygons immediately.
+// ELF 0x2DFF00
 void AIMineManager::minePlaced(MineType type, unsigned int id, const Mat4& transform, float radius)
 {
     if (type == 1)
@@ -455,6 +491,7 @@ void AIMineManager::minePlaced(MineType type, unsigned int id, const Mat4& trans
 
 // Removes settling mines first. If absent there, removes a resting mine and releases
 // its polygon counters. An id must not exist in both maps.
+// ELF 0x2DFE10
 void AIMineManager::mineRemoved(unsigned int id)
 {
     const std::map<unsigned int, MineInfo>::iterator settling = m_settlingMines.find(id);
@@ -471,6 +508,7 @@ void AIMineManager::mineRemoved(unsigned int id)
 }
 
 // Releases all polygon registrations for a mine and erases its entry.
+// ELF 0x2E1310
 void AIMineManager::removeMine(std::map<unsigned int, std::list<MineInfo> >::iterator& entry)
 {
     int index = 0;

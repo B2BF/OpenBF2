@@ -15,6 +15,7 @@ namespace hfe {
 namespace ai {
 
 class SquadCoordinator;
+class SquadMember;
 
 class SquadFormation
 {
@@ -46,7 +47,7 @@ public:
         /*  +0 */ bool m_occupied;       // the flag every deep branch in this class is guarded by
         /*  +4 */ int  m_memberIndex;    // = -1; indexes the coordinator's squad-member vector
         /*  +8 */ Vec3 m_offset;         // the position the formation setters compute
-        /* +20 */ int  m_i20;            // = -1 [UNRESOLVED]
+        /* +20 */ int  m_i20;            // = -1; the trailing position (m_slotTargets) this slot falls back to
         /* +24 */ bool m_b24;            // = false [UNRESOLVED]
         /* +28 */ float m_i28;           // legacy inferred name; float proved by leaveFormation's x87 loads/stores
         /* +32 */ int  m_referenceSlot;  // the slot this one is measured from [INFERRED]
@@ -63,28 +64,41 @@ public:
     };
 
     explicit SquadFormation(SquadCoordinator* coordinator);
+    ~SquadFormation();                              // ELF 0x1A9E10 (D1)
 
     void update(double time);                 // complete scheduler
     void updateFormation();                  // leader/anchor reassignment
-    void updateWaitForSquadMembers(double time); // occupied timing seam
-    void updateFormationForwardVector();     // occupied owner-query seam
+    void updateWaitForSquadMembers(double time); // ELF 0x1AAFC0
+    void updateFormationForwardVector();     // ELF 0x1AB470
     void updateTrailingPositions();          // complete
     void updateTrailingSlots();              // complete
     void selectFormation();                  // / PE inlined at
     int getSquadMemberIndexAtSlot(int slotIndex); // no occupied test
+    // ELF 0x1AB6C0: the first slot is occupied (no empty-vector guard).
+    bool hasSquadMembers() { return m_slots[0]->m_occupied; }
+    bool getSlotWorldPos(int memberIndex, Vec3& position);     // ELF 0x1AC550
+    int getFirstFreeTrailingSlot(SquadMember* member);         // ELF 0x1ACA30
+    bool isTrailPosAssigned(int trailIndex);                   // ELF 0x1ACB70
     bool shouldLeaveSquadLeader();           // returns m_b84
     void joinSquadLeader();                  // (inlines the movement update)
+    void leaveSquadLeader();                 // ELF 0x1AB640
     float getFormationMaxSpeed();
+    bool shouldSquadMoveOut() { return m_b36; }   // ELF 0x1AB6F0: +0x24
     void updateFormationMaxSpeed();
     void setFormation();
+    void changeFormation(Formations formation);
+    bool hasFormationMoved();
+    bool haveLineOfSightBetween(Vec3& from, Vec3& to);
+    void debugCheckNoFormationSlotGaps();
     void setLineFormation();
-    void setWedgeFormation();                // [FRONTIER]
-    void setEchelonFormation();              // [FRONTIER]
+    void setWedgeFormation();                // ELF 0x1ABA10
+    void setEchelonFormation();              // ELF 0x1ABBF0
 
     void joinFormation(int memberIndex);
     bool isInFormation(int memberIndex);      // ignores occupied flag
     void leaveFormation(int memberIndex);
     void resetSlot(int slotIndex);            // inlined
+    void reassignSlots();                     // ELF 0x1AC370
     void updateClosestSlots();
     int getClosestSlotIndex(int slotIndex);    // world-position seam
     void swapSlots(int first, int second);    // three payload fields only
@@ -101,13 +115,10 @@ public:
     /*  +36 */ bool m_b36;                            // = false; shouldSquadMoveOut returns it
     /*  +40 */ float m_formationMaxSpeed;             // FLT_MAX, then 5.0f - see the header note
     /*  +44 */ int m_side;                            // = the coordinator's side
-    // ELF +0x30 / PE +0x34 is one `Vec2` - the formation's XZ forward vector, born (0, 1). The
-    // Vec2 type is attested by the forward-vector update passing this address to
-    // `vec3ToVec2XZ(const Vec3&, Vec2&)`; getSlotWorldPos is the only other reader. The split
-    // below predates that evidence and stays until the occupied projection lands, so that the
-    // retyping and its first writer arrive together.
-    /*  +48 */ int m_i48;                             // = 0 Vec2 x (0.0f bits)
-    /*  +52 */ float m_f52;                           // = 1.0f Vec2 y
+    // ELF +0x30 / PE +0x34: the formation's XZ forward vector, born (0, 1). Attested as one Vec2
+    // by the forward-vector update passing its address to `vec3ToVec2XZ(const Vec3&, Vec2&)`;
+    // getSlotWorldPos (ELF 0x1AC550) reads it as two floats.
+    /*  +48 */ Vec2 m_forward;
     /*  +56 */ bool m_b56;                            // = false; hasFormationMoved returns it
     /*  +60 */ Vec3 m_v60;                            // zeroed; anchor position at the last movement stamp
     /*  +72 */ Vec3 m_v72;                            // zeroed; slot-zero world position (updateSlotZeroPos)

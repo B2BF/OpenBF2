@@ -1,9 +1,69 @@
 
+// static init: ELF 0x3D3120 (__tcf_0 0x3D3180, _GLOBAL__I 0x3D31B0): <iostream>'s Init object only.
+#include <iostream>
+
 #include "BotBehaviourManager.h"
 
 #include "../AIBotBehaviour/UrgeCurve.h"     // UCConstant / UCLinear / UCXInverse - the three factories
 #include "../AIUtils/checkPointer.h"         // inlined 26 times in the constructor
 #include "AIDllFrontier.h"
+#include "../AIBotBehaviour/BBAvoid.h"
+#include "../AIBotBehaviour/BBBridgeRepair.h"
+#include "../AIBotBehaviour/BBC4.h"
+#include "../AIBotBehaviour/BBCallForMedic.h"
+#include "../AIBotBehaviour/BBChange.h"
+#include "../AIBotBehaviour/BBChangeLandingCraft.h"
+#include "../AIBotBehaviour/BBChangeTeleport.h"
+#include "../AIBotBehaviour/BBDefuseMines.h"
+#include "../AIBotBehaviour/BBFire.h"
+#include "../AIBotBehaviour/BBFire3d.h"
+#include "../AIBotBehaviour/BBFireArtilleryDriver.h"
+#include "../AIBotBehaviour/BBFireInfantery.h"
+#include "../AIBotBehaviour/BBFireLargeBore.h"
+#include "../AIBotBehaviour/BBFireUnarmed.h"
+#include "../AIBotBehaviour/BBIdle.h"
+#include "../AIBotBehaviour/BBMedicAssist.h"
+#include "../AIBotBehaviour/BBMoveTo.h"
+#include "../AIBotBehaviour/BBMoveToFixed.h"
+#include "../AIBotBehaviour/BBRandom.h"
+#include "../AIBotBehaviour/BBRevive.h"
+#include "../AIBotBehaviour/BBRunOverSoldier.h"
+#include "../AIBotBehaviour/BBSuicide.h"
+#include "../AIBotBehaviour/BBTakeCover.h"
+#include "../AIBotBehaviour/BBTakeCover3d.h"
+#include "../AIBotBehaviour/BBTakeCoverInfantry.h"
+#include "../AIBotBehaviour/BBTriggerable.h"
+#include "../AIBotBehaviourPattern/BBPAvoidCollision2d.h"
+#include "../AIBotBehaviourPattern/BBPAvoidCollision3d.h"
+#include "../AIBotBehaviourPattern/BBPAvoidCollisionInfantery.h"
+#include "../AIBotBehaviourPattern/BBPBridgeRepair.h"
+#include "../AIBotBehaviourPattern/BBPC4.h"
+#include "../AIBotBehaviourPattern/BBPCallForMedic.h"
+#include "../AIBotBehaviourPattern/BBPChange.h"
+#include "../AIBotBehaviourPattern/BBPChangeLandingCraft.h"
+#include "../AIBotBehaviourPattern/BBPChangeTeleport.h"
+#include "../AIBotBehaviourPattern/BBPDefuseMines.h"
+#include "../AIBotBehaviourPattern/BBPFire2d.h"
+#include "../AIBotBehaviourPattern/BBPFire2dDriver.h"
+#include "../AIBotBehaviourPattern/BBPFire3d.h"
+#include "../AIBotBehaviourPattern/BBPFireInfantery.h"
+#include "../AIBotBehaviourPattern/BBPGotoWaypoints2d.h"
+#include "../AIBotBehaviourPattern/BBPGotoWaypoints3d.h"
+#include "../AIBotBehaviourPattern/BBPGotoWaypointsBoat.h"
+#include "../AIBotBehaviourPattern/BBPGotoWaypointsInfantery.h"
+#include "../AIBotBehaviourPattern/BBPHeliFire3d.h"
+#include "../AIBotBehaviourPattern/BBPIdle2d.h"
+#include "../AIBotBehaviourPattern/BBPIdle3d.h"
+#include "../AIBotBehaviourPattern/BBPIdleInfantery.h"
+#include "../AIBotBehaviourPattern/BBPMedicAssist.h"
+#include "../AIBotBehaviourPattern/BBPRandom.h"
+#include "../AIBotBehaviourPattern/BBPRevive.h"
+#include "../AIBotBehaviourPattern/BBPRunOverSoldier.h"
+#include "../AIBotBehaviourPattern/BBPSuicide.h"
+#include "../AIBotBehaviourPattern/BBPTakeCover.h"
+#include "../AIBotBehaviourPattern/BBPTakeCover3d.h"
+#include "../AIBotBehaviourPattern/BBPTakeCoverInfantry.h"
+#include "../AIBotBehaviourPattern/BBPTriggerable.h"
 
 namespace dice {
 namespace hfe {
@@ -19,208 +79,208 @@ namespace {
 class BBCreateFunctionAvoid : public BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights);
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights);
 };
 
 // - builds one `BBMoveTo`.
 class BBCreateFunctionMoveTo : public BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights);
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights);
 };
 
 // - builds one `BBMoveToFixed`.
 class BBCreateFunctionMoveToFixed : public BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights);
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights);
 };
 
 // - builds one `BBMedicAssist`.
 class BBCreateFunctionMedicAssist : public BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights);
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights);
 };
 
 // - builds one `BBIdle`.
 class BBCreateFunctionIdle : public BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights);
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights);
 };
 
 // - builds one `BBFire`.
 class BBCreateFunctionFire : public BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights);
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights);
 };
 
 // - builds one `BBFire3d`.
 class BBCreateFunctionFire3d : public BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights);
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights);
 };
 
 // - builds one `BBFireInfantery`.
 class BBCreateFunctionFireInfantery : public BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights);
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights);
 };
 
 // - builds one `BBFireUnarmed`.
 class BBCreateFunctionFireUnarmed : public BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights);
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights);
 };
 
 // - builds one `BBFireLargeBore`.
 class BBCreateFunctionFireLargeBore : public BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights);
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights);
 };
 
 // - builds one `BBTakeCover`.
 class BBCreateFunctionTakeCover : public BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights);
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights);
 };
 
 // - builds one `BBTakeCoverInfantry`.
 class BBCreateFunctionTakeCoverInfantry : public BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights);
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights);
 };
 
 // - builds one `BBFireDriver`.
 class BBCreateFunctionFireDriver : public BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights);
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights);
 };
 
 // - builds one `BBChange`.
 class BBCreateFunctionChange : public BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights);
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights);
 };
 
 // - builds one `BBChangeLandingCraft`.
 class BBCreateFunctionChangeLandingCraft : public BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights);
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights);
 };
 
 // - builds one `BBChangeTeleport`.
 class BBCreateFunctionChangeTeleport : public BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights);
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights);
 };
 
 // - builds one `BBSuicide`.
 class BBCreateFunctionSuicide : public BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights);
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights);
 };
 
 // - builds one `BBCallForMedic`.
 class BBCreateFunctionCallForMedic : public BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights);
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights);
 };
 
 // - builds one `BBRevive`.
 class BBCreateFunctionRevive : public BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights);
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights);
 };
 
 // - builds one `BBTakeCover3d`.
 class BBCreateFunctionTakeCover3d : public BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights);
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights);
 };
 
 // - builds one `BBC4`.
 class BBCreateFunctionC4 : public BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights);
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights);
 };
 
 // - builds one `BBRunOverSoldier`.
 class BBCreateFunctionRunOverSoldier : public BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights);
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights);
 };
 
 // - builds one `BBBridgeRepair`.
 class BBCreateFunctionBridgeRepair : public BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights);
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights);
 };
 
 // - builds one `BBDefuseMines`.
 class BBCreateFunctionDefuseMines : public BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights);
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights);
 };
 
 // - builds one `BBRandom`.
 class BBCreateFunctionRandom : public BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights);
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights);
 };
 
 // - builds one `BBTriggerable`.
 class BBCreateFunctionTriggerable : public BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights);
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights);
 };
 
 } // anonymous namespace
@@ -322,7 +382,7 @@ std::string BotBehaviourManager::getBehaviourName(int id)
 
 // Creates a named behavior through a registered factory.
 
-int BotBehaviourManager::create(std::string behaviourName, std::string createFunctionName,
+BotBehaviour* BotBehaviourManager::create(std::string behaviourName, std::string createFunctionName,
                                 std::string name, int mode, std::string urgeCurveName,
                                 float* weights, std::string& message)
 {
@@ -368,190 +428,312 @@ std::string BotBehaviourManager::createUCXInverse(std::string& name, float numer
     return "UCXInverse created";
 }
 
-// The twenty-six frontier bodies.
+// The twenty-six create functions (weak in the image, 0x3D4190..0x3D8DD0). Each compares the
+// pattern name with its candidates in the image's order, builds the first match with the behaviour
+// id, and builds the behaviour with (id, mode) narrowed to bytes (`movzbl`), the pattern (null when
+// no name matches), the urge curve and the weights. Every allocation goes through checkPointer
+// (the Debug(6, ..., 46, ...) "Allocation failed" branch after each `new`).
 
 namespace {
 
-// Creation of BBAvoid and registration with the behavior list remain unimplemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Replace the stop when this factory behavior is recovered.
-int BBCreateFunctionAvoid::operator()(int, std::string&, int, UrgeCurve*, float*)
+// ELF 0x3D4190.
+BotBehaviour* BBCreateFunctionAvoid::operator()(int behaviourId, std::string& name, int mode,
+                                                UrgeCurve* urgeCurve, float* weights)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::(anonymous namespace)::BBCreateFunctionAvoid::operator()");
+    BBPAvoidCollision* pattern = 0;
+    if (name.compare("BBPAvoidCollision2d") == 0)
+        pattern = checkPointer(new BBPAvoidCollision2d(behaviourId));
+    else if (name.compare("BBPAvoidCollision3d") == 0)
+        pattern = checkPointer(new BBPAvoidCollision3d(behaviourId));
+    else if (name.compare("BBPAvoidCollisionInfantery") == 0)
+        pattern = checkPointer(new BBPAvoidCollisionInfantery(behaviourId));
+    return checkPointer(new BBAvoid(static_cast<unsigned char>(behaviourId),
+                               static_cast<unsigned char>(mode), pattern, urgeCurve, weights));
 }
 
-// Creation of BBMoveTo and registration with the behavior list remain unimplemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Replace the stop when this factory behavior is recovered.
-int BBCreateFunctionMoveTo::operator()(int, std::string&, int, UrgeCurve*, float*)
+// ELF 0x3D4690.
+BotBehaviour* BBCreateFunctionMoveTo::operator()(int behaviourId, std::string& name, int mode,
+                                                UrgeCurve* urgeCurve, float* weights)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::(anonymous namespace)::BBCreateFunctionMoveTo::operator()");
+    BBPGotoWaypoint* pattern = 0;
+    if (name.compare("BBPGotoWaypoint2d") == 0)
+        pattern = checkPointer(new BBPGotoWaypoint2d(behaviourId));
+    else if (name.compare("BBPGotoWaypointBoat") == 0)
+        pattern = checkPointer(new BBPGotoWaypointBoat(behaviourId));
+    else if (name.compare("BBPGotoWaypoint3d") == 0)
+        pattern = checkPointer(new BBPGotoWaypoint3d(behaviourId));
+    else if (name.compare("BBPGotoWaypointInfantery") == 0)
+        pattern = checkPointer(new BBPGotoWaypointSoldier(behaviourId));
+    return checkPointer(new BBMoveTo(static_cast<unsigned char>(behaviourId),
+                               static_cast<unsigned char>(mode), pattern, urgeCurve, weights));
 }
 
-// Creation of BBMoveToFixed and registration with the behavior list remain unimplemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Replace the stop when this factory behavior is recovered.
-int BBCreateFunctionMoveToFixed::operator()(int, std::string&, int, UrgeCurve*, float*)
+// ELF 0x3D4CC0.
+BotBehaviour* BBCreateFunctionMoveToFixed::operator()(int behaviourId, std::string&, int mode,
+                                                UrgeCurve*, float*)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::(anonymous namespace)::BBCreateFunctionMoveToFixed::operator()");
+    return checkPointer(new BBMoveToFixed(static_cast<unsigned char>(behaviourId), static_cast<unsigned char>(mode)));
 }
 
-// Creation of BBMedicAssist and registration with the behavior list remain unimplemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Replace the stop when this factory behavior is recovered.
-int BBCreateFunctionMedicAssist::operator()(int, std::string&, int, UrgeCurve*, float*)
+// ELF 0x3D5D90.
+BotBehaviour* BBCreateFunctionMedicAssist::operator()(int behaviourId, std::string& name, int mode,
+                                                UrgeCurve* urgeCurve, float* weights)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::(anonymous namespace)::BBCreateFunctionMedicAssist::operator()");
+    PlanGenerator* pattern = 0;
+    if (name.compare("BBPMedicAssist") == 0)
+        pattern = checkPointer(new BBPMedicAssist(behaviourId));
+    return checkPointer(new BBMedicAssist(static_cast<unsigned char>(behaviourId),
+                               static_cast<unsigned char>(mode), pattern, urgeCurve, weights));
 }
 
-// Creation of BBIdle and registration with the behavior list remain unimplemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Replace the stop when this factory behavior is recovered.
-int BBCreateFunctionIdle::operator()(int, std::string&, int, UrgeCurve*, float*)
+// ELF 0x3D4F80.
+BotBehaviour* BBCreateFunctionIdle::operator()(int behaviourId, std::string& name, int mode,
+                                                UrgeCurve* urgeCurve, float* weights)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::(anonymous namespace)::BBCreateFunctionIdle::operator()");
+    BBPIdle* pattern = 0;
+    if (name.compare("BBPIdle2d") == 0)
+        pattern = checkPointer(new BBPIdle2d(behaviourId));
+    else if (name.compare("BBPIdle3d") == 0)
+        pattern = checkPointer(new BBPIdle3d(behaviourId));
+    else if (name.compare("BBPIdleInfantery") == 0)
+        pattern = checkPointer(new BBPIdleInfantery(behaviourId));
+    return checkPointer(new BBIdle(static_cast<unsigned char>(behaviourId),
+                               static_cast<unsigned char>(mode), pattern, urgeCurve, weights));
 }
 
-// Creation of BBFire and registration with the behavior list remain unimplemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Replace the stop when this factory behavior is recovered.
-int BBCreateFunctionFire::operator()(int, std::string&, int, UrgeCurve*, float*)
+// ELF 0x3D6030.
+BotBehaviour* BBCreateFunctionFire::operator()(int behaviourId, std::string& name, int mode,
+                                                UrgeCurve* urgeCurve, float* weights)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::(anonymous namespace)::BBCreateFunctionFire::operator()");
+    BBPFire* pattern = 0;
+    if (name.compare("BBPFire2d") == 0)
+        pattern = checkPointer(new BBPFire2d(behaviourId));
+    else if (name.compare("BBPFireInfantery") == 0)
+        pattern = checkPointer(new BBPFireInfantery(behaviourId));
+    return checkPointer(new BBFire(static_cast<unsigned char>(behaviourId),
+                               static_cast<unsigned char>(mode), pattern, urgeCurve, weights));
 }
 
-// Creation of BBFire3d and registration with the behavior list remain unimplemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Replace the stop when this factory behavior is recovered.
-int BBCreateFunctionFire3d::operator()(int, std::string&, int, UrgeCurve*, float*)
+// ELF 0x3D6A80.
+BotBehaviour* BBCreateFunctionFire3d::operator()(int behaviourId, std::string& name, int mode,
+                                                UrgeCurve* urgeCurve, float* weights)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::(anonymous namespace)::BBCreateFunctionFire3d::operator()");
+    BBPFire* pattern = 0;
+    if (name.compare("BBPFire3d") == 0)
+        pattern = checkPointer(new BBPFire3d(behaviourId));
+    else if (name.compare("BBPHeliFire3d") == 0)
+        pattern = checkPointer(new BBPHeliFire3d(behaviourId));
+    return checkPointer(new BBFire3d(static_cast<unsigned char>(behaviourId),
+                               static_cast<unsigned char>(mode), pattern, urgeCurve, weights));
 }
 
-// Creation of BBFireInfantery and registration with the behavior list remain unimplemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Replace the stop when this factory behavior is recovered.
-int BBCreateFunctionFireInfantery::operator()(int, std::string&, int, UrgeCurve*, float*)
+// ELF 0x3D6E50.
+BotBehaviour* BBCreateFunctionFireInfantery::operator()(int behaviourId, std::string& name, int mode,
+                                                UrgeCurve* urgeCurve, float* weights)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::(anonymous namespace)::BBCreateFunctionFireInfantery::operator()");
+    BBPFireInfantery* pattern = 0;
+    if (name.compare("BBPFireInfantery") == 0)
+        pattern = checkPointer(new BBPFireInfantery(behaviourId));
+    return checkPointer(new BBFireInfantery(static_cast<unsigned char>(behaviourId),
+                               static_cast<unsigned char>(mode), pattern, urgeCurve, weights));
 }
 
-// Creation of BBFireUnarmed and registration with the behavior list remain unimplemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Replace the stop when this factory behavior is recovered.
-int BBCreateFunctionFireUnarmed::operator()(int, std::string&, int, UrgeCurve*, float*)
+// ELF 0x3D4E20.
+BotBehaviour* BBCreateFunctionFireUnarmed::operator()(int behaviourId, std::string&, int mode,
+                                                UrgeCurve*, float*)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::(anonymous namespace)::BBCreateFunctionFireUnarmed::operator()");
+    return checkPointer(new BBFireUnarmed(static_cast<unsigned char>(behaviourId), static_cast<unsigned char>(mode)));
 }
 
-// Creation of BBFireLargeBore and registration with the behavior list remain unimplemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Replace the stop when this factory behavior is recovered.
-int BBCreateFunctionFireLargeBore::operator()(int, std::string&, int, UrgeCurve*, float*)
+// ELF 0x3D6400.
+BotBehaviour* BBCreateFunctionFireLargeBore::operator()(int behaviourId, std::string& name, int mode,
+                                                UrgeCurve* urgeCurve, float* weights)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::(anonymous namespace)::BBCreateFunctionFireLargeBore::operator()");
+    BBPFire* pattern = 0;
+    if (name.compare("BBPFire2d") == 0)
+        pattern = checkPointer(new BBPFire2d(behaviourId));
+    else if (name.compare("BBPFireInfantery") == 0)
+        pattern = checkPointer(new BBPFireInfantery(behaviourId));
+    return checkPointer(new BBFireLargeBore(static_cast<unsigned char>(behaviourId),
+                               static_cast<unsigned char>(mode), pattern, urgeCurve, weights, false));
 }
 
-// Creation of BBTakeCover and registration with the behavior list remain unimplemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Replace the stop when this factory behavior is recovered.
-int BBCreateFunctionTakeCover::operator()(int, std::string&, int, UrgeCurve*, float*)
+// ELF 0x3D70F0.
+BotBehaviour* BBCreateFunctionTakeCover::operator()(int behaviourId, std::string& name, int mode,
+                                                UrgeCurve* urgeCurve, float* weights)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::(anonymous namespace)::BBCreateFunctionTakeCover::operator()");
+    PlanGenerator* pattern = 0;
+    if (name.compare("BBPTakeCover") == 0)
+        pattern = checkPointer(new BBPTakeCover(behaviourId));
+    return checkPointer(new BBTakeCover(static_cast<unsigned char>(behaviourId),
+                               static_cast<unsigned char>(mode), pattern, urgeCurve, weights));
 }
 
-// Creation of BBTakeCoverInfantry and registration with the behavior list remain unimplemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Replace the stop when this factory behavior is recovered.
-int BBCreateFunctionTakeCoverInfantry::operator()(int, std::string&, int, UrgeCurve*, float*)
+// ELF 0x3D7390.
+BotBehaviour* BBCreateFunctionTakeCoverInfantry::operator()(int behaviourId, std::string& name, int mode,
+                                                UrgeCurve* urgeCurve, float* weights)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::(anonymous namespace)::BBCreateFunctionTakeCoverInfantry::operator()");
+    PlanGenerator* pattern = 0;
+    if (name.compare("BBPTakeCoverInfantry") == 0)
+        pattern = checkPointer(new BBPTakeCoverInfantry(behaviourId));
+    return checkPointer(new BBTakeCoverInfantry(static_cast<unsigned char>(behaviourId),
+                               static_cast<unsigned char>(mode), pattern, urgeCurve, weights));
 }
 
-// Creation of BBFireDriver and registration with the behavior list remain unimplemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Replace the stop when this factory behavior is recovered.
-int BBCreateFunctionFireDriver::operator()(int, std::string&, int, UrgeCurve*, float*)
+// ELF 0x3D67E0.
+BotBehaviour* BBCreateFunctionFireDriver::operator()(int behaviourId, std::string& name, int mode,
+                                                UrgeCurve* urgeCurve, float* weights)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::(anonymous namespace)::BBCreateFunctionFireDriver::operator()");
+    BBPFire* pattern = 0;
+    if (name.compare("BBPFire2dDriver") == 0)
+        pattern = checkPointer(new BBPFire2dDriver(behaviourId));
+    return checkPointer(new BBFireArtilleryDriver(static_cast<unsigned char>(behaviourId),
+                               static_cast<unsigned char>(mode), pattern, urgeCurve, weights));
 }
 
-// Creation of BBChange and registration with the behavior list remain unimplemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Replace the stop when this factory behavior is recovered.
-int BBCreateFunctionChange::operator()(int, std::string&, int, UrgeCurve*, float*)
+// ELF 0x3D5480.
+BotBehaviour* BBCreateFunctionChange::operator()(int behaviourId, std::string& name, int mode,
+                                                UrgeCurve* urgeCurve, float* weights)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::(anonymous namespace)::BBCreateFunctionChange::operator()");
+    PlanGenerator* pattern = 0;
+    if (name.compare("BBPChange") == 0)
+        pattern = checkPointer(new BBPChange(behaviourId));
+    return checkPointer(new BBChange(static_cast<unsigned char>(behaviourId),
+                               static_cast<unsigned char>(mode), pattern, urgeCurve, weights));
 }
 
-// Creation of BBChangeLandingCraft and registration with the behavior list remain unimplemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Replace the stop when this factory behavior is recovered.
-int BBCreateFunctionChangeLandingCraft::operator()(int, std::string&, int, UrgeCurve*, float*)
+// ELF 0x3D5720.
+BotBehaviour* BBCreateFunctionChangeLandingCraft::operator()(int behaviourId, std::string& name, int mode,
+                                                UrgeCurve* urgeCurve, float* weights)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::(anonymous namespace)::BBCreateFunctionChangeLandingCraft::operator()");
+    PlanGenerator* pattern = 0;
+    if (name.compare("BBPChangeLandingCraft") == 0)
+        pattern = checkPointer(new BBPChangeLandingCraft(behaviourId));
+    else if (name.compare("BBPChange") == 0)
+        pattern = checkPointer(new BBPChange(behaviourId));
+    return checkPointer(new BBChangeLandingCraft(static_cast<unsigned char>(behaviourId),
+                               static_cast<unsigned char>(mode), pattern, urgeCurve, weights));
 }
 
-// Creation of BBChangeTeleport and registration with the behavior list remain unimplemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Replace the stop when this factory behavior is recovered.
-int BBCreateFunctionChangeTeleport::operator()(int, std::string&, int, UrgeCurve*, float*)
+// ELF 0x3D5AF0.
+BotBehaviour* BBCreateFunctionChangeTeleport::operator()(int behaviourId, std::string& name, int mode,
+                                                UrgeCurve* urgeCurve, float* weights)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::(anonymous namespace)::BBCreateFunctionChangeTeleport::operator()");
+    PlanGenerator* pattern = 0;
+    if (name.compare("BBPChangeTeleport") == 0)
+        pattern = checkPointer(new BBPChangeTeleport(behaviourId));
+    return checkPointer(new BBChangeTeleport(static_cast<unsigned char>(behaviourId),
+                               static_cast<unsigned char>(mode), pattern, urgeCurve, weights));
 }
 
-// Creation of BBSuicide and registration with the behavior list remain unimplemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Replace the stop when this factory behavior is recovered.
-int BBCreateFunctionSuicide::operator()(int, std::string&, int, UrgeCurve*, float*)
+// ELF 0x3D7630.
+BotBehaviour* BBCreateFunctionSuicide::operator()(int behaviourId, std::string& name, int mode,
+                                                UrgeCurve* urgeCurve, float* weights)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::(anonymous namespace)::BBCreateFunctionSuicide::operator()");
+    BBPSuicide* pattern = 0;
+    if (name.compare("BBPSuicide") == 0)
+        pattern = checkPointer(new BBPSuicide(behaviourId));
+    return checkPointer(new BBSuicide(static_cast<unsigned char>(behaviourId),
+                               static_cast<unsigned char>(mode), pattern, urgeCurve, weights));
 }
 
-// Creation of BBCallForMedic and registration with the behavior list remain unimplemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Replace the stop when this factory behavior is recovered.
-int BBCreateFunctionCallForMedic::operator()(int, std::string&, int, UrgeCurve*, float*)
+// ELF 0x3D78D0.
+BotBehaviour* BBCreateFunctionCallForMedic::operator()(int behaviourId, std::string& name, int mode,
+                                                UrgeCurve* urgeCurve, float* weights)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::(anonymous namespace)::BBCreateFunctionCallForMedic::operator()");
+    BBPCallForMedic* pattern = 0;
+    if (name.compare("BBPCallForMedic") == 0)
+        pattern = checkPointer(new BBPCallForMedic(behaviourId));
+    return checkPointer(new BBCallForMedic(static_cast<unsigned char>(behaviourId),
+                               static_cast<unsigned char>(mode), pattern, urgeCurve, weights));
 }
 
-// Creation of BBRevive and registration with the behavior list remain unimplemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Replace the stop when this factory behavior is recovered.
-int BBCreateFunctionRevive::operator()(int, std::string&, int, UrgeCurve*, float*)
+// ELF 0x3D7B70.
+BotBehaviour* BBCreateFunctionRevive::operator()(int behaviourId, std::string& name, int mode,
+                                                UrgeCurve* urgeCurve, float* weights)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::(anonymous namespace)::BBCreateFunctionRevive::operator()");
+    BBPRevive* pattern = 0;
+    if (name.compare("BBPRevive") == 0)
+        pattern = checkPointer(new BBPRevive(behaviourId));
+    return checkPointer(new BBRevive(static_cast<unsigned char>(behaviourId),
+                               static_cast<unsigned char>(mode), pattern, urgeCurve, weights));
 }
 
-// Creation of BBTakeCover3d and registration with the behavior list remain unimplemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Replace the stop when this factory behavior is recovered.
-int BBCreateFunctionTakeCover3d::operator()(int, std::string&, int, UrgeCurve*, float*)
+// ELF 0x3D7E10.
+BotBehaviour* BBCreateFunctionTakeCover3d::operator()(int behaviourId, std::string& name, int mode,
+                                                UrgeCurve* urgeCurve, float* weights)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::(anonymous namespace)::BBCreateFunctionTakeCover3d::operator()");
+    PlanGenerator* pattern = 0;
+    if (name.compare("BBPTakeCover3d") == 0)
+        pattern = checkPointer(new BBPTakeCover3d(behaviourId));
+    return checkPointer(new BBTakeCover3d(static_cast<unsigned char>(behaviourId),
+                               static_cast<unsigned char>(mode), pattern, urgeCurve, weights));
 }
 
-// Creation of BBC4 and registration with the behavior list remain unimplemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Replace the stop when this factory behavior is recovered.
-int BBCreateFunctionC4::operator()(int, std::string&, int, UrgeCurve*, float*)
+// ELF 0x3D80B0.
+BotBehaviour* BBCreateFunctionC4::operator()(int behaviourId, std::string& name, int mode,
+                                                UrgeCurve* urgeCurve, float* weights)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::(anonymous namespace)::BBCreateFunctionC4::operator()");
+    PlanGenerator* pattern = 0;
+    if (name.compare("BBPC4") == 0)
+        pattern = checkPointer(new BBPC4(behaviourId));
+    return checkPointer(new BBC4(static_cast<unsigned char>(behaviourId),
+                               static_cast<unsigned char>(mode), pattern, urgeCurve, weights));
 }
 
-// Creation of BBRunOverSoldier and registration with the behavior list remain unimplemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Replace the stop when this factory behavior is recovered.
-int BBCreateFunctionRunOverSoldier::operator()(int, std::string&, int, UrgeCurve*, float*)
+// ELF 0x3D8890.
+BotBehaviour* BBCreateFunctionRunOverSoldier::operator()(int behaviourId, std::string& name, int mode,
+                                                UrgeCurve* urgeCurve, float* weights)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::(anonymous namespace)::BBCreateFunctionRunOverSoldier::operator()");
+    PlanGenerator* pattern = 0;
+    if (name.compare("BBPRunOverSoldier") == 0)
+        pattern = checkPointer(new BBPRunOverSoldier(behaviourId));
+    return checkPointer(new BBRunOverSoldier(static_cast<unsigned char>(behaviourId),
+                               static_cast<unsigned char>(mode), pattern, urgeCurve, weights));
 }
 
-// Creation of BBBridgeRepair and registration with the behavior list remain unimplemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Replace the stop when this factory behavior is recovered.
-int BBCreateFunctionBridgeRepair::operator()(int, std::string&, int, UrgeCurve*, float*)
+// ELF 0x3D8350.
+BotBehaviour* BBCreateFunctionBridgeRepair::operator()(int behaviourId, std::string& name, int mode,
+                                                UrgeCurve* urgeCurve, float* weights)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::(anonymous namespace)::BBCreateFunctionBridgeRepair::operator()");
+    PlanGenerator* pattern = 0;
+    if (name.compare("BBPBridgeRepair") == 0)
+        pattern = checkPointer(new BBPBridgeRepair(behaviourId));
+    return checkPointer(new BBBridgeRepair(static_cast<unsigned char>(behaviourId),
+                               static_cast<unsigned char>(mode), pattern, urgeCurve, weights));
 }
 
-// Creation of BBDefuseMines and registration with the behavior list remain unimplemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Replace the stop when this factory behavior is recovered.
-int BBCreateFunctionDefuseMines::operator()(int, std::string&, int, UrgeCurve*, float*)
+// ELF 0x3D85F0.
+BotBehaviour* BBCreateFunctionDefuseMines::operator()(int behaviourId, std::string& name, int mode,
+                                                UrgeCurve* urgeCurve, float* weights)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::(anonymous namespace)::BBCreateFunctionDefuseMines::operator()");
+    PlanGenerator* pattern = 0;
+    if (name.compare("BBPDefuseMines") == 0)
+        pattern = checkPointer(new BBPDefuseMines(behaviourId));
+    return checkPointer(new BBDefuseMines(static_cast<unsigned char>(behaviourId),
+                               static_cast<unsigned char>(mode), pattern, urgeCurve, weights));
 }
 
-// Creation of BBRandom and registration with the behavior list remain unimplemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Replace the stop when this factory behavior is recovered.
-int BBCreateFunctionRandom::operator()(int, std::string&, int, UrgeCurve*, float*)
+// ELF 0x3D8B30.
+BotBehaviour* BBCreateFunctionRandom::operator()(int behaviourId, std::string& name, int mode,
+                                                UrgeCurve* urgeCurve, float* weights)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::(anonymous namespace)::BBCreateFunctionRandom::operator()");
+    PlanGenerator* pattern = 0;
+    if (name.compare("BBPRandom") == 0)
+        pattern = checkPointer(new BBPRandom(behaviourId));
+    return checkPointer(new BBRandom(static_cast<unsigned char>(behaviourId),
+                               static_cast<unsigned char>(mode), pattern, urgeCurve, weights));
 }
 
-// Creation of BBTriggerable and registration with the behavior list remain unimplemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Replace the stop when this factory behavior is recovered.
-int BBCreateFunctionTriggerable::operator()(int, std::string&, int, UrgeCurve*, float*)
+// ELF 0x3D8DD0.
+BotBehaviour* BBCreateFunctionTriggerable::operator()(int behaviourId, std::string& name, int mode,
+                                                UrgeCurve* urgeCurve, float* weights)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::(anonymous namespace)::BBCreateFunctionTriggerable::operator()");
+    PlanGenerator* pattern = 0;
+    if (name.compare("BBPTriggerable") == 0)
+        pattern = checkPointer(new BBPTriggerable(behaviourId));
+    return checkPointer(new BBTriggerable(static_cast<unsigned char>(behaviourId),
+                               static_cast<unsigned char>(mode), pattern, urgeCurve, weights));
 }
 
 } // anonymous namespace

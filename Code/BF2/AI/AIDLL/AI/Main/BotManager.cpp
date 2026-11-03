@@ -1,10 +1,20 @@
 // Owns the bot pool and schedules sensing, decisions and plan execution.
 // Work is distributed across ticks according to per-bot update deadlines and detail level.
 
+// static init: ELF 0x3E1470 (__tcf_0 0x3E14D0, _GLOBAL__I 0x3E1500): <iostream>'s Init object only.
+#include <iostream>
+
+#include <cstdlib>
 #include "BotManager.h"
 
 
-#include "AIDllFrontier.h"
+#include <sstream>
+#include "../AIBot/WPEmpty.h"
+#include "../AIBotActionPlan/BAPStatement.h"
+#include "../../../AIInterface/BFKnowledge/BFGame.h"
+#include "../../../../IO/File/FileManager.h"
+#include "../../../../Game/Objects/IObject.h"
+#include "../../../../Game/Objects/IObjectTemplate.h"
 #include "AIMain.h"                  // IAIMain::m_instance - cached at +60
 #include "AISettingsInterfaces.h"    // IAISettings::getMaxNBots
 #include "../AIBot/BotMain.h"          // the preallocated pool
@@ -28,12 +38,20 @@
 #include "../../../AIInterface/BFKnowledge/BFObjectEnvironment.h"   // actionHearing's object list
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../../../../IO/Input/PlayerInput.h" // actionExecutePlan presses a climber's inputs
+#include "../../../AIInterface/BFKnowledge/IAIObject.h"          // the object map, vehicle changes
+#include "../../../AIInterface/BFKnowledge/IAIObjectPlugIn.h"    // IAIObjectPhysical::enablePhysics
+#include "../AIBot/BotCallBack.h"            // death and spawn reports
+#include "../AIBot/BotSquad.h"               // the order forwarders
+#include "../../../AIInterface/BFKnowledge/IWeapon.h"   // actionHearing
 
 namespace dice {
 namespace hfe {
 namespace ai {
 
+int BotManager::s_tabLevel = 0;
+
 // Runs the scheduled bot work within the supplied time budget.
+// ELF 0x3DD580
 void BotManager::action(const double& budget)
 {
     IBFTimer* const timer = static_cast<IBFTimer*>(CommonSingletonServer::m_iBFTimer);
@@ -107,6 +125,7 @@ void BotManager::action(const double& budget)
 }
 
 // Applies accumulated bot damage once per tick.
+// ELF 0x3E0AF0
 void BotManager::updateDamages()
 {
     IAIGameEffector* const effector =
@@ -140,6 +159,7 @@ void BotManager::updateDamages()
 
 // [INFERRED] Services one eligible bot's radio per tick, resuming from the saved cursor.
 // Skips dead, man-down, or navigation-blocked bots and makes at most one roster circuit.
+// ELF 0x3DE360
 void BotManager::actionComAgent()
 {
     const unsigned int start = m_comAgentCursor;
@@ -174,6 +194,7 @@ static bool speedSquaredAtMost(const Vec3& speed, float limit)
 }
 
 // Executes plans for the scheduled portion of the roster and refills work queues within the budget.
+// ELF 0x3DDA90
 void BotManager::actionExecutePlan(const double& slice)
 {
     IBFTimer* const timer = static_cast<IBFTimer*>(CommonSingletonServer::m_iBFTimer);
@@ -222,14 +243,14 @@ void BotManager::actionExecutePlan(const double& slice)
         {
             if (bot->getPlayer() && bot->getPlayer()->getCurrentVehicle())
             {
-                // [FRONTIER] [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: aidll-02-skeleton]
-                // Retail: `IAIObject* primary = getPlayer->getCurrentVehicle->getPrimaryObject;
-                // if (primary) { bot->setBotStuck(true); primary->setIsAllowedByBots(false); }`
-                // IAIObject slots ELF +0xFC / +0x9C (PE +0xF8 / +0x98), named from the engine's
-                // AIObjectReal table (bf2 ). IAIObject has no declaration in this tree.
-                IAIObject* const vehicle = bot->getPlayer()->getCurrentVehicle();
-                (void)vehicle;
-                BF2_AI_FRONTIER("dice::hfe::ai::BotManager::actionExecutePlan (IAIObject::getPrimaryObject)");
+                // ELF 0x3DE2A7: IAIObject +0xFC getPrimaryObject; a stuck bot marks its vehicle's
+                // primary object as not allowed to bots (+0x9C), after Bot +0x148 setBotStuck.
+                IAIObject* const primary = bot->getPlayer()->getCurrentVehicle()->getPrimaryObject();
+                if (primary)
+                {
+                    bot->setBotStuck(true);
+                    primary->setIsAllowedByBots(false);
+                }
             }
             bool onFoot = false;
             if (bot->getPlayer())
@@ -297,6 +318,7 @@ void BotManager::actionExecutePlan(const double& slice)
 // [INFERRED] Visits at most one roster circuit and refreshes at most size/16 + 1 active
 // navigations, skipping dead and man-down bots. Requires nonnull bot records: a null bot
 // does not advance the cursor and would loop indefinitely.
+// ELF 0x3DD980
 void BotManager::actionUpdateNavPoints()
 {
     if (m_botInfos.empty())
@@ -323,6 +345,7 @@ void BotManager::actionUpdateNavPoints()
 }
 
 // Schedules decisions using the interleave limits and each bot's detail level.
+// ELF 0x3DE850
 void BotManager::actionDecisionMaking(const double& slice)
 {
     unsigned int light = 0;
@@ -426,6 +449,7 @@ void BotManager::actionDecisionMaking(const double& slice)
 }
 
 // Uses one tenth of the slice for bot path requests and the remainder for search processing.
+// ELF 0x3DF7F0
 void BotManager::actionPathfinding(const double& slice)
 {
     IBFTimer* const timer = static_cast<IBFTimer*>(CommonSingletonServer::m_iBFTimer);
@@ -475,8 +499,17 @@ void BotManager::actionPathfinding(const double& slice)
     }
 }
 
-// Scans occupied world objects for hearing within the supplied slice.
-// [FRONTIER] The object-query path remains incomplete.
+// ELF 0x3DE440. Scans the occupied world objects round-robin from the last resume id. A sided
+// object with an armament or a mobile plug-in gets a sound radius: the mobile's
+// getSoundSphereRadius (IAIObjectMobile +0x40), or the last fired weapon's (IWeapon +0x10C)
+// when that fired within 3.0f seconds (ELF 0x49CC90) and is larger. Without a mobile plug-in the
+// ELF keeps the radius at its 0.0f start, so a weapon alone is never heard. A radius above 0.1f
+// (ELF 0x49CC80) is heard by every live, standing enemy bot within it (squared distance against
+// the float-rounded squared radius), through Bot +0x178 event_heardObject with the object's
+// information for the bot's side (IAIObject +0xB4 forceGetInformation(side, false)). The slice
+// deadline is tested only after such a pass.
+// [PLATFORM] The ELF keeps the time difference and the distance sum in x87 extended precision;
+// both are double here.
 void BotManager::actionHearing(const double& slice)
 {
     const double deadline =
@@ -499,19 +532,54 @@ void BotManager::actionHearing(const double& slice)
         if (++next == m_occupiedObjects.end())
             next = m_occupiedObjects.begin();
         ++visited;
-        // [FRONTIER] [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: aidll-02-skeleton]
-        // The body's first call is `object->getSide` (IAIObject ELF +0x12C / PE +0x128), and
-        // IAIObject has no declaration in this tree; see the outline above.
-        (void)object;
-        (void)gameTime;
-        (void)deadline;
-        BF2_AI_FRONTIER("dice::hfe::ai::BotManager::actionHearing (IAIObject hearing query)");
+        if (!object->getSide())
+            continue;
+        IAIObjectArmament* const armament = object->getArmament();
+        IAIObjectMobile* const mobile = object->getMobile();
+        if (!armament && !mobile)
+            continue;
+
+        float weaponRadius = 0.0f;
+        float radius = 0.0f;
+        if (armament)
+        {
+            IWeapon* const weapon = armament->getLastFiredWeapon();
+            if (weapon && 3.0f > gameTime - weapon->getTimeOfFiring())
+                weaponRadius = weapon->getSoundSphereRadius();
+        }
+        if (mobile)
+        {
+            const float mobileRadius = mobile->getSoundSphereRadius();
+            radius = weaponRadius > mobileRadius ? weaponRadius : mobileRadius;
+        }
+        if (radius <= 0.1f)
+            continue;
+
+        const float radiusSquared = radius * radius;
+        const int side = object->getSide();
+        const Vec3& position = object->getPosition();
+        for (std::vector<std::pair<int, IAIObject*> >::iterator it = m_occupiedObjects.begin();
+             it != m_occupiedObjects.end(); ++it)
+        {
+            Bot* const bot = getBot(it->second);
+            if (!bot || bot->isDead() || bot->getManDown() || bot->getSide() == side)
+                continue;
+            const Vec3& other = it->second->getPosition();
+            const double dx = static_cast<double>(position.x) - other.x;
+            const double dy = static_cast<double>(position.y) - other.y;
+            const double dz = static_cast<double>(position.z) - other.z;
+            if (!((dx * dx + dy * dy) + dz * dz > radiusSquared))
+                bot->event_heardObject(object->forceGetInformation(bot->getSide(), false));
+        }
+        if (static_cast<IBFTimer*>(CommonSingletonServer::m_iBFTimer)->getUpdateTime() > deadline)
+            break;
     }
     if (count > 0)
         m_hearingResumeId = next->first;
 }
 
 // Processes at most two sensing updates per tick using the full-detail update rate.
+// ELF 0x3DF180
 void BotManager::actionSensing(const double& slice)
 {
     const double deadline =
@@ -673,6 +741,7 @@ BotManager::BotManager()
 
 // These configuration methods remain virtual through IBotManagerModifier.
 
+// ELF 0x3DAD20
 void BotManager::setLodLevelTicks(unsigned full, unsigned medium, unsigned light)
 {
     m_lodLevelFullTicks   = full;
@@ -680,6 +749,7 @@ void BotManager::setLodLevelTicks(unsigned full, unsigned medium, unsigned light
     m_lodLevelLightTicks  = light;
 }
 
+// ELF 0x3DAD50
 void BotManager::setLodLevelPriority(unsigned full, unsigned medium, unsigned light)
 {
     m_lodLevelFullPriority   = full;
@@ -709,6 +779,7 @@ void BotManager::setUnplannedDecisionMakingThreshold(const double& full,
     m_unplannedDecisionMakingThresholdLight  = light  < 0.0 ? -light  : light;
 }
 
+// ELF 0x3DAE30
 void BotManager::setDecisionMakingInterleave(unsigned planned, unsigned unplanned)
 {
     m_plannedDecisionMakingInterleave   = planned;
@@ -717,6 +788,7 @@ void BotManager::setDecisionMakingInterleave(unsigned planned, unsigned unplanne
 
 // Normalizes two integer weights into complementary shares. Leaves both unchanged
 // when their unsigned sum is zero.
+// ELF 0x3DAE50
 void BotManager::setSensingQuotient(unsigned a, unsigned b)
 {
     if (a + b)
@@ -729,6 +801,7 @@ void BotManager::setSensingQuotient(unsigned a, unsigned b)
 
 // Normalizes three weights but stores only the first two fractions.
 // Leaves existing shares unchanged when the unsigned total is zero.
+// ELF 0x3DAEB0
 void BotManager::setSystemQuotient(unsigned a, unsigned b, unsigned c)
 {
     const unsigned total = a + b + c;
@@ -739,47 +812,48 @@ void BotManager::setSystemQuotient(unsigned a, unsigned b, unsigned c)
     }
 }
 
-// [FRONTIER] Active-bot counting requires the remaining state predicates.
-// [RETIRE-WHEN: aidll-02-skeleton] Complete and validate the corresponding BotManager operation.
-
-// [FRONTIER] Bot-manager destruction remains unimplemented.
-// [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: aidll-02-skeleton]
-// Replace the stop when owned bot and scheduler teardown is recovered.
+// ELF 0x3DA7A0 (D1; recovered on the client track, docs/macos-c-singleplayer.md): reset, then the
+// three scheduling queues are deleted (reset has already replaced A and B with fresh ones). The
+// containers and both interface bases follow as members.
 BotManager::~BotManager()
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::~BotManager");
+    reset();
+    delete m_queuePriorityA;
+    delete m_queuePriorityB;
+    delete m_queueSensing;
 }
-
-// [FRONTIER] Remaining bot-manager virtual operations stop visibly when reached.
-// [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: aidll-02-skeleton]
-// Replace each stop when its corresponding behavior is recovered.
 
 // - the vector's byte span shifted right by two, i.e. its element count.
 // It counts admitted records, including deactivated bots. The constructor only reserves capacity;
 // addUnspawnedBot appends a record after consuming or allocating a BotMain.
+// ELF 0x3DB060
 int BotManager::getBotCount() const
 {
     return static_cast<int>(m_botInfos.size());
 }
 
 // Reports the bot counts from the managed roster.
+// ELF 0x3DB080
 int BotManager::getNumberOfActiveBots() const
 {
     return static_cast<int>(m_botInfos.size()) - static_cast<int>(m_deactivatedBots.size());
 }
 
+// ELF 0x3DB0D0
 int BotManager::getNumberOfDeactivedBots() const
 {
     return static_cast<int>(m_deactivatedBots.size());
 }
 
 // Returns the bot at index. The caller must supply a valid index and a live record.
+// ELF 0x3DB100
 Bot* BotManager::getBot(unsigned int index) const
 {
     return m_botInfos[index]->m_bot;
 }
 
 // Bot-ID lookup checks bounds; player lookup requires a valid association.
+// ELF 0x3DB1A0
 Bot* BotManager::getBotFromId(unsigned int id) const
 {
     if (id < m_botInfos.size())
@@ -794,6 +868,7 @@ Bot* BotManager::getBotFromId(unsigned int id) const
 }
 
 // no bounds check on `playerId` - see the block above.
+// ELF 0x3E0A80
 Bot* BotManager::getBotFromPlayerId(int playerId) const
 {
     if (m_botByPlayerId[playerId] == -1)
@@ -803,9 +878,15 @@ Bot* BotManager::getBotFromPlayerId(int playerId) const
     return getBotFromId(static_cast<unsigned int>(m_botByPlayerId[playerId]));
 }
 
-Bot* BotManager::getBotFromName(const std::string&) const
+// ELF 0x3DB1D0: the first record whose player's name (IAIPlayer +0x18) equals the argument.
+Bot* BotManager::getBotFromName(const std::string& name) const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getBotFromName");
+    for (std::vector<BotInfo*>::const_iterator it = m_botInfos.begin(); it != m_botInfos.end(); ++it)
+    {
+        if ((*it)->m_bot->getPlayer()->getName() == name)
+            return (*it)->m_bot;
+    }
+    return 0;
 }
 
 // BotManager::BotInfo - inlined in ELF addUnspawnedBot at ;
@@ -820,7 +901,89 @@ BotManager::BotInfo::BotInfo(Bot* bot)
 {
 }
 
+// ELF 0x3DB2E0
+bool exitAddBot(int playerId)
+{
+    static_cast<IAIGameEffector*>(CommonSingletonServer::m_iaiGameEffector)->terminatePlayer(playerId);
+    return false;
+}
+
+// ELF 0x3DB320
+bool BotManager::addBot(int playerId, int side, float* personality, IAIObject* object)
+{
+    const std::size_t rosterSize = m_botInfos.size();
+    if (rosterSize >= static_cast<unsigned>(
+            static_cast<IAISettings*>(CommonSingletonServer::m_iaiSettings)->getMaxNBots()))
+        return exitAddBot(playerId);
+    if (m_botByPlayerId[playerId] != -1)
+        return exitAddBot(playerId);
+
+    m_lastCreatedBot = 0;
+    IAIPlayer* const player = static_cast<IAIPlayerFactory*>(CommonSingletonServer::m_iaiPlayerFactory)
+                                 ->getPlayerFromId(playerId);
+    IAIGameEffector* const effector = static_cast<IAIGameEffector*>(CommonSingletonServer::m_iaiGameEffector);
+    if (object)
+    {
+        IAIObject* const currentVehicle = player->getCurrentVehicle();
+        if (currentVehicle != player->getDefaultVehicle())
+            effector->exitVehicle(player);
+        if (!object->isUnit())
+            return exitAddBot(playerId);
+        effector->enterVehicle(player, object);
+    }
+    IAIObject* const vehicle = player->getCurrentVehicle();
+    if (!vehicle)
+        return exitAddBot(playerId);
+    vehicle->setSide(side);
+
+    const int count = static_cast<IAISettings*>(CommonSingletonServer::m_iaiSettings)->getNumberOfBehaviours();
+    BotMain* bot;
+    if (m_bots.empty())
+    {
+        UrgencyGenerator** const generators = checkPointer(new UrgencyGenerator*[count]);
+        UrgencyMerger* const merger = checkPointer(new UrgencyMerger(count, personality, generators));
+        float* const weights = checkPointer(new float[count]);
+        for (int i = 0; i < count; ++i)
+            weights[i] = 1.0f;
+        BotOrder* const order = checkPointer(new BotOrder(weights, static_cast<unsigned char>(
+            BotBehaviourManager::m_instance->getBehaviourId("Idle"))));
+        player->setViewDistance(static_cast<IAISettings*>(CommonSingletonServer::m_iaiSettings)->getViewDistance());
+        bot = checkPointer(new BotMain(player, static_cast<unsigned int>(m_botInfos.size()),
+            personality, 1.0f, 1, order, new BotMemory(), 0, side, merger, generators));
+    }
+    else
+    {
+        bot = static_cast<BotMain*>(m_bots.front());
+        bot->setPlayer(player);
+        bot->m_basicWeights = personality;
+        bot->setSide(side);
+        float* const weights = checkPointer(new float[count]);
+        for (int i = 0; i < count; ++i)
+            weights[i] = 1.0f;
+        BotOrder* const order = checkPointer(new BotOrder(weights, static_cast<unsigned char>(
+            BotBehaviourManager::m_instance->getBehaviourId("Idle"))));
+        bot->recieveOrder(order);
+        m_bots.erase(m_bots.begin());
+    }
+
+    bot->updateBotVehicle(0);
+    bot->updateBot();
+    Information* const information = informationManager->getInformation(bot->getCurrentEquipment());
+    if (!information)
+        return exitAddBot(playerId);
+    information->setStrength(information->getStrength() + 1.0f);
+    bot->setWaypoints(checkPointer(new WPEmpty(information->getPosition())));
+    m_botInfos.push_back(checkPointer(new BotInfo(bot)));
+    // shipped defect: grows to playerId, then writes element playerId; the first lookup is unchecked too.
+    if (static_cast<int>(m_botByPlayerId.size()) < playerId)
+        m_botByPlayerId.resize(playerId, -1);
+    m_botByPlayerId[playerId] = static_cast<int>(bot->getBotId());
+    m_lastCreatedBot = bot;
+    return true;
+}
+
 // Admits an unspawned player using the first available preallocated bot.
+// ELF 0x3DC300
 bool BotManager::addUnspawnedBot(int playerId, int side, float* personality)
 {
     m_lastCreatedBot = 0;
@@ -869,7 +1032,67 @@ bool BotManager::addUnspawnedBot(int playerId, int side, float* personality)
     return true;
 }
 
+// ELF 0x3DD240. Picks the first dead bot of the side, else the first bot of the side; with none
+// the index stays 0 (the ELF's initial value) and record 0 is deactivated. Its name returns to
+// the pool (IAISettingsModifier +0x94 setBotNameUnused), its id is queued first in the
+// deactivated list, its player slot cleared, its player detached (IAIPlayer +0x14 setPlayer(0))
+// and the bot marked deactivated. Both list inserts are at end() (the list header itself).
+int BotManager::deactivateBot(int side)
+{
+    unsigned int index = 0;
+    bool found = false;
+    for (unsigned int i = 0; i < m_botInfos.size(); ++i)
+    {
+        Bot* const bot = m_botInfos[i]->m_bot;
+        if (bot && bot->getSide() == side && bot->isDead())
+        {
+            index = i;
+            found = true;
+            break;
+        }
+    }
+    if (!found)
+    {
+        for (unsigned int i = 0; i < m_botInfos.size(); ++i)
+        {
+            Bot* const bot = m_botInfos[i]->m_bot;
+            if (bot && bot->getSide() == side)
+            {
+                index = i;
+                break;
+            }
+        }
+    }
+    static_cast<IAISettingsModifier*>(CommonSingletonServer::m_iaiSettingsModifier)
+        ->setBotNameUnused(m_botInfos[index]->m_bot->getPlayer()->getName());
+    m_deactivatedBots.push_back(index);
+    m_botByPlayerId[m_botInfos[index]->m_bot->getPlayerId()] = -1;
+    m_botInfos[index]->m_bot->getPlayer()->setPlayer(static_cast<world::IPlayer*>(0));
+    m_botInfos[index]->m_bot->setAsDeactivated(true);
+    return static_cast<int>(index);
+}
+
+// ELF 0x3DD450. The name goes back to the pool before the test; only a dead bot is then
+// deactivated (a live one answers -1).
+int BotManager::deactivateBotFromPlayerId(int playerId)
+{
+    Bot* const bot = getBotFromPlayerId(playerId);
+    if (!bot)
+        return -1;
+    static_cast<IAISettingsModifier*>(CommonSingletonServer::m_iaiSettingsModifier)
+        ->setBotNameUnused(bot->getPlayer()->getName());
+    const unsigned int botId = bot->getBotId();
+    if (!bot->isDead())
+        return -1;
+    m_deactivatedBots.push_back(botId);
+    bot->setAsDeactivated(true);
+    bot->getPlayer()->setPlayer(static_cast<world::IPlayer*>(0));
+    m_botByPlayerId[playerId] = -1;
+    return static_cast<int>(botId);
+}
+
 // Reactivates a retired bot for a player and restores it to the active roster.
+// ELF 0x3DD040
 bool BotManager::reactivateBot(int playerId, int side, const std::string& name)
 {
     if (m_deactivatedBots.empty())
@@ -902,300 +1125,578 @@ bool BotManager::reactivateBot(int playerId, int side, const std::string& name)
     return true;
 }
 
-Bot* BotManager::getBot(IAIObject*) const
+// ELF 0x3DB120: the object map's bot id, then that record's bot (a null record answers null).
+Bot* BotManager::getBot(IAIObject* object) const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getBot");
+    const std::map<IAIObject*, unsigned int>::const_iterator it = m_vehicleBots.find(object);
+    if (it == m_vehicleBots.end())
+        return 0;
+    BotInfo* const info = m_botInfos[it->second];
+    return info ? info->m_bot : 0;
 }
 
+// ELF 0x3E0C90
 Bot* BotManager::getLastCreatedBot() const
 {
     // return [this+228]. PE uses the corresponding member at +276.
     return m_lastCreatedBot;
 }
 
-void BotManager::updateBotVehicle(Bot*, IAIObject*)
+// ELF 0x3E0100: drops the first map entry that carries this bot's id, then maps the object to
+// it (insert_unique: an object already mapped keeps its old bot).
+void BotManager::updateBotVehicle(Bot* bot, IAIObject* vehicle)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::updateBotVehicle");
+    const unsigned int botId = bot->getBotId();
+    for (std::map<IAIObject*, unsigned int>::iterator it = m_vehicleBots.begin(); it != m_vehicleBots.end(); ++it)
+    {
+        if (it->second == botId)
+        {
+            m_vehicleBots.erase(it);
+            break;
+        }
+    }
+    m_vehicleBots.insert(std::pair<IAIObject* const, unsigned int>(vehicle, botId));
 }
 
-void BotManager::setBotChangedVehicle(int, IAIObject*)
+// ELF 0x3E0210. A physical vehicle first gets IAIObjectPhysical +0x74 enablePhysics(its own
+// side) - the plug-in is fetched before the side. A bot outside its transition phase and alive
+// then refreshes its vehicle (+0x2C, null out-flag) and itself (+0x30), drops its plan (+0x5C),
+// and, with the SAI enabled, reports the equipment change to its side's SAI (+0x40, bot id
+// read before the side).
+void BotManager::setBotChangedVehicle(int playerId, IAIObject* vehicle)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::setBotChangedVehicle");
+    Bot* const bot = getBotFromPlayerId(playerId);
+    if (!bot)
+        return;
+    if (vehicle && vehicle->isPhysical())
+    {
+        IAIObjectPhysical* const physical = vehicle->getPhysical();
+        physical->enablePhysics(vehicle->getSide());
+    }
+    if (bot->isInTransitionPhase())
+        return;
+    if (bot->isDead())
+        return;
+    bot->updateBotVehicle(0);
+    bot->updateBot();
+    bot->invalidatePlan();
+    if (m_aiMain->getSAIEnable())
+    {
+        const unsigned int botId = bot->getBotId();
+        m_aiMain->getSAI(bot->getSide())->setBotHasChangedEquipment(botId);
+    }
 }
 
-void BotManager::setBotIsDead(int)
+// ELF 0x3E0340. The first object-map entry whose bot id equals the player id is dropped (the
+// ELF compares the mapped bot id with the player id). The bot leaves man-down, enters its
+// transition phase, resets navigation and its assigned areas (BotMain +0x214, past the Bot
+// interface), its record's +4 word becomes 1 and the bot resets; equipment is cleared (-1),
+// placed C4 removed, and the death callback (+0x11C) reports.
+// The side's SAI is fetched (IAIMain +0x3C) and not used, as in the ELF.
+void BotManager::setBotIsDead(int playerId)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::setBotIsDead");
+    Bot* const bot = getBotFromPlayerId(playerId);
+    if (!bot)
+        return;
+    for (std::map<IAIObject*, unsigned int>::iterator it = m_vehicleBots.begin(); it != m_vehicleBots.end(); ++it)
+    {
+        if (it->second == static_cast<unsigned int>(playerId))
+        {
+            m_vehicleBots.erase(it);
+            break;
+        }
+    }
+    bot->setManDown(false);
+    bot->setIsInTransitionPhase(true);
+    bot->getBotNavigation()->resetAll();
+    static_cast<BotMain*>(bot)->resetAssignedAreas();
+    BotInfo* const info = m_botInfos[bot->getBotId()];
+    IAIMain::m_instance->getSAI(info->m_bot->getSide());
+    info->m_word4 = 1;
+    info->m_bot->reset();
+    bot->setCurrentEquipment(static_cast<unsigned int>(-1));
+    if (bot->isC4Placed())
+        bot->removeC4();
+    IBotDeathCallBack* const callBack = bot->getDeathCallBack();
+    if (callBack)
+        callBack->reportDeath();
 }
 
-void BotManager::setBotIsAlive(int)
+// ELF 0x3E0510. Only a bot in its transition phase: the phase ends, vehicle and bot refresh,
+// the last change time becomes -1000000.0 (float constant, ELF 0x49CDA4), the record's
+// priorities, +0x18 double and +0x14 flag clear, the spawn coordinate is taken from the
+// bot's information (Information +0x30 getPosition) and the spawn callback reports.
+void BotManager::setBotIsAlive(int playerId)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::setBotIsAlive");
+    Bot* const bot = getBotFromPlayerId(playerId);
+    if (!bot || !bot->isInTransitionPhase())
+        return;
+    bot->setIsInTransitionPhase(false);
+    bot->updateBotVehicle(0);
+    bot->updateBot();
+    bot->setLastChangeTime(-1000000.0f);
+    BotInfo* const info = m_botInfos[bot->getBotId()];
+    info->m_priority = 0;
+    info->m_double24 = 0.0f;
+    info->m_word4 = 0;
+    info->m_flag20 = false;
+    Information* const information = informationManager->getInformation(bot->getCurrentEquipment());
+    if (information)
+        static_cast<BotMain*>(bot)->setSpawnCoord(information->getPosition());
+    IBotSpawnCallBack* const callBack = bot->getSpawnCallBack();
+    if (callBack)
+        callBack->reportSpawn();
 }
 
-void BotManager::setBotIsManDown(int, IAIObject*)
+// ELF 0x3E0640: the object is not read.
+void BotManager::setBotIsManDown(int playerId, IAIObject*)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::setBotIsManDown");
+    Bot* const bot = getBotFromPlayerId(playerId);
+    if (!bot)
+        return;
+    bot->setManDown(true);
+    bot->updateBot();
+    bot->updateBotVehicle(0);
+    bot->invalidatePlan();
+    bot->getBotNavigation()->resetAll();
 }
 
-void BotManager::setBotIsRevived(int, IAIObject*)
+// ELF 0x3E06C0. The revived bot leaves man-down, refreshes, resets navigation (reset, not
+// resetAll), drops its plan, queues radio message 8 on channel 6 (args 2, 1.0f - ELF
+// 0x49CB2C - and -1), and with the SAI enabled reports an equipment change (bot id first).
+void BotManager::setBotIsRevived(int playerId, IAIObject*)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::setBotIsRevived");
+    Bot* const bot = getBotFromPlayerId(playerId);
+    if (!bot)
+        return;
+    bot->setManDown(false);
+    bot->updateBot();
+    bot->getBotNavigation()->reset();
+    bot->invalidatePlan();
+    bot->getCommunicationAgent()->enqueueRadioMessage(static_cast<AIRadioMessageType>(8),
+                                                       static_cast<AIRadioChannelType>(6), 2u, 1.0f, -1);
+    if (m_aiMain->getSAIEnable())
+    {
+        const unsigned int botId = bot->getBotId();
+        m_aiMain->getSAI(bot->getSide())->setBotHasChangedEquipment(botId);
+    }
 }
 
-void BotManager::setBotReceivedRadioMessage(const AIRadioMessageSettings&, int, int)
+// ELF 0x3E07C0: the third argument names the receiving player.
+void BotManager::setBotReceivedRadioMessage(const AIRadioMessageSettings& settings, int a, int playerId)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::setBotReceivedRadioMessage");
+    Bot* const bot = getBotFromPlayerId(playerId);
+    if (!bot)
+        return;
+    bot->getCommunicationAgent()->receiveRadioMessage(settings, a, false);   // ELF 0x3E080E
 }
 
-void BotManager::setBotRecievedAttackCommanderOrder(int)
+// ELF 0x3E0820: the bot's squad (+0x34 getBotSquad) receives the order.
+void BotManager::setBotRecievedAttackCommanderOrder(int playerId)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::setBotRecievedAttackCommanderOrder");
+    Bot* const bot = getBotFromPlayerId(playerId);
+    if (bot)
+        bot->getBotSquad()->recieveAttackCommanderOrder();
 }
 
-void BotManager::setBotRecievedDefendCommanderOrder(int)
+// ELF 0x3E0870: the bot's squad (+0x34 getBotSquad) receives the order.
+void BotManager::setBotRecievedDefendCommanderOrder(int playerId)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::setBotRecievedDefendCommanderOrder");
+    Bot* const bot = getBotFromPlayerId(playerId);
+    if (bot)
+        bot->getBotSquad()->recieveDefendCommanderOrder();
 }
 
-void BotManager::setBotRecievedMoveCommanderOrder(int)
+// ELF 0x3E08C0: the bot's squad (+0x34 getBotSquad) receives the order.
+void BotManager::setBotRecievedMoveCommanderOrder(int playerId)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::setBotRecievedMoveCommanderOrder");
+    Bot* const bot = getBotFromPlayerId(playerId);
+    if (bot)
+        bot->getBotSquad()->recieveMoveCommanderOrder();
 }
 
-void BotManager::setBotRecievedAttackSquadOrder(int)
+// ELF 0x3E0910: the bot's squad (+0x34 getBotSquad) receives the order.
+void BotManager::setBotRecievedAttackSquadOrder(int playerId)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::setBotRecievedAttackSquadOrder");
+    Bot* const bot = getBotFromPlayerId(playerId);
+    if (bot)
+        bot->getBotSquad()->recieveAttackSquadOrder();
 }
 
-void BotManager::setBotRecievedDefendSquadOrder(int)
+// ELF 0x3E0960: the bot's squad (+0x34 getBotSquad) receives the order.
+void BotManager::setBotRecievedDefendSquadOrder(int playerId)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::setBotRecievedDefendSquadOrder");
+    Bot* const bot = getBotFromPlayerId(playerId);
+    if (bot)
+        bot->getBotSquad()->recieveDefendSquadOrder();
 }
 
-void BotManager::setBotRecievedMoveSquadOrder(int)
+// ELF 0x3E09B0: the bot's squad (+0x34 getBotSquad) receives the order.
+void BotManager::setBotRecievedMoveSquadOrder(int playerId)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::setBotRecievedMoveSquadOrder");
+    Bot* const bot = getBotFromPlayerId(playerId);
+    if (bot)
+        bot->getBotSquad()->recieveMoveSquadOrder();
 }
 
-void BotManager::setBotTeamKilled(int, int)
+// ELF 0x3E0A00: the second argument is not read.
+void BotManager::setBotTeamKilled(int playerId, int)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::setBotTeamKilled");
+    Bot* const bot = getBotFromPlayerId(playerId);
+    if (!bot)
+        return;
+    bot->getCommunicationAgent()->enqueueRadioMessage(static_cast<AIRadioMessageType>(9),
+                                                       static_cast<AIRadioChannelType>(6), 3u, 0.0f, -1);
 }
 
-void BotManager::registerDamageOnBot(float, int, int)
+// ELF 0x3E0AC0: unchecked index; updateDamages applies and clears the sum each tick.
+void BotManager::registerDamageOnBot(float damage, int botIndex, int attackerIndex)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::registerDamageOnBot");
+    m_botInfos[botIndex]->m_damage += damage;
+    m_botInfos[botIndex]->m_attackerIndex = attackerIndex;
 }
 
+// ELF 0x3DAD10: `flds 0xE8(this)`.
 float BotManager::getVehicleBailValue()
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getVehicleBailValue");
+    return m_float232;
 }
 
-void BotManager::removeMineTarget(unsigned int)
+// ELF 0x3DB280: every bot targeting the mine (BotMain +0x1FC) gets target -1 (+0x1F8).
+void BotManager::removeMineTarget(unsigned int handle)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::removeMineTarget");
+    for (std::vector<BotInfo*>::iterator it = m_botInfos.begin(); it != m_botInfos.end(); ++it)
+    {
+        BotMain* const bot = static_cast<BotMain*>((*it)->m_bot);
+        if (bot->getMineTarget() == handle)
+            bot->setMineTarget(static_cast<unsigned int>(-1));
+    }
 }
 
+// ELF 0x3DFCE0 (1056 B; recovered on the client track, docs/macos-c-singleplayer.md). Clears the
+// plan cursor, deletes every bot record (its bot through the virtual deleting destructor, +4,
+// then the record) and empties the record vector and the bot list; frees the two priority
+// queues and empties the +56 list; re-applies the construction-time scheduling defaults through
+// the virtual setters (+0x8C..+0xA4); allocates two empty priority queues; clears +188.
+// The sensing queue is left alone. Returns 1.
 bool BotManager::reset()
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::reset");
+    m_planCursor = 0;                                                         // +0x104
+    for (std::vector<BotInfo*>::iterator info = m_botInfos.begin(); info != m_botInfos.end(); ++info)
+    {
+        if (*info)
+        {
+            if ((*info)->m_bot)
+                delete (*info)->m_bot;                                        // virtual, slot +4
+            delete *info;
+        }
+    }
+    m_botInfos.resize(0, 0);
+    m_bots.resize(0, 0);
+    delete m_queuePriorityA;
+    delete m_queuePriorityB;
+    m_list56.clear();                                                         // +0x38
+    setLodLevelTicks(3, 2, 1);                                                // +0x8C
+    setLodLevelPriority(3, 2, 1);                                             // +0x90
+    setPlannedDecisionMakingThreshold(0.5, 1.0, 3.0);                         // +0x94
+    setUnplannedDecisionMakingThreshold(0.3, 0.8, 2.0);                       // +0x98
+    setDecisionMakingInterleave(2, 2);                                        // +0x9C
+    setSensingQuotient(1, 1);                                                 // +0xA0
+    setSystemQuotient(30, 40, 30);                                            // +0xA4
+    m_queuePriorityA = new BotQueue;
+    m_queuePriorityB = new BotQueue;
+    m_hearingResumeId = 0;                                                    // +0xBC
+    return true;
 }
 
-void BotManager::setRenderBotSensing(bool)
+// ELF 0x3E2CC0 (weak): `movb %dl, 0xEC(this)`.
+void BotManager::setRenderBotSensing(bool render)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::setRenderBotSensing");
+    m_flag236 = render;
 }
 
+// ELF 0x3E2CE0 (weak): `movzbl 0xEC(this)`.
 bool BotManager::getRenderBotSensing() const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getRenderBotSensing");
+    return m_flag236;
 }
 
+// ELF 0x3E0CA0
 void BotManager::writeBotPlans()
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::writeBotPlans");
+    s_tabLevel = 0;
+    const std::string levelPath = static_cast<IAIGame*>(CommonSingletonServer::m_iaiGame)->getLevelPath();
+    io::IStream* file = io::fileManager->open(levelPath + "../../../AI/BotPlans.cpp",
+        static_cast<io::FileMode>(0), static_cast<io::FileAccess>(2), 0);
+    for (std::vector<BotInfo*>::iterator it = m_botInfos.begin(); it != m_botInfos.end(); ++it)
+    {
+        Bot* const bot = (*it)->m_bot;
+        if (bot->isDead())
+            continue;
+        BotScript* const plan = bot->getPlan();
+        if (!file)
+            continue;
+        Information* const information = informationManager->getInformation(bot->getCurrentEquipment());
+        std::ostringstream out;
+        out << "/*******************************************************/" << std::endl;
+        const std::string& name = bot->getPlayer()->getName();
+        out << "/* Name: " << name << std::endl;
+        // shipped defect: a missing information record is dereferenced, and a null plan is not checked.
+        const std::string& equipment = information->getAIObject()->getObject()->getTemplate()->getName();
+        out << "/* Equipment: " << equipment << "    Pos: ";
+        const Vec3& position = information->getPosition();
+        out << position.x << '/';
+        out << position.y << '/';
+        out << position.z << "  */" << std::endl;
+        out << "/*******************************************************/" << std::endl;
+        out << *static_cast<BAPStatement*>(plan) << std::endl;
+        const std::string lengthSource = out.str();
+        const std::string text = out.str();
+        file->write(text.c_str(), static_cast<unsigned int>(lengthSource.size()));
+    }
+    if (file)
+        file->release();
 }
 
+// ELF 0x3E2CF0 / 0x3E2D10 (weak): `incl` / `decl` of the class static.
 void BotManager::increaseTabLevel()
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::increaseTabLevel");
+    ++s_tabLevel;
 }
 
+// ELF 0x3E2D10
 void BotManager::decreaseTabLevel()
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::decreaseTabLevel");
+    --s_tabLevel;
 }
 
-void BotManager::tabulate(std::ostream&)
+// ELF 0x3E1410
+void BotManager::tabulate(std::ostream& out)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::tabulate");
+    for (int i = 0; i < s_tabLevel; ++i)
+        out << '\t';
 }
 
+// ELF 0x3DAF10: `movl 0x84(this)`.
 unsigned BotManager::getLodLevelFullTicks() const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getLodLevelFullTicks");
+    return m_lodLevelFullTicks;
 }
 
+// ELF 0x3DAF20: `movl 0x88(this)`.
 unsigned BotManager::getLodLevelMediumTicks() const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getLodLevelMediumTicks");
+    return m_lodLevelMediumTicks;
 }
 
+// ELF 0x3DAF30: `movl 0x8C(this)`.
 unsigned BotManager::getLodLevelLightTicks() const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getLodLevelLightTicks");
+    return m_lodLevelLightTicks;
 }
 
+// ELF 0x3DAF40: `movl 0x40(this)`.
 unsigned BotManager::getLodLevelFullPriority() const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getLodLevelFullPriority");
+    return m_lodLevelFullPriority;
 }
 
+// ELF 0x3DAF50: `movl 0x44(this)`.
 unsigned BotManager::getLodLevelMediumPriority() const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getLodLevelMediumPriority");
+    return m_lodLevelMediumPriority;
 }
 
+// ELF 0x3DAF60: `movl 0x48(this)`.
 unsigned BotManager::getLodLevelLightPriority() const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getLodLevelLightPriority");
+    return m_lodLevelLightPriority;
 }
 
+// ELF 0x3DAF70: `fldl 0x54(this)`.
 double BotManager::getPlannedDecisionMakingThresholdFull() const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getPlannedDecisionMakingThresholdFull");
+    return m_plannedDecisionMakingThresholdFull;
 }
 
+// ELF 0x3DAF80: `fldl 0x5C(this)`.
 double BotManager::getPlannedDecisionMakingThresholdMedium() const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getPlannedDecisionMakingThresholdMedium");
+    return m_plannedDecisionMakingThresholdMedium;
 }
 
+// ELF 0x3DAF90: `fldl 0x64(this)`.
 double BotManager::getPlannedDecisionMakingThresholdLight() const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getPlannedDecisionMakingThresholdLight");
+    return m_plannedDecisionMakingThresholdLight;
 }
 
+// ELF 0x3DAFA0: `fldl 0x6C(this)`.
 double BotManager::getUnplannedDecisionMakingThresholdFull() const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getUnplannedDecisionMakingThresholdFull");
+    return m_unplannedDecisionMakingThresholdFull;
 }
 
+// ELF 0x3DAFB0: `fldl 0x74(this)`.
 double BotManager::getUnplannedDecisionMakingThresholdMedium() const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getUnplannedDecisionMakingThresholdMedium");
+    return m_unplannedDecisionMakingThresholdMedium;
 }
 
+// ELF 0x3DAFC0: `fldl 0x7C(this)`.
 double BotManager::getUnplannedDecisionMakingThresholdLight() const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getUnplannedDecisionMakingThresholdLight");
+    return m_unplannedDecisionMakingThresholdLight;
 }
 
+// ELF 0x3DAFD0: `movl 0x4C(this)`.
 unsigned BotManager::getPlannedDecisionMakingInterleave() const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getPlannedDecisionMakingInterleave");
+    return m_plannedDecisionMakingInterleave;
 }
 
+// ELF 0x3DAFE0: `movl 0x50(this)`.
 unsigned BotManager::getUnplannedDecisionMakingInterleave() const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getUnplannedDecisionMakingInterleave");
+    return m_unplannedDecisionMakingInterleave;
 }
 
+// ELF 0x3DAFF0: `fldl 0xA0(this)`.
 double BotManager::getSensingQuotient() const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getSensingQuotient");
+    return m_sensingQuotient;
 }
 
+// ELF 0x3DB000: `fldl 0xA8(this) - the sensing split's second share`.
 double BotManager::getMemoryUpdateQuotient() const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getMemoryUpdateQuotient");
+    return m_sensingQuotientInverse;
 }
 
+// ELF 0x3DB010: `fldl 0x90(this)`.
 double BotManager::getSystemDecisionMakingQuotient() const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getSystemDecisionMakingQuotient");
+    return m_systemDecisionMakingQuotient;
 }
 
+// ELF 0x3DB020: `fldl 0x98(this) - setSystemQuotient's second share`.
 double BotManager::getSystemPathfindingQuotient() const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getSystemPathfindingQuotient");
+    return m_systemQuotient2;
 }
 
+// ELF 0x3DB030: the third share setSystemQuotient does not store, `1.0f - [0x98] - [0x90]`
+// (1.0f at ELF 0x49CB2C, evaluated left to right in x87).
 double BotManager::getSystemSensingQuotient() const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getSystemSensingQuotient");
+    return (1.0f - m_systemQuotient2) - m_systemDecisionMakingQuotient;
 }
 
+// ELF 0x3DFA80: every record's four counters (+0x20..+0x2C) and three run times (+0x30..+0x40).
 void BotManager::resetStatistics()
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::resetStatistics");
+    for (std::vector<BotInfo*>::iterator it = m_botInfos.begin(); it != m_botInfos.end(); ++it)
+    {
+        BotInfo* const info = *it;
+        info->m_behaviourUpdateCount = 0;
+        info->m_word36 = 0;
+        info->m_word40 = 0;
+        info->m_word44 = 0;
+        info->m_double48 = 0.0f;
+        info->m_double56 = 0.0f;
+        info->m_double64 = 0.0f;
+    }
 }
 
-void BotManager::resetStatistics(unsigned int) const
+// ELF 0x3DFAF0: the same for one unchecked index (the records are reached through pointers).
+void BotManager::resetStatistics(unsigned int index) const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::resetStatistics");
+    BotInfo* const info = m_botInfos[index];
+    info->m_behaviourUpdateCount = 0;
+    info->m_word36 = 0;
+    info->m_word40 = 0;
+    info->m_word44 = 0;
+    info->m_double48 = 0.0f;
+    info->m_double56 = 0.0f;
+    info->m_double64 = 0.0f;
 }
 
-unsigned BotManager::getPlanExecutionUpdateCount(unsigned int) const
+// ELF 0x3DFB50 (+0x24), unchecked index.
+unsigned BotManager::getPlanExecutionUpdateCount(unsigned int index) const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getPlanExecutionUpdateCount");
+    return m_botInfos[index]->m_word36;
 }
 
-unsigned BotManager::getDecisionMakingUpdateCount(unsigned int) const
+// ELF 0x3DFB70 (+0x28), unchecked index.
+unsigned BotManager::getDecisionMakingUpdateCount(unsigned int index) const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getDecisionMakingUpdateCount");
+    return m_botInfos[index]->m_word40;
 }
 
-unsigned BotManager::getSensingUpdateCount(unsigned int) const
+// ELF 0x3DFB90 (+0x2C), unchecked index.
+unsigned BotManager::getSensingUpdateCount(unsigned int index) const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getSensingUpdateCount");
+    return m_botInfos[index]->m_word44;
 }
 
-unsigned BotManager::getDecisionMakingBehaviourUpdateCount(unsigned int) const
+// ELF 0x3DFCC0 (+0x20), unchecked index.
+unsigned BotManager::getDecisionMakingBehaviourUpdateCount(unsigned int index) const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getDecisionMakingBehaviourUpdateCount");
+    return m_botInfos[index]->m_behaviourUpdateCount;
 }
 
-double BotManager::getPlanExecutionRunTime(unsigned int) const
+// ELF 0x3DFBB0 (+0x30), unchecked index.
+double BotManager::getPlanExecutionRunTime(unsigned int index) const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getPlanExecutionRunTime");
+    return m_botInfos[index]->m_double48;
 }
 
-double BotManager::getDecisionMakingRunTime(unsigned int) const
+// ELF 0x3DFBD0 (+0x38), unchecked index.
+double BotManager::getDecisionMakingRunTime(unsigned int index) const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getDecisionMakingRunTime");
+    return m_botInfos[index]->m_double56;
 }
 
-double BotManager::getSensingRunTime(unsigned int) const
+// ELF 0x3DFBF0 (+0x40), unchecked index.
+double BotManager::getSensingRunTime(unsigned int index) const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getSensingRunTime");
+    return m_botInfos[index]->m_double64;
 }
 
-bool BotManager::isPathfinding(unsigned int) const
+// ELF 0x3DFC10 (+0x14), unchecked index.
+bool BotManager::isPathfinding(unsigned int index) const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::isPathfinding");
+    return m_botInfos[index]->m_flag20;
 }
 
-bool BotManager::getLastPathfindingSucceeded(unsigned int) const
+// ELF 0x3DFC40 (+0x48), unchecked index.
+bool BotManager::getLastPathfindingSucceeded(unsigned int index) const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getLastPathfindingSucceeded");
+    return m_botInfos[index]->m_flag72;
 }
 
-bool BotManager::getPathfindingStall(unsigned int) const
+// ELF 0x3DFC70 (+0x49), unchecked index.
+bool BotManager::getPathfindingStall(unsigned int index) const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getPathfindingStall");
+    return m_botInfos[index]->m_flag73;
 }
 
-double BotManager::getLastPathfindingRunTime(unsigned int) const
+// ELF 0x3DFCA0 (+0x4C), unchecked index.
+double BotManager::getLastPathfindingRunTime(unsigned int index) const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::getLastPathfindingRunTime");
+    return m_botInfos[index]->m_double76;
 }
 
-void BotManager::enableBotScriptDebugger(bool)
+// ELF 0x3E0C40
+void BotManager::enableBotScriptDebugger(bool enable)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BotManager::enableBotScriptDebugger");
+    for (std::vector<BotInfo*>::iterator it = m_botInfos.begin(); it != m_botInfos.end(); ++it)
+        (*it)->m_bot->enableBotScriptDebugger(enable);
+}
+
+// ELF 0x3E0AB0
+void BotManager::buildObjectMap()
+{
 }
 
 } // namespace ai

@@ -8,12 +8,14 @@
 #include <map>
 #include <vector>
 #include "../../../../Math/Vec3.h"
+#include "BotSquad.h"                  // BotSquad::OrderType
 
 namespace dice {
 namespace hfe {
 namespace ai {
 
 class SquadCoordinator;   // (`operator new(0xE0)`); held only by pointer here
+class AIStrategicArea;
 class SquadMember;
 class IAIPlayer;
 // Attested enum name in both squad-strength ELF manglings. Enumerator names are not recovered.
@@ -23,6 +25,7 @@ class SquadManager
 {
 public:
     SquadManager();
+    ~SquadManager();                                // ELF 0x1ADD70 (D1)
 
     // Direct AIMain scheduling call, double by value; neither image materializes a result.
     void update(double time);
@@ -42,18 +45,62 @@ public:
     void newSquadLeader(int side, int squadId);
     void playerJoinsSquad(int playerId, int squadId, int side);
     SquadMember* getSquadMember(int playerId, int side);
+    // ELF 0x1AF480: the member occupying the object (IPIUnit::getOccupyingPlayerId(side)), or null.
+    SquadMember* getSquadMember(unsigned int handle, int side);
+    // ELF 0x1B0440: any squad of the side has a member with this pending request.
+    bool isAnySquadMemberRespondingToRequest(unsigned int handle, int action, int side);
+    // ELF 0x1B0390: 0 without a squad, 1 when `member` already has this request, else the squad's
+    // SquadCoordinator::requestResponseModifier. `action` is SquadMember::RequestAction.
+    float requestResponseModifier(SquadMember* member, unsigned int handle, int action, int side);
+    // [CHOSEN, not recovered] declaration placement; added by ai-w1-e-fire for
+    // BBPFireInfantery::createPlanInternal (coord/ai-requests.md 2026-11-01). ELF 0x1B04B0.
+    void shotsFired(int playerId, int side, unsigned int target);
+    void shotsFired(int playerId, int side, const Vec3& direction);
     SquadCoordinator* getSquadFromPlayer(int playerId, int side);
+    SquadCoordinator* getSquadFromPlayer(unsigned int handle, int side);
+    bool isInSameSquad(int firstPlayer, int secondPlayer, int side);
+    bool isInAnySquad(int playerId, int side);
+    int getSquadFromPlayer(int playerId, SquadCoordinator*& squad);     // ELF 0x1AF6A0: the side found
+    SquadMember* getSquadLeaderClosestTo(const Vec3& position);         // ELF 0x1AFBC0
+    SquadCoordinator* getSquadFromId(int squadId, int side);            // ELF 0x1AF720, unchecked
+    void setSquadReceivedOrder(BotSquad::OrderType type, int playerId, bool commander);   // ELF 0x1AF860
+    void repeatOrder(int side, int squadId);                            // ELF 0x1AF960
     int getSquadStrengths(int side, int areaIndex, StrategicStrengthType type);
 
     // Clears messages and position records by erasing each container node individually.
     void clearCommanderMessages();
     void clearPlayerValidPositions();
+    void unAssignSquads(int side);               // ELF 0x1AF800
+    int unAssignSquads(int areaIndex, int side); // ELF 0x1AF750
+    // [FRONTIER] declared by ai-strategic for SAI::checkCommanderUseArtillery; owner ai-bot
+    // (coord/ai-requests.md). getArtillerySafeDistance is recovered (ELF 0x1AEE60: +0x98).
+    bool  haveCampingHumans(int side, Vec2& position);            // ELF 0x1B0610
+    bool  haveHumanPlayerOnOwnSide(int side);                     // ELF 0x1AE5B0
+    float getArtillerySafeDistance();                             // ELF 0x1AEE60
+    float getDistanceToClosestSquad(const Vec3& position, int side);   // ELF symbol; requested from ai-bot
+    SquadCoordinator* getClosestAvailableSquad(AIStrategicArea* area, const Vec3& position, int side,
+                                               bool attack, int& strength);   // ELF symbol; requested from ai-bot
+    bool  friendliesCloseTo(Vec3 position, float radius, int side); // ELF 0x1B07F0
+    void  removeAllSquads();                                       // ELF 0x1AE000
+    void  destroySquadMember(int playerId, int side);             // ELF 0x1B0010
+    void  removeSquadMember(int playerId, int side);              // ELF 0x1AFF20
+    bool  isInArtilleryDangerZone(Vec3 position, int side, double& sinceStart, int& artillerySide);   // ELF 0x1B0B00
+    Vec3  getArtilleryTargetPos(int side);                         // ELF 0x1B0D40
+    // ELF 0x1B0D80 / 0x1B0EC0: the side's remembered flee position, one for soldiers, one for
+    // vehicles (the member's current vehicle's information flag 0x200000).
+    bool  haveValidArtilleryFleePos(SquadMember* member, Vec3& position);
+    void  setValidArtilleryFleePos(SquadMember* member, Vec3 position);
+    void  incomingArtillery(Vec3 position, int side);             // ELF 0x1B09A0
+    void reset();                                // ELF 0x1AE100
+    void playerRemovedFromSquad(int playerId, int squadId, int side);   // ELF 0x1B0180
 
     static SquadManager* m_instance;
 
     // Queued commander message. Field and enumerator names are inferred.
     // Native dueTime offset/record size: ELF +0xC/20 bytes, PE +0x10/24 bytes.
     enum CommanderMessageType : int;
+    // ELF 0x1AE970: queued once per (side index, squad index), due after `delay` s of game time.
+    void enqueueCommanderMessage(int sideIndex, int squadIndex, CommanderMessageType type, double delay);
     class CommanderMessage
     {
     public:

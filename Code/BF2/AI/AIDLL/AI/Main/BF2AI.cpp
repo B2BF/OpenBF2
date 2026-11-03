@@ -3,10 +3,11 @@
 // These statics belong to the AI module; do not share their definitions with the engine image.
 // [INFERRED] Source placement.
 
+// static init: ELF 0x3EE360 (__tcf_0 0x3EE3C0, _GLOBAL__I 0x3EE3F0): <iostream>'s Init object only.
+#include <iostream>
+
 #include "BF2AI.h"
 
-#include <cstdio>       // the [FRONTIER] stop in init - stderr, not BF2Log; see that body
-#include <cstdlib>      // std::abort - same
 #include <string>
 
 #include "../../../../Core/ClassManager.h"
@@ -25,9 +26,12 @@
 #include "AIMineManager.h"                           // step 13
 #include "AIPlayerCourier.h"                         // step 12
 #include "AIConsole.h"                               // step 15
+#include "../AIUtils/DebugRendering/AIRenderUtil.h"   // clear: the debug renderer
+#include "../AIStrategicEntity/AILandingZoneManager.h" // clear: the landing-zone manager
 #include "BotBehaviourManager.h"                   // step 16
 #include "../AIStrategicEntity/AIStrategicObjectManager.h"   // step 17
 #include "../AIStrategicEntity/CoverPosition/CoverPositionManager.h"  // step 18
+#include "BotPlacementManager.h"                     // clear only - the static initializer builds it
 #include "AILODManager.h"                            // clear only - `init` never builds one
 #include "AIPathfinding.h"                          // step 21, and clear
 #include "AIRandom.h"                               // step 22, and clear
@@ -50,6 +54,7 @@ namespace ai {
 
 // Registers the first AI in the simple-singleton registry. Later instances remain
 // unregistered; this intentionally differs from AIModule::close's normal-registry lookup.
+// ELF 0x3EE430 / 0x3EE540
 IAI::IAI()
 {
     if (!classManager->getSimpleSingleton("AI"))
@@ -58,6 +63,7 @@ IAI::IAI()
 
 // The exact mirror of the constructor: unregister only if the registered "AI" is still this object.
 // A second IAI that never registered will not tear down the first one's entry on its way out.
+// ELF 0x3EE650 / 0x3EE740 / 0x3EE830
 IAI::~IAI()
 {
     if (classManager->getSimpleSingleton("AI") == this)
@@ -65,6 +71,7 @@ IAI::~IAI()
 }
 
 // Two bytes. Everything that matters happened in the base constructor above.
+// ELF 0x3EC720 / 0x3EC770
 BF2AI::BF2AI()
     : m_initialized(false)
     , m_shuttingDown(false)
@@ -75,11 +82,13 @@ BF2AI::BF2AI()
 // call are the whole body. It does not call clear; tearing the AI down is shutdown's job and
 // nothing chains the two. Destroying a BF2AI without shutting it down first leaks every one of the
 // twenty-four subsystems init built.
+// ELF 0x3EC7C0 / 0x3EC800 / 0x3EC840
 BF2AI::~BF2AI()
 {
 }
 
 // Constructs the AI subsystems and refreshes their registered interfaces.
+// ELF 0x3EC890
 bool BF2AI::init()
 {
     // Raises the shutdown flag before checking initialization. A repeated init returns
@@ -241,6 +250,7 @@ bool BF2AI::init()
 }
 
 // Tears down AI subsystems in dependency order, refreshing cached interfaces during destruction.
+// ELF 0x3EDDF0
 bool BF2AI::clear()
 {
     if (!m_initialized)
@@ -258,8 +268,11 @@ bool BF2AI::clear()
     if (updater)
         delete updater;
 
-    // [FRONTIER: AIRenderUtil] delete AIRenderUtil::m_instance; ← , then operator delete
-    // Never built by `init` either; see the note beside AILODManager near the end.
+    // ELF D1 call at 0x3EDEAC: the debug renderer, nonvirtual D1 + operator delete.
+    // Recovered on the client track (docs/macos-c-singleplayer.md); init never builds it, so
+    // this only runs once a debug command has made one.
+    if (AIRenderUtil::m_instance)
+        delete AIRenderUtil::m_instance;
 
     if (CommonSingletonServer::m_iaiInformationCourier)
         delete static_cast<IAIInformationCourier*>(CommonSingletonServer::m_iaiInformationCourier);
@@ -300,8 +313,10 @@ bool BF2AI::clear()
     if (UserOrderManager::m_instance)
         delete UserOrderManager::m_instance;
 
-    // [FRONTIER: AIConsole] Cleanup is deferred until AIConsole destruction is implemented.
-    // [RETIRE-WHEN: aidll-02-skeleton] Complete and validate the corresponding BF2AI operation.
+    // ELF D1 call at 0x3EDFFB: the console (its destructor resets it and deletes the SquadManager).
+    // Recovered on the client track (docs/macos-c-singleplayer.md).
+    if (AIConsole::m_instance)
+        delete AIConsole::m_instance;
 
     // Destruction clears the behavior-manager singleton, making repeated cleanup harmless.
     if (BotBehaviourManager::m_instance)
@@ -362,19 +377,31 @@ bool BF2AI::clear()
     if (AIRandom::m_instance)
         delete AIRandom::m_instance;
 
-    // Deletes the LOD manager when present; an existing instance reaches its teardown frontier.
+    // Deletes the LOD manager when present.
     delete AILODManager::m_instance;
 
-    // [FRONTIER: AILandingZoneManager] Cleanup is deferred until its destructor is implemented.
+    // ELF D1 call at 0x3EE1A0 / PE read at 0x10001D5B: the landing-zone manager the static installer made.
+    // Its destructor does not zero m_instance (ELF 0x399D60, PE 0x10039B00), so the pointer dangles
+    // until the library is unloaded and its static initializers run again on the next load
+    // (AIConnection::clear unloads it right after this). No platform reset is added: on macOS
+    // dlclose does unmap libaidll.dylib (no thread-local or Objective-C sections, only libc++ and
+    // libSystem as dependencies; a dlopen/dlclose/RTLD_NOLOAD probe finds it gone after each close),
+    // so the next load re-runs the installer exactly as the retail DLL reload does.
+    if (AILandingZoneManager::m_instance)
+        delete AILandingZoneManager::m_instance;
     if (CommunicationHub::m_instance)
         delete CommunicationHub::m_instance;
-    // [FRONTIER: BotPlacementManager] delete BotPlacementManager::m_instance; init never made it
+    // ELF D1 call at 0x3EE1D0, the last delete: the placement manager the static initializer
+    // (0x3E4BD5) made at load. Its destructor zeroes m_instance.
+    if (BotPlacementManager::m_instance)
+        delete BotPlacementManager::m_instance;
 
     m_initialized = false;
     return true;
 }
 
 // Invokes virtual clear so a derived implementation can override shutdown cleanup.
+// ELF 0x3EE270
 bool BF2AI::shutdown()
 {
     clear();            // virtual, IAI vtable +0x0C
@@ -382,12 +409,14 @@ bool BF2AI::shutdown()
 }
 
 // Advances the AI using its own timer. The supplied engine delta is ignored.
+// ELF 0x3EE290
 int BF2AI::update(double /*dt*/)
 {
     return IAIMain::m_instance->action();       // IAIMain vtable +0x34
 }
 
 // Copies game settings into the AI configuration and initializes the runtime as needed.
+// ELF 0x3EE2C0
 int BF2AI::getSettingsFromMenu(bool /*fromMenu*/)
 {
     IAISettings* const settings =
@@ -418,12 +447,14 @@ int BF2AI::getSettingsFromMenu(bool /*fromMenu*/)
 }
 
 // - a bare byte load. The engine's gate on every .ai load and on the AI tick.
+// ELF 0x3EE410
 bool BF2AI::isInitialized() const
 {
     return m_initialized;
 }
 
 // - a bare byte load. Also reports true for the whole of init; see BF2AI.h.
+// ELF 0x3EE420
 bool BF2AI::isShuttingDown() const
 {
     return m_shuttingDown;

@@ -28,6 +28,18 @@ struct triple
     C third;
 };
 
+// Attested as `ai::make_triple<unsigned, unsigned, Vec3>` (ELF), the triple counterpart of
+// std::make_pair.
+template <class A, class B, class C>
+triple<A, B, C> make_triple(const A& first, const B& second, const C& third)
+{
+    triple<A, B, C> result;
+    result.first = first;
+    result.second = second;
+    result.third = third;
+    return result;
+}
+
 namespace astar {
 // `setStatus`'s second argument and `getStatus`'s result. [UNRESOLVED] enumerators.
 enum Status : int;
@@ -59,28 +71,28 @@ public:
     virtual bool isValidPosition(int, int, const Vec3&, unsigned int, bool) const = 0;
     virtual bool isValidPosition(int, int, const Vec3&, unsigned int, unsigned int, bool) const = 0;
     // Appends pointers to const vertices through a mutable output vector.
-    virtual int getPolygon(std::vector<const Vec3*>&, int, const Vec3&, int) const = 0;
-    virtual int getPolygon(std::vector<const Vec3*>&, int, const Vec3&, unsigned int&, unsigned int&, int) const = 0;
-    virtual int getPolygon(std::vector<const Vec3*>&, int, unsigned int, unsigned int) const = 0;
+    virtual bool getPolygon(std::vector<const Vec3*>&, int, const Vec3&, int) const = 0;
+    virtual bool getPolygon(std::vector<const Vec3*>&, int, const Vec3&, unsigned int&, unsigned int&, int) const = 0;
+    virtual bool getPolygon(std::vector<const Vec3*>&, int, unsigned int, unsigned int) const = 0;
     // Returns whether a polygon was found; invalid map indices return false.
     // [INFERRED] The second overload's bool result follows the first overload's contract.
     virtual bool getPolygon(const Vec3&, int, unsigned int&, unsigned int&, int) const = 0;
     virtual bool getPolygon(const Vec3&, int, unsigned int&, unsigned int&, unsigned int, unsigned int, int) const = 0;
     virtual void getPolygonsInRadius(std::list<unsigned int>&, int, unsigned int, unsigned int, const Vec3&, float) const = 0;
     virtual void getPolygonsInTriangle(std::list<unsigned int>&, int, unsigned int, unsigned int, const Vec3&, const Vec3&, const Vec3&) const = 0;
-    virtual int getPolygonFromIsland(const Vec3&, int, unsigned int&, unsigned int, int) const = 0;
+    virtual bool getPolygonFromIsland(const Vec3&, int, unsigned int&, unsigned int, int) const = 0;
     virtual bool getMaterial(const Vec3&, int, int, unsigned char&) const = 0;
     virtual bool getMaterial(int, unsigned int, unsigned int, unsigned char&) const = 0;
-    virtual void setMaterial(int, unsigned int, unsigned int, unsigned char) const = 0;   // const, and mutates
+    virtual bool setMaterial(int, unsigned int, unsigned int, unsigned char) const = 0;   // const, and mutates
     virtual void* getQuadTree(int, unsigned int) const = 0;
     virtual void* getClusterGraph(int, unsigned int) const = 0;
     virtual void getPolygonCentre(Vec3&, int, unsigned int, unsigned int) const = 0;
-    virtual void getEdge(Vec3&, Vec3&, int, unsigned int, unsigned int, unsigned int) const = 0;
+    virtual bool getEdge(Vec3&, Vec3&, int, unsigned int, unsigned int, unsigned int) const = 0;
     virtual bool getLineIntersectionWithPolygon(Vec3&, int, unsigned int, unsigned int, const Vec3&, const Vec3&) const = 0;
     virtual void drawPolygon(int, unsigned int, unsigned int, float *, float) const = 0;   // const, and draws
     virtual int getClusterOfPolygon(int, unsigned int, unsigned int) const = 0;
     virtual bool areNeighbouringClusters(int, unsigned int, unsigned short, unsigned short) const = 0;
-    virtual void updateClusterPortalCosts(unsigned int&, triple<unsigned short, unsigned short, unsigned short>&, int, unsigned int, unsigned short) = 0;
+    virtual bool updateClusterPortalCosts(unsigned int&, triple<unsigned short, unsigned short, unsigned short>&, int, unsigned int, unsigned short) = 0;
     virtual bool trace(int, const Vec3&, const Vec3&, Vec3&, unsigned int&, int, int, float, unsigned char, unsigned char *) const = 0;
     virtual bool trace(unsigned int, unsigned int, int, const Vec3&, const Vec3&, Vec3&, unsigned int&, int, int, float, unsigned char, unsigned char *) const = 0;
     virtual bool trace(BotNavigation *, bool, const Vec3&, Vec3&, unsigned int&, int, int, float, unsigned char, unsigned char *) const = 0;
@@ -111,14 +123,16 @@ public:
     virtual void restoreMapPart(int) = 0;
     virtual void resetOriginalMaterialOfDestroyableMapPart(int) = 0;
     virtual void searchPointSelected(bool) = 0;
-    virtual bool tryPath(const Vec3&, const Vec3&) = 0;
-    virtual bool tryClusterPath(const Vec3&, const Vec3&) = 0;
+    virtual void tryPath(const Vec3&, const Vec3&) = 0;
+    virtual void tryClusterPath(const Vec3&, const Vec3&) = 0;
     virtual void setClusterSearch(bool) = 0;
     virtual bool getClusterSearch() const = 0;
     virtual void setActivatePathfindingDebugTool(bool) = 0;
     virtual bool getActivatePathfindingDebugTool() const = 0;
     virtual void setPathfindingDebugToolVehicle(const std::string&) = 0;
-    virtual void* getPathfindingDebugToolVehicle() const = 0;
+    // ELF 0x3A53E0 returns IAISettings +0x50 getVehicle(int) unchanged; ConsoleClass540 assigns it
+    // to a std::string, so the borrowed reference is the result [INFERRED spelling].
+    virtual const std::string& getPathfindingDebugToolVehicle() const = 0;
     virtual void setPathfindingDebugToolVehicleId(int) = 0;
     virtual int getClusterCostType(int, unsigned int) const = 0;
 
@@ -138,24 +152,24 @@ public:
         IMapContainer();
         virtual ~IMapContainer();                                       // slots 0, 1
 
-        virtual const std::string& getName() = 0;                       //  2
-        virtual int getMinPolygonsInLeaf() = 0;                         //  3
+        virtual const std::string& getName() const = 0;                       //  2
+        virtual int getMinPolygonsInLeaf() const = 0;                         //  3
         virtual void setMinPolygonsInLeaf(int) = 0;                     //  4
-        virtual int getMaxDepthInTree() = 0;                            //  5
+        virtual int getMaxDepthInTree() const = 0;                            //  5
         virtual void setMaxDepthInTree(int) = 0;                        //  6
-        virtual float getMaxSlope() = 0;                                //  7
+        virtual float getMaxSlope() const = 0;                                //  7
         virtual void setMaxSlope(float) = 0;                            //  8
         virtual void setHeadClearance(float) = 0;                       //  9
-        virtual float getHeadClearance() = 0;                           // 10
+        virtual float getHeadClearance() const = 0;                           // 10
         virtual void setRadius(float) = 0;                              // 11
-        virtual float getRadius() = 0;                                  // 12
+        virtual float getRadius() const = 0;                                  // 12
         virtual void setAllowedHeightDiff(float) = 0;                   // 13
-        virtual float getAllowedHeightDiff() = 0;                       // 14
-        virtual void draw() = 0;                                        // 15
-        virtual void undraw() = 0;                                      // 16
-        virtual void drawCluster() = 0;                                 // 17
-        virtual void undrawCluster() = 0;                               // 18
-        virtual void drawClusterNeighbourIndices(const Vec3&) = 0;      // 19
+        virtual float getAllowedHeightDiff() const = 0;                       // 14
+        virtual void draw() const = 0;                                        // 15
+        virtual void undraw() const = 0;                                      // 16
+        virtual void drawCluster() const = 0;                                 // 17
+        virtual void undrawCluster() const = 0;                               // 18
+        virtual void drawClusterNeighbourIndices(const Vec3&) const = 0;      // 19
         virtual void loadGTSDebugMeshes() = 0;                          // 20
         virtual void buildDebugMeshes() = 0;                            // 21
         virtual void unloadDebugMeshes() = 0;                           // 22

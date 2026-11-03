@@ -19,6 +19,7 @@ class BotBehaviour;
 class BotMoralAdmin;
 class ISensingAgentPattern;
 class PlanGenerator;
+class PlanInterpreter;
 
 // [UNRESOLVED] enumerators. Both are one dword on the stack at every call site.
 enum BotLodLevel : int;
@@ -38,7 +39,7 @@ public:
     virtual float* getVehicleMods(int) const = 0;
     virtual BotBehaviour* getBehaviour(int, int) const = 0;
     virtual BotBehaviour* getDefaultBehaviour(int) const = 0;
-    virtual void* getPlanInterpreter(int) const = 0;
+    virtual PlanInterpreter* getPlanInterpreter(int) const = 0;
     virtual PlanGenerator* getPlanGenerator(int, int) const = 0;
     virtual float getViewDistance() const = 0;
     virtual float getStatsViewDistance() const = 0;
@@ -72,7 +73,7 @@ public:
     virtual bool getAutoSpawnBots() const = 0;
     virtual const float* getArmourClassValues() const = 0;
     virtual float getArmourClassValue(int) const = 0;
-    virtual void reset() = 0;
+    virtual bool reset() = 0;
     virtual int getManDownEquipmentType() = 0;
     virtual bool isValidMaterial(int, unsigned char) const = 0;
     virtual float getVehicleMaterialCost(const std::string&, unsigned char) const = 0;
@@ -124,7 +125,7 @@ public:
     virtual void setSensingAgentPatternName(const std::string&) = 0;
     virtual void setSensingAgentNullPattern(ISensingAgentPattern *) = 0;
     virtual void addSensingAgentPattern(int, ISensingAgentPattern *) = 0;
-    virtual void reset() = 0;
+    virtual bool reset() = 0;
     virtual void setManDownEquipment(const std::string&) = 0;
     virtual void setVehicleMaterialCost(const std::string&, unsigned char, float) = 0;
     virtual void addBotName(const std::string&, const std::string&) = 0;

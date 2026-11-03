@@ -1,6 +1,10 @@
 // [INFERRED] Source placement.
 #include "Information.h"
 
+// <iostream>'s ios_base::Init object is this TU's static initialisation and teardown (ELF
+// 0x2D9460, __tcf_0 0x2D94C0, _GLOBAL__I 0x2D94F0).
+#include <iostream>
+
 #include "IPIArmament.h"
 #include "IPIControlInfo.h"
 #include "IPICover.h"

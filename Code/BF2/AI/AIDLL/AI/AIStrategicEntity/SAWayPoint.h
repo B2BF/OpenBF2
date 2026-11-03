@@ -1,5 +1,4 @@
 // Strategic-area waypoint and its resolved navigation position.
-// [RETIRE-WHEN: aidll-02-skeleton] Remove when the corresponding implementation is complete and validated.
 // [INFERRED] Source placement.
 
 #ifndef AI_AIDLL_AI_AISTRATEGICENTITY_SAWAYPOINT_H      // [INFERRED] guard style
@@ -22,8 +21,13 @@ public:
     // [INFERRED] Initializes the waypoint polygon; no result is returned to its caller.
     void init();
 
-    void draw() const;                           // [FRONTIER]
+    void draw() const;
     void undraw() const;
+
+    // [INFERRED] accessor forms; AIStrategicArea::orderNormalBot (ELF 0x33C940) reads +0 (the
+    // position) and tests +0x10 against -1 inline.
+    const Vec3& getPosition() const { return m_position; }
+    unsigned int getPolygon() const { return m_polygon; }
 
 private:
     // layout, on the ELF, read store by store out of the constructor

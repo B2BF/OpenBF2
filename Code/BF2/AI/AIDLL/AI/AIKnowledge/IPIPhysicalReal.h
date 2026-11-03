@@ -29,7 +29,7 @@ public:
     virtual float  getRadius();                                         // +11
     virtual Vec3   getSphereLocalOffset() const;                        // +12
     virtual float  getSmallestRadius() const;                           // +13
-    virtual void   getSubSpheres2d(std::vector<Vec2>& out) const;       // +14
+    virtual float  getSubSpheres2d(std::vector<Vec2>& out) const;       // +14
     virtual float  getArmour(Vec3& direction);                          // +15
     virtual float  getBestArmour();                                     // +16
     virtual int    getStrengthType();                                   // +17

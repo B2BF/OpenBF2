@@ -2,18 +2,26 @@
 
 #include "InformationFactory.h"
 
+// <iostream>'s ios_base::Init object is this TU's static initialisation and teardown (ELF
+// 0x2DB350, __tcf_0 0x2DB3B0, _GLOBAL__I 0x2DB3E0).
+#include <iostream>
+
 #include <string>
 
 #include "Information.h"
 #include "InformationManager.h"
+#include "InformationKnown.h"
 #include "InformationReal.h"
+#include "IPIArmamentKnown.h"
 #include "IPIArmamentReal.h"
 #include "IPIControlInfo.h"
 #include "IPICover.h"
 #include "IPIMobileKnown.h"
 #include "IPIMobileReal.h"
+#include "IPIPhysicalKnown.h"
 #include "IPIPhysicalReal.h"
 #include "IPIUnit.h"
+#include "WeaponInfoKnown.h"
 #include "WeaponInfoReal.h"
 #include "WeaponInfoManager.h"
 #include "../AIUtils/checkPointer.h"
@@ -94,13 +102,16 @@ unsigned int InformationFactory::requestInformationReal(unsigned int handle, IAI
 }
 
 // The same with an InformationKnown
-// (ELF , PE ; , / , `(object, types, time
-// degeneration, basicTemp, allowedTimeDiff, side)`), registered through the same vtable slot.
-// [FRONTIER] InformationKnown is not written.
-unsigned int InformationFactory::requestInformationKnown(unsigned int, IAIObject*, unsigned int,
-                                                         double, float, float, float, int) const
+// (ELF 0x2DA1B0: `(object, types, time, degeneration, basicTemp, allowedTimeDiff, ownerSide)`
+// passed through in order), registered through the same vtable slot.
+unsigned int InformationFactory::requestInformationKnown(unsigned int handle, IAIObject* object,
+                                                         unsigned int types, double time,
+                                                         float degeneration, float basicTemp,
+                                                         float allowedTimeDiff, int ownerSide) const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::InformationFactory::requestInformationKnown [InformationKnown]");
+    return registerInformation(handle, checkPointer(new InformationKnown(
+                                           object, types, time, degeneration, basicTemp,
+                                           allowedTimeDiff, ownerSide)));
 }
 
 // the plug-in halves
@@ -127,7 +138,8 @@ bool InformationFactory::requestInformationPlugin(unsigned int sourceHandle,
             target->setArmament(checkPointer(new IPIArmamentReal(source)));
             return true;
         }
-        BF2_AI_FRONTIER("dice::hfe::ai::InformationFactory::requestInformationPlugin [IPIArmamentKnown]");
+        target->setArmament(checkPointer(new IPIArmamentKnown(source)));
+        return true;
 
     case 1:     // control info - , built inline in both images, the same for real and known
         target->setControlInfo(checkPointer(new IPIControlInfo(source)));
@@ -150,7 +162,8 @@ bool InformationFactory::requestInformationPlugin(unsigned int sourceHandle,
             target->setPhysical(checkPointer(new IPIPhysicalReal(source)));
             return true;
         }
-        BF2_AI_FRONTIER("dice::hfe::ai::InformationFactory::requestInformationPlugin [IPIPhysicalKnown]");
+        target->setPhysical(checkPointer(new IPIPhysicalKnown(source)));
+        return true;
 
     case 5:     // unit - IPIUnit , the same for real and known; `real` is ignored
         target->setUnit(checkPointer(new IPIUnit(source)));
@@ -179,13 +192,13 @@ bool InformationFactory::updateInformationPlugin(unsigned int handle, int type) 
 
 // A WeaponInfoReal for the owning
 // side, else a WeaponInfoKnown (ELF / PE ), each built on the IWeapon and registered through
-// the vtable (registerWeapon, ELF +0x3C / PE +0x38). The Real arm is written; Known remains named.
+// the vtable (registerWeapon, ELF +0x3C / PE +0x38).
 unsigned int InformationFactory::requestWeaponInfo(unsigned int handle, IWeapon* weapon,
                                                    bool real) const
 {
     if (real)
         return registerWeapon(handle, checkPointer(new WeaponInfoReal(weapon)));
-    BF2_AI_FRONTIER("dice::hfe::ai::InformationFactory::requestWeaponInfo [WeaponInfoKnown]");
+    return registerWeapon(handle, checkPointer(new WeaponInfoKnown(weapon)));
 }
 
 // lookups

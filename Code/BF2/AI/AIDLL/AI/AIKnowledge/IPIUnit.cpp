@@ -3,6 +3,10 @@
 // Retail deliberately omits null and bounds guards in these paths.
 #include "IPIUnit.h"
 
+// <iostream>'s ios_base::Init object is this TU's static initialisation and teardown (ELF
+// 0x2F1CC0, __tcf_0 0x2F1D20, _GLOBAL__I 0x2F1D50).
+#include <iostream>
+
 #include "Information.h"
 #include "IPIArmament.h"
 #include "IPIPhysical.h"

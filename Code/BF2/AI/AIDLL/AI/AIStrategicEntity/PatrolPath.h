@@ -1,4 +1,4 @@
-// Patrol route and bot recruitment state.
+// Patrol route and bot recruitment state (libaidll.so PatrolPath.cpp, 0x350230..0x350F80).
 // [INFERRED] Source placement.
 #ifndef AI_AIDLL_AI_AISTRATEGICENTITY_PATROLPATH_H
 #define AI_AIDLL_AI_AISTRATEGICENTITY_PATROLPATH_H
@@ -15,20 +15,39 @@ enum CombatStrengthType : int;
 class PatrolPath
 {
 public:
-    // Attested signatures, declaration-only: no default or fixture constructor in production.
-    PatrolPath(CombatStrengthType, int side);
-    PatrolPath(const std::vector<Vec3>&, CombatStrengthType, int);
-    // list nodes/sentinel, then the Vec3 vector buffer.
-    // Ordinary reverse member destruction; bot pointers in the list are not deleted.
-    ~PatrolPath() = default;
+    PatrolPath(CombatStrengthType strengthType, int side);             // ELF 0x350230 (C2; C1 0x350360)
+    PatrolPath(const std::vector<Vec3>& path, CombatStrengthType strengthType, int side);
+                                                                       // ELF 0x3503E0 (C2; C1 0x3504C0)
+    // Ordinary member destruction; bot pointers in the list are not deleted.
+    ~PatrolPath();                                                     // ELF 0x3505A0 (D2; D1 0x350620)
 
-    bool active() const { return m_active; }  // +16 / +20
-    int getSide() const { return m_side; }    // +20 / +24
-    int neededResources() const
-    {
-        // Signed required-minus-current, with no clamp. recruitBot tests the result > 0.
-        return m_requiredResources - m_currentResources;
-    }
+    CombatStrengthType getStrengthType() const;
+    const std::vector<Vec3>& getPath() const;
+    void addPathPoint(const Vec3& point);
+    // The terrain height under the point, three metres up.
+    void addPathPoint(const Vec2& point);
+    void setActive(bool active);
+    bool getActive() const;
+    bool active() const;                     // the same load as getActive
+    void setSide(int side);
+    int getSide() const;
+    void setMinDistance(float distance);
+    float getMinDistance() const;
+    void setPatrolSpeed(float speed);
+    float getPatrolSpeed() const;
+    void setRequiredResources(int resources);
+    int getRequiredResources() const;
+    // Signed required-minus-current, with no clamp. recruitBot tests the result > 0.
+    int neededResources() const;
+
+    // Installs the death/spawn callbacks, starts the patrol (or handles the dead bot) and
+    // counts the bot in.
+    void recruit(Bot* bot);
+    void botIsAlive(Bot* bot);
+    void botIsDead(Bot* bot);
+    // As shipped, losing a bot also increments the current resources.
+    void lost(Bot* bot);
+    void update();
 
 private:
     // Member names [INFERRED] from the constructor, getters and recruitment increment.

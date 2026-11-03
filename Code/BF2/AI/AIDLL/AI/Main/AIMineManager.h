@@ -1,5 +1,4 @@
 // Tracks mines by side and updates navigation hazards when mines settle or disappear.
-// [RETIRE-WHEN: aidll-02-skeleton] Remove when the corresponding implementation is complete and validated.
 // [INFERRED] Source placement.
 
 #ifndef AI_AIDLL_AI_MAIN_AIMINEMANAGER_H
@@ -35,8 +34,9 @@ public:
     // Mine notifications do not return a result.
     virtual void mineRemoved(unsigned int) = 0;
     virtual void minePlaced(MineType, unsigned int, const Mat4&, float) = 0;
-    virtual const std::set<unsigned int>& getMinedPolygons(MineType, unsigned int) = 0;
-    virtual void getPathfindingPositionOfMine(unsigned int, MineType, unsigned int&, unsigned int&) = 0;
+    virtual const std::set<unsigned int>& getMinedPolygons(MineType, unsigned int) const = 0;
+    // Returns a borrowed position and writes its navigation indices; unknown mines yield two -1 indices.
+    virtual const Vec3& getPathfindingPositionOfMine(unsigned int, MineType, unsigned int&, unsigned int&) const = 0;
 };
 
 // Mine tracking and polygon counters. Offsets describe the original 88-byte ELF object;
@@ -59,6 +59,7 @@ public:
     struct MineInfo
     {
         MineInfo();
+        MineInfo(const MineInfo& other);
 
         // The anti-tank form: a radius, i.e. a circular danger area. ,
         MineInfo(unsigned int, MineType, const Mat4&, float);
@@ -91,8 +92,8 @@ public:
     virtual void update();
     virtual void mineRemoved(unsigned int);
     virtual void minePlaced(MineType, unsigned int, const Mat4&, float);
-    virtual const std::set<unsigned int>& getMinedPolygons(MineType, unsigned int);
-    virtual void getPathfindingPositionOfMine(unsigned int, MineType, unsigned int&, unsigned int&);
+    virtual const std::set<unsigned int>& getMinedPolygons(MineType, unsigned int) const;
+    virtual const Vec3& getPathfindingPositionOfMine(unsigned int, MineType, unsigned int&, unsigned int&) const;
 
 private:
     // The secondary counter tracks projections of mines onto another navigation map.
@@ -124,9 +125,7 @@ private:
 
     /* 60 */ int  m_int60;              // = -1 [UNRESOLVED]; reset sets it to -1 as well
     /* 64 */ char m_gap64[8];           // the constructor never writes these eight bytes
-    /* 72 */ int  m_int72;              // = 0 [UNRESOLVED]
-    /* 76 */ int  m_int76;              // = 0 [UNRESOLVED]
-    /* 80 */ int  m_int80;              // = 0 [UNRESOLVED]
+    /* 72 */ Vec3 m_missingMinePosition; // Zero fallback returned by getPathfindingPositionOfMine; name [INFERRED].
     /* 84 */ bool m_flag84;             // = false [UNRESOLVED]; reset clears it as well
 };
 

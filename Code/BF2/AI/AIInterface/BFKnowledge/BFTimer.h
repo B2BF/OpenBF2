@@ -18,7 +18,8 @@ namespace hfe {
 namespace ai {
 
 // Stored wall-clock value used by the AI timer.
-// [RETIRE-WHEN: aidll-01-adapters] Complete and validate the corresponding BFTimer operation.
+// [RETIRE-WHEN: aidll-01-adapters] Confirm and validate the Win32 clock route against the
+// original Win32 image before retiring that chosen route; the ELF timeval calls are verified.
 struct BFTimerWallClock
 {
     long tv_sec;

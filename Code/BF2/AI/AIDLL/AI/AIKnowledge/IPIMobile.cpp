@@ -3,6 +3,10 @@
 
 #include "IPIMobile.h"
 
+// <iostream>'s ios_base::Init object is this TU's static initialisation and teardown (ELF
+// 0x2EEAF0, __tcf_0 0x2EEB50, _GLOBAL__I 0x2EEB80).
+#include <iostream>
+
 #include "Information.h"
 #include "../Main/CommonSingletonServer.h"
 #include "../Main/IAIPathfinding.h"

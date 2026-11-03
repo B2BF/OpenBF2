@@ -34,7 +34,7 @@ public:
     virtual ~BF2AI();
 
     virtual bool init();
-    virtual bool clear();                                   // [FRONTIER]
+    virtual bool clear();
     virtual bool shutdown();
     virtual int  getSettingsFromMenu(bool fromMenu);
     virtual int  update(double dt);

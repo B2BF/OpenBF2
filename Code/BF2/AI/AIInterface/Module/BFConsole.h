@@ -18,7 +18,7 @@ std::list<ConsoleObject*>& kitTemplateConsoleObjects();
 class AIEventListener;
 
 // Radio-message values are four-byte integers; the constructor maps names to values
-// 0..4 and 6..17. [FRONTIER] Enumerator names are unknown, so the enum remains opaque.
+// 0..4 and 6..17. [UNRESOLVED] Enumerator names are unknown, so the enum remains opaque.
 enum AIRadioMessageType : int;
 
 // Settings for an AI radio message; preserve the field order used by the courier.
@@ -36,15 +36,15 @@ public:
     BFConsole();
     ~BFConsole();
 
-    void createSingletons();                // [FRONTIER]
-    void clearSingletons();                 // [FRONTIER] |
-    void aiMainInit();                      // [FRONTIER]
-    void reset();                           // [FRONTIER]
+    void createSingletons();
+    void clearSingletons();
+    void aiMainInit();
+    void reset();
     void addAIRadioMessage(const std::string& name, float a, float b, float c);
-                                            // [FRONTIER]
-    bool getAIMessageSettings(int, AIRadioMessageSettings&);   // [FRONTIER]
-    bool getVoiceFromAiMessageType(AIRadioMessageType, int&);  // [FRONTIER]
-    void code(const std::string&);          // [FRONTIER]
+    bool getAIMessageSettings(int, AIRadioMessageSettings&);
+    bool getVoiceFromAiMessageType(AIRadioMessageType, int&);
+    // Emits the retail error diagnostic, then processes a legacy single-player code.
+    std::string code(const std::string& command);
 
     // Always returns null.
     static void* getSinglePlayerInstance();

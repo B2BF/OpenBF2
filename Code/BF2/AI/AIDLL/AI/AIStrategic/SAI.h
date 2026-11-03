@@ -9,6 +9,7 @@
 #include <list>
 #include <map>
 #include <set>
+#include <string>
 #include <vector>
 
 #include "../../../../Math/Vec3.h"   // Vec2 and Vec3 are typedefs in here - never forward-declare
@@ -27,12 +28,14 @@ class Strategy;
 // count that divides by five, so `sizeof(StrategyContainer) == 20`; the destructor also runs
 // `__destroy_aux` over the range, which is what proves the vector holds these by value rather than
 // by pointer. updateStates subtracts the float at +8 from game time.
-// Its name is [INFERRED]; the other sixteen bytes remain [UNRESOLVED].
+// Its name is [INFERRED]. SAI::addStrategy (ELF 0x326C10) builds {0, 0, 0, 1, strategy}.
 struct StrategyContainer
 {
-    unsigned char m_unresolved00[8];
-    float m_startTime; // +8, [INFERRED] name
-    unsigned char m_unresolved0C[8];
+    float m_f00;          // +0x00, [UNRESOLVED] role; SAI::reset zeroes it
+    float m_f04;          // +0x04, [UNRESOLVED] role; SAI::reset zeroes it
+    float m_startTime;    // +0x08, [INFERRED] name
+    int   m_i0C;          // +0x0C, = 1 [UNRESOLVED]
+    Strategy* m_strategy; // +0x10, borrowed; owned by the StrategyManager
 };
 
 // Running weighted averages over a fixed number of strength categories.
@@ -99,9 +102,9 @@ public:
     virtual bool isEnemy(int side) const = 0;                              // +10
     virtual bool isFriend(int side) const = 0;                             // +11
     virtual float* getEnemyStrengths(int index) const = 0;                 // +12
-    virtual int*   getEnemyTypes(int index) const = 0;                     // +13
+    virtual float* getEnemyTypes(int index) const = 0;                     // +13 (float counts)
     virtual float* getFriendlyStrengths(int index) const = 0;              // +14
-    virtual int*   getFriendlyTypes(int index) const = 0;                  // +15
+    virtual float* getFriendlyTypes(int index) const = 0;                  // +15 (float counts)
     virtual void setBotHasChangedEquipment(int botId) = 0;                 // +16
     virtual void setNewBotKit(int botId, int kit) = 0;                     // +17
     // Borrowed map address: ELF +0x48 / PE +0x44; caller copies map<int,pair<int,int>>.
@@ -127,21 +130,23 @@ public:
     virtual bool ownAllTakeableCps(int side) = 0;                             // +31
     // Full released-squad count: ELF callers add EAX; PE +0x7C forwards that count.
     virtual int releaseSquadsFromObject(int a, int b) = 0;                    // +32
-    virtual void releaseUnitFromObject(int a, std::map<int, int>::iterator& it, int b) = 0;  // +33
-    virtual void foundDeadBot(int botId) = 0;                                 // +34
+    virtual bool releaseUnitFromObject(int object, std::set<int>::iterator& it, int side) = 0;  // +33
+    virtual bool foundDeadBot(int botId) = 0;                                 // +34
     virtual bool hasChangedEquipment(int botId) = 0;                          // +35
     virtual void equipmentChangedFinished(int botId) = 0;                     // +36
-    virtual void assignBot(std::map<int, int>::iterator& it, int a, int b, bool c) = 0;      // +37
+    virtual int  assignBot(std::set<int>::iterator& it, int object, int botId, bool attacker) = 0;      // +37
     virtual bool strategicObjectsHasChanged() = 0;                            // +38
     virtual void registerTeleporter(int id) = 0;                              // +39
-    virtual float getStrategyHeat(unsigned int index) = 0;                    // +40
-    virtual void listStrategies() = 0;                                        // +41
-    virtual int  getActiveStrategy() = 0;                                     // +42
+    // ELF 0x32E380 returns the eight-byte {m_f00, m_f04} pair through the hidden result pointer;
+    // the Vec2 spelling is [INFERRED].
+    virtual Vec2 getStrategyHeat(unsigned int index) = 0;                     // +40
+    virtual std::string listStrategies() = 0;                                 // +41, by value
+    virtual Strategy* getActiveStrategy() = 0;                                // +42
     virtual void addSpawnToPoint(int point) = 0;                              // +43
     virtual int  getSpawnsToPoint(int point) const = 0;                       // +44
-    virtual Vec3 getBotCurrentPos(int botId) const = 0;                       // +45
-    virtual Vec3 getBotOrderedPos(int botId) const = 0;                       // +46
-    virtual Vec3 getBotLastOrderedPos(int botId) const = 0;                   // +47
+    virtual int  getBotCurrentPos(int botId) const = 0;                       // +45
+    virtual int  getBotOrderedPos(int botId) const = 0;                       // +46
+    virtual int  getBotLastOrderedPos(int botId) const = 0;                   // +47
     virtual CommanderInterface* getCommanderInterface() const = 0;            // +48
 
     // the factory is static and it is the only way in. : `operator new(0x1FC)` then the
@@ -159,7 +164,47 @@ public:
     struct BotInfo
     {
         explicit BotInfo(Bot* bot);
-        void remove(SAI* sai); // named removal frontier
+        // ELF 0x32F3D0: leave the assigned object (removeAssigned with release) and the current
+        // object's present set - or, unassigned, the occupied set through free(true) - and the
+        // free set (+0x44).
+        void remove(SAI* sai);
+        // ELF 0x32F5B0: removeAssigned through object->getAssignedUnits(side).find(id) (no end
+        // check in the image).
+        void removeAssigned(AIStrategicObject* object, bool release, SAI* sai);
+        // ELF 0x32FF30: m_int04/m_int08/m_int0C = -1, m_float10 = 0.0f.
+        void setAsDead(SAI* sai);
+        // ELF 0x32FF70: the id enters the free set (+0x44).
+        void setAsFree(SAI* sai);
+        // ELF 0x32FDF0: unregister the bot from the object's attacker/defender set (advancing
+        // it), move its id from SAI's occupied set (+0xFC) to the free set (+0x44).
+        void free(AIStrategicObject* object, bool attacker, std::set<int>::iterator& it, SAI* sai);
+        // ELF 0x32FC80: with release, unregister from the current object (m_int0C) and leave the
+        // occupied set; the id always enters the free set (+0x44).
+        void free(bool release, SAI* sai);
+        // ELF 0x32F0E0: the bot respawned at an object: present there, id into the free set.
+        void respawn(AIStrategicObject* object, SAI* sai);
+        // ELF 0x32FB10: register as attacker/defender of the current object; the id moves from
+        // the free set (erasing under the iterator) to the occupied set.
+        void assign(std::set<int>::iterator& it, bool attacker, SAI* sai);
+        int setLastOrderedSquare(int square);       // ELF 0x32FFD0; stamps m_double14
+        // ELF 0x32F660: leave the object's assigned set (erasing under the iterator); with
+        // release also SAI's occupied set (+0xFC), otherwise become an available attacker or
+        // defender of the current object (m_int0C). Clears m_int04 and m_double14.
+        void removeAssigned(AIStrategicObject* object, std::set<int>::iterator& it, bool release, SAI* sai);
+        // ELF 0x32F290: the bot moves from one object's present set (advancing it) to another's,
+        // keeping its attacker/defender role there; m_int0C becomes the new object's index.
+        void occupy(std::set<int>::iterator& it, AIStrategicObject* from, AIStrategicObject* to, SAI* sai);
+        // ELF 0x32F1F0: the iterator overload with from->getPresentUnits(side).find(id).
+        void occupy(AIStrategicObject* from, AIStrategicObject* to, SAI* sai);
+        // ELF 0x32F950: ordered to the object (m_int04 = m_int08 = its index, m_double14 = now);
+        // leaves the current object's attackers/defenders under the iterator and joins the
+        // object's assigned set.
+        void assignToObject(std::set<int>::iterator& it, AIStrategicObject* object, bool attacker, SAI* sai);
+        // ELF 0x32F860: the iterator overload with the current object's available attackers or
+        // defenders (getAvailableBots(attacker, side)).find(id).
+        void assignToObject(AIStrategicObject* object, bool attacker, SAI* sai);
+        // ELF 0x32FA60: the iterator overload with SAI's free set (+0x44).find(id).
+        void assign(bool attacker, SAI* sai);
 
         /* +0x00 */ Bot*   m_bot;
         /* +0x04 */ int    m_int04;       // = -1
@@ -183,6 +228,8 @@ public:
     SAI(int side, int gridWidth, int gridHeight, Vec2 min, Vec2 max);
     virtual ~SAI();
 
+    bool reset();                                // ELF 0x32E8A0, non-virtual; answers true
+
     // the 49 interface slots. Unwritten bodies stop at named frontiers.
     virtual void addStrategy(Strategy* strategy);
     virtual void update(double budget);
@@ -195,9 +242,9 @@ public:
     virtual bool isEnemy(int side) const;
     virtual bool isFriend(int side) const;
     virtual float* getEnemyStrengths(int index) const;
-    virtual int*   getEnemyTypes(int index) const;
+    virtual float* getEnemyTypes(int index) const;
     virtual float* getFriendlyStrengths(int index) const;
-    virtual int*   getFriendlyTypes(int index) const;
+    virtual float* getFriendlyTypes(int index) const;
     virtual void setBotHasChangedEquipment(int botId);
     virtual void setNewBotKit(int botId, int kit);
     virtual const std::map<int, std::pair<int, int> >& getDeadBots() const;
@@ -216,21 +263,21 @@ public:
     virtual bool haveAnyOwnedAndTakeableCps(int side);
     virtual bool ownAllTakeableCps(int side);
     virtual int releaseSquadsFromObject(int a, int b);                    // frontier
-    virtual void releaseUnitFromObject(int a, std::map<int, int>::iterator& it, int b);
-    virtual void foundDeadBot(int botId);
+    virtual bool releaseUnitFromObject(int object, std::set<int>::iterator& it, int side);   // ELF 0x32D6D0
+    virtual bool foundDeadBot(int botId);                    // ELF 0x329250
     virtual bool hasChangedEquipment(int botId);
     virtual void equipmentChangedFinished(int botId);
-    virtual void assignBot(std::map<int, int>::iterator& it, int a, int b, bool c);
+    virtual int  assignBot(std::set<int>::iterator& it, int object, int botId, bool attacker);   // ELF 0x32D870
     virtual bool strategicObjectsHasChanged();
     virtual void registerTeleporter(int id);
-    virtual float getStrategyHeat(unsigned int index);
-    virtual void listStrategies();
-    virtual int  getActiveStrategy();
+    virtual Vec2 getStrategyHeat(unsigned int index);
+    virtual std::string listStrategies();
+    virtual Strategy* getActiveStrategy();
     virtual void addSpawnToPoint(int point);
     virtual int  getSpawnsToPoint(int point) const;
-    virtual Vec3 getBotCurrentPos(int botId) const;
-    virtual Vec3 getBotOrderedPos(int botId) const;
-    virtual Vec3 getBotLastOrderedPos(int botId) const;
+    virtual int  getBotCurrentPos(int botId) const;
+    virtual int  getBotOrderedPos(int botId) const;
+    virtual int  getBotLastOrderedPos(int botId) const;
     virtual CommanderInterface* getCommanderInterface() const;
 
     // non-virtual. The vtable does not carry these.
@@ -244,6 +291,7 @@ public:
     void handleTeleportingBot(int botId);            // named frontier
     bool updateStrategicObjects();
     void chooseStrategy();
+    void changeStrategy(std::vector<StrategyContainer>::iterator& it);   // ELF 0x329610
     void modifyStrategicObjectsTemperatures();
     void updateBotPositions();
     void updateDistribution();
@@ -251,9 +299,21 @@ public:
     void distributeDefence();
     void distributeAttack();
     void distributeWithNoAreas();
+    void categoryDistributeWithNoAreas(const std::vector<AIStrategicObject*>& objects);  // ELF 0x32B770
+    void categoryDistributeAttack(const std::vector<AIStrategicObject*>& objects);       // ELF 0x32BA50
+    void categoryDistributeDefence(const std::vector<AIStrategicObject*>& objects);      // ELF 0x32AF10
     void distributeArtillery();                     // genuinely empty, PE update elides it
+    void updateMap(double budget);                  // ELF 0x32CEE0, empty
+    float* createUnitMods() const;                  // ELF 0x329490
+    bool isBotFree(int botId) const;                // ELF 0x32E2D0
+    bool isBotAssigned(int botId) const;            // ELF 0x32E320
+    Strategy* getActiveStrategy(float& a, float& b, float& c);   // ELF 0x32EAB0
 
 private:
+    // ELF 0x328DB0 (setBotIsDead's body, a direct call).
+    void handleDeadBot(int botId);
+    // ELF 0x328FE0 (setBotHasChangedEquipment's tail, a direct call).
+    void handleChangingBot(int botId);
     /* +0x000 */ // vptr - ISAI
     // forty bytes no constructor store and no destructor call ever touches. [UNRESOLVED]; kept
     // opaque so every offset below stays where the binary puts it.
@@ -289,13 +349,13 @@ private:
 
     /* +0x0D8 */ int m_intD8;                        // [UNRESOLVED] - the ctor zeroes it
     /* +0x0DC */ int m_intDC;                        // [UNRESOLVED] - the ctor zeroes it
-    /* +0x0E0 */ int m_intE0;                        // [UNRESOLVED]
+    /* +0x0E0 */ int m_intE0;                        // [UNRESOLVED]; not constructed, updateDistribution zeroes it
     /* +0x0E4 */ std::map<int, std::map<int, int> > m_mapE4;   // a map of maps - node 32
     /* +0x0F0 */ std::set<int> m_setF0;
     /* +0x0FC */ std::set<int> m_setFC;
     /* +0x108 */ std::list<int> m_list108;           // 4-byte element; type [UNRESOLVED]
     /* +0x10C */ std::list<int> m_list10C;           // 4-byte element; type [UNRESOLVED]
-    /* +0x110 */ std::list<int> m_list110;           // 4-byte element; type [UNRESOLVED]
+    /* +0x110 */ std::list<int> m_list110;           // teleporter ids (registerTeleporter)
 
     // by value, not by pointer - the destructor runs `__destroy_aux<StrategyContainer*>` over the
     // range, and the deallocation size divides by five, so `sizeof(StrategyContainer) == 20`.
@@ -312,7 +372,7 @@ private:
     /* +0x174 */ float m_friendlyCounts[6];
 
     /* +0x18C */ int   m_int18C;                     // = 19; resumable strategic update state
-    /* +0x190 */ float m_float190;                   // = -992.0f; last-update timestamp used by state 4
+    /* +0x190 */ float m_float190;                   // = -1000.0f; last-update timestamp used by state 4
     /* +0x194 */ int   m_side;                       // the constructor's first argument
     /* +0x198 */ int   m_sideMask;                   // = 1 << side
     /* +0x19C */ int   m_enemyMask;                  // = (side == 1) ? 4 : 2 - the other side's bit

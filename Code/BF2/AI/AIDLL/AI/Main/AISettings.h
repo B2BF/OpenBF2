@@ -10,7 +10,13 @@
 #include <utility>
 #include <vector>
 
+#include <istream>
+
+#include "../AIStrategic/StatusMap.h"
+#include "../AIStrategic/StrategyCondition.h"
+#include "../AIStrategicEntity/AIStrategicObject.h"
 #include "AISettingsInterfaces.h"      // the two bases, all 87 slots - RW-9's retirement
+#include "AIStreamOperators.h"         // the console argument extractors
 
 namespace dice {
 namespace hfe {
@@ -21,6 +27,7 @@ class BotBehaviour;
 class BotMoralAdmin;
 class ISensingAgentPattern;
 class PlanGenerator;
+class PlanInterpreter;
 
 // The two abstract halves are declared in AISettingsInterfaces.h with all 87 virtual positions.
 // AISettings is the concrete implementation in both recovered images.
@@ -44,7 +51,7 @@ public:
     virtual float* getVehicleMods(int) const;
     virtual BotBehaviour* getBehaviour(int, int) const;
     virtual BotBehaviour* getDefaultBehaviour(int) const;
-    virtual void* getPlanInterpreter(int) const;
+    virtual PlanInterpreter* getPlanInterpreter(int) const;
     virtual PlanGenerator* getPlanGenerator(int, int) const;
     virtual float getViewDistance() const;
     virtual float getStatsViewDistance() const;
@@ -75,7 +82,7 @@ public:
     virtual bool getAutoSpawnBots() const;
     virtual const float* getArmourClassValues() const;
     virtual float getArmourClassValue(int) const;
-    virtual void reset();
+    virtual bool reset();
     virtual int getManDownEquipmentType();
     virtual bool isValidMaterial(int, unsigned char) const;
     virtual float getVehicleMaterialCost(const std::string&, unsigned char) const;
@@ -86,8 +93,11 @@ public:
     virtual bool overrideMenuSettings() const;
     virtual bool getOverrideMenuSettings() const;
 
-    // IAISettingsModifier, slots 0..38 in vtable order; reset is shared with the read
-    // side above and is therefore declared only once.
+    // The IAISettingsModifier overriders, in AISettings's own primary-vtable order (ELF vtable for
+    // AISettings +0xC8..+0x15C; the order differs from the interface's: createVehicleGroup precedes
+    // setVehicle, and setAutoSpawnBots follows addSensingAgentPattern). The interface's own slot
+    // order is IAISettingsModifier's declaration order. reset is shared with the read side above
+    // and is therefore declared only once.
     virtual void setMaxNBots(int);
     virtual void maxBotsIncludeHumans(bool);
     virtual void setIgnoreCommanderDistance(float);
@@ -108,19 +118,19 @@ public:
     virtual void setNSides(int);
     virtual void setBotSkill(float);
     virtual void setSAIUpdateFrequency(float);
+    virtual void createVehicleGroup(const std::string&);
+    virtual void setVehicle(const std::string&);
+    virtual void setVehicleClusterMapping(const std::string&, const std::string&);
+    virtual void addVehicleToVehicleGroup(int, const std::string&);
+    virtual void addVehicleToVehicleGroup(const std::string&, const std::string&);
     virtual void setStandardPersonality(float *, int);
     virtual void setStandardMoralAdmin(BotMoralAdmin *, int);
     virtual void setRespawnAllowed(bool);
-    virtual void setVehicle(const std::string&);
-    virtual void setVehicleClusterMapping(const std::string&, const std::string&);
-    virtual void createVehicleGroup(const std::string&);
-    virtual void addVehicleToVehicleGroup(int, const std::string&);
-    virtual void addVehicleToVehicleGroup(const std::string&, const std::string&);
-    virtual void setAutoSpawnBots(bool);
     virtual void setDraw(bool);
     virtual void setSensingAgentPatternName(const std::string&);
     virtual void setSensingAgentNullPattern(ISensingAgentPattern *);
     virtual void addSensingAgentPattern(int, ISensingAgentPattern *);
+    virtual void setAutoSpawnBots(bool);
     virtual void setManDownEquipment(const std::string&);
     virtual void setVehicleMaterialCost(const std::string&, unsigned char, float);
     virtual void addBotName(const std::string&, const std::string&);
@@ -128,11 +138,16 @@ public:
     virtual void setOverrideMenuSettings(bool);
 
 private:
+    // Non-virtual pool helpers (direct PLT calls), ELF 0x3BFA20 / 0x3BFC50 / 0x3BFDE0 / 0x3C0040.
+    void prepareBehaviourPool(int vehicle, int index);
+    void preparePlanGeneratorPool(int vehicle, int index);
+    void preparePlanInterpreterPool(int vehicle);
+    void prepareVehicleGroup(int vehicle);
+
     // Field offsets describe retail x86 layout; native STL sizes may differ.
     /*   8 */ int    m_maxNBots;                  // = -1 getMaxNBots / setMaxNBots
     /*  12 */ int    m_numberOfBehaviours;        // = 0 getNumberOfBehaviours
-    /*  16 */ char   m_gap16[8];                  // the constructor never writes these eight bytes
-                                                  // and no accessor reads them. [UNRESOLVED]
+    /*  16 */ char   m_gap16[8];                  // [UNRESOLVED] two words reset zeroes; ctor leaves them alone
     /*  24 */ float  m_viewDistance;              // = -1.0f getViewDistance
     /*  28 */ float  m_statsViewDistance;         // = 30.0f get/setStatsViewDistance
     /*  32 */ float  m_botSkill;                  // = 0.75f get/setBotSkill
@@ -154,7 +169,7 @@ private:
     /*  60 */ std::vector<std::vector<BotBehaviour*> > m_behaviours;
     /*  72 */ std::vector<int> m_defaultBehaviour;          // index into m_behaviours[v]; -1 = none
     /*  84 */ std::vector<std::vector<PlanGenerator*> > m_planGenerators;
-    /*  96 */ std::vector<void*> m_planInterpreters;        // [UNRESOLVED] element type - placeholder
+    /*  96 */ std::vector<PlanInterpreter*> m_planInterpreters;   // each a BAPInterpreter (vector<PlanInterpreter*>::_M_insert_aux)
     /* 108 */ std::map<int, ISensingAgentPattern*> m_sensingAgentPatterns;
     /* 120 */ std::vector<MaterialManager*> m_vehicleMaterialManagers;
 
@@ -178,12 +193,16 @@ private:
     // Six zero-based armor-class weights, initialized to 1, 3, 8, 15, 10, and 12.
     /* 240 */ float m_armourClassValues[6];
 
-    /* 264 */ std::map<int, void*> m_tree264;               // [UNRESOLVED] Key and mapped types are placeholders.
+    // Pattern name -> registration index (setSensingAgentPatternName, ELF 0x3C0C50: insert_unique of
+    // the map's size before the insert). Name [INFERRED].
+    /* 264 */ std::map<std::string, int> m_sensingAgentPatternIds;
     // Mutable because getBotName rotates the list while satisfying the const interface.
     /* 276 */ mutable std::list<std::pair<float, std::string> > m_botNames;   // addBotName / getBotName
     /* 280 */ bool m_overrideMenuSettings;         // = false overrideMenuSettings + getOverrideMenuSettings
     /* 281 */ bool m_drawBotStats;                 // = true getDrawBotStats / setDrawBotStats
 };
+
+// The console argument extractors moved to AIStreamOperators.h (included above).
 
 } // namespace ai
 } // namespace hfe

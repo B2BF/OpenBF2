@@ -2,6 +2,10 @@
 
 #include "BFInformationCourier.h"
 
+// <iostream>'s ios_base::Init object is this TU's static initialisation and teardown (ELF
+// 0x2E6040, __tcf_0 0x2E60A0, _GLOBAL__I 0x2E60D0).
+#include <iostream>
+
 #include <cfloat>
 #include <cmath>
 #include <string>

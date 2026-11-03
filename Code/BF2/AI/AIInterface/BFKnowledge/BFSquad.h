@@ -74,6 +74,12 @@ public:
     virtual int requestNewCommanderOrder(int squad, IAIPlayer* player);
     virtual world::IObject* getCommanderOrder(int a, int b, Vec3& position, IAIObject* target);
     virtual world::IObject* getSquadOrder(int a, int b, Vec3& position, IAIObject* target);
+
+private:
+    // Non-virtual ELF helpers (0x8410BC0, 0x8410D20, 0x8410E70); the int is a SquadOrderType value.
+    int issueOrder(const Vec3& position, int a, int b, IAIObject* target, int orderType);
+    int acceptCommanderOrder(int squad, IAIPlayer* player, int orderType);
+    int declineCommanderOrder(int squad, IAIPlayer* player, int orderType);
 };
 
 } // namespace ai

@@ -1,6 +1,10 @@
 
 #include "InformationReal.h"
 
+// <iostream>'s ios_base::Init object is this TU's static initialisation and teardown (ELF
+// 0x2DCB90, __tcf_0 0x2DCBF0, _GLOBAL__I 0x2DCC20).
+#include <iostream>
+
 #include <cmath>
 
 #include "IPIPhysical.h"

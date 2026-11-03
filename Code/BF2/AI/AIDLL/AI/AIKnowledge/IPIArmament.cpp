@@ -1,6 +1,10 @@
 
 #include "IPIArmament.h"
 
+// <iostream>'s ios_base::Init object is this TU's static initialisation and teardown (ELF
+// 0x2EC6C0, __tcf_0 0x2EC720, _GLOBAL__I 0x2EC750).
+#include <iostream>
+
 #include "Information.h"
 #include "InformationFactory.h"
 #include "WeaponInfo.h"

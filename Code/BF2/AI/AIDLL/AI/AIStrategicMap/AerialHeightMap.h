@@ -1,6 +1,5 @@
 // Cached ground heights for aerial navigation. Sampling requires in-range coordinates.
 // An empty map reports the missing-height sentinel 9999.
-// [RETIRE-WHEN: aidll-02-skeleton] Remove when the corresponding implementation is complete and validated.
 // [INFERRED] Source placement.
 
 #ifndef AI_AIDLL_AI_AISTRATEGICMAP_AERIALHEIGHTMAP_H
@@ -24,11 +23,10 @@ public:
     float getGroundHeight(const Vec3&);
     float getGroundHeight(float, float);
 
-    void createHeightMap(int samplesPerAxis);
+    void createHeightMap(int samplesPerAxis = 4);   // ConsoleClass161 passes 4 without an argument
 
     // Returns the sampled height as an unsigned 16-bit integer for height-map storage.
     unsigned short computeHeightAt(int cellX, int cellZ, int samplesPerAxis);
-                                                    // [FRONTIER]
 
     void saveHeightMapToFile();
     void readHeightMapFromFile();

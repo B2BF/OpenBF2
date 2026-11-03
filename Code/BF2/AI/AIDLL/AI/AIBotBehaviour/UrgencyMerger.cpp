@@ -1,10 +1,11 @@
 // [INFERRED] Source placement.
-// [FRONTIER] Remaining methods stop by name until implemented.
 // [RETIRE-WHEN: aidll-02-skeleton] Complete and validate the remaining UrgencyMerger operations.
+
+// static init: ELF 0x1B5CD0 (__tcf_0 0x1B5D30, _GLOBAL__I 0x1B5D60): <iostream>'s Init object only.
+#include <iostream>
 
 #include "UrgencyMerger.h"
 
-#include "../Main/AIDllFrontier.h"
 
 namespace dice {
 namespace hfe {
@@ -27,58 +28,104 @@ UrgencyMerger::UrgencyMerger(int count, float* weights, UrgencyGenerator** gener
 {
 }
 
+// ELF 0x1B5930: only the vptr store; the generators belong to the caller.
 UrgencyMerger::~UrgencyMerger()
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::UrgencyMerger::~UrgencyMerger");
 }
 
-// [FRONTIER] Bot-specific urgency and modifier operations remain unimplemented.
-// [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: aidll-02-skeleton]
-// Replace each stop when the corresponding merger behavior is recovered.
-
-float UrgencyMerger::getUrgency(Bot*)
+// ELF 0x1B59B0. The chosen generator's urgency, 0 when none is chosen.
+float UrgencyMerger::getUrgency(Bot* bot)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::UrgencyMerger::getUrgency");
+    if (m_chosen == 0)
+        return 0.0f;
+    return m_chosen->getUrgency(bot);
 }
 
-float UrgencyMerger::getActiveUrgency(Bot*)
+// ELF 0x1B5A00.
+float UrgencyMerger::getActiveUrgency(Bot* bot)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::UrgencyMerger::getActiveUrgency");
+    if (m_chosen == 0)
+        return 0.0f;
+    return m_chosen->getActiveUrgency(bot);
 }
 
-void UrgencyMerger::updateActiveUrgency(Bot*)
+// ELF 0x1B5A40. Updates every generator; the strictly most urgent one's own chosen generator
+// becomes this merger's. Returns that urgency (0 when none is positive). The weights are not read.
+float UrgencyMerger::updateActiveUrgency(Bot* bot)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::UrgencyMerger::updateActiveUrgency");
+    float best = 0.0f;
+    m_chosen = 0;
+    for (int i = 0; i < m_count; ++i)
+    {
+        const float urgency =
+            m_generators[i] != 0 ? m_generators[i]->updateActiveUrgency(bot) : 0.0f;
+        if (urgency > best)
+        {
+            best = urgency;
+            m_chosen = m_generators[i]->getChosenGenerator();
+        }
+    }
+    return best;
 }
 
-bool UrgencyMerger::hasChangedTarget(Bot*)
+// ELF 0x1B5AF0. True while every present generator reports a changed target (stops at the first
+// that does not); true with no generators.
+bool UrgencyMerger::hasChangedTarget(Bot* bot)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::UrgencyMerger::hasChangedTarget");
+    bool changed = true;
+    for (int i = 0; i < m_count && changed; ++i)
+    {
+        if (m_generators[i] != 0)
+            changed = m_generators[i]->hasChangedTarget(bot);
+    }
+    return changed;
 }
 
-bool UrgencyMerger::quotientChanged(Bot*, float, float)
+// ELF 0x1B5B60. The same conjunction over quotientChanged.
+bool UrgencyMerger::quotientChanged(Bot* bot, float lower, float upper)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::UrgencyMerger::quotientChanged");
+    bool changed = true;
+    for (int i = 0; i < m_count && changed; ++i)
+    {
+        if (m_generators[i] != 0)
+            changed = m_generators[i]->quotientChanged(bot, lower, upper);
+    }
+    return changed;
 }
 
-bool UrgencyMerger::hasChanged(Bot*, float, float)
+// ELF 0x1B5BE0. True as soon as one present generator's quotient or target changed.
+bool UrgencyMerger::hasChanged(Bot* bot, float lower, float upper)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::UrgencyMerger::hasChanged");
+    bool changed = false;
+    for (int i = 0; i < m_count && !changed; ++i)
+    {
+        if (m_generators[i] != 0)
+            changed = m_generators[i]->quotientChanged(bot, lower, upper) ||
+                      m_generators[i]->hasChangedTarget(bot);
+    }
+    return changed;
 }
 
+// ELF 0x1A2850.
 UrgencyGenerator* UrgencyMerger::getChosenGenerator()
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::UrgencyMerger::getChosenGenerator");
+    return m_chosen;
 }
 
-void UrgencyMerger::reset(Bot*)
+// ELF 0x1B5C80. Resets every present generator.
+void UrgencyMerger::reset(Bot* bot)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::UrgencyMerger::reset");
+    for (int i = 0; i < m_count; ++i)
+    {
+        if (m_generators[i] != 0)
+            m_generators[i]->reset(bot);
+    }
 }
 
+// ELF 0x1B59F0.
 int UrgencyMerger::getSize()
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::UrgencyMerger::getSize");
+    return m_count;
 }
 
 } // namespace ai

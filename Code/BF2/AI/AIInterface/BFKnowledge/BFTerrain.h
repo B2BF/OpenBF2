@@ -33,7 +33,7 @@ public:
     virtual int getMaterialToGiveDamage() const = 0;
     virtual bool isInsideCombatArea(IAIPlayer* player) const = 0;
     virtual void getNormal(float x, float z, Vec3& normal) const = 0;
-    virtual void getHeightAndNormal(float x, float z, Vec3& normal, unsigned char& material) const = 0;
+    virtual float getHeightAndNormal(float x, float z, Vec3& normal, unsigned char& material) const = 0;
     virtual float getSlope(float x, float z) const = 0;
     virtual float getWaterLevel(float x, float z) const = 0;
     virtual float getSeaWaterLevel() const = 0;
@@ -51,7 +51,7 @@ public:
     virtual bool intersectTerrain(const Vec3& from, const Vec3& to, Vec3& hit, float& distance, Vec3& normal) const = 0;
     virtual bool getTriangle(const Vec3& position, Vec3& a, Vec3& b, Vec3& c, Vec3& normal, unsigned char& material) const = 0;
     virtual bool getTriangleNeighbour(const Vec3& a, const Vec3& b, const Vec3& c, unsigned int edge, Vec3& na, Vec3& nb, Vec3& nc, Vec3& normal, unsigned char& material) const = 0;
-    virtual int getAllTerrainPolygons(std::pair<Vec2, Vec2> bounds, std::vector<Vec3>& vertices, std::vector<std::pair<int, int> >& edges, std::list<triple<int, int, int> >& triangles) const = 0;
+    virtual void getAllTerrainPolygons(std::pair<Vec2, Vec2> bounds, std::vector<Vec3>& vertices, std::vector<std::pair<int, int> >& edges, std::list<triple<int, int, int> >& triangles) const = 0;
     virtual void getAllTerrainPolygonsWithinBoundary(std::pair<Vec2, Vec2> bounds, const Vec2& min, const Vec2& max, std::vector<Vec3>& vertices, std::vector<std::pair<int, int> >& edges, std::list<triple<int, int, int> >& triangles) const = 0;
 };
 
@@ -69,7 +69,7 @@ public:
     virtual int getMaterialToGiveDamage() const;
     virtual bool isInsideCombatArea(IAIPlayer* player) const;
     virtual void getNormal(float x, float z, Vec3& normal) const;
-    virtual void getHeightAndNormal(float x, float z, Vec3& normal, unsigned char& material) const;
+    virtual float getHeightAndNormal(float x, float z, Vec3& normal, unsigned char& material) const;
     virtual float getSlope(float x, float z) const;
     virtual float getWaterLevel(float x, float z) const;
     virtual float getSeaWaterLevel() const;
@@ -87,10 +87,14 @@ public:
     virtual bool intersectTerrain(const Vec3& from, const Vec3& to, Vec3& hit, float& distance, Vec3& normal) const;
     virtual bool getTriangle(const Vec3& position, Vec3& a, Vec3& b, Vec3& c, Vec3& normal, unsigned char& material) const;
     virtual bool getTriangleNeighbour(const Vec3& a, const Vec3& b, const Vec3& c, unsigned int edge, Vec3& na, Vec3& nb, Vec3& nc, Vec3& normal, unsigned char& material) const;
-    virtual int getAllTerrainPolygons(std::pair<Vec2, Vec2> bounds, std::vector<Vec3>& vertices, std::vector<std::pair<int, int> >& edges, std::list<triple<int, int, int> >& triangles) const;
+    virtual void getAllTerrainPolygons(std::pair<Vec2, Vec2> bounds, std::vector<Vec3>& vertices, std::vector<std::pair<int, int> >& edges, std::list<triple<int, int, int> >& triangles) const;
     virtual void getAllTerrainPolygonsWithinBoundary(std::pair<Vec2, Vec2> bounds, const Vec2& min, const Vec2& max, std::vector<Vec3>& vertices, std::vector<std::pair<int, int> >& edges, std::list<triple<int, int, int> >& triangles) const;
 
 private:
+    bool pointInsideBbox(const Vec3& position, const std::pair<Vec2, Vec2>& bounds) const;
+    void checkUnconnectedMeshData(std::vector<Vec3>& vertices, std::vector<std::pair<int, int>>& edges,
+                                 std::list<triple<int, int, int>>& triangles) const;
+
     /* +0x00 */ // vptr
     /* +0x04 */ IBase* m_heightmapCluster;   // getSingleton("HeightmapCluster")
     /* +0x08 */ int m_worldSizeX;            // heightmapCluster vtable +0x30

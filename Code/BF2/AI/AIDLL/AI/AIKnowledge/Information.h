@@ -108,13 +108,20 @@ public:
     IPIUnit* getUnit() const { return m_unit; }
     unsigned int getObjectTypeFlags() const { return m_objectTypeFlags; }
     float getStrength() const { return m_strength; }
+    // BotMain::updateBotVehicle (ELF 0x18BCC0) scales +0x10 inline (x0.75 / x1.3333334).
+    void setStrength(float strength) { m_strength = strength; }
+    // [INFERRED] name; SAIMap::updateInformation (ELF 0x3641F0) copies +0x14 into +0x10 inline.
+    float getBasicTemp() const { return m_basicTemp; }
     bool hasMobile() const { return m_mobile != nullptr; }
     IPIMobile* getMobile() const { return m_mobile; }
+    // [INFERRED] inline reader of +0x34 (InfoCoverPredicate 0x2E7E80 reads it without a call).
+    IPICover* getCover() const { return m_cover; }
     IAIObject* getAIObject() const { return m_object; }
     bool hasArmament() const { return m_armament != nullptr; }
     // [INFERRED] source-level inline accessor. Both retail images read the same +0x2C member in
     // InformationFactory::updateInformationPlugin before the virtual updateWeapons call.
     IPIArmament* getArmament() const { return m_armament; }
+    IPIControlInfo* getControlInfo() const { return m_controlInfo; }
 
 protected:
     /* +0x00 */ // vptr
