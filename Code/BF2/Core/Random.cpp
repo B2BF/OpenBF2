@@ -1,9 +1,8 @@
 // Random state and distribution serialization. [INFERRED] Core placement; AI FILE symbol: Random.cpp.
 
-#if defined(BF2_IMAGE_AIDLL)
-// static init: ELF 0x48A850 (__tcf_0 0x48A8D0, _GLOBAL__I 0x48A900): iostream Init, then Rand.
+// static init (each image's own Random.cpp): iostream Init, then Rand.
+//   bf2 ELF 0x83CB610 (seed store 0x83CB642); libaidll ELF 0x48A850 (__tcf_0 0x48A8D0, _GLOBAL__I 0x48A900).
 #include <iostream>
-#endif
 
 #include "Random.h"
 
@@ -15,10 +14,11 @@
 namespace dice {
 namespace hfe {
 
-#if defined(BF2_IMAGE_AIDLL)
-// ELF BSS 0x4DD454; the initializer's store at 0x48A8BA is Random's default seed.
+// Each image owns one instance under the same symbol, dice::hfe::Rand: bf2 ds:0x8ABBCB0 and
+// libaidll BSS 0x4DD454. The initializers store Random's default seed (0x759DC150).
 Random Rand;
-#else
+
+#if !defined(BF2_IMAGE_AIDLL)
 // [CHOSEN, not recovered] Image partition: these distribution codecs belong to the engine;
 // the original AI Random.cpp contributes its independent state and initialization only.
 

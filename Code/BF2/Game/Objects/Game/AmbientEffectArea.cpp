@@ -168,7 +168,7 @@ unsigned int ambientRandom(int& seed)
 // ELF 81658B8..5BE9 samples the distribution, materializes float, then draws its sign.
 double ambientUnitRandom()
 {
-    return static_cast<double>((static_cast<int>(g_random.getRaw() | 0x80u) >> 7) + 1)
+    return static_cast<double>((static_cast<int>(Rand.getRaw() | 0x80u) >> 7) + 1)
         * (1.0 / 16777216.0);
 }
 double ambientLifetimeSample(const RandomDistribution& distribution)
@@ -184,7 +184,7 @@ double ambientLifetimeSample(const RandomDistribution& distribution)
         value = distribution.value + (double(distribution.variation) - distribution.value) * ambientUnitRandom();
         break;
     case CRD_EXPONENTIAL: value = -double(distribution.value) * std::log(ambientUnitRandom()); break;
-    case CRD_NORMAL: value = distribution.value + double(g_random.getNormal()) * distribution.variation; break;
+    case CRD_NORMAL: value = distribution.value + double(Rand.getNormal()) * distribution.variation; break;
     default: value = 0; break;
     }
 #if defined(_WIN32)

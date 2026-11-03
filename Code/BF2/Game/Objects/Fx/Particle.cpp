@@ -11,7 +11,7 @@
 #include "../../../Core/ClassManager.h"
 #include "../../../Core/Debug.h"
 #include "../../../Core/Ids.h"
-#include "../../../Core/Random.h"                  // g_random, RandomDistribution
+#include "../../../Core/Random.h"                  // Rand, RandomDistribution
 #include "../../../Geom/GeometryInstanceData.h"    // the two opacity factors + setOpacity
 #include "../../../Physics/CollisionManager.h"     // ICollisionManager::getCollisionMeshPart
 #include "../../../Physics/ICollisionMesh.h"       // ICollisionMesh::createMaterialMapping
@@ -49,7 +49,7 @@ public:
 
 // the RandomDistribution sampler, client order
 // BF2.exe 0x5E74B0 (121 B) on the process-global Random (ds:977F88; the ELF's Rand 0x8ABBCB0, this
-// tree's g_random): when `relative` is set it draws the sign first - u <= 0.5 (compared as a double
+// tree's Rand): when `relative` is set it draws the sign first - u <= 0.5 (compared as a double
 // 0.5) gives -1 - and only then 0x5E7450 draws the value; the product is the result. [PLATFORM] The
 // ELF constructor inlines the same distribution five times with the draws the other way round
 // (value first, sign second: e.g. 0x82060BC after the arm at 0x8207000). Both use the global
@@ -58,7 +58,7 @@ float unitRandom()
 {
     // / 0x5E7360 / 0x5E74B0: `(raw | 0x80) sar 7, + 1` - equal to `((raw >> 7) | 1) + 1`
     // for every raw the Lehmer state can produce (< 2^31) - then * 2^-24.
-    return static_cast<float>(static_cast<int>(((g_random.getRaw() >> 7) | 1u) + 1u))
+    return static_cast<float>(static_cast<int>(((Rand.getRaw() >> 7) | 1u) + 1u))
          * 0.000000059604645f;
 }
 
@@ -79,7 +79,7 @@ float sampleDistribution(const RandomDistribution& distribution)
                                      * distribution.value));
         break;
     case CRD_NORMAL:                                   // (getNormal) * variation + value
-        value = g_random.getNormal() * distribution.variation + distribution.value;
+        value = Rand.getNormal() * distribution.variation + distribution.value;
         break;
     default:
         value = 0.0f;

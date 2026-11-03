@@ -40,7 +40,7 @@
 #include <cmath>
 #include "IWeapon.h"                                                   // hasIndirectLineOfFire's weapon reads
 #include "BFPhysics.h"                                                 // IAIPhysics::getGravity
-#include "../../../Core/Random.h"                                      // g_random (ELF dice::hfe::Rand)
+#include "../../../Core/Random.h"                                      // Rand (ELF dice::hfe::Rand)
 #include "../../../Game/Objects/Game/Soldier.h"                        // Soldier::getCameras
 #include "../../../Game/Objects/ICameraObject.h"
 #include "../../../Game/Objects/ObjectLayoutAccess.h"               // the cached collision mesh (+0x40)
@@ -353,7 +353,7 @@ public:
 // built on it: lo + (hi - lo) * draw + 0.5, truncated. [CHOSEN] helper spellings for inlined code.
 inline float randomUnit()
 {
-    return static_cast<float>(static_cast<int>(((g_random.getRaw() >> 7) | 1u) + 1u)) * 5.9604645e-08f;
+    return static_cast<float>(static_cast<int>(((Rand.getRaw() >> 7) | 1u) + 1u)) * 5.9604645e-08f;
 }
 
 inline unsigned int randomIndex(float hi)

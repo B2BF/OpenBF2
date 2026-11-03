@@ -28,7 +28,7 @@
 #include "../../../AI/AIDLL/AI/Main/CommonSingletonServer.h"   // m_iBFCollisionHandler
 #include "../../../Core/Ids.h"
 #include "../../../Core/Debug.h"                     // getStickTransformation's retail error arm
-#include "../../../Core/Random.h"                    // g_random - retail distribution sampler
+#include "../../../Core/Random.h"                    // Rand - retail distribution sampler
 #include "../../../Core/System.h"                    // launch clocks / ticks
 #include "../../../Core/WeakPtr.h"                   // the +0x174 ctrl read - PCO's idiom
 #include "../../../Geom/IGeometryTemplate.h"
@@ -82,20 +82,20 @@ float sampleRandomDistribution(const RandomDistribution& distribution)
         break;
     case CRD_UNIFORM:
         sample = distribution.value
-            + (distribution.variation - distribution.value) * unitRandom(g_random);
+            + (distribution.variation - distribution.value) * unitRandom(Rand);
         break;
     case CRD_EXPONENTIAL:
-        sample = -distribution.value * static_cast<float>(std::log(unitRandom(g_random)));
+        sample = -distribution.value * static_cast<float>(std::log(unitRandom(Rand)));
         break;
     case CRD_NORMAL:
-        sample = distribution.value + g_random.getNormal() * distribution.variation;
+        sample = distribution.value + Rand.getNormal() * distribution.variation;
         break;
     default:
         sample = 0.0f;
         break;
     }
 
-    if (distribution.relative && unitRandom(g_random) <= 0.5f)
+    if (distribution.relative && unitRandom(Rand) <= 0.5f)
         sample = -sample;
     return sample;
 }

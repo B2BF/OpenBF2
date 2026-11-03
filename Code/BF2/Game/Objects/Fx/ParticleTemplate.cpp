@@ -30,9 +30,6 @@
 namespace dice {
 namespace hfe {
 
-Random g_random;                   // ds:0x8ABBCB0 [CHOSEN name] - THE object, seeded 0x759DC150 by
-                                   // its ctor (the ELF's static init). See the class note.
-
 // , read in full. Two Lehmer steps x' = a*x mod (2^31 - 1), a = 24112 then 26143,
 // each in the classic overflow-free 16-bit-halves form, on the persistent state.
 namespace {
@@ -155,14 +152,14 @@ ParticleTemplate::ParticleTemplate()
             break;                                // sample = the value
         case 1:
             sample = m_gravityModifier.value + (m_gravityModifier.variation - m_gravityModifier.value)
-                     * (float(((g_random.getRaw() >> 7) | 1) + 1) * 0.000000059604645f);
+                     * (float(((Rand.getRaw() >> 7) | 1) + 1) * 0.000000059604645f);
             break;
         case 2:
             sample = -m_gravityModifier.value
-                     * std::log(float(((g_random.getRaw() >> 7) | 1) + 1) * 0.000000059604645f);
+                     * std::log(float(((Rand.getRaw() >> 7) | 1) + 1) * 0.000000059604645f);
             break;
         case 3:
-            sample = m_gravityModifier.value + g_random.getNormal() * m_gravityModifier.variation;
+            sample = m_gravityModifier.value + Rand.getNormal() * m_gravityModifier.variation;
             break;
         default:
             sample = 0.0f;
@@ -177,21 +174,21 @@ ParticleTemplate::ParticleTemplate()
             break;
         case 1:
             sample = m_gravityModifier.value + (m_gravityModifier.variation - m_gravityModifier.value)
-                     * (float(((g_random.getRaw() >> 7) | 1) + 1) * 0.000000059604645f);
+                     * (float(((Rand.getRaw() >> 7) | 1) + 1) * 0.000000059604645f);
             break;
         case 2:
             sample = -m_gravityModifier.value
-                     * std::log(float(((g_random.getRaw() >> 7) | 1) + 1) * 0.000000059604645f);
+                     * std::log(float(((Rand.getRaw() >> 7) | 1) + 1) * 0.000000059604645f);
             break;
         case 3:
-            sample = m_gravityModifier.value + g_random.getNormal() * m_gravityModifier.variation;
+            sample = m_gravityModifier.value + Rand.getNormal() * m_gravityModifier.variation;
             break;
         default:
             sample = 0.0f;
             break;
         }
         // The coin flip: u <= 0.5 negates.
-        if (float(((g_random.getRaw() >> 7) | 1) + 1) * 0.000000059604645f <= 0.5f)
+        if (float(((Rand.getRaw() >> 7) | 1) + 1) * 0.000000059604645f <= 0.5f)
             sample = -sample;
     }
     m_sampledValue = sample;

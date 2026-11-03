@@ -26,7 +26,7 @@
 #include "../../IGame.h"                                // game->destroyObject
 #include "../../IGameLogic.h"                           // gameLogic - isServer / getGameStatus / giveDamage
 #include "../../Common/GameEvent.h"                     // revive: ECGameLogic 14 replication
-#include "../Fx/ParticleTemplate.h"                     // g_random - UpdateInWaterStatus' jitter
+#include "../Fx/ParticleTemplate.h"                     // Rand - UpdateInWaterStatus' jitter
 #include "../IObject.h"
 #include "../IStrategicObjectComp.h"           // ResetStrategicObject's component
 #include "../StrategicObjectComp.h"            // ... and the holder it looks up
@@ -571,7 +571,7 @@ void ArmorGLComp::UpdateInWaterStatus()
         if (worldTime > *g_armorWaterSafetyCheckTime + m_lastWaterCheckTime)
         {
             timerFired = true;
-            const unsigned int x = g_random.getRaw();                        // two Lehmer steps, inlined in the ELF
+            const unsigned int x = Rand.getRaw();                        // two Lehmer steps, inlined in the ELF
             const float roll = static_cast<float>(((static_cast<int>(x) >> 7) | 1) + 1) * 5.9604645e-08f;
             m_lastWaterCheckTime = worldTime - (roll * 0.30000001f + 0.0f);
         }

@@ -113,22 +113,22 @@ bool vehicleBodies() {
     check(pco!=0,"stock PCO available");
     if(pco) {
         auto& nextInput=pco->*PcoAccess::timer();
-        const auto timer=nextInput, seed=g_random.m_seed;
+        const auto timer=nextInput, seed=Rand.m_seed;
         io::PlayerInput input; std::memset(&input,0,sizeof(input));
         input.inputs[50]=0.75f;input.mappingFlags=1ULL<<50;
         const auto original=input;
-        nextInput=0xffffffffu;g_random.m_seed=0x12345678u;
+        nextInput=0xffffffffu;Rand.m_seed=0x12345678u;
         pco->getUnmannedInput(input);
-        check(std::memcmp(&input,&original,sizeof(input))==0 && g_random.m_seed==0x12345678u,"unsigned timer leaves input and RNG untouched");
+        check(std::memcmp(&input,&original,sizeof(input))==0 && Rand.m_seed==0x12345678u,"unsigned timer leaves input and RNG untouched");
         nextInput=0;
         const auto tick=static_cast<unsigned>(WorldPref::getTickCount());
         pco->getUnmannedInput(input);
         check(input.mappingFlags==((1ULL<<50)|15) && input.inputs[50]==0.75f,"unmanned mapping preserves unrelated controls");
         check(input.inputs[0]==-1 && near(input.inputs[1],-0.6735224f)
             && near(input.inputs[2],0.0627387f) && input.inputs[3]==1
-            && g_random.m_seed==1242154650u,"seeded five-draw retail sequence");
+            && Rand.m_seed==1242154650u,"seeded five-draw retail sequence");
         check(nextInput==tick+300,"default unsigned next-input tick");
-        nextInput=timer;g_random.m_seed=seed;
+        nextInput=timer;Rand.m_seed=seed;
     }
     int parented=0;
     for(const auto& entry:objectManager->getAllRegisteredObjects()) {

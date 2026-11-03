@@ -12,7 +12,7 @@
 #include "../ObjectTemplate.h"                              // ObjectTemplate::getIsPreCaching
 #include "../ObjectLayoutAccess.h"                          // physicsNode / geometry of other objects
 #include "../../../Core/Ids.h"                              // CID_EffectBundle/Particle/SpriteParticleTemplate
-#include "../../../Core/Random.h"                           // RandomDistribution, g_random (ELF dice::hfe::Rand)
+#include "../../../Core/Random.h"                           // RandomDistribution, Rand (ELF dice::hfe::Rand)
 #include "../../../Core/OverTimeDistribution.h"
 #include "../../../Core/System.h"                           // g_system->getExactTime (ELF +0x18 / PE +0x14)
 #include "../../../Physics/MaterialManager.h"               // playParticleCollisionSound
@@ -232,7 +232,7 @@ float Emitter::calcInvItensity(const EmitterTemplate* objectTemplate, float spee
     const float fraction = scaled - static_cast<float>(index);
     const float curve = (1.0f - fraction) * objectTemplate->m_intensityOverTime.m_samples[index]
                       + fraction * objectTemplate->m_intensityOverTime.m_samples[index + 1];
-    const double product = static_cast<double>(sampleDistribution(objectTemplate->m_intensity, g_random))
+    const double product = static_cast<double>(sampleDistribution(objectTemplate->m_intensity, Rand))
                          * curve * speedFactor;
     float intensity = static_cast<float>(product);
     if (!std::isfinite(product))
@@ -315,8 +315,8 @@ void Emitter::handleUpdate(float deltaTime, unsigned int flags)
             handleMessage(static_cast<TemplateMessage>(1), 0, false);
             return;
         }
-        m_delay = sampleDistribution(t->m_delay, g_random);
-        m_timeToLive = sampleDistribution(t->m_timeToLive, g_random);
+        m_delay = sampleDistribution(t->m_delay, Rand);
+        m_timeToLive = sampleDistribution(t->m_timeToLive, Rand);
         if (m_timeToLive < 0.01f)                   // ds:0x892ADC, NaN kept
             m_timeToLive = 0.01f;
         m_age = 0.0f;
@@ -387,15 +387,15 @@ void Emitter::handleUpdate(float deltaTime, unsigned int flags)
         {
             // Velocity from the emitter's axes - row 2 dof, row 1 up, row 0 right - drawn in that order.
             // quirk 4: `transform` carries the previous particles' roll (rows 0/1).
-            const float speedDof = sampleDistribution(t->m_positionalSpeed[0], g_random);   // +0x50C
+            const float speedDof = sampleDistribution(t->m_positionalSpeed[0], Rand);   // +0x50C
             speed.x = transform.m[8] * speedDof;
             speed.y = transform.m[9] * speedDof;
             speed.z = transform.m[10] * speedDof;
-            const float speedUp = sampleDistribution(t->m_positionalSpeed[1], g_random);    // +0x520
+            const float speedUp = sampleDistribution(t->m_positionalSpeed[1], Rand);    // +0x520
             speed.x = transform.m[4] * speedUp + speed.x;
             speed.y = transform.m[5] * speedUp + speed.y;
             speed.z = transform.m[6] * speedUp + speed.z;
-            const float speedRight = sampleDistribution(t->m_positionalSpeed[2], g_random); // +0x534
+            const float speedRight = sampleDistribution(t->m_positionalSpeed[2], Rand); // +0x534
             speed.x = transform.m[0] * speedRight + speed.x;
             speed.y = transform.m[1] * speedRight + speed.y;
             speed.z = transform.m[2] * speedRight + speed.z;
@@ -406,15 +406,15 @@ void Emitter::handleUpdate(float deltaTime, unsigned int flags)
             position.x = travel.x * along + m_lastPosition.x;
             position.y = travel.y * along + m_lastPosition.y;
             position.z = travel.z * along + m_lastPosition.z;
-            const float relativeDof = sampleDistribution(t->m_relativePosition[0], g_random);    // +0x4D0
+            const float relativeDof = sampleDistribution(t->m_relativePosition[0], Rand);    // +0x4D0
             position.x = transform.m[8] * relativeDof + position.x;
             position.y = transform.m[9] * relativeDof + position.y;
             position.z = transform.m[10] * relativeDof + position.z;
-            const float relativeUp = sampleDistribution(t->m_relativePosition[1], g_random);     // +0x4E4
+            const float relativeUp = sampleDistribution(t->m_relativePosition[1], Rand);     // +0x4E4
             position.x = transform.m[4] * relativeUp + position.x;
             position.y = transform.m[5] * relativeUp + position.y;
             position.z = transform.m[6] * relativeUp + position.z;
-            const float relativeRight = sampleDistribution(t->m_relativePosition[2], g_random);  // +0x4F8
+            const float relativeRight = sampleDistribution(t->m_relativePosition[2], Rand);  // +0x4F8
             position.x = transform.m[0] * relativeRight + position.x;
             position.y = transform.m[1] * relativeRight + position.y;
             position.z = transform.m[2] * relativeRight + position.z;
@@ -424,10 +424,10 @@ void Emitter::handleUpdate(float deltaTime, unsigned int flags)
 
             // Roll: zRotation snapped down (truncated) to zRotationSnap steps, plus startRotation.
             // Draw order as shipped: zRotation (+0x598) before startRotation (+0x584).
-            const float zRotation = sampleDistribution(t->m_zRotation, g_random);
+            const float zRotation = sampleDistribution(t->m_zRotation, Rand);
             const float snapped = static_cast<float>(static_cast<int>(zRotation / t->m_zRotationSnap))
                                 * t->m_zRotationSnap;
-            const float angle = sampleDistribution(t->m_startRotation, g_random) + snapped;
+            const float angle = sampleDistribution(t->m_startRotation, Rand) + snapped;
             if (!t->m_addChild)                                                              // +0x5B2
             {
                 if (angle != 0.0f)          // `fucompp; test ah, 44h; jnp` - NaN rotates (0x5A2800 then skips it)
@@ -454,7 +454,7 @@ void Emitter::handleUpdate(float deltaTime, unsigned int flags)
             // (0x402EC0), then truncated; an index at or past the count (signed `jge`) is the main one.
             if (t->m_numAlternateTemplates)                                                  // +0x5B8
             {
-                const float draw = sampleDistribution(selector, g_random)
+                const float draw = sampleDistribution(selector, Rand)
                                  * static_cast<float>(t->m_numAlternateTemplates + 1);
                 const int choice = static_cast<int>(std::floor(draw));
                 if (choice < t->m_numAlternateTemplates)
@@ -526,9 +526,9 @@ void Emitter::handleUpdate(float deltaTime, unsigned int flags)
                     {
                         // Draw order as shipped: right (+0x570), UP (+0x55C), DOF (+0x548) - the source's
                         // Vec3(dof, up, right) arguments evaluated right to left by MSVC.
-                        const float spinRight = sampleDistribution(t->m_rotationalSpeed[2], g_random);
-                        const float spinUp = sampleDistribution(t->m_rotationalSpeed[1], g_random);
-                        const float spinDof = sampleDistribution(t->m_rotationalSpeed[0], g_random);
+                        const float spinRight = sampleDistribution(t->m_rotationalSpeed[2], Rand);
+                        const float spinUp = sampleDistribution(t->m_rotationalSpeed[1], Rand);
+                        const float spinDof = sampleDistribution(t->m_rotationalSpeed[0], Rand);
                         Vec3 spin = { spinDof, spinUp, spinRight };
                         if (t->m_addEmitterSpeed && rootPhysics)
                         {
@@ -577,7 +577,7 @@ void Emitter::handleMessage(TemplateMessage message, IPlayer* /*player*/, bool /
             roll.distribution = CRD_UNIFORM;
             roll.value = 0.0f;
             roll.variation = 1.0f;
-            if (sampleDistribution(roll, g_random) >= t->m_startProbability)
+            if (sampleDistribution(roll, Rand) >= t->m_startProbability)
                 return;
         }
         // A fresh start (the age is exactly 0 - after a stop, or never started).
@@ -605,8 +605,8 @@ void Emitter::handleMessage(TemplateMessage message, IPlayer* /*player*/, bool /
             if (m_particleTemplate)
                 updateFlags(0x3800, 1);     // updates + visual + frame updates on, the disabled bit off
         }
-        m_delay = sampleDistribution(t->m_delay, g_random);
-        m_timeToLive = sampleDistribution(t->m_timeToLive, g_random);
+        m_delay = sampleDistribution(t->m_delay, Rand);
+        m_timeToLive = sampleDistribution(t->m_timeToLive, Rand);
         m_startTime = static_cast<float>(g_system->getExactTime());
         m_age = 0.0f;
         m_nextEmitTime = 0.0f;
@@ -643,7 +643,7 @@ void Emitter::handleMessage(TemplateMessage message, IPlayer* /*player*/, bool /
             static_cast<EffectBundle*>(getParent())->decNumEmittersPlaying();
         if (t->m_looping)
         {
-            m_timeToLive = sampleDistribution(t->m_timeToLive, g_random);
+            m_timeToLive = sampleDistribution(t->m_timeToLive, Rand);
             m_nextEmitTime = 0.0f;
             return;
         }
