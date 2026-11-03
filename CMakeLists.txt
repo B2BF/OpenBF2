@@ -138,89 +138,16 @@ list(SORT bf2_engine_headers)
 # Its AIDLL-only half WAS SPLIT OUT on 2026-09-08 into AI/AIDLL/AI/Main/AISingletonServer.cpp, which
 # this list excludes - `AISingletonServer` exists only in libaidll.so.  The side-DLL target that the
 # old note was waiting for is Code/Build/aidll.cmd plus bf2_aidll below.
-set(bf2_aidll_only_sources
+# AIDLL_w32ded.dll / libaidll owns every TU under AI/AIDLL except the shared singleton bridge
+# (the same directory rule as Code/Build/build.cmd), plus three units outside it. This list is an
+# exclusion set for the engine image only, so its order is irrelevant; the DLL's own link order is
+# the explicit bf2_aidll_sources manifest below.
+file(GLOB_RECURSE bf2_aidll_only_sources CONFIGURE_DEPENDS "${BF2_ROOT}/AI/AIDLL/*.cpp")
+list(REMOVE_ITEM bf2_aidll_only_sources "${BF2_ROOT}/AI/AIDLL/AI/Main/CommonSingletonServer.cpp")
+list(APPEND bf2_aidll_only_sources
     "${BF2_ROOT}/Core/DllModule.cpp"
     "${BF2_ROOT}/Core/DllGlobals.cpp"                        # the side-DLL image's globals TU
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBot/BotMain.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBot/BotNavigation.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBot/BotSquad.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBot/SensingAgent.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBot/CommunicationAgent.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBot/BotSenses.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIPlanInterpreter/BAPContext.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/InformationManager.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/Information.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/WeaponInfo.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/IPIArmament.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/IPIArmamentReal.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/IPICover.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/IPIMobile.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/IPIMobileReal.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/IPIMobileKnown.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/IPIUnit.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/InformationReal.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/WeaponInfoReal.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/IPIPhysicalReal.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIUtils/VehicleOccupancy.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/BFInformationEnvironment.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/AIInformationGrid.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIUtils/DebugRendering/AIRenderUtil.cpp"  # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/WeaponInfoManager.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/BFInformationCourier.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/InformationFactory.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/AIStrategicMap/BFStrategicEnvironment.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/AIStrategicMap/BotSpawner.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/DrawPrimitives/DPManager.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/AICollisionHandler.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/AIEventCourier.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/AIMineManager.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/AIPlayerCourier.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/BFPathfindingCourier.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/AIPathFinding/Material/Material.cpp"          # libaidll materialId parser
-    "${BF2_ROOT}/AI/AIDLL/AI/AIPathFinding/Material/MaterialManager.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/AIPathFinding/NavMesh/MapProperties.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/AIPathFinding/NavMesh/QuadTreeManager.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/AIPathFinding/NavMesh/QuadTree.cpp"   # libaidll only - chunk 04
-    "${BF2_ROOT}/AI/AIDLL/AI/AIPathFinding/NavMesh/QuadTreeNode.cpp"   # libaidll only - live polygon query
-    "${BF2_ROOT}/AI/AIDLL/AI/AIPathFinding/Cluster/ClusterGraph.cpp"   # libaidll only - chunk 04
-    "${BF2_ROOT}/AI/AIDLL/AI/AIPathFinding/Cluster/ClusterNodeManager.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/AIPathFinding/NavMesh/QTSearchNodeManager.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/AIStrategicMap/AerialHeightMap.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/AIPlanInterpreter/BAPEntries.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBot/SensingAgentPatterns.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBot/SquadManager.cpp"           # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBot/SquadCoordinator.cpp"      # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBot/SquadFormation.cpp"        # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBot/SquadMember.cpp"           # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBotBehaviour/CustomCurve.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBot/BotMemory.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBot/BotSubObjects.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBotBehaviour/UrgencyMerger.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/AIConsole.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBotBehaviour/UrgeCurve.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/AIStrategicEntity/CoverPosition/CPNodeManager.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/AIStrategicEntity/CoverPosition/CoverPositionManager.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/AIStrategicEntity/AIStrategicObjectManager.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIStrategicEntity/AILandingZoneManager.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIStrategicEntity/AIStrategicObject.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIStrategicEntity/AIStrategicArea.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIStrategicEntity/SAWayPoint.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIStrategic/SAI.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/BotBehaviourManager.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/CommunicationHub.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/StrategyManager.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/AIPathfinding.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/IAIPathfinding.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/UserOrderManager.cpp"   # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/AIMain.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/AIModule.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/AIRandom.cpp"              # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/AILODManager.cpp"          # libaidll only - chunk 02
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/IBotManager.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/AISettings.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/AISingletonServer.cpp"     # libaidll only - see the split, below
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/BF2AI.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/BotManager.cpp"
+    "${BF2_ROOT}/Math/DoubleVec3.cpp"
 )
 list(REMOVE_ITEM bf2_engine_sources ${bf2_aidll_only_sources})
 
@@ -1077,9 +1004,8 @@ endif() # BF2_BUILD_LINUX / MSVC link contracts
 
 # =================================================================================================
 # bf2_aidll - THE BOT-AI SIDE-DLL IMAGE.
-# The native-x64 profile is intentionally dedicated-only. Do not let it emit x64 binaries under
-# the shipped x86 AIDLL/BF2 names; those ports require separate targets and ABI validation.
-if(NOT BF2_BUILD_X64)
+# Windows x64 remains dedicated-only; Linux builds its own native libaidll.so.
+if(NOT BF2_BUILD_X64 OR BF2_BUILD_LINUX)
 #
 # AIDLL_w32ded.dll is a THIRD server-side image built from this same tree: bf2_w32ded.exe loads it
 # through ai::AIConnection::init -> LoadLibraryBf -> the exported initDll, and reaches it afterwards
@@ -1094,8 +1020,8 @@ if(NOT BF2_BUILD_X64)
 # in step; aidll.cmd is the one the harness and every gate use.
 #
 # EXCLUDE_FROM_ALL, and /FORCE for the same reason bf2_w32ded is: every unwritten function links at
-# RVA 0 and faults BY NAME on the path that reaches it. The only unresolved symbol today is
-# ai::informationManager, the InformationManager frontier BF2AI.cpp declares and chunk 02 fills.
+# RVA 0 and faults BY NAME on the path that reaches it.
+# Any remaining unresolved symbol must be reported by the strict-link gate.
 #
 # OUTPUT: <BF2_AIDLL_OUTPUT_DIR>/AIDLL_w32ded.dll - the build tree's bin/, NEVER the game folder.
 # "D:/B2BF Launcher/Battlefield2/AIDLL_w32ded.dll" is the REFERENCE binary. The server reaches the
@@ -1105,109 +1031,54 @@ if(NOT BF2_BUILD_X64)
 set(BF2_AIDLL_OUTPUT_DIR "${CMAKE_BINARY_DIR}/bin" CACHE PATH
     "Where AIDLL_w32ded.dll is written (NOT the game folder - the original lives there)")
 
-add_library(bf2_aidll SHARED EXCLUDE_FROM_ALL
-    # group 1 - the module entry point; engine code compiled into every side-DLL, never into the exe
-    "${BF2_ROOT}/Core/DllModule.cpp"
-    "${BF2_ROOT}/Core/DllGlobals.cpp"
-    # group 2 - the AIDLL-only AI translation units
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBot/BotMain.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBot/BotNavigation.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBot/BotSquad.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBot/SensingAgent.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBot/CommunicationAgent.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBot/BotSenses.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIPlanInterpreter/BAPContext.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/InformationManager.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/Information.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/WeaponInfo.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/IPIArmament.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/IPIArmamentReal.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/IPICover.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/IPIMobile.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/IPIMobileReal.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/IPIMobileKnown.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/IPIUnit.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/InformationReal.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/WeaponInfoReal.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/IPIPhysicalReal.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIUtils/VehicleOccupancy.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/BFInformationEnvironment.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/AIInformationGrid.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIUtils/DebugRendering/AIRenderUtil.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/WeaponInfoManager.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/BFInformationCourier.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIKnowledge/InformationFactory.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIStrategicMap/BFStrategicEnvironment.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIStrategicMap/BotSpawner.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/DrawPrimitives/DPManager.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/AICollisionHandler.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/AIEventCourier.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/AIMineManager.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/AIPlayerCourier.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/BFPathfindingCourier.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIPathFinding/Material/Material.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIPathFinding/Material/MaterialManager.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIPathFinding/NavMesh/MapProperties.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIPathFinding/NavMesh/QuadTreeManager.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIPathFinding/NavMesh/QuadTree.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIPathFinding/NavMesh/QuadTreeNode.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIPathFinding/Cluster/ClusterGraph.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIPathFinding/Cluster/ClusterNodeManager.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIPathFinding/NavMesh/QTSearchNodeManager.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIStrategicMap/AerialHeightMap.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIPlanInterpreter/BAPEntries.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBot/SensingAgentPatterns.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBot/SquadManager.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBot/SquadCoordinator.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBot/SquadFormation.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBot/SquadMember.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBotBehaviour/CustomCurve.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBot/BotMemory.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBot/BotSubObjects.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBotBehaviour/UrgencyMerger.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/AIConsole.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIBotBehaviour/UrgeCurve.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIStrategicEntity/CoverPosition/CPNodeManager.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIStrategicEntity/CoverPosition/CoverPositionManager.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIStrategicEntity/AIStrategicObjectManager.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIStrategicEntity/AILandingZoneManager.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIStrategicEntity/AIStrategicObject.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIStrategicEntity/AIStrategicArea.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIStrategicEntity/SAWayPoint.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/AIStrategic/SAI.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/BotBehaviourManager.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/CommunicationHub.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/StrategyManager.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/AIPathfinding.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/IAIPathfinding.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/UserOrderManager.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/AIMain.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/AIModule.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/AIRandom.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/AILODManager.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/IBotManager.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/AISettings.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/AISingletonServer.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/BF2AI.cpp"
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/BotManager.cpp"
-    # group 3 - present in BOTH shipped images
-    "${BF2_ROOT}/AI/AIDLL/AI/Main/CommonSingletonServer.cpp"
-    # group 4 - engine translation units libaidll.so statically links, added as the strict link
-    # demands them (census/00_statically_linked_engine_code.tsv confirms each one is really there)
-    "${BF2_ROOT}/Core/ConsoleObjects.cpp"     # 0x4865C0.. - registerConsoleObjects, AIModule::init
-    "${BF2_ROOT}/Core/ConsoleObjectBase.cpp"  # the ConsoleClassN base - the ai.init binding
-    "${BF2_ROOT}/Math/Frustum.cpp"           # a bot sees by frustum - BotSenses
-    "${BF2_ROOT}/Math/Mat4Inverse.cpp"        # AIDLL PE body matches the recovered client PE body
-    "${BF2_ROOT}/AI/AIInterface/BFKnowledge/PlanePolygon.cpp" # physical-cover fallback dependency
-    "${BF2_ROOT}/Math/Plane3.cpp"            # Frustum pulls Plane3::transform + intersect
-    "${BF2_ROOT}/Math/Vec3.cpp"              # Vec3::getZero - BotMain's constructor
-    "${BF2_ROOT}/Core/Debug.cpp"              # 0x487C30.. - Debug ctor/dtor, reached by checkPointer
-    "${BF2_ROOT}/Core/StringUtil.cpp"         # 0x487AF0   - calcStringHashValueNoCase, for StringHashFunc
-    # Kept in step with Code/Build/aidll.cmd (2026-09-28): File.cpp joined that manifest on
-    # 2026-09-11 without this list; PlayerInput.cpp joins both for Input<PlayerInputMap,64>::setInput.
-    "${BF2_ROOT}/IO/File/File.cpp"            # io::File - AerialHeightMap's file paths
-    "${BF2_ROOT}/IO/Input/PlayerInput.cpp"    # 0x18F020   - setInput(float), the plan executor
-)
+# The AI side-DLL manifest, in link order (= static-initialisation order), shared with aidll.cmd.
+set(bf2_aidll_manifest "${CMAKE_CURRENT_SOURCE_DIR}/Code/Build/aidll_sources.txt")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${bf2_aidll_manifest}")
+file(STRINGS "${bf2_aidll_manifest}" bf2_aidll_manifest_lines)
+set(bf2_aidll_sources)
+foreach(bf2_aidll_line IN LISTS bf2_aidll_manifest_lines)
+    string(STRIP "${bf2_aidll_line}" bf2_aidll_line)
+    if(bf2_aidll_line AND NOT bf2_aidll_line MATCHES "^#")
+        list(APPEND bf2_aidll_sources "${BF2_ROOT}/${bf2_aidll_line}")
+    endif()
+endforeach()
+add_library(bf2_aidll SHARED EXCLUDE_FROM_ALL ${bf2_aidll_sources})
+if(BF2_BUILD_LINUX)
+    # [CHOSEN, not recovered] Native Linux AI image (a native-port design, not retail); same host toolchain
+    # and STL ABI as bf2. Never substitute the retail 32-bit libaidll.so.
+    bf2_configure_cpp_target(bf2_aidll)
+    bf2_set_image(bf2_aidll 1)
+    bf2_set_platform_compat(bf2_aidll)
+    target_compile_definitions(bf2_aidll PRIVATE BF2_IMAGE_AIDLL=1 BF2_PLATFORM_POSIX)
+    target_include_directories(bf2_aidll PRIVATE ${BF2_PYTHON_INCLUDE_DIRS})
+    target_link_libraries(bf2_aidll PRIVATE Threads::Threads ${CMAKE_DL_LIBS})
+    set_target_properties(bf2_aidll PROPERTIES
+        OUTPUT_NAME aidll
+        LIBRARY_OUTPUT_DIRECTORY "${BF2_DEDICATED_OUTPUT_DIR}"
+        FOLDER "BF2")
+    # Keep module globals private, including names also defined by the engine. The only
+    # cross-image entry points are the existing ClassManager handshake exports.
+    target_link_options(bf2_aidll PRIVATE
+        -Wl,--no-undefined
+        "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/Code/AidllAbi/aidll-posix.map")
+    set_property(TARGET bf2_aidll APPEND PROPERTY LINK_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/Code/AidllAbi/aidll-posix.map")
+    add_dependencies("${BF2_DEDICATED_TARGET}" bf2_aidll)
+
+    # [CHOSEN, not recovered] Engine-free check of the real loader and export lookup.
+    add_executable(bf2_aidll_loader_check EXCLUDE_FROM_ALL
+        "${CMAKE_CURRENT_SOURCE_DIR}/Code/Tests/aidll/posix_loader.cpp"
+        "${BF2_ROOT}/Core/PluginDll.cpp")
+    bf2_configure_cpp_target(bf2_aidll_loader_check)
+    bf2_set_image(bf2_aidll_loader_check 1)
+    bf2_set_platform_compat(bf2_aidll_loader_check)
+    target_link_libraries(bf2_aidll_loader_check PRIVATE ${CMAKE_DL_LIBS})
+    set_target_properties(bf2_aidll_loader_check PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${BF2_DEDICATED_OUTPUT_DIR}")
+    set_target_properties(bf2_aidll_loader_check PROPERTIES BUILD_RPATH "\$ORIGIN")
+    add_dependencies(bf2_aidll_loader_check bf2_aidll)
+
+else()
 set_target_properties(bf2_aidll PROPERTIES
     LINKER_LANGUAGE CXX
     OUTPUT_NAME AIDLL_w32ded
@@ -1240,6 +1111,11 @@ target_link_options(bf2_aidll PRIVATE
     "/MAP:${BF2_AIDLL_OUTPUT_DIR}/AIDLL_w32ded.map"
     /IGNORE:4006,4088,4098
 )
+
+endif() # Linux / Windows AIDLL
+endif() # x86 Windows or Linux AIDLL
+
+if(NOT BF2_BUILD_X64)
 
 # =================================================================================================
 # bf2_voipserver - THE VOICE-SERVER SIDE-DLL IMAGE.

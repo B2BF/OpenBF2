@@ -312,8 +312,6 @@ cl %FLAGS% "%~dp0..\BF2\Animation\BoneAnimation\CompressedAnim.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS% "%~dp0..\BF2\Animation\BoneAnimation\RagDoll.cpp"
 if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\BFGame.cpp"
-if errorlevel 1 set /a RC+=1
 cl %FLAGS% "%~dp0..\BF2\Physics\BspBuilder.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS% "%~dp0..\BF2\Math\TriangleToAABBIntersection.cpp"
@@ -840,110 +838,11 @@ cl %FLAGS% "%~dp0..\BF2\Physics\BasicPhysicsSystem.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS% "%~dp0..\BF2\Scene\Object\WorldObjTemplPortal\PortalManager.cpp"
 if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\Main\AIConnection.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\Module\BFConsole.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\IAIEventCourier.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\SingletonServer.cpp"
-if errorlevel 1 set /a RC+=1
 
 @rem Chunk 01's sixteen engine-side AI adapters plus the event listener (2026-09-08).
 @rem ENGINE members - unlike the AIDLL block below, these DO enter bf2_w32ded.exe.
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\Main\AIEventListener.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIPlayerFactory.cpp"
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIPlayer.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AITemplateManager.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AITemplatePlugInManager.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AITemplate.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AITemplatePlugIn.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AITemplatePhysical.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\InformationType.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AITemplateArmament.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AITemplateControlInfo.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AITemplateCover.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AITemplateMobile.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AITemplateUnit.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\SoldierPose.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\WeaponTemplate.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\BFCollisionHandler.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\BFCommander.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\BFGame.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\BFGameEffector.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\BFGraphCreator.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\BFObjectEnvironment.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\BFPhysics.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\BFRadioComm.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\BFSquad.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\BFTerrain.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\BFTimer.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\DebugRenderer.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\KitTemplateManager.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\KitTemplate.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\WeaponTemplateManager.cpp"
-if errorlevel 1 set /a RC+=1
 @rem AI chunk 07 (2026-09-29): the engine's AIObject family, its six plug-ins, the footprint polygon
 @rem and the AI weapon component (WeaponObject).
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIObject.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIObjectReal.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIObjectShared.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIObjectPrimaryReal.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIObjectPrimaryShared.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIObjectSecondaryReal.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIObjectSecondaryShared.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIObjectArmament.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIObjectControlInfo.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIObjectCover.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIObjectMobile.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIObjectPhysical.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIObjectUnit.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\PlanePolygon.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\WeaponObject.cpp"
-if errorlevel 1 set /a RC+=1
 
 @rem Side-image coverage. These TUs are AIDLL-only and are deliberately absent from the
 @rem bf2_w32ded engine-object manifest; CommonSingletonServer is the genuine shared member (its
@@ -954,143 +853,6 @@ if errorlevel 1 set /a RC+=1
 cl %FLAGS% "%~dp0..\BF2\Core\DllModule.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS% "%~dp0..\BF2\Core\DllGlobals.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\Main\AISingletonServer.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIBot\BotMain.cpp"
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIBot\BotNavigation.cpp"
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIBot\BotSquad.cpp"
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIBot\SensingAgent.cpp"
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIBot\CommunicationAgent.cpp"
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIBot\BotSenses.cpp"
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\BAPContext.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\InformationManager.cpp"
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\Information.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\WeaponInfo.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\IPIArmament.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\IPIArmamentReal.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\IPICover.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\IPIMobile.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\IPIMobileReal.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\IPIMobileKnown.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\IPIUnit.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\InformationReal.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\WeaponInfoReal.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\IPIPhysicalReal.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIUtils\VehicleOccupancy.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\BFInformationEnvironment.cpp"
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\AIInformationGrid.cpp"
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIUtils\DebugRendering\AIRenderUtil.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\WeaponInfoManager.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\BFInformationCourier.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\InformationFactory.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicMap\BFStrategicEnvironment.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicMap\BotSpawner.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\DrawPrimitives\DPManager.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\Main\AICollisionHandler.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\Main\AIEventCourier.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\Main\AIMineManager.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\Main\AIPlayerCourier.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\Main\BFPathfindingCourier.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIPathFinding\Material\Material.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIPathFinding\Material\MaterialManager.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIPathFinding\NavMesh\MapProperties.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIPathFinding\NavMesh\QuadTreeManager.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIPathFinding\Cluster\ClusterNodeManager.cpp"
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIPathFinding\NavMesh\QTSearchNodeManager.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIPathFinding\NavMesh\QuadTree.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIPathFinding\NavMesh\QuadTreeNode.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIPathFinding\Cluster\ClusterGraph.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicMap\AerialHeightMap.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\BAPEntries.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIBot\SensingAgentPatterns.cpp"
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIBot\SquadManager.cpp"
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIBot\SquadCoordinator.cpp"
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIBot\SquadFormation.cpp"
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIBot\SquadMember.cpp"
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\CustomCurve.cpp"
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIBot\BotMemory.cpp"
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIBot\BotSubObjects.cpp"
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\UrgencyMerger.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\Main\AIConsole.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\UrgeCurve.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicEntity\CoverPosition\CPNodeManager.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicEntity\CoverPosition\CoverPositionManager.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicEntity\AIStrategicObjectManager.cpp"
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicEntity\AILandingZoneManager.cpp"
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicEntity\AIStrategicObject.cpp"
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicEntity\AIStrategicArea.cpp"
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicEntity\SAWayPoint.cpp"
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\AIStrategic\SAI.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\Main\BotBehaviourManager.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\Main\CommunicationHub.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\Main\StrategyManager.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\Main\AIPathfinding.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\Main\IAIPathfinding.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\Main\UserOrderManager.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\Main\AIMain.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\Main\AIModule.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\Main\AIRandom.cpp"
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\Main\AILODManager.cpp"
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\Main\IBotManager.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\Main\AISettings.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\Main\BF2AI.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\Main\BotManager.cpp"
-if errorlevel 1 set /a RC+=1
-cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\Main\CommonSingletonServer.cpp"
 if errorlevel 1 set /a RC+=1
 
 cl %FLAGS% "%~dp0..\BF2\Core\ClassFactoryInstances.cpp"
@@ -1752,6 +1514,954 @@ if errorlevel 1 set /a RC+=1
 cl %FLAGS0% "%~dp0..\BF2\Game\Objects\Visual\LightSource.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS0% "%~dp0..\BF2\Game\Objects\Visual\LightSourceTemplate.cpp"
+if errorlevel 1 set /a RC+=1
+
+@rem AI manifests: every engine AI TU and every AIDLL-only TU.
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBot\Aimer.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBot\BotMain.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBot\BotMemory.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBot\BotNavigation.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBot\BotSenses.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBot\BotSquad.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBot\BotSubObjects.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBot\CommunicationAgent.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBot\CoverDetection.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBot\RandomSquareMerger.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBot\SensedObject.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBot\SensingAgent.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBot\SensingAgentPatterns.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBot\SquadCoordinator.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBot\SquadFormation.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBot\SquadManager.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBot\SquadMember.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBot\WPAltitudeCloseTo.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBot\WPAltitudeMoveTo.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBot\WPAltitudePatrol.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBot\WPBeachLanding.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBot\WPCloseTo.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBot\WPEmpty.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBot\WPMoveTo.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBot\WPMoveToBeachLanding.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBot\WPPatrol.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAAimAt.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAAimAt3d.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAAimAtObject.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAAimAtObject3d.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAAimAtPoint.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAAimAtPoint3d.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAChangeWeapon.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAComponentSoldierPose.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPADebug.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAEvaluate.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAEvaluateCondition.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAForgetTarget.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAHonkHorn.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAIdle.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPALook.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPALookAhead.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPALookAtObject.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPALookAtPoint.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPALookInDir.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAMergeSoldierInputs.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAMoveAwayFrom3dObject.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAMoveTo.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAMoveTo3d.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAMoveTo3dDirection.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAMoveTo3dObject.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAMoveToDirect.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAMoveToDirection.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAMoveToDirectionDirect.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAMoveToDirectionFinding.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAMoveToFinding.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAMoveToObject.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAMoveToObjectDirect.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAMoveToObjectFinding.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPANotifyBot.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAOverrideSensingAgent.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAPhysicsEnable.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAPlaceC4.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAResetControls.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPARevive.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPARoll3d.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPARunOverObject.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPASendRadioMessage.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPASense.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPASetSensingAgentFocus.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPASoldierPose.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPATrigger.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPATriggerContinously.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPATurn.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPATurnTowardsDirection.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPATurnTowardsObject.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAUpdateVehicle.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPAUseFlareOnMissileLock.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPCConBombPrecision3d.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPCConLookDeviation.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPCConPrecision.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPCConPrecision3d.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPCombinerParallel.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPCombinerSerial.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConAllowFire.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConAnd.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConDistanceToProj.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConEndOfPath.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConFalse.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConInsideBattleZone.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConIsSprinting.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConIsTriggered.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConIteration.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConLineOfFire.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConNot.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConObjectBehind.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConObjectDistance.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConObjectDistanceToPoint.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConObjectEnemyOccupied.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConObjectExists.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConObjectHealth.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConObjectInFront.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConObjectInLandingZone.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConObjectInsideFrustum.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConObjectLineOfFire.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConObjectManDown.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConObjectMoved.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConObjectOccupied.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConObjectSpeed.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConObjectTouchingLand.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConObjectValidAiming.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConObjectValidPitchAiming.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConObjectValidPosition.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConObjectValidYawAiming.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConObjectVisible.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConOkToThrowGrenade.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConOr.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConPointAt.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConPointDistance.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConPointInFront.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConPosition.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConSharedCondition.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConSplashDamage.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConStrategicObjectStatus.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConTime.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConTotalAmmo.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConTriggerableActive.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConTrue.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConWeaponDetonatorIsActive.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConWeaponHasLockOnTarget.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConWeaponHeat.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConWeaponIsActive.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConWeaponIsZoomed.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConWeaponMagAmmo.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConWeaponReadyToFire.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConWeaponTargetReachable.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPConWeaponTotalAmmo.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPCondition.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPFlowCEnd.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPFlowCIf.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPFlowCWait.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPFlowCWhile.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPICChangeVehicle.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPICTurnLock.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPIWChange.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPIWDefuseMines.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPIWFire.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPIWIdle.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPIWMoveTo.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPIWRoam.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPIWTakeCover.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPInfoWrapper.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPStatement.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPWrapperAiming.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPWrapperFinished.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPWrapperLookAt.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotActionPlan\BAPWrapperWeapon.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BBAvoid.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BBBridgeRepair.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BBC4.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BBCallForMedic.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BBChange.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BBChangeLandingCraft.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BBChangeTeleport.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BBDefuseMines.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BBFire.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BBFire3d.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BBFireArtilleryDriver.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BBFireInfantery.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BBFireLargeBore.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BBFireUnarmed.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BBIdle.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BBMedicAssist.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BBMoveTo.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BBMoveToFixed.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BBRandom.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BBRevive.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BBRunOverSoldier.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BBSuicide.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BBTakeCover.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BBTakeCover3d.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BBTakeCoverInfantry.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BBTriggerable.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\BotBehaviour.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\CustomCurve.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\UrgeCurve.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\UrgencyMerger.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviour\VehicleUrgencyCalculator.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPAvoidCollision.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPAvoidCollision2d.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPAvoidCollision3d.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPAvoidCollisionInfantery.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPBridgeRepair.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPC4.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPCallForMedic.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPChange.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPChangeLandingCraft.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPChangeTeleport.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPDefuseMines.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPFire.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPFire2d.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPFire2dDriver.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPFire3d.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPFireInfantery.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPGotoWaypoints2d.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPGotoWaypoints3d.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPGotoWaypointsBoat.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPGotoWaypointsInfantery.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPHeliFire3d.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPIdle.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPIdle2d.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPIdle3d.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPIdleInfantery.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPMedicAssist.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPPattern.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPRandom.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPRevive.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPRoam.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPRoam2d.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPRoam3d.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPRunOverSoldier.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPSuicide.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPTakeCover.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPTakeCover3d.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPTakeCoverInfantry.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\BBPTriggerable.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIBotBehaviourPattern\WeaponChoice.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\AIInformationGrid.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\BFInformationCourier.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\BFInformationEnvironment.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\DangerObject.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\FireObject.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\IPIArmament.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\IPIArmamentDummy.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\IPIArmamentKnown.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\IPIArmamentReal.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\IPIControlInfo.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\IPICover.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\IPIMobile.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\IPIMobileDummy.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\IPIMobileKnown.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\IPIMobileReal.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\IPIPhysicalDummy.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\IPIPhysicalKnown.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\IPIPhysicalReal.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\IPIUnit.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\Information.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\InformationDummy.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\InformationFactory.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\InformationKnown.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\InformationManager.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\InformationReal.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\WeaponInfo.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\WeaponInfoKnown.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\WeaponInfoManager.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIKnowledge\WeaponInfoReal.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPathFinding\Cluster\Cluster.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPathFinding\Cluster\ClusterGraph.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPathFinding\Cluster\ClusterNode.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPathFinding\Cluster\ClusterNodeManager.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPathFinding\Cluster\ClusterNodePath.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPathFinding\Material\Material.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPathFinding\Material\MaterialManager.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPathFinding\NavMesh\GTSDataOptimiser.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPathFinding\NavMesh\MapProperties.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPathFinding\NavMesh\MeshImporterExporter.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPathFinding\NavMesh\QTPath.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPathFinding\NavMesh\QTSearchNode.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPathFinding\NavMesh\QTSearchNodeManager.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPathFinding\NavMesh\QuadTree.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPathFinding\NavMesh\QuadTreeManager.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPathFinding\NavMesh\QuadTreeNode.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\BAPContext.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\BAPDebugger.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\BAPInterpreter.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\BoatControl.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\BotScriptDebugger.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\CarControl.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\CommonControls.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\ControlFunctions.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryBoatMoveTo.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryBoatMoveToDirection.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryBoatMoveToObject.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryBoatResetControls.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryCarMoveTo.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryCarMoveToDirection.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryCarMoveToObject.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryCarResetControls.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryHeliAimAt.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryHeliMoveAwayFromObject.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryHeliMoveTo.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryHeliMoveToDirection.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryHeliMoveToObject.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryHeliResetControls.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryInfanteryMoveTo.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryInfanteryMoveToDirection.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryInfanteryMoveToObject.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryInfanteryResetControls.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryInfoWrapper.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryKeyTurretAimAt.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryMouseTurretAimAt.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryMouseTurretLookAt.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryMoveToMedium.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryMoveToMediumBoat.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryMoveToMediumSoldier.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryMoveToObjectMedium.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryMoveToObjectMediumBoat.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryMoveToObjectMediumSoldier.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryPlaneAimAt.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryPlaneMoveTo.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryPlaneMoveToDirection.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryPlaneMoveToObject.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryPlaneResetControls.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryPlaneRoll.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntrySense.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntrySoldierPose.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryTankMoveTo.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryTankMoveToDirection.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryTankMoveToObject.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryTankResetControls.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryTankTurnTo.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryTrigger.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryTriggerContinously.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\EntryTurnToMedium.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\HeliControl.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\InfanteryControl.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\MouseControl.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\PlaneControl.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\PrettyPrinter.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIPlanInterpreter\TankControl.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategic\SAI.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategic\SCArea.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategic\SCConstant.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategic\SCHeterogeneous.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategic\SCHomogeneous.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategic\Strategy.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategic\StrategyCondition.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategic\StrategyPrerequisite.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicEntity\AILandingZone.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicEntity\AILandingZoneManager.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicEntity\AIStrategicArea.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicEntity\AIStrategicObject.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicEntity\AIStrategicObjectManager.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicEntity\AreaAssignment.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicEntity\AreaDistanceInfo.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicEntity\CoverPosition\CPNode.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicEntity\CoverPosition\CPNodeManager.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicEntity\CoverPosition\CoverPosition.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicEntity\CoverPosition\CoverPositionManager.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicEntity\GuardPosition.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicEntity\GuardPositionBotDCB.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicEntity\GuardPositionBotSCB.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicEntity\PatrolPath.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicEntity\PatrolPathBotDCB.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicEntity\PatrolPathBotSCB.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicEntity\SAWayPoint.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicMap\AICamera.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicMap\AerialHeightMap.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicMap\BFStrategicEnvironment.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicMap\BotSpawner.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicMap\SAIMap.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicMap\SAIMapRenderUtil.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicMap\SAIMapSquare.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicMap\ScalarMap.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicMap\StatusMap.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicMap\TemperatureTree.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIStrategicMap\TemperatureTreeModifiers.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIUtils\AIVectorMath.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIUtils\AimerHelper.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIUtils\DebugRendering\AIRenderUtil.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIUtils\DebugRendering\DPAIObject3dText.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIUtils\DebugRendering\DPAIObjectCircle.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIUtils\DebugRendering\DPAIObjectLine.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIUtils\DebugRendering\DPDynamic3dText.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIUtils\DebugRendering\DPDynamicCircle.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIUtils\DebugRendering\DPDynamicLine.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIUtils\DebugRendering\DPGraph.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIUtils\IAimerHelper.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIUtils\IgnoreListPredicate.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIUtils\Opening.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIUtils\TraceUtils.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\AIUtils\VehicleOccupancy.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\DrawPrimitives\DPManager.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\DrawPrimitives\DPStatic2dText.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\DrawPrimitives\DPStatic3dText.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\DrawPrimitives\DPStaticCirlce.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\DrawPrimitives\DPStaticLine.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\DrawPrimitives\DPStaticMesh.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\DrawPrimitives\DPStaticPolygon.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\DrawPrimitives\DPStaticTriangle.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\DrawPrimitives\DrawPrimitive.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\Main\AICollisionHandler.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\Main\AIConsole.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\Main\AIEventCourier.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\Main\AILODManager.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\Main\AIMain.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\Main\AIMineManager.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\Main\AIModule.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\Main\AIPathfinding.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\Main\AIPlayerCourier.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\Main\AIRadio.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\Main\AIRandom.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\Main\AISettings.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\Main\AISingletonServer.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\Main\AIStreamOperators.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\Main\BF2AI.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\Main\BFPathfindingCourier.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\Main\BotBehaviourManager.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\Main\BotManager.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\Main\BotPlacementManager.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIDLL\AI\Main\CommonSingletonServer.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\Main\CommunicationHub.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\Main\IAIPathfinding.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\Main\IBotManager.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\Main\StrategyManager.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\AI\AIDLL\AI\Main\UserOrderManager.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIObject.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIObjectArmament.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIObjectControlInfo.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIObjectCover.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIObjectMobile.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIObjectPhysical.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIObjectPrimaryReal.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIObjectPrimaryShared.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIObjectReal.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIObjectSecondaryReal.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIObjectSecondaryShared.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIObjectShared.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIObjectUnit.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIPlayer.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AIPlayerFactory.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AITemplate.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AITemplateArmament.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AITemplateControlInfo.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AITemplateCover.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AITemplateManager.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AITemplateMobile.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AITemplatePhysical.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AITemplatePlugIn.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AITemplatePlugInManager.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\AITemplateUnit.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\BFCollisionHandler.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\BFCommander.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\BFGame.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\BFGameEffector.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\BFGraphCreator.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\BFObjectEnvironment.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\BFPhysics.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\BFRadioComm.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\BFSquad.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\BFTerrain.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\BFTimer.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\DebugRenderer.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\InformationType.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\KitTemplate.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\KitTemplateManager.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\PlanePolygon.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\SoldierPose.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\WeaponObject.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\WeaponTemplate.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\BFKnowledge\WeaponTemplateManager.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\IAIEventCourier.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\Main\AIConnection.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\Main\AIEventListener.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\Module\BFConsole.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\AI\AIInterface\SingletonServer.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\Math\Mat3.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\Math\Intersect.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\Math\DoubleVec3.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\IO\Stream\BoundingBox.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\Scene\Object\WorldObjTemplPortal\PortalEvent.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\Core\DllStlAllocator.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\Core\Random.cpp"
 if errorlevel 1 set /a RC+=1
 
 if %RC%==0 (echo ALL OK) else (echo *** %RC% FILE^(S^) FAILED ***)

@@ -1,0 +1,5 @@
+/* [CHOSEN, not recovered] Native POSIX AI image boundary; prevent host interposition. */
+{
+    global: initDll; deinitDll;
+    local: *;
+};
