@@ -26,15 +26,10 @@
 #include "../../../../IO/Stream/IStream.h"
 #include "../../../../Physics/IPhysicsNode.h"
 #include "../../../../AI/AIInterface/BFKnowledge/BFCollisionHandler.h"
+#include "../../../../AI/AIDLL/AI/Main/CommonSingletonServer.h"   // m_iBFCollisionHandler
 
 namespace dice {
 namespace hfe {
-namespace ai {
-
-// Stored as an erased pointer; IBFCollisionHandler does not derive from IBase.
-extern IBase* g_bfCollisionHandler;
-
-} // namespace ai
 namespace world {
 
 namespace {
@@ -371,8 +366,8 @@ bool MultiFireComp::launchProjectile(int index)
             {
                 IProjectileObject* const projectile = static_cast<IProjectileObject*>(
                     object->queryInterface(IID_IProjectileObject));
-                if (ai::g_bfCollisionHandler)
-                    reinterpret_cast<ai::IBFCollisionHandler*>(ai::g_bfCollisionHandler)
+                if (ai::CommonSingletonServer::m_iBFCollisionHandler)
+                    static_cast<ai::IBFCollisionHandler*>(ai::CommonSingletonServer::m_iBFCollisionHandler)
                         ->handleProjectileFire(projectile, object);
             }
         }

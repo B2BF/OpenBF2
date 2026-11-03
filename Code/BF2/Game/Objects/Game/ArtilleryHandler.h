@@ -37,6 +37,9 @@ public:
     void failedFire();
     void doFire();
     bool haveAnyArtillery();
+    // [INFERRED] name: inlined into BFCommander::gameHasArtillery (bf2 0x840FCE0), which tests
+    // the list header at +4 against its first node.
+    bool hasArtilleryPieces() const { return !m_artillery.empty(); }
 
 private:
     void findHelperObjects(ArtilleryObjectStruct& artillery);

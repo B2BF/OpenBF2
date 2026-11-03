@@ -25,6 +25,7 @@
 #include "../IWeaponObject.h"
 #include "../Networkables/Networkables.h"
 #include "../../../AI/AIInterface/BFKnowledge/BFCollisionHandler.h"
+#include "../../../AI/AIDLL/AI/Main/CommonSingletonServer.h"   // m_iBFCollisionHandler
 #include "../../../Core/Ids.h"
 #include "../../../Core/Debug.h"                     // getStickTransformation's retail error arm
 #include "../../../Core/Random.h"                    // g_random - retail distribution sampler
@@ -49,10 +50,6 @@
 
 namespace dice {
 namespace hfe {
-namespace ai {
-// Stored as an erased pointer; IBFCollisionHandler does not derive from IBase.
-extern IBase* g_bfCollisionHandler;
-}
 namespace world {
 
 extern IBase* materialManager;      // ds:0x8AD2820, defined in Core/Globals.cpp
@@ -511,8 +508,8 @@ void GenericProjectile::resetProjectile(bool a2)
         gameLogic->removeProjectile(this);
 
     // . Drop this projectile from the AI's collision tracking before the trail goes.
-    if (ai::g_bfCollisionHandler)
-        reinterpret_cast<ai::IBFCollisionHandler*>(ai::g_bfCollisionHandler)
+    if (ai::CommonSingletonServer::m_iBFCollisionHandler)
+        static_cast<ai::IBFCollisionHandler*>(ai::CommonSingletonServer::m_iBFCollisionHandler)
             ->handleProjectileTimeout(static_cast<IProjectileObject*>(this), this);
 
     destroyTrailEffect();
@@ -1052,8 +1049,8 @@ void GenericProjectile::detonate(bool forced)
     objectManager->postMessage(this, static_cast<TemplateMessage>(32), destroyDelay);
 
     // . The same removal resetProjectile does, and the last thing detonate does.
-    if (ai::g_bfCollisionHandler)
-        reinterpret_cast<ai::IBFCollisionHandler*>(ai::g_bfCollisionHandler)
+    if (ai::CommonSingletonServer::m_iBFCollisionHandler)
+        static_cast<ai::IBFCollisionHandler*>(ai::CommonSingletonServer::m_iBFCollisionHandler)
             ->handleProjectileTimeout(static_cast<IProjectileObject*>(this), this);
 }
 

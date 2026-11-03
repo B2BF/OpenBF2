@@ -77,10 +77,13 @@ public:
     bool write(const Vec3& v);
     bool write(const Vec4& v);
 
-    // String reads stop at the supplied delimiter; narrow writes emit raw bytes without length or terminator.
+    // Reads consume the delimiter. Narrow reads return false without assigning on empty input;
+    // wide reads assign even empty input and return true. Both have an unchecked 4096-unit limit.
+    // Native engine wide reads use the UTF-16 port adaptation; the AI DLL uses native wchar_t.
     bool read(std::string& out, char delimiter);
     bool read(std::wstring& out, wchar_t delimiter);
     bool write(const std::string& v);
+    // Writes native character bytes without a length or terminator (not a POSIX UTF-16 encoder).
     bool write(const std::wstring& v);
     unsigned int write(std::ostringstream& s);
 

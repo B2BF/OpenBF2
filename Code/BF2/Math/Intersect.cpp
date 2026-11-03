@@ -1,11 +1,58 @@
 // Sphere, ray, and box intersection helpers.
 
 #include "Intersect.h"
+#include "Frustum.h"
+#include "Ray3.h"
+
+#include <cfloat>
+#include <cmath>
+// static init: ELF 0x4963C0, 0x496420, 0x496450 (std::__ioinit).
+#include <iostream>
 
 namespace dice {
 namespace hfe {
 
-// Per axis: below the box -> (c - min)^2, above it -> (c - max)^2, inside -> 0.
+// ELF 0x495E20; engine ELF 0x83B26D0.
+bool findIntersection(const Plane3& plane, const Ray3& ray, Vec3& position)
+{
+    const float denominator = plane.normal.x * ray.direction.x
+                            + plane.normal.y * ray.direction.y
+                            + plane.normal.z * ray.direction.z;
+    // The ia-32 images proceed for an unordered denominator too.
+    if (std::fabs(denominator) < FLT_EPSILON)
+        return false;
+    const float amount = -(plane.normal.x * ray.origin.x + plane.normal.y * ray.origin.y
+                         + plane.normal.z * ray.origin.z + plane.d) / denominator;
+    Vec3 result;
+    result.x = ray.origin.x + ray.direction.x * amount;
+    result.y = ray.origin.y + ray.direction.y * amount;
+    result.z = ray.origin.z + ray.direction.z * amount;
+    position = result;
+    return true;
+}
+
+// ELF 0x495F20; engine ELF 0x83B27C0.
+bool intersect(const Frustum& frustum, const LocalBoundingBox& box)
+{
+    for (int i = 0; i < 6; ++i)
+    {
+        Vec3 point = {};
+        const unsigned int mask = static_cast<unsigned int>(frustum.m_planeOutcodes[i]);
+        if (mask <= 7)
+        {
+            point.x = (mask & 1) ? box.m_max.x : box.m_min.x;
+            point.y = (mask & 2) ? box.m_max.y : box.m_min.y;
+            point.z = (mask & 4) ? box.m_max.z : box.m_min.z;
+        }
+        const Plane3& plane = frustum.m_planes[i];
+        if (point.x * plane.normal.x + point.y * plane.normal.y
+          + point.z * plane.normal.z + plane.d > 0.0f)
+            return false;
+    }
+    return true;
+}
+
+// ELF 0x496180. Per axis: below the box -> (c - min)^2, above it -> (c - max)^2, inside -> 0.
 bool sphereIntersectsAABB(const Vec3& centre, float radius, const Vec3& boxMin, const Vec3& boxMax)
 {
     const float* c  = &centre.x;
@@ -64,13 +111,14 @@ inline bool slabTest(const Vec3& origin, const Vec3& dir, const float* lo, const
 
 } // namespace
 
+// ELF 0x496010.
 bool rayIntersectsAABB(const Vec3& origin, const Vec3& dir, const Vec3& boxMin, const Vec3& boxMax,
                        float& tMin, float& tMax)
 {
     return slabTest(origin, dir, &boxMin.x, &boxMax.x, tMin, tMax);
 }
 
-// the box grown by `radius` on all six sides first.
+// ELF 0x4961F0. The box grown by `radius` on all six sides first.
 bool rayRadiusIntersectsAABB(const Vec3& origin, const Vec3& dir, float radius,
                              const Vec3& boxMin, const Vec3& boxMax, float& tMin, float& tMax)
 {

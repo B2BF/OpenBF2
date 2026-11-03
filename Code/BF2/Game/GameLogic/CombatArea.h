@@ -26,6 +26,9 @@ public:
     // Test the XZ position against the inclusive rectangle.
     bool checkPositionRect(const Vec3& position) const;
 
+    // Test the left side of the first polygon edge; requires at least two vertices.
+    bool isClockwise() const;
+
     // Offsets describe the original 32-bit layout; STL-bearing layouts depend on the compiler.
     /* +0x00 */ int   m_isPolygon;                 // 0 = rectangle, non-0 = polygon
     /* +0x04 */ float m_minX;

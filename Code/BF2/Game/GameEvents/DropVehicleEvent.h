@@ -16,10 +16,8 @@ class DropVehicleEvent : public GameEvent                    // 0x18
 public:
     // [INFERRED] argument order - no ELF constructor exists.
     DropVehicleEvent(float positionX, float positionZ, int team, bool field15);
-#if !DEDICATED
-    // Client PE7B2460 leaves the serialized byte+15 untouched.
+    // The commander producer leaves the trailing serialized byte untouched.
     DropVehicleEvent(int team, Vec2 position);
-#endif
     DropVehicleEvent()
         : m_positionX(0.0f), m_positionZ(0.0f), m_team(0), m_field15(false) {}
     virtual ~DropVehicleEvent() {}

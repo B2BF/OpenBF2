@@ -295,5 +295,59 @@ void CombatAreaManager::addVehicleTimer(int vehicleCategory, float seconds)
         entry->second = seconds;
 }
 
+// ELF 0x8125A00. The caller owns clearing the output vector.
+bool CombatAreaManager::getAiCombatAreas(std::vector<CombatArea*>& areas) const
+{
+    for (unsigned int i = 0; i < m_areas.size(); ++i)
+        if (m_areas[i]->m_usedByPathFinding)
+            areas.push_back(m_areas[i]);
+    return areas.size() == 1;
+}
+
+// ELF 0x8125890. The manager's player/team and enable filters do not apply here.
+bool CombatAreaManager::isAiPositionInside(const Vec3& position,
+                                         const std::vector<CombatArea*>& areas) const
+{
+    bool anyInclusion = false;
+    bool inside = false;
+    for (unsigned int i = 0; i < areas.size(); ++i)
+        if (!areas[i]->m_isExclusion)
+            anyInclusion = true;
+
+    if (!anyInclusion)
+    {
+        world::IHeightmap* heightmap =
+            static_cast<world::IHeightmapCluster*>(world::heightmapCluster)->getPrimaryHeightmap();
+        int sizeX, sizeZ;
+        heightmap->getSize(sizeX, sizeZ);
+        // shipped defect: the dimensions are queried but never used to test the position.
+        inside = true;
+    }
+
+    for (unsigned int i = 0; i < areas.size(); ++i)
+    {
+        CombatArea* area = areas[i];
+        if (!area->m_isExclusion)
+        {
+            const bool hit = static_cast<unsigned char>(area->m_isPolygon)
+                ? area->checkPositionPolygon(position) : area->checkPositionRect(position);
+            if (hit)
+                inside = true;
+        }
+    }
+    for (unsigned int i = 0; i < areas.size(); ++i)
+    {
+        CombatArea* area = areas[i];
+        if (area->m_isExclusion)
+        {
+            const bool hit = static_cast<unsigned char>(area->m_isPolygon)
+                ? area->checkPositionPolygon(position) : area->checkPositionRect(position);
+            if (hit)
+                inside = false;
+        }
+    }
+    return inside;
+}
+
 } // namespace hfe
 } // namespace dice

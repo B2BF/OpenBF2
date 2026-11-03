@@ -2,7 +2,6 @@
 // [INFERRED] header placement. Perspective FOV is in radians.
 // Preserve the plane/corner order used by culling. Private field names are [CHOSEN];
 // M_prevCorners is a [CHOSEN name] for the cached previous corners.
-// Unimplemented operations remain explicit [FRONTIER] declarations.
 
 #ifndef MATH_FRUSTUM_H     // [INFERRED] guard style
 #define MATH_FRUSTUM_H
@@ -20,7 +19,7 @@ class Frustum
 {
 public:
     Frustum();
-    Frustum& operator=(const Frustum& other);                                    // [FRONTIER]
+    Frustum& operator=(const Frustum& other);
 
     void setPerspective(float fov, float aspect, float nearDist, float farDist, const Mat4& m);
     void setOrtho(float, float, float, float, const Mat4& m);
@@ -29,20 +28,22 @@ public:
     void getPerspProjection(Mat4&) const {}                                      // empty
     void getOrthoProjection(Mat4&) const {}                                      // empty
     void getViewMatrix(Mat4&) const {}                                           // empty
-    void expandToEncapsulate(const Frustum& other);                              // [FRONTIER]
+    void expandToEncapsulate(const Frustum& other);
     void reSetup();
     void transform(const Mat4& m);
     float getFov() { return m_fov; }
     void  setFov(float fov);
     float getNearDist() const { return m_nearDist; }
-    void  setNearDist(float d);                                                  // [FRONTIER]
+    void  setNearDist(float d);
     float getFarDist() const { return m_farDist; }
     void  setFarDist(float d);
-    const Vec3& getCornerForPlane(unsigned int corner, FrustumPlane plane) const;   // [FRONTIER]
+    // Returns one of four corners for a plane; invalid input emits an error.
+    const Vec3& getCornerForPlane(unsigned int corner, FrustumPlane plane) const;
     bool inside(const Vec3& p) const;
     bool inside(const Vec3& p, float radius) const;
     bool inside(const Vec3& p, float radius, bool& fullyInside) const;
-    unsigned int getOutcode(const Vec3& p) const;                                // [FRONTIER]
+    // Six outside-plane bits, in the same order as m_planes.
+    unsigned int getOutcode(const Vec3& p) const;
 
     /* +0x000 */ Plane3 m_planes[6];
     /* +0x060 */ Vec3   m_corners[8];

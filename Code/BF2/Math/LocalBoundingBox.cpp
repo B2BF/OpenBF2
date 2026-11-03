@@ -3,25 +3,24 @@
 
 #include "LocalBoundingBox.h"
 #include "Ray3.h"
+#include "BoundingBox.h"
+#include "Frustum.h"
+#include "Intersect.h"
 
 #include <cfloat>
 #include <cmath>
+// static init: ELF 0x4986B0, 0x498710, 0x498740 (std::__ioinit).
+#include <iostream>
 
 namespace dice {
 namespace hfe {
 
 namespace {
 
-struct Plane3
-{
-    Vec3 normal;
-    float distance;
-};
-
 float planeDistance(const Plane3& plane, const Vec3& point)
 {
     return plane.normal.x * point.x + plane.normal.y * point.y
-         + plane.normal.z * point.z + plane.distance;
+         + plane.normal.z * point.z + plane.d;
 }
 
 float dot(const Vec3& a, const Vec3& b)
@@ -49,31 +48,75 @@ Vec3 transformPoint(const Mat4& transform, const Vec3& point)
     return result;
 }
 
-// dice::hfe::findIntersection(Plane3 const&, Ray3 const&, Vec3&) - ;
-// Kept TU-local because Plane3 is not otherwise needed by the recovered tree.
-bool findIntersection(const Plane3& plane, const Ray3& ray, Vec3& position)
-{
-    const float denominator = dot(plane.normal, ray.direction);
-    if (!(FLT_EPSILON <= std::fabs(denominator)))
-        return false;
-
-    const float t = -planeDistance(plane, ray.origin) / denominator;
-    position.x = ray.origin.x + ray.direction.x * t;
-    position.y = ray.origin.y + ray.direction.y * t;
-    position.z = ray.origin.z + ray.direction.z * t;
-    return true;
-}
-
 } // anonymous namespace
 
-// ; The source overload is only an identity-transform
+// ELF 0x496470; engine ELF 0x83B2CA0.
+void LocalBoundingBox::expand(const BoundingBox& box)
+{
+    expand(box.getMin());
+    expand(box.getMax());
+}
+
+// ELF 0x4964E0; engine ELF 0x83B2D00.
+bool LocalBoundingBox::inside(const Frustum* frustum, const Mat4* transform, unsigned char mask) const
+{
+    unsigned char common = mask;
+    for (int i = 0; i < 8; ++i)
+    {
+        const Vec3 corner = {(i & 4) ? m_max.x : m_min.x,
+                             (i & 2) ? m_max.y : m_min.y,
+                             (i & 1) ? m_max.z : m_min.z};
+        const Vec3 point = transformPoint(*transform, corner);
+        common &= static_cast<unsigned char>(frustum->getOutcode(point)) & mask;
+        if (common == 0)
+            return true;
+    }
+    return false;
+}
+
+// ELF 0x4969F0; engine ELF 0x83B31F0.
+int LocalBoundingBox::getMajorAxis() const
+{
+    if (m_derivedDataDirty)
+        const_cast<LocalBoundingBox*>(this)->calcRadius();
+    if (m_size.y > m_size.x)
+        return m_size.z > m_size.y ? 2 : 1;
+    return m_size.z > m_size.x ? 2 : 0;
+}
+
+// ELF 0x497560; engine ELF 0x83B3CE0.
+bool LocalBoundingBox::inside(const Frustum& frustum) const
+{
+    return intersect(frustum, *this);
+}
+
+// ELF 0x4981F0; engine ELF 0x83B49B0.
+bool LocalBoundingBox::isInside(const Vec3& point, const Vec3& ownerPosition,
+                               const Mat4& ownerInverse) const
+{
+    const float dx = point.x - ownerPosition.x;
+    const float dy = point.y - ownerPosition.y;
+    const float dz = point.z - ownerPosition.z;
+    const float* const m = ownerInverse.m;
+    const float lx = m[4] * dy + m[0] * dx + m[8] * dz;
+    const float ly = m[9] * dz + (m[5] * dy + m[1] * dx);
+    const float lz = dz * m[10] + dy * m[6] + dx * m[2];
+    if (!(lx >= m_min.x)) return false;
+    if (!(m_max.x >= lx)) return false;
+    if (!(ly >= m_min.y)) return false;
+    if (!(m_max.y >= ly)) return false;
+    if (!(lz >= m_min.z)) return false;
+    return m_max.z >= lz;
+}
+
+// ELF 0x496A70. The source overload is only an identity-transform
 // forwarding wrapper in both ports.
 bool LocalBoundingBox::intersectRay(const Ray3& ray, Vec3& position, Vec3* normal) const
 {
     return intersectRay(ray, Mat4::getIdentity(), position, normal);
 }
 
-// Tests the ray against this box under transform and writes intersection data when found.
+// ELF 0x496AC0. Tests the ray against this box under transform and writes intersection data when found.
 bool LocalBoundingBox::intersectRay(const Ray3& ray, const Mat4& transform,
                                     Vec3& position, Vec3* normal) const
 {
@@ -85,29 +128,29 @@ bool LocalBoundingBox::intersectRay(const Ray3& ray, const Mat4& transform,
     planes[0].normal.x = transform.m[8];
     planes[0].normal.y = transform.m[9];
     planes[0].normal.z = transform.m[10];
-    planes[0].distance = -dot(planes[0].normal, worldMax);
+    planes[0].d = -dot(planes[0].normal, worldMax);
     planes[1].normal.x = -transform.m[8];
     planes[1].normal.y = -transform.m[9];
     planes[1].normal.z = -transform.m[10];
-    planes[1].distance = -dot(planes[1].normal, worldMin);
+    planes[1].d = -dot(planes[1].normal, worldMin);
 
     planes[2].normal.x = transform.m[4];
     planes[2].normal.y = transform.m[5];
     planes[2].normal.z = transform.m[6];
-    planes[2].distance = -dot(planes[2].normal, worldMax);
+    planes[2].d = -dot(planes[2].normal, worldMax);
     planes[3].normal.x = -transform.m[4];
     planes[3].normal.y = -transform.m[5];
     planes[3].normal.z = -transform.m[6];
-    planes[3].distance = -dot(planes[3].normal, worldMin);
+    planes[3].d = -dot(planes[3].normal, worldMin);
 
     planes[4].normal.x = transform.m[0];
     planes[4].normal.y = transform.m[1];
     planes[4].normal.z = transform.m[2];
-    planes[4].distance = -dot(planes[4].normal, worldMax);
+    planes[4].d = -dot(planes[4].normal, worldMax);
     planes[5].normal.x = -transform.m[0];
     planes[5].normal.y = -transform.m[1];
     planes[5].normal.z = -transform.m[2];
-    planes[5].distance = -dot(planes[5].normal, worldMin);
+    planes[5].d = -dot(planes[5].normal, worldMin);
 
     Vec3 entryPoint = {};
     Vec3 farPoint = {};
@@ -200,7 +243,7 @@ bool LocalBoundingBox::intersectRay(const Ray3& ray, const Mat4& transform,
     return true;
 }
 
-// Tests two oriented bounding boxes using their separating axes.
+// ELF 0x497600. Tests two oriented bounding boxes using their separating axes.
 bool LocalBoundingBox::testIntersectWithOBB(const Mat4& thisTransform,
                                              const LocalBoundingBox& other,
                                              const Mat4& otherTransform,

@@ -85,5 +85,17 @@ bool CombatArea::checkPositionPolygon(const Vec3& position) const
     return inside;
 }
 
+// ELF 0x81245E0. The first edge's left-hand normal offsets its midpoint.
+bool CombatArea::isClockwise() const
+{
+    const float dx = m_points[1].x - m_points[0].x;
+    const float dz = m_points[1].y - m_points[0].y;
+    Vec3 position;
+    position.x = -dz + (m_points[1].x + m_points[0].x) * 0.5f;
+    position.y = 0.0f;
+    position.z = dx + (m_points[1].y + m_points[0].y) * 0.5f;
+    return !checkPositionPolygon(position);
+}
+
 } // namespace hfe
 } // namespace dice

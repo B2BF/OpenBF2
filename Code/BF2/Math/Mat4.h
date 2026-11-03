@@ -21,6 +21,7 @@ struct Mat4
     static const Mat4& getIdentity();
     static const Mat4& getZero();       // dice::hfe::Mat4::getZero - ArmorGLComp::setUseDestroyedLodRecursive
                                         // hands it to the geometry to hide a part
+    static const Mat4& getTexScaleBias();
     Mat4 operator*(const Mat4& rhs) const;
     void mult(const Mat4& lhs, const Mat4& rhs);
 
@@ -28,6 +29,13 @@ struct Mat4
     void fullMult(const Mat4& lhs, const Mat4& rhs);
 
     void setInverse(const Mat4& source);
+
+    // Scales x/y/z components, including translation for scale and excluding it for rotScale.
+    // Both return this matrix and preserve the fourth column.
+    Mat4& scale(const Vec3& factors);
+    Mat4& rotScale(const Vec3& factors);
+    // Sequential transpose; source must be distinct for a correct transpose.
+    Mat4& setTranspose(const Mat4& source);
 
     // Writes only the 3x3 rotation product, preserving translation and the fourth column.
     void rotMult(const Mat4& lhs, const Mat4& rhs);
@@ -64,6 +72,15 @@ void setRotateAboutLine(Mat4& m, float degrees, const Vec3& axis);
 // Builds a viewing transform from eye, target and up.
 
 void calcLookAtMatrix(Mat4& m, const Vec3& eye, const Vec3& target, const Vec3& up);
+
+// Perspective projection in radians. Returns -20000 without writing m when far-near < FLT_EPSILON.
+// Otherwise returns zero; aspectScale multiplies the horizontal cotangent.
+int calcProjectionMatrix(Mat4& m, float fov, float aspectScale, float nearDistance, float farDistance);
+
+// Writes the basis columns in right/up/forward order and translation as negative eye dot each axis.
+// Returns the destination matrix.
+Mat4& calcRotationMatrixFromAllVectors(Mat4& m, const Vec3& forward, const Vec3& up,
+                                       const Vec3& right, const Vec3& eye);
 
 // General 4x4 inverse. Supports input/output aliasing; no singular-determinant guard.
 // [INFERRED] Void return.

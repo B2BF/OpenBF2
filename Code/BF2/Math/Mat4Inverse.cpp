@@ -1,7 +1,11 @@
-// Full 4x4 inverse for client and supported aidll builds.
-// The dedicated implementation has different rounding and remains declaration-only.
+// Full 4x4 inverse for client and aidll builds.
+// AIDLL.dll 0x10123490 is instruction-identical to RendDX9.dll 0x10078270.
+// The dedicated engine implementation has different rounding and remains declaration-only.
 #include "Mat4.h"
-#if !DEDICATED || (defined(BF2_IMAGE_AIDLL) && defined(_MSC_VER) && defined(_M_IX86))
+#if !defined(_MSC_VER) || !defined(_M_IX86)
+#include "PortableX87.h"
+#endif
+#if !DEDICATED || defined(BF2_IMAGE_AIDLL)
 namespace dice { namespace hfe {
 namespace {
 // Explicit x87 arithmetic keeps the caller's precision/rounding control and
@@ -10,27 +14,38 @@ namespace {
 float roundedPairProduct(float left, float right)
 {
     float value;
+#if defined(_MSC_VER) && defined(_M_IX86)
     __asm {
         fld left
         fmul right
         fstp value
     }
+#else
+    // [CHOSEN, not recovered] Preserve x87 product float store.
+    value = bf2x87::store(bf2x87::mul(bf2x87::wide(left), bf2x87::wide(right)));
+#endif
     return value;
 }
 double pairProduct(float left, float right)
 {
     double value;
+#if defined(_MSC_VER) && defined(_M_IX86)
     __asm {
         fld left
         fmul right
         fstp value
     }
+#else
+    // [CHOSEN, not recovered] Preserve x87 product double store.
+    value = bf2x87::storeDouble(bf2x87::mul(bf2x87::wide(left), bf2x87::wide(right)));
+#endif
     return value;
 }
 void cofactor(float& output, double a0, double b0, double a1, double b1,
               double a2, double b2, double a3, double b3, double a4, double b4,
               double a5, double b5)
 {
+#if defined(_MSC_VER) && defined(_M_IX86)
     __asm {
         mov edx, output
         fld a0
@@ -53,12 +68,17 @@ void cofactor(float& output, double a0, double b0, double a1, double b1,
         fsubr dword ptr [edx]
         fstp dword ptr [edx]
     }
+#else
+    // [CHOSEN, not recovered] Preserve x87 staged cofactor float stores.
+    bf2x87::cofactor(output, a0, b0, a1, b1, a2, b2, a3, b3, a4, b4, a5, b5);
+#endif
 }
 void divideByDeterminant(const float* input, float* output)
 {
     const float one = 1.0f;
     // Retain the reciprocal on the x87 stack throughout all16 scaled stores.
     // No zero/NaN/infinity test exists in either shipped image.
+#if defined(_MSC_VER) && defined(_M_IX86)
     __asm {
         mov ecx, input
         mov edx, output
@@ -84,6 +104,10 @@ void divideByDeterminant(const float* input, float* output)
         jnz scaleElement
         fstp st
     }
+#else
+    // [CHOSEN, not recovered] Preserve x87 retained determinant reciprocal for all stores.
+    bf2x87::divideByDeterminant(input, output);
+#endif
 }
 }
 void fullInvert(const Mat4& source, Mat4& destination)

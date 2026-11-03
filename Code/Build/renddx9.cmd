@@ -151,6 +151,8 @@ set SOURCES=^
  "%BF2%\Math\Mat4Inverse.cpp" ^
  "%BF2%\Math\Vec3.cpp" ^
  "%BF2%\Math\Frustum.cpp" ^
+ "%BF2%\Core\Debug.cpp" ^
+ "%BF2%\Core\StringUtil.cpp" ^
  "%BF2%\Math\Plane3.cpp" ^
  "%BF2%\IO\Tokenizer.cpp" ^
  "%BF2%\Geom\ModuleGeom.cpp" ^

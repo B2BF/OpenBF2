@@ -121,6 +121,7 @@
 #include <cstdlib>                             // srand / rand - the challenge ordinal
 #include <iostream>                            // the empty-maplist refusal writes to std::cout
 #include <sstream>
+#include "../../Scene/Object/WorldObjTemplPortal/PortalManager.h"  // IPortalManager::update, +0x40
 
 namespace dice {
 namespace hfe {
@@ -2339,16 +2340,6 @@ extern IBase*                  portalManager;          // ds:0x8B1ED80 - ditto
 } // namespace world
 
 namespace {
-// [FRONTIER] [TEMP] [CHOSEN, not recovered] Bot portal updates diagnose and abort at this seam.
-void portalManagerUpdate(IBase* manager, float dt);                             // world::PortalManager::update(float) - vtable +0x40 (0x88CABE0 slot 16)
-
-void portalManagerUpdate(IBase* /*manager*/, float /*dt*/)
-{
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::(anon)::portalManagerUpdate"
-                         " (world::PortalManager::update, vtable +0x40) reached (bots game)\n");
-    std::fflush(stderr);
-    std::abort();
-}
 // Typed bridge from the shared connection interface to packet processing.
 inline bool clientConnectionProcessReceivedPacket(IClientConnection* c, io::BitStream* stream)
 {
@@ -3513,7 +3504,7 @@ void GameServer::simulatePlayersCollisions(float dt)
 void GameServer::updatePortals(float dt)
 {
     if (ai::g_aiInstance && ai::aiInstance()->isBotsGame())
-        portalManagerUpdate(world::portalManager, dt);          // [FRONTIER]
+        reinterpret_cast<world::IPortalManager*>(world::portalManager)->update(dt);   // +0x40
 }
 
 // Marks an acknowledged object ghostable for one connection. Missing connection
@@ -3900,16 +3891,32 @@ void GameServer::handleRadioMessageReceivedEvent(RadioMessageReceivedEvent* even
     event->m_connectionId = connectionId;
 }
 
-// [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: gameserver-radio-ai-courier]
-// The no-bot production path above never enters this arm. Keeping a fail-loud callable boundary
-// prevents a bots-enabled server from silently dropping radio commands while the 309-byte courier
-// body and its AI-event payload remain unrecovered.
-void GameServer::sendRadioMessageToAI(IEventWrapper&, int)
+// sendRadioMessageToAI - ELF 0x080B5A80, 304 B. The sender is the wrapper's sender id (-1: the
+// local human player); an alive sender's message is posted once per alive AI player that
+// filterMessage lets hear it, as ECAI event 10 {messageId, sender id, receiver id} (the
+// AIEventListener radio arm, which forwards it to the courier).
+void GameServer::sendRadioMessageToAI(IEventWrapper& wrapper, int messageId)
 {
-    std::fprintf(stderr,
-                 "[FRONTIER] dice::hfe::GameServer::sendRadioMessageToAI reached\n");
-    std::fflush(stderr);
-    std::abort();
+    world::IPlayer* sender = wrapper.getSenderId() == -1                          // +0x08
+        ? world::playerManager->getLocalHumanPlayer()                             // +0x30
+        : world::playerManager->getPlayerFromId(wrapper.getSenderId());           // +0x20
+    if (!sender || !sender->getIsAlive())                                         // +0x6C
+        return;
+    const std::list<world::IPlayer*>& players = world::playerManager->getPlayers();   // +0x3C
+    for (std::list<world::IPlayer*>::const_iterator it = players.begin(); it != players.end(); ++it)
+    {
+        world::IPlayer* const receiver = *it;
+        if (!receiver || !receiver->getIsAlive() || !receiver->getIsAIPlayer())  // +0x6C, +0x64
+            continue;
+        if (!filterMessage(wrapper, sender, receiver))                            // 0x080ADD00
+            continue;
+        struct { int messageId; int senderId; int receiverId; } payload;          // ebp-0x28..-0x20
+        const int senderId = sender->getId();                                     // +0x54, called first
+        payload.receiverId = receiver->getId();
+        payload.messageId = messageId;
+        payload.senderId = senderId;
+        eventManager->postEvent(ECAI, 10, &payload, 0.0f);                        // +0x14
+    }
 }
 
 // Forwards chat to player/admin and server-console listeners, temporarily hiding

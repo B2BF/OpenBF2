@@ -1,9 +1,13 @@
 // Frustum setup and intersection queries.
 
 #include "Frustum.h"
+#include "../Core/Debug.h"
 
+#include <cfloat>
 #include <cmath>
 #include <cstring>
+// static init: ELF 0x495CF0, 0x495D50, 0x495D80 (std::__ioinit).
+#include <iostream>
 
 namespace dice {
 namespace hfe {
@@ -29,6 +33,7 @@ inline void normalizePlaneNormal(Vec3& n)
 }
 } // namespace
 
+// ELF 0x1A0D00.
 // Initializes plane normals, corners, bounds, centre, and identity transform; marks derived data dirty.
 // Leaves plane distances, outcodes, radii, and projection scalars untouched.
 Frustum::Frustum()
@@ -54,7 +59,7 @@ Frustum::Frustum()
     m_type = 2;                                                  // +0x1E4
 }
 
-// Copies setup parameters and transformation, then rebuilds derived planes and corners.
+// ELF 0x494130. Copies setup parameters and transformation, then rebuilds derived planes and corners.
 Frustum& Frustum::operator=(const Frustum& other)
 {
     m_fov        = other.m_fov;
@@ -69,6 +74,7 @@ Frustum& Frustum::operator=(const Frustum& other)
     return *this;
 }
 
+// ELF 0x494270.
 void Frustum::setPerspective(float fov, float aspect, float nearDist, float farDist, const Mat4& m)
 {
     m_fov = fov;                                                 // +0x1CC
@@ -122,7 +128,7 @@ void Frustum::setPerspective(float fov, float aspect, float nearDist, float farD
     updateSecondarySizes();
 }
 
-// ELF83B1500 / client PE6DD4C0 / renderer PE1007A7F0. Width/height and distance
+// ELF 0x494A20; engine ELF 0x83B1500 / client PE6DD4C0 / renderer PE1007A7F0. Width/height and distance
 // stores, six axial planes, native plane transform/sign masks, matrix and centre,
 // then the same secondary-size recompute as perspective. FOV/aspect stay untouched.
 void Frustum::setOrtho(float width, float height, float nearDist, float farDist, const Mat4& m)
@@ -133,17 +139,17 @@ void Frustum::setOrtho(float width, float height, float nearDist, float farDist,
     m_dword1D8 = height;
     m_type = 1;
     m_planes[0].normal = {-1.0f, 0.0f, 0.0f};
-    m_planes[0].d = -(width * -0.5f * -1.0f);
+    m_planes[0].d = -((-width * 0.5f) * -1.0f + 0.0f + 0.0f);
     m_planes[1].normal = {1.0f, 0.0f, 0.0f};
-    m_planes[1].d = -(width * 0.5f);
+    m_planes[1].d = -(width * 0.5f + 0.0f + 0.0f);
     m_planes[3].normal = {0.0f, -1.0f, 0.0f};
-    m_planes[3].d = -(height * -0.5f * -1.0f);
+    m_planes[3].d = -(0.0f + (-height * 0.5f) * -1.0f + 0.0f);
     m_planes[2].normal = {0.0f, 1.0f, 0.0f};
-    m_planes[2].d = -(height * 0.5f);
+    m_planes[2].d = -(0.0f + height * 0.5f + 0.0f);
     m_planes[4].normal = {0.0f, 0.0f, -1.0f};
-    m_planes[4].d = -(nearDist * -1.0f);
+    m_planes[4].d = -(0.0f + nearDist * -1.0f);
     m_planes[5].normal = {0.0f, 0.0f, 1.0f};
-    m_planes[5].d = -farDist;
+    m_planes[5].d = -(0.0f + farDist);
     for (int i = 0; i < 6; ++i) {
         m_planes[i] = Plane3::transform(m_planes[i], m);
         unsigned int bits[3];
@@ -223,7 +229,43 @@ void Frustum::setOrtho(float width, float height, float nearDist, float farDist,
     updateSecondarySizes();
 }
 
-// ELF83B1EA0 / PE6DD730: unknown type values intentionally do nothing.
+// ELF 0x494F20; engine ELF 0x83B1960.
+void Frustum::expandToEncapsulate(const Frustum& other)
+{
+    for (int i = 0; i < 6; ++i)
+    {
+        Plane3& plane = m_planes[i];
+        float maximum = -FLT_MAX;
+        float minimum = FLT_MAX;
+        for (int j = 0; j < 8; ++j)
+        {
+            const Vec3& corner = other.m_corners[j];
+            const float projection = plane.normal.x * corner.x + plane.normal.y * corner.y
+                                   + plane.normal.z * corner.z;
+            maximum = maximum > projection ? maximum : projection;
+            minimum = minimum > projection ? projection : minimum;
+        }
+        // Shipped behavior replaces the distance, without negating the chosen projection.
+        plane.d = plane.d > 0.0f ? maximum : minimum;
+    }
+    const auto pairLength = [this](int a, int b) {
+        const Plane3& p = m_planes[a];
+        const Plane3& q = m_planes[b];
+        const float x = p.d * p.normal.x + q.d * q.normal.x;
+        const float y = p.d * p.normal.y + q.d * q.normal.y;
+        const float z = p.d * p.normal.z + q.d * q.normal.z;
+        return std::sqrt(x * x + y * y + z * z);
+    };
+    m_dword1D4 = pairLength(0, 1);
+    m_dword1D8 = pairLength(2, 3);
+    m_farDist = pairLength(5, 4);
+    m_transformation.m[12] -= m_planes[4].d * m_planes[4].normal.x;
+    m_transformation.m[13] -= m_planes[4].d * m_planes[4].normal.y;
+    m_transformation.m[14] -= m_planes[4].d * m_planes[4].normal.z;
+    reSetup();
+}
+
+// ELF 0x4954B0; engine ELF 0x83B1EA0 / PE6DD730: unknown type values intentionally do nothing.
 void Frustum::reSetup()
 {
     if (m_type == 0)
@@ -232,28 +274,63 @@ void Frustum::reSetup()
         setOrtho(m_dword1D4, m_dword1D8, m_nearDist, m_farDist, m_transformation);
 }
 
-// a store followed by the existing setup path.
+// ELF 0x495630. A store followed by the existing setup path.
 void Frustum::setFov(float fov)
 {
     m_fov = fov;
     reSetup();
 }
 
-// replace, rather than compose, the entire transformation.
+// ELF 0x495560. Replace, rather than compose, the entire transformation.
 void Frustum::transform(const Mat4& transformation)
 {
     m_transformation = transformation;
     reSetup();
 }
 
-// ELF83B2050 / PE6DD7F0: unconditional store followed by reSetup.
+// ELF 0x4956B0; engine ELF 0x83B2050 / PE6DD7F0: unconditional store followed by reSetup.
 void Frustum::setFarDist(float distance)
 {
     m_farDist = distance;
     reSetup();
 }
 
-// Returns whether the point is inside the frustum.
+// ELF 0x495670; engine ELF 0x83B2020.
+void Frustum::setNearDist(float distance)
+{
+    m_nearDist = distance;
+    reSetup();
+}
+
+// ELF 0x4956E0; engine ELF 0x83B2070.
+const Vec3& Frustum::getCornerForPlane(unsigned int corner, FrustumPlane plane) const
+{
+    static const unsigned int corners[6][4] = {
+        {5, 4, 0, 1}, {3, 2, 6, 7}, {0, 4, 6, 2},
+        {5, 7, 3, 1}, {1, 0, 2, 3}, {7, 6, 4, 5}
+    };
+    if (static_cast<unsigned int>(plane) < 6 && corner < 4)
+        return m_corners[corners[static_cast<unsigned int>(plane)][corner]];
+    Debug(DebugTypeError, "Math/Frustum.cpp", 430, "") << "Invalid corner or plane.";
+    return m_corners[1];
+}
+
+// ELF 0x498760; engine ELF 0x83B4EE0. This inline was emitted in LocalBoundingBox.cpp.
+unsigned int Frustum::getOutcode(const Vec3& p) const
+{
+    unsigned int result = 0;
+    const int order[6] = {5, 4, 1, 0, 2, 3};
+    for (int i = 0; i < 6; ++i)
+    {
+        const int index = order[i];
+        const Plane3& plane = m_planes[index];
+        if (plane.normal.x * p.x + plane.normal.y * p.y + plane.normal.z * p.z + plane.d > 0.0f)
+            result |= 1u << index;
+    }
+    return result;
+}
+
+// ELF 0x495920. Returns whether the point is inside the frustum.
 bool Frustum::inside(const Vec3& p) const
 {
     const Plane3& p5 = m_planes[5];
@@ -276,7 +353,7 @@ bool Frustum::inside(const Vec3& p) const
 }
 
 
-// Tests far, near, right, left, top, bottom in that order; reject when n.p + d exceeds radius.
+// ELF 0x495A30. Tests far, near, right, left, top, bottom in that order; reject when n.p + d exceeds radius.
 // Preserve early-return order for NaNs and floating-point exceptions.
 bool Frustum::inside(const Vec3& p, float radius) const
 {
@@ -300,7 +377,7 @@ bool Frustum::inside(const Vec3& p, float radius) const
 }
 
 
-// Tests a sphere and, on success, writes whether it lies fully inside the frustum.
+// ELF 0x495B30. Tests a sphere and, on success, writes whether it lies fully inside the frustum.
 // fullyInside is unchanged on false. Its sign-bit test includes negative zero; preserve plane evaluation order.
 
 bool Frustum::inside(const Vec3& p, float radius, bool& fullyInside) const
@@ -349,7 +426,7 @@ bool Frustum::inside(const Vec3& p, float radius, bool& fullyInside) const
     return true;
 }
 
-// the corners, the bounding radius (max |corner - centre|), the corners copied
+// ELF 0x494D80. The corners, the bounding radius (max |corner - centre|), the corners copied
 // to the second set, the dirty flag cleared.
 void Frustum::updateSecondarySizes()
 {
@@ -374,7 +451,7 @@ void Frustum::updateSecondarySizes()
     m_cornersDirty = false;                                      // byte +0x1C8
 }
 
-// the eight three-plane intersections, then the box from corners 0 and 1,
+// ELF 0x495220. The eight three-plane intersections, then the box from corners 0 and 1,
 // expanded by 2..7 (LocalBoundingBox::expand - dirty set).
 void Frustum::recalcCorners()
 {

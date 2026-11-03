@@ -111,8 +111,8 @@ namespace ai {
 IBase*                 g_aiConnection         = 0;   // ds:0x8B29AE0  _ZN4dice3hfe2ai14g_aiConnectionE
 // [CHOSEN] AI-instance singleton name. Its bots-game query controls whether loading includes .ai files.
 IBase*                 g_aiInstance           = 0;   // ds:0x8AC37F8  [CHOSEN name]
-// [CHOSEN] AI collision-handler singleton name. Null without an AI DLL; consumers report damage and firing here.
-IBase*                 g_bfCollisionHandler   = 0;   // ds:0x8AC35E4  [CHOSEN name]
+// ds:0x8AC35E4 is CommonSingletonServer::m_iBFCollisionHandler (AIDLL/AI/Main), not a separate
+// global: the engine's fire, timeout, collision, explosion and damage reports read it there.
 }
 
 namespace world {

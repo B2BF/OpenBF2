@@ -25,6 +25,7 @@ public:
     };
 
     // Initializes empty records with generation zero and links every slot into the free list.
+    // libaidll.so: the SpHandlePool<ai::WeaponInfo, 65535> instantiation is ELF 0x36D580 (weak).
     SpHandlePool()
     {
         for (int i = 0; i < N; ++i)

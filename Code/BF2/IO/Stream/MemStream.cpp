@@ -3,6 +3,10 @@
 #include "MemStream.h"
 
 #include <cstring>      // memcpy
+#include <iostream>
+
+// static init: ELF 0x492B40 (__tcf_0 0x492BA0, _GLOBAL__I 0x492BD0): iostream only.
+// Engine 0x84388A0/0x84388F0/0x8438900 has the same initialization and teardown.
 
 namespace dice {
 namespace hfe {

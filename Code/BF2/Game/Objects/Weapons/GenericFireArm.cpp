@@ -54,14 +54,11 @@
 #include <climits>
 #include <vector>
 
+#include "../../../AI/AIInterface/BFKnowledge/BFCollisionHandler.h"
+#include "../../../AI/AIDLL/AI/Main/CommonSingletonServer.h"
+
 namespace dice {
 namespace hfe {
-
-namespace ai {
-// This singleton is null in the production no-bot server.  Its concrete IBFCollisionHandler
-// interface is aidll-owned and intentionally not fabricated in the engine reconstruction.
-extern IBase* g_bfCollisionHandler;
-}
 
 namespace world {
 
@@ -69,15 +66,6 @@ namespace world {
 extern IBase* heightmapCluster;
 
 namespace {
-
-// [TEMP] [CHOSEN, not recovered] - the agents.md frontier stop: name the method on stderr,
-// flush, and never return. It never fabricates a default and lets execution continue.
-[[noreturn]] void gfaFrontier(const char* method)
-{
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::world::GenericFireArm::%s reached\n", method);
-    std::fflush(stderr);
-    std::abort();
-}
 
 const float kTicksPerSecond   = 30.0f;   // flt_888B174 - the fixed timestep
 const float kRedeployInterval =  2.0f;   // flt_888FFE4 - enableItem's deploy retry gap, in seconds
@@ -1518,8 +1506,15 @@ void GenericFireArm::postFire(FireState requestedState,
                         m_targetComp->postFire(event);
                     if (m_zoomComp)
                         m_zoomComp->postFire(event);
-                    if (ai::g_bfCollisionHandler && projectileObject)
-                        gfaFrontier("postFire (AIDLL IBFCollisionHandler fire report)");
+                    // ELF 0x8251867: every real round is reported to the AI collision handler
+                    // (+0x18). The IProjectileObject query is repeated, as compiled.
+                    ai::IBFCollisionHandler* const collision = static_cast<ai::IBFCollisionHandler*>(
+                        ai::CommonSingletonServer::m_iBFCollisionHandler);
+                    if (collision && projectileObject)
+                        collision->handleProjectileFire(
+                            static_cast<IProjectileObject*>(
+                                projectileObject->queryInterface(IID_IProjectileObject)),
+                            projectileObject);
                 }
             }
 

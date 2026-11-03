@@ -18,9 +18,11 @@ struct Plane3
 
     // static, by value.
     static Plane3 transform(const Plane3& plane, const Mat4& m);
-    // projectVector: engine [FRONTIER].
-    // intersectLine: aidll / - written.
+    // Projects onto the plane through the origin, scaled by normal's squared length.
+    // The input may alias the output; d does not participate.
     void projectVector(const Vec3& v, Vec3& out);
+    // Intersects an infinite line; parallel lines leave both outputs unchanged.
+    // The range flag reports whether the intersection lies on the segment.
     bool intersectLine(const Vec3& a, const Vec3& b, Vec3& out, bool& insideSegment);
 };
 

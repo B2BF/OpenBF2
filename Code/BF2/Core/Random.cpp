@@ -1,4 +1,9 @@
-// Stream serialization for shared random-distribution types. [INFERRED] Source placement.
+// Random state and distribution serialization. [INFERRED] Core placement; AI FILE symbol: Random.cpp.
+
+#if defined(BF2_IMAGE_AIDLL)
+// static init: ELF 0x48A850 (__tcf_0 0x48A8D0, _GLOBAL__I 0x48A900): iostream Init, then Rand.
+#include <iostream>
+#endif
 
 #include "Random.h"
 
@@ -9,6 +14,13 @@
 
 namespace dice {
 namespace hfe {
+
+#if defined(BF2_IMAGE_AIDLL)
+// ELF BSS 0x4DD454; the initializer's store at 0x48A8BA is Random's default seed.
+Random Rand;
+#else
+// [CHOSEN, not recovered] Image partition: these distribution codecs belong to the engine;
+// the original AI Random.cpp contributes its independent state and initialization only.
 
 // ELF 0x83CFC50 (87 B), PE 0x5C10D0 (91 B).  The default arm covers CRD_NONE and every invalid
 // selector; do not print an unknown integer numerically.
@@ -92,6 +104,8 @@ std::istream& operator>>(std::istream& stream, RandomDistribution& distribution)
            >> distribution.relative;
     return stream;
 }
+
+#endif
 
 } // namespace hfe
 } // namespace dice

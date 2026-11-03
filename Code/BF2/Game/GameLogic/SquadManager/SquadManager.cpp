@@ -549,8 +549,10 @@ void SquadManager::issueSquadOrder(int teamId, int squadId, SquadOrder& order,
     }
 }
 
-// Broadcasts the order before commander and member HUD notifications. Preserve
-// repeated ID lookups. [UNRESOLVED] The optional AI courier branch remains omitted.
+// issueCommanderOrder - ELF 0x811D800. Broadcasts the order before commander and member HUD
+// notifications. Preserve repeated ID lookups. The AI singleton (ds:0x8AC37F8) is loaded once
+// before the member loop; while it is non-null and initialized (IAIInstance +0x1C), every member
+// first gets ecai 8 `(playerId, orderId)` (eventManager +0x14) and then its HUD 26, AI or not.
 void SquadManager::issueCommanderOrder(int teamId, int squadId, SquadOrder& order,
                                        bool suppressEvent)
 {
@@ -578,6 +580,7 @@ void SquadManager::issueCommanderOrder(int teamId, int squadId, SquadOrder& orde
             new PostRemoteEvent(ECHud, 27, false, &squadId, 4, 0.0f));
     }
 
+    IBase* const aiSingleton = ai::g_aiInstance;   // 0x811D939: read once, before the loop
     for (std::set<int>::iterator it = squad->m_members.begin();
          it != squad->m_members.end(); ++it)
     {
@@ -585,7 +588,12 @@ void SquadManager::issueCommanderOrder(int teamId, int squadId, SquadOrder& orde
         if (!player)
             continue;
 
-        // [UNRESOLVED] ecai 8 notification behind ds:0x8AC37F8 / PE dword_8B25B0.
+        // 0x811D98E..0x811DAA3: the AI courier's commander-order notification.
+        if (aiSingleton && reinterpret_cast<ai::IAIInstance*>(aiSingleton)->isInitialized())
+        {
+            int aiPayload[2] = { *it, order.orderId };
+            eventManager->postEvent(ECAI, 8, aiPayload, 0.0f);
+        }
         if (player->getId() == 255)
         {
             eventManager->postEvent(ECHud, 26, &squadId, 0.0f);

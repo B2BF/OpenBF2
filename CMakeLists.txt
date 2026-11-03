@@ -1841,6 +1841,8 @@ if(BUILD_TESTING AND MSVC)
         "${BF2_ROOT}/Physics/StaticResponsePhysics.cpp"
         "${BF2_ROOT}/IO/Network/INetworkable.cpp"
         "${BF2_ROOT}/Math/LocalBoundingBox.cpp"
+        "${BF2_ROOT}/Math/Intersect.cpp"
+        "${BF2_ROOT}/IO/Stream/BoundingBox.cpp"
         "${BF2_ROOT}/Math/Frustum.cpp"
         "${BF2_ROOT}/Math/Mat4.cpp"
         "${BF2_ROOT}/Math/Plane3.cpp"

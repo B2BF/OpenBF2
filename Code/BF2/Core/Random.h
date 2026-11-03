@@ -62,6 +62,9 @@ static_assert(sizeof(RandomDistribution) == 0x14,
 
 extern Random g_random;                        // ELF ds:0x8ABBCB0 [CHOSEN symbol name]
 
+// The AI DLL's independent random instance (ia-32 BSS 0x4DD454, Random.cpp initializer).
+extern Random Rand;
+
 } // namespace hfe
 } // namespace dice
 

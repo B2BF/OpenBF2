@@ -427,8 +427,8 @@ void GameLogicDamage::serverGiveDamage(IObject* object, float damage, IPlayer* a
     {
         Vec3 pos = position;
         const unsigned int weaponId = weapon->getObjectId();                       // +0x10
-        // ..539 / PE 58763F..684: registered IBFCollisionHandler,
-        // not the independent chosen g_bfCollisionHandler storage. Vec3 is
+        // ..539 / bf2_w32ded.exe 0x58763F..684: the registered IBFCollisionHandler, the same
+        // variable (w32ded 0x8B7030, BF2.exe 0xA38688) every other engine report reads. Vec3 is
         // BY value (mangling and PE's twelve stack bytes); GCC passes its copy
         // indirectly. The typed call preserves the native compiler's ABI.
         collisionHandler->handleProjectileDamage(owner, damage, seatPlayer->getId(), weaponId, pos);

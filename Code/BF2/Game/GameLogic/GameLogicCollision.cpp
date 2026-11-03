@@ -30,6 +30,8 @@
 #include "../Objects/ISoldier.h"                          // the man-down retraction's getOccupingPlayer
 #include "../Objects/Projectiles/GenericProjectile.h"     // the sole IProjectileObject implementor
 #include "../../Core/System.h"                            // WorldPref::getTickCount
+#include "../../AI/AIInterface/BFKnowledge/BFCollisionHandler.h"   // the AI collision courier
+#include "../../AI/AIDLL/AI/Main/CommonSingletonServer.h"     // m_iBFCollisionHandler
 #if !DEDICATED
 // The client bodies of doImpact / playCollisionEffect (BF2.exe 0x5CADF0 / 0x5CA9C0 / 0x5CA910).
 #include "../Main/Game.h"                                 // isDedicated() - BF2.exe 0x440510
@@ -46,8 +48,6 @@ namespace dice {
 namespace hfe {
 
 namespace world { extern IBase* materialManager; }       // ds:0x8AD2820 - Core/Globals.cpp
-namespace ai    { extern IBase* g_bfCollisionHandler; }  // ds:0x8AC35E4 - Core/Globals.cpp, and
-                                                         // declared the same way in GenericProjectile.cpp
 
 namespace world {
 
@@ -121,18 +121,6 @@ void normaliseIfNeeded(Vec3& v)
 }
 inline MaterialManager* materials() { return static_cast<MaterialManager*>(materialManager); }
 
-// [FRONTIER] [TEMP] [CHOSEN, not recovered] Stops at the opaque AI collision
-// courier: object-hit and terrain-hit argument lists are unresolved.
-// Reachable when g_bfCollisionHandler is populated.
-// [RETIRE-WHEN: bfcollisionhandler-iface] Recover the complete typed interface,
-// including projectile removal, before replacing this boundary.
-[[noreturn]] void bfCollisionHandlerFrontier(const char* what)
-{
-    std::fprintf(stderr,
-                 "[FRONTIER] dice::hfe::world::GameLogicCollision AI collision courier: %s\n", what);
-    std::fflush(stderr);
-    std::abort();
-}
 
 #if !DEDICATED
 // Builds a plane from normal and point, preserving (z + y) + x dot-product order.
@@ -844,8 +832,10 @@ bool GameLogicCollision::serverHandleCollisionForProjectile(IObject* projectile,
                                proj, projectile, hitObject, armor, damaged, faceB);
         }
 
-        if (ai::g_bfCollisionHandler)
-            bfCollisionHandlerFrontier("object hit (IBFCollisionHandler +0x0C)");
+        // ELF 0x80DD04A: the AI collision handler hears the object hit (+0x0C) at the contact.
+        if (ai::IBFCollisionHandler* const collision = static_cast<ai::IBFCollisionHandler*>(
+                ai::CommonSingletonServer::m_iBFCollisionHandler))
+            collision->handleCollision(projectile, hitObject, contact);
     }
     else
     {
@@ -860,8 +850,15 @@ bool GameLogicCollision::serverHandleCollisionForProjectile(IObject* projectile,
                                proj, projectile, 0, 0, false, faceB);
         }
 
-        if (ai::g_bfCollisionHandler)
-            bfCollisionHandlerFrontier("terrain hit (IBFCollisionHandler +0x30)");
+        // ELF 0x80DD468: a terrain hit is a miss (+0x30): the owner's id (-1 without one), the
+        // round and its object id, the contact.
+        if (ai::IBFCollisionHandler* const collision = static_cast<ai::IBFCollisionHandler*>(
+                ai::CommonSingletonServer::m_iBFCollisionHandler))
+        {
+            IPlayer* const owner = gp->getPlayer();                                     // +0x54
+            collision->handleProjectileMiss(owner ? owner->getId() : -1, projectile,
+                                            projectile->getObjectId(), contact);
+        }
     }
 
     // ricochet / penetrate

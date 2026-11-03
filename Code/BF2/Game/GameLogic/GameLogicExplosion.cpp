@@ -37,11 +37,11 @@
 #include "../../Scene/Object/PlayerManager.h"
 #include "../../Scene/Object/ObjectTypes/Game/IPlayerControlObject.h"
 #include "../../Sound/BfSound.h"
+#include "../../AI/AIInterface/BFKnowledge/BFCollisionHandler.h"
+#include "../../AI/AIDLL/AI/Main/CommonSingletonServer.h"   // m_iBFCollisionHandler
 
 namespace dice {
 namespace hfe {
-
-namespace ai { extern IBase* g_bfCollisionHandler; }
 
 namespace world {
 
@@ -165,15 +165,6 @@ public:
         return !materials()->getMaterialPtr(surface)->getHasWaterPhysics();
     }
 };
-
-// IBFCollisionHandler remains an AI-only interface frontier.
-[[noreturn]] void bfCollisionHandlerFrontier()
-{
-    std::fprintf(stderr,
-                 "[FRONTIER] dice::hfe::world::GameLogicExplosion AI explosion courier reached\n");
-    std::fflush(stderr);
-    std::abort();
-}
 
 GenericProjectile* projectileFromObject(IObject* object)
 {
@@ -443,8 +434,12 @@ bool GameLogicExplosion::serverHandleExplosionOnObject(
         return false;
     IPlayerControlObject* const pco = findPco(root);
 
-    if (player && ai::g_bfCollisionHandler && weapon)
-        bfCollisionHandlerFrontier();
+    // ELF 0x80E375E: the AI hears the queued damage (+0x20), the explosion position by value.
+    ai::IBFCollisionHandler* const collision =
+        static_cast<ai::IBFCollisionHandler*>(ai::CommonSingletonServer::m_iBFCollisionHandler);
+    if (player && collision && weapon)
+        collision->handleExplosionDamage(object, calculatedDamage, player->getId(),
+                                         weapon->getObjectId(), explosionPosition);
 
     if (!pco)
         return false;

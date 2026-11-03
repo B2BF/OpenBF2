@@ -360,6 +360,14 @@ public:
     // Applies decoded remote weapon ammunition state to the player's live weapons.
     void          forceSetRemoteClientAmmo(unsigned int firedMask);
 
+    // The position captured when a tear-gas exposure starts (see m_tearGasPosition).
+    // [CHOSEN, not recovered] Neither image has this accessor: the retail AI image reads the three
+    // floats at raw x86 offsets +0x2E8/+0x2EC/+0x2F0 of the world::IPlayer it gets from
+    // IAIPlayer::getPlayer (BBPAvoidCollisionInfantery::createPlan, libaidll 0x22E304..0x22E310,
+    // three `flds`). The inline accessor gives the native AI image the same field without copying
+    // x86 offsets.
+    const Vec3&   getTearGasPosition() const { return m_tearGasPosition; }
+
 private:
     // Non-vtable Player helpers, all attested by their ELF manglings and direct callers. Keeping
     // these private avoids inventing a wider gameplay API for implementation details.
@@ -564,9 +572,11 @@ protected:
     /* +0x2D8 */ int    m_profileId;                 // 0
     /* +0x2E0 */ float  m_field2E0;                  // 1.0f NOT 0
     /* +0x2E4 */ float  m_field2E4;                  // 0; gas damage per second [UNRESOLVED name]
-    /* +0x2E8 */ int    m_field2E8;                  // 0
-    /* +0x2EC */ int    m_field2EC;                  // 0
-    /* +0x2F0 */ int    m_field2F0;                  // 0
+    // +0x2E8..+0x2F0: one Vec3, zeroed by the constructor; setBlurryVision (bf2 0x80F6890,
+    // 0x80F691D..0x80F693A) copies the three words of the default vehicle's getAbsolutePosition
+    // (+0x6C) through a base register at +0x2E8 when a gas exposure starts; the AI image reads
+    // them as floats. No other writer in the bf2 image. [INFERRED] name.
+    /* +0x2E8 */ Vec3   m_tearGasPosition;           // (0, 0, 0)
     /* +0x2F4 */ float  m_field2F4;                  // 0; blur fade countdown [UNRESOLVED name]
     /* +0x2F8 */ float  m_field2F8;                  // 1.0f NOT 0
     /* +0x2FC */ float  m_gasDamage;                 // 0
