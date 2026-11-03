@@ -330,12 +330,12 @@ float ServerSettings::getManDownTime() const
     return m_manDownTime;               // +0x6C
 }
 
-// [CHOSEN, not recovered] getNumPlayersNeededToStart currently returns 2 before
-// its original ranked/configured logic. The following getters retain fixed ranked
-// overrides for unlocks, coop settings, and team ratio.
+// Number of players the round waits for: ranked servers use 6, or 8 from 33 slots up; every
+// other server uses the configured sv.numPlayersNeededToStart, so a value of 1 starts the round
+// with the first player. The following getters retain fixed ranked overrides for unlocks, coop
+// settings, and team ratio.
 int ServerSettings::getNumPlayersNeededToStart() const
 {
-    return 2;
     if (m_ranked)                       // +0xF5
         return (getMaxPlayers() >= 33 ? 1 : 0) * 2 + 6;
     return m_playersNeededToStart;      // +0x58
