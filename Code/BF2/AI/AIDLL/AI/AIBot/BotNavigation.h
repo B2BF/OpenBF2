@@ -107,12 +107,12 @@ public:
         NavigationPoint()
             : m_polygon(-1)
         {
-            m_point0.x = 0.0f; m_point0.y = 0.0f; m_point0.z = 0.0f;
+            edgePoint1.x = 0.0f; edgePoint1.y = 0.0f; edgePoint1.z = 0.0f;
             m_pointC.x = 0.0f; m_pointC.y = 0.0f; m_pointC.z = 0.0f;
             m_position.x = 0.0f; m_position.y = 0.0f; m_position.z = 0.0f;
         }
 
-        /* +0x00 */ Vec3 m_point0;
+        /* +0x00 */ Vec3 edgePoint1;   // name: AIDLL_r assert "m_navigationPoints[i].edgePoint1" 0x10149B20 (entry +0)
         /* +0x0C */ Vec3 m_pointC;
         /* +0x18 */ Vec3 m_position;
         /* +0x24 */ int  m_polygon;     // = -1
@@ -128,7 +128,7 @@ private:
     /*   8 */ float m_float8;              // = 2.0f [UNRESOLVED]
     /*  12 */ float m_float8Squared;       // initPathfinding: b * b
     // initPathfinding / retrace: the bot's last valid position (IPIMobile::ValidPos fields).
-    /*  16 */ int   m_island;              // = -1; ValidPos::quadTree
+    /*  16 */ int   m_startIsland;              // = -1; ValidPos::island [INFERRED] name: AIDLL_r names +112 m_island (0x10149B20), so this one was renamed
     /*  20 */ int   m_startPolygon;        // = -1
     /*  24 */ Vec3  m_startPosition;       // all 0
     /*  36 */ int   m_goalPolygon;         // = -1
@@ -147,7 +147,7 @@ private:
     // is set. [CHOSEN] name.
     /*  68 */ bool  m_polygonSearchPending;
     /*  69 */ char  m_pad69[3];
-    /*  72 */ QTPath* m_polygonPath;       // new(0x18) - the fine path
+    /*  72 */ QTPath* m_path;       // new(0x18) - the fine path  // name: AIDLL_r assert 0x10149B20 (PE +0x48)
     // IAIPathfinding::acquireResource's polygon-search slot; -1 = none.
     /*  76 */ unsigned int m_int76;        // = -1
     // AIPathfinding::trace (ELF 0x3A81C0) reads +0x50 as the map index passed to getTraceData
@@ -159,9 +159,9 @@ private:
     // stores its size at +252.
     /*  88 */ std::vector<unsigned int> m_obstacles;
     // the walkable result - see the header note. The constructor's dead resize targets this.
-    /* 100 */ std::vector<NavigationPoint> m_points;
+    /* 100 */ std::vector<NavigationPoint> m_navigationPoints;   // name: AIDLL_r assert 0x10149B20 (PE +0x68, 0x28-byte entries)
     // the island the path was searched on (initPathfinding: the start island).
-    /* 112 */ int   m_pathIsland;          // never written by the constructor
+    /* 112 */ int   m_island;          // never written by the constructor  // name: AIDLL_r assert "m_island == m_path->getIsland()" 0x10149B20 (PE +0x78)
     // index of the point being walked to.
     /* 116 */ unsigned int m_currentPoint;   // = 0
     // update: nonzero selects the cluster search. [CHOSEN] name.
@@ -174,8 +174,8 @@ private:
     // so the value type is four bytes - a set of pointers or handles. Which is [UNRESOLVED];
     // `void*` holds the width and claims nothing.
     /* 132 */ std::set<unsigned short> m_set132;   // doPolygonSearch: the clusters the local search may use (setAllowedClusters)
-    /* 144 */ double m_double144;          // = 0.0
-    /* 152 */ double m_double152;          // = 0.0
+    /* 144 */ double m_noProgressTimer;          // = 0.0  // name: AIDLL_r assert in checkProgress 0x10145DD0 (PE +0x98)
+    /* 152 */ double m_noThrottleTimer;          // = 0.0  // name: AIDLL_r assert in checkProgress 0x10145DD0 (PE +0xA0)
     /* 160 */ double m_double160;          // = 0.0
     /* 168 */ double m_double168;          // = 0.0
     /* 176 */ float m_zero176[3];         // +176..+184; checkProgress: the soldier position at the last action-press check
@@ -192,7 +192,7 @@ private:
     /* 196 */ char  m_gap196[4];           // [UNRESOLVED] - never written
     // the last valid positions (reset / initPathfinding): the vehicle's (getLastValidPosition of
     // the vehicle number) and the infantry one (IPIMobile +8 / +0xC).
-    /* 200 */ int   m_vehiclePolygon;      // = -1
+    /* 200 */ int   m_currentPolygon;      // = -1  // name: AIDLL_r asserts 0x10146930, 0x1014AD10 (PE +0xD0)
     /* 204 */ int   m_vehicleIsland;       // = -1
     /* 208 */ int   m_infantryPolygon;     // = -1
     /* 212 */ int   m_infantryIsland;      // = -1
@@ -208,7 +208,7 @@ private:
     /* 236 */ bool  m_updateSpaceLeftAndRight;
     /* 237 */ char  m_pad237[3];
     // updatePath: useSkipTrace && soldier before a retrace; stillOnPath counts it down.
-    /* 240 */ int   m_int240;              // = 0
+    /* 240 */ int   m_skipTraceCount;              // = 0  // name: AIDLL_r assert 0x101471C0 (PE +0xF8)
     // updatePath's game time (isActive: three seconds).
     /* 244 */ double m_double244;          // not a gap - `reset` zeroes it
     // resetAll clears this field.
@@ -224,7 +224,7 @@ private:
     // and towards side 2 while +296 > 0.5; updateSpaceLeftAndRight writes them. [INFERRED] names.
     /* 292 */ float m_spaceLeft;
     /* 296 */ float m_spaceRight;
-    /* 300 */ double m_double300;          // Initially -1.0; independent of the distance sentinel.
+    /* 300 */ double m_lastAngleDiffTest;          // Initially -1.0; independent of the distance sentinel.  // name: AIDLL_r assert 0x10147490 (PE +0x138)
     // getLargestAngleDiff's cached answer (recomputed every 0.5 s, +300 the time).
     /* 308 */ float m_largestAngleDiff;    // = 0
     // updateClosestDistance: the walked-points length from the bot (updatePath re-checks the

@@ -16,7 +16,7 @@
 #include "../AIBot/SquadManager.h"   // requestResponseModifier (ai-bot)
 #include "BBMedicAssist.h"
 
-#include "CustomCurve.h"
+#include "../AIUtils/CustomCurve.h"
 #include "../AIBot/BotMain.h"
 #include "../AIBot/BotMemory.h"
 #include "../AIBot/CommunicationAgent.h"
@@ -30,9 +30,9 @@
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../AIUtils/checkPointer.h"
 #include "../Main/AIDllFrontier.h"
 #include "../Main/AISettingsInterfaces.h"
@@ -305,7 +305,7 @@ float BBMedicAssist::calculateUrgency(Bot* bot, bool recalculate, float urgencyS
         if (info == self && bot->getPlayer()->getSpawnKit() == 5 && bot->isFiring())
             continue;
         // Object-type flag 0x80 (testb $-0x80, +0x04): only when a human is in it.
-        if ((info->getObjectTypeFlags() & 0x80) && !isHumanInTarget(info, bot->getSide()))
+        if (info->isOfType(ITNaval) && !isHumanInTarget(info, bot->getSide()))
             continue;
         if (info == self && bot->getPlayer()->getSpawnKit() == 5 && armament->getActiveWeapon() != -1)
         {

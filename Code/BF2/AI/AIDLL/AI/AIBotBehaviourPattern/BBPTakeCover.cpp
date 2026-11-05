@@ -19,7 +19,7 @@
 #include "../AIBotActionPlan/BAPConPosition.h"
 #include "../AIBotActionPlan/BAPIWTakeCover.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIControlInfo.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/IPIUnit.h"
@@ -215,7 +215,7 @@ BotScript* BBPTakeCover::createPlan(Bot* bot)
     }
     else
         wrapper = checkPointer(new BAPIWTakeCover(threatPosition, root, m_patternId));
-    wrapper->m_owner = this;
+    wrapper->mpOwner = this;
     return wrapper;
 }
 

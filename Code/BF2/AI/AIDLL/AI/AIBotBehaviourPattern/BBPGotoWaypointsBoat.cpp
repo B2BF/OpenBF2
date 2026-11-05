@@ -31,7 +31,7 @@
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIPlanInterpreter/BAPContext.h"
 #include "../AIPlanInterpreter/BotScriptDebugger.h"
 #include "../AIStrategicEntity/AILandingZone.h"

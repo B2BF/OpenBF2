@@ -1,4 +1,4 @@
-// Ballistic aiming. Evidence: libaidll.so 1.5.3153 (ia-32), AIBot/Aimer.cpp, 0x1C7120..0x1C8EA0
+// Ballistic aiming. Evidence: libaidll.so 1.5.3153 (ia-32), Aimer.cpp, 0x1C7120..0x1C8EA0
 // (see Aimer.h). Read from the Ghidra decompile and checked against objdump where Ghidra hides x87
 // precision (getFiringDirection's impact time is `double time + float t`, 0x1C8134..0x1C8143).
 
@@ -48,7 +48,7 @@ Aimer::Aimer()
     m_drag = 0.0f;
     m_gravity = 0.0f;
     m_speed = 1.0f;
-    m_hasTargetData = 0;
+    m_nSamples = 0;
     m_time = 0.0;
     m_relativePos.x = 1.0f; m_relativePos.y = 0.0f; m_relativePos.z = 0.0f;
     m_targetVelocity.x = 0.0f; m_targetVelocity.y = 0.0f; m_targetVelocity.z = 0.0f;
@@ -71,7 +71,7 @@ Aimer::~Aimer()
 bool Aimer::setTargetData(const Vec3& relativePos, const Vec3& targetVelocity, const Vec3& shooterVelocity,
                           const Mat4* transform, double time)
 {
-    m_hasTargetData = 1;
+    m_nSamples = 1;
     m_relativePos = relativePos;
     m_relativeDir = relativePos;
     const float lengthSq = m_relativeDir.x * m_relativeDir.x + m_relativeDir.y * m_relativeDir.y

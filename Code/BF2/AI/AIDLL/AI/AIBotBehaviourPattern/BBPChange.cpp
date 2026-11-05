@@ -45,7 +45,7 @@
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIPlanInterpreter/BAPContext.h"
 #include "../AIPlanInterpreter/BotScriptDebugger.h"
 #include "../Main/IBotManager.h"
@@ -67,7 +67,7 @@ namespace ai {
 // uninitialised), then +0x08 = the argument and +0x0C unsigned int (uninitialised).
 BBPChange::BBPChange(int value)
 {
-    m_entryPositions = checkPointer(
+    m_noPathfindingPos = checkPointer(
         new Vec3[static_cast<IAISettings*>(CommonSingletonServer::m_iaiSettings)->getMaxNBots()]());
     m_sameVehicle = checkPointer(new bool[static_cast<IAISettings*>(CommonSingletonServer::m_iaiSettings)->getMaxNBots()]);
     m_getInConfirm = checkPointer(new bool[static_cast<IAISettings*>(CommonSingletonServer::m_iaiSettings)->getMaxNBots()]);
@@ -83,8 +83,8 @@ BBPChange::~BBPChange()
         delete[] m_targets;
     if (m_sameVehicle)
         delete[] m_sameVehicle;
-    if (m_entryPositions)
-        delete[] m_entryPositions;
+    if (m_noPathfindingPos)
+        delete[] m_noPathfindingPos;
     if (m_getInConfirm)
         delete[] m_getInConfirm;
 }
@@ -177,7 +177,7 @@ BotScript* BBPChange::createPlan(Bot* bot)
     bot->getSquadMember()->clearRequestAction();
 
     BAPStatement* plan;   // the node the tail wraps
-    if (!(current->getObjectTypeFlags() & 0x200000)) {
+    if (!current->isOfType(ITSoldier)) {
         // 0x236D12 `testb $0x20, 0x6(%esi)`: the bot sits in a vehicle or stationary weapon.
         BAPCombinerSerial* const sequence = checkPointer(new BAPCombinerSerial(m_patternId, -1));   // -0x1B0
         // Getting out to the bot's own soldier: confirm a pending type-0 message with 6 on channel 7.
@@ -226,7 +226,7 @@ BotScript* BBPChange::createPlan(Bot* bot)
 
             BAPAction* move;
             if (toEntryPosition) {
-                if (!(current->getObjectTypeFlags() & 0x10)) {
+                if (!current->isOfType(ITAir)) {
                     // 0x239CF0
                     BAPConAnd* const arrivedBehind = checkPointer(new BAPConAnd());
                     arrivedBehind->addCondition(arrived);
@@ -235,7 +235,7 @@ BotScript* BBPChange::createPlan(Bot* bot)
                     const int patternId = m_patternId;
                     const float arriveSpeed = mobile->getMaxSpeed() * 0.75f;
                     const float speed = mobile->getMaxSpeed();
-                    move = checkPointer(new BAPAMoveToFinding(bot, m_entryPositions[bot->getBotId()], speed, arriveSpeed,
+                    move = checkPointer(new BAPAMoveToFinding(bot, m_noPathfindingPos[bot->getBotId()], speed, arriveSpeed,
                                                               arrivedBehind, driveControls, patternId, 0.0f, 0.0f));
                 } else {
                     // 0x239B40: flag 0x10 (air): 3d move to the target's position.
@@ -245,11 +245,10 @@ BotScript* BBPChange::createPlan(Bot* bot)
                     move = checkPointer(new BAPAMoveTo3d(bot, target->getPosition(), speed, arriveSpeed, arrived,
                                                          driveControls, 25.0f, patternId));
                 }
-            } else if (!(current->getObjectTypeFlags() & 0x10)) {
+            } else if (!current->isOfType(ITAir)) {
                 bool aroundAircraft = false;
                 Vec3 position;
-                const unsigned int targetFlags = target->getObjectTypeFlags();
-                if ((targetFlags & 0x10) && !(targetFlags & 0x20)) {
+                if (target->isOfType(ITAir) && !target->isOfType(ITHelicopter)) {
                     // 0x239064: the target is an aircraft (0x10 without 0x20): a navigable point behind
                     // or beside it.
                     position = target->getPosition();
@@ -303,8 +302,8 @@ BotScript* BBPChange::createPlan(Bot* bot)
             // 0x237C66: getting out to the soldier from the primary seat of a ground vehicle whose health
             // (IPIPhysical vfn +0x14) is below IBotManager::getVehicleBailValue: also press input 0x2F
             // (controls bit 47).
-            if ((target->getObjectTypeFlags() & 0x200000) && current->isPrimary()
-                && !(current->getObjectTypeFlags() & 0x10) && !(current->getObjectTypeFlags() & 0x20)) {
+            if (target->isOfType(ITSoldier) && current->isPrimary()
+                && !current->isOfType(ITAir) && !current->isOfType(ITHelicopter)) {
                 if (current->getPhysical()->getHealth() < IBotManager::instance->getVehicleBailValue()) {
                     const int bailPatternId = m_patternId;
                     BAPConFalse* const bailStop = checkPointer(new BAPConFalse());
@@ -349,7 +348,7 @@ BotScript* BBPChange::createPlan(Bot* bot)
             const int patternId = m_patternId;
             const float arriveSpeed = mobile->getMaxSpeed() * 0.75f;
             const float speed = mobile->getMaxSpeed();
-            move = checkPointer(new BAPAMoveToFinding(bot, m_entryPositions[bot->getBotId()], speed, arriveSpeed, taken,
+            move = checkPointer(new BAPAMoveToFinding(bot, m_noPathfindingPos[bot->getBotId()], speed, arriveSpeed, taken,
                                                       driveControls, patternId, 0.5f, 0.0f));
         } else {
             // 0x23AFEB
@@ -406,7 +405,7 @@ BotScript* BBPChange::createPlan(Bot* bot)
             primaryDistanceSqr = delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
         }
         // 0x23B558: ask the driver for a ride when the bot walks into a manned vehicle's seat.
-        if (!m_sameVehicle[bot->getBotId()] && (current->getObjectTypeFlags() & 0x200000)
+        if (!m_sameVehicle[bot->getBotId()] && current->isOfType(ITSoldier)
             && primaryObject->getPlayerId() >= 0 && primary && primary->hasMobile() && primaryDistanceSqr < 400.0f
             && !type1Waiting && !type0Waiting) {
             BAPConObjectOccupied* const driverIn = checkPointer(new BAPConObjectOccupied(primary->getHandle()));   // -0x464
@@ -447,7 +446,7 @@ BotScript* BBPChange::createPlan(Bot* bot)
     // BAPAUseFlareOnMissileLock (controls bit 47); wrap it in BAPIWChange (books the target), owner = this
     // (0x2370E0).
     BAPStatement* wrapped = plan;
-    if (!(current->getObjectTypeFlags() & 0x200000)) {
+    if (!current->isOfType(ITSoldier)) {
         BAPCombinerParallel* const flares = checkPointer(new BAPCombinerParallel(m_patternId, true, -1, false));
         flares->addStatement(checkPointer(new BAPAUseFlareOnMissileLock(bot, 0x800000000000ULL, m_patternId)));
         flares->addStatement(plan);
@@ -456,7 +455,7 @@ BotScript* BBPChange::createPlan(Bot* bot)
     const int playerId = bot->getPlayerId();
     BAPIWChange* const wrapper =
         checkPointer(new BAPIWChange(m_targets[bot->getBotId()], wrapped, m_patternId, playerId));
-    wrapper->m_owner = this;
+    wrapper->mpOwner = this;
     return wrapper;
 }
 
@@ -467,7 +466,7 @@ void BBPChange::init(unsigned int handle, const Vec3& position, bool sameVehicle
     m_initiated[bot->getBotId()] = true;
     m_sameVehicle[bot->getBotId()] = sameVehicle;
     m_targets[bot->getBotId()] = handle;
-    m_entryPositions[bot->getBotId()] = position;
+    m_noPathfindingPos[bot->getBotId()] = position;
     m_getInConfirm[bot->getBotId()] = getInConfirm;
 }
 

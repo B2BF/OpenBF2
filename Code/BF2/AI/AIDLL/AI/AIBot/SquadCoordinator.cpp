@@ -18,7 +18,7 @@
 #include "SensingAgent.h"
 #include "CommunicationAgent.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../Main/AIDllFrontier.h"
 #include "../Main/AIMain.h"
 #include "SquadManager.h"
@@ -260,7 +260,7 @@ static bool insideControlPointRadius(const Vec3& controlPoint, const Vec3& posit
 void SquadCoordinator::update(double time)
 {
     m_d124 = time;
-    if (m_i120 == 2 && !IAIMain::m_instance->getSAI(m_side + 1)->isPlayerCommander())
+    if (m_missionStatus == 2 && !IAIMain::m_instance->getSAI(m_side + 1)->isPlayerCommander())
     {
         if (m_i40 == 0)
         {
@@ -538,8 +538,8 @@ int SquadCoordinator::chooseSquadManeuver()
             if (bot->isFiring())
             {
                 // No information-null guard exists in either image.
-                const unsigned int flags = information->getObjectTypeFlags();
-                if (!(flags & 0x10u) && !(flags & 0x20u) && !(flags & 0x80u) &&
+                if (!information->isOfType(ITAir) && !information->isOfType(ITHelicopter) &&
+                    !information->isOfType(ITNaval) &&
                     member->getPosition(position) &&
                     maneuverMemberWithinRange(position, m_v108))
                     ++firingMembers;
@@ -548,7 +548,7 @@ int SquadCoordinator::chooseSquadManeuver()
     }
     if (firingMembers > 1)
         return 1;
-    if (m_i120 != 2)
+    if (m_missionStatus != 2)
         return 0;
 
     // ELF 0x1A5741: the mission target (+28) at terrain height (IAITerrain +0x14), 50..173 m from the
@@ -602,8 +602,8 @@ void SquadCoordinator::squadManeuverAlternateFire()
         Information* const equipment = informationManager->getInformation(bot->getCurrentEquipment());
         if (!bot->isFiring() || !equipment->isPrimary() || !equipment->hasMobile())
             continue;
-        const unsigned int flags = equipment->getObjectTypeFlags();
-        if ((flags & 0x10u) || (flags & 0x20u) || (flags & 0x80u) || !member->getPosition(position))
+        if (equipment->isOfType(ITAir) || equipment->isOfType(ITHelicopter) || equipment->isOfType(ITNaval) ||
+            !member->getPosition(position))
             continue;
         const float dx = m_v108.x - position.x;
         const float dy = m_v108.y - position.y;
@@ -692,7 +692,7 @@ void SquadCoordinator::squadManeuverStaticFlank()
         if (m_squadMembers[i]->isBot())
             m_squadMembers[i]->getBot()->setAllowFire(true);
     }
-    if (m_b157 || m_i120 != 2)
+    if (m_b157 || m_missionStatus != 2)
         return;
     if (!m_formation->hasSquadMembers() || !m_strategicAreaAssignment)
         return;
@@ -737,7 +737,7 @@ const Vec3& SquadCoordinator::getSquadGotoPos()
 // return enum spelling is unresolved, so int records the observed payload without new labels.
 int SquadCoordinator::getMissionStatus()
 {
-    return m_i120;
+    return m_missionStatus;
 }
 
 // The assignment is borrowed and nullable.
@@ -838,10 +838,10 @@ bool SquadCoordinator::isValidPosition(SquadMember* member, const Vec3& position
     const int equipment = soldier->getUnit()->getEquipmentType();
     if (!IAIPathfinding::instance->getPolygon(position, mobile->getVehicleNumber(), polygon, island, equipment))
         return false;
-    if (last.quadTree == static_cast<unsigned int>(-1) || island != last.quadTree)
+    if (last.island == static_cast<unsigned int>(-1) || island != last.island)
         return false;
     return IAIPathfinding::instance->isValidPosition(
-        mobile->getVehicleNumber(), soldier->getUnit()->getEquipmentType(), position, last.quadTree, true);
+        mobile->getVehicleNumber(), soldier->getUnit()->getEquipmentType(), position, last.island, true);
 }
 
 // ELF 0x1A3A40: the requested-mission record (+60..+95) by value.
@@ -892,12 +892,12 @@ void SquadCoordinator::requestMission(BotSquad::OrderType type, const Vec3& posi
         return;
     }
     if ((!IAIMain::m_instance->getSAI(m_side + 1)->isPlayerCommander() && isSquadCloseToNonOwnedTarget())
-        || m_i120 != 0)
+        || m_missionStatus != 0)
     {
         if (!IAIMain::m_instance->getSAI(m_side + 1)->isPlayerCommander())
             return;
     }
-    m_i120 = 1;
+    m_missionStatus = 1;
     m_d132 = m_d124 + 10.0f;
     m_v64 = position;
     m_i76 = type;
@@ -991,7 +991,7 @@ bool SquadCoordinator::acceptMission(SquadMember* member)
         {
             m_v64 = centre;
             m_v28 = centre;
-            m_i120 = 2;
+            m_missionStatus = 2;
             m_i40 = m_i76;
             m_strategicAreaAssignment = closest;
             m_i44 = m_requestedObject;
@@ -1007,7 +1007,7 @@ bool SquadCoordinator::acceptMission(SquadMember* member)
         if (getRandomValidPosition(member, position, 30.0f))
         {
             m_v64 = position;
-            m_i120 = 2;
+            m_missionStatus = 2;
             m_v28 = m_v64;
             m_i40 = m_i76;
             m_i44 = m_requestedObject;
@@ -1114,9 +1114,9 @@ SquadCoordinator::SquadCoordinator(int side, int squadIndex)
     , m_requestedArea(0)
     , m_i76(4)
     , m_requestedObject(0)
-    , m_i96(-1)
+    , m_squadLeaderIndex(-1)
     , m_list104()
-    , m_i120(0)
+    , m_missionStatus(0)
     , m_d124(0.0)
     , m_d132(0.0)
     , m_d140(0.0)
@@ -1186,7 +1186,7 @@ void SquadCoordinator::getSquadPosition(Vec3& position)
 // used directly, including the absence of an empty-vector or negative-index guard.
 SquadMember* SquadCoordinator::getSquadLeader()
 {
-    return m_squadMembers[m_i96];
+    return m_squadMembers[m_squadLeaderIndex];
 }
 
 // Signed count consumed by the manager's comparisons.
@@ -1217,7 +1217,7 @@ void SquadCoordinator::unAssignSquad()
     m_strategicAreaAssignment = 0;
     m_i40 = 4;
     m_i44 = 0;
-    m_i120 = 0;
+    m_missionStatus = 0;
 }
 
 // Allocation is not checkPointer-wrapped. The human arm
@@ -1245,7 +1245,7 @@ void SquadCoordinator::addSquadMember(IAIPlayer* player)
 // change arm, but the single-member trailing-position reset still runs.
 void SquadCoordinator::updateSquadLeader()
 {
-    const int oldLeader = m_i96;
+    const int oldLeader = m_squadLeaderIndex;
     bool found = false;
     for (unsigned int i = 0; i < m_squadMembers.size(); ++i)
     {
@@ -1254,7 +1254,7 @@ void SquadCoordinator::updateSquadLeader()
                 m_squadIndex + 1, m_squadMembers[i]->getPlayer()));
         if (m_squadMembers[i]->isSquadLeader())
         {
-            m_i96 = static_cast<int>(i);
+            m_squadLeaderIndex = static_cast<int>(i);
             found = true;
             break;
         }
@@ -1262,12 +1262,12 @@ void SquadCoordinator::updateSquadLeader()
     if (!found)
         return;
 
-    if (oldLeader != m_i96 && oldLeader != -1 && !m_squadMembers.empty())
+    if (oldLeader != m_squadLeaderIndex && oldLeader != -1 && !m_squadMembers.empty())
     {
         // ELF 0x1A5C66: a new leader - the formation rejoins it and the squad position and paths
         // are refreshed; a human leader of a squad with more members leaves the AI commander's
         // assignment (unless the side has a player commander).
-        m_squadMembers[m_i96]->updateMemberPos();
+        m_squadMembers[m_squadLeaderIndex]->updateMemberPos();
         m_formation->joinSquadLeader();
         updateSquadPosition();
         updateSquadPaths();
@@ -1347,7 +1347,7 @@ void SquadCoordinator::reset()
     m_i76 = 4;
     m_requestedArea = 0;
     m_requestedObject = 0;
-    m_i120 = 0;
+    m_missionStatus = 0;
     m_formation->joinSquadLeader();
     for (std::list<SquadMemberFire*>::iterator it = m_list12.begin(); it != m_list12.end();)
     {
@@ -1428,16 +1428,16 @@ bool SquadCoordinator::isSquadCloseToNonOwnedTarget()
     return false;
 }
 
-// ELF 0x1A6B00: the mission state at +0x78 (m_i120) equals 2.
+// ELF 0x1A6B00: the mission state at +0x78 (m_missionStatus) equals 2.
 bool SquadCoordinator::squadHasMission()
 {
-    return m_i120 == 2;
+    return m_missionStatus == 2;
 }
 
 // ELF 0x1A7FA0.
 bool SquadCoordinator::isSquadAvailable()
 {
-    return m_i120 == 0;
+    return m_missionStatus == 0;
 }
 
 // ELF 0x1A7F60: the requested area's index (+0xF0).
@@ -1737,7 +1737,7 @@ void SquadCoordinator::squadManeuverDynamicFlank()
         if (member->isBot())
             member->getBot()->setAllowFire(true);                              // +0x134
     }
-    if (m_b157 || m_i120 != 2 || !m_formation->hasSquadMembers())
+    if (m_b157 || m_missionStatus != 2 || !m_formation->hasSquadMembers())
         return;
     m_b157 = true;
     SquadMember* const leader = m_squadMembers[m_formation->getSquadMemberIndexAtSlot(0)];

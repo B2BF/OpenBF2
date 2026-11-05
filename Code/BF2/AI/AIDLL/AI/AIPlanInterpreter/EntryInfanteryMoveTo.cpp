@@ -14,7 +14,7 @@
 #include "../AIBot/BotMain.h"
 #include "../AIBotActionPlan/BAPAMoveTo.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../../../AIInterface/BFKnowledge/IAIObject.h"
 #include "../../../AIInterface/BFKnowledge/IAIObjectPlugIn.h"

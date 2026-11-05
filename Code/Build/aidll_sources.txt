@@ -17,7 +17,7 @@ AI/AIDLL/AI/AIBot/SquadCoordinator.cpp
 AI/AIDLL/AI/AIBot/SquadFormation.cpp
 AI/AIDLL/AI/AIBot/SquadManager.cpp
 AI/AIDLL/AI/AIBot/SquadMember.cpp
-AI/AIDLL/AI/AIBotBehaviour/UrgencyMerger.cpp
+AI/AIDLL/AI/AIBot/UrgencyMerger.cpp
 AI/AIDLL/AI/AIBot/WPAltitudeCloseTo.cpp
 AI/AIDLL/AI/AIBot/WPAltitudeMoveTo.cpp
 AI/AIDLL/AI/AIBot/WPAltitudePatrol.cpp
@@ -28,9 +28,12 @@ AI/AIDLL/AI/AIBot/WPMoveTo.cpp
 AI/AIDLL/AI/AIBot/WPMoveToBeachLanding.cpp
 AI/AIDLL/AI/AIBot/WPPatrol.cpp
 AI/AIDLL/AI/AIBot/SensingAgent.cpp
-AI/AIDLL/AI/AIBot/SensingAgentPatterns.cpp
+AI/AIDLL/AI/AIBot/SensingAgentMouseFreeLookPattern.cpp
+AI/AIDLL/AI/AIBot/SensingAgentNullPattern.cpp
+AI/AIDLL/AI/AIBot/SensingAgentSoldierPattern.cpp
+AI/AIDLL/AI/AIBot/SensingAgentTurretPattern.cpp
 AI/AIDLL/AI/AIBot/CommunicationAgent.cpp
-AI/AIDLL/AI/AIBot/Aimer.cpp
+AI/AIDLL/AI/AIBotActionPlan/Aimer.cpp
 AI/AIDLL/AI/AIPlanInterpreter/BAPContext.cpp
 AI/AIDLL/AI/AIPlanInterpreter/PrettyPrinter.cpp
 # S0 behaviour-system skeleton
@@ -298,10 +301,10 @@ AI/AIDLL/AI/AIKnowledge/InformationFactory.cpp
 AI/AIDLL/AI/AIKnowledge/InformationKnown.cpp
 AI/AIDLL/AI/AIKnowledge/InformationReal.cpp
 AI/AIDLL/AI/AIKnowledge/WeaponInfo.cpp
-AI/AIDLL/AI/Main/AIMineManager.cpp
+AI/AIDLL/AI/AIKnowledge/AIMineManager.cpp
 AI/AIDLL/AI/AIKnowledge/BFInformationCourier.cpp
 AI/AIDLL/AI/AIKnowledge/BFInformationEnvironment.cpp
-AI/AIDLL/AI/AIKnowledge/InformationManager.cpp
+AI/AIDLL/AI/Main/InformationManager.cpp
 AI/AIDLL/AI/Main/BFPathfindingCourier.cpp
 AI/AIDLL/AI/AIStrategicMap/BFStrategicEnvironment.cpp
 AI/AIDLL/AI/AIUtils/IgnoreListPredicate.cpp
@@ -321,7 +324,7 @@ AI/AIDLL/AI/AIKnowledge/IPIPhysicalKnown.cpp
 AI/AIDLL/AI/AIKnowledge/IPIPhysicalReal.cpp
 AI/AIDLL/AI/AIKnowledge/IPIUnit.cpp
 AI/AIDLL/AI/AIKnowledge/WeaponInfoKnown.cpp
-AI/AIDLL/AI/AIKnowledge/WeaponInfoManager.cpp
+AI/AIDLL/AI/AIUtils/WeaponInfoManager.cpp
 AI/AIDLL/AI/AIKnowledge/WeaponInfoReal.cpp
 Math/DoubleVec3.cpp
 AI/AIDLL/AI/AIPathFinding/NavMesh/GTSDataOptimiser.cpp
@@ -333,7 +336,7 @@ AI/AIDLL/AI/AIPathFinding/NavMesh/QTSearchNodeManager.cpp
 AI/AIDLL/AI/AIPathFinding/NavMesh/QuadTree.cpp
 AI/AIDLL/AI/AIPathFinding/NavMesh/QuadTreeManager.cpp
 AI/AIDLL/AI/AIPathFinding/NavMesh/QuadTreeNode.cpp
-AI/AIDLL/AI/AIStrategicMap/AerialHeightMap.cpp
+AI/AIDLL/AI/AIPathFinding/AerialHeightMap/AerialHeightMap.cpp
 AI/AIDLL/AI/AIPathFinding/Cluster/Cluster.cpp
 AI/AIDLL/AI/AIPathFinding/Cluster/ClusterGraph.cpp
 AI/AIDLL/AI/AIPathFinding/Cluster/ClusterNode.cpp
@@ -361,7 +364,7 @@ AI/AIDLL/AI/AIStrategicEntity/GuardPositionBotSCB.cpp
 AI/AIDLL/AI/AIStrategicEntity/PatrolPath.cpp
 AI/AIDLL/AI/AIStrategicEntity/PatrolPathBotDCB.cpp
 AI/AIDLL/AI/AIStrategicEntity/PatrolPathBotSCB.cpp
-AI/AIDLL/AI/Main/UserOrderManager.cpp
+AI/AIDLL/AI/AIStrategicEntity/UserOrders/UserOrderManager.cpp
 AI/AIDLL/AI/AIStrategicEntity/CoverPosition/CoverPosition.cpp
 AI/AIDLL/AI/AIStrategicEntity/CoverPosition/CoverPositionManager.cpp
 AI/AIDLL/AI/AIStrategicEntity/CoverPosition/CPNode.cpp
@@ -384,7 +387,8 @@ AI/AIDLL/AI/AIUtils/Opening.cpp
 AI/AIInterface/BFKnowledge/PlanePolygon.cpp
 AI/AIDLL/AI/AIUtils/TraceUtils.cpp
 AI/AIDLL/AI/AIUtils/VehicleOccupancy.cpp
-AI/AIDLL/AI/AIBotBehaviour/CustomCurve.cpp
+AI/AIDLL/AI/AIUtils/CustomCurve.cpp
+AI/AIDLL/AI/AIUtils/SCurve.cpp
 AI/AIDLL/AI/AIUtils/DebugRendering/DPAIObject3dText.cpp
 AI/AIDLL/AI/AIUtils/DebugRendering/DPAIObjectCircle.cpp
 AI/AIDLL/AI/AIUtils/DebugRendering/DPAIObjectLine.cpp
@@ -403,10 +407,11 @@ AI/AIDLL/AI/DrawPrimitives/DrawPrimitive.cpp
 AI/AIDLL/AI/Main/AICollisionHandler.cpp
 AI/AIDLL/AI/Main/AIConsole.cpp
 AI/AIDLL/AI/Main/AIEventCourier.cpp
-AI/AIDLL/AI/AIStrategicEntity/AILandingZoneManager.cpp
+AI/AIDLL/AI/Main/AILandingZoneManager.cpp
 AI/AIDLL/AI/AIStrategicEntity/AreaDistanceInfo.cpp
 AI/AIDLL/AI/Main/AILODManager.cpp
 AI/AIDLL/AI/Main/AIMain.cpp
+AI/AIDLL/AI/Main/IAIMain.cpp
 AI/AIDLL/AI/Main/AIPathfinding.cpp
 AI/AIDLL/AI/Main/AIPlayerCourier.cpp
 AI/AIDLL/AI/Main/AIRadio.cpp
@@ -420,12 +425,14 @@ AI/AIDLL/AI/Main/BotManager.cpp
 AI/AIDLL/AI/Main/BotPlacementManager.cpp
 AI/AIDLL/AI/Main/CommunicationHub.cpp
 AI/AIDLL/AI/Main/IAIPathfinding.cpp
+AI/AIDLL/AI/Main/IAIPathfindingSetup.cpp
 AI/AIDLL/AI/Main/StrategyManager.cpp
 AI/AIDLL/AI/Main/BF2AI.cpp
 AI/AIDLL/AI/Main/AIModule.cpp
 AI/AIDLL/AI/Main/AISingletonServer.cpp
 AI/AIDLL/AI/Main/CommonSingletonServer.cpp
 AI/AIDLL/AI/Main/IBotManager.cpp
+AI/AIDLL/AI/Main/IBotManagerModifier.cpp
 # the ConsoleClassN base - the ai.init binding
 Core/ConsoleObjectBase.cpp
 # demands them (census/00_statically_linked_engine_code.tsv confirms each one is really there)

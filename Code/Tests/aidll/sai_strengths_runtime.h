@@ -4,7 +4,7 @@
 #include "../../BF2/AI/AIDLL/AI/AIKnowledge/BFInformationEnvironment.h"
 #include "../../BF2/AI/AIDLL/AI/AIKnowledge/AIInformationGrid.h"
 #include "../../BF2/AI/AIDLL/AI/AIKnowledge/Information.h"
-#include "../../BF2/AI/AIDLL/AI/AIKnowledge/InformationManager.h"
+#include "../../BF2/AI/AIDLL/AI/Main/InformationManager.h"
 #include "../../BF2/AI/AIDLL/AI/AIKnowledge/IPIPhysical.h"
 #include "../../BF2/AI/AIDLL/AI/AIKnowledge/IPIUnit.h"
 #include "../../BF2/AI/AIDLL/AI/AIKnowledge/UnitPredicate.h"

@@ -4,14 +4,14 @@
 // belonging to engine TUs outside this focused link. CoverObserver uses the real IPICover
 // constructor/destructor against a chosen empty engine cover; no IPICover body is shadowed.
 #include "../../BF2/AI/AIDLL/AI/AIKnowledge/Information.h"
-#include "../../BF2/AI/AIDLL/AI/AIKnowledge/InformationManager.h"
+#include "../../BF2/AI/AIDLL/AI/Main/InformationManager.h"
 #include "../../BF2/AI/AIDLL/AI/AIKnowledge/IPIArmament.h"
 #include "../../BF2/AI/AIDLL/AI/AIKnowledge/IPIControlInfo.h"
 #include "../../BF2/AI/AIDLL/AI/AIKnowledge/IPICover.h"
 #include "../../BF2/AI/AIDLL/AI/AIKnowledge/IPIMobile.h"
 #include "../../BF2/AI/AIDLL/AI/AIKnowledge/IPIPhysical.h"
 #include "../../BF2/AI/AIDLL/AI/AIKnowledge/IPIUnit.h"
-#include "../../BF2/AI/AIDLL/AI/AIKnowledge/WeaponInfoManager.h"
+#include "../../BF2/AI/AIDLL/AI/AIUtils/WeaponInfoManager.h"
 #include "../../BF2/AI/AIDLL/AI/Main/AISettingsInterfaces.h"
 #include "../../BF2/AI/AIDLL/AI/Main/CommonSingletonServer.h"
 #include "../../BF2/AI/AIDLL/AI/Main/IAIPathfinding.h"

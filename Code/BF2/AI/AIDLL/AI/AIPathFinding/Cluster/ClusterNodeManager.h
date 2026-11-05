@@ -101,9 +101,9 @@ public:
     /* +20 */ Vec3 m_goalPosition;           // the search's goal position
     /* +32 */ ClusterNode* m_goal;           // = 0; setGoal's copy of the goal node
     /* +36 */ ClusterNode* m_freeNodes;      // = 0
-    /* +40 */ int m_numberOfNodes;           // = 0
+    /* +40 */ int m_nodeCacheSize;           // = 0  // name: AIDLL_r assert 0x1018FDD0 (PE +0x28)
     /* +44 */ OCData* m_freeOCData;          // = 0 the intrusive free list `recycleOCData` pushes to
-    /* +48 */ int m_numberOfOCData;          // = 0
+    /* +48 */ int m_ocCacheSize;          // = 0  // name: AIDLL_r assert 0x1018FDD0 (PE +0x30)
     /* +52 */ Hash<OCData, ClusterNodeManager, OCData>* m_ocDataHash;   // new Hash(313), then ->this
     /* +56 */ std::vector<ClusterNode*> m_pathNodes;   // buildPath's goal-to-start scratch list
     /* +68 */ int m_costType;                // the vehicle's cluster cost type; read as 16 bits

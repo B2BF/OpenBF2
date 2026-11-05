@@ -6,7 +6,7 @@
 // 0x1A2210, __tcf_0 0x1A2270, _GLOBAL__I 0x1A22A0).
 #include <iostream>
 
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/Information.h"
 #include "../../../AIInterface/BFKnowledge/IAIObject.h"
 

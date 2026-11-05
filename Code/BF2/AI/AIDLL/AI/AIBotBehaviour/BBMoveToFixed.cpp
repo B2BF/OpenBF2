@@ -15,7 +15,7 @@
 #include "../AIBot/BotMemory.h"
 #include "../AIBot/WaypointList.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../Main/AIMain.h"
 
 #include <string>

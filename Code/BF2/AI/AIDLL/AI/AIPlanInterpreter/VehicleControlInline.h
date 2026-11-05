@@ -5,7 +5,7 @@
 #ifndef AI_AIDLL_AI_AIPLANINTERPRETER_VEHICLECONTROLINLINE_H
 #define AI_AIDLL_AI_AIPLANINTERPRETER_VEHICLECONTROLINLINE_H
 
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../../../../Math/Mat4.h"
 #include "../../../../Math/Vec3.h"
 

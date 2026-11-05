@@ -149,7 +149,7 @@ public:
     // Borrowed mutable statistics at m_statistics[side - 1]; reference spelling is [INFERRED].
     EnemyStatistics& getBattleStatistics(int side) const;
     int releaseAssignedResources(int side);
-    // ELF 0x3422A0..0x342300: the per-side available-unit sets (m_set20 attackers, m_set44
+    // ELF 0x3422A0..0x342300: the per-side available-unit sets (m_availableAttackers attackers, m_availableDefenders
     // defenders), one-based side. Reference spelling [INFERRED].
     std::set<int>& getAvailableBots(bool attackers, int side);
     std::set<int>& getAvailableAttackers(int side);
@@ -161,7 +161,7 @@ public:
     bool registerAvailableDefender(int unit, int side);        // ELF 0x342040; always true
     bool unregisterAvailableAttacker(int unit, int side);      // ELF 0x342600
     bool unregisterAvailableDefender(int unit, int side);      // ELF 0x342670
-    // ELF 0x342310 / 0x3423E0..0x342550: assigned (m_set68) and present (m_set92) units.
+    // ELF 0x342310 / 0x3423E0..0x342550: assigned (m_set68) and present (m_presentUnits) units.
     std::set<int>& getAssignedUnits(int side);
     std::set<int>& getPresentUnits(int side);
     bool isPresentUnit(int unit, int side) const;
@@ -193,10 +193,10 @@ public:
     /*   +4 */ EnemyStatistics* m_statistics[4];   // new EnemyStatistics(6), (6), (2), (2) in order
     // Per-side strategic-object sets. [UNRESOLVED] Exact roles of these four pairs remain
     // unidentified; at least two pairs represent neighboring areas and objects.
-    /*  +20 */ std::set<int> m_set20[2];
-    /*  +44 */ std::set<int> m_set44[2];
+    /*  +20 */ std::set<int> m_availableAttackers[2];   // name: AIDLL_r assert 0x100E8A80 (PE +0x14)
+    /*  +44 */ std::set<int> m_availableDefenders[2];   // name: AIDLL_r assert 0x100E8A80 (PE +0x2C)
     /*  +68 */ std::set<int> m_set68[2]; // assigned units, one-based side accessor
-    /*  +92 */ std::set<int> m_set92[2];
+    /*  +92 */ std::set<int> m_presentUnits[2];   // name: AIDLL_r assert 0x100E3E80 (PE +0x5C)
 
     // All four set to 2. `StatusMap::Status(2)` is `Neutral`, which is the only reason this member
     // carries that name - [INFERRED], on the strength of one coincidence.

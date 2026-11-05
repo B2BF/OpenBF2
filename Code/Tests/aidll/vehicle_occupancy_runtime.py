@@ -18,8 +18,8 @@ def record(out):
     out.mkdir(parents=True, exist_ok=True)
     paths = ('AI/AIDLL/AI/AIUtils/VehicleOccupancy.cpp',
              'AI/AIDLL/AI/AIUtils/VehicleOccupancy.h',
-             'AI/AIDLL/AI/AIKnowledge/InformationManager.cpp',
-             'AI/AIDLL/AI/AIKnowledge/InformationManager.h',
+             'AI/AIDLL/AI/Main/InformationManager.cpp',
+             'AI/AIDLL/AI/Main/InformationManager.h',
              'AI/AIDLL/AI/AIKnowledge/Information.h',
              'AI/AIDLL/AI/AIKnowledge/IPIUnit.h', 'Core/SpHandlePool.h')
     evidence = []

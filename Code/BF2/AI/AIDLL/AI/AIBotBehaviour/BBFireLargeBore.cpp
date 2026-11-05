@@ -5,7 +5,7 @@
 
 #include "BBFireLargeBore.h"
 
-#include "CustomCurve.h"
+#include "../AIUtils/CustomCurve.h"
 #include "../AIBot/BotMain.h"
 #include "../AIBot/BotMemory.h"
 #include "../AIBot/SensedObject.h"
@@ -13,14 +13,14 @@
 #include "../AIBotBehaviourPattern/BBPFire2d.h"
 #include "../AIKnowledge/BFInformationEnvironment.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIArmament.h"
 #include "../AIKnowledge/IPIControlInfo.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../AIStrategic/SAI.h"
 #include "../AIStrategicEntity/AIStrategicArea.h"
 #include "../AIStrategicEntity/AIStrategicObjectManager.h"
@@ -203,7 +203,7 @@ float BBFireLargeBore::calculateUrgency(Bot* bot, bool recalculate, float modifi
             targetSpeed = targetMobile->getSpeed();
         const float speed = std::sqrt(targetSpeed.x * targetSpeed.x + targetSpeed.y * targetSpeed.y
                                      + targetSpeed.z * targetSpeed.z);
-        if (!(equipment->getObjectTypeFlags() & 0x10) && (info->getObjectTypeFlags() & 0x10))
+        if (!equipment->isOfType(ITAir) && info->isOfType(ITAir))
         {
             if (armament->isAntiAircraft() == 0)
             {
@@ -297,8 +297,8 @@ float BBFireLargeBore::calculateUrgency(Bot* bot, bool recalculate, float modifi
         if (!info || info->getSide() == side)
             continue;
         IPIPhysical* const targetPhysical = info->getPhysical();
-        if (!targetPhysical || (info->getObjectTypeFlags() & 0x20000) || (info->getObjectTypeFlags() & 0x100000)
-            || (info->getObjectTypeFlags() & 0x800000) || 0.0f >= targetPhysical->getHealth())
+        if (!targetPhysical || info->isOfType(ITLowPriority) || info->isOfType(ITVegetation)
+            || info->isOfType(ITNoTemperature) || 0.0f >= targetPhysical->getHealth())
             continue;
         if ((object->m_flags & 0x20) && object->m_fireRating < 0)
             continue;
@@ -468,8 +468,8 @@ float BBFireLargeBore::calculateUrgency(Bot* bot, bool recalculate, float modifi
             if (!info || info->getSide() == side)
                 continue;
             IPIPhysical* const targetPhysical = info->getPhysical();
-            if (!targetPhysical || (info->getObjectTypeFlags() & 0x20000) || (info->getObjectTypeFlags() & 0x100000)
-                || (info->getObjectTypeFlags() & 0x800000) || 0.0f >= targetPhysical->getHealth())
+            if (!targetPhysical || info->isOfType(ITLowPriority) || info->isOfType(ITVegetation)
+                || info->isOfType(ITNoTemperature) || 0.0f >= targetPhysical->getHealth())
                 continue;
             if (20.0 > now - getBBPFeedback(*it)->m_time)
                 continue;

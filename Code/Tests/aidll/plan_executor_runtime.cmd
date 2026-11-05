@@ -10,7 +10,7 @@ python -I "%~dp0plan_executor_runtime.py" generate "%BF2_PLAN_EXECUTOR_OUT%"
 if errorlevel 1 exit /b 1
 set "TASK_FLAGS=/nologo /c /O2 /MD /std:c++14 /permissive /EHsc /W3 /Gy /DDEDICATED=1 /DBF2_IMAGE_AIDLL"
 set "TASK_FI=/FI"%TASK_CODE%\BF2\Core\BuildConfig.h""
-cl %TASK_FLAGS% %TASK_FI% "%TASK_CODE%\BF2\AI\AIDLL\AI\AIKnowledge\InformationManager.cpp" /Fo"%BF2_PLAN_EXECUTOR_OUT%\manager.obj" >"%BF2_PLAN_EXECUTOR_OUT%\compile.log" 2>&1
+cl %TASK_FLAGS% %TASK_FI% "%TASK_CODE%\BF2\AI\AIDLL\AI\Main\InformationManager.cpp" /Fo"%BF2_PLAN_EXECUTOR_OUT%\manager.obj" >"%BF2_PLAN_EXECUTOR_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed
 cl %TASK_FLAGS% %TASK_FI% "%TASK_CODE%\BF2\IO\Input\PlayerInput.cpp" /Fo"%BF2_PLAN_EXECUTOR_OUT%\input.obj" >>"%BF2_PLAN_EXECUTOR_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed

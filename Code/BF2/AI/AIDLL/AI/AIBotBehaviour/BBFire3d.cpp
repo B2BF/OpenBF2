@@ -5,21 +5,21 @@
 
 #include "BBFire3d.h"
 
-#include "CustomCurve.h"
+#include "../AIUtils/CustomCurve.h"
 #include "../AIBot/BotMain.h"
 #include "../AIBot/BotMemory.h"
 #include "../AIBot/SensedObject.h"
 #include "../AIBotBehaviourPattern/BBPFire.h"
 #include "../AIKnowledge/BFInformationEnvironment.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIArmament.h"
 #include "../AIKnowledge/IPIControlInfo.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../AIStrategic/SAI.h"
 #include "../AIStrategicEntity/AIStrategicArea.h"
 #include "../AIStrategicEntity/AIStrategicObject.h"
@@ -164,7 +164,7 @@ float BBFire3d::calculateUrgency(Bot* bot, bool recalculate, float modifier)
         if (!info)
             continue;
         Bot* const other = IBotManager::instance->getBotFromPlayerId(info->getPlayerId());
-        if (other && (info->getObjectTypeFlags() & 0x10))
+        if (other && info->isOfType(ITAir))
         {
             Information* const otherTarget = informationManager->getInformation(other->getFiringTarget());
             if (otherTarget && otherTarget->getPlayerId() == bot->getPlayerId())
@@ -203,7 +203,7 @@ float BBFire3d::calculateUrgency(Bot* bot, bool recalculate, float modifier)
             if (!info)
                 continue;
             Bot* const other = IBotManager::instance->getBotFromPlayerId(info->getPlayerId());
-            if (other && (info->getObjectTypeFlags() & 0x10))
+            if (other && info->isOfType(ITAir))
             {
                 Information* const otherTarget = informationManager->getInformation(other->getFiringTarget());
                 if (otherTarget && otherTarget->getPlayerId() == bot->getPlayerId())
@@ -319,8 +319,8 @@ float BBFire3d::updateUrgencyWithTarget(unsigned int target, Information* info, 
         return 0.0f;
     Information* const primary = informationManager->getInformation(info->getPrimaryObject(bot->getSide()));
     IPIPhysical* const physical = info->getPhysical();
-    if (!physical || (info->getObjectTypeFlags() & 0x20000) || (info->getObjectTypeFlags() & 0x100000)
-        || (info->getObjectTypeFlags() & 0x800000) || 0.0f >= physical->getHealth())
+    if (!physical || info->isOfType(ITLowPriority) || info->isOfType(ITVegetation)
+        || info->isOfType(ITNoTemperature) || 0.0f >= physical->getHealth())
         return 0.0f;
 
     float attackFactor = 1.0f;
@@ -403,7 +403,7 @@ float BBFire3d::updateUrgencyWithTarget(unsigned int target, Information* info, 
 
     bool calculateApproach = true;
     float approachFactor = 1.0f;
-    if (primary->getObjectTypeFlags() & 0x10)
+    if (primary->isOfType(ITAir))
     {
         if (armament->isAntiAircraft() == 0)
         {
@@ -415,7 +415,7 @@ float BBFire3d::updateUrgencyWithTarget(unsigned int target, Information* info, 
                 calculateApproach = false;
             }
         }
-        else if (!(equipment->getObjectTypeFlags() & 0x10) && maxRange * 0.9f > distance)
+        else if (!equipment->isOfType(ITAir) && maxRange * 0.9f > distance)
         {
             calculateApproach = false;
         }
@@ -464,7 +464,7 @@ float BBFire3d::updateUrgencyWithTarget(unsigned int target, Information* info, 
     }
 
     float targetAreaFactor = areaFactor;
-    if (mobile && !(equipment->getObjectTypeFlags() & 0x10) && area
+    if (mobile && !equipment->isOfType(ITAir) && area
         && !static_cast<AIStrategicArea*>(area)->isInside(targetPosition))
         targetAreaFactor = targetAreaFactor * 0.75f;
     if (!info->getUnit() || !vehicleOccupied(target, bot->getSide()))
@@ -504,7 +504,7 @@ float BBFire3d::updateUrgencyWithTarget(unsigned int target, Information* info, 
     while (part);
 
     float rangeFactor;
-    if (primary->getObjectTypeFlags() & 0x10)
+    if (primary->isOfType(ITAir))
     {
         rangeFactor = 1.0f - distance / (maxRange * 1.5f);
         if (!(rangeFactor > 0.0f))

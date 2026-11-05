@@ -9,8 +9,8 @@
 
 #include "IPIPhysical.h"
 #include "IPIUnit.h"
-#include "InformationManager.h"
-#include "../AIStrategicMap/AerialHeightMap.h"
+#include "../Main/InformationManager.h"
+#include "../AIPathFinding/AerialHeightMap/AerialHeightMap.h"
 #include "../Main/CommonSingletonServer.h"
 #include "../../../../Math/Mat4.h"
 #include "../../../AIInterface/BFKnowledge/BFTimer.h"                // IBFTimer::getGameTime

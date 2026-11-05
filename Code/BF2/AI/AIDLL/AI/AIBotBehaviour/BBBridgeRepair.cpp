@@ -17,9 +17,9 @@
 #include "../AIKnowledge/IPIArmament.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../AIStrategicEntity/AIStrategicObjectManager.h"
 #include "../AIUtils/checkPointer.h"
 #include "../Main/AIDllFrontier.h"
@@ -148,9 +148,9 @@ float BBBridgeRepair::calculateUrgency(Bot* bot, bool update, float urgencyScale
 
     // 0x1FE508: virtual isApplicable (slot +0x34); then the soldier (0x200000) or 0x40 type flag.
     if (isApplicable(info, bot) &&
-        ((info->getObjectTypeFlags() & 0x200000) || (info->getObjectTypeFlags() & 0x40)))
+        (info->isOfType(ITSoldier) || info->isOfType(ITGround)))
     {
-        if ((info->getObjectTypeFlags() & 0x200000) && info->getSoldierPose() == SPSwimming)
+        if (info->isOfType(ITSoldier) && info->getSoldierPose() == SPSwimming)
         {
             // 0x1FEBF0
             m_targetChanged[botId] = true;

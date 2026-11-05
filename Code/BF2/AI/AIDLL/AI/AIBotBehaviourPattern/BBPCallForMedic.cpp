@@ -59,7 +59,7 @@ BotScript* BBPCallForMedic::createPlan(Bot* bot)
     bot->getScriptContext()->clear();
     BAPASendRadioMessage* const plan = checkPointer(new BAPASendRadioMessage(static_cast<AIRadioMessageType>(3),
         static_cast<AIRadioChannelType>(0), 5, 0.0f, m_patternId, -1));
-    plan->m_owner = this;
+    plan->mpOwner = this;
     return plan;
 }
 

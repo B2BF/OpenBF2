@@ -19,7 +19,7 @@
 #include "../AIKnowledge/IPIControlInfo.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIPlanInterpreter/BAPContext.h"
 #include "../AIPlanInterpreter/BotScriptDebugger.h"
 #include "../AIUtils/checkPointer.h"
@@ -174,7 +174,7 @@ BotScript* BBPAvoidCollision3d::createPlan(Bot* bot)
         maxSpeed *= 0.3f;
     BAPAMoveTo3d* const move =
         checkPointer(new BAPAMoveTo3d(bot, destination, maxSpeed, maxSpeed, stop, controls, 30.0f, m_id));
-    move->setParent(this);   // +0x04 (BotScript::m_owner)
+    move->setParent(this);   // +0x04 (BotScript::mpOwner)
     return move;
 }
 

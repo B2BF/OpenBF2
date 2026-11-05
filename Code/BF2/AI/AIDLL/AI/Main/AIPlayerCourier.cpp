@@ -11,7 +11,7 @@
 #include "IBotManager.h"
 #include "../AIBot/BotMain.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "InformationManager.h"
 #include "../../../AIInterface/BFKnowledge/IAIObject.h"
 
 namespace dice {

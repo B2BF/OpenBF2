@@ -6,12 +6,12 @@
 #include "BBChangeTeleport.h"
 
 #include "VehicleUrgencyCalculator.h"
-#include "CustomCurve.h"
+#include "../AIUtils/CustomCurve.h"
 #include "../AIBot/BotMain.h"
 #include "../AIBot/BotMemory.h"
 #include "../AIBotBehaviourPattern/BBPChangeTeleport.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../AIStrategicMap/BFStrategicEnvironment.h"
 #include "../Main/CommonSingletonServer.h"
@@ -117,20 +117,19 @@ float BBChangeTeleport::calculateUrgency(Bot* bot, bool evaluate, float)
         }
         else
         {
-            const unsigned int flags = equipment->getObjectTypeFlags();
-            if (flags & 0x80)
+            if (equipment->isOfType(ITNaval))
             {
                 currentModifier = 0.5f;
                 secondaryModifier = 0.65f;
                 primaryModifier = 1.0f;
             }
-            else if (flags & 0x40)
+            else if (equipment->isOfType(ITGround))
             {
                 currentModifier = 0.5f;
                 secondaryModifier = 0.7f;
                 primaryModifier = 1.0f;
             }
-            else if (flags & 0x10)
+            else if (equipment->isOfType(ITAir))
             {
                 currentModifier = secondaryModifier = 0.5f;
                 primaryModifier = 1.5f;

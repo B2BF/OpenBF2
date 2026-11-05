@@ -11,7 +11,7 @@
 #include "../AIBot/BotNavigation.h"
 #include "../AIBot/CommunicationAgent.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/IPIUnit.h"
@@ -55,7 +55,7 @@ void CommonControls::updateSpaceWithObstacles(Bot* bot, const Vec3& origin, cons
         if (self == obstacle || obstacle == 0)
             continue;
         IPIPhysical* const physical = obstacle->getPhysical();
-        if (physical == 0 || (obstacle->getObjectTypeFlags() & 0x200000u))
+        if (physical == 0 || obstacle->isOfType(ITSoldier))
             continue;
         const float radius = physical->getSmallestRadius();
         const Vec3& position = obstacle->getPosition();
@@ -147,7 +147,7 @@ bool CommonControls::checkCollisions(Bot* bot, Information* info, IPIPhysical* p
         if (info == other || other == 0)
             continue;
         IPIPhysical* const otherPhysical = other->getPhysical();
-        if (otherPhysical == 0 || (other->getObjectTypeFlags() & 0x200000u))
+        if (otherPhysical == 0 || other->isOfType(ITSoldier))
             continue;
         const float combinedRadius = otherPhysical->getRadius() + radius;
         const Vec3& ownPosition = info->getPosition();
@@ -356,7 +356,7 @@ float CommonControls::checkSlowDown(Bot* bot, Information* info, const Vec3& vel
         IPIPhysical* const otherPhysical = other->getPhysical();
         if (otherPhysical == 0)
             continue;
-        if ((other->getObjectTypeFlags() & 0x200000u) && 0.0f >= otherPhysical->getHealth())
+        if (other->isOfType(ITSoldier) && 0.0f >= otherPhysical->getHealth())
             continue;
         IPIMobile* const otherMobile = other->getMobile();
         if (otherMobile == 0)
@@ -409,7 +409,7 @@ float CommonControls::checkSlowDown(Bot* bot, Information* info, const Vec3& vel
         miss.z = centre.z - projected.z;
         if (miss.x * miss.x + miss.y * miss.y + miss.z * miss.z > radii * radii)
             continue;
-        if (other->getObjectTypeFlags() & 0x200000u)
+        if (other->isOfType(ITSoldier))
         {
             // 0x2B049C: a soldier ahead is only a horn candidate.
             if (along > 0.0f && info->getSide() == other->getSide())

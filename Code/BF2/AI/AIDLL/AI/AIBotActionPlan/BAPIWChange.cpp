@@ -24,7 +24,7 @@ BAPIWChange::BAPIWChange(unsigned int target, BAPStatement* statement, int patte
     m_target = target;
     m_playerId = playerId;
     bapinline::info(target)->bookVehicle(playerId);
-    m_statement->m_owner = this;
+    m_statement->mpOwner = this;
 }
 
 // ELF 0x1F5FC0 (D1; D2 0x1F5B20, D0 0x1F6470). Cancels the booking; then, when the plan's bot

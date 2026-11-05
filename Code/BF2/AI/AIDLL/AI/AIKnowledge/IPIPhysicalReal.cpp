@@ -6,7 +6,7 @@
 #include <iostream>
 
 #include "Information.h"
-#include "../AIBotBehaviour/CustomCurve.h"                          // SCurve::calculate (static)
+#include "../AIUtils/CustomCurve.h"                          // SCurve::calculate (static)
 #include "../Main/CommonSingletonServer.h"
 #include "../../../AIInterface/BFKnowledge/BFTimer.h"                // IBFTimer::getGameTime
 #include "../../../AIInterface/BFKnowledge/IAIObjectPlugIn.h"        // IAIObject, IAIObjectPhysical

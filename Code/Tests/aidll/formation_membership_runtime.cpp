@@ -39,7 +39,7 @@ void* CommonSingletonServer::m_iBFTimer = nullptr;
 IBFTimer::IBFTimer() {}
 IBFTimer::~IBFTimer() {}
 SquadFormation::SquadFormation(SquadCoordinator* squad)
-    : m_coordinator(squad), m_maxSquadMembers(6), m_b56(true), m_d92(-9.0)
+    : m_coordinator(squad), m_numberOfSlots(6), m_b56(true), m_d92(-9.0)
 { m_v60 = {-8,-9,-10}; m_v72 = {11,12,13}; m_trailingPosition = {21,22,23}; }
 SquadCoordinator::SquadCoordinator(int side, int index)
     : m_squadIndex(index), m_side(side), m_formation(nullptr)
@@ -54,16 +54,16 @@ SquadMember::~SquadMember() {}
 
 static bool equal(Vec3 a, Vec3 b) { return a.x == b.x && a.y == b.y && a.z == b.z; }
 static void resetExpected(SquadFormation::Slot& s)
-{ s.m_occupied=false; s.m_memberIndex=-1; s.m_i20=-1; s.m_b24=false; s.m_i28=0; }
+{ s.hasSquadMemberAssigned=false; s.m_memberIndex=-1; s.m_i20=-1; s.m_b24=false; s.m_i28=0; }
 static void movedExpected(SquadFormation::Slot& to, const SquadFormation::Slot& from, bool copyPosition)
 {
-    to.m_occupied=from.m_occupied; to.m_memberIndex=from.m_memberIndex;
+    to.hasSquadMemberAssigned=from.hasSquadMemberAssigned; to.m_memberIndex=from.m_memberIndex;
     to.m_i20=from.m_i20; to.m_b24=from.m_b24; to.m_i28=from.m_i28;
     if (copyPosition) to.m_offset=from.m_offset;
 }
 static void compareSlot(const SquadFormation::Slot& actual, const SquadFormation::Slot& expected)
 {
-    require(actual.m_occupied==expected.m_occupied, "occupied field");
+    require(actual.hasSquadMemberAssigned==expected.hasSquadMemberAssigned, "occupied field");
     require(actual.m_memberIndex==expected.m_memberIndex, "member identity field");
     require(actual.m_i20==expected.m_i20, "slot index field");
     require(actual.m_b24==expected.m_b24, "slot Boolean payload");
@@ -91,18 +91,18 @@ int main(int argc, char** argv)
     {
         members[i].m_bot=reinterpret_cast<Bot*>(&botIdentity);
         squad.m_squadMembers.push_back(&members[i]);
-        slots[i].m_occupied=true; slots[i].m_memberIndex=i;
+        slots[i].hasSquadMemberAssigned=true; slots[i].m_memberIndex=i;
         slots[i].m_i20=100+i; slots[i].m_b24=(i&1)!=0; slots[i].m_i28=20.25f+i;
         slots[i].m_offset={30.0f+i,40.0f+i,50.0f+i}; slots[i].m_referenceSlot=200+i;
         formation.m_slots.push_back(&slots[i]);
-        formation.m_slotTargets.push_back({true,{300.0f+i,400.0f+i,500.0f+i}});
+        formation.m_trailingPositions.push_back({true,{300.0f+i,400.0f+i,500.0f+i}});
     }
     if (mode=="membership")
     {
-        formation.m_maxSquadMembers=0;
+        formation.m_numberOfSlots=0;
         require(!formation.isInFormation(0), "zero count returns false without slots");
-        formation.m_maxSquadMembers=3;
-        slots[1].m_occupied=false; slots[1].m_memberIndex=-1;
+        formation.m_numberOfSlots=3;
+        slots[1].hasSquadMemberAssigned=false; slots[1].m_memberIndex=-1;
         require(formation.isInFormation(-1), "unoccupied minus-one slot matches");
         require(formation.isInFormation(2) && !formation.isInFormation(5), "captured count bounds scan");
         slots[2].m_memberIndex=(std::numeric_limits<int>::min)();
@@ -114,7 +114,7 @@ int main(int argc, char** argv)
         for(int i=0;i<6;++i) expected[i]=slots[i];
         resetExpected(expected[3]); formation.resetSlot(3);
         for(int i=0;i<6;++i) compareSlot(slots[i],expected[i]);
-        require(clockCalls==0 && formation.m_slotTargets[3].first, "reset leaves timer and target flag");
+        require(clockCalls==0 && formation.m_trailingPositions[3].first, "reset leaves timer and target flag");
     }
     else
     {
@@ -124,10 +124,10 @@ int main(int argc, char** argv)
         else if(mode=="last") removed=5;
         else if(mode=="middle" || mode=="duplicate" || mode=="timer_mutation")
         { removed=2; selected=5; if(mode=="duplicate") slots[4].m_memberIndex=2; }
-        else if(mode=="next_empty") { removed=2; slots[3].m_occupied=false; }
+        else if(mode=="next_empty") { removed=2; slots[3].hasSquadMemberAssigned=false; }
         else if(mode=="only_zero" || mode=="zero_two" || mode=="trailing_stop")
         {
-            for(int i=(mode=="only_zero"?1:2);i<6;++i) slots[i].m_occupied=false;
+            for(int i=(mode=="only_zero"?1:2);i<6;++i) slots[i].hasSquadMemberAssigned=false;
             resetTrailing=true;
             if(mode!="only_zero") selected=1;
             if(mode=="trailing_stop") squad.m_v108={1,0,0};
@@ -188,7 +188,7 @@ int main(int argc, char** argv)
         if(resetTrailing) for(auto& s:expected) s.m_i20=-1;
         if(mode=="timer_mutation")
             clockCallback=[&] {
-                require(slots[2].m_memberIndex==5 && !slots[5].m_occupied && !members[5].m_havePath, "all moves and path invalidation before clock");
+                require(slots[2].m_memberIndex==5 && !slots[5].hasSquadMemberAssigned && !members[5].m_havePath, "all moves and path invalidation before clock");
                 formation.m_v72={77,78,79};
             };
         formation.leaveFormation(removed);
@@ -197,14 +197,14 @@ int main(int argc, char** argv)
         {
             compareSlot(slots[i],expected[i]);
             require(formation.m_slots[i]==&slots[i], "slot pointers not moved or replaced");
-            require(formation.m_slotTargets[i].first==!resetTrailing, "only trailing reset clears target flags");
-            require(equal(formation.m_slotTargets[i].second,{300.0f+i,400.0f+i,500.0f+i}), "target positions untouched");
+            require(formation.m_trailingPositions[i].first==!resetTrailing, "only trailing reset clears target flags");
+            require(equal(formation.m_trailingPositions[i].second,{300.0f+i,400.0f+i,500.0f+i}), "target positions untouched");
             const bool moved=(selected==i || replacement==i);
             require(members[i].m_havePath==!moved && members[i].m_flag4A==moved, "only moved members get both real path flags");
         }
         require(equal(formation.m_trailingPosition,resetTrailing?Vec3{11,12,13}:Vec3{21,22,23}), "trailing position reset policy");
-        require(clockCalls==(slots[0].m_occupied?1:0), "movement timer only for occupied slot0");
-        if(slots[0].m_occupied)
+        require(clockCalls==(slots[0].hasSquadMemberAssigned?1:0), "movement timer only for occupied slot0");
+        if(slots[0].hasSquadMemberAssigned)
             require(formation.m_b56 && formation.m_d92==10.125+0.2 && equal(formation.m_v60,formation.m_v72), "forced movement timestamp and fresh position");
         else require(formation.m_b56 && formation.m_d92==-9.0 && equal(formation.m_v60,{-8,-9,-10}), "empty slot0 preserves previous movement state");
     }

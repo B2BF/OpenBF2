@@ -18,10 +18,12 @@ for %%F in (InformationFactory BFInformationCourier Information InformationReal 
 cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIInterface\BFKnowledge\PlanePolygon.cpp" /Fo"%BF2_INFORMATION_FACTORY_OUT%\PlanePolygon.obj" >>"%BF2_INFORMATION_FACTORY_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed
 cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\Main\IAIPathfinding.cpp" /Fo"%BF2_INFORMATION_FACTORY_OUT%\IAIPathfinding.obj" >>"%BF2_INFORMATION_FACTORY_OUT%\compile.log" 2>&1
+cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\Main\IAIPathfindingSetup.cpp" /Fo"%BF2_INFORMATION_FACTORY_OUT%\IAIPathfindingSetup.obj" >>"%BF2_INFORMATION_FACTORY_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed
 cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\Math\Vec3.cpp" /Fo"%BF2_INFORMATION_FACTORY_OUT%\Vec3.obj" >>"%BF2_INFORMATION_FACTORY_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed
-cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\AIBotBehaviour\CustomCurve.cpp" /Fo"%BF2_INFORMATION_FACTORY_OUT%\CustomCurve.obj" >>"%BF2_INFORMATION_FACTORY_OUT%\compile.log" 2>&1
+cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\AIUtils\CustomCurve.cpp" /Fo"%BF2_INFORMATION_FACTORY_OUT%\CustomCurve.obj" >>"%BF2_INFORMATION_FACTORY_OUT%\compile.log" 2>&1
+cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\AIUtils\SCurve.cpp" /Fo"%BF2_INFORMATION_FACTORY_OUT%\SCurve.obj" >>"%BF2_INFORMATION_FACTORY_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed
 for %%F in (Debug StringUtil) do (
   cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\Core\%%F.cpp" /Fo"%BF2_INFORMATION_FACTORY_OUT%\%%F.obj" >>"%BF2_INFORMATION_FACTORY_OUT%\compile.log" 2>&1
@@ -30,7 +32,7 @@ for %%F in (Debug StringUtil) do (
 cl %TASK_FLAGS% /I"%BF2_INFORMATION_FACTORY_OUT%" /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%~dp0information_factory_runtime.cpp" /Fo"%BF2_INFORMATION_FACTORY_OUT%\fixture.obj" >>"%BF2_INFORMATION_FACTORY_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed
 set "O=%BF2_INFORMATION_FACTORY_OUT%"
-link /nologo /OPT:REF /INCREMENTAL:NO /SUBSYSTEM:CONSOLE /OUT:"%O%\information_factory_runtime.exe" "%O%\InformationFactory.obj" "%O%\BFInformationCourier.obj" "%O%\Information.obj" "%O%\InformationReal.obj" "%O%\IPIPhysicalReal.obj" "%O%\IPIArmament.obj" "%O%\IPIArmamentReal.obj" "%O%\IPICover.obj" "%O%\IPIMobile.obj" "%O%\IPIMobileReal.obj" "%O%\IPIMobileKnown.obj" "%O%\IPIUnit.obj" "%O%\InformationManager.obj" "%O%\WeaponInfo.obj" "%O%\WeaponInfoReal.obj" "%O%\WeaponInfoManager.obj" "%O%\PlanePolygon.obj" "%O%\IAIPathfinding.obj" "%O%\Vec3.obj" "%O%\CustomCurve.obj" "%O%\Debug.obj" "%O%\StringUtil.obj" "%O%\fixture.obj" >"%O%\link.log" 2>&1
+link /nologo /OPT:REF /INCREMENTAL:NO /SUBSYSTEM:CONSOLE /OUT:"%O%\information_factory_runtime.exe" "%O%\InformationFactory.obj" "%O%\BFInformationCourier.obj" "%O%\Information.obj" "%O%\InformationReal.obj" "%O%\IPIPhysicalReal.obj" "%O%\IPIArmament.obj" "%O%\IPIArmamentReal.obj" "%O%\IPICover.obj" "%O%\IPIMobile.obj" "%O%\IPIMobileReal.obj" "%O%\IPIMobileKnown.obj" "%O%\IPIUnit.obj" "%O%\InformationManager.obj" "%O%\WeaponInfo.obj" "%O%\WeaponInfoReal.obj" "%O%\WeaponInfoManager.obj" "%O%\PlanePolygon.obj" "%O%\IAIPathfinding.obj" "%O%\IAIPathfindingSetup.obj" "%O%\Vec3.obj" "%O%\CustomCurve.obj" "%O%\SCurve.obj" "%O%\Debug.obj" "%O%\StringUtil.obj" "%O%\fixture.obj" >"%O%\link.log" 2>&1
 if errorlevel 1 goto failed
 python -I "%~dp0information_factory_runtime.py" run "%BF2_INFORMATION_FACTORY_OUT%\information_factory_runtime.exe"
 exit /b %errorlevel%

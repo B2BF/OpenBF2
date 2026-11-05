@@ -15,19 +15,19 @@
 #include "../AIKnowledge/BFInformationCourier.h"     // step 4
 #include "../AIKnowledge/BFInformationEnvironment.h"
 #include "../AIKnowledge/InformationFactory.h"       // step 8
-#include "../AIKnowledge/InformationManager.h"       // step 1, and clear's table teardown
-#include "../AIKnowledge/WeaponInfoManager.h"        // step 2
+#include "InformationManager.h"       // step 1, and clear's table teardown
+#include "../AIUtils/WeaponInfoManager.h"        // step 2
 #include "../AIStrategicMap/BFStrategicEnvironment.h"  // step 6
 #include "../DrawPrimitives/DPManager.h"             // step 7
 #include "../AIUtils/checkPointer.h"
 #include "AICollisionHandler.h"                      // step 10
 #include "AIEventCourier.h"                          // step 11
 #include "AIMain.h"
-#include "AIMineManager.h"                           // step 13
+#include "../AIKnowledge/AIMineManager.h"                           // step 13
 #include "AIPlayerCourier.h"                         // step 12
 #include "AIConsole.h"                               // step 15
 #include "../AIUtils/DebugRendering/AIRenderUtil.h"   // clear: the debug renderer
-#include "../AIStrategicEntity/AILandingZoneManager.h" // clear: the landing-zone manager
+#include "AILandingZoneManager.h" // clear: the landing-zone manager
 #include "BotBehaviourManager.h"                   // step 16
 #include "../AIStrategicEntity/AIStrategicObjectManager.h"   // step 17
 #include "../AIStrategicEntity/CoverPosition/CoverPositionManager.h"  // step 18
@@ -37,9 +37,9 @@
 #include "AIRandom.h"                               // step 22, and clear
 #include "AISettings.h"                              // step 9
 #include "BFPathfindingCourier.h"                    // step 5
-#include "UserOrderManager.h"                        // step 14
+#include "../AIStrategicEntity/UserOrders/UserOrderManager.h"                        // step 14
 #include "StrategyManager.h"                         // step 19, and clear
-#include "../AIStrategicMap/AerialHeightMap.h"       // step 20, and clear
+#include "../AIPathFinding/AerialHeightMap/AerialHeightMap.h"       // step 20, and clear
 #include "CommunicationHub.h"                        // step 23, and clear
 #include "AISettingsInterfaces.h"   // IAISettings / IAISettingsModifier
 #include "../../../AIInterface/BFKnowledge/BFGame.h"   // IAIGame::getAISettingsFromGame
@@ -347,7 +347,7 @@ bool BF2AI::clear()
     // both, with no destructor call on either - which is what establishes that `SpHandlePool` is
     // trivially destructible and that `InformationManager` owns nothing else. Written as the two
     // raw frees the binary makes rather than as `delete informationManager`, because a typed delete
-    // would call the destructor the binary does not call. See AIKnowledge/InformationManager.h.
+    // would call the destructor the binary does not call. See Main/InformationManager.h.
     if (informationManager)
     {
         if (informationManager->getPool())

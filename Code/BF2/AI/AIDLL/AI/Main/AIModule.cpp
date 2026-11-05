@@ -21,13 +21,13 @@
 #include "../AIStrategic/Strategy.h"
 #include "../AIStrategic/StrategyCondition.h"
 #include "../AIStrategicEntity/AILandingZone.h"
-#include "../AIStrategicEntity/AILandingZoneManager.h"
+#include "AILandingZoneManager.h"
 #include "../AIStrategicEntity/AIStrategicArea.h"
 #include "../AIStrategicEntity/AIStrategicObjectManager.h"
 #include "../AIStrategicEntity/CoverPosition/CoverPositionManager.h"
 #include "../AIStrategicEntity/GuardPosition.h"
 #include "../AIStrategicEntity/PatrolPath.h"
-#include "../AIStrategicMap/AerialHeightMap.h"
+#include "../AIPathFinding/AerialHeightMap/AerialHeightMap.h"
 #include "../DrawPrimitives/DPManager.h"
 #include "AIConsole.h"
 #include "AILODManager.h"
@@ -43,7 +43,7 @@
 #include "IAIPathfinding.h"
 #include "IBotManager.h"
 #include "StrategyManager.h"
-#include "UserOrderManager.h"
+#include "../AIStrategicEntity/UserOrders/UserOrderManager.h"
 
 namespace dice {
 namespace hfe {

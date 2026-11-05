@@ -44,7 +44,7 @@ static bool* firingField;
 #include "mocks.inl"
 namespace dice {namespace hfe {namespace ai {
 // [CHOSEN, not recovered] Native scoped lifetimes; no retail publication/deep construction.
-SquadCoordinator::SquadCoordinator(int side,int index):m_squadIndex(index),m_side(side),m_i120(0),m_i148(77),
+SquadCoordinator::SquadCoordinator(int side,int index):m_squadIndex(index),m_side(side),m_missionStatus(0),m_i148(77),
     m_b156(true),m_b157(true),m_v28{},m_v108{} {}
 SquadMember::SquadMember(SquadCoordinator* squad,IAIPlayer* player,int squadIndex,int side,int index)
     :m_squadIndex(squadIndex),m_memberIndex(index),m_player(player),m_bot(nullptr),m_squad(squad),m_side(side),
@@ -181,10 +181,10 @@ int main(int argc,char** argv)
     }
     else if(mode=="fresh_position")
     {a.m_position={900,0,0};botCallback=[&](int id,int op)->unsigned{if(op&&id==0){a.m_position={1,0,0};squad.m_v108={2,0,0};}return op?1:handle;};}
-    else if(mode=="mission_full_width"){squad.m_squadMembers.clear();squad.m_i120=0x102;expected=0;expectedTrace="";}
+    else if(mode=="mission_full_width"){squad.m_squadMembers.clear();squad.m_missionStatus=0x102;expected=0;expectedTrace="";}
     else if(mode=="mission_stop"||mode=="mission_after_scan")
     {
-        squad.m_i120=2;expected=0;
+        squad.m_missionStatus=2;expected=0;
         if(mode=="mission_stop"){squad.m_squadMembers.clear();expectedTrace="";}
         else {alive[0]=alive[1]=false;expectedTrace="p0,p1";}
         stoppingSquad=&squad;expectedStopTrace=expectedTrace;

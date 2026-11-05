@@ -11,7 +11,7 @@
 #include "../AIBotActionPlan/BAPATurn.h"
 #include "../AIBotActionPlan/BAPCondition.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../Main/CommonSingletonServer.h"
 #include "../../../AIInterface/BFKnowledge/BFObjectEnvironment.h"

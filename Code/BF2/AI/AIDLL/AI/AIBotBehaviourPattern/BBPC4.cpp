@@ -21,10 +21,10 @@
 #include "../AIBotActionPlan/BAPIWFire.h"
 #include "../AIBotActionPlan/BAPVariable.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIArmament.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../AIPlanInterpreter/BAPContext.h"
 #include "../AIPlanInterpreter/BotScriptDebugger.h"
 #include "../AIUtils/checkPointer.h"
@@ -153,7 +153,7 @@ BotScript* BBPC4::createPlan(Bot* bot)
 
     // 0x232FE2
     BAPIWFire* const root = checkPointer(new BAPIWFire(bot, 0xFFFFFFFFu, true, false, 4, -1, serial, m_id));
-    root->setParent(this);   // +0x04 (BotScript::m_owner)
+    root->setParent(this);   // +0x04 (BotScript::mpOwner)
     static_cast<BotMain*>(bot)->resetAllControls(true, true, true);
     return root;
 }

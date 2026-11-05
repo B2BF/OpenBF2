@@ -13,7 +13,7 @@
 #include <windows.h>
 #include <crtdbg.h>
 #define private public
-#include "../../BF2/AI/AIDLL/AI/Main/UserOrderManager.h"
+#include "../../BF2/AI/AIDLL/AI/AIStrategicEntity/UserOrders/UserOrderManager.h"
 #include "../../BF2/AI/AIDLL/AI/AIStrategicEntity/GuardPosition.h"
 #include "../../BF2/AI/AIDLL/AI/AIStrategicEntity/PatrolPath.h"
 #undef private

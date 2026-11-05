@@ -9,7 +9,7 @@
 #include <string>
 
 #include "Information.h"
-#include "InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "InformationKnown.h"
 #include "InformationReal.h"
 #include "IPIArmamentKnown.h"
@@ -23,7 +23,7 @@
 #include "IPIUnit.h"
 #include "WeaponInfoKnown.h"
 #include "WeaponInfoReal.h"
-#include "WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../AIUtils/checkPointer.h"
 #include "../../../../Core/ClassManager.h"
 #include "../../../../Core/Ids.h"                       // IID_IBase

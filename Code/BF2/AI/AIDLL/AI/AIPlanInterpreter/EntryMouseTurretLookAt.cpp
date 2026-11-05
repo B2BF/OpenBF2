@@ -14,7 +14,7 @@
 #include "../AIBotActionPlan/BAPALook.h"
 #include "../AIBotActionPlan/BAPCondition.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../../../AIInterface/BFKnowledge/AIPlayer.h"
 #include "../../../../Math/Mat4.h"
 #include "../../../../Math/Vec3.h"

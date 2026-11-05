@@ -9,7 +9,7 @@
 #include "../AIBot/BotMain.h"
 #include "../AIBot/SensingAgent.h"
 #include "../AIBotBehaviourPattern/PlanGenerator.h"
-#include "../AIPlanInterpreter/BotScript.h"
+#include "../AIBotActionPlan/BotScript.h"
 #include "../AIUtils/checkPointer.h"
 #include "../Main/AIDllFrontier.h"
 
@@ -151,15 +151,15 @@ BotScript* BotBehaviour::generatePlan(Bot* bot)
     }
 
     if (bot->getPlan() != 0)
-        bot->getPlan()->m_owner = m_pattern;
+        bot->getPlan()->mpOwner = m_pattern;
 
     BotScript* plan = m_pattern->createPlan(bot);
     if (plan != 0)
     {
-        plan->m_owner = this;
+        plan->mpOwner = this;
         if (bot->getPlan() != 0 && bot->getPlan() != plan)
         {
-            bot->getPlan()->m_owner = this;
+            bot->getPlan()->mpOwner = this;
             bot->getSensingAgent()->setSensedNewObject();
         }
     }

@@ -1,11 +1,12 @@
+// Source placement: AIDLL_r.dll __FILE__ "Code\BF2\AI\AIDLL\AI\AIStrategicEntity\UserOrders\UserOrderManager.cpp" (asserts in 0x1007C7E0 / 0x1007C920).
 // static init: ELF 0x3521D0 (__tcf_0 0x352230, _GLOBAL__I 0x352260): <iostream>'s Init object only.
 #include <iostream>
 
 #include "UserOrderManager.h"
 
-#include "../AIUtils/checkPointer.h"
-#include "../AIStrategicEntity/GuardPosition.h"
-#include "../AIStrategicEntity/PatrolPath.h"
+#include "../../AIUtils/checkPointer.h"
+#include "../GuardPosition.h"
+#include "../PatrolPath.h"
 
 namespace dice {
 namespace hfe {

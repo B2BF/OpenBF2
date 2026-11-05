@@ -6,20 +6,20 @@
 
 #include "BBFire.h"
 
-#include "CustomCurve.h"
+#include "../AIUtils/CustomCurve.h"
 #include "../AIBot/BotMain.h"
 #include "../AIBotBehaviourPattern/BBPFire.h"
 #include "../AIBot/BotMemory.h"
 #include "../AIBot/SensedObject.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIArmament.h"
 #include "../AIKnowledge/IPIControlInfo.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../AIStrategic/SAI.h"
 #include "../AIStrategicEntity/AIStrategicArea.h"
 #include "../AIStrategicEntity/AIStrategicObjectManager.h"
@@ -161,8 +161,7 @@ float BBFire::calculateUrgency(Bot* bot, bool recalculate, float modifier)
     const int side = bot->getSide();
     Information* const equipment = informationManager->getInformation(bot->getCurrentEquipment());
     const Vec3& position = equipment->getPosition();
-    const unsigned int flags = equipment->getObjectTypeFlags();
-    if (!(flags & 0x80) && !(flags & 0x10) && (flags & 0x200000))
+    if (!equipment->isOfType(ITNaval) && !equipment->isOfType(ITAir) && equipment->isOfType(ITSoldier))
     {
         // 0x209FE0: a passenger seat whose soldier pose is 4 does not fire.
         if (equipment->isPrimary() && equipment->getSoldierPose() == 4)
@@ -236,8 +235,7 @@ float BBFire::calculateUrgency(Bot* bot, bool recalculate, float modifier)
         IPIPhysical* const targetPhysical = info->getPhysical();
         if (!targetPhysical)
             continue;
-        const unsigned int targetFlags = info->getObjectTypeFlags();
-        if ((targetFlags & 0x20000) || (targetFlags & 0x100000) || (targetFlags & 0x800000))
+        if (info->isOfType(ITLowPriority) || info->isOfType(ITVegetation) || info->isOfType(ITNoTemperature))
             continue;
         if (0.0f >= targetPhysical->getHealth())     // 0x208B46 jae: a NaN health is kept
             continue;
@@ -272,7 +270,7 @@ float BBFire::calculateUrgency(Bot* bot, bool recalculate, float modifier)
                 ramp = 1.0f;
             attackFactor = 1.5f - ramp * 0.5f;
             if (!IBotManager::instance->getBotFromPlayerId(info->getPlayerId())
-                && (info->getObjectTypeFlags() & 0x200000))
+                && info->isOfType(ITSoldier))
                 attackFactor = attackFactor * 3.0f;
         }
         else
@@ -320,7 +318,7 @@ float BBFire::calculateUrgency(Bot* bot, bool recalculate, float modifier)
             if (targetUnit->getEquipmentType() != equipmentType)
             {
                 unsigned char material;
-                pathfinding->getMaterial(mobile->getVehicleNumber(), valid.quadTree, valid.polygon, material);
+                pathfinding->getMaterial(mobile->getVehicleNumber(), valid.island, valid.polygon, material);
                 if (!settings()->isValidMaterial(equipmentType, material))
                     continue;
             }
@@ -348,8 +346,7 @@ float BBFire::calculateUrgency(Bot* bot, bool recalculate, float modifier)
                      + transformation.m[9] * local.z + transformation.m[13];
             seen.z = local.x * transformation.m[2] + local.y * transformation.m[6]
                      + local.z * transformation.m[10] + transformation.m[14];
-            const unsigned int ownFlags = equipment->getObjectTypeFlags();
-            if (!(ownFlags & 0x10) || (ownFlags & 0x20))
+            if (!equipment->isOfType(ITAir) || equipment->isOfType(ITHelicopter))
             {
                 if (!controlInfo->validateCameraDirectionByPos(seen))
                     continue;
@@ -419,13 +416,13 @@ float BBFire::calculateUrgency(Bot* bot, bool recalculate, float modifier)
                                                      + targetSpeed.z * targetSpeed.z);
 
         float targetAreaFactor = areaFactor;   // -0x1A0
-        if (mobile && !(equipment->getObjectTypeFlags() & 0x10) && area && !area->isInside(targetPosition))
+        if (mobile && !equipment->isOfType(ITAir) && area && !area->isInside(targetPosition))
             targetAreaFactor = targetAreaFactor * 0.85f;
 
         // 0x209247: the approach factor (-0x258).
         float approachFactor;
         bool closing = true;   // falls through to the closing-speed estimate below
-        if (info->getObjectTypeFlags() & 0x10)
+        if (info->isOfType(ITAir))
         {
             // 0x209C55: an aircraft target.
             const int antiAircraft = armament->isAntiAircraft();
@@ -518,7 +515,7 @@ float BBFire::calculateUrgency(Bot* bot, bool recalculate, float modifier)
             if (targetUnit->getEquipmentType() != equipmentType)
             {
                 unsigned char material;
-                pathfinding->getMaterial(mobile->getVehicleNumber(), valid.quadTree, valid.polygon, material);
+                pathfinding->getMaterial(mobile->getVehicleNumber(), valid.island, valid.polygon, material);
                 if (!settings()->isValidMaterial(equipmentType, material))
                     continue;
             }
@@ -571,7 +568,7 @@ float BBFire::calculateUrgency(Bot* bot, bool recalculate, float modifier)
             else
                 strength = std::max(partUnit->getBattleStrengths()[strengthType],
                                     partUnit->getBattleStrengths()[soldierStrengthType]);
-            if (!(info->getObjectTypeFlags() & 0x200000))
+            if (!info->isOfType(ITSoldier))
                 strength = strength * enemyStrengthTweak;
             score = (strength + part->getStrength() + unit->getBattleStrengths()[targetStrengthType])
                         * armourClassValues[targetStrengthType] * orderFactor * targetAreaFactor
@@ -709,7 +706,7 @@ int BBFire::chooseWeapon(Bot* bot, unsigned int target, float distance)
     static bool allowMultipleC4 = false;   // .bss; nothing in the image writes it
 
     Information* const equipment = informationManager->getInformation(bot->getCurrentEquipment());
-    const bool ownIsSoldier = (equipment->getObjectTypeFlags() & 0x200000) != 0;
+    const bool ownIsSoldier = equipment->isOfType(ITSoldier);
     IPIArmament* const armament = equipment->getArmament();
     static_cast<BotMain*>(bot)->setUseStaticAttack(false);
     const double now = static_cast<const IBFTimer*>(CommonSingletonServer::m_iBFTimer)->getGameTime();
@@ -719,7 +716,7 @@ int BBFire::chooseWeapon(Bot* bot, unsigned int target, float distance)
     Information* const targetInfo = informationManager->getInformation(target);
     if (!targetInfo)
         return -1;
-    const bool targetIsSoldier = (targetInfo->getObjectTypeFlags() & 0x200000) != 0;
+    const bool targetIsSoldier = targetInfo->isOfType(ITSoldier);
     IPIPhysical* const targetPhysical = targetInfo->getPhysical();
     IPIMobile* const targetMobile = targetInfo->getMobile();
     if (!targetPhysical)
@@ -795,7 +792,7 @@ int BBFire::chooseWeapon(Bot* bot, unsigned int target, float distance)
         bool closeQuarters = false;     // -0x1B1
         bool meleeAttack = false;       // -0x1B2
         bool splash = false;            // -0x1C8: a vehicle's explosive weapon against a soldier
-        if (!ownIsSoldier && (targetInfo->getObjectTypeFlags() & 0x200000))
+        if (!ownIsSoldier && targetInfo->isOfType(ITSoldier))
         {
             if (weapon->getWeaponGuidanceType() == 0 && weapon->getExplosionRadius() != 0.0f)
                 splash = true;
@@ -885,7 +882,7 @@ int BBFire::chooseWeapon(Bot* bot, unsigned int target, float distance)
                 return static_cast<int>(i);
         }
 
-        if ((ownIsSoldier || splash) && (targetInfo->getObjectTypeFlags() & 0x200000)
+        if ((ownIsSoldier || splash) && targetInfo->isOfType(ITSoldier)
             && weapon->getWeaponGuidanceType() == 0 && weapon->getExplosionRadius() != 0.0f)
         {
             // 0x20ABCC: splash damage, unless the bot or the target is at the flag the bot goes for.

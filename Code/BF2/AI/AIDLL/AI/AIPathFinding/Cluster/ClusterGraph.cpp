@@ -34,8 +34,8 @@ void ClusterGraph::readGTSDataFromFile(QuadTree* tree, io::File& file)
     {
         Cluster& cluster = m_clusters[i];
         unsigned int count;
-        cluster.readGTSDataFromFile(m_clusterPolygons + m_numberOfClusterPolygons,
-                                    count, m_numberOfClusterPolygons, file);
+        cluster.readGTSDataFromFile(m_clusterPolygons + m_polygonCount,
+                                    count, m_polygonCount, file);
         const unsigned int first = cluster.m_firstPolygon;
         const unsigned int size = cluster.m_numberOfPolygons;
         for (unsigned int j = 0; j < size; ++j)
@@ -43,10 +43,10 @@ void ClusterGraph::readGTSDataFromFile(QuadTree* tree, io::File& file)
             const unsigned int id = m_clusterPolygons[first + j];
             Polygon* polygon = tree->getPolygon(id);
             DoublePolygon* doublePolygon = tree->getPolygonDouble(id);
-            polygon->m_cluster = i;
+            polygon->cluster = i;
             doublePolygon->m_cluster = i;
         }
-        m_numberOfClusterPolygons += count;
+        m_polygonCount += count;
     }
 }
 
@@ -175,14 +175,14 @@ void ClusterGraph::buildClusterEdges(const Cluster& cluster, unsigned short clus
     {
         const unsigned int id = m_clusterPolygons[first + j];
         const Polygon* polygon = tree->getPolygon(id);
-        for (unsigned char edge = 0; edge < polygon->m_numberOfVertices; ++edge)
+        for (unsigned char edge = 0; edge < polygon->vertexCount; ++edge)
         {
             const unsigned int neighbourId = tree->getNeighbourOfPolygon(id, edge);
             const Polygon* neighbour = tree->getPolygon(neighbourId);
-            if (!neighbour || neighbour->m_cluster == polygon->m_cluster) continue;
+            if (!neighbour || neighbour->cluster == polygon->cluster) continue;
             const unsigned int a = tree->getVertexIndexForPolygon(id, edge);
             const unsigned int b = tree->getVertexIndexForPolygon(id,
-                static_cast<unsigned char>((edge + 1) % polygon->m_numberOfVertices));
+                static_cast<unsigned char>((edge + 1) % polygon->vertexCount));
             for (int endpoint = 0; endpoint < 2; ++endpoint)
             {
                 const unsigned int vertex = endpoint == 0 ? a : b;
@@ -190,14 +190,14 @@ void ClusterGraph::buildClusterEdges(const Cluster& cluster, unsigned short clus
                 if (found == vertices.end())
                 {
                     std::map<unsigned short, unsigned int> clusters;
-                    clusters.insert(std::make_pair(neighbour->m_cluster, 1U));
+                    clusters.insert(std::make_pair(neighbour->cluster, 1U));
                     vertices.insert(std::make_pair(vertex, clusters));
                 }
                 else
                 {
-                    std::map<unsigned short, unsigned int>::iterator entry = found->second.find(neighbour->m_cluster);
+                    std::map<unsigned short, unsigned int>::iterator entry = found->second.find(neighbour->cluster);
                     if (entry == found->second.end())
-                        found->second.insert(std::make_pair(neighbour->m_cluster, 1U));
+                        found->second.insert(std::make_pair(neighbour->cluster, 1U));
                     else if (++entry->second > 2)
                     {
                         printClusterInfo(clusterId, tree, false);
@@ -206,13 +206,13 @@ void ClusterGraph::buildClusterEdges(const Cluster& cluster, unsigned short clus
                     }
                 }
             }
-            ClusterEdges::iterator found = edges.find(neighbour->m_cluster);
+            ClusterEdges::iterator found = edges.find(neighbour->cluster);
             const std::pair<unsigned int, unsigned int> edgePair(a, b);
             if (found == edges.end())
             {
                 std::list<std::pair<unsigned int, unsigned int> > list;
                 list.push_back(edgePair);
-                edges.insert(std::make_pair(neighbour->m_cluster, list));
+                edges.insert(std::make_pair(neighbour->cluster, list));
             }
             else
                 found->second.push_back(edgePair);
@@ -341,7 +341,7 @@ bool ClusterGraph::calculateMiddleVertex(unsigned short cluster, const ClusterPo
     if (found)
     {
         const bool valid = materials->isValidMaterial(result->m_material);
-        const bool rightCluster = result->m_cluster == cluster || result->m_cluster == info.neighbour;
+        const bool rightCluster = result->cluster == cluster || result->cluster == info.neighbour;
         if (valid && rightCluster) return true;
     }
     Vec3 direction;
@@ -371,7 +371,7 @@ bool ClusterGraph::calculateMiddleVertex(unsigned short cluster, const ClusterPo
             {
                 result = tree->getPolygon(polygon);
                 const bool valid = materials->isValidMaterial(result->m_material);
-                const bool rightCluster = result->m_cluster == cluster || result->m_cluster == info.neighbour;
+                const bool rightCluster = result->cluster == cluster || result->cluster == info.neighbour;
                 if (valid && rightCluster) return true;
             }
             distance += 0.1f;
@@ -407,14 +407,14 @@ void ClusterGraph::movePolygonBetweenClusters(unsigned short source, unsigned sh
                                               unsigned int polygon)
 {
     Cluster* adjusted = checkPointer(new Cluster[m_numberOfClusters]);
-    unsigned int* polygons = checkPointer(new unsigned int[m_numberOfClusterPolygons]);
+    unsigned int* polygons = checkPointer(new unsigned int[m_polygonCount]);
     for (unsigned int i = 0; i < m_numberOfClusters; ++i)
     {
         if (i == source) adjusted[i].m_numberOfPolygons = m_clusters[i].m_numberOfPolygons - 1;
         else if (i == destination) adjusted[i].m_numberOfPolygons = m_clusters[destination].m_numberOfPolygons + 1;
         else adjusted[i].m_numberOfPolygons = m_clusters[i].m_numberOfPolygons;
     }
-    for (unsigned int i = 0; i < m_numberOfClusterPolygons; ++i)
+    for (unsigned int i = 0; i < m_polygonCount; ++i)
     {
         // shipped defect: skipped entries leave holes; insertion also skips the old destination entry.
         if (m_clusterPolygons[i] == polygon) continue;
@@ -439,7 +439,7 @@ void ClusterGraph::addPolygonsToNewCluster(const std::set<unsigned int>& selecte
                                           std::list<OptPolygon*>& mesh)
 {
     Cluster* adjusted = checkPointer(new Cluster[m_numberOfClusters + 1]);
-    unsigned int* polygons = checkPointer(new unsigned int[m_numberOfClusterPolygons]);
+    unsigned int* polygons = checkPointer(new unsigned int[m_polygonCount]);
     for (unsigned int i = 0; i < m_numberOfClusters; ++i)
         adjusted[i].m_numberOfPolygons = m_clusters[i].m_numberOfPolygons;
     unsigned int write = 0;
@@ -725,10 +725,10 @@ void ClusterGraph::getAllDeepWaterAndInvalidPolygonsInCluster(unsigned short clu
 // ELF 0x31B5B0.
 void ClusterGraph::setPolygonIndices(const ClusterPolygonMap& clusters)
 {
-    m_numberOfClusterPolygons = 0;
+    m_polygonCount = 0;
     for (ClusterPolygonMap::const_iterator i = clusters.begin(); i != clusters.end(); ++i)
-        m_numberOfClusterPolygons += static_cast<unsigned int>(i->second.size());
-    unsigned int* polygons = checkPointer(new unsigned int[m_numberOfClusterPolygons]);
+        m_polygonCount += static_cast<unsigned int>(i->second.size());
+    unsigned int* polygons = checkPointer(new unsigned int[m_polygonCount]);
     unsigned int write = 0;
     for (ClusterPolygonMap::const_iterator i = clusters.begin(); i != clusters.end(); ++i)
         for (std::list<unsigned int>::const_iterator p = i->second.begin(); p != i->second.end(); ++p)
@@ -774,7 +774,7 @@ bool ClusterGraph::validateClusterConnectivityFromPolygon(unsigned short, OptPol
 // SGI node allocator is inlined into it - same source, two inlining decisions.
 ClusterGraph::ClusterGraph()
     : m_clusterPolygons(0)
-    , m_numberOfClusterPolygons(0)
+    , m_polygonCount(0)
     , m_clusters(0)
     , m_numberOfClusters(0)
     , m_numberOfPortals(0)
@@ -797,7 +797,7 @@ ClusterGraph::~ClusterGraph()
 void ClusterGraph::clean()
 {
     delete[] m_clusterPolygons;
-    m_numberOfClusterPolygons = 0;
+    m_polygonCount = 0;
 
     delete[] m_clusters;
     m_numberOfClusters = 0;
@@ -826,9 +826,9 @@ void ClusterGraph::readFromFile(io::File& file)
         m_clusters = checkPointer(new Cluster[m_numberOfClusters]);
         file.read(m_clusters, sizeof(Cluster) * m_numberOfClusters);
 
-        file.read(m_numberOfClusterPolygons);
-        m_clusterPolygons = checkPointer(new unsigned int[m_numberOfClusterPolygons]);
-        file.read(m_clusterPolygons, sizeof(unsigned int) * m_numberOfClusterPolygons);
+        file.read(m_polygonCount);
+        m_clusterPolygons = checkPointer(new unsigned int[m_polygonCount]);
+        file.read(m_clusterPolygons, sizeof(unsigned int) * m_polygonCount);
 
         file.read(m_numberOfPortals);
         if (m_numberOfPortals)
@@ -857,7 +857,7 @@ void ClusterGraph::readFromFile(io::File& file)
 // ELF 0x314E10. An out-of-range polygon dereferences null, as in retail.
 unsigned short ClusterGraph::getClusterId(QuadTree* quadTree, unsigned int polygon) const
 {
-    return quadTree->getPolygon(polygon)->m_cluster;
+    return quadTree->getPolygon(polygon)->cluster;
 }
 
 // ELF 0x31DA70. True when one of the cluster's portals leads to `neighbour`.
@@ -1056,8 +1056,8 @@ void ClusterGraph::saveToFile(io::File& file) const
     file.write(5);
     file.write(m_numberOfClusters);
     file.write(m_clusters, sizeof(Cluster) * m_numberOfClusters);
-    file.write(m_numberOfClusterPolygons);
-    file.write(m_clusterPolygons, sizeof(unsigned int) * m_numberOfClusterPolygons);
+    file.write(m_polygonCount);
+    file.write(m_clusterPolygons, sizeof(unsigned int) * m_polygonCount);
     file.write(m_numberOfPortals);
     if (m_numberOfPortals)
         file.write(m_portals, sizeof(ClusterPortal) * m_numberOfPortals);
@@ -1169,13 +1169,13 @@ bool ClusterGraph::allNeighboursOfClusterInSameCluster(QuadTree* quadTree,
     {
         const unsigned int polygon = m_clusterPolygons[first + i];
         const Polygon* const candidate = quadTree->getPolygon(polygon);
-        for (unsigned char edge = 0; edge < candidate->m_numberOfVertices; ++edge)
+        for (unsigned char edge = 0; edge < candidate->vertexCount; ++edge)
         {
             const Polygon* const neighbour
                 = quadTree->getPolygon(quadTree->getNeighbourOfPolygon(polygon, edge));
-            if (neighbour && neighbour->m_cluster != cluster && neighbour->m_cluster != 0xFFFF)
+            if (neighbour && neighbour->cluster != cluster && neighbour->cluster != 0xFFFF)
             {
-                neighbours.insert(neighbour->m_cluster);
+                neighbours.insert(neighbour->cluster);
                 if (neighbours.size() > 1)
                     return false;
             }
@@ -1199,14 +1199,14 @@ bool ClusterGraph::checkClusterCondition(QuadTree* quadTree, unsigned short clus
         const unsigned int polygon = m_clusterPolygons[first + i];
         const Polygon* const candidate = quadTree->getPolygon(polygon);
         unsigned char edge = 0;
-        for (; edge < candidate->m_numberOfVertices; ++edge)
+        for (; edge < candidate->vertexCount; ++edge)
         {
             const Polygon* const neighbour
                 = quadTree->getPolygon(quadTree->getNeighbourOfPolygon(polygon, edge));
-            if (neighbour && neighbour->m_cluster == cluster)
+            if (neighbour && neighbour->cluster == cluster)
                 break;
         }
-        if (edge >= candidate->m_numberOfVertices)
+        if (edge >= candidate->vertexCount)
             return false;
     }
     return true;
@@ -1224,7 +1224,7 @@ bool ClusterGraph::validateClusterGraphConnectivity(QuadTree* quadTree, bool ver
         unsigned int members = 0;
         for (unsigned int i = 0; i < count; ++i)
         {
-            if (quadTree->getPolygon(m_clusterPolygons[first + i])->m_cluster == cluster)
+            if (quadTree->getPolygon(m_clusterPolygons[first + i])->cluster == cluster)
                 ++members;
         }
         if (members != count)
@@ -1255,7 +1255,7 @@ void ClusterGraph::printClusterInfo(unsigned short cluster, QuadTree* quadTree, 
     {
         const unsigned int polygon = m_clusterPolygons[first + i];
         const Polygon* const candidate = quadTree->getPolygon(polygon);
-        for (unsigned char edge = 0; edge < candidate->m_numberOfVertices; ++edge)
+        for (unsigned char edge = 0; edge < candidate->vertexCount; ++edge)
         {
             quadTree->getVertexIndexForPolygon(polygon, edge);
             quadTree->getPolygon(quadTree->getNeighbourOfPolygon(polygon, edge));

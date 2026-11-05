@@ -16,10 +16,10 @@
 #include "../AIBotActionPlan/BAPFlowCWhile.h"
 #include "../AIBotActionPlan/BAPIWIdle.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIArmament.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../AIPlanInterpreter/BAPContext.h"
 #include "../AIPlanInterpreter/BotScriptDebugger.h"
 #include "../AIUtils/checkPointer.h"
@@ -127,7 +127,7 @@ BotScript* BBPRandom::createPlan(Bot* bot)
     }
     BAPFlowCWhile* loop = checkPointer(new BAPFlowCWhile(checkPointer(new BAPConTrue()), parallel, true, m_id));
     BAPIWIdle* wrapper = checkPointer(new BAPIWIdle(self->getPosition(), loop, m_id, bot));
-    wrapper->m_owner = this;
+    wrapper->mpOwner = this;
     return wrapper;
 }
 

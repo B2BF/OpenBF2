@@ -20,7 +20,7 @@
 #include "../AIBot/BotMain.h"          // the preallocated pool
 #include "../AIBot/BotMemory.h"
 #include "../AIBot/BotOrder.h"
-#include "../AIBotBehaviour/UrgencyMerger.h"
+#include "../AIBot/UrgencyMerger.h"
 #include "BotBehaviourManager.h"
 #include "../AIUtils/checkPointer.h"
 #include "CommonSingletonServer.h"
@@ -32,7 +32,7 @@
 #include "../AIBot/BotNavigation.h"          // actionComAgent / actionUpdateNavPoints
 #include "../AIBot/CommunicationAgent.h"     // actionComAgent
 #include "../AIKnowledge/Information.h"      // updateDamages
-#include "../AIKnowledge/InformationManager.h"
+#include "InformationManager.h"
 #include "../AIKnowledge/IPIMobile.h"        // actionExecutePlan's stall test, actionPathfinding
 #include "IAIPathfinding.h"                  // actionPathfinding hands the searcher its share
 #include "../../../AIInterface/BFKnowledge/BFObjectEnvironment.h"   // actionHearing's object list
@@ -130,14 +130,14 @@ void BotManager::updateDamages()
 {
     IAIGameEffector* const effector =
         static_cast<IAIGameEffector*>(CommonSingletonServer::m_iaiGameEffector);
-    for (std::vector<BotInfo*>::iterator it = m_botInfos.begin(); it != m_botInfos.end(); ++it)
+    for (std::vector<BotInfo*>::iterator it = m_bots.begin(); it != m_bots.end(); ++it)
     {
         if (!(*it)->m_bot->isDead() && (*it)->m_damage > 0.0f)
         {
             world::IPlayer* const from =
-                m_botInfos[(*it)->m_attackerIndex]->m_bot->getPlayer()->getPlayer();
+                m_bots[(*it)->m_attackerIndex]->m_bot->getPlayer()->getPlayer();
 #if defined(_WIN32)
-            Bot* const attacker = m_botInfos[(*it)->m_attackerIndex]->m_bot;
+            Bot* const attacker = m_bots[(*it)->m_attackerIndex]->m_bot;
             const unsigned int handle = (*it)->m_bot->getCurrentEquipment();
             Information* const information =
                 (handle & 0xffffu) ? informationManager->getInformation(handle) : nullptr;
@@ -146,7 +146,7 @@ void BotManager::updateDamages()
             effector->giveDamage(target, from, attacker->getSide(), damage);
 #else
             BotInfo* const info = *it;
-            const int side = m_botInfos[info->m_attackerIndex]->m_bot->getSide();
+            const int side = m_bots[info->m_attackerIndex]->m_bot->getSide();
             InformationManager* const manager = informationManager;
             const unsigned int handle = (*it)->m_bot->getCurrentEquipment();
             Information* const information = manager->getInformation(handle);
@@ -163,23 +163,23 @@ void BotManager::updateDamages()
 void BotManager::actionComAgent()
 {
     const unsigned int start = m_comAgentCursor;
-    if (m_botInfos.empty())
+    if (m_bots.empty())
         return;
-    Bot* bot = m_botInfos[m_comAgentCursor]->m_bot;
+    Bot* bot = m_bots[m_comAgentCursor]->m_bot;
     for (;;)
     {
         if (!bot->isDead() && !bot->getManDown() && !bot->getBotNavigation()->isPathSearchPending())
         {
             bot->getCommunicationAgent()->update();
-            if (++m_comAgentCursor >= m_botInfos.size())
+            if (++m_comAgentCursor >= m_bots.size())
                 m_comAgentCursor = 0;
             return;
         }
-        if (++m_comAgentCursor >= m_botInfos.size())
+        if (++m_comAgentCursor >= m_bots.size())
             m_comAgentCursor = 0;
         if (start == m_comAgentCursor)
             return;
-        bot = m_botInfos[m_comAgentCursor]->m_bot;
+        bot = m_bots[m_comAgentCursor]->m_bot;
     }
 }
 
@@ -200,14 +200,14 @@ void BotManager::actionExecutePlan(const double& slice)
     IBFTimer* const timer = static_cast<IBFTimer*>(CommonSingletonServer::m_iBFTimer);
     const double deadline = timer->getUpdateTime() + slice;
 
-    m_queuePriorityA->clear();
-    m_queuePriorityB->clear();
-    m_queueSensing->clear();
+    m_planned->clear();
+    m_unplanned->clear();
+    m_sensingQueue->clear();
     m_planExecutionsThisTick = 0;
     m_tickCount180 = 0;
     m_tickCount184 = 0;
 
-    const unsigned int size = static_cast<unsigned int>(m_botInfos.size());
+    const unsigned int size = static_cast<unsigned int>(m_bots.size());
     m_planHalfToggle = !m_planHalfToggle;
     unsigned int count = size / 2 + 1;
     if (count > size)
@@ -218,7 +218,7 @@ void BotManager::actionExecutePlan(const double& slice)
     unsigned int processed = 0;
     while (processed < count)
     {
-        BotInfo* info = m_botInfos[m_planCursor];
+        BotInfo* info = m_bots[m_planCursor];
         Bot* const bot = info->m_bot;
         if (!bot || bot->isDead() || bot->isDeactivated() || !bot->getSquadMember())
         {
@@ -297,13 +297,13 @@ void BotManager::actionExecutePlan(const double& slice)
         if (bot->hasPlan() && !bot->hasDefaultPlan())
         {
             if (info->m_double24 > m_plannedDecisionMakingThresholdFull)
-                m_queuePriorityA->push(info);
+                m_planned->push(info);
         }
         else if (info->m_double24 > m_unplannedDecisionMakingThresholdFull)
         {
-            m_queuePriorityB->push(info);
+            m_unplanned->push(info);
         }
-        m_queueSensing->push(info);
+        m_sensingQueue->push(info);
         bot->updatePlayerAction(!inBudget);
         if (!executed)
             break;
@@ -312,7 +312,7 @@ void BotManager::actionExecutePlan(const double& slice)
     }
 
     for (unsigned int i = 0; i < size - processed; ++i)
-        m_botInfos[m_planCursor]->m_bot->updatePlayerAction(false);
+        m_bots[m_planCursor]->m_bot->updatePlayerAction(false);
 }
 
 // [INFERRED] Visits at most one roster circuit and refreshes at most size/16 + 1 active
@@ -321,17 +321,17 @@ void BotManager::actionExecutePlan(const double& slice)
 // ELF 0x3DD980
 void BotManager::actionUpdateNavPoints()
 {
-    if (m_botInfos.empty())
+    if (m_bots.empty())
         return;
-    const unsigned int limit = static_cast<unsigned int>(m_botInfos.size() >> 4) + 1;
+    const unsigned int limit = static_cast<unsigned int>(m_bots.size() >> 4) + 1;
     unsigned int updated = 0;
     unsigned int visited = 0;
-    while (updated < limit && visited < m_botInfos.size())
+    while (updated < limit && visited < m_bots.size())
     {
-        Bot* const bot = m_botInfos[m_navPointCursor]->m_bot;
+        Bot* const bot = m_bots[m_navPointCursor]->m_bot;
         if (!bot)
             continue;
-        m_navPointCursor = (m_navPointCursor + 1) % static_cast<unsigned int>(m_botInfos.size());
+        m_navPointCursor = (m_navPointCursor + 1) % static_cast<unsigned int>(m_bots.size());
         ++visited;
         if (bot->isDead() || bot->getManDown())
             continue;
@@ -355,16 +355,16 @@ void BotManager::actionDecisionMaking(const double& slice)
         static_cast<IBFTimer*>(CommonSingletonServer::m_iBFTimer)->getUpdateTime() + slice;
 
     int spare = static_cast<int>(m_plannedDecisionMakingInterleave)
-        - static_cast<int>(m_queuePriorityA->size());
+        - static_cast<int>(m_planned->size());
     if (spare < 0)
         spare = 0;
     const unsigned int unplannedLimit = m_unplannedDecisionMakingInterleave + spare;
     m_selectedBots.resize(0);
 
-    while (!m_queuePriorityB->empty() && m_selectedBots.size() < unplannedLimit)
+    while (!m_unplanned->empty() && m_selectedBots.size() < unplannedLimit)
     {
-        BotInfo* info = m_queuePriorityB->top();
-        m_queuePriorityB->pop();
+        BotInfo* info = m_unplanned->top();
+        m_unplanned->pop();
         switch (info->m_bot->getLodLevel())
         {
         case BotLodFull:
@@ -383,10 +383,10 @@ void BotManager::actionDecisionMaking(const double& slice)
     }
 
     unsigned int planned = 0;
-    while (!m_queuePriorityA->empty() && planned++ < m_plannedDecisionMakingInterleave)
+    while (!m_planned->empty() && planned++ < m_plannedDecisionMakingInterleave)
     {
-        BotInfo* info = m_queuePriorityA->top();
-        m_queuePriorityA->pop();
+        BotInfo* info = m_planned->top();
+        m_planned->pop();
         switch (info->m_bot->getLodLevel())
         {
         case BotLodFull:
@@ -456,13 +456,13 @@ void BotManager::actionPathfinding(const double& slice)
     const double now = timer->getUpdateTime();
     const double deadline = now + slice;
     const double botDeadline = now + slice * 0.1;
-    const unsigned int size = static_cast<unsigned int>(m_botInfos.size());
+    const unsigned int size = static_cast<unsigned int>(m_bots.size());
 
     for (unsigned int visited = 0; visited < size; ++visited)
     {
         if (timer->getUpdateTime() > botDeadline)
             break;
-        BotInfo* const info = m_botInfos[m_pathfindingCursor];
+        BotInfo* const info = m_bots[m_pathfindingCursor];
         Bot* const bot = info->m_bot;
         if (bot && !bot->isDead() && !bot->isDeactivated() && bot->getSquadMember()
             && info->m_bot->getBotNavigation()->isSearchActive()
@@ -487,7 +487,7 @@ void BotManager::actionPathfinding(const double& slice)
 
     for (unsigned int i = 0; i < size; ++i)
     {
-        BotInfo* const info = m_botInfos[i];
+        BotInfo* const info = m_bots[i];
         Bot* const bot = info->m_bot;
         if (bot && !bot->isDead() && !bot->isDeactivated() && bot->getSquadMember()
             && info->m_bot->getBotNavigation()->isSearchActive()
@@ -589,10 +589,10 @@ void BotManager::actionSensing(const double& slice)
     unsigned int medium = 0;
     unsigned int light = 0;
     unsigned int taken = 0;
-    while (!m_queueSensing->empty() && taken <= 1)
+    while (!m_sensingQueue->empty() && taken <= 1)
     {
-        BotInfo* info = m_queueSensing->top();
-        m_queueSensing->pop();
+        BotInfo* info = m_sensingQueue->top();
+        m_sensingQueue->pop();
         Bot* const bot = info->m_bot;
         if (!informationManager->getInformation(info->m_bot->getCurrentEquipment()))
             continue;
@@ -655,9 +655,9 @@ void BotManager::actionSensing(const double& slice)
 // [RETIRE-WHEN: aidll-02-skeleton] Complete and validate the corresponding BotManager operation.
 BotManager::BotManager()
     // The IBotManager and IBotManagerModifier bases construct their own interface subobjects.
-    : m_queuePriorityA(new BotQueue)
-    , m_queuePriorityB(new BotQueue)
-    , m_queueSensing(new SensingQueue)
+    : m_planned(new BotQueue)
+    , m_unplanned(new BotQueue)
+    , m_sensingQueue(new SensingQueue)
     , m_comAgentCursor(0)
     // cached, not looked UP later. Every later use of the AI main goes through this copy, so a
     // BotManager built before an AIMain exists caches a null and never notices.
@@ -708,7 +708,7 @@ BotManager::BotManager()
     IAISettings* const settings = static_cast<IAISettings*>(CommonSingletonServer::m_iaiSettings);
     if (settings->getMaxNBots() != -1)
     {
-        m_botInfos.reserve(settings->getMaxNBots());
+        m_bots.reserve(settings->getMaxNBots());
 
         // Re-queries the maximum bot count on every iteration, independently of the reserve call.
         for (int i = 0; i < settings->getMaxNBots(); ++i)
@@ -731,7 +731,7 @@ BotManager::BotManager()
                 new BotMain(0, static_cast<unsigned int>(i), 0, 1.0f, 1, 0, memory, 0, 0,
                             merger, generators));
 
-            m_bots.insert(m_bots.end(), bot);
+            m_preallocatedBots.insert(m_preallocatedBots.end(), bot);
         }
     }
 
@@ -818,9 +818,9 @@ void BotManager::setSystemQuotient(unsigned a, unsigned b, unsigned c)
 BotManager::~BotManager()
 {
     reset();
-    delete m_queuePriorityA;
-    delete m_queuePriorityB;
-    delete m_queueSensing;
+    delete m_planned;
+    delete m_unplanned;
+    delete m_sensingQueue;
 }
 
 // - the vector's byte span shifted right by two, i.e. its element count.
@@ -829,14 +829,14 @@ BotManager::~BotManager()
 // ELF 0x3DB060
 int BotManager::getBotCount() const
 {
-    return static_cast<int>(m_botInfos.size());
+    return static_cast<int>(m_bots.size());
 }
 
 // Reports the bot counts from the managed roster.
 // ELF 0x3DB080
 int BotManager::getNumberOfActiveBots() const
 {
-    return static_cast<int>(m_botInfos.size()) - static_cast<int>(m_deactivatedBots.size());
+    return static_cast<int>(m_bots.size()) - static_cast<int>(m_deactivatedBots.size());
 }
 
 // ELF 0x3DB0D0
@@ -849,16 +849,16 @@ int BotManager::getNumberOfDeactivedBots() const
 // ELF 0x3DB100
 Bot* BotManager::getBot(unsigned int index) const
 {
-    return m_botInfos[index]->m_bot;
+    return m_bots[index]->m_bot;
 }
 
 // Bot-ID lookup checks bounds; player lookup requires a valid association.
 // ELF 0x3DB1A0
 Bot* BotManager::getBotFromId(unsigned int id) const
 {
-    if (id < m_botInfos.size())
+    if (id < m_bots.size())
     {
-        BotInfo* const info = m_botInfos[id];
+        BotInfo* const info = m_bots[id];
 
         if (info)
             return info->m_bot;
@@ -881,7 +881,7 @@ Bot* BotManager::getBotFromPlayerId(int playerId) const
 // ELF 0x3DB1D0: the first record whose player's name (IAIPlayer +0x18) equals the argument.
 Bot* BotManager::getBotFromName(const std::string& name) const
 {
-    for (std::vector<BotInfo*>::const_iterator it = m_botInfos.begin(); it != m_botInfos.end(); ++it)
+    for (std::vector<BotInfo*>::const_iterator it = m_bots.begin(); it != m_bots.end(); ++it)
     {
         if ((*it)->m_bot->getPlayer()->getName() == name)
             return (*it)->m_bot;
@@ -911,7 +911,7 @@ bool exitAddBot(int playerId)
 // ELF 0x3DB320
 bool BotManager::addBot(int playerId, int side, float* personality, IAIObject* object)
 {
-    const std::size_t rosterSize = m_botInfos.size();
+    const std::size_t rosterSize = m_bots.size();
     if (rosterSize >= static_cast<unsigned>(
             static_cast<IAISettings*>(CommonSingletonServer::m_iaiSettings)->getMaxNBots()))
         return exitAddBot(playerId);
@@ -938,7 +938,7 @@ bool BotManager::addBot(int playerId, int side, float* personality, IAIObject* o
 
     const int count = static_cast<IAISettings*>(CommonSingletonServer::m_iaiSettings)->getNumberOfBehaviours();
     BotMain* bot;
-    if (m_bots.empty())
+    if (m_preallocatedBots.empty())
     {
         UrgencyGenerator** const generators = checkPointer(new UrgencyGenerator*[count]);
         UrgencyMerger* const merger = checkPointer(new UrgencyMerger(count, personality, generators));
@@ -948,12 +948,12 @@ bool BotManager::addBot(int playerId, int side, float* personality, IAIObject* o
         BotOrder* const order = checkPointer(new BotOrder(weights, static_cast<unsigned char>(
             BotBehaviourManager::m_instance->getBehaviourId("Idle"))));
         player->setViewDistance(static_cast<IAISettings*>(CommonSingletonServer::m_iaiSettings)->getViewDistance());
-        bot = checkPointer(new BotMain(player, static_cast<unsigned int>(m_botInfos.size()),
+        bot = checkPointer(new BotMain(player, static_cast<unsigned int>(m_bots.size()),
             personality, 1.0f, 1, order, new BotMemory(), 0, side, merger, generators));
     }
     else
     {
-        bot = static_cast<BotMain*>(m_bots.front());
+        bot = static_cast<BotMain*>(m_preallocatedBots.front());
         bot->setPlayer(player);
         bot->m_basicWeights = personality;
         bot->setSide(side);
@@ -963,7 +963,7 @@ bool BotManager::addBot(int playerId, int side, float* personality, IAIObject* o
         BotOrder* const order = checkPointer(new BotOrder(weights, static_cast<unsigned char>(
             BotBehaviourManager::m_instance->getBehaviourId("Idle"))));
         bot->recieveOrder(order);
-        m_bots.erase(m_bots.begin());
+        m_preallocatedBots.erase(m_preallocatedBots.begin());
     }
 
     bot->updateBotVehicle(0);
@@ -973,7 +973,7 @@ bool BotManager::addBot(int playerId, int side, float* personality, IAIObject* o
         return exitAddBot(playerId);
     information->setStrength(information->getStrength() + 1.0f);
     bot->setWaypoints(checkPointer(new WPEmpty(information->getPosition())));
-    m_botInfos.push_back(checkPointer(new BotInfo(bot)));
+    m_bots.push_back(checkPointer(new BotInfo(bot)));
     // shipped defect: grows to playerId, then writes element playerId; the first lookup is unchecked too.
     if (static_cast<int>(m_botByPlayerId.size()) < playerId)
         m_botByPlayerId.resize(playerId, -1);
@@ -991,7 +991,7 @@ bool BotManager::addUnspawnedBot(int playerId, int side, float* personality)
                           ->getNumberOfBehaviours();
     BotMain* bot;
 
-    if (m_bots.empty())
+    if (m_preallocatedBots.empty())
     {
         UrgencyGenerator** const generators = checkPointer(new UrgencyGenerator*[count]);
         UrgencyMerger* const merger = checkPointer(new UrgencyMerger(count, personality, generators));
@@ -1004,12 +1004,12 @@ bool BotManager::addUnspawnedBot(int playerId, int side, float* personality)
                                      ->getPlayerFromId(playerId);
         // BotMain storage is allocated before this nested BotMemory construction in both images.
         // Unlike the preallocation constructor, this path does not checkPointer the memory.
-        bot = checkPointer(new BotMain(player, static_cast<unsigned int>(m_botInfos.size()),
+        bot = checkPointer(new BotMain(player, static_cast<unsigned int>(m_bots.size()),
             personality, 1.0f, 1, order, new BotMemory(), 0, side, merger, generators));
     }
     else
     {
-        bot = static_cast<BotMain*>(m_bots.front());
+        bot = static_cast<BotMain*>(m_preallocatedBots.front());
         bot->setPlayer(static_cast<IAIPlayerFactory*>(CommonSingletonServer::m_iaiPlayerFactory)
                            ->getPlayerFromId(playerId));
         bot->setSide(side);
@@ -1021,10 +1021,10 @@ bool BotManager::addUnspawnedBot(int playerId, int side, float* personality)
             BotBehaviourManager::m_instance->getBehaviourId("Idle"))));
         bot->recieveOrder(order);
         // Reload begin after the virtual calls, as retail does.
-        m_bots.erase(m_bots.begin());
+        m_preallocatedBots.erase(m_preallocatedBots.begin());
     }
 
-    m_botInfos.push_back(checkPointer(new BotInfo(bot)));
+    m_bots.push_back(checkPointer(new BotInfo(bot)));
     if (static_cast<int>(m_botByPlayerId.size()) < playerId)
         m_botByPlayerId.resize(playerId, -1);
     m_botByPlayerId[playerId] = static_cast<int>(bot->getBotId());
@@ -1041,9 +1041,9 @@ int BotManager::deactivateBot(int side)
 {
     unsigned int index = 0;
     bool found = false;
-    for (unsigned int i = 0; i < m_botInfos.size(); ++i)
+    for (unsigned int i = 0; i < m_bots.size(); ++i)
     {
-        Bot* const bot = m_botInfos[i]->m_bot;
+        Bot* const bot = m_bots[i]->m_bot;
         if (bot && bot->getSide() == side && bot->isDead())
         {
             index = i;
@@ -1053,9 +1053,9 @@ int BotManager::deactivateBot(int side)
     }
     if (!found)
     {
-        for (unsigned int i = 0; i < m_botInfos.size(); ++i)
+        for (unsigned int i = 0; i < m_bots.size(); ++i)
         {
-            Bot* const bot = m_botInfos[i]->m_bot;
+            Bot* const bot = m_bots[i]->m_bot;
             if (bot && bot->getSide() == side)
             {
                 index = i;
@@ -1064,11 +1064,11 @@ int BotManager::deactivateBot(int side)
         }
     }
     static_cast<IAISettingsModifier*>(CommonSingletonServer::m_iaiSettingsModifier)
-        ->setBotNameUnused(m_botInfos[index]->m_bot->getPlayer()->getName());
+        ->setBotNameUnused(m_bots[index]->m_bot->getPlayer()->getName());
     m_deactivatedBots.push_back(index);
-    m_botByPlayerId[m_botInfos[index]->m_bot->getPlayerId()] = -1;
-    m_botInfos[index]->m_bot->getPlayer()->setPlayer(static_cast<world::IPlayer*>(0));
-    m_botInfos[index]->m_bot->setAsDeactivated(true);
+    m_botByPlayerId[m_bots[index]->m_bot->getPlayerId()] = -1;
+    m_bots[index]->m_bot->getPlayer()->setPlayer(static_cast<world::IPlayer*>(0));
+    m_bots[index]->m_bot->setAsDeactivated(true);
     return static_cast<int>(index);
 }
 
@@ -1105,7 +1105,7 @@ bool BotManager::reactivateBot(int playerId, int side, const std::string& name)
     const std::list<unsigned int>::iterator oldest = m_deactivatedBots.begin();
     const unsigned int botId = *oldest;
 
-    Bot* const bot = m_botInfos[botId]->m_bot;
+    Bot* const bot = m_bots[botId]->m_bot;
 
     bot->getPlayer()->setPlayer(playerId);
     bot->setSide(side);
@@ -1131,7 +1131,7 @@ Bot* BotManager::getBot(IAIObject* object) const
     const std::map<IAIObject*, unsigned int>::const_iterator it = m_vehicleBots.find(object);
     if (it == m_vehicleBots.end())
         return 0;
-    BotInfo* const info = m_botInfos[it->second];
+    BotInfo* const info = m_bots[it->second];
     return info ? info->m_bot : 0;
 }
 
@@ -1210,7 +1210,7 @@ void BotManager::setBotIsDead(int playerId)
     bot->setIsInTransitionPhase(true);
     bot->getBotNavigation()->resetAll();
     static_cast<BotMain*>(bot)->resetAssignedAreas();
-    BotInfo* const info = m_botInfos[bot->getBotId()];
+    BotInfo* const info = m_bots[bot->getBotId()];
     IAIMain::m_instance->getSAI(info->m_bot->getSide());
     info->m_word4 = 1;
     info->m_bot->reset();
@@ -1235,7 +1235,7 @@ void BotManager::setBotIsAlive(int playerId)
     bot->updateBotVehicle(0);
     bot->updateBot();
     bot->setLastChangeTime(-1000000.0f);
-    BotInfo* const info = m_botInfos[bot->getBotId()];
+    BotInfo* const info = m_bots[bot->getBotId()];
     info->m_priority = 0;
     info->m_double24 = 0.0f;
     info->m_word4 = 0;
@@ -1352,8 +1352,8 @@ void BotManager::setBotTeamKilled(int playerId, int)
 // ELF 0x3E0AC0: unchecked index; updateDamages applies and clears the sum each tick.
 void BotManager::registerDamageOnBot(float damage, int botIndex, int attackerIndex)
 {
-    m_botInfos[botIndex]->m_damage += damage;
-    m_botInfos[botIndex]->m_attackerIndex = attackerIndex;
+    m_bots[botIndex]->m_damage += damage;
+    m_bots[botIndex]->m_attackerIndex = attackerIndex;
 }
 
 // ELF 0x3DAD10: `flds 0xE8(this)`.
@@ -1365,7 +1365,7 @@ float BotManager::getVehicleBailValue()
 // ELF 0x3DB280: every bot targeting the mine (BotMain +0x1FC) gets target -1 (+0x1F8).
 void BotManager::removeMineTarget(unsigned int handle)
 {
-    for (std::vector<BotInfo*>::iterator it = m_botInfos.begin(); it != m_botInfos.end(); ++it)
+    for (std::vector<BotInfo*>::iterator it = m_bots.begin(); it != m_bots.end(); ++it)
     {
         BotMain* const bot = static_cast<BotMain*>((*it)->m_bot);
         if (bot->getMineTarget() == handle)
@@ -1382,7 +1382,7 @@ void BotManager::removeMineTarget(unsigned int handle)
 bool BotManager::reset()
 {
     m_planCursor = 0;                                                         // +0x104
-    for (std::vector<BotInfo*>::iterator info = m_botInfos.begin(); info != m_botInfos.end(); ++info)
+    for (std::vector<BotInfo*>::iterator info = m_bots.begin(); info != m_bots.end(); ++info)
     {
         if (*info)
         {
@@ -1391,10 +1391,10 @@ bool BotManager::reset()
             delete *info;
         }
     }
-    m_botInfos.resize(0, 0);
     m_bots.resize(0, 0);
-    delete m_queuePriorityA;
-    delete m_queuePriorityB;
+    m_preallocatedBots.resize(0, 0);
+    delete m_planned;
+    delete m_unplanned;
     m_list56.clear();                                                         // +0x38
     setLodLevelTicks(3, 2, 1);                                                // +0x8C
     setLodLevelPriority(3, 2, 1);                                             // +0x90
@@ -1403,8 +1403,8 @@ bool BotManager::reset()
     setDecisionMakingInterleave(2, 2);                                        // +0x9C
     setSensingQuotient(1, 1);                                                 // +0xA0
     setSystemQuotient(30, 40, 30);                                            // +0xA4
-    m_queuePriorityA = new BotQueue;
-    m_queuePriorityB = new BotQueue;
+    m_planned = new BotQueue;
+    m_unplanned = new BotQueue;
     m_hearingResumeId = 0;                                                    // +0xBC
     return true;
 }
@@ -1428,7 +1428,7 @@ void BotManager::writeBotPlans()
     const std::string levelPath = static_cast<IAIGame*>(CommonSingletonServer::m_iaiGame)->getLevelPath();
     io::IStream* file = io::fileManager->open(levelPath + "../../../AI/BotPlans.cpp",
         static_cast<io::FileMode>(0), static_cast<io::FileAccess>(2), 0);
-    for (std::vector<BotInfo*>::iterator it = m_botInfos.begin(); it != m_botInfos.end(); ++it)
+    for (std::vector<BotInfo*>::iterator it = m_bots.begin(); it != m_bots.end(); ++it)
     {
         Bot* const bot = (*it)->m_bot;
         if (bot->isDead())
@@ -1595,7 +1595,7 @@ double BotManager::getSystemSensingQuotient() const
 // ELF 0x3DFA80: every record's four counters (+0x20..+0x2C) and three run times (+0x30..+0x40).
 void BotManager::resetStatistics()
 {
-    for (std::vector<BotInfo*>::iterator it = m_botInfos.begin(); it != m_botInfos.end(); ++it)
+    for (std::vector<BotInfo*>::iterator it = m_bots.begin(); it != m_bots.end(); ++it)
     {
         BotInfo* const info = *it;
         info->m_behaviourUpdateCount = 0;
@@ -1609,9 +1609,9 @@ void BotManager::resetStatistics()
 }
 
 // ELF 0x3DFAF0: the same for one unchecked index (the records are reached through pointers).
-void BotManager::resetStatistics(unsigned int index) const
+void BotManager::resetStatistics(unsigned int botIndex) const
 {
-    BotInfo* const info = m_botInfos[index];
+    BotInfo* const info = m_bots[botIndex];
     info->m_behaviourUpdateCount = 0;
     info->m_word36 = 0;
     info->m_word40 = 0;
@@ -1622,75 +1622,75 @@ void BotManager::resetStatistics(unsigned int index) const
 }
 
 // ELF 0x3DFB50 (+0x24), unchecked index.
-unsigned BotManager::getPlanExecutionUpdateCount(unsigned int index) const
+unsigned BotManager::getPlanExecutionUpdateCount(unsigned int botIndex) const
 {
-    return m_botInfos[index]->m_word36;
+    return m_bots[botIndex]->m_word36;
 }
 
 // ELF 0x3DFB70 (+0x28), unchecked index.
-unsigned BotManager::getDecisionMakingUpdateCount(unsigned int index) const
+unsigned BotManager::getDecisionMakingUpdateCount(unsigned int botIndex) const
 {
-    return m_botInfos[index]->m_word40;
+    return m_bots[botIndex]->m_word40;
 }
 
 // ELF 0x3DFB90 (+0x2C), unchecked index.
-unsigned BotManager::getSensingUpdateCount(unsigned int index) const
+unsigned BotManager::getSensingUpdateCount(unsigned int botIndex) const
 {
-    return m_botInfos[index]->m_word44;
+    return m_bots[botIndex]->m_word44;
 }
 
 // ELF 0x3DFCC0 (+0x20), unchecked index.
-unsigned BotManager::getDecisionMakingBehaviourUpdateCount(unsigned int index) const
+unsigned BotManager::getDecisionMakingBehaviourUpdateCount(unsigned int botIndex) const
 {
-    return m_botInfos[index]->m_behaviourUpdateCount;
+    return m_bots[botIndex]->m_behaviourUpdateCount;
 }
 
 // ELF 0x3DFBB0 (+0x30), unchecked index.
-double BotManager::getPlanExecutionRunTime(unsigned int index) const
+double BotManager::getPlanExecutionRunTime(unsigned int botIndex) const
 {
-    return m_botInfos[index]->m_double48;
+    return m_bots[botIndex]->m_double48;
 }
 
 // ELF 0x3DFBD0 (+0x38), unchecked index.
-double BotManager::getDecisionMakingRunTime(unsigned int index) const
+double BotManager::getDecisionMakingRunTime(unsigned int botIndex) const
 {
-    return m_botInfos[index]->m_double56;
+    return m_bots[botIndex]->m_double56;
 }
 
 // ELF 0x3DFBF0 (+0x40), unchecked index.
-double BotManager::getSensingRunTime(unsigned int index) const
+double BotManager::getSensingRunTime(unsigned int botIndex) const
 {
-    return m_botInfos[index]->m_double64;
+    return m_bots[botIndex]->m_double64;
 }
 
 // ELF 0x3DFC10 (+0x14), unchecked index.
-bool BotManager::isPathfinding(unsigned int index) const
+bool BotManager::isPathfinding(unsigned int botIndex) const
 {
-    return m_botInfos[index]->m_flag20;
+    return m_bots[botIndex]->m_flag20;
 }
 
 // ELF 0x3DFC40 (+0x48), unchecked index.
-bool BotManager::getLastPathfindingSucceeded(unsigned int index) const
+bool BotManager::getLastPathfindingSucceeded(unsigned int botIndex) const
 {
-    return m_botInfos[index]->m_flag72;
+    return m_bots[botIndex]->m_flag72;
 }
 
 // ELF 0x3DFC70 (+0x49), unchecked index.
-bool BotManager::getPathfindingStall(unsigned int index) const
+bool BotManager::getPathfindingStall(unsigned int botIndex) const
 {
-    return m_botInfos[index]->m_flag73;
+    return m_bots[botIndex]->m_flag73;
 }
 
 // ELF 0x3DFCA0 (+0x4C), unchecked index.
-double BotManager::getLastPathfindingRunTime(unsigned int index) const
+double BotManager::getLastPathfindingRunTime(unsigned int botIndex) const
 {
-    return m_botInfos[index]->m_double76;
+    return m_bots[botIndex]->m_double76;
 }
 
 // ELF 0x3E0C40
 void BotManager::enableBotScriptDebugger(bool enable)
 {
-    for (std::vector<BotInfo*>::iterator it = m_botInfos.begin(); it != m_botInfos.end(); ++it)
+    for (std::vector<BotInfo*>::iterator it = m_bots.begin(); it != m_bots.end(); ++it)
         (*it)->m_bot->enableBotScriptDebugger(enable);
 }
 

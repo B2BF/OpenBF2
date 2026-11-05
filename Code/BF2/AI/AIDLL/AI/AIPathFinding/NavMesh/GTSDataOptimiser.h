@@ -74,7 +74,7 @@ public:
 
     /* +0x00 */ std::list<OptPolygon*> m_polygons;
     /* +0x04 */ std::list<OptPolygon*>::iterator m_current;
-    /* +0x08 */ ClusterGraph* m_graph;
+    /* +0x08 */ ClusterGraph* m_clusterGraph;   // name: AIDLL_r assert 0x101F74E0 (PE +0x10)
 };
 
 } } }

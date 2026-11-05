@@ -14,7 +14,7 @@
 #include "../Main/IBotManager.h"
 #include "../../../../Math/LocalBoundingBox.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIControlInfo.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../../../AIInterface/BFKnowledge/IAIObject.h"
@@ -476,7 +476,7 @@ int TankControl::actionStatusDecision(Bot* bot, Information* info, const Vec2& d
                 const float reach = clearance + 0.5f;
                 const int vehicleNumber = mobile->getVehicleNumber();
                 const IPIMobile::ValidPos& otherValid = otherMobile->getLastValidPosition(vehicleNumber);
-                if (otherValid.polygon == 0xFFFFFFFFu || otherValid.quadTree == 0xFFFFFFFFu)
+                if (otherValid.polygon == 0xFFFFFFFFu || otherValid.island == 0xFFFFFFFFu)
                 {
                     avoidSide = 1;
                 }
@@ -488,11 +488,11 @@ int TankControl::actionStatusDecision(Bot* bot, Information* info, const Vec2& d
                     hitLeft.x = hitLeft.y = hitLeft.z = 0.0f;
                     unsigned int sidePolygon;
                     Vec3 sideTarget = alongFrom(otherValid.position, rightAxis(info->getTransformation()), reach);
-                    pathfinding->trace(otherValid.polygon, otherValid.quadTree, vehicleNumber, otherValid.position,
+                    pathfinding->trace(otherValid.polygon, otherValid.island, vehicleNumber, otherValid.position,
                                        sideTarget, hitRight, sidePolygon, equipmentType, -1, 0.0f, 0, 0);
                     float roomRight = isZeroVec3(hitRight) ? 0.0f : distanceVec3(hitRight, otherValid.position);
                     sideTarget = backFrom(otherValid.position, rightAxis(info->getTransformation()), reach);
-                    pathfinding->trace(otherValid.polygon, otherValid.quadTree, vehicleNumber, otherValid.position,
+                    pathfinding->trace(otherValid.polygon, otherValid.island, vehicleNumber, otherValid.position,
                                        sideTarget, hitLeft, sidePolygon, equipmentType, -1, 0.0f, 0, 0);
                     float roomLeft = isZeroVec3(hitLeft) ? 0.0f : distanceVec3(hitLeft, otherValid.position);
                     bool firstSide = roomRight < roomLeft;   // before the obstacles shorten them

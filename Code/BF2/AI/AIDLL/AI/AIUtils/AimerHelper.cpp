@@ -6,7 +6,7 @@
 #include "AimerHelper.h"
 
 #include "checkPointer.h"
-#include "../AIBot/Aimer.h"
+#include "../AIBotActionPlan/Aimer.h"
 #include "../Main/CommonSingletonServer.h"
 #include "../../../AIInterface/BFKnowledge/BFTimer.h"
 

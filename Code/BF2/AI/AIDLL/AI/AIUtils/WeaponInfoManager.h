@@ -1,6 +1,6 @@
 // Handle pool for weapon information. The singleton keeps the first instance.
 // setInformation and changeInformation perform the same guarded store; only changeInformation returns success.
-// [INFERRED] Source placement.
+// Header placement [INFERRED]: beside its .cpp, whose path AIDLL_r.dll confirms (AIUtils/WeaponInfoManager.cpp).
 
 #ifndef AI_AIDLL_AI_AIKNOWLEDGE_WEAPONINFOMANAGER_H
 #define AI_AIDLL_AI_AIKNOWLEDGE_WEAPONINFOMANAGER_H

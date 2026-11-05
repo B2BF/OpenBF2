@@ -17,7 +17,7 @@
 #include "../AIBotActionPlan/BAPIWChange.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIPlanInterpreter/BAPContext.h"
 #include "../AIPlanInterpreter/BotScriptDebugger.h"
 #include "../AIStrategic/SAI.h"
@@ -108,7 +108,7 @@ BotScript* BBPChangeTeleport::createPlan(Bot* bot)
     }
     const int playerId = bot->getPlayerId();
     BAPIWChange* const wrapper = checkPointer(new BAPIWChange(m_target[bot->getBotId()], plan, m_patternId, playerId));
-    wrapper->m_owner = this;
+    wrapper->mpOwner = this;
     return wrapper;
 }
 

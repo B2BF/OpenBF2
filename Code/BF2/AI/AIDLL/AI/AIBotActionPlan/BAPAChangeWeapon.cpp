@@ -11,7 +11,7 @@
 #include "../AIKnowledge/IPIUnit.h"
 #include "../AIKnowledge/Information.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 
 namespace dice {
 namespace hfe {
@@ -46,7 +46,7 @@ bool BAPAChangeWeapon::execute(Bot* bot, bool& ok, bool& failed)
         return true;
     }
     io::PlayerInput* input = bot->getInput();
-    if (info->getObjectTypeFlags() & 0x200000u) {
+    if (info->isOfType(ITSoldier)) {
         if (info->getArmament()->getActiveWeapon() != m_weaponIndex) {
             input->setInput(io::PIFire, 0.0f);
             input->setInput(io::PIAltFire, 0.0f);

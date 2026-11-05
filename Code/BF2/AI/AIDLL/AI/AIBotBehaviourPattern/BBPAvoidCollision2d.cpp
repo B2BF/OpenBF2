@@ -16,7 +16,7 @@
 #include "../AIBotActionPlan/BAPConPosition.h"
 #include "../AIBotActionPlan/BAPConTime.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIControlInfo.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/IPIPhysical.h"
@@ -162,7 +162,7 @@ BotScript* BBPAvoidCollision2d::createPlan(Bot* bot)
     const float speed = mobile->getMaxSpeed();
     BAPAMoveToDirect* move = checkPointer(new BAPAMoveToDirect(bot, target, speed, arriveSpeed, stop, driveControls, m_id));
     BAPAHonkHorn* horn = 0;
-    if (self->getObjectTypeFlags() & 0x04000000u)
+    if (self->isOfType(ITHasCarHorn))
     {
         const int obstacleSide = obstacle->getSide();
         const int ownSide = self->getSide();
@@ -173,7 +173,7 @@ BotScript* BBPAvoidCollision2d::createPlan(Bot* bot)
     if (horn)
         serial->addStatement(horn);
     serial->addStatement(move);
-    serial->m_owner = this;
+    serial->mpOwner = this;
     return serial;
 }
 

@@ -7,7 +7,7 @@
 #include "BAPInterpreter.h"
 
 #include "BAPEntry.h"
-#include "BotScript.h"
+#include "../AIBotActionPlan/BotScript.h"
 #include "../AIBot/BotMain.h"
 #include "../AIBotActionPlan/BAPStatement.h"
 #include "../../../../Core/Debug.h"

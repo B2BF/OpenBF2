@@ -143,7 +143,7 @@ def generate(out):
     node=AI+'AIPathFinding/NavMesh/QuadTreeNode.cpp'
     if (BF2/node).exists(): whole.append(node)
     whole += [AI+'AIPathFinding/Cluster/ClusterGraph.cpp',AI+'AIPathFinding/Material/MaterialManager.cpp',
-              AI+'Main/IAIPathfinding.cpp','Math/Mat4Inverse.cpp','Math/Plane3.cpp','Math/Vec3.cpp',
+              AI+'Main/IAIPathfinding.cpp',AI+'Main/IAIPathfindingSetup.cpp','Math/Mat4Inverse.cpp','Math/Plane3.cpp','Math/Vec3.cpp',
               'Core/Debug.cpp','Core/StringUtil.cpp']
     headers=[AI+'Main/AIPathfinding.h',AI+'Main/IAIPathfinding.h',AI+'Main/AISettingsInterfaces.h',
              AI+'AIPathFinding/NavMesh/QuadTree.h',AI+'AIPathFinding/NavMesh/QuadTreeNode.h',

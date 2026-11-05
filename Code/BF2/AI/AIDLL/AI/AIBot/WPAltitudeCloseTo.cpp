@@ -4,7 +4,7 @@
 #include "WPAltitudeCloseTo.h"
 
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 
 // <iostream>'s ios_base::Init object is this TU's static initialisation and teardown (ELF
 // 0x1B60D0, __tcf_0 0x1B6130, _GLOBAL__I 0x1B6160).

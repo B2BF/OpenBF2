@@ -42,7 +42,7 @@ BAPCombinerSerial::BAPCombinerSerial(std::list<BAPStatement*>& statements, int p
     m_statements = statements;
     m_current = m_statements.begin();
     for (std::list<BAPStatement*>::iterator it = m_statements.begin(); it != m_statements.end(); ++it)
-        (*it)->m_owner = this;
+        (*it)->mpOwner = this;
 }
 
 // ELF 0x1E65F0 (D2; D1 0x1E66B0, D0 0x1E6770). Deletes the children (slot +8).
@@ -142,7 +142,7 @@ void BAPCombinerSerial::addStatement(BAPStatement* statement)
 {
     if (statement == 0)
         return;
-    statement->m_owner = this;
+    statement->mpOwner = this;
     m_statements.insert(m_statements.end(), statement);
     m_current = m_statements.begin();
 }

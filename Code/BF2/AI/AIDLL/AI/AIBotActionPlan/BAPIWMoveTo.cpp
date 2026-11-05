@@ -14,7 +14,7 @@ BAPIWMoveTo::BAPIWMoveTo(const Vec3& position, BAPStatement* statement, int tag)
     : BAPInfoWrapper(statement, tag)
 {
     m_position = position;
-    m_statement->m_owner = this;
+    m_statement->mpOwner = this;
 }
 
 // ELF 0x1F78F0 (D0 0x1F7940): deletes the child.

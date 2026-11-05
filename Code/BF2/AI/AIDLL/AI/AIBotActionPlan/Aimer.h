@@ -1,7 +1,8 @@
 // Ballistic aiming for one weapon at one target: given the shooter-relative target state and the
 // projectile's speed, drag and gravity, finds the firing direction by iterating the elevation.
-// Evidence: libaidll.so 1.5.3153 (ia-32). Attested file AIBot/Aimer.cpp (FILE symbol beside
-// 0x1C8EA0, after CommunicationAgent.cpp); constructors 0x1C7120 / 0x1C71E0, destructors
+// Evidence: libaidll.so 1.5.3153 (ia-32). FILE symbol Aimer.cpp beside
+// 0x1C8EA0, after CommunicationAgent.cpp; the directory is AIDLL_r.dll's __FILE__
+// "Code\BF2\AI\AIDLL\AI\AIBotActionPlan\Aimer.cpp" (the tree had inferred AIBot/); constructors 0x1C7120 / 0x1C71E0, destructors
 // 0x1C72A0 / 0x1C72B0 (empty, not virtual). sizeof 0x6C: BAPAAimAt embeds it at +0xA4 and its next
 // member is at +0x110 (BAPAAimAt::BAPAAimAt 0x1CD5E0).
 //
@@ -60,7 +61,7 @@ public:
     /* +0x30 */ Vec3   m_targetVelocity;
     /* +0x3C */ Vec3   m_shooterVelocity;
     /* +0x48 */ Vec3   m_forward;               // transform * (0, 0, 1); ctor (0, 0, 1)
-    /* +0x54 */ int    m_hasTargetData;         // ctor 0, setTargetData 1
+    /* +0x54 */ int    m_nSamples;         // ctor 0, setTargetData 1  // name: AIDLL_r asserts 0x101FE960, 0x101FFC20 (+0x54)
     /* +0x58 */ double m_verticalExtreme;       // half the last impact time (getFiringDirection)
     /* +0x60 */ float  m_angle;                 // last elevation; ctor 666.0f = none yet
     /* +0x64 */ float  m_angleStep;             // ctor 0.0174533f (one degree)

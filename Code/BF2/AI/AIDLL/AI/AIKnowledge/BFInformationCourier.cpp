@@ -11,11 +11,11 @@
 #include <string>
 
 #include "Information.h"
-#include "InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "IPIMobile.h"
 #include "WeaponInfo.h"
-#include "WeaponInfoManager.h"
-#include "../AIStrategicMap/AerialHeightMap.h"
+#include "../AIUtils/WeaponInfoManager.h"
+#include "../AIPathFinding/AerialHeightMap/AerialHeightMap.h"
 #include "../../../../Core/ClassManager.h"
 #include "../Main/CommonSingletonServer.h"
 #include "../Main/IAIPathfinding.h"
@@ -61,7 +61,7 @@ BFInformationCourier::BFInformationCourier()
     for (int i = 0; i < 3; ++i)
     {
         m_saved[i].polygon = 0xFFFFFFFFu;
-        m_saved[i].quadTree = 0xFFFFFFFFu;
+        m_saved[i].island = 0xFFFFFFFFu;
         m_saved[i].position.x = 0.0f;
         m_saved[i].position.y = 0.0f;
         m_saved[i].position.z = 0.0f;
@@ -255,13 +255,13 @@ void BFInformationCourier::updateCurrentPolygon(IAIObject* object)
 
     IPIMobile::ValidPos infantryPosition;
     infantryPosition.polygon = static_cast<unsigned int>(-1);
-    infantryPosition.quadTree = static_cast<unsigned int>(-1);
+    infantryPosition.island = static_cast<unsigned int>(-1);
     infantryPosition.position.x = 0.0f;
     infantryPosition.position.y = 0.0f;
     infantryPosition.position.z = 0.0f;
     if (pathfinding->getPolygon(
-            position, traceMapIndex, infantryPosition.polygon, infantryPosition.quadTree,
-            mobile->m_lastValidInfantryPos.polygon, mobile->m_lastValidInfantryPos.quadTree,
+            position, traceMapIndex, infantryPosition.polygon, infantryPosition.island,
+            mobile->m_lastValidInfantryPos.polygon, mobile->m_lastValidInfantryPos.island,
             equipmentType))
     {
         infantryPosition.position = position;
@@ -274,13 +274,13 @@ void BFInformationCourier::updateCurrentPolygon(IAIObject* object)
             : mobile->m_lastValidVehiclePosB;
         IPIMobile::ValidPos vehiclePosition;
         vehiclePosition.polygon = static_cast<unsigned int>(-1);
-        vehiclePosition.quadTree = static_cast<unsigned int>(-1);
+        vehiclePosition.island = static_cast<unsigned int>(-1);
         vehiclePosition.position.x = 0.0f;
         vehiclePosition.position.y = 0.0f;
         vehiclePosition.position.z = 0.0f;
         if (pathfinding->getPolygon(
-                position, traceMapIndex == 0, vehiclePosition.polygon, vehiclePosition.quadTree,
-                previousVehiclePosition.polygon, previousVehiclePosition.quadTree, equipmentType))
+                position, traceMapIndex == 0, vehiclePosition.polygon, vehiclePosition.island,
+                previousVehiclePosition.polygon, previousVehiclePosition.island, equipmentType))
         {
             vehiclePosition.position = position;
             mobile->setLastValidVehiclePos(vehiclePosition);

@@ -1,4 +1,4 @@
-// [INFERRED] Source placement.
+// Source placement: AIDLL_r.dll __FILE__ "Code\BF2\AI\AIDLL\AI\AIBot\UrgencyMerger.cpp" (assert "mpMaxGenerator != 0", 0x101F9180).
 // [RETIRE-WHEN: aidll-02-skeleton] Complete and validate the remaining UrgencyMerger operations.
 
 // static init: ELF 0x1B5CD0 (__tcf_0 0x1B5D30, _GLOBAL__I 0x1B5D60): <iostream>'s Init object only.
@@ -24,7 +24,7 @@ UrgencyMerger::UrgencyMerger(int count, float* weights, UrgencyGenerator** gener
     : m_count(count)
     , m_weights(weights)
     , m_generators(generators)
-    , m_chosen(0)
+    , mpMaxGenerator(0)
 {
 }
 
@@ -36,17 +36,17 @@ UrgencyMerger::~UrgencyMerger()
 // ELF 0x1B59B0. The chosen generator's urgency, 0 when none is chosen.
 float UrgencyMerger::getUrgency(Bot* bot)
 {
-    if (m_chosen == 0)
+    if (mpMaxGenerator == 0)
         return 0.0f;
-    return m_chosen->getUrgency(bot);
+    return mpMaxGenerator->getUrgency(bot);
 }
 
 // ELF 0x1B5A00.
 float UrgencyMerger::getActiveUrgency(Bot* bot)
 {
-    if (m_chosen == 0)
+    if (mpMaxGenerator == 0)
         return 0.0f;
-    return m_chosen->getActiveUrgency(bot);
+    return mpMaxGenerator->getActiveUrgency(bot);
 }
 
 // ELF 0x1B5A40. Updates every generator; the strictly most urgent one's own chosen generator
@@ -54,7 +54,7 @@ float UrgencyMerger::getActiveUrgency(Bot* bot)
 float UrgencyMerger::updateActiveUrgency(Bot* bot)
 {
     float best = 0.0f;
-    m_chosen = 0;
+    mpMaxGenerator = 0;
     for (int i = 0; i < m_count; ++i)
     {
         const float urgency =
@@ -62,7 +62,7 @@ float UrgencyMerger::updateActiveUrgency(Bot* bot)
         if (urgency > best)
         {
             best = urgency;
-            m_chosen = m_generators[i]->getChosenGenerator();
+            mpMaxGenerator = m_generators[i]->getChosenGenerator();
         }
     }
     return best;
@@ -109,7 +109,7 @@ bool UrgencyMerger::hasChanged(Bot* bot, float lower, float upper)
 // ELF 0x1A2850.
 UrgencyGenerator* UrgencyMerger::getChosenGenerator()
 {
-    return m_chosen;
+    return mpMaxGenerator;
 }
 
 // ELF 0x1B5C80. Resets every present generator.

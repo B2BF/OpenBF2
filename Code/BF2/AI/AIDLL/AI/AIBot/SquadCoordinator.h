@@ -119,7 +119,7 @@ public:
     // ELF 0x1A69C0: the accepted order (+40 type, +44 object, +28 position within FLT_EPSILON per axis).
     bool isSameMission(BotSquad::OrderType type, const Vec3& position, IAIObject* object);
     const Vec3& getSquadLeaderGotoPos() { return m_v200; }     // ELF 0x1A7FE0: this + 0xC8
-    int getSquadLeaderIndex() { return m_i96; }                // ELF 0x1A5D70: +0x60
+    int getSquadLeaderIndex() { return m_squadLeaderIndex; }                // ELF 0x1A5D70: +0x60
     bool isRepairRequested() { return m_b172; }                // ELF 0x1A49F0: movzbl +0xAC
     Vec3& getRepairRequestPos() { return m_v176; }             // ELF 0x1A4A00: this + 0xB0
     void setRogerThatPositionMessage(bool roger) { m_b220 = roger; }   // ELF 0x1A39F0: +0xDC
@@ -161,7 +161,8 @@ public:
     /*  +24 */ AIStrategicArea* m_strategicAreaAssignment; // [INFERRED] name; ELF +0x18 / PE +0x28, borrowed; initially null
     /*  +28 */ Vec3 m_v28;                     // zeroed [UNRESOLVED]
     /*  +40 */ int m_i40;                      // = 4 [UNRESOLVED]
-    /*  +44 */ IAIObject* m_i44;               // = 0; acceptMission: the request's object
+    /*  +44 */ IAIObject* m_i44;               // = 0; acceptMission: the request's object. DICE: m_mission.target
+                                           // (AIDLL_r assert "m_mission.target == 0", 0x101BA880)
     /*  +48 */ double m_d48;                   // = -20.0 a "never happened" sentinel; acceptMission: the game time
     /*  +56 */ bool m_b56;                     // never written by the constructor; acceptMission: the request's commander flag
     // isSquadRequestedToArea (ELF 0x1A7F60) compares the area index at +0xF0 of this pointer.
@@ -170,13 +171,16 @@ public:
     /*  +76 */ int m_i76;                      // = 4 [UNRESOLVED] - the twin of m_i40
     /*  +80 */ IAIObject* m_requestedObject;   // = 0; requestMission's object [INFERRED] name
     /*  +84 */ double m_d84;                   // never written by the constructor; getMissionRequest copies it
-    /*  +92 */ bool m_b92;                     // requestMission: the order came from the commander
-    /*  +96 */ int m_i96;                      // leader member index, initially -1
+    /*  +92 */ bool m_b92;                     // requestMission: the order came from the commander. DICE:
+                                           // m_missionRequest.isCommanderOrder (AIDLL_r assert, 0x101BA880)
+    /*  +96 */ int m_squadLeaderIndex;         // leader member index, initially -1. Name: AIDLL_r assert
+                                           // "m_squadLeaderIndex >= 0" in getSquadLeaderIndex (0x101B8910, PE +0x78)
     /* +100 */ SquadFormation* m_formation;    // new SquadFormation(this)
     /* +104 */ std::list<AIStrategicObject*> m_list104; // the area nav points; getListOfAreaNavPoints copies it
     /* +108 */ Vec3 m_v108;                    // zeroed twice - once before the formation, once after
     // 0 = available (isSquadAvailable, ELF 0x1A7FA0), 2 = has a mission (squadHasMission).
-    /* +120 */ int m_i120;                     // = 0
+    /* +120 */ int m_missionStatus;            // = 0. Name: AIDLL_r assert "m_missionStatus == MSOnMission"
+                                           // (getSquadMissionTargetPos 0x101B8B00 compares PE +0x98 with 2)
     /* +124 */ double m_d124;                  // = 0.0 [UNRESOLVED]
     /* +132 */ double m_d132;                  // = 0.0 [UNRESOLVED]
     /* +140 */ double m_d140;                  // = 0.0 [UNRESOLVED]

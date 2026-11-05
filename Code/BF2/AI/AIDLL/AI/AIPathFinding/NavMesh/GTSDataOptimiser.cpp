@@ -55,7 +55,7 @@ float normalAngle(const DoubleVec3& a, const DoubleVec3& b)
 }
 
 // ELF 0x2F2390 (C2), 0x2F2490 (C1).
-GTSDataOptimiser::GTSDataOptimiser(ClusterGraph* graph) : m_current(), m_graph(graph) {}
+GTSDataOptimiser::GTSDataOptimiser(ClusterGraph* graph) : m_current(), m_clusterGraph(graph) {}
 
 // ELF 0x2F24E0 (D2), 0x2F2550 (D1).
 GTSDataOptimiser::~GTSDataOptimiser()
@@ -262,11 +262,11 @@ OptPolygon* GTSDataOptimiser::createPolygon() const { return checkPointer(new Op
 // ELF 0x2F3EF0. Only the two-to-one pass is enabled in the shipped optimiser.
 void GTSDataOptimiser::optimise(const std::vector<DestroyableMapPart*>& parts)
 {
-    m_graph->resetTempMemberSizes();
+    m_clusterGraph->resetTempMemberSizes();
     std::set<OptPolygon*> removed;
     while (twoToOneMerge(removed)) {}
-    delete[] m_graph->m_tempMemberSizes;
-    m_graph->m_tempMemberSizes = 0;
+    delete[] m_clusterGraph->m_tempMemberSizes;
+    m_clusterGraph->m_tempMemberSizes = 0;
     setPolygonIndices(parts);
 }
 
@@ -274,7 +274,7 @@ void GTSDataOptimiser::optimise(const std::vector<DestroyableMapPart*>& parts)
 void GTSDataOptimiser::setPolygonIndices(const std::vector<DestroyableMapPart*>& parts)
 {
     ClusterGraph::ClusterPolygonMap clusters;
-    const std::set<unsigned int>& removed = m_graph->m_set18;
+    const std::set<unsigned int>& removed = m_clusterGraph->m_set18;
     std::map<unsigned int, unsigned int> oldParts;
     unsigned int part = 0;
     for (std::vector<DestroyableMapPart*>::const_iterator p = parts.begin(); p != parts.end(); ++p, ++part)
@@ -288,7 +288,7 @@ void GTSDataOptimiser::setPolygonIndices(const std::vector<DestroyableMapPart*>&
         OptPolygon* polygon = *i;
         if (removed.find(polygon->m_index) == removed.end())
         {
-            for (unsigned short cluster = 0; cluster < m_graph->m_numberOfClusters; ++cluster)
+            for (unsigned short cluster = 0; cluster < m_clusterGraph->m_numberOfClusters; ++cluster)
                 if (polygon->m_cluster == cluster)
                 {
                     ClusterGraph::ClusterPolygonMap::iterator entry = clusters.find(cluster);
@@ -310,7 +310,7 @@ void GTSDataOptimiser::setPolygonIndices(const std::vector<DestroyableMapPart*>&
                 std::make_pair(entry->second, parts[entry->second]->m_initiallyWalkable)));
         polygon->m_index = index;
     }
-    m_graph->updateClustersAfterOptimisation(newParts, m_polygons, clusters);
+    m_clusterGraph->updateClustersAfterOptimisation(newParts, m_polygons, clusters);
 }
 
 // ELF 0x2F5D20. Dropping a previous list does not destroy its polygons, as shipped.
@@ -484,8 +484,8 @@ bool GTSDataOptimiser::twoToOneMerge(std::set<OptPolygon*>& removed)
             OptPolygon* discarded = polygon;
             unsigned short retainedCluster = neighbour->m_cluster;
             unsigned short discardedCluster = polygon->m_cluster;
-            unsigned int remaining = m_graph->m_tempMemberSizes[discardedCluster];
-            const unsigned int otherSize = m_graph->m_tempMemberSizes[retainedCluster];
+            unsigned int remaining = m_clusterGraph->m_tempMemberSizes[discardedCluster];
+            const unsigned int otherSize = m_clusterGraph->m_tempMemberSizes[retainedCluster];
             if (remaining <= otherSize)
             {
                 retained = polygon;
@@ -498,7 +498,7 @@ bool GTSDataOptimiser::twoToOneMerge(std::set<OptPolygon*>& removed)
             if (retainedCluster != discardedCluster && remaining > 1)
             {
                 std::set<unsigned int> visited;
-                if (!m_graph->validateClusterConnectivityFromPolygon(discardedCluster, discarded,
+                if (!m_clusterGraph->validateClusterConnectivityFromPolygon(discardedCluster, discarded,
                         remaining, visited, false))
                 {
                     visited.clear();
@@ -508,8 +508,8 @@ bool GTSDataOptimiser::twoToOneMerge(std::set<OptPolygon*>& removed)
             output = createPolygon();
             output->m_index = retained->m_index;
             output->m_cluster = retainedCluster;
-            m_graph->m_set18.insert(discarded->m_index);
-            m_graph->m_tempMemberSizes[discardedCluster] = remaining;
+            m_clusterGraph->m_set18.insert(discarded->m_index);
+            m_clusterGraph->m_tempMemberSizes[discardedCluster] = remaining;
             std::list<const DoubleVec3*> vertices;
             std::list<OptPolygon*> neighbours;
             for (int corner = firstOther; corner != lastOther; corner = wrappedIndex(corner + 1, otherCount))
@@ -711,7 +711,7 @@ void GTSDataOptimiser::removeTooThinTriangles()
                     }
                     m_polygons.insert(m_polygons.end(), split[half]);
                 }
-                ++m_graph->m_tempMemberSizes[across->m_cluster];
+                ++m_clusterGraph->m_tempMemberSizes[across->m_cluster];
                 removed.insert(across);
             }
             if (before) before->changeNeighbour(polygon->m_vertices[opposite], polygon, split[0]);
@@ -726,8 +726,8 @@ void GTSDataOptimiser::removeTooThinTriangles()
     {
         if (removed.find(*i) == removed.end()) { ++i; continue; }
         OptPolygon* polygon = *i;
-        m_graph->m_set18.insert(polygon->m_index);
-        --m_graph->m_tempMemberSizes[polygon->m_cluster];
+        m_clusterGraph->m_set18.insert(polygon->m_index);
+        --m_clusterGraph->m_tempMemberSizes[polygon->m_cluster];
         m_polygons.erase(i++);
         destroyPolygon(polygon);
     }

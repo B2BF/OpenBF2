@@ -13,7 +13,7 @@
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIPlanInterpreter/BAPContext.h"
 #include "../AIPlanInterpreter/BotScriptDebugger.h"
 #include "../../../../Math/Vec3.h"
@@ -58,7 +58,7 @@ BotScript* BBPRoam2d::createPlan(Bot* bot)
     BAPConPosition* const arrived = new BAPConPosition(m_positions[bot->getBotId()], radius);
     BAPAMoveToFinding* const plan = new BAPAMoveToFinding(bot, m_positions[bot->getBotId()], speed, speed,
                                                        arrived, controls, m_patternId, 0.0f, 0.0f);
-    plan->m_owner = this;
+    plan->mpOwner = this;
     return plan;
 }
 

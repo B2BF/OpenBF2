@@ -19,8 +19,8 @@ class MissileLockMessage;
 namespace ai {
 
 // knowledge records
-class Information;            // the SpHandlePool payload; see AIKnowledge/InformationManager.h
-class WeaponInfo;             // likewise; see AIKnowledge/WeaponInfoManager.h
+class Information;            // the SpHandlePool payload; see Main/InformationManager.h
+class WeaponInfo;             // likewise; see AIUtils/WeaponInfoManager.h
 
 // the bot itself
 // `Bot*` and `unsigned int` appear as alternative first arguments on the same DPManager creators

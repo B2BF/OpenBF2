@@ -10,7 +10,7 @@
 #include "../AIBot/SquadManager.h"   // requestResponseModifier (ai-bot)
 #include "BBRevive.h"
 
-#include "CustomCurve.h"
+#include "../AIUtils/CustomCurve.h"
 #include "../AIBot/BotMain.h"
 #include "../AIBot/BotMemory.h"
 #include "../AIBotBehaviourPattern/BBPRevive.h"
@@ -20,9 +20,9 @@
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../AIUtils/checkPointer.h"
 #include "../Main/AIDllFrontier.h"
 #include "../Main/AISettingsInterfaces.h"
@@ -163,7 +163,7 @@ float BBRevive::calculateUrgency(Bot* bot, bool update, float modifier)
         if (!unit)
             continue;
         IPIPhysical* const physical = unit->getPhysical();
-        if (!physical || unit == self || !unit->hasMobile() || (unit->getObjectTypeFlags() & 0x200000u) == 0)
+        if (!physical || unit == self || !unit->hasMobile() || !unit->isOfType(ITSoldier))
             continue;
         if (!physical->getManDown())                                        // IPIPhysical +0x5C
             continue;

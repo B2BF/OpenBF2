@@ -211,7 +211,7 @@ AIStrategicObject* AIStrategicObjectManager::getClosestObject(const Vec3& positi
     const int index=points[currentGroup].object;
     return index<0 ? nullptr : objects[index];
 }
-SquadCoordinator::SquadCoordinator(int side,int index):m_squadIndex(index),m_side(side),m_i96(0),m_formation(nullptr)
+SquadCoordinator::SquadCoordinator(int side,int index):m_squadIndex(index),m_side(side),m_squadLeaderIndex(0),m_formation(nullptr)
 { m_v108=Vec3{0,0,0}; }
 SquadMember::SquadMember(SquadCoordinator* squad,IAIPlayer* player,int,int,int):m_isSquadLeader(false),m_player(player),m_squad(squad) {}
 SquadMember::~SquadMember() {}

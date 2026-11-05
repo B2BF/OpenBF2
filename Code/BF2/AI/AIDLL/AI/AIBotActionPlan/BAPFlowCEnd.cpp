@@ -16,7 +16,7 @@ BAPFlowCEnd::BAPFlowCEnd(int patternId, BAPFlowCEnd::EndType type, BAPCondition*
     , m_type(type)
 {
     if (condition)
-        condition->m_owner = this;
+        condition->mpOwner = this;
 }
 
 // ELF 0x1E3310 (D2; D1 0x1E3380, D0 0x1E33F0). The condition's deleting destructor is slot +0x10.

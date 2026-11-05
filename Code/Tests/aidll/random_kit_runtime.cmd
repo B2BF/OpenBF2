@@ -13,7 +13,7 @@ cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%BF2_RANDOM_KIT_OUT%\ra
 if errorlevel 1 goto failed
 cl %TASK_FLAGS% /I"%BF2_RANDOM_KIT_OUT%" /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%~dp0random_kit_runtime.cpp" /Fo"%BF2_RANDOM_KIT_OUT%\fixture.obj" >>"%BF2_RANDOM_KIT_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed
-cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\AIKnowledge\InformationManager.cpp" /Fo"%BF2_RANDOM_KIT_OUT%\pool.obj" >>"%BF2_RANDOM_KIT_OUT%\compile.log" 2>&1
+cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\Main\InformationManager.cpp" /Fo"%BF2_RANDOM_KIT_OUT%\pool.obj" >>"%BF2_RANDOM_KIT_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed
 link /nologo /OPT:REF /INCREMENTAL:NO /SUBSYSTEM:CONSOLE /OUT:"%BF2_RANDOM_KIT_OUT%\random_kit_runtime.exe" "%BF2_RANDOM_KIT_OUT%\actual.obj" "%BF2_RANDOM_KIT_OUT%\fixture.obj" "%BF2_RANDOM_KIT_OUT%\pool.obj" >"%BF2_RANDOM_KIT_OUT%\link.log" 2>&1
 if errorlevel 1 goto failed

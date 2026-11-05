@@ -31,10 +31,10 @@ struct Vec3
 // record only; it is not a production-header or retail ABI assertion.
 struct Polygon
 {
-    unsigned char m_numberOfVertices;
+    unsigned char vertexCount;
     unsigned char m_material;
-    unsigned short m_cluster;
-    unsigned int m_firstIndex;
+    unsigned short cluster;
+    unsigned int vertexOffset;
     Vec3 m_normal;
 };
 
@@ -51,7 +51,7 @@ class QuadTreeManager
 {
 public:
     QuadTree* getIsland(unsigned int island) const;
-    std::vector<std::pair<QuadTree*, ClusterGraph*> > m_islands;
+    std::vector<std::pair<QuadTree*, ClusterGraph*> > m_quadTrees;
 };
 
 class AIPathfinding
@@ -105,12 +105,12 @@ static int runNormal()
     CHECK(tree.getMaterialOfPolygon(2) == 0xE6);
 
     QuadTreeManager manager;
-    manager.m_islands.push_back(std::make_pair(&tree, static_cast<ClusterGraph*>(0)));
+    manager.m_quadTrees.push_back(std::make_pair(&tree, static_cast<ClusterGraph*>(0)));
     dice::hfe::ai::Polygon secondPolygon = {};
     secondPolygon.m_material = 0xFF;
     QuadTree secondTree;
     secondTree.m_polygons = &secondPolygon;
-    manager.m_islands.push_back(std::make_pair(&secondTree, static_cast<ClusterGraph*>(0)));
+    manager.m_quadTrees.push_back(std::make_pair(&secondTree, static_cast<ClusterGraph*>(0)));
     AIPathfinding::MapContainer map;
     map.m_quadTreeManager = &manager;
 
@@ -161,7 +161,7 @@ static int runBadIsland()
     QuadTree tree;
     tree.m_polygons = &polygon;
     QuadTreeManager manager;
-    manager.m_islands.push_back(std::make_pair(&tree, static_cast<ClusterGraph*>(0)));
+    manager.m_quadTrees.push_back(std::make_pair(&tree, static_cast<ClusterGraph*>(0)));
     AIPathfinding::MapContainer map;
     map.m_quadTreeManager = &manager;
     unsigned char material = 0xA5;
@@ -179,7 +179,7 @@ static int runNullPolygonStorage()
     QuadTree tree;
     tree.m_polygons = reinterpret_cast<dice::hfe::ai::Polygon*>(zero);
     QuadTreeManager manager;
-    manager.m_islands.push_back(std::make_pair(&tree, static_cast<ClusterGraph*>(0)));
+    manager.m_quadTrees.push_back(std::make_pair(&tree, static_cast<ClusterGraph*>(0)));
     AIPathfinding::MapContainer map;
     map.m_quadTreeManager = &manager;
     unsigned char material = 0xA5;

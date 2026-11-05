@@ -3,7 +3,7 @@
 // for this caller fixture. They do not establish the unrecovered engine forwarding ABI.
 #include "../../BF2/AI/AIDLL/AI/AIUtils/VehicleOccupancy.h"
 #include "../../BF2/AI/AIDLL/AI/AIKnowledge/Information.h"
-#include "../../BF2/AI/AIDLL/AI/AIKnowledge/InformationManager.h"
+#include "../../BF2/AI/AIDLL/AI/Main/InformationManager.h"
 #include "../../BF2/AI/AIDLL/AI/AIKnowledge/IPIUnit.h"
 #include <cstdio>
 #include <cstdlib>
@@ -47,7 +47,7 @@ namespace dice { namespace hfe { namespace ai {
 // [TEMP] Chosen genuine native storage, no raw objects or header rewriting. A constructor
 // may access its actual private fields; the captured typed field pointer permits mutations.
 Information::Information(IAIObject* object, double time)
-    : m_objectTypeFlags(0), m_strength(0), m_time(time), m_object(object), m_booked(false),
+    : m_objectTypeFlags(0), m_strength(0), m_time(time), m_object(object), m_isBooked(false),
       m_bookingPlayerId(-1), m_armament(nullptr), m_controlInfo(nullptr), m_cover(nullptr),
       m_mobile(nullptr), m_physical(nullptr), m_unit(constructingUnit)
 { unitSlots[this] = &m_unit; }

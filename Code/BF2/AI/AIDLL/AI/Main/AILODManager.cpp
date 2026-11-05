@@ -10,7 +10,7 @@
 #include "IBotManager.h"
 #include "../AIBot/BotMain.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "InformationManager.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../../../AIInterface/BFKnowledge/AIPlayer.h"
 #include "../../../AIInterface/BFKnowledge/AIPlayerFactory.h"

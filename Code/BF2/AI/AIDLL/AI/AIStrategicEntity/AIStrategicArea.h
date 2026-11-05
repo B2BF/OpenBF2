@@ -37,7 +37,7 @@ public:
         }
 
         /*  +0 */ Vec3 m_offset;        // absolute until `initOrderPoses`, a delta afterwards
-        /* +12 */ unsigned int m_island;
+        /* +12 */ unsigned int island;      // name: AIDLL_r assert "m_orderPos[vehicle].island" (0x100E45C0; PE +0x120 array, 16-byte entries)
     };
 
     // [UNRESOLVED] List payloads whose original element types have not been identified.
@@ -178,7 +178,7 @@ public:
     // The top-left corner: the bounded constructor and setTopLeftCorner store it; [INFERRED]
     // name kept from the control-point path, which derives it from the control-point radius.
     /* +272 */ Vec2 m_centre;                      // getXExtent/getZExtent subtract it
-    /* +280 */ MapData* m_mapData;                 // new MapData[IAIPathfinding::getNumberOfMaps]
+    /* +280 */ MapData* m_orderPos;                 // new MapData[IAIPathfinding::getNumberOfMaps]  // name: AIDLL_r assert 0x100E45C0 (PE +0x120)
     // Separate vectors for neighboring areas and other neighboring strategic objects.
     /* +284 */ std::vector<AIStrategicObject*> m_neighbours;
     /* +296 */ std::vector<AIStrategicObject*> m_neighbouringObjects;

@@ -19,7 +19,7 @@
 #include "../AIBotActionPlan/BAPIWMoveTo.h"
 #include "../AIBotBehaviour/BBPendingCalls.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIControlInfo.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIPlanInterpreter/BAPContext.h"
@@ -220,7 +220,7 @@ BotScript* BBPGotoWaypointSoldier::buildMoveTo(Bot* bot, Information* equipment,
     serial->addStatement(focus);
     serial->addStatement(move);
     BAPIWMoveTo* const root = checkPointer(new BAPIWMoveTo(goal, serial, m_patternId));
-    root->setParent(this);   // +0x04 (BotScript::m_owner)
+    root->setParent(this);   // +0x04 (BotScript::mpOwner)
     return root;
 }
 
@@ -246,7 +246,7 @@ BotScript* BBPGotoWaypointSoldier::buildMoveToObject(Bot* bot, Information* equi
     serial->addStatement(focus);
     serial->addStatement(move);
     BAPIWMoveTo* const root = checkPointer(new BAPIWMoveTo(goal, serial, m_patternId));
-    root->setParent(this);   // +0x04 (BotScript::m_owner)
+    root->setParent(this);   // +0x04 (BotScript::mpOwner)
     return root;
 }
 

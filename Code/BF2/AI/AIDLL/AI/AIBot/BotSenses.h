@@ -75,7 +75,7 @@ private:
 
     /*   0 */ BotMain* m_bot;                // the ctor argument, and the first store
     /*   4 */ Frustum* m_frustum;            // new(0x1E8) - . See the header block.
-    // see (ELF 0x198420): 1 when the equipment has type flag 0x400000 (meaning [UNRESOLVED]); the
+    // see (ELF 0x198420): 1 when the equipment is ITObstructedView (bit 22, AIDLL_r enum switch 0x100D3010); the
     // row of tweak_frustumUpdateAngle used for the frustum.
     /*   8 */ int m_viewMode;
     /*  12 */ double m_collectTime;          // = -1000000.0; see: the game time of the last candidate scan
@@ -90,8 +90,8 @@ private:
     /*  56 */ TimedList m_list56;
     // A cursor into the list above, seeded to end by the constructor's last statement.
     /*  60 */ TimedList::iterator m_cursor60;
-    /*  64 */ std::set<unsigned int> m_set64;
-    /*  76 */ TimedList m_list76;
+    /*  64 */ std::set<unsigned int> m_hearingMemHelperSet;   // name: AIDLL_r assert 0x101D6BF0 (PE +0x50)
+    /*  76 */ TimedList m_hearingMemCheckQueue;   // name: AIDLL_r assert 0x101D6BF0 (PE +0x5C)
     // A cursor into the list above - and unlike +60 the constructor leaves it default-constructed.
     // Only `reset` makes it valid. See the header block.
     /*  80 */ TimedList::iterator m_cursor80;

@@ -96,11 +96,11 @@ SAI::SAI(int side, int, int, Vec2, Vec2)
       m_stateC(stateArrays[2]), m_stateD(stateArrays[3]), m_int1F4(initialBuffer)
 {
     state = &m_int18C; buffer = &m_int1F4; timestamp = &m_float190;
-    suppression = &m_flag1D1; bots = &m_botInfo;
+    suppression = &m_flag1D1; bots = &m_bots;
 }
 SAI::~SAI() {}
 SAI::BotInfo::BotInfo(Bot* bot)
-    : m_bot(bot), m_int04(-1), m_int08(-1), m_int0C(-1), m_float10(0.0f), m_double14(0.0) {}
+    : m_bot(bot), m_currentlyOrderedSquare(-1), m_lastOrderedSquare(-1), m_currentlyOccupiedSquare(-1), m_float10(0.0f), m_double14(0.0) {}
 IBFTimer::IBFTimer() {}
 IBFTimer::~IBFTimer() {}
 IAISettings::IAISettings() {}

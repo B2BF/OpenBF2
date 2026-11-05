@@ -16,7 +16,7 @@
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../Main/AIDllFrontier.h"
 #include "../Main/IAIPathfinding.h"
 #include "../Main/IBotManager.h"
@@ -208,10 +208,10 @@ int BAPAMoveToObjectFinding::update(Vec2& point, bool& reached, bool& done, floa
         }
     }
     if (replan == 1) {
-        initObjectFinding(dist, dir, own.position, goal.quadTree, goal.polygon, goal.position, false);
+        initObjectFinding(dist, dir, own.position, goal.island, goal.polygon, goal.position, false);
     } else if (replan == 2) {
         const Vec3 zero = bapinline::vec3(0.0f, 0.0f, 0.0f);
-        initObjectFinding(0.0f, zero, zero, goal.quadTree, goal.polygon, goal.position, true);
+        initObjectFinding(0.0f, zero, zero, goal.island, goal.polygon, goal.position, true);
     }
 
     m_pathStarted = true;
@@ -227,7 +227,7 @@ int BAPAMoveToObjectFinding::update(Vec2& point, bool& reached, bool& done, floa
     if (got) {
         point = m_currentPoint;
         reached = m_pathDone;
-        if (!(self->getObjectTypeFlags() & 0x10u)
+        if (!self->isOfType(ITAir)
             && SquadManager::m_instance->isInArtilleryDangerZone(target3, bot->getSide(), sinceStart, artillerySide)
             && !SquadManager::m_instance->isInArtilleryDangerZone(self->getPosition(), bot->getSide(), sinceStart,
                                                                   artillerySide)) {
@@ -236,7 +236,7 @@ int BAPAMoveToObjectFinding::update(Vec2& point, bool& reached, bool& done, floa
         }
     }
     if (!done) {
-        const bool soldier = (self->getObjectTypeFlags() & 0x200000u) != 0;
+        const bool soldier = self->isOfType(ITSoldier);
         bool artilleryCheck = true;
         if (!stopped && !m_movingAway && soldier
             && std::fabs(target->getPosition().y - self->getPosition().y) < 2.0f) {
@@ -408,7 +408,7 @@ void BAPAMoveToObjectFinding::initObjectFinding(float distance, const Vec3&, con
         const Vec3& speed = mobile->getSpeed();
         Vec3 flat = bapinline::vec3(speed.x, 0.0f, speed.z);
         const float flatSpeed = std::sqrt(flat.x * flat.x + 0.0f * 0.0f + flat.z * flat.z);
-        const bool soldier = (self->getObjectTypeFlags() & 0x200000u) != 0;
+        const bool soldier = self->isOfType(ITSoldier);
         if (!soldier || !(flatSpeed > 1.5f)) {     // 0x1DB53E ja
             float d = (m_distance - m_minDistance) * 0.2f;
             if (10.0f < d)

@@ -51,7 +51,7 @@ SquadMember::SquadMember(SquadCoordinator* squad,IAIPlayer* player,int squadInde
     m_time24(0.0),m_havePath(true),m_request(nullptr),m_int38(777),m_position{1,2,3},m_positionValid(false),
     m_flag49(true),m_flag4A(false),m_flag4B(true),m_moved(true),m_vector54{},m_vector60{} {}
 SquadMember::~SquadMember() {}
-SquadFormation::SquadFormation(SquadCoordinator* squad):m_coordinator(squad),m_maxSquadMembers(0) {}
+SquadFormation::SquadFormation(SquadCoordinator* squad):m_coordinator(squad),m_numberOfSlots(0) {}
 IAIPlayer::~IAIPlayer() {}
 Bot::~Bot() {}
 int Bot::getBotType() const { unexpected("Bot::getBotType"); }

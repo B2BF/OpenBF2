@@ -14,7 +14,7 @@ BAPConAnd::BAPConAnd(std::list<BAPCondition*>& conditions)
 {
     m_conditions = conditions;
     for (std::list<BAPCondition*>::iterator it = m_conditions.begin(); it != m_conditions.end(); ++it)
-        (*it)->m_owner = this;
+        (*it)->mpOwner = this;
 }
 
 // ELF 0x1F3D30 (C2; C1 0x1F3DA0).
@@ -48,7 +48,7 @@ bool BAPConAnd::evaluate(Bot* bot)
 // ELF 0x1F40A0: no null check.
 void BAPConAnd::addCondition(BAPCondition* condition)
 {
-    condition->m_owner = this;
+    condition->mpOwner = this;
     m_conditions.insert(m_conditions.end(), condition);
 }
 

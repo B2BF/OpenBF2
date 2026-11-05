@@ -14,7 +14,7 @@
 #include "../Main/IAIPathfinding.h"
 #include "../AIBot/SquadManager.h"
 #include "../AIBot/SquadCoordinator.h"
-#include "../AIBotBehaviour/CustomCurve.h"
+#include "../AIUtils/CustomCurve.h"
 #include "../AIStrategic/SAI.h"
 #include "../AIStrategic/Strategy.h"
 #include "AIStrategicObjectManager.h"
@@ -22,7 +22,7 @@
 #include "../Main/IBotManager.h"
 #include "../Main/AIMain.h"                             // IAIMain::m_instance->getSAI
 #include "../AIKnowledge/BFInformationEnvironment.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/Information.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/IPIUnit.h"
@@ -33,7 +33,7 @@
 #include "../Main/AIRandom.h"
 #include "SAWayPoint.h"
 #include "AILandingZone.h"
-#include "AILandingZoneManager.h"
+#include "../Main/AILandingZoneManager.h"
 #include "../AIKnowledge/AIInformationGrid.h"
 #include "../../../AIInterface/BFKnowledge/BFGame.h"       // IAIGame - the control-point queries
 #include "../../../AIInterface/BFKnowledge/BFTerrain.h"    // IAITerrain::getTerrainAltitude
@@ -71,8 +71,7 @@ public:
     {
         if (!information->getUnit() || !information->hasMobile())
             return false;
-        const unsigned int flags = information->getObjectTypeFlags();
-        if ((flags & 0x80u) || (flags & 0x200000u))
+        if (information->isOfType(ITNaval) || information->isOfType(ITSoldier))
             return false;
 
         int iterator = information->getFirstSecondaryObjectIterator();
@@ -101,7 +100,7 @@ AIStrategicArea::AIStrategicArea(const std::string& name, Vec2 topLeft, Vec2 cen
     : AIStrategicObject(radius, height)
     , m_list268()
     , m_centre(topLeft)
-    , m_mapData(checkPointer(new MapData[IAIPathfinding::instance->getNumberOfMaps()]))
+    , m_orderPos(checkPointer(new MapData[IAIPathfinding::instance->getNumberOfMaps()]))
     , m_neighbours()
     , m_neighbouringObjects()
     , m_name(name)
@@ -129,7 +128,7 @@ AIStrategicArea::AIStrategicArea(const std::string& name, unsigned int controlPo
     : AIStrategicObject(radius, -666.0f)
     , m_list268()
     , m_centre()
-    , m_mapData(checkPointer(new MapData[IAIPathfinding::instance->getNumberOfMaps()]))
+    , m_orderPos(checkPointer(new MapData[IAIPathfinding::instance->getNumberOfMaps()]))
     , m_neighbours()
     , m_neighbouringObjects()
     , m_name(name)
@@ -157,7 +156,7 @@ AIStrategicArea::AIStrategicArea(const std::string& name, unsigned int controlPo
 // vectors and the name (+0x188 down to +0x10C) then go in reverse declaration order, then the base.
 AIStrategicArea::~AIStrategicArea()
 {
-    delete[] m_mapData;
+    delete[] m_orderPos;
     delete[] m_flagsA;
     delete[] m_flagsB;
     delete[] m_listsA;
@@ -385,7 +384,7 @@ void AIStrategicArea::initOrderPoses()
 
     for (int i = 0; i < pathfinding->getNumberOfMaps(); ++i)
     {
-        MapData& data = m_mapData[i];
+        MapData& data = m_orderPos[i];
 
         unsigned int polygon = 0;
         unsigned int island  = 0;
@@ -395,7 +394,7 @@ void AIStrategicArea::initOrderPoses()
         data.m_offset.y = data.m_offset.y - areaPosition.y;
         data.m_offset.z = data.m_offset.z - areaPosition.z;
 
-        data.m_island = island;
+        data.island = island;
     }
 
     m_orderPosesInitialised = true;
@@ -415,7 +414,7 @@ Vec3 AIStrategicArea::getOrderPos(int map, int unused) const
 
     if (map != -1)
     {
-        const MapData& data = m_mapData[map];
+        const MapData& data = m_orderPos[map];
         position.x += data.m_offset.x;
         position.y += data.m_offset.y;
         position.z += data.m_offset.z;
@@ -560,13 +559,13 @@ void AIStrategicArea::update(int side, ISAI* sai, bool& changed)
                 return;
             if (sai->isFriend(information->getSide()))
             {
-                if (!root || (information->getObjectTypeFlags() & 0x10u) == 0)
+                if (!root || !information->isOfType(ITAir))
                     ++friendlyUnits;
                 friendly = static_cast<float>(static_cast<double>(security) * strength + friendly);
             }
             else if (sai->isEnemy(information->getSide()))
             {
-                if (!root || (information->getObjectTypeFlags() & 0x10u) == 0)
+                if (!root || !information->isOfType(ITAir))
                     ++enemyUnits;
                 enemy = static_cast<float>(static_cast<double>(security) * strength + enemy);
                 IPIPhysical* const physical = information->getPhysical();
@@ -1163,7 +1162,7 @@ float AIStrategicArea::gravity(const Vec2& position, int side)
 // present-set find and the local object list are unused in the image.
 bool AIStrategicArea::retainBot(int side, int unit, ISAI*)
 {
-    m_set92[side - 1].find(unit);
+    m_presentUnits[side - 1].find(unit);
     Bot* const bot = IBotManager::instance->getBotFromId(unit);
     Information* const information = informationManager->getInformation(bot->getCurrentEquipment());
     if (!information || !information->getMobile() || !information->getUnit())
@@ -1245,7 +1244,7 @@ void AIStrategicArea::getControlpointPos(AIStrategicObject* object, int side, in
         const float dz = centre.z - from.z;
         const float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
         if (0.8f * radius > distance
-            && pathfinding->isValidPosition(map, unit, from, m_mapData[map].m_island, true))
+            && pathfinding->isValidPosition(map, unit, from, m_orderPos[map].island, true))
         {
             position = from;
             return;
@@ -1266,7 +1265,7 @@ void AIStrategicArea::getControlpointPos(AIStrategicObject* object, int side, in
         const float dz = centre.z - from.z;
         const float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
         if (twice > distance
-            && pathfinding->isValidPosition(map, unit, from, m_mapData[map].m_island, true))
+            && pathfinding->isValidPosition(map, unit, from, m_orderPos[map].island, true))
         {
             position = from;
             return;
@@ -1280,7 +1279,7 @@ void AIStrategicArea::getControlpointPos(AIStrategicObject* object, int side, in
     object->randomizeControlpointPos(scale, spread, position);
     for (; tries <= 19; ++tries)
     {
-        if (pathfinding->isValidPosition(map, unit, position, m_mapData[map].m_island, true))
+        if (pathfinding->isValidPosition(map, unit, position, m_orderPos[map].island, true))
             return;
         position.x = centre.x;
         position.y = m_f148;
@@ -1298,7 +1297,7 @@ void AIStrategicArea::orderBot(int side, const std::list<AIStrategicObject*>& ob
 {
     Bot* const bot = IBotManager::instance->getBotFromId(unit);
     Information* const information = informationManager->getInformation(bot->getCurrentEquipment());
-    if (information->getObjectTypeFlags() & 0x10u)
+    if (information->isOfType(ITAir))
     {
         orderAirBot(side, objects, unit, sai);
         return;
@@ -1319,7 +1318,7 @@ void AIStrategicArea::orderAirBot(int side, const std::list<AIStrategicObject*>&
     Bot* const bot = IBotManager::instance->getBotFromId(unit);
     Information* const information = informationManager->getInformation(bot->getCurrentEquipment());
     const IAITerrain* const terrain = static_cast<const IAITerrain*>(CommonSingletonServer::m_iaiTerrain);
-    const float clearance = (information->getObjectTypeFlags() & 0x20u) ? 4.0f : 40.0f;
+    const float clearance = information->isOfType(ITHelicopter) ? 4.0f : 40.0f;
     const std::size_t count = objects.size();
     if (count == 0 || count == 1)
     {
@@ -1405,7 +1404,7 @@ void findOrderPosition(const AIStrategicArea* area, AIStrategicObject* object, i
     object->randomizePos(side, 0.8f, position);
     for (int tries = 0; tries <= 19; ++tries)
     {
-        if (pathfinding->isValidPosition(map, equipment, position, area->m_mapData[map].m_island, true))
+        if (pathfinding->isValidPosition(map, equipment, position, area->m_orderPos[map].island, true))
             return;
         object->randomizePos(side, 0.8f, position);
     }
@@ -1496,7 +1495,7 @@ void AIStrategicArea::orderNormalBot(int side, const std::list<AIStrategicObject
             bool found = false;
             if (isInside(botPosition2)
                 && pathfinding->isValidPosition(map, equipment, information->getPosition(),
-                                                m_mapData[map].m_island, true))
+                                                m_orderPos[map].island, true))
             {
                 position = information->getPosition();
                 found = true;
@@ -1801,7 +1800,7 @@ bool AIStrategicArea::setOrderPos(int map, const Vec3& position)
 {
     if (!m_orderPosesInitialised)
     {
-        m_mapData[map].m_offset = position;
+        m_orderPos[map].m_offset = position;
         return true;
     }
 
@@ -1814,14 +1813,14 @@ bool AIStrategicArea::setOrderPos(int map, const Vec3& position)
 
     unsigned int polygon;
     unsigned int island;
-    IAIPathfinding::instance->getPolygon(m_mapData[map].m_offset, map, polygon, island, 1);
+    IAIPathfinding::instance->getPolygon(m_orderPos[map].m_offset, map, polygon, island, 1);
 
     Vec3 delta;
     delta.x = position.x - areaPosition.x;
     delta.y = position.y - areaPosition.y;
     delta.z = position.z - areaPosition.z;
-    m_mapData[map].m_offset = delta;
-    m_mapData[map].m_island = island;
+    m_orderPos[map].m_offset = delta;
+    m_orderPos[map].island = island;
     return true;
 }
 

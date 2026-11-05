@@ -5,7 +5,7 @@
 #ifndef AI_AIDLL_AI_AIBOTBEHAVIOUR_BOTBEHAVIOUR_H
 #define AI_AIDLL_AI_AIBOTBEHAVIOUR_BOTBEHAVIOUR_H
 
-#include "UrgencyMerger.h"
+#include "../AIBot/UrgencyMerger.h"
 
 namespace dice {
 namespace hfe {

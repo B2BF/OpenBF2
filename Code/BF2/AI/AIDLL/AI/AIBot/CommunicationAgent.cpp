@@ -9,13 +9,13 @@
 #include <cstring>
 
 #include "BotMain.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/Information.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/IPIArmament.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../../../../IO/Input/PlayerInput.h"
 
 #include "../Main/IBotManager.h"
@@ -88,7 +88,7 @@ void CommunicationAgent::reset()
     m_lastPollTime = 0.0;
     m_int92 = -1;
     // This order is the binary's.
-    m_hornTime = 0.0;
+    m_lastHornHonkTime = 0.0;
     m_double96 = 0.0;
 }
 
@@ -156,7 +156,7 @@ void CommunicationAgent::sendCallForMedic(Information* equipment)
     IPIMobile* const mobile = primary->getMobile();
     bool skip = false;
     if (m_bot->isAirBorn()
-        || (primary && (primary->getObjectTypeFlags() & 0x10) != 0 && mobile
+        || (primary && primary->isOfType(ITAir) && mobile
             && mobile->getSpeedMagnitude() > 3.0f))
         skip = true;
     if (!equipment->isPrimary() || skip)
@@ -242,10 +242,10 @@ void CommunicationAgent::receiveRadioMessage(const AIRadioMessageSettings& setti
 // ELF 0x1C53F0: horn-capable equipment (type flag 0x04000000) releases fire after 2 s.
 void CommunicationAgent::shutOffHorn(Information* equipment)
 {
-    if ((equipment->getObjectTypeFlags() & 0x04000000) == 0)
+    if (!equipment->isOfType(ITHasCarHorn))
         return;
     const double now = static_cast<const IBFTimer*>(CommonSingletonServer::m_iBFTimer)->getGameTime();
-    if (now - m_hornTime > 2.0)
+    if (now - m_lastHornHonkTime > 2.0)
         m_bot->m_playerInput->setInput(io::PIFire, 0.0f);
 }
 
@@ -267,16 +267,16 @@ void CommunicationAgent::honkHorn(Information* target)
     if (!player)
         return;
     const float interval = player->getIsAIPlayer() ? 20.0f : 5.0f;
-    if (interval > now - m_hornTime)
+    if (interval > now - m_lastHornHonkTime)
         return;
     Information* const equipment = informationManager->getInformation(m_bot->getCurrentEquipment());
-    if ((equipment->getObjectTypeFlags() & 0x04000000) != 0)
+    if (equipment->isOfType(ITHasCarHorn))
         m_bot->m_playerInput->setInput(io::PIFire, 1.0f);
     else
         sendImmediately(static_cast<AIRadioMessageType>(11), static_cast<AIRadioChannelType>(6), 3,
                         targetPlayerId);
-    m_hornTime = static_cast<const IBFTimer*>(CommonSingletonServer::m_iBFTimer)->getGameTime();
-    if ((target->getObjectTypeFlags() & 0x00200000) == 0)
+    m_lastHornHonkTime = static_cast<const IBFTimer*>(CommonSingletonServer::m_iBFTimer)->getGameTime();
+    if (!target->isOfType(ITSoldier))
         return;
     Bot* const horned = IBotManager::instance->getBot(target->getAIObject());
     if (!horned)
@@ -350,7 +350,7 @@ void CommunicationAgent::enqueueRadioMessage(AIRadioMessageType type, AIRadioCha
     message.m_type = type;
     message.m_channel = channel;
     message.m_priority = static_cast<int>(priority);
-    message.m_int12 = c;
+    message.m_receiverPlayerId = c;
     message.m_sendTime = now + static_cast<double>(delay);
     message.m_delay = delay;
     if (m_map20.insert(std::make_pair(type, message.m_sendTime)).second)
@@ -366,7 +366,7 @@ void CommunicationAgent::postEvent(const CAPrioMessage& message) const
     const unsigned char sender = static_cast<unsigned char>(m_bot->getPlayerId());
     const unsigned char player = static_cast<unsigned char>(m_bot->getPlayerId());
     const unsigned char side = static_cast<unsigned char>(m_bot->getSide());
-    const unsigned char argument = static_cast<unsigned char>(message.m_int12);
+    const unsigned char argument = static_cast<unsigned char>(message.m_receiverPlayerId);
     int voice;
     if (!static_cast<IBFModuleCourier*>(CommonSingletonServer::m_iBFModuleCourier)
              ->getVoiceFromAiMessageType(message.m_type, voice))
@@ -456,7 +456,7 @@ void CommunicationAgent::sendImmediately(AIRadioMessageType type, AIRadioChannel
     message.m_channel = channel;
     message.m_priority = static_cast<int>(priority);
     message.m_sendTime = static_cast<const IBFTimer*>(CommonSingletonServer::m_iBFTimer)->getGameTime();
-    message.m_int12 = c;
+    message.m_receiverPlayerId = c;
     message.m_delay = 0.0f;
     postEvent(message);
 }

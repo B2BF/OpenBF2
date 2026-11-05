@@ -49,7 +49,7 @@ void QuadTreeManager::DebugMesh::lockSize()
 // metadata.
 QuadTreeManager::QuadTreeManager()
 {
-    // m_numberOfIslands deliberately not initialised - the binary steps over it.
+    // m_treeCount deliberately not initialised - the binary steps over it.
 }
 
 // ELF 0x30DD40 (D2; D1 0x30DE30; first recovered on the client track,
@@ -66,18 +66,18 @@ QuadTreeManager::~QuadTreeManager()
 // a valid island index.
 QuadTree* QuadTreeManager::getIsland(unsigned int island) const
 {
-    return m_islands[island].first;
+    return m_quadTrees[island].first;
 }
 
 ClusterGraph* QuadTreeManager::getClusterGraph(unsigned int island) const
 {
-    return m_islands[island].second;
+    return m_quadTrees[island].second;
 }
 
 // ELF 0x310F80.
 unsigned int QuadTreeManager::getNumberOfIslands() const
 {
-    return static_cast<unsigned int>(m_islands.size());
+    return static_cast<unsigned int>(m_quadTrees.size());
 }
 
 // ELF 0x30E240. Deletes both halves of every island's pair (each `delete` null-tests for itself), then
@@ -88,26 +88,26 @@ unsigned int QuadTreeManager::getNumberOfIslands() const
 // with no islands at all.
 void QuadTreeManager::destroyQuadTrees()
 {
-    for (std::vector<std::pair<QuadTree*, ClusterGraph*> >::iterator it = m_islands.begin();
-         it != m_islands.end(); ++it)
+    for (std::vector<std::pair<QuadTree*, ClusterGraph*> >::iterator it = m_quadTrees.begin();
+         it != m_quadTrees.end(); ++it)
     {
         delete it->first;
         delete it->second;
     }
-    m_islands.resize(0);
+    m_quadTrees.resize(0);
 }
 
 // ELF 0x30A690. Deletes the matching quad tree while retaining its island entry and nulling its pointer.
 void QuadTreeManager::destroyQuadTree(QuadTree* quadTree)
 {
-    std::vector<std::pair<QuadTree*, ClusterGraph*> >::iterator it = m_islands.begin();
-    for (; it != m_islands.end(); ++it)
+    std::vector<std::pair<QuadTree*, ClusterGraph*> >::iterator it = m_quadTrees.begin();
+    for (; it != m_quadTrees.end(); ++it)
     {
         if (it->first == quadTree)
             break;
     }
 
-    if (it != m_islands.end())
+    if (it != m_quadTrees.end())
     {
         delete it->first;
         it->first = 0;
@@ -132,8 +132,8 @@ void QuadTreeManager::loadQuadTrees(const std::string& name)
                           static_cast<io::FileAccess>(0), 0))
         return;
 
-    quadTreeFile.read(m_numberOfIslands);
-    if (m_numberOfIslands > 1)
+    quadTreeFile.read(m_treeCount);
+    if (m_treeCount > 1)
     {
         // [PLATFORM] ELF: signed `cmp edi, 1 / jg` at 0x30AF0A, `call abort` at 0x30B385. PE: signed
         // `cmp [ebx], 2 / jl` at , `int 3` at - which falls through into the
@@ -145,7 +145,7 @@ void QuadTreeManager::loadQuadTrees(const std::string& name)
 #endif
     }
 
-    for (unsigned int island = 0; island < static_cast<unsigned int>(m_numberOfIslands); ++island)
+    for (unsigned int island = 0; island < static_cast<unsigned int>(m_treeCount); ++island)
     {
         QuadTree* const quadTree = checkPointer(new QuadTree(island));
         quadTree->readFromFile(quadTreeFile);
@@ -153,13 +153,13 @@ void QuadTreeManager::loadQuadTrees(const std::string& name)
         ClusterGraph* const clusterGraph = checkPointer(new ClusterGraph);
         clusterGraph->readFromFile(clusterFile);
 
-        m_islands.push_back(std::make_pair(quadTree, clusterGraph));
+        m_quadTrees.push_back(std::make_pair(quadTree, clusterGraph));
     }
 
-    for (unsigned int island = 0; island < static_cast<unsigned int>(m_numberOfIslands); ++island)
+    for (unsigned int island = 0; island < static_cast<unsigned int>(m_treeCount); ++island)
     {
         for (unsigned short cluster = 0;
-             cluster < m_islands[island].second->getNumberOfClusters();
+             cluster < m_quadTrees[island].second->getNumberOfClusters();
              ++cluster)
         {
         }
@@ -170,7 +170,7 @@ void QuadTreeManager::loadQuadTrees(const std::string& name)
 }
 
 // ELF 0x30A700. Writes <level>/AIPathFinding/<name>.qtr and .clb: the island count (also stored in
-// m_numberOfIslands) to the tree file, then each island's tree and graph. Nothing is written
+// m_treeCount) to the tree file, then each island's tree and graph. Nothing is written
 // unless both files open.
 void QuadTreeManager::saveQuadTrees(const std::string& name)
 {
@@ -187,10 +187,10 @@ void QuadTreeManager::saveQuadTrees(const std::string& name)
                           static_cast<io::FileMode>(0), io::FILEACCESS_1, 0))
         return;
 
-    m_numberOfIslands = static_cast<int>(m_islands.size());
-    quadTreeFile.write(m_numberOfIslands);
-    for (std::vector<std::pair<QuadTree*, ClusterGraph*> >::iterator it = m_islands.begin();
-         it != m_islands.end(); ++it)
+    m_treeCount = static_cast<int>(m_quadTrees.size());
+    quadTreeFile.write(m_treeCount);
+    for (std::vector<std::pair<QuadTree*, ClusterGraph*> >::iterator it = m_quadTrees.begin();
+         it != m_quadTrees.end(); ++it)
     {
         it->first->saveToFile(quadTreeFile);
         it->second->saveToFile(clusterFile);
@@ -244,7 +244,7 @@ bool QuadTreeManager::loadGTSData(const std::string& name, int maxDepth, int min
         tree->optimiseGTSData(graph);
         graph->validateClusterGraphConnectivity(tree, false);
         graph->createPortals(map, tree, radius);
-        m_islands.push_back(std::make_pair(tree, graph));
+        m_quadTrees.push_back(std::make_pair(tree, graph));
         graph->calculatePortalCosts(map, island);
         ++island;
     } while (--count != 0);
@@ -257,8 +257,8 @@ bool QuadTreeManager::loadGTSData(const std::string& name, int maxDepth, int min
 void QuadTreeManager::recalculatePortalCosts(int map)
 {
     unsigned int island = 0;
-    for (std::vector<std::pair<QuadTree*, ClusterGraph*> >::iterator it = m_islands.begin();
-         it != m_islands.end(); ++it, ++island)
+    for (std::vector<std::pair<QuadTree*, ClusterGraph*> >::iterator it = m_quadTrees.begin();
+         it != m_quadTrees.end(); ++it, ++island)
         it->second->calculatePortalCosts(map, island);
 }
 
@@ -340,11 +340,11 @@ void QuadTreeManager::drawClusterNeighbourIndices(const Vec3& point)
         static_cast<IDPStaticCreator*>(CommonSingletonServer::m_iDPStaticCreator)
             ->createStaticCircle(60.0f, 0xFFFFFFu, raised, 0.5f, up, false, 255)));
 
-    const unsigned int islands = static_cast<unsigned int>(m_islands.size());
+    const unsigned int islands = static_cast<unsigned int>(m_quadTrees.size());
     for (unsigned int island = 0; island < islands; ++island)
     {
-        QuadTree* tree = m_islands[island].first;
-        ClusterGraph* graph = m_islands[island].second;
+        QuadTree* tree = m_quadTrees[island].first;
+        ClusterGraph* graph = m_quadTrees[island].second;
         MaterialManager* materials =
             static_cast<IAISettings*>(CommonSingletonServer::m_iaiSettings)
                 ->getVehicleMaterialManager(1);
@@ -387,23 +387,23 @@ void QuadTreeManager::buildDebugMeshes(const std::string&)
     std::list<Vec3> vertices;
     std::list<unsigned char> materials;
     std::vector<unsigned int> counts;
-    const unsigned int islands = static_cast<unsigned int>(m_islands.size());
+    const unsigned int islands = static_cast<unsigned int>(m_quadTrees.size());
     DebugMesh* mesh = checkPointer(new DebugMesh);
     int polygons = 0;
     unsigned int nextVertex = 0;
     for (unsigned int island = 0; island < islands; ++island)
     {
-        QuadTree* tree = m_islands[island].first;
+        QuadTree* tree = m_quadTrees[island].first;
         const unsigned int polygonCount = tree->m_numberOfPolygons;
         vertexMap.clear();
         for (unsigned int polygon = 0; polygon < polygonCount; ++polygon)
         {
             const Polygon* p = tree->getPolygon(polygon);
-            counts.push_back(p->m_numberOfVertices);
+            counts.push_back(p->vertexCount);
             materials.push_back(p->m_material);
-            for (unsigned char corner = 0; corner < p->m_numberOfVertices; ++corner)
+            for (unsigned char corner = 0; corner < p->vertexCount; ++corner)
             {
-                const unsigned int index = tree->m_vertexIndices[p->m_firstIndex + corner];
+                const unsigned int index = tree->m_vertexIndices[p->vertexOffset + corner];
                 std::map<unsigned int, unsigned int>::iterator v = vertexMap.find(index);
                 if (v == vertexMap.end())
                 {
@@ -482,7 +482,7 @@ void QuadTreeManager::buildDebugMeshes(const std::string&)
 void QuadTreeManager::buildDebugClusterMeshes(const std::string&)
 {
     unloadDebugClusterMeshes();
-    const unsigned int islands = static_cast<unsigned int>(m_islands.size());
+    const unsigned int islands = static_cast<unsigned int>(m_quadTrees.size());
     int polygons = 0;
     std::list<unsigned int> indices;
     std::list<Vec3> vertices;
@@ -495,8 +495,8 @@ void QuadTreeManager::buildDebugClusterMeshes(const std::string&)
     unsigned int nextVertex = 0;
     for (unsigned int island = 0; island < islands; ++island)
     {
-        QuadTree* tree = m_islands[island].first;
-        ClusterGraph* graph = m_islands[island].second;
+        QuadTree* tree = m_quadTrees[island].first;
+        ClusterGraph* graph = m_quadTrees[island].second;
         const unsigned int clusterCount = graph->m_numberOfClusters;
         vertexMap.clear();
         for (unsigned short cluster = 0; cluster < clusterCount; ++cluster)
@@ -509,13 +509,13 @@ void QuadTreeManager::buildDebugClusterMeshes(const std::string&)
             {
                 const Polygon* p = tree->getPolygon(graph->m_clusterPolygons[first + polygon]);
                 ++polygons;
-                counts.push_back(p->m_numberOfVertices);
+                counts.push_back(p->vertexCount);
                 materials.push_back(static_cast<unsigned char>(clusterTag));
                 base &= 0xE0E0E0E0u;
                 colours.push_back((AIRandom::m_instance->next() & 0x1F1F1F1Fu) + base);
-                for (unsigned char corner = 0; corner < p->m_numberOfVertices; ++corner)
+                for (unsigned char corner = 0; corner < p->vertexCount; ++corner)
                 {
-                    const unsigned int index = tree->m_vertexIndices[p->m_firstIndex + corner];
+                    const unsigned int index = tree->m_vertexIndices[p->vertexOffset + corner];
                     std::map<unsigned int, unsigned int>::iterator v = vertexMap.find(index);
                     if (v == vertexMap.end())
                     {
@@ -772,9 +772,9 @@ void QuadTreeManager::triangulateDebugMeshes(std::list<DebugMesh*>& meshes)
 unsigned int QuadTreeManager::findPolygon(const Vec3& point, unsigned int& polygon,
                                           MaterialManager* materials, float allowedHeightDiff)
 {
-    for (unsigned int island = 0; island < m_islands.size(); ++island)
+    for (unsigned int island = 0; island < m_quadTrees.size(); ++island)
     {
-        if (m_islands[island].first->findPolygon(point, polygon, materials, allowedHeightDiff))
+        if (m_quadTrees[island].first->findPolygon(point, polygon, materials, allowedHeightDiff))
             return island;
     }
 
@@ -789,7 +789,7 @@ unsigned int QuadTreeManager::findPolygon(const Vec3& point, unsigned int& polyg
                                           MaterialManager* materials, float allowedHeightDiff)
 {
     if (knownIsland == 0xFFFFFFFFu || knownPolygon == 0xFFFFFFFFu
-        || !m_islands[knownIsland].first->isPointInPolygon(
+        || !m_quadTrees[knownIsland].first->isPointInPolygon(
             point, knownPolygon, allowedHeightDiff, materials))
         return findPolygon(point, polygon, materials, allowedHeightDiff);
 
@@ -801,15 +801,15 @@ unsigned int QuadTreeManager::findPolygon(const Vec3& point, unsigned int& polyg
 void QuadTreeManager::printPolygonsInNode(const Vec3& point, unsigned int& polygon,
                                           MaterialManager* materials, float allowedHeightDiff)
 {
-    for (unsigned int island = 0; island < m_islands.size(); ++island)
-        m_islands[island].first->printPolygonsInNode(point, polygon, materials,
+    for (unsigned int island = 0; island < m_quadTrees.size(); ++island)
+        m_quadTrees[island].first->printPolygonsInNode(point, polygon, materials,
                                                      allowedHeightDiff);
 }
 
 // ELF 0x30E0F0.
 unsigned short QuadTreeManager::getCluster(unsigned int island, unsigned int polygon) const
 {
-    return m_islands[island].second->getClusterId(m_islands[island].first, polygon);
+    return m_quadTrees[island].second->getClusterId(m_quadTrees[island].first, polygon);
 }
 
 // ELF 0x30E140.
@@ -817,7 +817,7 @@ void QuadTreeManager::getClusterPortals(unsigned int island, unsigned short clus
                                         unsigned short costType,
                                         std::list<ClusterPortal*>& portals) const
 {
-    m_islands[island].second->getClusterPortals(cluster, costType, portals);
+    m_quadTrees[island].second->getClusterPortals(cluster, costType, portals);
 }
 
 // ELF 0x30E190. The island's tree only; no bounds check.
@@ -825,7 +825,7 @@ void QuadTreeManager::getPolygonsInRadius(std::list<unsigned int>& polygons, uns
                                           unsigned int polygon, const Vec3& centre,
                                           float radius) const
 {
-    m_islands[island].first->getPolygonsInRadius(polygons, polygon, centre, radius);
+    m_quadTrees[island].first->getPolygonsInRadius(polygons, polygon, centre, radius);
 }
 
 // ELF 0x30E1E0.
@@ -833,7 +833,7 @@ void QuadTreeManager::getPolygonsInTriangle(std::list<unsigned int>& polygons, u
                                             unsigned int polygon, const Vec3& a, const Vec3& b,
                                             const Vec3& c) const
 {
-    m_islands[island].first->getPolygonsInTriangle(polygons, polygon, a, b, c);
+    m_quadTrees[island].first->getPolygonsInTriangle(polygons, polygon, a, b, c);
 }
 
 // ELF 0x30E320. Forward to every island in ascending order, re-reading the vector
@@ -842,46 +842,46 @@ void QuadTreeManager::initializeDestroyableMapPart(int mapPartId, bool initially
                                                    const Vec3& minimum, const Vec3& maximum,
                                                    const Mat4& transformation)
 {
-    for (unsigned int island = 0; island < m_islands.size(); ++island)
-        m_islands[island].first->initializeDestroyableMapPart(
+    for (unsigned int island = 0; island < m_quadTrees.size(); ++island)
+        m_quadTrees[island].first->initializeDestroyableMapPart(
             mapPartId, initiallyWalkable, minimum, maximum, transformation,
-            m_islands[island].second, false);
+            m_quadTrees[island].second, false);
 }
 
 // ELF 0x30E3C0.
 void QuadTreeManager::destroyMapPart(int mapPartId)
 {
-    for (unsigned int island = 0; island < m_islands.size(); ++island)
-        m_islands[island].first->destroyMapPart(mapPartId, m_islands[island].second);
+    for (unsigned int island = 0; island < m_quadTrees.size(); ++island)
+        m_quadTrees[island].first->destroyMapPart(mapPartId, m_quadTrees[island].second);
 }
 
 // ELF 0x30E420.
 void QuadTreeManager::restoreMapPart(int mapPartId)
 {
-    for (unsigned int island = 0; island < m_islands.size(); ++island)
-        m_islands[island].first->restoreMapPart(mapPartId, m_islands[island].second);
+    for (unsigned int island = 0; island < m_quadTrees.size(); ++island)
+        m_quadTrees[island].first->restoreMapPart(mapPartId, m_quadTrees[island].second);
 }
 
 // ELF 0x30E480.
 void QuadTreeManager::resetOriginalMaterialOfDestroyableMapPart(int mapPartId)
 {
-    for (unsigned int island = 0; island < m_islands.size(); ++island)
-        m_islands[island].first->resetOriginalMaterialOfDestroyableMapPart(
-            mapPartId, m_islands[island].second);
+    for (unsigned int island = 0; island < m_quadTrees.size(); ++island)
+        m_quadTrees[island].first->resetOriginalMaterialOfDestroyableMapPart(
+            mapPartId, m_quadTrees[island].second);
 }
 
 // ELF 0x30E4E0.
 void QuadTreeManager::resetDestroyableMapParts()
 {
-    for (unsigned int island = 0; island < m_islands.size(); ++island)
-        m_islands[island].first->resetDestroyableMapParts(m_islands[island].second);
+    for (unsigned int island = 0; island < m_quadTrees.size(); ++island)
+        m_quadTrees[island].first->resetDestroyableMapParts(m_quadTrees[island].second);
 }
 
 // ELF 0x310F30.
 void QuadTreeManager::validateNeighbourRelations() const
 {
-    for (unsigned int island = 0; island < m_islands.size(); ++island)
-        m_islands[island].first->validateNeighbourRelations();
+    for (unsigned int island = 0; island < m_quadTrees.size(); ++island)
+        m_quadTrees[island].first->validateNeighbourRelations();
 }
 
 } // namespace ai

@@ -7,7 +7,7 @@
 
 #include "Information.h"
 #include "IPIPhysical.h"
-#include "InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIUtils/checkPointer.h"                    // and, through it, Core/Debug.h
 #include "../../../../Math/Frustum.h"
 
@@ -28,15 +28,15 @@ AIInformationGrid::AIInformationGrid(int side, int dimX, int dimZ, Vec2 min, Vec
     , m_dimZ(dimZ)
     , m_min(min)
     , m_max(max)
-    , m_cells(0)
+    , m_grid(0)
 {
-    m_cells = checkPointer(new Cell[m_dimX * m_dimZ + 1]);
+    m_grid = checkPointer(new Cell[m_dimX * m_dimZ + 1]);
 }
 
 // The records the map still points at are not deleted - defect 2.
 AIInformationGrid::~AIInformationGrid()
 {
-    delete[] m_cells;
+    delete[] m_grid;
 }
 
 // On an id it already holds this updates rather than declining, which makes it
@@ -226,7 +226,7 @@ void AIInformationGrid::getInformationWithinCircle(std::vector<unsigned int>& ou
     {
         for (int x = minX; x <= maxX; ++x)
         {
-            Cell& cell = m_cells[x + m_dimX * y];
+            Cell& cell = m_grid[x + m_dimX * y];
             for (Cell::iterator it = cell.begin(); it != cell.end(); ++it)
             {
                 InfoInfo* const info = it->m_info;
@@ -291,7 +291,7 @@ void AIInformationGrid::getInformationWithinFrustum(std::vector<unsigned int>& o
     {
         for (int x = minX; x <= maxX; ++x)
         {
-            Cell& cell = m_cells[x + m_dimX * y];
+            Cell& cell = m_grid[x + m_dimX * y];
             for (Cell::iterator it = cell.begin(); it != cell.end(); ++it)
             {
                 InfoInfo* const info = it->m_info;
@@ -346,7 +346,7 @@ void AIInformationGrid::getInformationWithinRectangle(std::vector<unsigned int>&
     {
         for (int x = minX; x <= maxX; ++x)
         {
-            Cell& cell = m_cells[x + m_dimX * y];
+            Cell& cell = m_grid[x + m_dimX * y];
             for (Cell::iterator it = cell.begin(); it != cell.end(); ++it)
             {
                 InfoInfo* const info = it->m_info;
@@ -471,7 +471,7 @@ void AIInformationGrid::updateElementInCells(unsigned int id, const InfoInfo& ol
         for (int x = oldMinX; x <= oldMaxX; ++x)
         {
             const int cell = x + m_dimX * y;
-            m_cells[cell].erase(findCellElement(cell, id));
+            m_grid[cell].erase(findCellElement(cell, id));
         }
     }
 
@@ -483,7 +483,7 @@ void AIInformationGrid::updateElementInCells(unsigned int id, const InfoInfo& ol
     {
         for (int x = newMinX; x <= newMaxX; ++x)
         {
-            Cell& cell = m_cells[x + m_dimX * y];
+            Cell& cell = m_grid[x + m_dimX * y];
             cell.insert(cell.begin(), element);
         }
     }
@@ -511,7 +511,7 @@ void AIInformationGrid::addElementToCells(unsigned int id, InfoInfo* info)
     {
         for (int x = minX; x <= maxX; ++x)
         {
-            Cell& cell = m_cells[x + m_dimX * y];
+            Cell& cell = m_grid[x + m_dimX * y];
             cell.insert(cell.begin(), element);
         }
     }
@@ -537,7 +537,7 @@ void AIInformationGrid::removeElementFromCells(unsigned int id, InfoInfo* info)
         for (int x = minX; x <= maxX; ++x)
         {
             const int cell = x + m_dimX * y;
-            m_cells[cell].erase(findCellElement(cell, id));
+            m_grid[cell].erase(findCellElement(cell, id));
         }
     }
 }
@@ -546,7 +546,7 @@ void AIInformationGrid::removeElementFromCells(unsigned int id, InfoInfo* info)
 AIInformationGrid::Cell::iterator AIInformationGrid::findCellElement(int cell,
                                                                     unsigned int id) const
 {
-    Cell& list = m_cells[cell];
+    Cell& list = m_grid[cell];
 
     Cell::iterator it = list.begin();
     while (it != list.end())

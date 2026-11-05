@@ -12,7 +12,7 @@
 #include "../../../../AIInterface/BFKnowledge/DebugRenderer.h"
 #include "../../../../AIInterface/BFKnowledge/IAIObject.h"
 #include "../../AIKnowledge/Information.h"
-#include "../../AIKnowledge/InformationManager.h"
+#include "../../Main/InformationManager.h"
 
 namespace dice {
 namespace hfe {

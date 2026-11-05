@@ -8,7 +8,7 @@
 #include "../AIBot/BotMain.h"
 #include "../AIBotBehaviourPattern/BBPSuicide.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../Main/AISettingsInterfaces.h"
 #include "../Main/CommonSingletonServer.h"

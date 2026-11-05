@@ -85,8 +85,8 @@ def generate(out):
             lines.append(signature+' { unexpected("'+base+'::'+method+'"); }')
     lines.append('} } }')
     (out/'mocks.inl').write_text('\n'.join(lines),encoding='utf-8')
-    whole=[AI+'AIBotBehaviour/CustomCurve.cpp',AI+'AIBotBehaviour/CustomCurve.h',
-           AI+'AIKnowledge/InformationManager.cpp',AI+'AIKnowledge/InformationManager.h','Core/SpHandlePool.h']
+    whole=[AI+'AIUtils/CustomCurve.cpp',AI+'AIUtils/SCurve.cpp',AI+'AIUtils/SCurve.h',AI+'AIUtils/CustomCurve.h',
+           AI+'Main/InformationManager.cpp',AI+'Main/InformationManager.h','Core/SpHandlePool.h']
     (out/'whole_sources.json').write_text(json.dumps({p:hashlib.sha256((CODE/'BF2'/p).read_bytes()).hexdigest() for p in whole},indent=2))
     (out/'fixture_sources.json').write_text(json.dumps({Path(__file__).with_suffix(s).name:hashlib.sha256(Path(__file__).with_suffix(s).read_bytes()).hexdigest() for s in ('.cpp','.h','.py','.cmd')},indent=2))
     (out/'cases.json').write_text(json.dumps(MODES,indent=2))

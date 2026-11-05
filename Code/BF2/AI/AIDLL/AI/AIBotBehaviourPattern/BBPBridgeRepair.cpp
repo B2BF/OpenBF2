@@ -32,9 +32,9 @@
 #include "../AIKnowledge/IPIControlInfo.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../AIPlanInterpreter/BAPContext.h"
 #include "../AIPlanInterpreter/BotScriptDebugger.h"
 #include "../AIUtils/checkPointer.h"
@@ -142,7 +142,7 @@ BotScript* BBPBridgeRepair::createPlan(Bot* bot)
     BAPCombinerSerial* const sequence = checkPointer(new BAPCombinerSerial(m_unknown8, -1));
     sequence->addStatement(checkPointer(new BAPAResetControls(true, true, true, m_unknown8)));
     BAPStatement* last;
-    if (!(self->getObjectTypeFlags() & 0x200000)) {
+    if (!self->isOfType(ITSoldier)) {
         BAPCombinerSerial* const leave = checkPointer(new BAPCombinerSerial(m_unknown8, -1));
         BAPConFalse* const stop = checkPointer(new BAPConFalse());
         BAPConTrue* const start = checkPointer(new BAPConTrue());
@@ -201,7 +201,7 @@ BotScript* BBPBridgeRepair::createPlan(Bot* bot)
     bot->getSquadMember()->setCurrentRequestAction(2, requestHandle);
     BAPIWFire* const wrapper = checkPointer(new BAPIWFire(bot, m_segment[bot->getBotId()], true, false,
                                                        weaponIndex, -1, root, m_unknown8));
-    wrapper->m_owner = this;
+    wrapper->mpOwner = this;
     static_cast<BotMain*>(bot)->resetAllControls(true, true, true);
     return wrapper;
 }

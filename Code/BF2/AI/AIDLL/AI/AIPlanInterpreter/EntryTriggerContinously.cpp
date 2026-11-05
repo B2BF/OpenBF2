@@ -16,11 +16,11 @@
 #include "../AIBotActionPlan/BAPATriggerContinously.h"
 #include "../AIBotActionPlan/BAPCondition.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIArmament.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../../../AIInterface/BFKnowledge/BFTimer.h"
 #include "../../../../IO/Input/PlayerInput.h"
 #include "../../../../Math/Vec3.h"
@@ -89,11 +89,11 @@ bool EntryTriggerContinously::execute(BotScript* script, Bot* bot, bool& ok, boo
             if (infantry_detail::inputValue(input, io::PIThrottle) == 0.0f
                 && infantry_detail::inputValue(input, io::PIYaw) == 0.0f
                 && infantry_detail::inputValue(input, io::PISprint) == 0.0f
-                && !(bot->getSpawnKit() == 4 && (info->getObjectTypeFlags() & 0x200000) != 0
+                && !(bot->getSpawnKit() == 4 && info->isOfType(ITSoldier)
                      && armament->getActiveWeapon() == 5))
             {
                 SoldierPose pose = SPStanding;
-                if (info->getObjectTypeFlags() & 0x200000)
+                if (info->isOfType(ITSoldier))
                     pose = weapon->getFiringPose();
                 const SoldierPose current = info->getSoldierPose();
                 if (current != SPSwimming && current != pose)
@@ -113,7 +113,7 @@ bool EntryTriggerContinously::execute(BotScript* script, Bot* bot, bool& ok, boo
                 if (!humanVehicle)
                     skill = 1.0f - (1.0f - skill) * 0.5f;
             }
-            else if ((info->getObjectTypeFlags() & 0x200000) == 0)
+            else if (!info->isOfType(ITSoldier))
             {
                 skill = 1.0f - (1.0f - skill) * 0.8f;
             }
@@ -125,12 +125,12 @@ bool EntryTriggerContinously::execute(BotScript* script, Bot* bot, bool& ok, boo
                 skill = 1.0f;
             float scale = 1.0f;
             bool apply = true;
-            if ((info->getObjectTypeFlags() & 0x10) == 0)
+            if (!info->isOfType(ITAir))
             {
                 if (target == 0)
                     apply = false;
-                else if ((target->getObjectTypeFlags() & 0x10) != 0 && !info->isPrimary()
-                         && (info->getObjectTypeFlags() & 0x80) == 0)
+                else if (target->isOfType(ITAir) && !info->isPrimary()
+                         && !info->isOfType(ITNaval))
                     scale = 3.0f;
             }
             if (apply)

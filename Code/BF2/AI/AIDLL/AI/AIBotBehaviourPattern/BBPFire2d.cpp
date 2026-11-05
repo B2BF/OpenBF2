@@ -48,9 +48,9 @@
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../AIPlanInterpreter/BAPContext.h"
 #include "../AIPlanInterpreter/BotScriptDebugger.h"
 #include "../../../AIInterface/BFKnowledge/BFObjectEnvironment.h"
@@ -348,7 +348,7 @@ BotScript* BBPFire2d::createPlan(Bot* bot)
         const float precisionScale = (1.0f - fraction) * 0.1f + fraction * 5.0f;
         float precisionFactor;
         float minimumPrecision;
-        if (targetInfo->getObjectTypeFlags() & 0x10)
+        if (targetInfo->isOfType(ITAir))
         {
             precisionFactor = 0.8f;
             minimumPrecision = 0.5f;

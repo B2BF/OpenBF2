@@ -47,7 +47,7 @@ BAPCombinerParallel::BAPCombinerParallel(std::list<BAPStatement*>& statements, i
     m_statements = statements;
     for (std::list<BAPStatement*>::iterator it = m_statements.begin(); it != m_statements.end(); ++it)
     {
-        (*it)->m_owner = this;
+        (*it)->mpOwner = this;
         m_controls |= (*it)->getControls();
         m_isFinished.insert(m_isFinished.end(), false);
     }
@@ -64,7 +64,7 @@ BAPCombinerParallel::BAPCombinerParallel(std::list<BAPStatement*>& statements, i
     m_statements = statements;
     for (std::list<BAPStatement*>::iterator it = m_statements.begin(); it != m_statements.end(); ++it)
     {
-        (*it)->m_owner = this;
+        (*it)->mpOwner = this;
         m_controls |= (*it)->getControls();
         m_isFinished.insert(m_isFinished.end(), false);
     }
@@ -151,7 +151,7 @@ void BAPCombinerParallel::addStatement(BAPStatement* statement)
 {
     if (statement == 0)
         return;
-    statement->m_owner = this;
+    statement->mpOwner = this;
     m_statements.insert(m_statements.end(), statement);
     m_controls |= statement->getControls();
     m_isFinished.insert(m_isFinished.end(), false);

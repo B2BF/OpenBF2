@@ -7,7 +7,7 @@
 #include "../AIBotActionPlan/BAPARunOverObject.h"
 #include "../AIBotActionPlan/BAPIWFire.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIControlInfo.h"
 #include "../AIPlanInterpreter/BAPContext.h"
 #include "../AIPlanInterpreter/BotScriptDebugger.h"
@@ -89,7 +89,7 @@ BotScript* BBPRunOverSoldier::createPlan(Bot* bot)
         new BAPARunOverObject(m_target[bot->getBotId()], controlInfo->getDriveControls(), m_patternId));
     BAPIWFire* const root = checkPointer(
         new BAPIWFire(bot, m_target[bot->getBotId()], true, false, 4, -1, runOver, m_patternId));
-    root->setParent(this);   // +0x04 (BotScript::m_owner)
+    root->setParent(this);   // +0x04 (BotScript::mpOwner)
     static_cast<BotMain*>(bot)->resetAllControls(true, true, true);
     return root;
 }

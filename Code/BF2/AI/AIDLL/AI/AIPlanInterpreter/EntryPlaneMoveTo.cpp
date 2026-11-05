@@ -9,7 +9,7 @@
 #include "../AIBot/BotMain.h"
 #include "../AIBotActionPlan/BAPAMoveTo3d.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../../../../Math/Mat4.h"
 
 namespace dice {

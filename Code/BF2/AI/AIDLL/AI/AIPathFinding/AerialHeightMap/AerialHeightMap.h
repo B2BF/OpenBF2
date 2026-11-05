@@ -1,12 +1,12 @@
 // Cached ground heights for aerial navigation. Sampling requires in-range coordinates.
 // An empty map reports the missing-height sentinel 9999.
-// [INFERRED] Source placement.
+// Header placement [INFERRED]: beside its .cpp, whose path AIDLL_r.dll confirms (AIPathFinding/AerialHeightMap/AerialHeightMap.cpp: singleton assert in 0x1007D0E0).
 
 #ifndef AI_AIDLL_AI_AISTRATEGICMAP_AERIALHEIGHTMAP_H
 #define AI_AIDLL_AI_AISTRATEGICMAP_AERIALHEIGHTMAP_H
 
-#include "../Main/AIDllTypes.h"     // Vec3
-#include "../../../../Math/Vec3.h"  // Vec2 lives here too, and both are typedefs - never
+#include "../../Main/AIDllTypes.h"     // Vec3
+#include "../../../../../Math/Vec3.h"  // Vec2 lives here too, and both are typedefs - never
                                     // forward-declare either one; see AILandingZoneManager.h.
 
 namespace dice {

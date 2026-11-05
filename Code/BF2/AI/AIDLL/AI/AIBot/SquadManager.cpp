@@ -4,7 +4,7 @@
 #include "SquadManager.h"
 #include "../AIKnowledge/IPIArmament.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 
 // <iostream>'s ios_base::Init object is this TU's static initialisation and teardown (ELF
 // 0x1B0FE0, __tcf_0 0x1B1040, _GLOBAL__I 0x1B1070).
@@ -17,7 +17,7 @@
 #include "SquadMember.h"
 #include "../Main/AIDllFrontier.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../Main/IBotManager.h"
 #include "../Main/AIMain.h"
@@ -31,7 +31,7 @@
 #include "../../../AIInterface/BFKnowledge/BFTimer.h"
 #include "../../../../Core/SettingsRepostitory.h"
 #include "../../../../Core/StringUtil.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/Information.h"
 #include "../Main/AIRandom.h"
 #include "../Main/IAIPathfinding.h"
@@ -51,12 +51,12 @@ namespace ai {
 int SquadManager::getSquadStrengths(int side, int areaIndex, StrategicStrengthType type)
 {
     int total = 0;
-    for (std::size_t index = 0; index < m_coordinators[side - 1].size(); ++index)
+    for (std::size_t index = 0; index < m_Squads[side - 1].size(); ++index)
     {
-        if (m_coordinators[side - 1][index]->getMissionStatus() == 2 &&
-            m_coordinators[side - 1][index]->isSquadAssignedToArea(areaIndex))
+        if (m_Squads[side - 1][index]->getMissionStatus() == 2 &&
+            m_Squads[side - 1][index]->isSquadAssignedToArea(areaIndex))
         {
-            total += m_coordinators[side - 1][index]->getStrategicStrength(type);
+            total += m_Squads[side - 1][index]->getStrategicStrength(type);
         }
     }
     return total;
@@ -72,10 +72,10 @@ void SquadManager::update(double time)
     updateArtilleryStatus(time);
     updateCommanderMessages();
     m_sideCursor = m_sideCursor == 0;
-    m_coordinators[m_sideCursor][m_squadCursor]->update(time);
+    m_Squads[m_sideCursor][m_squadCursor]->update(time);
     if (m_sideCursor == 1)
     {
-        if (static_cast<unsigned int>(m_squadCursor) < m_coordinators[0].size() - 1)
+        if (static_cast<unsigned int>(m_squadCursor) < m_Squads[0].size() - 1)
             m_squadCursor = static_cast<int>(static_cast<unsigned int>(m_squadCursor) + 1);
         else
         {
@@ -91,15 +91,15 @@ void SquadManager::update(double time)
 // therefore runs two complete traversals.
 void SquadManager::updateArtilleryStatus(double time)
 {
-    SideBlock* blocks[2] = { &m_sideBlock0, &m_sideBlock1 };
+    SideBlock* blocks[2] = { &m_artillery[0], &m_artillery[1] };
     for (unsigned int block = 0; block < 2; ++block)
     {
-        if (blocks[block]->m_b0 && time > m_double156 + blocks[block]->m_artilleryStartTime)
+        if (blocks[block]->incomingArtillery && time > m_double156 + blocks[block]->m_artilleryStartTime)
         {
-            blocks[block]->m_b0 = false;
+            blocks[block]->incomingArtillery = false;
             for (unsigned int side = 0; side < 2; ++side)
-                for (unsigned int index = 0; index < m_coordinators[side].size(); ++index)
-                    m_coordinators[side][index]->updateSquadPaths();
+                for (unsigned int index = 0; index < m_Squads[side].size(); ++index)
+                    m_Squads[side][index]->updateSquadPaths();
         }
     }
 }
@@ -231,7 +231,7 @@ void SquadManager::updateHumanPlayers(double time)
 
 // Creates a coordinator for each squad on each side, excluding squad zero.
 SquadManager::SquadManager()
-    : m_coordinators()
+    : m_Squads()
     // Default-initialize SideBlock: its three Vec3 values alone are zeroed. Value-initializing
     // the blocks would also zero timestamps/flags retail leaves untouched (full //PE reads).
     , m_commanderMessages()
@@ -246,8 +246,8 @@ SquadManager::SquadManager()
 
         for (unsigned int i = 0; i < last; ++i)
         {
-            m_coordinators[0].push_back(new SquadCoordinator(0, static_cast<int>(i)));
-            m_coordinators[1].push_back(new SquadCoordinator(1, static_cast<int>(i)));
+            m_Squads[0].push_back(new SquadCoordinator(0, static_cast<int>(i)));
+            m_Squads[1].push_back(new SquadCoordinator(1, static_cast<int>(i)));
         }
     }
 
@@ -258,8 +258,8 @@ SquadManager::SquadManager()
     m_float152 = 40.0f;
     m_sideCursor = 1;
 
-    m_sideBlock0.m_b0 = false;
-    m_sideBlock1.m_b0 = false;
+    m_artillery[0].incomingArtillery = false;
+    m_artillery[1].incomingArtillery = false;
 
     m_double156 = 25.0;
 
@@ -301,7 +301,7 @@ void SquadManager::addSquadMember(int playerId, int side)
     const int maximum = static_cast<IAIGame*>(CommonSingletonServer::m_iaiGame)
         ->getMaxNumberOfSquadMembers();
     int best = maximum;
-    std::vector<SquadCoordinator*>& coordinators = m_coordinators[side];
+    std::vector<SquadCoordinator*>& coordinators = m_Squads[side];
     for (unsigned int i = 0; i < coordinators.size(); ++i)
     {
         if (coordinators[i]->getNumberOfSquadMembers() <= best &&
@@ -366,14 +366,14 @@ void SquadManager::addSquadMember(int playerId, int side)
 // singleton or coordinator-null check here; the courier owns only the singleton guard.
 void SquadManager::newSquadLeader(int side, int squadId)
 {
-    m_coordinators[side - 1][squadId - 1]->updateSquadLeader();
+    m_Squads[side - 1][squadId - 1]->updateSquadLeader();
 }
 
 // Search this side in coordinator order and return the first
 // matching member. The coordinator's output index is intentionally not used by this caller.
 SquadMember* SquadManager::getSquadMember(int playerId, int side)
 {
-    std::vector<SquadCoordinator*>& coordinators = m_coordinators[side - 1];
+    std::vector<SquadCoordinator*>& coordinators = m_Squads[side - 1];
     for (unsigned int i = 0; i < coordinators.size(); ++i)
     {
         int memberIndex;
@@ -389,7 +389,7 @@ SquadMember* SquadManager::getSquadMember(int playerId, int side)
 // The member index output is not consumed, and null coordinator entries are not guarded.
 SquadCoordinator* SquadManager::getSquadFromPlayer(int playerId, int side)
 {
-    std::vector<SquadCoordinator*>& coordinators = m_coordinators[side - 1];
+    std::vector<SquadCoordinator*>& coordinators = m_Squads[side - 1];
     for (unsigned int i = 0; i < coordinators.size(); ++i)
     {
         int memberIndex;
@@ -412,7 +412,7 @@ int SquadManager::getSquadFromPlayer(int playerId, SquadCoordinator*& squad)
 // ELF 0x1AF720: one-based squad id and side, no range checks.
 SquadCoordinator* SquadManager::getSquadFromId(int squadId, int side)
 {
-    return m_coordinators[side - 1][squadId - 1];
+    return m_Squads[side - 1][squadId - 1];
 }
 
 // ELF 0x1AF860 (256 bytes). An order received by the player's squad: the order position comes
@@ -493,7 +493,7 @@ void SquadManager::playerJoinsSquad(int playerId, int squadId, int side)
     if (getSquadMember(playerId, side))
         return;
 
-    SquadCoordinator* coordinator = m_coordinators[side - 1][squadId - 1];
+    SquadCoordinator* coordinator = m_Squads[side - 1][squadId - 1];
     IAIPlayer* player = static_cast<IAIPlayerFactory*>(CommonSingletonServer::m_iaiPlayerFactory)
         ->getPlayerFromId(playerId);
     coordinator->addSquadMember(player);
@@ -503,7 +503,7 @@ void SquadManager::playerJoinsSquad(int playerId, int squadId, int side)
 // ELF 0x1AF800: every coordinator of the one-based side drops its strategic-area assignment.
 void SquadManager::unAssignSquads(int side)
 {
-    std::vector<SquadCoordinator*>& coordinators = m_coordinators[side - 1];
+    std::vector<SquadCoordinator*>& coordinators = m_Squads[side - 1];
     for (unsigned int i = 0; i < coordinators.size(); ++i)
         coordinators[i]->unAssignSquad();
 }
@@ -519,9 +519,9 @@ SquadManager::~SquadManager()
 {
     for (int side = 0; side < 2; ++side)
     {
-        for (unsigned int i = 0; i < m_coordinators[side].size(); ++i)
-            delete m_coordinators[side][i];
-        m_coordinators[side].erase(m_coordinators[side].begin(), m_coordinators[side].end());
+        for (unsigned int i = 0; i < m_Squads[side].size(); ++i)
+            delete m_Squads[side][i];
+        m_Squads[side].erase(m_Squads[side].begin(), m_Squads[side].end());
     }
     clearCommanderMessages();
     clearPlayerValidPositions();
@@ -534,13 +534,13 @@ void SquadManager::reset()
     unAssignSquads(2);
     clearCommanderMessages();
     clearPlayerValidPositions();
-    m_sideBlock0.m_b0 = false;
-    m_sideBlock1.m_b0 = false;
+    m_artillery[0].incomingArtillery = false;
+    m_artillery[1].incomingArtillery = false;
     m_squadCursor = 0;
     m_sideCursor = 1;
     for (int side = 0; side < 2; ++side)
-        for (unsigned int i = 0; i < m_coordinators[side].size(); ++i)
-            m_coordinators[side][i]->reset();
+        for (unsigned int i = 0; i < m_Squads[side].size(); ++i)
+            m_Squads[side][i]->reset();
 }
 
 // ELF 0x1B0180: squad 0 (no squad) is ignored. Otherwise the player's member record is unlinked
@@ -553,7 +553,7 @@ void SquadManager::playerRemovedFromSquad(int playerId, int squadId, int side)
     SquadMember* const member = getSquadMember(playerId, side);
     if (!member)
         return;
-    SquadCoordinator* const coordinator = m_coordinators[side - 1][squadId - 1];
+    SquadCoordinator* const coordinator = m_Squads[side - 1][squadId - 1];
     coordinator->removeSquadMember(member);
     coordinator->updateSquadLeader();
 }
@@ -563,7 +563,7 @@ void SquadManager::playerRemovedFromSquad(int playerId, int squadId, int side)
 int SquadManager::unAssignSquads(int areaIndex, int side)
 {
     int released = 0;
-    std::vector<SquadCoordinator*>& coordinators = m_coordinators[side - 1];
+    std::vector<SquadCoordinator*>& coordinators = m_Squads[side - 1];
     for (unsigned int i = 0; i < coordinators.size(); ++i)
     {
         if (coordinators[i]->isSquadCloseToNonOwnedTarget())
@@ -615,7 +615,7 @@ SquadCoordinator* SquadManager::getClosestAvailableSquad(AIStrategicArea* area, 
     SquadCoordinator* closest = 0;
     float best = 3.4028235e+38f;
     Vec3 squadPosition = { 0.0f, 0.0f, 0.0f };
-    std::vector<SquadCoordinator*>& coordinators = m_coordinators[side - 1];
+    std::vector<SquadCoordinator*>& coordinators = m_Squads[side - 1];
     strength = 0;
     for (unsigned int i = 0; i < coordinators.size(); ++i)
     {
@@ -648,7 +648,7 @@ float SquadManager::getDistanceToClosestSquad(const Vec3& position, int side)
 {
     float best = 3.4028235e+38f;
     Vec3 leader = { 0.0f, 0.0f, 0.0f };
-    const std::vector<SquadCoordinator*>& coordinators = m_coordinators[side - 1];
+    const std::vector<SquadCoordinator*>& coordinators = m_Squads[side - 1];
     for (unsigned int i = 0; i < coordinators.size(); ++i)
     {
         SquadCoordinator* const squad = coordinators[i];
@@ -692,8 +692,7 @@ bool SquadManager::friendliesCloseTo(Vec3 position, float radius, int side)
         Information* const info = informationManager->getInformation(vehicle->getInformation(side));
         if (!info)
             continue;
-        const unsigned int flags = info->getObjectTypeFlags();
-        if ((flags & 0x20) == 0 && (flags & 0x10) != 0)
+        if (!info->isOfType(ITHelicopter) && info->isOfType(ITAir))
             continue;
         const Vec3& p = info->getPosition();
         const float dx = p.x - position.x;
@@ -713,10 +712,10 @@ bool SquadManager::friendliesCloseTo(Vec3 position, float radius, int side)
 // The sum is x87 extended in the ELF (fildll, fmuls, fmul, faddp); bf2x87::Real keeps that.
 void SquadManager::incomingArtillery(Vec3 position, int side)
 {
-    SideBlock& block = side - 1 == 0 ? m_sideBlock0 : m_sideBlock1;
-    SideBlock& other = side - 1 == 0 ? m_sideBlock1 : m_sideBlock0;
+    SideBlock& block = side - 1 == 0 ? m_artillery[0] : m_artillery[1];
+    SideBlock& other = side - 1 == 0 ? m_artillery[1] : m_artillery[0];
     const double half = 0.5 * m_double156;
-    block.m_b0 = true;
+    block.incomingArtillery = true;
     block.m_artilleryStartTime = static_cast<const IBFTimer*>(CommonSingletonServer::m_iBFTimer)->getGameTime();
     block.m_artilleryPosition = position;
     const unsigned int r = AIRandom::m_instance->next();
@@ -734,8 +733,8 @@ void SquadManager::incomingArtillery(Vec3 position, int side)
 // artillerySide = the striking side. Otherwise -1.0 and 0.
 bool SquadManager::isInArtilleryDangerZone(Vec3 position, int side, double& sinceStart, int& artillerySide)
 {
-    SideBlock& own = side - 1 == 0 ? m_sideBlock0 : m_sideBlock1;
-    SideBlock& other = side - 1 == 0 ? m_sideBlock1 : m_sideBlock0;
+    SideBlock& own = side - 1 == 0 ? m_artillery[0] : m_artillery[1];
+    SideBlock& other = side - 1 == 0 ? m_artillery[1] : m_artillery[0];
     const int otherSide = side - 1 == 0 ? 2 : 1;
     bool danger = false;
     sinceStart = -1.0;
@@ -748,13 +747,13 @@ bool SquadManager::isInArtilleryDangerZone(Vec3 position, int side, double& sinc
         const float dz = block.m_artilleryPosition.z - position.z;
         return dx * dx + dy * dy + dz * dz;
     };
-    if (own.m_b0 && distanceSq(own) < safe)
+    if (own.incomingArtillery && distanceSq(own) < safe)
     {
         danger = true;
         sinceStart = static_cast<double>(now - bf2x87::Real(own.m_artilleryStartTime));
         artillerySide = side;
     }
-    else if (other.m_b0 && distanceSq(other) < safe
+    else if (other.incomingArtillery && distanceSq(other) < safe
              && bf2x87::Real(other.m_artilleryStartTime) + bf2x87::Real(other.m_artilleryDelay) < now)
     {
         danger = true;
@@ -768,7 +767,7 @@ bool SquadManager::isInArtilleryDangerZone(Vec3 position, int side, double& sinc
 // engine squad (IBFSquad::exitSquad, squad id + 1) and re-elects its leader.
 void SquadManager::removeSquadMember(int playerId, int side)
 {
-    std::vector<SquadCoordinator*>& coordinators = m_coordinators[side - 1];
+    std::vector<SquadCoordinator*>& coordinators = m_Squads[side - 1];
     for (unsigned int i = 0; i < coordinators.size(); ++i)
     {
         SquadCoordinator* const squad = coordinators[i];
@@ -787,10 +786,10 @@ void SquadManager::removeSquadMember(int playerId, int side)
 // ELF 0x1AE000: both sides' squads are emptied, then every active bot is added again.
 void SquadManager::removeAllSquads()
 {
-    for (unsigned int i = 0; i < m_coordinators[0].size(); ++i)
-        m_coordinators[0][i]->removeAll();
-    for (unsigned int i = 0; i < m_coordinators[1].size(); ++i)
-        m_coordinators[1][i]->removeAll();
+    for (unsigned int i = 0; i < m_Squads[0].size(); ++i)
+        m_Squads[0][i]->removeAll();
+    for (unsigned int i = 0; i < m_Squads[1].size(); ++i)
+        m_Squads[1][i]->removeAll();
     IBotManager* const manager = IBotManager::instance;
     if (!manager)
         return;
@@ -809,7 +808,7 @@ void SquadManager::removeAllSquads()
 // ELF 0x1B0010: removeSquadMember's search, but the coordinator destroys the member record.
 void SquadManager::destroySquadMember(int playerId, int side)
 {
-    std::vector<SquadCoordinator*>& coordinators = m_coordinators[side - 1];
+    std::vector<SquadCoordinator*>& coordinators = m_Squads[side - 1];
     for (unsigned int i = 0; i < coordinators.size(); ++i)
     {
         SquadCoordinator* const squad = coordinators[i];
@@ -902,7 +901,7 @@ SquadMember* SquadManager::getSquadLeaderClosestTo(const Vec3& position)
     Vec3 leaderPosition = {};
     for (unsigned int side = 0; side < 2; ++side)
     {
-        std::vector<SquadCoordinator*>& squads = m_coordinators[side];
+        std::vector<SquadCoordinator*>& squads = m_Squads[side];
         for (unsigned int i = 0; i < squads.size(); ++i)
         {
             if (squads[i]->getNumberOfSquadMembers() <= 0)
@@ -940,7 +939,7 @@ SquadMember* SquadManager::getSquadMember(unsigned int handle, int side)
 // ELF 0x1B0440.
 bool SquadManager::isAnySquadMemberRespondingToRequest(unsigned int handle, int action, int side)
 {
-    const std::vector<SquadCoordinator*>& squads = m_coordinators[side - 1];
+    const std::vector<SquadCoordinator*>& squads = m_Squads[side - 1];
     for (unsigned int i = 0; i < squads.size(); ++i)
     {
         if (squads[i]->isAnySquadMemberRespondingToRequest(handle, action))
@@ -967,7 +966,7 @@ float SquadManager::requestResponseModifier(SquadMember* member, unsigned int ha
 // ELF 0x1B0D40.
 Vec3 SquadManager::getArtilleryTargetPos(int side)
 {
-    SideBlock* const blocks[2] = { &m_sideBlock0, &m_sideBlock1 };
+    SideBlock* const blocks[2] = { &m_artillery[0], &m_artillery[1] };
     return blocks[side - 1]->m_artilleryPosition;
 }
 
@@ -991,12 +990,12 @@ Information* fleeInformation(SquadMember* member, int side)
 bool SquadManager::haveValidArtilleryFleePos(SquadMember* member, Vec3& position)
 {
     const int side = member->getSide();
-    SideBlock* const blocks[2] = { &m_sideBlock0, &m_sideBlock1 };
+    SideBlock* const blocks[2] = { &m_artillery[0], &m_artillery[1] };
     SideBlock* const block = blocks[side - 1];
     Information* const info = fleeInformation(member, side);
     if (!info)
         return false;
-    if ((info->getObjectTypeFlags() & 0x00200000u) == 0)
+    if (!info->isOfType(ITSoldier))
     {
         if (!block->m_validFlee1)
             return false;
@@ -1015,12 +1014,12 @@ bool SquadManager::haveValidArtilleryFleePos(SquadMember* member, Vec3& position
 void SquadManager::setValidArtilleryFleePos(SquadMember* member, Vec3 position)
 {
     const int side = member->getSide();
-    SideBlock* const blocks[2] = { &m_sideBlock0, &m_sideBlock1 };
+    SideBlock* const blocks[2] = { &m_artillery[0], &m_artillery[1] };
     SideBlock* const block = blocks[side - 1];
     Information* const info = fleeInformation(member, side);
     if (!info)
         return;
-    if ((info->getObjectTypeFlags() & 0x00200000u) == 0)
+    if (!info->isOfType(ITSoldier))
     {
         block->m_validFlee1 = true;
         block->m_fleePos1 = position;

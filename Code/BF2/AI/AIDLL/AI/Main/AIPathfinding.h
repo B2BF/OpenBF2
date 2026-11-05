@@ -245,7 +245,7 @@ private:
     // Both elements are separately heap-allocated zeroed `Vec3`s; `tryPath` writes the caller's two
     // positions straight into them.
     /*  +20 */ Vec3* m_searchPoint[2];
-    /*  +28 */ QTPath* m_debugPath;                   // = new QTPath
+    /*  +28 */ QTPath* m_path;                   // = new QTPath  // name: AIDLL_r asserts 0x100A70E0 (PE +0x1C)
     /*  +32 */ ClusterNodePath* m_debugClusterPath;   // = new ClusterNodePath
     /*  +36 */ double m_d36;                          // Last debug endpoint selection time; reset sentinel -1000.0.
     /*  +44 */ bool m_clusterSearch;                  // = false; the debug tool's cluster/local toggle

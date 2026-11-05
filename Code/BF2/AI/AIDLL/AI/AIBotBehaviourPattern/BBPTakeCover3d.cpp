@@ -22,7 +22,7 @@
 #include "../AIKnowledge/IPIControlInfo.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIPlanInterpreter/BAPContext.h"
 #include "../AIPlanInterpreter/BotScriptDebugger.h"
 #include "../AIUtils/checkPointer.h"
@@ -107,7 +107,7 @@ BotScript* BBPTakeCover3d::createPlan(Bot* bot)
     plan->addStatement(checkPointer(new BAPAMoveTo3d(bot, destination, mobile->getMaxSpeed(), mobile->getMaxSpeed(),
                                                      checkPointer(new BAPConFalse()),
                                                      controlInfo->getDriveControls(), 30.0f, m_patternId)));
-    plan->setParent(this);   // +0x04 (BotScript::m_owner)
+    plan->setParent(this);   // +0x04 (BotScript::mpOwner)
     return plan;
 }
 

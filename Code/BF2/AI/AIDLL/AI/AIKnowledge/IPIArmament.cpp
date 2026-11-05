@@ -8,7 +8,7 @@
 #include "Information.h"
 #include "InformationFactory.h"
 #include "WeaponInfo.h"
-#include "WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../Main/CommonSingletonServer.h"
 #include "../../../AIInterface/BFKnowledge/BFTimer.h"
 #include "../../../AIInterface/BFKnowledge/IAIObjectPlugIn.h"

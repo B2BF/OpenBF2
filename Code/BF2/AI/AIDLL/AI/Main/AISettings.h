@@ -139,14 +139,14 @@ public:
 
 private:
     // Non-virtual pool helpers (direct PLT calls), ELF 0x3BFA20 / 0x3BFC50 / 0x3BFDE0 / 0x3C0040.
-    void prepareBehaviourPool(int vehicle, int index);
-    void preparePlanGeneratorPool(int vehicle, int index);
+    void prepareBehaviourPool(int vehicleTypeId, int behaviourId);
+    void preparePlanGeneratorPool(int vehicleTypeId, int behaviourId);
     void preparePlanInterpreterPool(int vehicle);
     void prepareVehicleGroup(int vehicle);
 
     // Field offsets describe retail x86 layout; native STL sizes may differ.
     /*   8 */ int    m_maxNBots;                  // = -1 getMaxNBots / setMaxNBots
-    /*  12 */ int    m_numberOfBehaviours;        // = 0 getNumberOfBehaviours
+    /*  12 */ int    m_behaviourCount;        // = 0 getNumberOfBehaviours  // name: AIDLL_r assert 0x100C2690 (PE +0xC)
     /*  16 */ char   m_gap16[8];                  // [UNRESOLVED] two words reset zeroes; ctor leaves them alone
     /*  24 */ float  m_viewDistance;              // = -1.0f getViewDistance
     /*  28 */ float  m_statsViewDistance;         // = 30.0f get/setStatsViewDistance
@@ -165,19 +165,19 @@ private:
     /*  56 */ std::string m_manDownEquipment;
 
     // the size of this vector is `getNumberOfVehicles`. The AI counts vehicles by counting
-    // behaviour lists, one per vehicle; `getBehaviour(vehicle, i)` is `m_behaviours[vehicle][i]`.
-    /*  60 */ std::vector<std::vector<BotBehaviour*> > m_behaviours;
-    /*  72 */ std::vector<int> m_defaultBehaviour;          // index into m_behaviours[v]; -1 = none
-    /*  84 */ std::vector<std::vector<PlanGenerator*> > m_planGenerators;
-    /*  96 */ std::vector<PlanInterpreter*> m_planInterpreters;   // each a BAPInterpreter (vector<PlanInterpreter*>::_M_insert_aux)
+    // behaviour lists, one per vehicle; `getBehaviour(vehicle, i)` is `m_behaviourPool[vehicle][i]`.
+    /*  60 */ std::vector<std::vector<BotBehaviour*> > m_behaviourPool;   // name: AIDLL_r assert 0x100C2980 (PE +0x50)
+    /*  72 */ std::vector<int> m_defaultBehaviour;          // index into m_behaviourPool[v]; -1 = none
+    /*  84 */ std::vector<std::vector<PlanGenerator*> > m_planGeneratorPool;   // name: AIDLL_r assert 0x100C2DD0 (PE +0x70)
+    /*  96 */ std::vector<PlanInterpreter*> m_planInterpreterPool;   // each a BAPInterpreter (vector<PlanInterpreter*>::_M_insert_aux)  // name: AIDLL_r assert 0x100C0DF0 (PE +0x80)
     /* 108 */ std::map<int, ISensingAgentPattern*> m_sensingAgentPatterns;
-    /* 120 */ std::vector<MaterialManager*> m_vehicleMaterialManagers;
+    /* 120 */ std::vector<MaterialManager*> m_materialManagers;   // name: AIDLL_r assert 0x100BD950 (PE +0xA0)
 
     // Uninitialized until setSensingAgentNullPattern is called; callers must set it before use.
-    /* 132 */ ISensingAgentPattern* m_sensingAgentNullPattern;
+    /* 132 */ ISensingAgentPattern* m_nullPattern;  // name: AIDLL_r assert "m_nullPattern != 0" (0x100BA3F0)
 
     /* 136 */ std::vector<std::string> m_vehicleGroupNames; // size == getNumberOfVehicleGroups
-    /* 148 */ std::map<std::string, int> m_vehicleGroupIndex;   // createVehicleGroup inserts here
+    /* 148 */ std::map<std::string, int> m_namesToVehicleGroups;   // createVehicleGroup inserts here  // name: AIDLL_r assert 0x100BED20 (PE +0xC4)
     /* 160 */ std::vector<int> m_vehicleGroups;
 
     // Two per-side arrays indexed by side - 1; callers must supply side 1 or 2.
@@ -185,7 +185,7 @@ private:
     /* 180 */ float*         m_standardPersonality[2];
 
     /* 188 */ std::vector<float*> m_vehicleMods;
-    /* 200 */ std::map<std::string, int> m_vehicleIndex;    // setVehicle inserts; getVehicle(name) reads
+    /* 200 */ std::map<std::string, int> m_vehicleIdMap;    // setVehicle inserts; getVehicle(name) reads  // name: AIDLL_r assert 0x100BE960 (PE +0x100)
     /* 212 */ std::vector<std::string> m_vehicleNames;      // setVehicle push_backs the same name here
     /* 224 */ std::vector<int> m_clusterCostTypes;
     /* 236 */ std::string m_sensingAgentPatternName;        // [INFERRED] setSensingAgentPatternName

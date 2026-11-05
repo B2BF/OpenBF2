@@ -93,11 +93,11 @@ AIStrategicArea::AIStrategicArea(const std::string& name, unsigned int id, float
     : AIStrategicObject(radius, 0.0f), m_name(name), m_controlPointId(id) {}
 AIStrategicArea::~AIStrategicArea() {}
 SquadCoordinator::SquadCoordinator(int side, int index)
-    : m_squadIndex(index), m_side(side), m_strategicAreaAssignment(nullptr), m_i40(4), m_i96(0),
+    : m_squadIndex(index), m_side(side), m_strategicAreaAssignment(nullptr), m_i40(4), m_squadLeaderIndex(0),
       m_formation(nullptr), m_d124(0.0), m_b172(false), m_b196(false), m_needOrderMessageTimer(100.0)
 { m_v28 = {}; m_v108 = {4, 4, 4}; m_v176 = {}; m_d188 = 0.0; }
 SquadFormation::SquadFormation(SquadCoordinator* coordinator)
-    : m_coordinator(coordinator), m_maxSquadMembers(6), m_b56(false), m_b84(false), m_b85(false), m_d92(0.0)
+    : m_coordinator(coordinator), m_numberOfSlots(6), m_b56(false), m_b84(false), m_b85(false), m_d92(0.0)
 { m_v60 = {}; m_v72 = {1, 2, 3}; }
 SquadMember::SquadMember(SquadCoordinator* squad, IAIPlayer* player, int squadIndex, int side, int index)
     : m_squadIndex(squadIndex), m_memberIndex(index), m_isSquadLeader(false), m_playerId(0), m_player(player),
@@ -188,7 +188,7 @@ int main(int argc, char** argv)
         for (int i = 0; i < 4; ++i) m[i].m_position = {10.0f * i + 1, 2, 3};
         std::string expected;
         if (mode == "position_anchor") { fx.slots[0].m_memberIndex = 2; expected = "alive2"; }
-        else if (mode == "position_leader") { fx.slots[0].m_memberIndex = -1; squad.m_i96 = 1; expected = "alive1"; }
+        else if (mode == "position_leader") { fx.slots[0].m_memberIndex = -1; squad.m_squadLeaderIndex = 1; expected = "alive1"; }
         else if (mode == "position_first_alive")
         {
             alive = [](int id) { return id == 2; };
@@ -208,7 +208,7 @@ int main(int argc, char** argv)
     else if (mode.rfind("shots_", 0) == 0)
     {
         squad.m_d124 = 50.0;
-        fx.slots[0].m_occupied = true;   // make the forced movement update observable
+        fx.slots[0].hasSquadMemberAssigned = true;   // make the forced movement update observable
         int resets = 0; std::size_t left = 0;
         if (mode == "shots_empty") {}
         else if (mode == "shots_invalid") { m[1].m_positionValid = false; squad.m_list12.push_back(fire(&m[1], 60.0, m[1].m_position)); }

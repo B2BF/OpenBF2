@@ -27,7 +27,7 @@ BAPIWFire::BAPIWFire(Bot* bot, unsigned int target, bool flag24, bool flag25, in
     m_int28 = -1;
     m_flag25 = flag25;
     m_bot = bot;
-    m_statement->m_owner = this;
+    m_statement->mpOwner = this;
     bot->setIsFiring(true);
     bot->setFiringTarget(target);
     m_useStaticAttack = static_cast<BotMain*>(bot)->getUseStaticAttack();

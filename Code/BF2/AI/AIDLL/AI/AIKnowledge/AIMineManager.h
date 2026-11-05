@@ -1,5 +1,5 @@
 // Tracks mines by side and updates navigation hazards when mines settle or disappear.
-// [INFERRED] Source placement.
+// Header placement [INFERRED]: beside its .cpp, whose path AIDLL_r.dll confirms (AIKnowledge/AIMineManager.cpp: asserts in 0x100B3B60 / 0x100B3C60).
 
 #ifndef AI_AIDLL_AI_MAIN_AIMINEMANAGER_H
 #define AI_AIDLL_AI_MAIN_AIMINEMANAGER_H
@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-#include "AIDllTypes.h"
+#include "../Main/AIDllTypes.h"
 
 namespace dice {
 namespace hfe {
@@ -118,7 +118,7 @@ private:
 
     // Indexed by mine type, then quad-tree island. init() sizes the island dimension.
     /* 12 */ std::vector<std::vector<std::set<unsigned int> > > m_minedPolygons;
-    /* 24 */ std::vector<std::vector<std::map<unsigned int, PolygonData> > > m_polygonData;
+    /* 24 */ std::vector<std::vector<std::map<unsigned int, PolygonData> > > m_minesInPolygon;   // name: AIDLL_r assert 0x100B3B60 (PE +0x20)
 
     /* 36 */ std::map<unsigned int, std::list<MineInfo> > m_mines;      // at rest; node =
     /* 48 */ std::map<unsigned int, MineInfo> m_settlingMines;          // still moving; node = 132

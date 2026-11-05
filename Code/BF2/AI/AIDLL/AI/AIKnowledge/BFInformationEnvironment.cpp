@@ -11,7 +11,7 @@
 
 #include "AIInformationGrid.h"                             // the grids the constructor builds
 #include "Information.h"                                   // removeAllContacts
-#include "InformationManager.h"                            // the information pool
+#include "../Main/InformationManager.h"                            // the information pool
 #include "IPIMobile.h"                                     // getCover's search radius
 #include "../AIBot/BotMain.h"                              // Bot +0xD8 / +0xE0
 #include "../AIUtils/VehicleOccupancy.h"                   // InfoEnemyPredicate
@@ -196,8 +196,9 @@ public:
     IAIInformationGridPredicate* m_second;   // +8
 };
 
-// Cover objects of one side or of side 0. Flag 0x40000 accepts any side; 0x10 and 0x80 reject.
-// The flag names are [UNRESOLVED]; the bits are the record's object-type flags (+4).
+// Cover objects of one side or of side 0. ITStructure accepts any side; ITAir and ITNaval reject.
+// Bit names: InformationType (AIDLL_r 0x100D3010); AIDLL_r's version of this predicate (0x101A83C0)
+// asserts "Object has no cover plugin but is of type ITCover" on the ITCover bit.
 class InfoCoverPredicate : public IAIInformationGridPredicate
 {
 public:
@@ -205,14 +206,14 @@ public:
     // ELF 0x2E7E80.
     virtual bool includeInformation(Information* information) const
     {
-        if ((information->getObjectTypeFlags() & 0x4000) == 0 || information->getCover() == 0)
+        if (!information->isOfType(ITCover) || information->getCover() == 0)
             return false;
-        if ((information->getObjectTypeFlags() & 0x40000) != 0)
+        if (information->isOfType(ITStructure))
             return true;
         const int side = information->getSide();
         const bool sideOk = m_side == side || side == 0;
-        return sideOk && (information->getObjectTypeFlags() & 0x10) == 0
-               && (information->getObjectTypeFlags() & 0x80) == 0;
+        return sideOk && !information->isOfType(ITAir)
+               && !information->isOfType(ITNaval);
     }
     int m_side;
 };
@@ -312,7 +313,7 @@ void BFInformationEnvironment::getEnemyObjects(std::vector<unsigned int>& out, B
 {
     Information* const self = informationOf(bot);
     if (radius < 0.0f)
-        radius = (self->getObjectTypeFlags() & 0x10) != 0 ? 600.0f : 75.0f;
+        radius = self->isOfType(ITAir) ? 600.0f : 75.0f;
     InfoEnemyPredicate keep(bot->getSide());
     getObjectsWithinRadius(out, radius, *bot, true, &keep);
 }

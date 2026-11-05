@@ -23,7 +23,7 @@ namespace {
 void clearValidPos(IPIMobile::ValidPos& position)
 {
     position.polygon = static_cast<unsigned int>(-1);
-    position.quadTree = static_cast<unsigned int>(-1);
+    position.island = static_cast<unsigned int>(-1);
     position.position.x = 0.0f;
     position.position.y = 0.0f;
     position.position.z = 0.0f;
@@ -137,7 +137,7 @@ void IPIMobile::setLastValidVehiclePosInternal(const ValidPos& position)
 {
     unsigned char material; // Retail ignores getMaterial's result and may inspect this uninitialized.
     IAIPathfinding::instance->getMaterial(IAIPathfinding::instance->getTraceMapIndex() == 0,
-                                          position.quadTree, position.polygon, material);
+                                          position.island, position.polygon, material);
     switch (material)
     {
     case 3:

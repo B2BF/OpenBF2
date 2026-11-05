@@ -20,7 +20,7 @@
 #include "../AIBotActionPlan/BAPIWIdle.h"
 #include "../AIBotActionPlan/BAPStatement.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIPlanInterpreter/BAPContext.h"
 #include "../AIPlanInterpreter/BotScriptDebugger.h"
 #include "../../../AIInterface/BFKnowledge/AIPlayer.h"
@@ -92,7 +92,7 @@ BotScript* BBPIdle2d::createPlan(Bot* bot)
         if (static_cast<BAPStatement*>(bot->getPlan())->getPatternId() == m_patternId)
         {
             const int pickupPlayerId = m_pickupPlayerId[bot->getBotId()];
-            if (pickupPlayerId >= 0 && !(equipment->getObjectTypeFlags() & 0x200000)
+            if (pickupPlayerId >= 0 && !equipment->isOfType(ITSoldier)
                 && bot->getCommunicationAgent()->confirmReceivedMessage(static_cast<AIRadioMessageType>(2),
                                                                         pickupPlayerId))
             {
@@ -117,7 +117,7 @@ BotScript* BBPIdle2d::createPlan(Bot* bot)
     Information* const primary = informationManager->getInformation(equipment->getPrimaryObject(bot->getSide()));
     const int pickupPlayerId = m_pickupPlayerId[bot->getBotId()];
     const bool anyPosition = pickupPlayerId == 0xFF;
-    if (pickupPlayerId >= 0 && !(primary->getObjectTypeFlags() & 0x200000))
+    if (pickupPlayerId >= 0 && !primary->isOfType(ITSoldier))
     {
         IAIPlayer* const passenger =
             static_cast<IAIPlayerFactory*>(CommonSingletonServer::m_iaiPlayerFactory)->getPlayerFromId(pickupPlayerId);
@@ -160,7 +160,7 @@ BotScript* BBPIdle2d::createPlan(Bot* bot)
     parallel->addStatement(flares);
     parallel->addStatement(serial);
     BAPIWIdle* const idle = checkPointer(new BAPIWIdle(equipment->getPosition(), parallel, m_patternId, bot));
-    idle->setParent(this);   // +0x04 (BotScript::m_owner)
+    idle->setParent(this);   // +0x04 (BotScript::mpOwner)
     bot->getBotNavigation()->clearProgress();
     return idle;
 }

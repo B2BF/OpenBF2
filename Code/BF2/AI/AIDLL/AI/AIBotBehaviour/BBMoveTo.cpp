@@ -16,7 +16,7 @@
 #include "../AIBot/WaypointList.h"
 #include "../AIBotBehaviourPattern/BBPGotoWaypoint.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../Main/AIDllFrontier.h"
 #include "../Main/AISettingsInterfaces.h"
 #include "../Main/CommonSingletonServer.h"

@@ -11,7 +11,7 @@
 #include "../AIKnowledge/IPIArmament.h"
 #include "../AIKnowledge/Information.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 
 #include <cfloat>
 #include <cmath>
@@ -148,12 +148,12 @@ bool BAPCConPrecision::evaluate(Bot* bot)
     float distance = std::sqrt(toPoint.x * toPoint.x + toPoint.y * toPoint.y + toPoint.z * toPoint.z);
     bool closeVehicle = false;
     if (5.0f <= std::fabs(point.y - from.y)) {
-    } else if (!(target->getObjectTypeFlags() & 0x200000u)) {
-        if (!(own->getObjectTypeFlags() & 0x200000u) && distance < 15.0f)
+    } else if (!target->isOfType(ITSoldier)) {
+        if (!own->isOfType(ITSoldier) && distance < 15.0f)
             closeVehicle = true;
     }
     bool staticAttack = false;
-    if (!(own->getObjectTypeFlags() & 0x200000u))
+    if (!own->isOfType(ITSoldier))
         staticAttack = static_cast<BotMain*>(bot)->getUseStaticAttack();
 
     const Vec3 aim = m_aimDirection->m_value;

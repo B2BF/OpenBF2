@@ -8,7 +8,7 @@
 #ifndef AI_AIDLL_AI_AIBOT_RANDOMSQUAREMERGER_H       // [INFERRED] guard style
 #define AI_AIDLL_AI_AIBOT_RANDOMSQUAREMERGER_H
 
-#include "../AIBotBehaviour/UrgencyMerger.h"
+#include "UrgencyMerger.h"
 
 namespace dice {
 namespace hfe {

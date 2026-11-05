@@ -11,7 +11,7 @@
 #include "../AIKnowledge/IPIArmament.h"
 #include "../AIKnowledge/Information.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../Main/CommonSingletonServer.h"
 #include "../../../AIInterface/BFKnowledge/AIPlayer.h"
 #include "../../../AIInterface/BFKnowledge/AIPlayerFactory.h"
@@ -84,7 +84,7 @@ bool BAPConSplashDamage::evaluate(Bot* bot)
             if (!vehicle)
                 continue;
             Information* info = bapinline::info(vehicle->getInformation(bot->getSide()));
-            if (info && (info->getObjectTypeFlags() & 0x200000u) && std::fabs(info->getPosition().y - hit.y) < 2.5f) {
+            if (info && info->isOfType(ITSoldier) && std::fabs(info->getPosition().y - hit.y) < 2.5f) {
                 const Vec3& p = info->getPosition();
                 if ((hit.z - p.z) * (hit.z - p.z) + (hit.x - p.x) * (hit.x - p.x) + (hit.y - p.y) * (hit.y - p.y)
                     < m_radiusSqr)

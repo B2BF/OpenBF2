@@ -8,10 +8,10 @@
 #include "BotMain.h"
 #include "WPBeachLanding.h"                                       // storeLandingZone
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIStrategicEntity/AILandingZone.h"
-#include "../AIStrategicEntity/AILandingZoneManager.h"
+#include "../Main/AILandingZoneManager.h"
 #include "../AIStrategicEntity/AIStrategicArea.h"
 #include "../AIStrategicEntity/AIStrategicObjectManager.h"
 

@@ -14,13 +14,13 @@
 #include "../Main/AISettingsInterfaces.h"
 #include "../AIUtils/checkPointer.h"
 #include "../../../../Math/Vec3.h"
-#include "CustomCurve.h"
+#include "../AIUtils/CustomCurve.h"
 #include "../AIBot/BotMain.h"
 #include "../AIBot/BotMemory.h"
 #include "../AIBot/SensedObject.h"
 #include "../AIKnowledge/FireObject.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/IPIUnit.h"
@@ -141,8 +141,7 @@ float BBFireUnarmed::calculateUrgency(Bot* bot, bool evaluate, float modifier)
         Information* const info = informationManager->getInformation(object->m_handle);
         if (!info || info->getSide() == side || !info->getPhysical())
             continue;
-        const unsigned int typeFlags = info->getObjectTypeFlags();
-        if ((typeFlags & 0x20000) || (typeFlags & 0x100000) || (typeFlags & 0x800000))
+        if (info->isOfType(ITLowPriority) || info->isOfType(ITVegetation) || info->isOfType(ITNoTemperature))
             continue;
         if (!(info->getPhysical()->getHealth() > 0.0f))
             continue;

@@ -10,7 +10,7 @@
 #include "../AIBotActionPlan/BAPARoll3d.h"
 #include "../AIBotActionPlan/BAPCondition.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../../../../Math/Mat4.h"
 

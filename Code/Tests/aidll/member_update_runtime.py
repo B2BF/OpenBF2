@@ -89,7 +89,7 @@ def generate(out):
     paths.append(Path(__file__).with_name('sai_states_runtime.py'))
     (out/'fixture_sources.json').write_text(json.dumps({p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in paths},indent=2),encoding='utf-8')
     paths = [CODE/'BF2'/p for p in (
-        AI+'AIKnowledge/InformationManager.cpp', AI+'AIKnowledge/InformationManager.h', 'Core/SpHandlePool.h',
+        AI+'Main/InformationManager.cpp', AI+'Main/InformationManager.h', 'Core/SpHandlePool.h',
         AI+'AIKnowledge/Information.h', AI+'AIBot/SquadMember.h', AI+'AIBot/SquadCoordinator.h',
         AI+'AIBot/SquadFormation.h', AI+'AIBot/BotMain.h', 'AI/AIInterface/BFKnowledge/AIPlayer.h')]
     (out/'whole_sources.json').write_text(json.dumps({p.as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in paths},indent=2),encoding='utf-8')

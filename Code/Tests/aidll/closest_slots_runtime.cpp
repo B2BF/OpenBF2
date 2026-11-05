@@ -38,7 +38,7 @@ void operator delete(void* pointer, std::size_t) noexcept { ::operator delete(po
 namespace dice { namespace hfe { namespace ai {
 // [CHOSEN, not recovered] Native lifetime only. Actual constructor is not under test.
 SquadFormation::SquadFormation(SquadCoordinator* coordinator)
-    : m_coordinator(coordinator), m_formation(0), m_direction{}, m_maxSquadMembers(0),
+    : m_coordinator(coordinator), m_formation(0), m_direction{}, m_numberOfSlots(0),
       m_b36(false), m_formationMaxSpeed(0), m_side(0), m_i48(0), m_f52(0), m_b56(false),
       m_v60{}, m_v72{}, m_b84(false), m_b85(false), m_i88(0), m_d92(0),
       m_trailingPosition{}
@@ -47,7 +47,7 @@ SquadFormation::SquadFormation(SquadCoordinator* coordinator)
 
 static void fill(Slot& s, int n)
 {
-    s.m_occupied = (n & 1) != 0;
+    s.hasSquadMemberAssigned = (n & 1) != 0;
     s.m_memberIndex = -1000 - n;
     s.m_offset = {float(n), float(n + 10), float(n + 20)};
     s.m_i20 = n + 30;
@@ -57,7 +57,7 @@ static void fill(Slot& s, int n)
 }
 static void sameUnswapped(const Slot& a, const Slot& b)
 {
-    check(a.m_occupied == b.m_occupied, "occupied retained");
+    check(a.hasSquadMemberAssigned == b.hasSquadMemberAssigned, "occupied retained");
     check(a.m_offset.x == b.m_offset.x && a.m_offset.y == b.m_offset.y &&
           a.m_offset.z == b.m_offset.z, "offset retained");
     check(a.m_i20 == b.m_i20, "i20 retained");
@@ -94,10 +94,10 @@ int SquadFormation::getClosestSlotIndex(int index)
     if (!std::strcmp(scenario, "same")) return index;
     if (!std::strcmp(scenario, "zero")) return 0;
     if (!std::strcmp(scenario, "cross")) return index == 1 ? 2 : -1;
-    if (!std::strcmp(scenario, "shrink")) { m_maxSquadMembers = 2; return -1; }
+    if (!std::strcmp(scenario, "shrink")) { m_numberOfSlots = 2; return -1; }
     if (!std::strcmp(scenario, "grow"))
     {
-        if (index == 1) { m_slots.push_back(callbackNewSlot); m_maxSquadMembers = 3; }
+        if (index == 1) { m_slots.push_back(callbackNewSlot); m_numberOfSlots = 3; }
         return -1;
     }
     if (!std::strcmp(scenario, "replace"))
@@ -107,13 +107,13 @@ int SquadFormation::getClosestSlotIndex(int index)
     }
     if (!std::strcmp(scenario, "clear_next"))
     {
-        if (index == 1) m_slots[2]->m_occupied = false;
+        if (index == 1) m_slots[2]->hasSquadMemberAssigned = false;
         return -1;
     }
     if (!std::strcmp(scenario, "replace_current"))
     {
         m_slots[1] = callbackNewSlot;
-        m_maxSquadMembers = 2;
+        m_numberOfSlots = 2;
         return 2;
     }
     std::abort();
@@ -131,7 +131,7 @@ int main(int argc, char** argv)
     Slot a, b, c, d, e;
     fill(a, 1); fill(b, 2); fill(c, 3); fill(d, 4); fill(e, 5);
     f.m_slots = {&a, &b, &c};
-    f.m_maxSquadMembers = 3;
+    f.m_numberOfSlots = 3;
     const Slot savedA = a, savedB = b, savedC = c, savedD = d, savedE = e;
 
     if (!std::strcmp(mode, "swap") || !std::strcmp(mode, "swap_same") ||
@@ -162,9 +162,9 @@ int main(int argc, char** argv)
     else if (!std::strcmp(mode, "max_zero") || !std::strcmp(mode, "max_one") ||
              !std::strcmp(mode, "all_free"))
     {
-        if (!std::strcmp(mode, "max_zero")) { f.m_slots.clear(); f.m_maxSquadMembers = 0; }
-        else if (!std::strcmp(mode, "max_one")) { f.m_slots.resize(1); f.m_maxSquadMembers = 1; }
-        else { b.m_occupied = false; c.m_occupied = false; }
+        if (!std::strcmp(mode, "max_zero")) { f.m_slots.clear(); f.m_numberOfSlots = 0; }
+        else if (!std::strcmp(mode, "max_one")) { f.m_slots.resize(1); f.m_numberOfSlots = 1; }
+        else { b.hasSquadMemberAssigned = false; c.hasSquadMemberAssigned = false; }
         f.updateClosestSlots();
         samePayload(a, savedA); sameUnswapped(a, savedA);
         check(allocations == 0, "no swap allocation");
@@ -177,7 +177,7 @@ int main(int argc, char** argv)
     }
     else if (!std::strcmp(mode, "outer_frontier"))
     {
-        b.m_occupied = true;
+        b.hasSquadMemberAssigned = true;
         f.updateClosestSlots();
         return 92;
     }
@@ -186,10 +186,10 @@ int main(int argc, char** argv)
     else
     {
         scenario = mode;
-        b.m_occupied = c.m_occupied = d.m_occupied = true;
+        b.hasSquadMemberAssigned = c.hasSquadMemberAssigned = d.hasSquadMemberAssigned = true;
         callbackNewSlot = &d;
-        if (!std::strcmp(mode, "grow")) { f.m_slots.resize(2); f.m_slots.shrink_to_fit(); f.m_maxSquadMembers = 2; }
-        if (!std::strcmp(mode, "zero") || !std::strcmp(mode, "replace_current")) f.m_maxSquadMembers = 2;
+        if (!std::strcmp(mode, "grow")) { f.m_slots.resize(2); f.m_slots.shrink_to_fit(); f.m_numberOfSlots = 2; }
+        if (!std::strcmp(mode, "zero") || !std::strcmp(mode, "replace_current")) f.m_numberOfSlots = 2;
         f.updateClosestSlots();
         check(count >= 1 && observed[0] == 1, "slot zero skipped");
         check(observedMember[0] == savedB.m_memberIndex, "first input slot member");

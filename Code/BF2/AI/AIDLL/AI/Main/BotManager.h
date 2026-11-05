@@ -50,7 +50,7 @@ public:
     {
         explicit BotInfo(Bot* bot);
         // * +0
-        // one dereferences the record: `return *(Bot)m_botInfos[index];`. So the first word
+        // one dereferences the record: `return *(Bot)m_bots[index];`. So the first word
         // of a BotInfo is the bot it describes.
         Bot* m_bot;                 // +0
         unsigned m_word4;           // +4 = 0 [UNRESOLVED]
@@ -182,18 +182,18 @@ public:
     virtual double getSystemPathfindingQuotient() const;                                            // +0x0EC
     virtual double getSystemSensingQuotient() const;                                                // +0x0F0
     virtual void resetStatistics();                                                                 // +0x0F4
-    virtual void resetStatistics(unsigned int index) const;                                         // +0x0F8
-    virtual unsigned getPlanExecutionUpdateCount(unsigned int index) const;                         // +0x0FC
-    virtual unsigned getDecisionMakingUpdateCount(unsigned int index) const;                        // +0x100
-    virtual unsigned getSensingUpdateCount(unsigned int index) const;                               // +0x104
-    virtual unsigned getDecisionMakingBehaviourUpdateCount(unsigned int index) const;               // +0x108
-    virtual double getPlanExecutionRunTime(unsigned int index) const;                               // +0x10C
-    virtual double getDecisionMakingRunTime(unsigned int index) const;                              // +0x110
-    virtual double getSensingRunTime(unsigned int index) const;                                     // +0x114
-    virtual bool isPathfinding(unsigned int index) const;                                           // +0x118
-    virtual bool getLastPathfindingSucceeded(unsigned int index) const;                             // +0x11C
-    virtual bool getPathfindingStall(unsigned int index) const;                                     // +0x120
-    virtual double getLastPathfindingRunTime(unsigned int index) const;                             // +0x124
+    virtual void resetStatistics(unsigned int botIndex) const;                                         // +0x0F8
+    virtual unsigned getPlanExecutionUpdateCount(unsigned int botIndex) const;                         // +0x0FC
+    virtual unsigned getDecisionMakingUpdateCount(unsigned int botIndex) const;                        // +0x100
+    virtual unsigned getSensingUpdateCount(unsigned int botIndex) const;                               // +0x104
+    virtual unsigned getDecisionMakingBehaviourUpdateCount(unsigned int botIndex) const;               // +0x108
+    virtual double getPlanExecutionRunTime(unsigned int botIndex) const;                               // +0x10C
+    virtual double getDecisionMakingRunTime(unsigned int botIndex) const;                              // +0x110
+    virtual double getSensingRunTime(unsigned int botIndex) const;                                     // +0x114
+    virtual bool isPathfinding(unsigned int botIndex) const;                                           // +0x118
+    virtual bool getLastPathfindingSucceeded(unsigned int botIndex) const;                             // +0x11C
+    virtual bool getPathfindingStall(unsigned int botIndex) const;                                     // +0x120
+    virtual double getLastPathfindingRunTime(unsigned int botIndex) const;                             // +0x124
     virtual void enableBotScriptDebugger(bool enable);                                              // +0x128
 
     // population, and not part of either base
@@ -213,16 +213,16 @@ public:
 
 private:
 // Three priority queues hold pending bot work. Native container sizes depend on the compiler ABI.
-    /*   8 */ BotQueue*     m_queuePriorityA;
-    /*  12 */ BotQueue*     m_queuePriorityB;
-    /*  16 */ SensingQueue* m_queueSensing;
-    /*  20 */ std::list<Bot*> m_bots;        // the ctor inserts every preallocated BotMain
-    /*  24 */ std::vector<BotInfo*> m_botInfos;         // reserve(getMaxNBots)
-    // Deactivated bot ids in oldest-first order; values index m_botInfos.
+    /*   8 */ BotQueue*     m_planned;   // name: AIDLL_r assert 0x101A6170 (PE +8)
+    /*  12 */ BotQueue*     m_unplanned;   // name: AIDLL_r assert 0x101A6170 (PE +0xC)
+    /*  16 */ SensingQueue* m_sensingQueue;   // name: AIDLL_r assert 0x101A6810 (PE +0x10)
+    /*  20 */ std::list<Bot*> m_preallocatedBots;        // the ctor inserts every preallocated BotMain [INFERRED] name: AIDLL_r names the BotInfo vector m_bots (0x101A2880)
+    /*  24 */ std::vector<BotInfo*> m_bots;         // reserve(getMaxNBots)  // name: AIDLL_r asserts "botIndex < m_bots.size()" 0x101A2880.. (PE +0x20)
+    // Deactivated bot ids in oldest-first order; values index m_bots.
     /*  36 */ std::list<unsigned int> m_deactivatedBots;   // bot ids, oldest first
     // [CHOSEN name] Player-id to bot-index table, sized to 256 and initialized to -1.
     /*  40 */ std::vector<int> m_botByPlayerId;
-    // actionComAgent's round-robin position in m_botInfos (ELF +0x34 / PE +0x4C); unsigned from
+    // actionComAgent's round-robin position in m_bots (ELF +0x34 / PE +0x4C); unsigned from
     // its `jb` wrap test. Name [INFERRED].
     /*  52 */ unsigned int m_comAgentCursor;  // = 0
     /*  56 */ std::list<void*> m_list56;     // allocate(12) -> a 4-byte element. [UNRESOLVED] type

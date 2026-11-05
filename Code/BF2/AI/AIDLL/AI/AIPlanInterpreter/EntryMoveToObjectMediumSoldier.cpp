@@ -13,7 +13,7 @@
 #include "../AIBot/BotMain.h"
 #include "../AIBotActionPlan/BAPAMoveTo.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../../../AIInterface/BFKnowledge/BFObjectEnvironment.h"
 #include "../../../AIInterface/BFKnowledge/BFTimer.h"
 #include "../../../AIInterface/BFKnowledge/IAIObject.h"

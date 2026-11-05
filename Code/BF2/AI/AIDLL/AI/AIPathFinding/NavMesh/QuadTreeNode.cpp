@@ -107,7 +107,7 @@ bool QuadTreeNode::polygonInside(const Vec2& minimum, float size, QuadTree* tree
         {minimum.x + size, 0.0f, minimum.y + size},
         {minimum.x, 0.0f, minimum.y + size}};
     const Polygon* p = tree->m_polygons + polygon;
-    const int count = p->m_numberOfVertices;
+    const int count = p->vertexCount;
     for (int corner = 0; corner < count; ++corner)
     {
         const Vec3* v = tree->getVertexForPolygon(polygon, static_cast<unsigned char>(corner));
@@ -274,7 +274,7 @@ void QuadTreeNode::printPolygonsInNode(const QuadTree* tree, const Vec2& minimum
         {
             const unsigned int candidate = tree->m_nodePolygons[m_firstPolygon + i];
             const Polygon& candidatePolygon = tree->m_polygons[candidate];
-            for (int corner = 0; corner < candidatePolygon.m_numberOfVertices; ++corner)
+            for (int corner = 0; corner < candidatePolygon.vertexCount; ++corner)
                 tree->getVertexForPolygon(candidate, static_cast<unsigned char>(corner));
         }
         return;

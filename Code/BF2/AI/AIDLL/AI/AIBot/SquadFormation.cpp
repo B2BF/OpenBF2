@@ -14,7 +14,7 @@
 #include "../Main/AIDllFrontier.h"
 #include "../Main/CommonSingletonServer.h"
 #include "../Main/AIRandom.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/Information.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../../../AIInterface/BFKnowledge/IAIObject.h"
@@ -262,7 +262,7 @@ void SquadFormation::selectFormation()
 void SquadFormation::updateFormationForwardVector()
 {
     Slot* const anchor = m_slots[0];
-    if (!anchor->m_occupied)
+    if (!anchor->hasSquadMemberAssigned)
         return;
 
     IAIPlayer* const player = m_coordinator->getSquadMember(anchor->m_memberIndex)->getPlayer();
@@ -298,7 +298,7 @@ void SquadFormation::updateTrailingPositions()
         m_trailingPosition = m_v72;
         return;
     }
-    if (!anchor->m_occupied)
+    if (!anchor->hasSquadMemberAssigned)
         return;
 
     const float distanceSq = trailCrumbDistanceSq(m_v72, m_trailingPosition);
@@ -307,14 +307,14 @@ void SquadFormation::updateTrailingPositions()
     if (!(distanceSq > 36.0f))
         return;
 
-    for (unsigned int index = m_maxSquadMembers - 1; index != 0; --index)
+    for (unsigned int index = m_numberOfSlots - 1; index != 0; --index)
     {
         // Two statements: both images reload the vector's storage after the byte store.
-        m_slotTargets[index].first = m_slotTargets[index - 1].first;
-        m_slotTargets[index].second = m_slotTargets[index - 1].second;
+        m_trailingPositions[index].first = m_trailingPositions[index - 1].first;
+        m_trailingPositions[index].second = m_trailingPositions[index - 1].second;
     }
-    m_slotTargets[0].first = true;
-    m_slotTargets[0].second = m_trailingPosition;
+    m_trailingPositions[0].first = true;
+    m_trailingPositions[0].second = m_trailingPosition;
     m_trailingPosition = m_v72;
 }
 
@@ -324,10 +324,10 @@ void SquadFormation::updateTrailingSlots()
     std::list<SquadMemberDistanceObj> members;
     Vec3 position = {};
 
-    for (unsigned int index = 0; index < m_maxSquadMembers; ++index)
+    for (unsigned int index = 0; index < m_numberOfSlots; ++index)
     {
         Slot* const slot = m_slots[index];
-        if (slot->m_i20 != -1 && slot->m_occupied)
+        if (slot->m_i20 != -1 && slot->hasSquadMemberAssigned)
         {
             SquadMember* const member = m_coordinator->getSquadMember(slot->m_memberIndex);
             member->getPosition(position);
@@ -342,7 +342,7 @@ void SquadFormation::updateTrailingSlots()
     members.sort();
 
     Slot* slot = 0;
-    for (unsigned int index = 0; index < m_maxSquadMembers; ++index)
+    for (unsigned int index = 0; index < m_numberOfSlots; ++index)
     {
         slot = m_slots[index];
         slot->m_i20 = -1;
@@ -352,7 +352,7 @@ void SquadFormation::updateTrailingSlots()
     for (std::list<SquadMemberDistanceObj>::iterator it = members.begin(); it != members.end(); ++it)
     {
         SquadMember* const member = it->m_member;
-        for (unsigned int index = 1; index < m_maxSquadMembers; ++index)
+        for (unsigned int index = 1; index < m_numberOfSlots; ++index)
         {
             slot = m_slots[index];
             if (slot->m_memberIndex == member->getMemberIndex())
@@ -405,7 +405,7 @@ bool SquadFormation::getSlotWorldPos(int memberIndex, Vec3& position)
     }
     float fx = m_forward.x;
     float fy = m_forward.y;
-    for (unsigned int i = 0; i < m_maxSquadMembers; ++i)
+    for (unsigned int i = 0; i < m_numberOfSlots; ++i)
     {
         Slot* const slot = m_slots[i];
         if (slot->m_memberIndex != memberIndex)
@@ -463,7 +463,7 @@ bool SquadFormation::getSlotWorldPos(int memberIndex, Vec3& position)
             }
             slot->m_i20 = trail;
         }
-        position = m_slotTargets[trail].second;
+        position = m_trailingPositions[trail].second;
         return true;
     }
     return found;
@@ -473,11 +473,11 @@ bool SquadFormation::getSlotWorldPos(int memberIndex, Vec3& position)
 // valid for `member`; -1 when none. (The image also computes, and drops, the distance to it.)
 int SquadFormation::getFirstFreeTrailingSlot(SquadMember* member)
 {
-    for (unsigned int i = 0; i < m_maxSquadMembers; ++i)
+    for (unsigned int i = 0; i < m_numberOfSlots; ++i)
     {
         const bool assigned = isTrailPosAssigned(static_cast<int>(i));
-        const bool valid = m_coordinator->isValidPosition(member, m_slotTargets[i].second);
-        if (m_slotTargets[i].first && !assigned && valid)
+        const bool valid = m_coordinator->isValidPosition(member, m_trailingPositions[i].second);
+        if (m_trailingPositions[i].first && !assigned && valid)
             return static_cast<int>(i);
     }
     return -1;
@@ -486,7 +486,7 @@ int SquadFormation::getFirstFreeTrailingSlot(SquadMember* member)
 // ELF 0x1ACB70: whether any slot falls back to trailing position `trailIndex`.
 bool SquadFormation::isTrailPosAssigned(int trailIndex)
 {
-    for (unsigned int i = 0; i < m_maxSquadMembers; ++i)
+    for (unsigned int i = 0; i < m_numberOfSlots; ++i)
     {
         if (m_slots[i]->m_i20 == trailIndex)
             return true;
@@ -514,10 +514,10 @@ void SquadFormation::updateFormation()
     m_coordinator->getSquadPosition(squadPosition);
 
     unsigned int leaderSlotIndex = 0;
-    for (; leaderSlotIndex < m_maxSquadMembers; ++leaderSlotIndex)
+    for (; leaderSlotIndex < m_numberOfSlots; ++leaderSlotIndex)
     {
         slot = m_slots[leaderSlotIndex];
-        if (slot->m_occupied && slot->m_memberIndex == leaderIndex)
+        if (slot->hasSquadMemberAssigned && slot->m_memberIndex == leaderIndex)
         {
             leaderPresent = true;
             break;
@@ -530,10 +530,10 @@ void SquadFormation::updateFormation()
         {
             if (leaderSlotIndex != 0)
                 return;
-            for (unsigned int index = m_maxSquadMembers - 1; index > 0; --index)
+            for (unsigned int index = m_numberOfSlots - 1; index > 0; --index)
             {
                 Slot* const other = m_slots[index];
-                if (!other->m_occupied)
+                if (!other->hasSquadMemberAssigned)
                     continue;
                 const int otherIndex = other->m_memberIndex;
                 const int oldIndex = slot->m_memberIndex;
@@ -562,9 +562,9 @@ void SquadFormation::updateFormation()
 
         m_b85 = false;
         Slot* const zero = m_slots[0];
-        const bool oldOccupied = zero->m_occupied;
+        const bool oldOccupied = zero->hasSquadMemberAssigned;
         const int oldIndex = zero->m_memberIndex;
-        zero->m_occupied = true;
+        zero->hasSquadMemberAssigned = true;
         zero->m_memberIndex = leaderIndex;
         zero->m_b24 = false;
         zero->m_i28 = 0.0f;
@@ -572,7 +572,7 @@ void SquadFormation::updateFormation()
 
         // The old leader-slot pointer is reloaded after that callback.
         slot = m_slots[leaderSlotIndex];
-        slot->m_occupied = oldOccupied;
+        slot->hasSquadMemberAssigned = oldOccupied;
         slot->m_memberIndex = oldIndex;
         slot->m_b24 = false;
         slot->m_i28 = 0.0f;
@@ -583,17 +583,17 @@ void SquadFormation::updateFormation()
     }
 
     Slot* const zero = m_slots[0];
-    if (!zero->m_occupied)
+    if (!zero->hasSquadMemberAssigned)
         return;
     if (m_coordinator->getSquadMember(zero->m_memberIndex)->isBot() == leaderIsBot)
         return;
 
     // Find the first occupied slot whose bot/human kind matches the captured leader.
     // The bound, vector and coordinator are fresh after each member callback.
-    for (unsigned int index = 1; index < m_maxSquadMembers; ++index)
+    for (unsigned int index = 1; index < m_numberOfSlots; ++index)
     {
         Slot* const other = m_slots[index];
-        if (!other->m_occupied ||
+        if (!other->hasSquadMemberAssigned ||
             m_coordinator->getSquadMember(other->m_memberIndex)->isBot() != leaderIsBot)
             continue;
         const int oldIndex = zero->m_memberIndex;
@@ -623,10 +623,10 @@ void SquadFormation::updateWaitForSquadMembers(double time)
     m_b36 = true;
     Vec3 memberPosition = {};
     Vec3 squadPosition = {};
-    for (unsigned int index = 1; index < m_maxSquadMembers; ++index)
+    for (unsigned int index = 1; index < m_numberOfSlots; ++index)
     {
         Slot* const slot = m_slots[index];
-        if (!slot->m_occupied)
+        if (!slot->hasSquadMemberAssigned)
             continue;
 
         SquadMember* const member = m_coordinator->getSquadMember(slot->m_memberIndex);
@@ -739,7 +739,7 @@ static bool nearerFormationMember(const Vec3& position, const Vec3& destination,
 // comparison, no occupied/null/vector-size test. Even an empty slot's -1 can match.
 bool SquadFormation::isInFormation(int memberIndex)
 {
-    const unsigned int count = m_maxSquadMembers;
+    const unsigned int count = m_numberOfSlots;
     for (unsigned int i = 0; i < count; ++i)
         if (m_slots[i]->m_memberIndex == memberIndex)
             return true;
@@ -751,7 +751,7 @@ bool SquadFormation::isInFormation(int memberIndex)
 void SquadFormation::resetSlot(int slotIndex)
 {
     Slot* const slot = m_slots[slotIndex];
-    slot->m_occupied = false;
+    slot->hasSquadMemberAssigned = false;
     slot->m_memberIndex = -1;
     slot->m_i20 = -1;
     slot->m_b24 = false;
@@ -765,7 +765,7 @@ void SquadFormation::resetSlot(int slotIndex)
 void SquadFormation::leaveFormation(int memberIndex)
 {
     unsigned int removed = 0;
-    for (; removed < m_maxSquadMembers; ++removed)
+    for (; removed < m_numberOfSlots; ++removed)
     {
         if (m_slots[removed]->m_memberIndex == memberIndex)
         {
@@ -774,13 +774,13 @@ void SquadFormation::leaveFormation(int memberIndex)
         }
     }
 
-    if (removed < m_maxSquadMembers - 1 && m_slots[removed + 1]->m_occupied)
+    if (removed < m_numberOfSlots - 1 && m_slots[removed + 1]->hasSquadMemberAssigned)
     {
-        unsigned int last = m_maxSquadMembers - 1;
+        unsigned int last = m_numberOfSlots - 1;
         while (last > 0)
         {
             Slot* const lastSlot = m_slots[last];
-            if (lastSlot->m_occupied)
+            if (lastSlot->hasSquadMemberAssigned)
             {
                 if (removed == 0 && last > 1)
                 {
@@ -792,7 +792,7 @@ void SquadFormation::leaveFormation(int memberIndex)
                         Slot* const slot = m_slots[candidate];
                         // Retail obtains the member even for an unoccupied candidate.
                         SquadMember* const member = m_coordinator->getSquadMember(slot->m_memberIndex);
-                        if (slot->m_occupied && !member->isSquadLeader() && member->isBot() &&
+                        if (slot->hasSquadMemberAssigned && !member->isSquadLeader() && member->isBot() &&
                             member->getPosition(position))
                         {
                             const Vec3& destination = m_coordinator->getSquadGotoPos();
@@ -803,7 +803,7 @@ void SquadFormation::leaveFormation(int memberIndex)
 
                     Slot* destination = m_slots[0];
                     Slot* source = m_slots[selected];
-                    destination->m_occupied = source->m_occupied;
+                    destination->hasSquadMemberAssigned = source->hasSquadMemberAssigned;
                     destination->m_b24 = source->m_b24;
                     destination->m_offset = source->m_offset;
                     destination->m_memberIndex = source->m_memberIndex;
@@ -812,16 +812,16 @@ void SquadFormation::leaveFormation(int memberIndex)
                     m_coordinator->getSquadMember(destination->m_memberIndex)->setHavePath(false);
                     resetSlot(static_cast<int>(selected));
 
-                    if (selected < m_maxSquadMembers - 1 && m_slots[selected + 1]->m_occupied)
+                    if (selected < m_numberOfSlots - 1 && m_slots[selected + 1]->hasSquadMemberAssigned)
                     {
-                        unsigned int replacement = m_maxSquadMembers - 1;
+                        unsigned int replacement = m_numberOfSlots - 1;
                         while (replacement > 0)
                         {
                             source = m_slots[replacement];
-                            if (source->m_occupied)
+                            if (source->hasSquadMemberAssigned)
                             {
                                 destination = m_slots[selected];
-                                destination->m_occupied = source->m_occupied;
+                                destination->hasSquadMemberAssigned = source->hasSquadMemberAssigned;
                                 destination->m_b24 = source->m_b24;
                                 destination->m_offset = source->m_offset;
                                 destination->m_memberIndex = source->m_memberIndex;
@@ -843,7 +843,7 @@ void SquadFormation::leaveFormation(int memberIndex)
                     const float oldValue = lastSlot->m_i28;
                     resetSlot(static_cast<int>(last));
                     Slot* const slot = m_slots[removed];
-                    slot->m_occupied = true;
+                    slot->hasSquadMemberAssigned = true;
                     slot->m_memberIndex = movedMember;
                     slot->m_i20 = oldIndex;
                     slot->m_b24 = oldFlag;
@@ -864,9 +864,9 @@ void SquadFormation::leaveFormation(int memberIndex)
 // callbacks; occupied candidates only, with -1 and identical-slot results skipped.
 void SquadFormation::updateClosestSlots()
 {
-    for (unsigned int slot = 1; slot < m_maxSquadMembers; ++slot)
+    for (unsigned int slot = 1; slot < m_numberOfSlots; ++slot)
     {
-        if (m_slots[slot]->m_occupied)
+        if (m_slots[slot]->hasSquadMemberAssigned)
         {
             const int closest = getClosestSlotIndex(static_cast<int>(slot));
             if (closest != -1 && closest != static_cast<int>(slot))
@@ -885,9 +885,9 @@ int SquadFormation::getClosestSlotIndex(int slotIndex)
     Vec3 position = {};
     if (!getSlotWorldPos(m_slots[slotIndex]->m_memberIndex, target))
         return best;
-    for (unsigned int i = 1; i < m_maxSquadMembers; ++i)
+    for (unsigned int i = 1; i < m_numberOfSlots; ++i)
     {
-        if (!m_slots[i]->m_occupied)
+        if (!m_slots[i]->hasSquadMemberAssigned)
             continue;
         if (!m_coordinator->getSquadMember(m_slots[i]->m_memberIndex)->getPosition(position))
             continue;
@@ -932,7 +932,7 @@ SquadFormation::SquadFormation(SquadCoordinator* coordinator)
     , m_forward()
     , m_i88(0)
     , m_d92(0.0)
-    , m_slotTargets()
+    , m_trailingPositions()
     , m_trailingPosition()
 {
     m_direction.x = 0.0f;
@@ -948,10 +948,10 @@ SquadFormation::SquadFormation(SquadCoordinator* coordinator)
 
     m_side = coordinator->getSide();
 
-    m_maxSquadMembers = static_cast<unsigned int>(
+    m_numberOfSlots = static_cast<unsigned int>(
         static_cast<IAIGame*>(CommonSingletonServer::m_iaiGame)->getMaxNumberOfSquadMembers());
 
-    for (unsigned int i = 0; i < m_maxSquadMembers; ++i)
+    for (unsigned int i = 0; i < m_numberOfSlots; ++i)
     {
         m_slots.push_back(new Slot());
 
@@ -959,7 +959,7 @@ SquadFormation::SquadFormation(SquadCoordinator* coordinator)
         zero.x = 0.0f;
         zero.y = 0.0f;
         zero.z = 0.0f;
-        m_slotTargets.push_back(std::pair<bool, Vec3>(false, zero));
+        m_trailingPositions.push_back(std::pair<bool, Vec3>(false, zero));
     }
 
     // FLT_MAX, written as the bit pattern the binary stores.
@@ -995,12 +995,12 @@ float SquadFormation::getFormationMaxSpeed()
 // even when the scan finds no free slot. PE inlines updateMovementFlag(true).
 void SquadFormation::joinFormation(int memberIndex)
 {
-    for (unsigned int i = 0; i < m_maxSquadMembers; ++i)
+    for (unsigned int i = 0; i < m_numberOfSlots; ++i)
     {
         Slot* const slot = m_slots[i];
-        if (!slot->m_occupied)
+        if (!slot->hasSquadMemberAssigned)
         {
-            slot->m_occupied = true;
+            slot->hasSquadMemberAssigned = true;
             slot->m_memberIndex = memberIndex;
             slot->m_i20 = -1;
             slot->m_b24 = false;
@@ -1018,7 +1018,7 @@ void SquadFormation::joinFormation(int memberIndex)
 // when forced or when both strict thresholds pass. No empty-slot-vector guard.
 void SquadFormation::updateMovementFlag(bool force)
 {
-    if (!m_slots[0]->m_occupied)
+    if (!m_slots[0]->hasSquadMemberAssigned)
         return;
 
     m_b56 = false;
@@ -1046,7 +1046,7 @@ void SquadFormation::updateMovementFlag(bool force)
 // Preserve both guards (inlined in the image): the positioned squad's slot-zero world position.
 void SquadFormation::updateSlotZeroPos()
 {
-    if (m_slots[0]->m_occupied && m_coordinator->squadHasPosition())
+    if (m_slots[0]->hasSquadMemberAssigned && m_coordinator->squadHasPosition())
         getSlotWorldPos(getSquadMemberIndexAtSlot(0), m_v72);
 }
 
@@ -1057,9 +1057,9 @@ void SquadFormation::resetTrailingPositions()
     updateSlotZeroPos();
     m_trailingPosition = m_v72;
 
-    for (unsigned int i = 0; i < m_maxSquadMembers; ++i)
+    for (unsigned int i = 0; i < m_numberOfSlots; ++i)
     {
-        m_slotTargets[i].first = false;
+        m_trailingPositions[i].first = false;
         m_slots[i]->m_i20 = -1;
     }
 }
@@ -1076,11 +1076,11 @@ void SquadFormation::updateFormationMaxSpeed()
 
     m_formationMaxSpeed = 3.402823466e+38F;
 
-    for (unsigned int i = 0; i < m_maxSquadMembers; ++i)
+    for (unsigned int i = 0; i < m_numberOfSlots; ++i)
     {
         Slot* const slot = m_slots[i];
 
-        if (slot->m_occupied)
+        if (slot->hasSquadMemberAssigned)
         {
             ++occupied;
             IAIObject* const vehicle =
@@ -1156,7 +1156,7 @@ void SquadFormation::setLineFormation()
     float offset        = 0.0f;
     int   referenceSlot = 0;
 
-    for (unsigned int i = 0; i < m_maxSquadMembers; ++i)
+    for (unsigned int i = 0; i < m_numberOfSlots; ++i)
     {
         Slot* const slot = m_slots[i];
 
@@ -1187,7 +1187,7 @@ void SquadFormation::setLineFormation()
         // reference slot: offset = reference offset + offset * (3 * own radius + 3 * reference
         // radius) (0x49CC90 = 3.0f; the image rounds the first product to float, keeps the x
         // product's sum in x87 precision).
-        if (slot->m_occupied)
+        if (slot->hasSquadMemberAssigned)
         {
             const float own = 3.0f * m_coordinator->getSquadMember(slot->m_memberIndex)->getVehicleRadius();
             Slot* const reference = m_slots[slot->m_referenceSlot];
@@ -1210,7 +1210,7 @@ void SquadFormation::setWedgeFormation()
     Vec3  offset        = {};
     int   referenceSlot = 0;
 
-    for (unsigned int i = 0; i < m_maxSquadMembers; ++i)
+    for (unsigned int i = 0; i < m_numberOfSlots; ++i)
     {
         Slot* const slot = m_slots[i];
 
@@ -1237,7 +1237,7 @@ void SquadFormation::setWedgeFormation()
 
         slot->m_offset = offset;
 
-        if (slot->m_occupied)
+        if (slot->hasSquadMemberAssigned)
         {
             const float own = 3.0f * m_coordinator->getSquadMember(slot->m_memberIndex)->getVehicleRadius();
             Slot* const reference = m_slots[slot->m_referenceSlot];
@@ -1258,7 +1258,7 @@ void SquadFormation::setEchelonFormation()
     Vec3  offset        = {};
     int   referenceSlot = 0;
 
-    for (unsigned int i = 0; i < m_maxSquadMembers; ++i)
+    for (unsigned int i = 0; i < m_numberOfSlots; ++i)
     {
         Slot* const slot = m_slots[i];
 
@@ -1285,7 +1285,7 @@ void SquadFormation::setEchelonFormation()
 
         slot->m_offset = offset;
 
-        if (slot->m_occupied)
+        if (slot->hasSquadMemberAssigned)
         {
             const float own = 3.0f * m_coordinator->getSquadMember(slot->m_memberIndex)->getVehicleRadius();
             Slot* const reference = m_slots[slot->m_referenceSlot];
@@ -1302,11 +1302,11 @@ void SquadFormation::setEchelonFormation()
 // least as many members as slots, the last slot is left free.
 void SquadFormation::reassignSlots()
 {
-    for (unsigned int i = 0; i < m_maxSquadMembers; ++i)
+    for (unsigned int i = 0; i < m_numberOfSlots; ++i)
         resetSlot(static_cast<int>(i));
     unsigned int count = static_cast<unsigned int>(m_coordinator->getNumberOfSquadMembers());
-    if (count >= m_maxSquadMembers)
-        count = m_maxSquadMembers - 1;
+    if (count >= m_numberOfSlots)
+        count = m_numberOfSlots - 1;
     unsigned int next = 0;
     for (unsigned int i = 0; i < count; ++i)
     {
@@ -1314,28 +1314,28 @@ void SquadFormation::reassignSlots()
         if (!member->isAllowedInFormation())
             continue;
         Slot* const slot = m_slots[next++];
-        slot->m_occupied = true;
+        slot->hasSquadMemberAssigned = true;
         slot->m_memberIndex = member->getMemberIndex();
     }
 }
 
 // ELF 0x1A9E10 (D1, 240 B; recovered on the client track, docs/macos-c-singleplayer.md). Clears
-// the coordinator back-pointer, deletes the first m_maxSquadMembers slots (the bound is the
+// the coordinator back-pointer, deletes the first m_numberOfSlots slots (the bound is the
 // member count fixed at construction, not the vector's size), then empties both vectors.
 SquadFormation::~SquadFormation()
 {
     m_coordinator = 0;
-    for (unsigned int i = 0; i < m_maxSquadMembers; ++i)
+    for (unsigned int i = 0; i < m_numberOfSlots; ++i)
         delete m_slots[i];
     m_slots.erase(m_slots.begin(), m_slots.end());
-    m_slotTargets.erase(m_slotTargets.begin(), m_slotTargets.end());
+    m_trailingPositions.erase(m_trailingPositions.begin(), m_trailingPositions.end());
 }
 
 // ELF 0x1A9FB0. Shipped defect: the gap-checking loop has no checks left in this image.
 void SquadFormation::debugCheckNoFormationSlotGaps()
 {
-    unsigned int last = m_maxSquadMembers - 1;
-    while (last && !m_slots[last]->m_occupied)
+    unsigned int last = m_numberOfSlots - 1;
+    while (last && !m_slots[last]->hasSquadMemberAssigned)
         --last;
     if (last)
         for (unsigned int index = 0; index <= last; ++index) {}

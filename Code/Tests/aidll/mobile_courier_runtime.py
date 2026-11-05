@@ -56,7 +56,7 @@ SOURCES = [AI + 'AIKnowledge/' + name for name in (
     'InformationReal.h', 'InformationManager.cpp', 'InformationManager.h', 'IPIMobile.cpp',
     'IPIMobile.h', 'IPIMobileReal.cpp', 'IPIMobileReal.h', 'IPIMobileKnown.cpp',
     'IPIMobileKnown.h')]
-SOURCES += [AI + 'Main/IAIPathfinding.cpp', AI + 'Main/IAIPathfinding.h',
+SOURCES += [AI + 'Main/IAIPathfinding.cpp', AI + 'Main/IAIPathfindingSetup.cpp', AI + 'Main/IAIPathfinding.h',
             AI + 'Main/AISettingsInterfaces.h', BFK + 'IAIObject.h',
             BFK + 'IAIObjectPlugIn.h', BFK + 'BFTimer.h']
 FIXTURE_FILES = [

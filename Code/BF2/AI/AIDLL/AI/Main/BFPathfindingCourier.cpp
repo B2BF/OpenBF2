@@ -20,7 +20,7 @@
 #include "../AIBot/SquadMember.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "InformationManager.h"
 #include "../../../AIInterface/BFKnowledge/AIPlayer.h"
 #include "../../../AIInterface/BFKnowledge/BFGame.h"
 #include "../../../AIInterface/BFKnowledge/IAIObject.h"      // IAISettings::getVehicle - findClosestValidInfantryPolygon

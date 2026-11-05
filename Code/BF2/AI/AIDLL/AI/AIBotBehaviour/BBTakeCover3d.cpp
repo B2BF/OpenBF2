@@ -9,7 +9,7 @@
 #include "../AIBot/BotMemory.h"
 #include "../AIBotBehaviourPattern/BBPTakeCover3d.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../Main/AISettingsInterfaces.h"
 #include "../Main/CommonSingletonServer.h"

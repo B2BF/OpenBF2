@@ -879,6 +879,9 @@ std::ostream& operator<<(std::ostream& out, StrategyCondition::Conditional value
     return out;
 }
 
+// Kit types: AIDLL_r.dll's operator<< (0x100D4D70, jump table 0x100D4F40) confirms every value:
+// 0 KTSpecops, 1 KTSniper, 2 KTAssault, 3 KTSupport, 4 KTEngineer, 5 KTMedic, 6 KTAT (anti-tank),
+// 7..12 KTExtended1..6. hfe::KitType itself is declared opaque (Game/Objects/Game/KitTemplate.h).
 static const char* const kKitNames[] = {
     "KTSpecops",
     "KTSniper",

@@ -19,7 +19,7 @@
 #include "../AIBotActionPlan/BAPFlowCWhile.h"
 #include "../AIBotActionPlan/BAPIWIdle.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIControlInfo.h"
 #include "../AIPlanInterpreter/BAPContext.h"
 #include "../AIPlanInterpreter/BotScriptDebugger.h"
@@ -110,7 +110,7 @@ BotScript* BBPTriggerable::createPlan(Bot* bot)
     BAPConTrue* const repeat = checkPointer(new BAPConTrue());
     BAPFlowCWhile* const loop = checkPointer(new BAPFlowCWhile(repeat, parallel, true, m_id));
     BAPIWIdle* const plan = checkPointer(new BAPIWIdle(equipment->getPosition(), loop, m_id, bot));
-    plan->m_owner = this;
+    plan->mpOwner = this;
     return plan;
 }
 

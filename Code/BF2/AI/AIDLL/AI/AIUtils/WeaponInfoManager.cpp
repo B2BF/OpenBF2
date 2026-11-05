@@ -1,8 +1,8 @@
-// [INFERRED] Source placement.
+// Source placement: AIDLL_r.dll __FILE__ "Code\BF2\AI\AIDLL\AI\AIUtils\WeaponInfoManager.cpp" (0x1007D910).
 
 #include "WeaponInfoManager.h"
 
-#include "../AIUtils/checkPointer.h"
+#include "checkPointer.h"
 
 namespace dice {
 namespace hfe {

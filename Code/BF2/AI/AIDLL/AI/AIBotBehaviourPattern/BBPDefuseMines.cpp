@@ -25,12 +25,12 @@
 #include "../AIBotActionPlan/BAPICChangeVehicle.h"
 #include "../AIBotActionPlan/BAPIWDefuseMines.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIArmament.h"
 #include "../AIKnowledge/IPIControlInfo.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../AIPlanInterpreter/BAPContext.h"
 #include "../AIPlanInterpreter/BotScriptDebugger.h"
 #include "../AIUtils/checkPointer.h"
@@ -136,7 +136,7 @@ BotScript* BBPDefuseMines::createPlan(Bot* bot)
     BAPCombinerSerial* root = checkPointer(new BAPCombinerSerial(m_unknown8, -1));
     BAPCombinerSerial* sequence = checkPointer(new BAPCombinerSerial(m_unknown8, -1));
     sequence->addStatement(checkPointer(new BAPAResetControls(true, true, true, m_unknown8)));
-    if (!(self->getObjectTypeFlags() & 0x200000))
+    if (!self->isOfType(ITSoldier))
     {
         BAPCombinerParallel* leave = checkPointer(new BAPCombinerParallel(m_unknown8, -1, false));
         leave->addStatement(checkPointer(new BAPICChangeVehicle(soldierHandle)));
@@ -184,7 +184,7 @@ BotScript* BBPDefuseMines::createPlan(Bot* bot)
     root->addStatement(sequence);
     const unsigned int target = m_mine[bot->getBotId()];
     BAPIWDefuseMines* wrapper = checkPointer(new BAPIWDefuseMines(bot, target, root, m_unknown8));
-    wrapper->m_owner = this;
+    wrapper->mpOwner = this;
     static_cast<BotMain*>(bot)->resetAllControls(true, true, true);
     return wrapper;
 }

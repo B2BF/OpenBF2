@@ -1,4 +1,4 @@
-// [INFERRED] Source placement.
+// Source placement: AIDLL_r.dll __FILE__ "Code\BF2\AI\AIDLL\AI\Main\AILandingZoneManager.cpp" (0x10081FA0).
 
 // static init: ELF 0x39AA80, __tcf_0 0x39AB10, _GLOBAL__I 0x39AB40: stream Init precedes the manager.
 #include <iostream>
@@ -7,7 +7,7 @@
 
 #include <sstream>
 
-#include "AILandingZone.h"
+#include "../AIStrategicEntity/AILandingZone.h"
 #include "../AIUtils/checkPointer.h"
 #include "../AIUtils/DebugRendering/AIRenderUtil.h"   // updateNumberOfLandingZones
 

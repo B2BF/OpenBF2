@@ -18,15 +18,15 @@
 #include "BotNavigation.h"
 #include "BotSquad.h"
 #include "../AIPlanInterpreter/BAPContext.h"
-#include "../AIPlanInterpreter/BotScript.h"
+#include "../AIBotActionPlan/BotScript.h"
 #include "../AIPlanInterpreter/PlanInterpreter.h"
 #include "SensingAgent.h"
 #include "CommunicationAgent.h"
 #include "BotSubObjects.h"
 #include "../AIBotBehaviour/BotBehaviour.h"
-#include "../AIBotBehaviour/UrgencyMerger.h"
+#include "UrgencyMerger.h"
 #include "../AIUtils/checkPointer.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/Information.h"      // updatePlayerAction: the equipment's mobile plug-in
 #include "../AIKnowledge/IPIMobile.h"
 #include "../../../AIInterface/BFKnowledge/AIPlayer.h"
@@ -36,7 +36,7 @@
 #include "../Main/IBotManager.h"
 #include "../../../AIInterface/BFKnowledge/IAIObject.h"
 #include "../AIKnowledge/IPIArmament.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "BotSenses.h"
 #include "WaypointList.h"
 #include "WPEmpty.h"
@@ -137,7 +137,7 @@ BotMain::BotMain(IAIPlayer* player,
 
     // Use -DBL_MAX for uninitialized timestamps; magnitude sentinels use separate values.
     m_time276 = -DBL_MAX;
-    m_poseChangeTime = -DBL_MAX;
+    m_soldierPoseAlteredTime = -DBL_MAX;
     m_botStuck = false;
     m_poseInputActive = false;
     for (int k = 0; k < 4; ++k)
@@ -160,9 +160,9 @@ BotMain::BotMain(IAIPlayer* player,
     m_currentWaypoint[2] = 0.0f;
     m_int412 = -1;
     m_stalledPlanTicks = 0;
-    m_c4.position.x = 0.0f;             // +428..+436 (three zero word stores)
-    m_c4.position.y = 0.0f;
-    m_c4.position.z = 0.0f;
+    m_c4Explosives.position.x = 0.0f;             // +428..+436 (three zero word stores)
+    m_c4Explosives.position.y = 0.0f;
+    m_c4Explosives.position.z = 0.0f;
     m_moveToStatus = 0;
     m_timeOfLastFailedStaticAttack = 0.0;
     m_timeOfLastFailedStaticSkyAttack = 0.0;
@@ -171,7 +171,7 @@ BotMain::BotMain(IAIPlayer* player,
         (&m_wantsToSimulateArtillery)[k] = false;   // +500..+502
     m_avoidSideChanged = false;                   // +512
     m_collidedObject = -1;
-    m_double516 = 0.0;
+    m_timeOfLastStateChange = 0.0;
     for (int k = 0; k < 3; ++k)
         m_collidedObjectPosition[k] = 0;                // +528..+536
 
@@ -234,7 +234,7 @@ BotMain::BotMain(IAIPlayer* player,
     // sense every player, and the storage for that is committed at construction.
     m_sensedObjects.reserve(256);
 
-    m_c4.placed = false;                 // the constructor's last field store
+    m_c4Explosives.isPlaced = false;                 // the constructor's last field store
     reset();
 }
 
@@ -339,7 +339,7 @@ void BotMain::reset()
     m_grenadeThrownTime[2] = 0.0;
     m_timeOfLastFailedStaticAttack = 0.0;
     m_timeOfLastFailedStaticSkyAttack = 0.0;
-    m_double516 = 0.0;
+    m_timeOfLastStateChange = 0.0;
     m_wantsToSimulateArtillery = false;
     m_isSimulatingArtillery = false;
     m_forcePose = false;
@@ -362,7 +362,7 @@ void BotMain::reset()
     m_isGoingForFlag = false;
     m_useStaticAttack = false;
     // 9999.0, not the ctor's -DBL_MAX. See the block above.
-    m_poseChangeTime = -9999.0;
+    m_soldierPoseAlteredTime = -9999.0;
     m_timeOfLastFailedSplashDamageAttack = -9999.0;
     m_takeOffPosition[0] = 0.0f;
     m_takeOffPosition[1] = 0.0f;
@@ -487,7 +487,7 @@ void BotMain::prePlanExecution()
 void BotMain::postPlanExecution()
 {
     Information* const equipment = informationManager->getInformation(getCurrentEquipment());
-    if ((equipment->getObjectTypeFlags() & 0x00200000) == 0)
+    if (!equipment->isOfType(ITSoldier))
         return;
     const double now = static_cast<const IBFTimer*>(CommonSingletonServer::m_iBFTimer)->getGameTime();
     const double sinceFriendsInLine = now - getFriendsInLineOfFireTime();
@@ -601,7 +601,7 @@ void BotMain::planExecution(const double& slice)
             m_activePlan = behaviour->generatePlan(this);
             if (m_activePlan)
             {
-                m_activePlan->m_owner = this;
+                m_activePlan->mpOwner = this;
                 m_hasDefaultPlan = true;
                 m_planInvalid = false;
             }
@@ -635,7 +635,7 @@ void BotMain::planExecution(const double& slice)
 
     // No null guard: the ELF reads the flag word of whatever the handle resolves to.
     Information* const current = informationManager->getInformation(m_currentEquipment);
-    if ((current->getObjectTypeFlags() & 0x00200000) == 0)
+    if (!current->isOfType(ITSoldier))
     {
         m_playerInput->setInput(io::PIWeaponSelect9, 0.0f);
     }
@@ -838,7 +838,7 @@ int BotMain::decisionMaking(const double& slice)
     {
         if (!m_planInvalid)
         {
-            m_activePlan->m_owner = chosen;
+            m_activePlan->mpOwner = chosen;
         }
         else
         {
@@ -854,7 +854,7 @@ int BotMain::decisionMaking(const double& slice)
     {
         if (m_activePlan)
         {
-            m_activePlan->m_owner = this;
+            m_activePlan->mpOwner = this;
             delete m_activePlan;
             m_activePlan = 0;
             m_sensingAgent->setOverride(false);
@@ -870,7 +870,7 @@ int BotMain::decisionMaking(const double& slice)
     {
         m_planInvalid = false;
         m_hasDefaultPlan = false;
-        plan->m_owner = this;
+        plan->mpOwner = this;
     }
     for (std::list<int>::iterator it = refreshed.begin(); it != refreshed.end(); ++it)
     {
@@ -1020,7 +1020,7 @@ bool BotMain::updateBot()
     calculateMods();
     getSelector()->updateActiveUrgency(this);                                // UrgencyGenerator +0x10
     getMemory()->reset();
-    if ((equipment->getObjectTypeFlags() & 0x10) == 0)
+    if (!equipment->isOfType(ITAir))
     {
         // The image re-reads +0x8C (m_currentEquipment) inline here; no null guard.
         Information* const self = informationManager->getInformation(m_currentEquipment);
@@ -1394,14 +1394,14 @@ void BotMain::resetAllControls(bool movement, bool look, bool actions)
 {
     static float minThrottle = 0.4f;
     Information* const equipment = informationManager->getInformation(m_currentEquipment);
-    const bool soldier = equipment && (equipment->getObjectTypeFlags() & 0x00200000) != 0;
+    const bool soldier = equipment && equipment->isOfType(ITSoldier);
     if (movement)
     {
         m_playerInput->setInput(io::PISprint, 0.0f);
         m_playerInput->setInput(io::PIYaw, 0.0f);
         m_playerInput->setInput(io::PIPitch, 0.0f);
         m_playerInput->setInput(io::PIRoll, 0.0f);
-        if ((equipment->getObjectTypeFlags() & 0x10) == 0)
+        if (!equipment->isOfType(ITAir))
         {
             IPIMobile* const mobile = equipment->getMobile();
             float throttle = 0.0f;
@@ -1524,7 +1524,7 @@ void BotMain::pollRequestedSoldierPose()
             {
                 input->setInput(io::PICrouch, 0.0f);
                 Lie::toggle(input);
-                m_poseChangeTime = now;
+                m_soldierPoseAlteredTime = now;
                 m_poseInputActive = true;
             }
         }
@@ -1561,7 +1561,7 @@ void BotMain::pollRequestedSoldierPose()
             {
                 input->setInput(io::PICrouch, 0.0f);
                 Lie::toggle(input);
-                m_poseChangeTime = now;
+                m_soldierPoseAlteredTime = now;
                 m_poseInputActive = true;
             }
         }
@@ -1582,7 +1582,7 @@ void BotMain::pollRequestedSoldierPose()
             {
                 input->setInput(io::PICrouch, 1.0f);
                 input->setInput(io::PILie, 0.0f);
-                m_poseChangeTime = now;
+                m_soldierPoseAlteredTime = now;
                 m_poseInputActive = true;
             }
         }
@@ -1591,7 +1591,7 @@ void BotMain::pollRequestedSoldierPose()
             input->setInput(io::PICrouch, 0.0f);
             Lie::toggle(input);
             clearTestResults();
-            m_poseChangeTime = now;
+            m_soldierPoseAlteredTime = now;
             m_poseInputActive = true;
         }
         else if (requested == SPLying || requested == SPSwimming)
@@ -1621,7 +1621,7 @@ void BotMain::pollRequestedSoldierPose()
     }
 
     m_forcePose = false;
-    if (m_poseInputActive && (equipment->getObjectTypeFlags() & 0x00200000) != 0)
+    if (m_poseInputActive && equipment->isOfType(ITSoldier))
         input->setInput(io::PIFire, 0.0f);
 }
 
@@ -1882,46 +1882,46 @@ void BotMain::setBotStuck(bool b)
 void BotMain::placeC4(int placementType, Vec3 v, AIStrategicObject* o)
 {
     const double now = static_cast<const IBFTimer*>(CommonSingletonServer::m_iBFTimer)->getGameTime();
-    m_c4.placed = true;
-    m_c4.placementType = placementType;
-    m_c4.object = o;
-    m_c4.position = v;
-    m_c4.placedTime = now;
-    m_c4.lifeTime = 240.0;
+    m_c4Explosives.isPlaced = true;
+    m_c4Explosives.placementType = placementType;
+    m_c4Explosives.object = o;
+    m_c4Explosives.position = v;
+    m_c4Explosives.placedTime = now;
+    m_c4Explosives.lifeTime = 240.0;
 }
 
 // +0x150
 // ELF 0x1889C0.
 bool BotMain::isC4Placed()
 {
-    return m_c4.placed;
+    return m_c4Explosives.isPlaced;
 }
 
 // +0x154
 // ELF 0x188980: type and position stay.
 void BotMain::removeC4()
 {
-    m_c4.placed = false;
-    m_c4.object = 0;
-    m_c4.placedTime = 0.0;
-    m_c4.lifeTime = 0.0;
+    m_c4Explosives.isPlaced = false;
+    m_c4Explosives.object = 0;
+    m_c4Explosives.placedTime = 0.0;
+    m_c4Explosives.lifeTime = 0.0;
 }
 
 // +0x158
 // ELF 0x188880: a copy of +0x1A4..+0x1CB.
 Bot::C4State BotMain::getC4()
 {
-    return m_c4;
+    return m_c4Explosives;
 }
 
 // +0x15C
 // ELF 0x1889D0: a placed charge past its life time is removed (virtual +0x154).
 void BotMain::updateC4()
 {
-    if (!m_c4.placed)
+    if (!m_c4Explosives.isPlaced)
         return;
     const double now = static_cast<const IBFTimer*>(CommonSingletonServer::m_iBFTimer)->getGameTime();
-    if (now > m_c4.placedTime + m_c4.lifeTime)
+    if (now > m_c4Explosives.placedTime + m_c4Explosives.lifeTime)
         removeC4();
 }
 
@@ -2038,7 +2038,7 @@ void BotMain::requestSoldierPose(int pose, bool b)
     const double now = static_cast<const IBFTimer*>(CommonSingletonServer::m_iBFTimer)->getGameTime();
     if (pose != m_requestedSoldierPose)
     {
-        if ((m_poseInputActive || now <= 1.0 + m_poseChangeTime) && !b)
+        if ((m_poseInputActive || now <= 1.0 + m_soldierPoseAlteredTime) && !b)
             return;
         m_requestedSoldierPose = pose;
     }
@@ -2070,11 +2070,12 @@ void BotMain::setPoseStatus(int pose, unsigned int h, bool a, bool b)
 }
 
 // +0x1A0
-// ELF 0x18D740: airborne when the equipment carries type flag 0x10 or 0x20.
+// ELF 0x18D740: airborne when the equipment is ITAir or ITHelicopter (two single-bit tests,
+// testb $0x10 then testb $0x20).
 void BotMain::event_airborn()
 {
     Information* const equipment = informationManager->getInformation(m_currentEquipment);
-    m_airBorn = equipment && (equipment->getObjectTypeFlags() & 0x30) != 0;
+    m_airBorn = equipment && (equipment->isOfType(ITAir) || equipment->isOfType(ITHelicopter));
 }
 
 // +0x1A4
@@ -2375,11 +2376,11 @@ int BotMain::getMoveToStatus() const
 void BotMain::setMoveToStatus(int status)
 {
     const double now = static_cast<const IBFTimer*>(CommonSingletonServer::m_iBFTimer)->getGameTime();
-    if (m_double516 > now)
-        m_double516 = 0.0;
-    if (now - m_double516 > 0.0)
+    if (m_timeOfLastStateChange > now)
+        m_timeOfLastStateChange = 0.0;
+    if (now - m_timeOfLastStateChange > 0.0)
     {
-        m_double516 = now;
+        m_timeOfLastStateChange = now;
         m_moveToStatus = status;
     }
 }
@@ -2479,7 +2480,7 @@ bool BotMain::botInPoseTransition() const
 {
     static double changeTime = 0.8;
     const double now = static_cast<const IBFTimer*>(CommonSingletonServer::m_iBFTimer)->getGameTime();
-    return now - m_poseChangeTime < changeTime;
+    return now - m_soldierPoseAlteredTime < changeTime;
 }
 
 // +0x284

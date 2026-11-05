@@ -1,6 +1,6 @@
 // Owns AI landing zones. Constructed when the DLL loads and destroyed by BF2AI::clear.
 // reset is its only virtual method; the destructor is nonvirtual.
-// [INFERRED] Source placement.
+// Header placement [INFERRED]: beside its .cpp, whose path AIDLL_r.dll confirms (Main/AILandingZoneManager.cpp).
 
 #ifndef AI_AIDLL_AI_AISTRATEGICENTITY_AILANDINGZONEMANAGER_H      // [INFERRED] guard style
 #define AI_AIDLL_AI_AISTRATEGICENTITY_AILANDINGZONEMANAGER_H

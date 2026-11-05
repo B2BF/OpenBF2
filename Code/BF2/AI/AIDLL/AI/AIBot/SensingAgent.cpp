@@ -26,14 +26,14 @@
 #include "../Main/AIDllFrontier.h"
 #include "../AIKnowledge/FireObject.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIControlInfo.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../../../AIInterface/BFKnowledge/IAIObject.h"
 #include "../../../../IO/Input/PlayerInput.h"
 #include "../../../../Core/Debug.h"
-#include "../AIPlanInterpreter/BotScript.h"
+#include "../AIBotActionPlan/BotScript.h"
 #include "SensedObject.h"
 #include "../DrawPrimitives/DPManager.h"
 #include <list>
@@ -422,7 +422,7 @@ void SensingAgent::update()
 
     Information* const current = informationManager->getInformation(m_bot->getCurrentEquipment());
     bool turnedAway = false;
-    if ((current->getObjectTypeFlags() & 0x00200000) != 0 && m_flag133
+    if (current->isOfType(ITSoldier) && m_flag133
         && !isForward(m_int24, m_moveDirection))
         turnedAway = true;
     if (!(elapsed >= m_currentPeriod || m_flag120 || m_flag140 == true) && !turnedAway)
@@ -477,7 +477,7 @@ void SensingAgent::update()
 void SensingAgent::updateQuadTimeUrgencies(Vec2& direction, bool turnedAway)
 {
     Information* const current = informationManager->getInformation(m_bot->getCurrentEquipment());
-    if ((current->getObjectTypeFlags() & 0x00200000) == 0)
+    if (!current->isOfType(ITSoldier))
     {
         Information* const primary =
             informationManager->getInformation(current->getPrimaryObject(m_bot->getSide()));
@@ -494,7 +494,7 @@ void SensingAgent::updateQuadTimeUrgencies(Vec2& direction, bool turnedAway)
         direction.y = -move.y;
     }
     bool clearBehind = false;
-    if ((current->getObjectTypeFlags() & 0x00200000) == 0 && current->hasMobile() && current->isPrimary())
+    if (!current->isOfType(ITSoldier) && current->hasMobile() && current->isPrimary())
         clearBehind = true;
     for (int q = 0; q < 8; ++q)
     {
@@ -709,7 +709,7 @@ void SensingAgent::checkForPlanInvalidation(const QuadrantInformation& info, boo
 {
     Information* const equipment = informationManager->getInformation(m_bot->m_currentEquipment);
     bool vehicle = false;
-    if ((equipment->getObjectTypeFlags() & 0x20) || (equipment->getObjectTypeFlags() & 0x10))
+    if (equipment->isOfType(ITHelicopter) || equipment->isOfType(ITAir))
         vehicle = true;
     if (equipment->getUnit()->mustBorrowArmament() || vehicle)
     {
@@ -822,8 +822,7 @@ void SensingAgent::calculateCurrentPeriod(const QuadrantInformation& info, Infor
     const io::PlayerInput* const input = m_bot->getInput();
     if (!equipment->getUnit())
         return;
-    const unsigned int flags = equipment->getObjectTypeFlags();
-    if (equipment->getUnit()->mustBorrowArmament() || (flags & 0x20) || (flags & 0x10))
+    if (equipment->getUnit()->mustBorrowArmament() || equipment->isOfType(ITHelicopter) || equipment->isOfType(ITAir))
     {
         m_currentPeriod = randomBetween(1.0f, 1.5f);
         return;
@@ -834,7 +833,7 @@ void SensingAgent::calculateCurrentPeriod(const QuadrantInformation& info, Infor
         m_currentPeriod = randomBetween(1.5f, 2.0f);
         return;
     }
-    const bool soldier = (flags & 0x00200000) != 0;
+    const bool soldier = equipment->isOfType(ITSoldier);
     if (boundInput(input, io::PIThrottle) < 0.01f && boundInput(input, io::PIYaw) < 0.01f)
     {
         m_currentPeriod = soldier ? randomBetween(3.0f, 4.0f) : randomBetween(7.0f, 10.0f);
@@ -859,10 +858,10 @@ void SensingAgent::calculateCurrentPeriod(const QuadrantInformation& info, Infor
 void SensingAgent::createPlan(ISensingAgentPattern* pattern, const QuadrantInformation& info)
 {
     if (m_plan)
-        m_plan->m_owner = pattern;
+        m_plan->mpOwner = pattern;
     Information* const equipment = informationManager->getInformation(m_bot->m_currentEquipment);
     bool vehicle = false;
-    if ((equipment->getObjectTypeFlags() & 0x20) || (equipment->getObjectTypeFlags() & 0x10))
+    if (equipment->isOfType(ITHelicopter) || equipment->isOfType(ITAir))
         vehicle = true;
     if (equipment->getUnit()->mustBorrowArmament() || vehicle)
     {
@@ -871,7 +870,7 @@ void SensingAgent::createPlan(ISensingAgentPattern* pattern, const QuadrantInfor
         {
             Vec3 down;
             down.x = forward.x;
-            down.y = (equipment->getObjectTypeFlags() & 0x10) ? -0.4f : -0.7f;
+            down.y = equipment->isOfType(ITAir) ? -0.4f : -0.7f;
             down.z = forward.z;
             createDirPlan(down, pattern);
         }
@@ -940,17 +939,17 @@ void SensingAgent::createPlan(ISensingAgentPattern* pattern, const QuadrantInfor
         m_flag133 = false;
     }
     if (m_plan)
-        m_plan->m_owner = this;
+        m_plan->mpOwner = this;
 }
 
 // ELF 0x1BF120: the previous plan's owner becomes the pattern, the new plan's this agent.
 void SensingAgent::createDirPlan(const Vec3& direction, ISensingAgentPattern* pattern)
 {
     if (m_plan)
-        m_plan->m_owner = pattern;
+        m_plan->mpOwner = pattern;
     m_plan = pattern->createPlan(this, m_bot, direction);
     if (m_plan)
-        m_plan->m_owner = this;
+        m_plan->mpOwner = this;
 }
 
 // ELF 0x1BF180: IAISettings +0x8C getSensingAgentNullPattern, target handle 0.
@@ -959,10 +958,10 @@ void SensingAgent::createNullPlan()
     ISensingAgentPattern* const pattern =
         static_cast<IAISettings*>(CommonSingletonServer::m_iaiSettings)->getSensingAgentNullPattern();
     if (m_plan)
-        m_plan->m_owner = pattern;
+        m_plan->mpOwner = pattern;
     m_plan = pattern->createPlan(this, m_bot, 0u);
     if (m_plan)
-        m_plan->m_owner = this;
+        m_plan->mpOwner = this;
 }
 
 void SensingAgent::insertPlanDirectionInformation(float weight, const Vec3& direction, bool flag)
@@ -1016,7 +1015,7 @@ void SensingAgent::drawSensingAgentDebugStuff()
         static_cast<IDPStaticCreator*>(CommonSingletonServer::m_iDPStaticCreator)
             ->createStaticLine(0.1f, 0xFFFF00, start, end, 0.1f);
     }
-    if (equipment->getObjectTypeFlags() & 0x200000)
+    if (equipment->isOfType(ITSoldier))
     {
         const Vec3 direction = { m_moveDirection.x * 10.0f, 0.0f * 10.0f, m_moveDirection.y * 10.0f };
         const Vec3 end = { position.x + direction.x, position.y + direction.y, position.z + direction.z };

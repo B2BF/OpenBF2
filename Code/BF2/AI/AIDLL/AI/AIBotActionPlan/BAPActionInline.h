@@ -7,7 +7,7 @@
 
 #include "../../../../Math/Vec3.h"
 #include "../../../../IO/Input/PlayerInput.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../Main/AIDllFrontier.h"
 #include "BAPCondition.h"
 #include "BAPTypes.h"

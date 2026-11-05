@@ -10,7 +10,7 @@
 #include <string>
 
 #include "../AIUtils/checkPointer.h"                       // the ctor's dead null check
-#include "../AIBotBehaviour/CustomCurve.h"                 // SCurve / JCurve / DecleiningSlopeCurve
+#include "../AIUtils/CustomCurve.h"                 // SCurve / JCurve / DecleiningSlopeCurve
 #include "../../../AIInterface/Module/BFConsole.h"         // IBFModuleCourier::aiMainInit
 #include "BotManager.h"                                           // getNumberOfActiveBots
 #include "CommonSingletonServer.h"                                 // m_iaiGame / Settings / Effector
@@ -18,7 +18,7 @@
 #include "../../../AIInterface/BFKnowledge/BFGame.h"              // IAIGame
 #include "../../../AIInterface/BFKnowledge/BFGameEffector.h"      // IAIGameEffector::addBot
 #include "IAIPathfinding.h"                                        // IAIPathfindingSetup::instance
-#include "../AIStrategicMap/AerialHeightMap.h"                     // readHeightMapFromFile
+#include "../AIPathFinding/AerialHeightMap/AerialHeightMap.h"                     // readHeightMapFromFile
 #include "../AIKnowledge/BFInformationEnvironment.h"                // built and dropped by init
 #include "../AIUtils/DebugRendering/AIRenderUtil.h"                // built and dropped by init
 #include "../AIStrategic/SAI.h"                                   // ISAI::create, one per side
@@ -27,13 +27,13 @@
 #include "../../../AIInterface/BFKnowledge/AIPlayer.h"            // IAIPlayer - newPlayerCreated
 #include "../AIBot/BotMain.h"                                      // Bot - switchSides
 #include "../../../AIInterface/BFKnowledge/BFObjectEnvironment.h"  // isValidPlayerId
-#include "UserOrderManager.h"                                     // recruitBot's first refusal
+#include "../AIStrategicEntity/UserOrders/UserOrderManager.h"                                     // recruitBot's first refusal
 #include <utility>                                                // the per-bot pair series
 #include "../../../AIInterface/BFKnowledge/AIPlayerFactory.h"     // getPlayerFromId, the id sweep
 #include "../../../AIInterface/BFKnowledge/BFTimer.h"             // action's three timer methods
 #include "../../../AIInterface/BFKnowledge/BFCollisionHandler.h"  // updateBotProjectiles
 #include "../AIBot/SquadManager.h"                                // update(double)
-#include "AIMineManager.h"
+#include "../AIKnowledge/AIMineManager.h"
 #include "../../../AIInterface/BFKnowledge/IAIObject.h"         // updateAIObject, vehicle changes
 #include "../../../AIInterface/BFKnowledge/IAIObjectPlugIn.h"   // IAIObjectUnit
 #include "CommunicationHub.h"                                       // resetLevel                                       // IAIMineManager::update
@@ -42,23 +42,7 @@ namespace dice {
 namespace hfe {
 namespace ai {
 
-// Active IAIMain instance; construction replaces it unconditionally.
-IAIMain* IAIMain::m_instance = 0;
-
-// Construction replaces the active IAIMain pointer. Destruction clears it unconditionally.
-// Only one IAIMain may be alive when callers use this singleton.
-// ELF 0x3E6790 / 0x3E67C0
-IAIMain::IAIMain()
-{
-    m_instance = this;
-}
-
-// ELF 0x3E67F0 / 0x3E6820 / 0x3E6850
-IAIMain::~IAIMain()
-{
-    m_instance = 0;
-}
-
+// IAIMain's constructor, destructor and m_instance live in IAIMain.cpp (AIDLL_r __FILE__).
 
 // Returns whether initialization has completed. [INFERRED] State-field name.
 // ELF 0x39F9F0

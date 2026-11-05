@@ -10,7 +10,7 @@
 #include "../AIKnowledge/IPIArmament.h"
 #include "../AIKnowledge/Information.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../Main/CommonSingletonServer.h"
 #include "../../../AIInterface/BFKnowledge/AIPlayer.h"
 #include "../../../AIInterface/BFKnowledge/AIPlayerFactory.h"
@@ -54,9 +54,8 @@ bool BAPConOkToThrowGrenade::evaluate(Bot* bot)
     Information* target = bapinline::info(m_object);
     if (!target)
         return false;
-    const unsigned int selfFlags = self->getObjectTypeFlags();
     const double now = bapinline::gameTime();
-    if (now - main->getTimeOfLastFailedStaticAttack() < 10.0 && (selfFlags & 0x200000u))
+    if (now - main->getTimeOfLastFailedStaticAttack() < 10.0 && self->isOfType(ITSoldier))
         return false;
 
     const std::vector<IAIPlayer*>& players =
@@ -69,7 +68,7 @@ bool BAPConOkToThrowGrenade::evaluate(Bot* bot)
         if (!vehicle)
             continue;
         Information* info = bapinline::info(vehicle->getInformation(bot->getSide()));
-        if (info && (info->getObjectTypeFlags() & 0x200000u)
+        if (info && info->isOfType(ITSoldier)
             && std::fabs(info->getPosition().y - m_targetPoint->m_value.y) < 2.5f) {
             const Vec3 d = bapinline::sub(m_targetPoint->m_value, info->getPosition());
             if (d.x * d.x + d.y * d.y + d.z * d.z < 49.0f)

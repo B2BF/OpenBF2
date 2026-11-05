@@ -21,14 +21,14 @@
 #include "../AIKnowledge/BFInformationEnvironment.h"
 #include "../AIKnowledge/FireObject.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIArmament.h"
 #include "../AIKnowledge/IPIControlInfo.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../AIStrategic/SAI.h"
 #include "../AIStrategicEntity/AIStrategicArea.h"
 #include "../AIStrategicEntity/AIStrategicObjectManager.h"
@@ -572,8 +572,7 @@ bool closeAndShouldAvoidVehiclesImpl(Information* vehicle, int side, Bot* bot)
 {
     bool avoid = false;
     Information* const primary = infoOf(vehicle->getPrimaryObject(side));
-    const unsigned int flags = primary->getObjectTypeFlags();
-    if ((flags & 0x200000u) || (flags & 0x10u) || (flags & 0x20u))
+    if (primary->isOfType(ITSoldier) || primary->isOfType(ITAir) || primary->isOfType(ITHelicopter))
         return false;
     IPIMobile* const mobile = primary->getMobile();
     AIStrategicArea* const area = bot->getSquadMember()->getSquad()->getSquadStrategicAreaAssignment();
@@ -644,7 +643,7 @@ float calculateVehicleUrgency(Bot* bot, Information* vehicle, const float* stren
     IPIUnit* const unit = vehicle->getUnit();
     if (vehicle->isBooked() && !vehicle->isBookedBy(bot->getPlayerId()))
         return 0.0f;
-    if (vehicle != current && (vehicle->getObjectTypeFlags() & 0x10u) == 0)
+    if (vehicle != current && !vehicle->isOfType(ITAir))
     {
         if (8.0f < static_cast<const IAITerrain*>(CommonSingletonServer::m_iaiTerrain)
                        ->getAltitude(vehicle->getPosition()))
@@ -659,10 +658,10 @@ float calculateVehicleUrgency(Bot* bot, Information* vehicle, const float* stren
         urgency = vehicle->getStrength() * 4.0f + urgency;
     const float health = physical->getHealth();
     float bail = IBotManager::instance->getVehicleBailValue();
-    if ((vehicle->getObjectTypeFlags() & 0x200000u) == 0 && vehicle->isPrimary()
+    if (!vehicle->isOfType(ITSoldier) && vehicle->isPrimary()
         && vehicle->getHandle() == current->getHandle())
         bail = bail * 0.3f;
-    if (!(bail <= health) && (vehicle->getObjectTypeFlags() & 0x200000u) == 0)
+    if (!(bail <= health) && !vehicle->isOfType(ITSoldier))
         return 0.0f;
     urgency = urgency * health;
     const double now = static_cast<const IBFTimer*>(CommonSingletonServer::m_iBFTimer)->getGameTime();

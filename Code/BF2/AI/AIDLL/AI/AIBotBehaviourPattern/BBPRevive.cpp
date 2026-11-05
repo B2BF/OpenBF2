@@ -33,9 +33,9 @@
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../AIPlanInterpreter/BAPContext.h"
 #include "../AIPlanInterpreter/BotScriptDebugger.h"
 #include "../../../AIInterface/BFKnowledge/AIPlayer.h"
@@ -197,7 +197,7 @@ BotScript* BBPRevive::createPlan(Bot* bot)
 
     BAPIWFire* const root = checkPointer(
         new BAPIWFire(bot, m_target[bot->getBotId()], true, false, weaponIndex, -1, serial, m_id));
-    root->setParent(this);   // +0x04 (BotScript::m_owner)
+    root->setParent(this);   // +0x04 (BotScript::mpOwner)
     static_cast<BotMain*>(bot)->resetAllControls(true, true, true);
     return root;
 }

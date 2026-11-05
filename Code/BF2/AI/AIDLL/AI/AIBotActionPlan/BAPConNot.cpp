@@ -12,7 +12,7 @@ namespace ai {
 // ELF 0x1F4580 (C2; C1 0x1F46E0). No null check.
 BAPConNot::BAPConNot(BAPCondition* condition)
 {
-    condition->m_owner = this;
+    condition->mpOwner = this;
     m_conditions.insert(m_conditions.end(), condition);
 }
 
@@ -20,7 +20,7 @@ BAPConNot::BAPConNot(BAPCondition* condition)
 BAPConNot::BAPConNot(std::list<BAPCondition*>& conditions)
 {
     m_conditions.clear();
-    conditions.front()->m_owner = this;
+    conditions.front()->mpOwner = this;
     m_conditions.insert(m_conditions.end(), conditions.front());
 }
 
@@ -51,7 +51,7 @@ void BAPConNot::addCondition(BAPCondition* condition)
 {
     if (!m_conditions.empty())
         return;
-    condition->m_owner = this;
+    condition->mpOwner = this;
     m_conditions.insert(m_conditions.end(), condition);
 }
 

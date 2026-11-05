@@ -55,9 +55,9 @@
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../AIPlanInterpreter/BAPContext.h"
 #include "../AIPlanInterpreter/BotScriptDebugger.h"
 #include "../AIUtils/checkPointer.h"
@@ -190,7 +190,7 @@ BotScript* BBPHeliFire3d::createPlan(Bot* bot)
     data.m_position = row(self->getTransformation(), 3);
     data.m_direction = row(self->getTransformation(), 2);
     const bool indirect = weapon->getIndirect();
-    const bool flag40 = (targetInfo->getObjectTypeFlags() & 0x40) != 0;
+    const bool flag40 = targetInfo->isOfType(ITGround);
     bot->getSquadMember()->clearRequestAction();
     if (!self->getMobile())
     {
@@ -223,7 +223,7 @@ BotScript* BBPHeliFire3d::createPlan(Bot* bot)
 
     BAPIWFire* const plan = checkPointer(new BAPIWFire(bot, target, m_flag20, false, data.m_weapon, -1,
                                                        createPlanInternal(bot, data), m_patternId));
-    plan->setParent(this);   // +0x04 (BotScript::m_owner)
+    plan->setParent(this);   // +0x04 (BotScript::mpOwner)
     return plan;
 }
 

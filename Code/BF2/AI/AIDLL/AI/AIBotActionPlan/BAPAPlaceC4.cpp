@@ -8,7 +8,7 @@
 
 #include "../AIBot/BotMain.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../../../../Math/Vec3.h"
 
 #include <iostream>

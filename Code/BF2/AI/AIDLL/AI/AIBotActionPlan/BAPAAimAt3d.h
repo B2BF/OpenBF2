@@ -9,7 +9,7 @@
 
 #include "../../../../Math/Mat4.h"
 #include "../../../../Math/Vec3.h"
-#include "../AIBot/Aimer.h"
+#include "Aimer.h"
 #include "BAPAction.h"
 #include "BAPTypes.h"
 

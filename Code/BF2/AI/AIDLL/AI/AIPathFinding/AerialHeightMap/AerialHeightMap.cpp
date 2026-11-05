@@ -7,13 +7,13 @@
 // 0x313C40, __tcf_0 0x313CA0, _GLOBAL__I 0x313CD0).
 #include <iostream>
 
-#include "../Main/CommonSingletonServer.h"
-#include "../../../AIInterface/BFKnowledge/AIAdapterTypes.h"     // AIObjectPredicate
-#include "../../../AIInterface/BFKnowledge/BFObjectEnvironment.h" // IAIObjectEnvironment::getMaxHeight
-#include "../../../AIInterface/BFKnowledge/IAIObject.h"
-#include "../../../AIInterface/BFKnowledge/BFGame.h"             // IAIGame::getLevelPath
-#include "../../../AIInterface/BFKnowledge/BFTerrain.h"          // IAITerrain, the world bounds
-#include "../../../../IO/File/File.h"
+#include "../../Main/CommonSingletonServer.h"
+#include "../../../../AIInterface/BFKnowledge/AIAdapterTypes.h"     // AIObjectPredicate
+#include "../../../../AIInterface/BFKnowledge/BFObjectEnvironment.h" // IAIObjectEnvironment::getMaxHeight
+#include "../../../../AIInterface/BFKnowledge/IAIObject.h"
+#include "../../../../AIInterface/BFKnowledge/BFGame.h"             // IAIGame::getLevelPath
+#include "../../../../AIInterface/BFKnowledge/BFTerrain.h"          // IAITerrain, the world bounds
+#include "../../../../../IO/File/File.h"
 
 namespace dice {
 namespace hfe {
@@ -23,7 +23,8 @@ AerialHeightMap* AerialHeightMap::m_instance = 0;
 
 // Filters vehicles out of the height probe: accepts every object that is not mobile. Inline in
 // the image (weak ELF 0x313CF0, emitted with this TU), so declared here; its vtable has the one
-// predicate slot and no destructor. Placement is [INFERRED].
+// predicate slot and no destructor. Placement: AIDLL_r.dll __FILE__
+// "Code\BF2\AI\AIDLL\AI\AIPathFinding\AerialHeightMap\AerialHeightMap.cpp" (0x1007D0E0).
 class AIObjectPredicateNoVehicles : public AIObjectPredicate
 {
 public:

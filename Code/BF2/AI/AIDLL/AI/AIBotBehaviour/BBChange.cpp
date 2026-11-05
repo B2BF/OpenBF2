@@ -2,8 +2,9 @@
 // nearby vehicle and seat (calculateVehicleUrgency), then initialises the BBPChange pattern with the best
 // one. Radio requests (message types 0 and 1) and the human player calling for a pick-up weigh in.
 // Recovered from libaidll.so (Linux 1.5.3153, ia-32); F-urgency package, see
-// docs/macos-ai-behaviour-plan.md. Information flag bits are named by their test only: 0x10 (the
-// air-vehicle tests: altitude, runway), 0x20, 0x80, 0x8000 and 0x200000 [UNRESOLVED] meanings.
+// docs/macos-ai-behaviour-plan.md. Information flag bits (InformationType, AIDLL_r enum switch
+// 0x100D3010): 0x10 ITAir (the air-vehicle tests: altitude, runway), 0x20 ITHelicopter, 0x40 ITGround,
+// 0x80 ITNaval, 0x8000 ITMobile, 0x200000 ITSoldier.
 
 // static init: ELF 0x2038C0 (__tcf_0 0x203920, _GLOBAL__I 0x203950): <iostream>'s Init object only.
 #include <iostream>
@@ -12,7 +13,7 @@
 #include "VehicleUrgencyCalculator.h"
 
 #include "UrgeCurve.h"
-#include "CustomCurve.h"
+#include "../AIUtils/CustomCurve.h"
 #include "../AIBot/BotMain.h"
 #include "../AIBot/BotMemory.h"
 #include "../AIBot/CommunicationAgent.h"
@@ -27,9 +28,9 @@
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIStrategicEntity/AIStrategicArea.h"
-#include "../AIStrategicMap/AerialHeightMap.h"
+#include "../AIPathFinding/AerialHeightMap/AerialHeightMap.h"
 #include "../AIStrategicMap/BFStrategicEnvironment.h"
 #include "../AIUtils/VehicleOccupancy.h"
 #include "../AIUtils/checkPointer.h"
@@ -69,12 +70,11 @@ public:
     {
         if (information == m_vehicle || information == m_other)
             return false;
-        const unsigned int flags = information->getObjectTypeFlags();
-        if (!(flags & 0x8000))
+        if (!information->isOfType(ITMobile))
             return false;
-        if (flags & 0x200000)
+        if (information->isOfType(ITSoldier))
             return false;
-        if (flags & 0x80)
+        if (information->isOfType(ITNaval))
             return false;
         return true;
     }
@@ -232,7 +232,7 @@ float BBChange::calculateUrgency(Bot* bot, bool evaluate, float scale)
                     m_urgency[botId] = checkBookings(bot);
                     // ELF 0x200D88: no null test of the equipment information (retail).
                     Information* equipmentInfo = informationManager->getInformation(equipment);
-                    if (equipmentInfo->getObjectTypeFlags() & 0x200000)
+                    if (equipmentInfo->isOfType(ITSoldier))
                     {
                         const std::list<AIRadioMessageInfo>& calls =
                             comm->getReceivedMessages(static_cast<AIRadioMessageType>(1));
@@ -270,11 +270,11 @@ float BBChange::calculateUrgency(Bot* bot, bool evaluate, float scale)
     Information* equipmentInfo = informationManager->getInformation(equipment);   // -0x208, no null test
     Vec3& pos = equipmentInfo->getPosition();   // -0x20C
     IAITerrain* const terrain = static_cast<IAITerrain*>(CommonSingletonServer::m_iaiTerrain);   // -0x210
-    const bool isAir = (equipmentInfo->getObjectTypeFlags() & 0x200000) != 0;   // -0x1FB
+    const bool isAir = equipmentInfo->isOfType(ITSoldier);   // -0x1FB
     bool inArtillery = false;      // -0x211
     double artillerySinceStart = 0.0;   // -0x198
     int artillerySide = -1;        // -0x190
-    if (!(equipmentInfo->getObjectTypeFlags() & 0x10))
+    if (!equipmentInfo->isOfType(ITAir))
     {
         // ELF 0x202D27
         if (squadManager->isInArtilleryDangerZone(pos, bot->getSide(), artillerySinceStart, artillerySide)
@@ -328,7 +328,7 @@ float BBChange::calculateUrgency(Bot* bot, bool evaluate, float scale)
         candidate = 0.0f;
         upsideDown = true;
         radioStrength = 1.0f;
-        if ((primaryInfo->getObjectTypeFlags() & 0x10) && !primaryInfo->getPhysical()->isInAir())
+        if (primaryInfo->isOfType(ITAir) && !primaryInfo->getPhysical()->isInAir())
         {
             // ELF 0x202BB9: a grounded air vehicle counts as upright again.
             radioStrength = getRadioStrength(primaryInfo, bot);
@@ -396,9 +396,9 @@ float BBChange::calculateUrgency(Bot* bot, bool evaluate, float scale)
         Information* soldierInfo = informationManager->getInformation(soldier);   // -0x22C
         candidate = calculateVehicleUrgency(bot, soldierInfo, enemyStrengths, enemyTypes, false,
                                                      equipmentInfo, fireShare, moveShare, side) * 0.2f;
-        if (!requests.empty() && requestValid && !(equipmentInfo->getObjectTypeFlags() & 0x200000))
+        if (!requests.empty() && requestValid && !equipmentInfo->isOfType(ITSoldier))
             candidate = 100.0f * requests.front().m_modifier * candidate;
-        if (!requests.empty() && requestValid && (equipmentInfo->getObjectTypeFlags() & 0x10))
+        if (!requests.empty() && requestValid && equipmentInfo->isOfType(ITAir))
             candidate = 10000.0f;   // rodata 0x49F4C0
         if (inArtillery)
             candidate = 10000.0f;
@@ -446,7 +446,7 @@ float BBChange::calculateUrgency(Bot* bot, bool evaluate, float scale)
     {
         requestedPrimary = currentTarget->getPrimaryObject(side);
         const std::list<AIRadioMessageInfo>& calls = comm->getReceivedMessages(static_cast<AIRadioMessageType>(1));
-        if (!calls.empty() && (equipmentInfo->getObjectTypeFlags() & 0x200000))
+        if (!calls.empty() && equipmentInfo->isOfType(ITSoldier))
         {
             IAIPlayer* caller = liveHumanSender(calls);
             if (caller && caller->getCurrentVehicle()->getPrimaryObject()->getInformation(side) == requestedPrimary)
@@ -455,7 +455,7 @@ float BBChange::calculateUrgency(Bot* bot, bool evaluate, float scale)
     }
 
     unsigned int callingHandle = 0xFFFFFFFFu;   // -0x238: the last scanned vehicle's caller state (retail)
-    if (!chooseSoldier && (requests.empty() || !requestValid) && !(equipmentInfo->getObjectTypeFlags() & 0x10)
+    if (!chooseSoldier && (requests.empty() || !requestValid) && !equipmentInfo->isOfType(ITAir)
         && !inArtillery && !bot->getSquadMember()->isCloseToNonOwnedTarget())
     {
         // ---- ELF 0x201AF9: every vehicle around.
@@ -473,16 +473,16 @@ float BBChange::calculateUrgency(Bot* bot, bool evaluate, float scale)
         {
             callingHandle = 0xFFFFFFFFu;
             unsigned int handle = *it;   // -0x1A8 (passed by reference to isMannedByEnemy)
-            if (!calls.empty() && (equipmentInfo->getObjectTypeFlags() & 0x200000)
+            if (!calls.empty() && equipmentInfo->isOfType(ITSoldier)
                 && isCallingVehicle(*it, calls, side))
                 callingHandle = *it;
 
             Information* vehicle = informationManager->getInformation(handle);   // -0x254
-            if (!vehicle || vehicle == primaryInfoAgain || (vehicle->getObjectTypeFlags() & 0x200000))
+            if (!vehicle || vehicle == primaryInfoAgain || vehicle->isOfType(ITSoldier))
                 continue;
             if (requestedByHuman && handle != requestedPrimary)
                 continue;
-            if (vehicle->getObjectTypeFlags() & 0x80)
+            if (vehicle->isOfType(ITNaval))
             {
                 // ELF 0x201CF2: only the vehicle the calling human sits in, airborne and in water.
                 if (calls.empty())
@@ -506,11 +506,11 @@ float BBChange::calculateUrgency(Bot* bot, bool evaluate, float scale)
 
             Vec3& vehiclePos = vehicle->getPosition();   // -0x258
             IPIMobile* mobile = vehicle->getMobile();    // -0x248
-            if (mobile && !(vehicle->getObjectTypeFlags() & 0x10))
+            if (mobile && !vehicle->isOfType(ITAir))
             {
                 // ELF 0x202570: no valid navmesh position - only the calling human's vehicle.
                 const IPIMobile::ValidPos lastValid = mobile->getLastValidPosition();
-                if (lastValid.quadTree == 0xFFFFFFFFu)
+                if (lastValid.island == 0xFFFFFFFFu)
                 {
                     if (calls.empty())
                         continue;
@@ -524,7 +524,7 @@ float BBChange::calculateUrgency(Bot* bot, bool evaluate, float scale)
                         continue;
                 }
             }
-            if (mobile && !(vehicle->getObjectTypeFlags() & 0x10) && !(vehicle->getObjectTypeFlags() & 0x200000)
+            if (mobile && !vehicle->isOfType(ITAir) && !vehicle->isOfType(ITSoldier)
                 && isUpsideDown(vehicle, terrain, 0.7071f))
                 continue;
 
@@ -574,7 +574,7 @@ float BBChange::calculateUrgency(Bot* bot, bool evaluate, float scale)
                 }
             }
             bool usable;
-            if (!vehicle->getMobile() || (vehicle->getObjectTypeFlags() & 0x10))
+            if (!vehicle->getMobile() || vehicle->isOfType(ITAir))
                 usable = true;
             else
                 usable = reachable;
@@ -596,8 +596,7 @@ float BBChange::calculateUrgency(Bot* bot, bool evaluate, float scale)
                 candidate *= calls.front().m_modifier;
             if (candidate > best)
             {
-                const unsigned int flags = vehicle->getObjectTypeFlags();
-                if (!(flags & 0x10) || (flags & 0x20) || runwayClear(vehicle, equipmentInfo, side))
+                if (!vehicle->isOfType(ITAir) || vehicle->isOfType(ITHelicopter) || runwayClear(vehicle, equipmentInfo, side))
                 {
                     bestHandle = handle;
                     wasCalled = callingHandle != 0xFFFFFFFFu;
@@ -736,12 +735,11 @@ float BBChange::modifyForDriver(Information* vehicle, bool current)
         return 1.0f;
     if (15.0f > sincePossessed)
         return 1.0f;
-    const unsigned int flags = vehicle->getObjectTypeFlags();
-    if (flags & 0x80)
+    if (vehicle->isOfType(ITNaval))
         return 1.0f;
-    if (flags & 0x40)
+    if (vehicle->isOfType(ITGround))
         return 0.77f;
-    if (flags & 0x10)
+    if (vehicle->isOfType(ITAir))
         return 0.5f;
     return 1.0f;
 }
@@ -783,7 +781,7 @@ bool BBChange::runwayClear(Information* aircraft, Information* other, int side) 
 float BBChange::getRadioStrength(Information* vehicle, Bot*) const
 {
     const float strength = 1.0f;
-    if (vehicle->getObjectTypeFlags() & 0x200000)
+    if (vehicle->isOfType(ITSoldier))
         return strength;
     return strength * strength;
 }
@@ -819,7 +817,7 @@ bool BBChange::isBailAllowed(Bot* bot) const
         const Vec3& position = equipment->getPosition();
         equipment->getUnit()->useNoPathfindingToGetToObject();
         equipment->isPrimary();
-        if (equipment->getObjectTypeFlags() & 0x10)
+        if (equipment->isOfType(ITAir))
         {
             const float altitude = AerialHeightMap::m_instance->getAltitude(position);
             if (altitude > 2.0f && 12.0f > altitude)

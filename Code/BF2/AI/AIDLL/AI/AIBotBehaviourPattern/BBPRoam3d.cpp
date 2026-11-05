@@ -11,7 +11,7 @@
 #include "../AIBotActionPlan/BAPConObjectVisible.h"
 #include "../AIBotActionPlan/BAPIWRoam.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIControlInfo.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/IPIPhysical.h"
@@ -88,7 +88,7 @@ BotScript* BBPRoam3d::createPlan(Bot* bot)
     BAPAMoveTo3dObject* move = new BAPAMoveTo3dObject(object, radius, speed, arriveSpeed, 50.0f,
                                                     visible, driveControls, m_patternId);
     BAPIWRoam* wrapper = new BAPIWRoam(m_objects[bot->getBotId()], move, m_patternId);
-    wrapper->m_owner = this;
+    wrapper->mpOwner = this;
     return wrapper;
 }
 

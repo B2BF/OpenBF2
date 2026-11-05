@@ -123,7 +123,7 @@ private:
     friend class QuadTree;
     friend class QuadTreeManager;
     /* +0x00 */ unsigned int*  m_clusterPolygons;           // [INFERRED] polygon indices grouped by cluster
-    /* +0x04 */ unsigned int   m_numberOfClusterPolygons;   // (Dalian Infantry: 18,512, every polygon once)
+    /* +0x04 */ unsigned int   m_polygonCount;   // (Dalian Infantry: 18,512, every polygon once)  // name: AIDLL_r assert 0x10179F30 (+4)
     /* +0x08 */ Cluster*       m_clusters;                  // getClusterPortal
     /* +0x0C */ unsigned int   m_numberOfClusters;          // loadQuadTrees' empty walk bound
     /* +0x10 */ unsigned int   m_numberOfPortals;

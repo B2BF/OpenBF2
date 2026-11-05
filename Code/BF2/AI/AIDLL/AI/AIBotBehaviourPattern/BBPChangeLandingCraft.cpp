@@ -18,7 +18,7 @@
 #include "../AIBotActionPlan/BAPStatement.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIPlanInterpreter/BAPContext.h"
 #include "../AIPlanInterpreter/BotScriptDebugger.h"
 #include "../AIUtils/checkPointer.h"
@@ -116,7 +116,7 @@ BotScript* BBPChangeLandingCraft::createPlan(Bot* bot)
     const int playerId = bot->getPlayerId();
     BAPIWChange* const wrapper =
         checkPointer(new BAPIWChange(m_target[bot->getBotId()], sequence, m_patternId, playerId));
-    wrapper->setParent(this);   // +0x04 (BotScript::m_owner)
+    wrapper->setParent(this);   // +0x04 (BotScript::mpOwner)
     return wrapper;
 }
 

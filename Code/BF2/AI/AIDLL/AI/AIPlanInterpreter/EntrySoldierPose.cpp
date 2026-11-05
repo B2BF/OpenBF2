@@ -12,7 +12,7 @@
 #include "../AIBot/BotMain.h"
 #include "../AIBotActionPlan/BAPASoldierPose.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 
 namespace dice {
 namespace hfe {

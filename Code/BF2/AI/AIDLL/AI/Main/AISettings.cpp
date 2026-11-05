@@ -59,25 +59,25 @@ bool AISettings::getOverrideMenuSettings() const
 // ELF 0x3BEF90.
 int AISettings::getNumberOfBehaviours() const
 {
-    return m_numberOfBehaviours;
+    return m_behaviourCount;
 }
 
 // ELF 0x3BEFA0.
 int AISettings::getNumberOfVehicles() const
 {
-    return static_cast<int>(m_behaviours.size());
+    return static_cast<int>(m_behaviourPool.size());
 }
 
 // ELF 0x3C0EF0.
-float* AISettings::getVehicleMods(int vehicle) const
+float* AISettings::getVehicleMods(int vehicleTypeId) const
 {
-    return m_vehicleMods[vehicle];
+    return m_vehicleMods[vehicleTypeId];
 }
 
 // ELF 0x3BF640.
 BotBehaviour* AISettings::getBehaviour(int vehicle, int index) const
 {
-    return m_behaviours[vehicle][index];
+    return m_behaviourPool[vehicle][index];
 }
 
 // ELF 0x3BF670.
@@ -85,20 +85,20 @@ BotBehaviour* AISettings::getDefaultBehaviour(int vehicle) const
 {
     const int index = m_defaultBehaviour[vehicle];
     if (index != -1)
-        return m_behaviours[vehicle][index];
+        return m_behaviourPool[vehicle][index];
     return 0;
 }
 
 // ELF 0x3BF6B0.
 PlanInterpreter* AISettings::getPlanInterpreter(int vehicle) const
 {
-    return m_planInterpreters[vehicle];
+    return m_planInterpreterPool[vehicle];
 }
 
 // ELF 0x3BF6D0.
 PlanGenerator* AISettings::getPlanGenerator(int vehicle, int index) const
 {
-    return m_planGenerators[vehicle][index];
+    return m_planGeneratorPool[vehicle][index];
 }
 
 // ELF 0x3C0230.
@@ -156,8 +156,8 @@ const std::string& AISettings::getVehicle(int vehicle) const
 int AISettings::getVehicle(const std::string& name) const
 {
     // (!) guarded, and the sibling below is not. Same map type, same find, opposite discipline.
-    const std::map<std::string, int>::const_iterator i = m_vehicleIndex.find(name);
-    if (i == m_vehicleIndex.end())
+    const std::map<std::string, int>::const_iterator i = m_vehicleIdMap.find(name);
+    if (i == m_vehicleIdMap.end())
         return -1;
     return i->second;
 }
@@ -166,7 +166,7 @@ int AISettings::getVehicle(const std::string& name) const
 // ELF 0x3BF500.
 const std::string& AISettings::getVehicleClusterMapping(const std::string& name) const
 {
-    const int vehicle = m_vehicleIndex.find(name)->second;
+    const int vehicle = m_vehicleIdMap.find(name)->second;
     return m_vehicleNames[m_clusterCostTypes[vehicle]];
 }
 
@@ -198,7 +198,7 @@ int AISettings::getVehicleGroup(int index) const
 int AISettings::getVehicleGroup(const std::string& name) const
 {
     // Requires an existing group name; the lookup result is dereferenced without checking end().
-    return m_vehicleGroupIndex.find(name)->second;
+    return m_namesToVehicleGroups.find(name)->second;
 }
 
 // ELF 0x3C09E0.
@@ -254,7 +254,7 @@ ISensingAgentPattern* AISettings::getSensingAgentPattern(int id) const
 // ELF 0x3C0E70.
 ISensingAgentPattern* AISettings::getSensingAgentNullPattern() const
 {
-    return m_sensingAgentNullPattern;
+    return m_nullPattern;
 }
 
 // ELF 0x3C0FD0.
@@ -267,25 +267,25 @@ int AISettings::getManDownEquipmentType()
 // ELF 0x3C1090.
 bool AISettings::isValidMaterial(int vehicle, unsigned char material) const
 {
-    return m_vehicleMaterialManagers[vehicle]->isValidMaterial(material);
+    return m_materialManagers[vehicle]->isValidMaterial(material);
 }
 
 // ELF 0x3C1110.
 float AISettings::getVehicleMaterialCost(const std::string& name, unsigned char material) const
 {
-    return m_vehicleMaterialManagers[getVehicle(name)]->getMaterialCost(material);
+    return m_materialManagers[getVehicle(name)]->getMaterialCost(material);
 }
 
 // ELF 0x3C10D0.
 float AISettings::getVehicleMaterialCost(int vehicle, unsigned char material) const
 {
-    return m_vehicleMaterialManagers[vehicle]->getMaterialCost(material);
+    return m_materialManagers[vehicle]->getMaterialCost(material);
 }
 
 // ELF 0x3C1170.
 MaterialManager* AISettings::getVehicleMaterialManager(int vehicle) const
 {
-    return m_vehicleMaterialManagers[vehicle];
+    return m_materialManagers[vehicle];
 }
 
 // Returns the next bot name and rotates the roster for the following request.
@@ -303,7 +303,7 @@ const std::string& AISettings::getBotName() const
 void AISettings::setMaxNumberOfBehaviours(int count)
 {
     BotMain::setNBehaviours(static_cast<unsigned char>(count));
-    m_numberOfBehaviours = count;
+    m_behaviourCount = count;
 }
 
 // ELF 0x3C0F10: grows the table to the vehicle (new slots null), then stores the set.
@@ -315,88 +315,88 @@ void AISettings::setVehicleMods(int vehicle, float* mods)
 }
 
 // ELF 0x3BF730.
-void AISettings::addBehaviour(int vehicle, int index, BotBehaviour* behaviour)
+void AISettings::addBehaviour(int vehicleTypeId, int behaviourId, BotBehaviour* behaviour)
 {
-    prepareBehaviourPool(vehicle, index);
-    m_behaviours[vehicle][index] = behaviour;
+    prepareBehaviourPool(vehicleTypeId, behaviourId);
+    m_behaviourPool[vehicleTypeId][behaviourId] = behaviour;
 }
 
 // ELF 0x3BF7A0: the pool is prepared for (vehicle, index) although only the default slot is set.
-void AISettings::setDefaultBehaviour(int vehicle, int index)
+void AISettings::setDefaultBehaviour(int vehicleTypeId, int behaviourId)
 {
-    prepareBehaviourPool(vehicle, index);
-    m_defaultBehaviour[vehicle] = index;
+    prepareBehaviourPool(vehicleTypeId, behaviourId);
+    m_defaultBehaviour[vehicleTypeId] = behaviourId;
 }
 
 // ELF 0x3BF870: BAPInterpreter::addEntry(entry) on the vehicle's interpreter.
-void AISettings::addInterpreterEntry(int vehicle, BAPEntry* entry)
+void AISettings::addInterpreterEntry(int vehicleTypeId, BAPEntry* entry)
 {
-    preparePlanInterpreterPool(vehicle);
-    static_cast<BAPInterpreter*>(m_planInterpreters[vehicle])->addEntry(entry);
+    preparePlanInterpreterPool(vehicleTypeId);
+    static_cast<BAPInterpreter*>(m_planInterpreterPool[vehicleTypeId])->addEntry(entry);
 }
 
 // ELF 0x3BF8D0.
-void AISettings::addInterpreterEntry(int vehicle, BotLodLevel lod, BAPEntry* entry)
+void AISettings::addInterpreterEntry(int vehicleTypeId, BotLodLevel lod, BAPEntry* entry)
 {
-    preparePlanInterpreterPool(vehicle);
-    static_cast<BAPInterpreter*>(m_planInterpreters[vehicle])->addEntry(lod, entry);
+    preparePlanInterpreterPool(vehicleTypeId);
+    static_cast<BAPInterpreter*>(m_planInterpreterPool[vehicleTypeId])->addEntry(lod, entry);
 }
 
 // ELF 0x3BF930.
-void AISettings::removeInterpreterEntry(int vehicle, BotLodLevel lod, BAPEntry* entry)
+void AISettings::removeInterpreterEntry(int vehicleTypeId, BotLodLevel lod, BAPEntry* entry)
 {
-    preparePlanInterpreterPool(vehicle);
-    static_cast<BAPInterpreter*>(m_planInterpreters[vehicle])->removeEntry(lod, entry);
+    preparePlanInterpreterPool(vehicleTypeId);
+    static_cast<BAPInterpreter*>(m_planInterpreterPool[vehicleTypeId])->removeEntry(lod, entry);
 }
 
 // ELF 0x3BF990.
-void AISettings::activateDefaultInterpreter(int vehicle, BAPStatementType type, BotLodLevel lod)
+void AISettings::activateDefaultInterpreter(int vehicleTypeId, BAPStatementType type, BotLodLevel lod)
 {
-    preparePlanInterpreterPool(vehicle);
-    static_cast<BAPInterpreter*>(m_planInterpreters[vehicle])->activateEntry(type, lod);
+    preparePlanInterpreterPool(vehicleTypeId);
+    static_cast<BAPInterpreter*>(m_planInterpreterPool[vehicleTypeId])->activateEntry(type, lod);
 }
 
 // ELF 0x3BF800.
-void AISettings::addGenerator(int vehicle, int index, PlanGenerator* generator)
+void AISettings::addGenerator(int vehicleTypeId, int behaviourId, PlanGenerator* generator)
 {
-    preparePlanGeneratorPool(vehicle, index);
-    m_planGenerators[vehicle][index] = generator;
+    preparePlanGeneratorPool(vehicleTypeId, behaviourId);
+    m_planGeneratorPool[vehicleTypeId][behaviourId] = generator;
 }
 
 // ELF 0x3BFA20: one behaviour list per vehicle up to `vehicle`; a list too short for `index` is
 // sized to the number of behaviours (not to index + 1); the default table grows with -1 entries.
 // Every size test is signed (`cmpl ...; jg`).
-void AISettings::prepareBehaviourPool(int vehicle, int index)
+void AISettings::prepareBehaviourPool(int vehicleTypeId, int behaviourId)
 {
-    if (static_cast<int>(m_behaviours.size()) <= vehicle)
-        m_behaviours.resize(vehicle + 1, std::vector<BotBehaviour*>());
-    std::vector<BotBehaviour*>& behaviours = m_behaviours[vehicle];
-    if (static_cast<int>(behaviours.size()) <= index)
-        behaviours.resize(m_numberOfBehaviours, 0);
-    prepareVehicleGroup(vehicle);
-    if (static_cast<int>(m_defaultBehaviour.size()) <= vehicle)
-        m_defaultBehaviour.resize(vehicle + 1, -1);
+    if (static_cast<int>(m_behaviourPool.size()) <= vehicleTypeId)
+        m_behaviourPool.resize(vehicleTypeId + 1, std::vector<BotBehaviour*>());
+    std::vector<BotBehaviour*>& behaviours = m_behaviourPool[vehicleTypeId];
+    if (static_cast<int>(behaviours.size()) <= behaviourId)
+        behaviours.resize(m_behaviourCount, 0);
+    prepareVehicleGroup(vehicleTypeId);
+    if (static_cast<int>(m_defaultBehaviour.size()) <= vehicleTypeId)
+        m_defaultBehaviour.resize(vehicleTypeId + 1, -1);
 }
 
 // ELF 0x3BFC50: as prepareBehaviourPool, with the vehicle group prepared before the inner list.
-void AISettings::preparePlanGeneratorPool(int vehicle, int index)
+void AISettings::preparePlanGeneratorPool(int vehicleTypeId, int behaviourId)
 {
-    if (static_cast<int>(m_planGenerators.size()) <= vehicle)
-        m_planGenerators.resize(vehicle + 1, std::vector<PlanGenerator*>());
-    prepareVehicleGroup(vehicle);
-    std::vector<PlanGenerator*>& generators = m_planGenerators[vehicle];
-    if (static_cast<int>(generators.size()) <= index)
-        generators.resize(m_numberOfBehaviours, 0);
+    if (static_cast<int>(m_planGeneratorPool.size()) <= vehicleTypeId)
+        m_planGeneratorPool.resize(vehicleTypeId + 1, std::vector<PlanGenerator*>());
+    prepareVehicleGroup(vehicleTypeId);
+    std::vector<PlanGenerator*>& generators = m_planGeneratorPool[vehicleTypeId];
+    if (static_cast<int>(generators.size()) <= behaviourId)
+        generators.resize(m_behaviourCount, 0);
 }
 
 // ELF 0x3BFDE0: one `new BAPInterpreter(45)` (operator new 0x10; 45 statement types) per missing
 // vehicle, each checked (checkPointer, the Debug at line 46) and pushed back.
 void AISettings::preparePlanInterpreterPool(int vehicle)
 {
-    if (static_cast<int>(m_planInterpreters.size()) <= vehicle)
+    if (static_cast<int>(m_planInterpreterPool.size()) <= vehicle)
     {
-        for (unsigned int i = m_planInterpreters.size(); i < static_cast<unsigned int>(vehicle + 1); ++i)
-            m_planInterpreters.push_back(checkPointer(new BAPInterpreter(45)));
+        for (unsigned int i = m_planInterpreterPool.size(); i < static_cast<unsigned int>(vehicle + 1); ++i)
+            m_planInterpreterPool.push_back(checkPointer(new BAPInterpreter(45)));
     }
     prepareVehicleGroup(vehicle);
 }
@@ -467,10 +467,10 @@ void AISettings::setRespawnAllowed(bool allowed)
 // ELF 0x3BEFC0.
 void AISettings::setVehicle(const std::string& name)
 {
-    const int id = static_cast<int>(m_vehicleIndex.size());
-    m_vehicleIndex.insert(std::make_pair(name, id));
+    const int id = static_cast<int>(m_vehicleIdMap.size());
+    m_vehicleIdMap.insert(std::make_pair(name, id));
     m_vehicleNames.push_back(name);
-    m_vehicleMaterialManagers.push_back(checkPointer(new MaterialManager));
+    m_materialManagers.push_back(checkPointer(new MaterialManager));
     m_clusterCostTypes.push_back(-1);
 }
 
@@ -479,8 +479,8 @@ void AISettings::setVehicle(const std::string& name)
 void AISettings::setVehicleClusterMapping(const std::string& vehicle,
                                           const std::string& clusterVehicle)
 {
-    const int vehicleId = m_vehicleIndex.find(vehicle)->second;
-    const int clusterVehicleId = m_vehicleIndex.find(clusterVehicle)->second;
+    const int vehicleId = m_vehicleIdMap.find(vehicle)->second;
+    const int clusterVehicleId = m_vehicleIdMap.find(clusterVehicle)->second;
     m_clusterCostTypes[vehicleId] = clusterVehicleId;
 }
 
@@ -490,7 +490,7 @@ void AISettings::createVehicleGroup(const std::string& name)
 {
     const int id = static_cast<int>(m_vehicleGroupNames.size());
     m_vehicleGroupNames.resize(m_vehicleGroupNames.size() + 1, name);
-    m_vehicleGroupIndex.insert(std::make_pair(name, id));
+    m_namesToVehicleGroups.insert(std::make_pair(name, id));
 }
 
 // ELF 0x3C0790.
@@ -549,7 +549,7 @@ void AISettings::setSensingAgentPatternName(const std::string& name)
 // ELF 0x3C0D80.
 void AISettings::setSensingAgentNullPattern(ISensingAgentPattern* pattern)
 {
-    m_sensingAgentNullPattern = pattern;
+    m_nullPattern = pattern;
 }
 
 // ELF 0x3C0DA0: insert_unique(vehicle, pattern) into the +0x6C map.
@@ -569,7 +569,7 @@ void AISettings::setVehicleMaterialCost(const std::string& vehicle,
                                         unsigned char material,
                                         float cost)
 {
-    m_vehicleMaterialManagers[getVehicle(vehicle)]->setMaterialCost(material, cost);
+    m_materialManagers[getVehicle(vehicle)]->setMaterialCost(material, cost);
 }
 
 // Adds a name to the bot-name roster used by getBotName.
@@ -610,7 +610,7 @@ void AISettings::setBotNameUnused(const std::string&)
 // ELF 0x3BD020 / 0x3BD5B0. Initializes AI settings and their default values.
 AISettings::AISettings()
     : m_maxNBots(-1)
-    , m_numberOfBehaviours(0)
+    , m_behaviourCount(0)
     , m_viewDistance(-1.0f)
     , m_statsViewDistance(30.0f)
     , m_botSkill(0.75f)
@@ -625,7 +625,7 @@ AISettings::AISettings()
     , m_overrideMenuSettings(false)
     , m_drawBotStats(true)
 {
-    // Defect 1: m_sensingAgentNullPattern is deliberately not initialised here. See above.
+    // Defect 1: m_nullPattern is deliberately not initialised here. See above.
 
     // Both arrays are indexed [side - 1]; the constructor nulls all four words.
     m_standardMoralAdmin[0]  = 0;
@@ -811,25 +811,25 @@ bool AISettings::reset()
     if (AIRadio::m_instance)
         AIRadio::m_instance->reset();
     // shipped defect: deleted entries stay in their vectors and can be deleted again.
-    for (unsigned int row = 0; row < m_behaviours.size(); ++row)
-        for (unsigned int i = 0; i < m_behaviours[row].size(); ++i)
-            if (m_behaviours[row][i])
-                delete m_behaviours[row][i];
-    for (unsigned int row = 0; row < m_planGenerators.size(); ++row)
-        for (unsigned int i = 0; i < m_planGenerators[row].size(); ++i)
-            if (m_planGenerators[row][i])
-                delete m_planGenerators[row][i];
-    for (unsigned int i = 0; i < m_planInterpreters.size(); ++i)
-        if (m_planInterpreters[i])
-            delete m_planInterpreters[i];
-    m_vehicleIndex.clear();
+    for (unsigned int row = 0; row < m_behaviourPool.size(); ++row)
+        for (unsigned int i = 0; i < m_behaviourPool[row].size(); ++i)
+            if (m_behaviourPool[row][i])
+                delete m_behaviourPool[row][i];
+    for (unsigned int row = 0; row < m_planGeneratorPool.size(); ++row)
+        for (unsigned int i = 0; i < m_planGeneratorPool[row].size(); ++i)
+            if (m_planGeneratorPool[row][i])
+                delete m_planGeneratorPool[row][i];
+    for (unsigned int i = 0; i < m_planInterpreterPool.size(); ++i)
+        if (m_planInterpreterPool[i])
+            delete m_planInterpreterPool[i];
+    m_vehicleIdMap.clear();
     m_vehicleNames.resize(0);
     m_sensingAgentPatternIds.clear();
     m_sensingAgentPatterns.clear();
     m_maxNBots = -1;
     // [UNRESOLVED] Types/names of the two words at +0x10/+0x14; both are zeroed here.
     std::memset(m_gap16, 0, sizeof(m_gap16));
-    m_numberOfBehaviours = 0;
+    m_behaviourCount = 0;
     m_informationGridDimension = 32;
     m_viewDistance = 600.0f;
     m_nSides = 0;
@@ -857,20 +857,20 @@ bool AISettings::reset()
 AISettings::~AISettings()
 {
     delete AIRadio::m_instance;
-    for (unsigned int row = 0; row < m_behaviours.size(); ++row)
-        for (unsigned int i = 0; i < m_behaviours[row].size(); ++i)
-            if (m_behaviours[row][i])
-                delete m_behaviours[row][i];
-    for (unsigned int row = 0; row < m_planGenerators.size(); ++row)
-        for (unsigned int i = 0; i < m_planGenerators[row].size(); ++i)
-            if (m_planGenerators[row][i])
-                delete m_planGenerators[row][i];
-    for (unsigned int i = 0; i < m_planInterpreters.size(); ++i)
-        if (m_planInterpreters[i])
-            delete m_planInterpreters[i];
-    for (unsigned int i = 0; i < m_vehicleMaterialManagers.size(); ++i)
-        if (m_vehicleMaterialManagers[i])
-            delete m_vehicleMaterialManagers[i];
+    for (unsigned int row = 0; row < m_behaviourPool.size(); ++row)
+        for (unsigned int i = 0; i < m_behaviourPool[row].size(); ++i)
+            if (m_behaviourPool[row][i])
+                delete m_behaviourPool[row][i];
+    for (unsigned int row = 0; row < m_planGeneratorPool.size(); ++row)
+        for (unsigned int i = 0; i < m_planGeneratorPool[row].size(); ++i)
+            if (m_planGeneratorPool[row][i])
+                delete m_planGeneratorPool[row][i];
+    for (unsigned int i = 0; i < m_planInterpreterPool.size(); ++i)
+        if (m_planInterpreterPool[i])
+            delete m_planInterpreterPool[i];
+    for (unsigned int i = 0; i < m_materialManagers.size(); ++i)
+        if (m_materialManagers[i])
+            delete m_materialManagers[i];
 }
 
 } // namespace ai

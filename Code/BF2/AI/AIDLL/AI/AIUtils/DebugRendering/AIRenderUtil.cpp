@@ -20,7 +20,7 @@
 #include "../../AIStrategicEntity/PatrolPath.h"
 #include "../checkPointer.h"
 #include "../../AIStrategicEntity/AILandingZone.h"
-#include "../../AIStrategicEntity/AILandingZoneManager.h"
+#include "../../Main/AILandingZoneManager.h"
 #include "../../AIStrategicEntity/AIStrategicObjectManager.h"
 #include "../../AIStrategicEntity/AIStrategicArea.h"
 #include "../../DrawPrimitives/DPManager.h"

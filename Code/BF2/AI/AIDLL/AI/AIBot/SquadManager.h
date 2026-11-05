@@ -113,12 +113,12 @@ public:
     // Three Vec3 values, not containers: incomingArtillery
     // and setValidArtilleryFleePos store their scalar components.
     // [INFERRED] field names. ELF offsets below; PE offsets are 0,8,16,32,40,41,44,56.
-    // Only the three positions are zeroed here. The manager tail clears m_b0; both doubles
+    // Only the three positions are zeroed here. The manager tail clears incomingArtillery; both doubles
     // and the two validity flags remain unwritten by retail construction.
     class SideBlock
     {
     public:
-        /*  +0 */ bool m_b0;
+        /*  +0 */ bool incomingArtillery;    // name: AIDLL_r assert (0x1012FC60)
         /*  +4 */ double m_artilleryStartTime;
         /* +12 */ Vec3 m_artilleryPosition{};
         /* +24 */ double m_artilleryDelay;
@@ -131,13 +131,15 @@ public:
 private:
     // no vtable. The constructor stores no vptr on any path, so this class has no virtuals at
     // all - checked before writing, because a missing vptr shifts every offset below by four.
-    /*   0 */ std::vector<SquadCoordinator*> m_coordinators[2]; // ELF stride 12 / PE stride 16
+    /*   0 */ std::vector<SquadCoordinator*> m_Squads[2]; // ELF stride 12 / PE stride 16  // name: AIDLL_r assert "m_Squads[side - 1]" 0x101320A0 (PE +0)
     /*  24 */ int  m_squadCursor;         // = 0; [INFERRED] name, update uses unsigned comparison
     /*  28 */ int  m_sideCursor;          // = 1; [INFERRED] name, update alternates zero/nonzero
     // Per-side state blocks, each 60 bytes in the original layout. Construction clears
     // the leading flag and the same nine words in each block.
-    /*  32 */ SideBlock m_sideBlock0;     // +32..+91
-    /*  92 */ SideBlock m_sideBlock1;     // +92..+151
+    // Two blocks, one per side: AIDLL_r asserts "m_artillery[side - 1].incomingArtillery" (0x1012FC60)
+    // and "m_artillery[theSide].incomingArtillery || m_artillery[otherSide].incomingArtillery"
+    // (0x1012FD90; PE stride 0x48, flag at +0x28 + index * 0x48).
+    /*  32 */ SideBlock m_artillery[2];     // +32..+91, +92..+151
     /* 152 */ float  m_float152;          // = 40.0f (bit pattern )
     /* 156 */ double m_double156;         // = 25.0
     // with a bare `operator delete` one at a time.

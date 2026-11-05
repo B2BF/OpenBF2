@@ -66,7 +66,7 @@ public:
         // enqueueRadioMessage (ELF 0x1C4290) fills all seven words from its arguments.
         /*  4 */ AIRadioChannelType m_channel;  // postEvent's fifth hub argument
         /*  8 */ int m_priority;                // the unsigned argument
-        /* 12 */ int m_int12;                   // the last argument; postEvent passes its low byte
+        /* 12 */ int m_receiverPlayerId;                   // the last argument; postEvent passes its low byte  // name: AIDLL_r assert "message.m_receiverPlayerId" 0x101640F0 (+0xC; channel AIRCPlayer = 8)
         /* 16 */ double m_sendTime;             // now + delay; not sent before this time
         /* 24 */ float m_delay;
     };
@@ -148,7 +148,7 @@ private:
     // the game time another bot last horned at this one (honkHorn); BBAvoid reads it.
     /*  96 */ double m_double96;               // reset: 0.0
     // shutOffHorn (ELF 0x1C53F0) releases the horn (PIFire) two seconds after this time.
-    /* 104 */ double m_hornTime;               // reset: 0.0
+    /* 104 */ double m_lastHornHonkTime;               // reset: 0.0  // name: AIDLL_r assert in honkHorn (0x10165630)
 };
 
 } // namespace ai

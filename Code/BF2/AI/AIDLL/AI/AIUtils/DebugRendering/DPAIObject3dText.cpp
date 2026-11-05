@@ -14,7 +14,7 @@
 #include "../../../../AIInterface/BFKnowledge/IAIObject.h"
 #include "../../AIBot/BotMain.h"
 #include "../../AIKnowledge/Information.h"
-#include "../../AIKnowledge/InformationManager.h"
+#include "../../Main/InformationManager.h"
 
 namespace dice {
 namespace hfe {

@@ -27,7 +27,7 @@
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIPlanInterpreter/BAPContext.h"
 #include "../AIPlanInterpreter/BotScriptDebugger.h"
 #include "../AIUtils/checkPointer.h"
@@ -123,7 +123,7 @@ BotScript* BBPGotoWaypoint3d::createPlan(Bot* bot)
             plan->addStatement(checkPointer(new BAPAMoveTo3dObject(closeTo->m_target, radius, speed, speed,
                                                                    closeTo->m_third, checkPointer(new BAPConFalse()),
                                                                    controls, m_patternId)));
-            plan->setParent(this);   // +0x04 (BotScript::m_owner)
+            plan->setParent(this);   // +0x04 (BotScript::mpOwner)
             return plan;
         }
         case 6:
@@ -133,7 +133,7 @@ BotScript* BBPGotoWaypoint3d::createPlan(Bot* bot)
             if (!waypoints->getGoalPoint(goal))
                 return 0;
             BAPCombinerParallel* const plan = newFlightPlan(bot, m_patternId);
-            BAPConPosition* const reached = (self->getObjectTypeFlags() & 0x20)
+            BAPConPosition* const reached = self->isOfType(ITHelicopter)
                 ? checkPointer(new BAPConPosition(goal, 2.0f))
                 : checkPointer(new BAPConPosition(goal, radius));
             plan->addStatement(checkPointer(new BAPAMoveTo3d(bot, goal, speed, speed, reached, controls,

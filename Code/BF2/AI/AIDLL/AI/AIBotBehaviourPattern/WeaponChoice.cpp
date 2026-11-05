@@ -5,7 +5,7 @@
 #include "WeaponChoice.h"
 
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 
 namespace dice {
 namespace hfe {

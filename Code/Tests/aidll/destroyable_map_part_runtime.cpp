@@ -58,14 +58,14 @@ struct TreeVertexCountTag
     typedef unsigned int QuadTree::* type;
     friend type access(TreeVertexCountTag);
 };
-template struct PrivateMember<TreeVertexCountTag, &QuadTree::m_numberOfVertices>;
+template struct PrivateMember<TreeVertexCountTag, &QuadTree::m_vertexCount>;
 
 struct TreeVertexIndexCountTag
 {
     typedef unsigned int QuadTree::* type;
     friend type access(TreeVertexIndexCountTag);
 };
-template struct PrivateMember<TreeVertexIndexCountTag, &QuadTree::m_numberOfVertexIndices>;
+template struct PrivateMember<TreeVertexIndexCountTag, &QuadTree::m_vertexIndexCount>;
 
 struct TreePolygonsTag
 {
@@ -199,10 +199,10 @@ struct TreeFixture
             unexpected("fixture float/double vertex counts differ");
 
         NavPolygon polygon;
-        polygon.m_numberOfVertices = static_cast<unsigned char>(floatVertices.size());
+        polygon.vertexCount = static_cast<unsigned char>(floatVertices.size());
         polygon.m_material = material;
-        polygon.m_cluster = cluster;
-        polygon.m_firstIndex = static_cast<unsigned int>(indices.size());
+        polygon.cluster = cluster;
+        polygon.vertexOffset = static_cast<unsigned int>(indices.size());
         polygon.m_normal.x = 0.0f;
         polygon.m_normal.y = 1.0f;
         polygon.m_normal.z = 0.0f;
@@ -593,8 +593,8 @@ void testManagerPairingAndForwarders()
     secondGraph.fill(0x52);
 
     QuadTreeManager* manager = new QuadTreeManager;
-    manager->m_islands.push_back(std::make_pair(first.tree, firstGraph.graph));
-    manager->m_islands.push_back(std::make_pair(second.tree, secondGraph.graph));
+    manager->m_quadTrees.push_back(std::make_pair(first.tree, firstGraph.graph));
+    manager->m_quadTrees.push_back(std::make_pair(second.tree, secondGraph.graph));
     manager->initializeDestroyableMapPart(0, false, minimum, maximum, transform);
     CHECK(parts(*first.tree).size() == 1);
     CHECK(parts(*second.tree).size() == 1);
@@ -644,15 +644,15 @@ void testManagerPairingAndForwarders()
     empty->restoreMapPart(0);
     empty->resetOriginalMaterialOfDestroyableMapPart(0);
     empty->resetDestroyableMapParts();
-    CHECK(empty->m_islands.empty());
+    CHECK(empty->m_quadTrees.empty());
 
     TreeFixture noPolygonsA(0);
     TreeFixture noPolygonsB(1);
     noPolygonsA.publish();
     noPolygonsB.publish();
     QuadTreeManager* emptyTrees = new QuadTreeManager;
-    emptyTrees->m_islands.push_back(std::make_pair(noPolygonsA.tree, firstGraph.graph));
-    emptyTrees->m_islands.push_back(std::make_pair(noPolygonsB.tree, secondGraph.graph));
+    emptyTrees->m_quadTrees.push_back(std::make_pair(noPolygonsA.tree, firstGraph.graph));
+    emptyTrees->m_quadTrees.push_back(std::make_pair(noPolygonsB.tree, secondGraph.graph));
     emptyTrees->initializeDestroyableMapPart(0, true, minimum, maximum, transform);
     CHECK(parts(*noPolygonsA.tree).size() == 1);
     CHECK(parts(*noPolygonsB.tree).size() == 1);
@@ -676,8 +676,8 @@ void testManagerAscendingOrder()
     firstGraph.state(0) = 0x61;
     secondGraph.state(0) = 0x62;
     QuadTreeManager* manager = new QuadTreeManager;
-    manager->m_islands.push_back(std::make_pair(fixture.tree, firstGraph.graph));
-    manager->m_islands.push_back(std::make_pair(fixture.tree, secondGraph.graph));
+    manager->m_quadTrees.push_back(std::make_pair(fixture.tree, firstGraph.graph));
+    manager->m_quadTrees.push_back(std::make_pair(fixture.tree, secondGraph.graph));
     manager->destroyMapPart(0);
     // The first island destroys the shared record; the second sees destroyed=true and does nothing.
     CHECK(firstGraph.state(0) == 0);

@@ -13,11 +13,11 @@
 #include "SquadCoordinator.h"
 #include "SquadFormation.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/IPIArmament.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "SquadManager.h"
 #include "WaypointList.h"
 #include "../../../AIInterface/BFKnowledge/BFSquad.h"
@@ -270,7 +270,7 @@ void SquadMember::update(double time)
         Information* const information = manager->getInformation(handle);
 #endif
         IPIArmament* const armament = information ? information->getArmament() : 0;
-        if (information && (information->getObjectTypeFlags() & 0x200000u) && armament
+        if (information && information->isOfType(ITSoldier) && armament
             && armament->getActiveWeapon() != -1)
         {
             // ELF 0x1B1ED0: a soldier who is not firing switches to weapon slot 2 (activation
@@ -395,7 +395,7 @@ bool SquadMember::isAllowedInFormation()
     if (!vehicle)
         return false;
     Information* const info = informationManager->getInformation(vehicle->getInformation(m_side + 1));
-    if (info && info->getUnit() && (info->getObjectTypeFlags() & 0x00200000) != 0 && info->getMobile())
+    if (info && info->getUnit() && info->isOfType(ITSoldier) && info->getMobile())
     {
         allowed = true;
         Vec3 goal = m_squad->getSquadGotoPos();
@@ -532,7 +532,7 @@ void SquadMember::moveToSlotPos(const Vec3& position, Information* information)
 {
     m_havePath = true;
     m_vector60 = position;
-    if (!(information->getObjectTypeFlags() & 0x10u))
+    if (!information->isOfType(ITAir))
     {
         WPMoveTo::GoalList goals;
         goals.push_back(std::make_pair(position, -1));
@@ -541,7 +541,7 @@ void SquadMember::moveToSlotPos(const Vec3& position, Information* information)
     }
     float altitude = 70.0f;
     float radius = 30.0f;
-    if (information->getObjectTypeFlags() & 0x20u)
+    if (information->isOfType(ITHelicopter))
     {
         radius = 5.0f;
         altitude = 20.0f;
@@ -634,7 +634,7 @@ void SquadMember::moveToGoalPos(Information* information)
     AIStrategicArea* area = m_squad->getSquadStrategicAreaAssignment();
     const int side = m_side + 1;
 
-    if (!(information->getObjectTypeFlags() & 0x10u)
+    if (!information->isOfType(ITAir)
         && m_squad->getSquadFormation()->shouldLeaveSquadLeader()
         && !m_squad->isSquadCloseToNonOwnedTarget())
     {
@@ -671,11 +671,11 @@ void SquadMember::moveToGoalPos(Information* information)
     goal = m_squad->getSquadGotoPos();
     if (m_squad->isSquadAssignedToAnyArea())
         m_squad->getValidSaPos(this, goal);
-    if (information->getObjectTypeFlags() & 0x10u)
+    if (information->isOfType(ITAir))
     {
         float altitude = 70.0f;
         float radius = 30.0f;
-        if (information->getObjectTypeFlags() & 0x20u)
+        if (information->isOfType(ITHelicopter))
         {
             radius = 5.0f;
             altitude = 20.0f;
@@ -1078,7 +1078,7 @@ bool SquadMember::canDamageTarget(unsigned int target)
     const float dz = m_position.z - targetPosition.z;
     (void)std::sqrt(dx * dx + dy * dy + dz * dz);
     float strength = 0.0f;
-    if (armament->isAntiAircraft() || !(targetInformation->getObjectTypeFlags() & 0x10u))
+    if (armament->isAntiAircraft() || !targetInformation->isOfType(ITAir))
     {
         for (unsigned int i = 0; i < weapons.size(); ++i)
         {

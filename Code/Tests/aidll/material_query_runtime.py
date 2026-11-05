@@ -87,7 +87,7 @@ def preflight(output):
             for token in (".size()", ".at(", "getNumberOfIslands", "m_numberOfPolygons", "nullptr")
         ),
         "island_accessor_is_unchecked_subscript": (
-            "return m_islands[island].first;" in manager
+            "return m_quadTrees[island].first;" in manager
             and ".size()" not in manager
             and ".at(" not in manager
         ),

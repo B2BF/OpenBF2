@@ -10,7 +10,7 @@
 #include "BotMain.h"                       // getBotId / getCurrentEquipment - vtable +0xE8, +0xD8
 #include "../Main/CommonSingletonServer.h"
 #include "../../../AIInterface/BFKnowledge/BFTimer.h"   // IBFTimer::getGameTime
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/Information.h"
 #include "../AIKnowledge/AIInformationGrid.h"
 #include "../AIKnowledge/BFInformationEnvironment.h"
@@ -45,18 +45,18 @@ BotNavigation::BotNavigation(BotMain* owner)
     : m_bot(owner)
     , m_arriveDistance(2.0f)
     , m_float8(2.0f)
-    , m_island(-1)
+    , m_startIsland(-1)
     , m_startPolygon(-1)
     , m_goalPolygon(-1)
     , m_goalMaterial(0)
     // the two paths, in the order the binary builds them: the fine one first.
-    , m_polygonPath(checkPointer(new QTPath()))
+    , m_path(checkPointer(new QTPath()))
     , m_int76(-1)
     , m_currentPoint(0)
     , m_clusterPath(checkPointer(new ClusterNodePath()))
     , m_int128(-1)
-    , m_double144(0.0)
-    , m_double152(0.0)
+    , m_noProgressTimer(0.0)
+    , m_noThrottleTimer(0.0)
     , m_double160(0.0)
     , m_double168(0.0)
     // 9,999,999.0f - a distance sentinel, not a time and not a magnitude. See above.
@@ -64,15 +64,15 @@ BotNavigation::BotNavigation(BotMain* owner)
     , m_flag192(false)
     , m_flag193(false)
     , m_flag195(false)
-    , m_vehiclePolygon(-1)
+    , m_currentPolygon(-1)
     , m_vehicleIsland(-1)
     , m_infantryPolygon(-1)
     , m_infantryIsland(-1)
-    , m_int240(0)
+    , m_skipTraceCount(0)
     , m_grenadeTime(0.0)
     , m_grenadeFlag(false)
     // Independent sentinel, initialized to -1.0.
-    , m_double300(-1.0)
+    , m_lastAngleDiffTest(-1.0)
 {
     for (int i = 0; i < 3; ++i)
     {
@@ -100,7 +100,7 @@ BotNavigation::BotNavigation(BotMain* owner)
     m_searchGoal.z = 0.0f;
 
     // the dead resize - see the block above. Written as what it is rather than dropped.
-    m_points.resize(0);
+    m_navigationPoints.resize(0);
 }
 
 // [RETIRE-WHEN: aidll-02-skeleton] Remove when the corresponding implementation is complete and validated.
@@ -110,8 +110,8 @@ BotNavigation::BotNavigation(BotMain* owner)
 BotNavigation::~BotNavigation()
 {
     reset();
-    if (m_polygonPath)
-        delete m_polygonPath;
+    if (m_path)
+        delete m_path;
     if (m_clusterPath)
         delete m_clusterPath;
 }
@@ -126,7 +126,7 @@ void BotNavigation::resetAll()
     // Not the constructor's 0.0 - see the block above.
     m_grenadeTime = -9999.0;
     m_largestAngleDiff = 0.0f;
-    m_double300 = -1.0;
+    m_lastAngleDiffTest = -1.0;
 
     clearProgress();
 }
@@ -149,18 +149,18 @@ void BotNavigation::reset()
     }
 
     // Reaching through both path objects - see the block above.
-    m_polygonPath->m_nodes.resize(0);
-    m_polygonPath->m_i0 = 0;
-    m_polygonPath->m_i20 = 0;
+    m_path->m_nodes.resize(0);
+    m_path->m_i0 = 0;
+    m_path->m_i20 = 0;
 
     m_clusterPath->m_nodes.resize(0);
     m_clusterPath->m_i0 = 0;
 
     m_int56 = 0;
 
-    m_points.resize(0);
+    m_navigationPoints.resize(0);
 
-    m_int240 = 0;
+    m_skipTraceCount = 0;
     m_currentPoint = 0;
     m_double160 = 0.0;
     m_flag195 = false;
@@ -177,9 +177,9 @@ void BotNavigation::reset()
         {
             m_mapIndex = mobile->getVehicleNumber();
             const IPIMobile::ValidPos& vehicle = mobile->getLastValidPosition(m_mapIndex);
-            m_vehicleIsland = static_cast<int>(vehicle.quadTree);
-            m_vehiclePolygon = static_cast<int>(vehicle.polygon);
-            m_infantryIsland = static_cast<int>(mobile->getLastValidInfantryPos().quadTree);
+            m_vehicleIsland = static_cast<int>(vehicle.island);
+            m_currentPolygon = static_cast<int>(vehicle.polygon);
+            m_infantryIsland = static_cast<int>(mobile->getLastValidInfantryPos().island);
             m_infantryPolygon = static_cast<int>(mobile->getLastValidInfantryPos().polygon);
         }
     }
@@ -197,13 +197,13 @@ void BotNavigation::clearProgress()
     m_zero176[0] = 0;                      // +176
 
     // the one non-zero store. See the block above.
-    m_double144 =
+    m_noProgressTimer =
         static_cast<const IBFTimer*>(CommonSingletonServer::m_iBFTimer)->getGameTime();
 
     m_double168 = 0.0;
     m_zero176[1] = 0;                      // +180
     m_zero176[2] = 0;                      // +184
-    m_double152 = 0.0;
+    m_noThrottleTimer = 0.0;
     m_flag192 = false;
     m_zero280[0] = 0;                      // +280
     m_zero280[1] = 0;                      // +284
@@ -223,7 +223,7 @@ public:
     virtual bool includeInformation(Information* information) const
     {
         return (information->isPrimary() && information->hasMobile())
-            || (information->getObjectTypeFlags() & 0x02000000) != 0;
+            || information->isOfType(ITObstacle);
     }
 };
 
@@ -287,7 +287,7 @@ bool BotNavigation::update(bool& a, bool* b)
         *b = false;
     if (m_flag195)
     {
-        m_points.resize(0);
+        m_navigationPoints.resize(0);
         m_currentPoint = 0;
         m_polygonSearchPending = true;
         m_flag195 = false;
@@ -329,7 +329,7 @@ bool BotNavigation::initPathfinding(unsigned int island, unsigned int goalPolygo
         m_flag193 = false;
         return false;
     }
-    m_updateSpaceLeftAndRight = (info->getObjectTypeFlags() & 0x00200000) != 0;   // byte +6 & 0x20
+    m_updateSpaceLeftAndRight = info->isOfType(ITSoldier);   // byte +6 & 0x20
     if (m_pathfinding == 0)
         m_pathfinding = IAIPathfinding::instance;
     IPIMobile* const mobile = info->getMobile();
@@ -349,11 +349,11 @@ bool BotNavigation::initPathfinding(unsigned int island, unsigned int goalPolygo
     {
         if (static_cast<unsigned int>(m_int56) < 2)
             return true;
-        if (!m_points.empty() && m_points[m_currentPoint].m_polygon == static_cast<int>(valid.polygon))
+        if (!m_navigationPoints.empty() && m_navigationPoints[m_currentPoint].m_polygon == static_cast<int>(valid.polygon))
             return true;
-        if (!m_points.empty() && stillOnPath())
+        if (!m_navigationPoints.empty() && stillOnPath())
             return true;
-        if (m_points.size() > 1)
+        if (m_navigationPoints.size() > 1)
         {
             retrace();
             return true;
@@ -364,7 +364,7 @@ bool BotNavigation::initPathfinding(unsigned int island, unsigned int goalPolygo
     {
         m_goalPolygon = static_cast<int>(goalPolygon);
         m_goal = to;
-        if (valid.quadTree != 0xFFFFFFFFu && valid.polygon != 0xFFFFFFFFu)
+        if (valid.island != 0xFFFFFFFFu && valid.polygon != 0xFFFFFFFFu)
         {
             const Vec3& position = info->getPosition();                   // Information slot +0x30
             const float dx = position.x - valid.position.x;
@@ -372,13 +372,13 @@ bool BotNavigation::initPathfinding(unsigned int island, unsigned int goalPolygo
             const float dz = position.z - valid.position.z;
             if (dx * dx + dy * dy + dz * dz <= 100.0f)
             {
-                if (island == valid.quadTree)
+                if (island == valid.island)
                 {
                     m_polygonSearchPending = true;
                     m_useClusterSearch = true;
                     m_flag192 = false;
-                    m_island = static_cast<int>(valid.quadTree);
-                    m_pathIsland = static_cast<int>(valid.quadTree);
+                    m_startIsland = static_cast<int>(valid.island);
+                    m_island = static_cast<int>(valid.island);
                     m_startPolygon = static_cast<int>(valid.polygon);
                     m_startPosition = valid.position;
                     m_arriveDistance = arriveDistance;
@@ -386,27 +386,27 @@ bool BotNavigation::initPathfinding(unsigned int island, unsigned int goalPolygo
                     m_float8Squared = b * b;
                     m_mapIndex = mobile->getVehicleNumber();
                     const IPIMobile::ValidPos& vehicle = mobile->getLastValidPosition(m_mapIndex);
-                    m_vehicleIsland = static_cast<int>(vehicle.quadTree);
-                    m_vehiclePolygon = static_cast<int>(vehicle.polygon);
-                    m_infantryIsland = static_cast<int>(mobile->getLastValidInfantryPos().quadTree);
+                    m_vehicleIsland = static_cast<int>(vehicle.island);
+                    m_currentPolygon = static_cast<int>(vehicle.polygon);
+                    m_infantryIsland = static_cast<int>(mobile->getLastValidInfantryPos().island);
                     m_infantryPolygon = static_cast<int>(mobile->getLastValidInfantryPos().polygon);
                     m_equipmentType = info->getUnit()->getEquipmentType();
                     m_flag195 = false;
-                    m_int240 = 0;
+                    m_skipTraceCount = 0;
                     reset();
                     m_flag193 = true;
                     m_radius = info->getPhysical()->getSmallestRadius();       // IPIPhysical slot +0x34
                     m_pathfinding->getMaterial(m_mapIndex, island, static_cast<unsigned int>(m_goalPolygon),
                                                m_goalMaterial);                // slot +0x5C
                     testDirectPath();
-                    void* const quadTree = m_pathfinding->getQuadTree(m_mapIndex, static_cast<unsigned int>(m_island));
+                    void* const quadTree = m_pathfinding->getQuadTree(m_mapIndex, static_cast<unsigned int>(m_startIsland));
                     m_flag316 = true;
                     m_quadTree = static_cast<QuadTree*>(quadTree);             // slot +0x64
                     return true;
                 }
                 Debug(DebugTypeError, "AI/AIDLL/AI/AIBot/BotNavigation.cpp", 0xC4, "")
                     << "Bot " << m_bot->getName() << " is ordered to go to an island that it is not on ("
-                    << island << " != " << valid.quadTree << ")";
+                    << island << " != " << valid.island << ")";
                 m_flag193 = false;
                 return false;
             }
@@ -423,12 +423,12 @@ void BotNavigation::updateLastPoint(Information* info)
 {
     const ClusterNodePath* const cluster = m_clusterPath;
     if (cluster->m_nodes.size() <= static_cast<unsigned int>(cluster->m_i0) && !m_useClusterSearch
-        && !m_polygonSearchPending && static_cast<int>(m_points.size()) > 0)
+        && !m_polygonSearchPending && static_cast<int>(m_navigationPoints.size()) > 0)
     {
         const IPIMobile::ValidPos& valid = info->getMobile()->getLastValidPosition(m_mapIndex);
-        if (static_cast<unsigned int>(m_pathIsland) == valid.quadTree)
+        if (static_cast<unsigned int>(m_island) == valid.island)
         {
-            NavigationPoint& last = m_points[m_points.size() - 1];
+            NavigationPoint& last = m_navigationPoints[m_navigationPoints.size() - 1];
             last.m_position = valid.position;
             last.m_polygon = static_cast<int>(valid.polygon);
         }
@@ -458,7 +458,7 @@ bool BotNavigation::updatePath(Vec2& point, bool& arrived, bool& direct, float d
     direct = false;
     if (static_cast<unsigned int>(m_int56) < 2)
         m_double244 = 0.0;
-    if (m_useClusterSearch || m_flag195 || (m_polygonSearchPending && m_points.size() <= m_currentPoint))
+    if (m_useClusterSearch || m_flag195 || (m_polygonSearchPending && m_navigationPoints.size() <= m_currentPoint))
     {
         direct = true;
         return true;
@@ -466,15 +466,15 @@ bool BotNavigation::updatePath(Vec2& point, bool& arrived, bool& direct, float d
 
     // a soldier firing at an enemy does not walk onto material 4 polygons
     Information* const target = informationManager->getInformation(m_bot->getFiringTarget());
-    if (!m_points.empty() && m_updateSpaceLeftAndRight && m_bot->isFiring() && target)
+    if (!m_navigationPoints.empty() && m_updateSpaceLeftAndRight && m_bot->isFiring() && target)
     {
         if (target->getSide() != m_bot->getSide())
         {
-            const unsigned int polygon = m_points.size() < 2
+            const unsigned int polygon = m_navigationPoints.size() < 2
                 ? static_cast<unsigned int>(m_goalPolygon)
-                : static_cast<unsigned int>(m_points[m_currentPoint].m_polygon);
+                : static_cast<unsigned int>(m_navigationPoints[m_currentPoint].m_polygon);
             unsigned char material;
-            if (m_pathfinding->getMaterial(m_mapIndex, static_cast<unsigned int>(m_pathIsland), polygon, material)
+            if (m_pathfinding->getMaterial(m_mapIndex, static_cast<unsigned int>(m_island), polygon, material)
                 && material == 4)
             {
                 direct = true;
@@ -492,7 +492,7 @@ bool BotNavigation::updatePath(Vec2& point, bool& arrived, bool& direct, float d
 
     if (checkArrivedAtPoint(distance))
     {
-        if (m_currentPoint == m_points.size() - 1)
+        if (m_currentPoint == m_navigationPoints.size() - 1)
         {
             m_double244 = 0.0;
             m_sentinel188 = 100000000.0f;
@@ -502,23 +502,23 @@ bool BotNavigation::updatePath(Vec2& point, bool& arrived, bool& direct, float d
         else
         {
             ++m_currentPoint;
-            if (m_int240 > 0)
-                --m_int240;
+            if (m_skipTraceCount > 0)
+                --m_skipTraceCount;
         }
     }
 
     ClusterNodePath* const cluster = m_clusterPath;
     bool trim = true;
-    if (m_pathLength >= 30.0f && m_currentPoint + 10 < m_points.size())
+    if (m_pathLength >= 30.0f && m_currentPoint + 10 < m_navigationPoints.size())
     {
-        const Polygon* const polygon = m_quadTree->getPolygon(static_cast<unsigned int>(m_points[m_currentPoint].m_polygon));
-        if (static_cast<unsigned int>(polygon->m_cluster) != static_cast<unsigned int>(cluster->m_i0))
+        const Polygon* const polygon = m_quadTree->getPolygon(static_cast<unsigned int>(m_navigationPoints[m_currentPoint].m_polygon));
+        if (static_cast<unsigned int>(polygon->cluster) != static_cast<unsigned int>(cluster->m_i0))
         {
-            const Polygon* const again = m_quadTree->getPolygon(static_cast<unsigned int>(m_points[m_currentPoint].m_polygon));
+            const Polygon* const again = m_quadTree->getPolygon(static_cast<unsigned int>(m_navigationPoints[m_currentPoint].m_polygon));
             unsigned short current = 0xFFFF;
             if (cluster->m_i0 < static_cast<int>(cluster->m_nodes.size()))
                 current = cluster->m_nodes[cluster->m_i0].first;
-            if (again->m_cluster != current)
+            if (again->cluster != current)
                 trim = false;
         }
     }
@@ -526,10 +526,10 @@ bool BotNavigation::updatePath(Vec2& point, bool& arrived, bool& direct, float d
     {
         // keep at most ten points ahead and search the rest again
         m_polygonSearchPending = true;
-        unsigned int keep = static_cast<unsigned int>(m_points.size());
+        unsigned int keep = static_cast<unsigned int>(m_navigationPoints.size());
         if (m_currentPoint + 10 < keep)
             keep = m_currentPoint + 10;
-        m_points.resize(keep, NavigationPoint());
+        m_navigationPoints.resize(keep, NavigationPoint());
     }
 
     if (!m_flag195)
@@ -547,12 +547,12 @@ bool BotNavigation::updatePath(Vec2& point, bool& arrived, bool& direct, float d
             if (static_cast<double>(delay) < now - m_double160)
             {
                 m_flag194 = false;
-                m_int240 = (useSkipTrace && m_updateSpaceLeftAndRight) ? 1 : 0;
+                m_skipTraceCount = (useSkipTrace && m_updateSpaceLeftAndRight) ? 1 : 0;
                 retrace();
             }
         }
     }
-    vec3ToVec2XZ(m_points[m_currentPoint].m_position, point);
+    vec3ToVec2XZ(m_navigationPoints[m_currentPoint].m_position, point);
     return true;
 }
 
@@ -560,32 +560,32 @@ bool BotNavigation::updatePath(Vec2& point, bool& arrived, bool& direct, float d
 // current point's, or one behind; or within the next 20 points (which becomes the current one).
 bool BotNavigation::stillOnPath()
 {
-    if (m_points.size() < 2)
+    if (m_navigationPoints.size() < 2)
         return false;
     Information* const info = informationManager->getInformation(m_bot->getCurrentEquipment());
     const int polygon = static_cast<int>(info->getMobile()->getLastValidPosition().polygon);
     if (polygon == -1)
         return false;
     const unsigned int current = m_currentPoint;
-    if (current >= m_points.size())
+    if (current >= m_navigationPoints.size())
         return false;
-    const int previous = current != 0 ? m_points[current - 1].m_polygon : -1;
-    if (polygon == previous || polygon == m_points[current].m_polygon)
+    const int previous = current != 0 ? m_navigationPoints[current - 1].m_polygon : -1;
+    if (polygon == previous || polygon == m_navigationPoints[current].m_polygon)
         return true;
     for (int i = static_cast<int>(current); i >= 0; --i)
-        if (m_points[i].m_polygon == polygon)
+        if (m_navigationPoints[i].m_polygon == polygon)
             return true;
-    unsigned int ahead = static_cast<unsigned int>(m_points.size()) - current;
+    unsigned int ahead = static_cast<unsigned int>(m_navigationPoints.size()) - current;
     if (ahead > 0x14)
         ahead = 0x14;
     const unsigned int end = ahead + current;
     for (unsigned int i = current; i < end; ++i)
     {
-        if (m_points[i].m_polygon == polygon)
+        if (m_navigationPoints[i].m_polygon == polygon)
         {
             m_currentPoint = i;
-            const int left = m_int240 - static_cast<int>(i - current);
-            m_int240 = left > 0 ? left : 0;
+            const int left = m_skipTraceCount - static_cast<int>(i - current);
+            m_skipTraceCount = left > 0 ? left : 0;
             return true;
         }
     }
@@ -605,15 +605,15 @@ void BotNavigation::retrace()
         return;
     }
     cluster->m_i0 = 0;
-    m_points.resize(0, NavigationPoint());
+    m_navigationPoints.resize(0, NavigationPoint());
     Information* const info = informationManager->getInformation(m_bot->getCurrentEquipment());
     const IPIMobile::ValidPos& valid = info->getMobile()->getLastValidPosition();
-    m_island = static_cast<int>(valid.quadTree);
+    m_startIsland = static_cast<int>(valid.island);
     m_startPolygon = static_cast<int>(valid.polygon);
     m_startPosition = valid.position;
     m_flag195 = true;
     const short own = static_cast<short>(m_pathfinding->getClusterOfPolygon(
-        m_mapIndex, static_cast<unsigned int>(m_island), valid.polygon));              // slot +0x7C
+        m_mapIndex, static_cast<unsigned int>(m_startIsland), valid.polygon));              // slot +0x7C
     for (unsigned int i = 0; i < count - 1; ++i)
     {
         short node = -1;
@@ -629,7 +629,7 @@ void BotNavigation::retrace()
         unsigned short node = 0xFFFF;
         if (m_clusterPath->m_i0 < static_cast<int>(m_clusterPath->m_nodes.size()))
             node = m_clusterPath->m_nodes[m_clusterPath->m_i0].first;
-        if (m_pathfinding->areNeighbouringClusters(m_mapIndex, static_cast<unsigned int>(m_island),
+        if (m_pathfinding->areNeighbouringClusters(m_mapIndex, static_cast<unsigned int>(m_startIsland),
                                                    static_cast<unsigned short>(own), node))   // slot +0x80
             return;
         ++m_clusterPath->m_i0;
@@ -655,16 +655,16 @@ void BotNavigation::testDirectPath()
     hit.x = 0.0f; hit.y = 0.0f; hit.z = 0.0f;
     unsigned int polygon;
     unsigned char material;
-    if (!m_pathfinding->trace(static_cast<unsigned int>(m_startPolygon), static_cast<unsigned int>(m_pathIsland),
+    if (!m_pathfinding->trace(static_cast<unsigned int>(m_startPolygon), static_cast<unsigned int>(m_island),
                               m_mapIndex, m_startPosition, m_goal, hit, polygon, m_equipmentType, -1, 0.0f, 5,
                               &material))                                           // slot +0x8C
         return;
-    const unsigned int index = static_cast<unsigned int>(m_points.size());
-    m_points.resize(index + 1, NavigationPoint());
-    NavigationPoint& last = m_points[index];
+    const unsigned int index = static_cast<unsigned int>(m_navigationPoints.size());
+    m_navigationPoints.resize(index + 1, NavigationPoint());
+    NavigationPoint& last = m_navigationPoints[index];
     last.m_position = m_goal;
     last.m_polygon = static_cast<int>(polygon);
-    last.m_point0 = m_goal;
+    last.edgePoint1 = m_goal;
     last.m_pointC = m_goal;
     m_goalPolygon = static_cast<int>(polygon);
     m_goalMaterial = material;
@@ -683,9 +683,9 @@ bool BotNavigation::checkArrivedAtPoint(float)
     // The image reads BotMain +0x8C (m_currentEquipment) inline; getCurrentEquipment returns it.
     Information* const info = informationManager->getInformation(m_bot->getCurrentEquipment());
     const Vec3& position = info->getPosition();
-    if (m_points.empty())
+    if (m_navigationPoints.empty())
         return false;
-    const NavigationPoint& p = m_points[m_currentPoint];
+    const NavigationPoint& p = m_navigationPoints[m_currentPoint];
     if (!(std::fabs(position.y - p.m_position.y) <= 3.0f))
         return false;
     float distance = soldierMinDist;
@@ -696,7 +696,7 @@ bool BotNavigation::checkArrivedAtPoint(float)
             distance = 1.0f;
     }
     float limit = distance;
-    if (!m_updateSpaceLeftAndRight && m_currentPoint == m_points.size() - 1)
+    if (!m_updateSpaceLeftAndRight && m_currentPoint == m_navigationPoints.size() - 1)
     {
         limit = m_radius - 1.0f;
         if (limit <= distance)
@@ -711,9 +711,9 @@ bool BotNavigation::checkArrivedAtPoint(float)
 bool BotNavigation::getSecondPoint(Vec2& out)
 {
     const unsigned int next = m_currentPoint + 1;
-    const bool exists = next < m_points.size();
+    const bool exists = next < m_navigationPoints.size();
     if (exists)
-        vec3ToVec2XZ(m_points[next].m_position, out);
+        vec3ToVec2XZ(m_navigationPoints[next].m_position, out);
     return exists;
 }
 
@@ -723,17 +723,17 @@ bool BotNavigation::getLargestAngleDiff(float& out)
 {
     static float timeStep = 2.0f;                     // ELF 0x4B6C2C (.data)
     const double now = static_cast<const IBFTimer*>(CommonSingletonServer::m_iBFTimer)->getGameTime();
-    if (!(now - m_double300 >= 0.5))
+    if (!(now - m_lastAngleDiffTest >= 0.5))
     {
         out = m_largestAngleDiff;
         return true;
     }
-    m_double300 = now;
+    m_lastAngleDiffTest = now;
     // The image reads BotMain +0x8C inline (no null guard).
     Information* const info = informationManager->getInformation(m_bot->getCurrentEquipment());
     const Vec3& position = info->getPosition();
     unsigned int index = m_currentPoint;
-    const Vec3& first = m_points[index].m_position;
+    const Vec3& first = m_navigationPoints[index].m_position;
     float covered = length3(position.x - first.x, position.y - first.y, position.z - first.z);
     Vec2 facing;
     facing.x = 0.0f; facing.y = 0.0f;
@@ -743,14 +743,14 @@ bool BotNavigation::getLargestAngleDiff(float& out)
     float range = info->getMobile()->getSpeedMagnitude() * timeStep;   // IPIMobile slot +0x24
     if (range <= 3.0f)
         range = 3.0f;
-    for (; covered < range && index < m_points.size(); ++index)
+    for (; covered < range && index < m_navigationPoints.size(); ++index)
     {
         Vec3 from;
         if (index == 0)
             from = info->getPosition();
         else
-            from = m_points[index - 1].m_position;
-        const Vec3& to = m_points[index].m_position;
+            from = m_navigationPoints[index - 1].m_position;
+        const Vec3& to = m_navigationPoints[index].m_position;
         covered = length3(from.x - to.x, from.y - to.y, from.z - to.z) + covered;
         Vec3 leg;
         leg.x = to.x - from.x; leg.y = to.y - from.y; leg.z = to.z - from.z;
@@ -782,9 +782,9 @@ bool BotNavigation::getLargestAngleDiff(float& out)
 // `from` in the plane; `out` keeps the last point looked at.
 void BotNavigation::getFirstPointBeyondDist(const Vec2& from, float distance, Vec2& out)
 {
-    for (unsigned int i = m_currentPoint; i < m_points.size(); ++i)
+    for (unsigned int i = m_currentPoint; i < m_navigationPoints.size(); ++i)
     {
-        const Vec3& p = m_points[i].m_position;
+        const Vec3& p = m_navigationPoints[i].m_position;
         out.x = p.x;
         out.y = p.z;
         const float dx = from.x - p.x;
@@ -831,19 +831,19 @@ bool BotNavigation::doPolygonSearch(bool& finished, bool* blocked)
         }
         if (m_mapIndex != m_pathfinding->getTraceMapIndex())
             m_pathfinding->setUsePathTopologySmoothing(m_int76, true);
-        if (m_points.empty())
+        if (m_navigationPoints.empty())
         {
             m_searchStart = m_startPosition;
             m_searchStartPolygon = static_cast<unsigned int>(m_startPolygon);
         }
         else
         {
-            const NavigationPoint& last = m_points.back();
+            const NavigationPoint& last = m_navigationPoints.back();
             m_searchStart = last.m_position;
             m_searchStartPolygon = static_cast<unsigned int>(last.m_polygon);
         }
         m_set132.clear();
-        m_set132.insert(m_quadTree->getPolygon(m_searchStartPolygon)->m_cluster);
+        m_set132.insert(m_quadTree->getPolygon(m_searchStartPolygon)->cluster);
         m_searchGoalIsFinal = false;
         if (!m_clusterPath->getPoint(m_searchGoal, m_searchGoalPolygon, static_cast<unsigned int>(m_clusterPath->m_i0 + 2)))
         {
@@ -861,12 +861,12 @@ bool BotNavigation::doPolygonSearch(bool& finished, bool* blocked)
                 static_cast<int>(index) < static_cast<int>(nodes) ? m_clusterPath->m_nodes[index].first : 0xFFFF;
             m_set132.insert(cluster);
         }
-        m_set132.insert(m_quadTree->getPolygon(m_searchGoalPolygon)->m_cluster);
+        m_set132.insert(m_quadTree->getPolygon(m_searchGoalPolygon)->cluster);
         m_pathfinding->setAllowedClusters(m_int76, &m_set132);
     }
-    m_int56 = m_pathfinding->localSearch(static_cast<int>(m_int76), m_mapIndex, static_cast<unsigned int>(m_island),
+    m_int56 = m_pathfinding->localSearch(static_cast<int>(m_int76), m_mapIndex, static_cast<unsigned int>(m_startIsland),
                                          m_searchStartPolygon, m_searchStart, m_searchGoalPolygon, m_searchGoal,
-                                         m_equipmentType, m_polygonPath);
+                                         m_equipmentType, m_path);
     if (m_int56 != 1)
     {
         m_pathfinding->releaseResource(m_int76, m_bot->getBotId());
@@ -876,16 +876,16 @@ bool BotNavigation::doPolygonSearch(bool& finished, bool* blocked)
             calculatePoints();
             if (m_searchGoalIsFinal)
             {
-                const unsigned int n = static_cast<unsigned int>(m_points.size());
-                m_points.resize(n + 1, NavigationPoint());
-                m_points[n].m_position = m_goal;
-                m_points[n].m_polygon = m_goalPolygon;
+                const unsigned int n = static_cast<unsigned int>(m_navigationPoints.size());
+                m_navigationPoints.resize(n + 1, NavigationPoint());
+                m_navigationPoints[n].m_position = m_goal;
+                m_navigationPoints[n].m_polygon = m_goalPolygon;
                 m_clusterPath->m_nodes.resize(0);
                 m_clusterPath->m_i0 = 0;
             }
             m_flag192 = false;
             m_quadTree = static_cast<QuadTree*>(
-                m_pathfinding->getQuadTree(m_mapIndex, static_cast<unsigned int>(m_polygonPath->m_island)));
+                m_pathfinding->getQuadTree(m_mapIndex, static_cast<unsigned int>(m_path->m_island)));
             optimizePoints();
             updateNavPoints();
             updateNavPoints();
@@ -913,7 +913,7 @@ bool BotNavigation::doClusterSearch(bool& finished, bool* blocked)
             return false;
         }
     }
-    m_int56 = m_pathfinding->clusterSearch(static_cast<int>(m_int128), m_mapIndex, static_cast<unsigned int>(m_island),
+    m_int56 = m_pathfinding->clusterSearch(static_cast<int>(m_int128), m_mapIndex, static_cast<unsigned int>(m_startIsland),
                                            static_cast<unsigned int>(m_startPolygon), m_startPosition,
                                            static_cast<unsigned int>(m_goalPolygon), m_goal, m_equipmentType,
                                            m_clusterPath);
@@ -944,7 +944,7 @@ bool BotNavigation::pointWithinObstacleRadius(const Vec3& point)
     for (unsigned int i = 0; i < m_obstacles.size(); ++i)
     {
         Information* const info = informationManager->getInformation(m_obstacles[i]);
-        if (!info || (info->getObjectTypeFlags() & 0x00200000u) || !info->getPhysical())
+        if (!info || info->isOfType(ITSoldier) || !info->getPhysical())
             continue;
         const Vec3& p = info->getPosition();
         const float radius = info->getPhysical()->getSmallestRadius();
@@ -962,11 +962,11 @@ bool BotNavigation::pointWithinObstacleRadius(const Vec3& point)
 // emptied afterwards.
 void BotNavigation::calculatePoints()
 {
-    m_polygonPath->m_i0 = 0;
-    QTPath* path = m_polygonPath;
+    m_path->m_i0 = 0;
+    QTPath* path = m_path;
     const unsigned int island = static_cast<unsigned int>(path->m_island);
     const unsigned int steps = static_cast<unsigned int>(path->m_nodes.size());
-    const unsigned int count = static_cast<unsigned int>(m_points.size());
+    const unsigned int count = static_cast<unsigned int>(m_navigationPoints.size());
     unsigned int base = count - 1;
     if (count <= m_currentPoint)
         base = 0;
@@ -979,27 +979,27 @@ void BotNavigation::calculatePoints()
     int polygon = -1;
     if (path->m_i0 < static_cast<int>(path->m_nodes.size()))
         polygon = static_cast<int>(path->m_nodes[path->m_i0].first);
-    m_points.resize(size, NavigationPoint());
-    path = m_polygonPath;
+    m_navigationPoints.resize(size, NavigationPoint());
+    path = m_path;
     unsigned int k = base;
     while (static_cast<unsigned int>(path->m_i0) < steps)
     {
         int entered = polygon;
-        NavigationPoint& point = m_points[k];
+        NavigationPoint& point = m_navigationPoints[k];
         point.m_position = *path->getPosition(static_cast<unsigned int>(path->m_i0));
-        point.m_polygon = static_cast<int>(m_polygonPath->getPolygon(static_cast<unsigned int>(m_polygonPath->m_i0)));
+        point.m_polygon = static_cast<int>(m_path->getPolygon(static_cast<unsigned int>(m_path->m_i0)));
         if (from == -1)
         {
-            point.m_point0 = *m_polygonPath->getPosition(static_cast<unsigned int>(m_polygonPath->m_i0));
-            point.m_pointC = *m_polygonPath->getPosition(static_cast<unsigned int>(m_polygonPath->m_i0));
+            point.edgePoint1 = *m_path->getPosition(static_cast<unsigned int>(m_path->m_i0));
+            point.m_pointC = *m_path->getPosition(static_cast<unsigned int>(m_path->m_i0));
         }
         else
         {
-            m_pathfinding->getEdge(point.m_point0, point.m_pointC, m_mapIndex, static_cast<unsigned int>(from),
+            m_pathfinding->getEdge(point.edgePoint1, point.m_pointC, m_mapIndex, static_cast<unsigned int>(from),
                                    static_cast<unsigned int>(entered), island);
         }
-        ++m_polygonPath->m_i0;
-        path = m_polygonPath;
+        ++m_path->m_i0;
+        path = m_path;
         int next = -1;
         if (path->m_i0 < static_cast<int>(path->m_nodes.size()))
             next = static_cast<int>(path->m_nodes[path->m_i0].second);
@@ -1022,7 +1022,7 @@ void BotNavigation::calculatePoints()
 // point where that line crosses its edge, when it does within the edge.
 void BotNavigation::optimizePoints()
 {
-    if (m_points.empty())
+    if (m_navigationPoints.empty())
         return;
     Vec2 from;
     from.x = 0.0f;
@@ -1032,10 +1032,10 @@ void BotNavigation::optimizePoints()
     vec3ToVec2XZ(info->getPosition(), from);
     for (int pass = 0; pass < 2; ++pass)
     {
-        for (unsigned int i = 0; i < m_points.size() - 1; ++i)
+        for (unsigned int i = 0; i < m_navigationPoints.size() - 1; ++i)
         {
             const Vec3& p = info->getPosition();
-            const Vec3& at = m_points[i].m_position;
+            const Vec3& at = m_navigationPoints[i].m_position;
             const float dx = p.x - at.x;
             const float dy = p.y - at.y;
             const float dz = p.z - at.z;
@@ -1045,9 +1045,9 @@ void BotNavigation::optimizePoints()
                 next.x = 0.0f; next.y = 0.0f;
                 a.x = 0.0f; a.y = 0.0f;
                 b.x = 0.0f; b.y = 0.0f;
-                vec3ToVec2XZ(m_points[i + 1].m_position, next);
-                vec3ToVec2XZ(m_points[i].m_point0, a);
-                vec3ToVec2XZ(m_points[i].m_pointC, b);
+                vec3ToVec2XZ(m_navigationPoints[i + 1].m_position, next);
+                vec3ToVec2XZ(m_navigationPoints[i].edgePoint1, a);
+                vec3ToVec2XZ(m_navigationPoints[i].m_pointC, b);
                 float s;
                 float t;
                 if (lineIntersect(from, next, a, b, s, t))
@@ -1071,36 +1071,36 @@ void BotNavigation::optimizePoints()
                     {
                         t = margin / length;
                     }
-                    NavigationPoint& point = m_points[i];
+                    NavigationPoint& point = m_navigationPoints[i];
                     const float u = t <= 1.0f ? t : 1.0f;
-                    point.m_position.x = point.m_point0.x + (point.m_pointC.x - point.m_point0.x) * u;
-                    point.m_position.y = (point.m_pointC.y - point.m_point0.y) * u + point.m_point0.y;
-                    point.m_position.z = (point.m_pointC.z - point.m_point0.z) * u + point.m_point0.z;
+                    point.m_position.x = point.edgePoint1.x + (point.m_pointC.x - point.edgePoint1.x) * u;
+                    point.m_position.y = (point.m_pointC.y - point.edgePoint1.y) * u + point.edgePoint1.y;
+                    point.m_position.z = (point.m_pointC.z - point.edgePoint1.z) * u + point.edgePoint1.z;
                 }
             }
-            vec3ToVec2XZ(m_points[i].m_position, from);
+            vec3ToVec2XZ(m_navigationPoints[i].m_position, from);
         }
     }
     vec3ToVec2XZ(info->getPosition(), from);
-    for (unsigned int i = 0; i < m_points.size() - 1; ++i)
+    for (unsigned int i = 0; i < m_navigationPoints.size() - 1; ++i)
     {
         Vec2 next, a, b;
         next.x = 0.0f; next.y = 0.0f;
         a.x = 0.0f; a.y = 0.0f;
         b.x = 0.0f; b.y = 0.0f;
-        vec3ToVec2XZ(m_points[i + 1].m_position, next);
-        vec3ToVec2XZ(m_points[i].m_point0, a);
-        vec3ToVec2XZ(m_points[i].m_pointC, b);
+        vec3ToVec2XZ(m_navigationPoints[i + 1].m_position, next);
+        vec3ToVec2XZ(m_navigationPoints[i].edgePoint1, a);
+        vec3ToVec2XZ(m_navigationPoints[i].m_pointC, b);
         float s;
         float t;
         if (lineIntersect(from, next, a, b, s, t) && 0.0f <= t && t <= 1.0f)
         {
-            NavigationPoint& point = m_points[i];
-            point.m_position.x = (point.m_pointC.x - point.m_point0.x) * t + point.m_point0.x;
-            point.m_position.y = (point.m_pointC.y - point.m_point0.y) * t + point.m_point0.y;
-            point.m_position.z = (point.m_pointC.z - point.m_point0.z) * t + point.m_point0.z;
+            NavigationPoint& point = m_navigationPoints[i];
+            point.m_position.x = (point.m_pointC.x - point.edgePoint1.x) * t + point.edgePoint1.x;
+            point.m_position.y = (point.m_pointC.y - point.edgePoint1.y) * t + point.edgePoint1.y;
+            point.m_position.z = (point.m_pointC.z - point.edgePoint1.z) * t + point.edgePoint1.z;
         }
-        vec3ToVec2XZ(m_points[i].m_position, from);
+        vec3ToVec2XZ(m_navigationPoints[i].m_position, from);
     }
 }
 
@@ -1130,9 +1130,9 @@ void BotNavigation::updateNavPoints()
     bool advanced = false;
     const float clearance = soldier ? minClearanceSoldier : minClearanceVehicle;
     unsigned int polygon;
-    if (m_int240 == 0)
+    if (m_skipTraceCount == 0)
     {
-        const Vec3& current = m_points[m_currentPoint].m_position;
+        const Vec3& current = m_navigationPoints[m_currentPoint].m_position;
         const float dx = position.x - current.x;
         const float dy = position.y - current.y;
         const float dz = position.z - current.z;
@@ -1140,8 +1140,8 @@ void BotNavigation::updateNavPoints()
         {
             for (int i = 0; i < (soldier ? 1 : 4); ++i)
             {
-                if (m_points.size() - 1 <= m_currentPoint
-                    || !m_pathfinding->trace(this, false, m_points[m_currentPoint + 1].m_position, hit, polygon,
+                if (m_navigationPoints.size() - 1 <= m_currentPoint
+                    || !m_pathfinding->trace(this, false, m_navigationPoints[m_currentPoint + 1].m_position, hit, polygon,
                                              m_equipmentType, steps, clearance, 5, 0))
                     break;
                 ++m_currentPoint;
@@ -1151,7 +1151,7 @@ void BotNavigation::updateNavPoints()
                 return;
         }
     }
-    if (!m_pathfinding->trace(this, false, m_points[m_currentPoint].m_position, hit, polygon, m_equipmentType, -1,
+    if (!m_pathfinding->trace(this, false, m_navigationPoints[m_currentPoint].m_position, hit, polygon, m_equipmentType, -1,
                               0.0f, 0, 0))
         m_flag194 = true;
 }
@@ -1162,7 +1162,7 @@ void BotNavigation::updateNavPoints()
 // as in the image.
 void BotNavigation::updateClosestDistance()
 {
-    if (m_points.empty())
+    if (m_navigationPoints.empty())
     {
         m_sentinel188 = 0.0f;
         return;
@@ -1170,13 +1170,13 @@ void BotNavigation::updateClosestDistance()
     // The image reads BotMain +0x8C inline (no null guard).
     Information* const info = informationManager->getInformation(m_bot->getCurrentEquipment());
     const Vec3& position = info->getPosition();
-    const Vec3& current = m_points[m_currentPoint].m_position;
+    const Vec3& current = m_navigationPoints[m_currentPoint].m_position;
     float distance = length3(position.x - current.x, position.y - current.y, position.z - current.z);
     unsigned int i = m_currentPoint + 1;
-    for (; i < m_points.size(); ++i)
+    for (; i < m_navigationPoints.size(); ++i)
     {
-        const Vec3& a = m_points[i - 1].m_position;
-        const Vec3& b = m_points[i].m_position;
+        const Vec3& a = m_navigationPoints[i - 1].m_position;
+        const Vec3& b = m_navigationPoints[i].m_position;
         distance = length3(a.x - b.x, a.y - b.y, a.z - b.z) + distance;
     }
     ClusterNodePath* const cluster = m_clusterPath;
@@ -1185,7 +1185,7 @@ void BotNavigation::updateClosestDistance()
     if (static_cast<unsigned int>(cluster->m_i0) < nodes)
     {
         const unsigned int remaining = nodes - static_cast<unsigned int>(cluster->m_i0);
-        Vec3 previous = m_points[i - 1].m_position;
+        Vec3 previous = m_navigationPoints[i - 1].m_position;
         for (unsigned int k = 1; k < remaining; ++k)
         {
             Vec3 point;
@@ -1202,9 +1202,9 @@ void BotNavigation::updateClosestDistance()
 // ELF 0x1927A0 (130 bytes): a point on a missing or non-walkable (material 0) polygon.
 bool BotNavigation::hasIllegalPath()
 {
-    for (unsigned int i = 0; i < m_points.size(); ++i)
+    for (unsigned int i = 0; i < m_navigationPoints.size(); ++i)
     {
-        const Polygon* const polygon = m_quadTree->getPolygon(static_cast<unsigned int>(m_points[i].m_polygon));
+        const Polygon* const polygon = m_quadTree->getPolygon(static_cast<unsigned int>(m_navigationPoints[i].m_polygon));
         if (!polygon || polygon->m_material == 0)
             return true;
     }
@@ -1238,7 +1238,7 @@ bool BotNavigation::checkProgress()
     const double now = static_cast<const IBFTimer*>(CommonSingletonServer::m_iBFTimer)->getGameTime();
     if (1.0 < now - m_double168 && ((input->mappingFlags >> io::PIAction) & 1ULL))
         input->inputs[io::PIAction] = 0.0f;
-    if (m_points.empty() || m_int56 != 2)
+    if (m_navigationPoints.empty() || m_int56 != 2)
         return true;
     float move = mappedInput(input, io::PIThrottle);
     const float sprint = mappedInput(input, io::PISprint);
@@ -1250,16 +1250,16 @@ bool BotNavigation::checkProgress()
     const double still = m_updateSpaceLeftAndRight ? 0.1 : 0.5;
     if (std::fabs(move) <= 0.1f)
     {
-        if (still < now - m_double152)
+        if (still < now - m_noThrottleTimer)
         {
-            m_double144 = now;
+            m_noProgressTimer = now;
             m_flag192 = false;
             return true;
         }
     }
     else
     {
-        m_double152 = now;
+        m_noThrottleTimer = now;
     }
     const float radius = m_updateSpaceLeftAndRight ? 2.0f : 4.0f;
     Information* const info = informationManager->getInformation(m_bot->getCurrentEquipment());
@@ -1267,7 +1267,7 @@ bool BotNavigation::checkProgress()
     if (distanceSq(m_zero280, position) <= radius * radius)
     {
         const float limit = m_updateSpaceLeftAndRight ? 10.0f : 20.0f;
-        const double since = m_double144;
+        const double since = m_noProgressTimer;
         if (m_updateSpaceLeftAndRight && 2.0f < static_cast<float>(now - since) && 3.0 < now - m_double168)
         {
             if (distanceSq(m_zero176, info->getPosition()) < 0.001f)
@@ -1282,7 +1282,7 @@ bool BotNavigation::checkProgress()
     m_zero280[0] = position.x;
     m_zero280[1] = position.y;
     m_zero280[2] = position.z;
-    m_double144 = now;
+    m_noProgressTimer = now;
     m_flag192 = false;
     return true;
 }
@@ -1347,16 +1347,16 @@ void BotNavigation::getTraceData(int mapIndex, unsigned int& polygon, unsigned i
         m_tracePosition = valid.position;
         position = valid.position;
         polygon = valid.polygon;
-        island = valid.quadTree;
+        island = valid.island;
         if (m_mapIndex == mapIndex)
         {
-            m_vehiclePolygon = static_cast<int>(valid.polygon);
-            m_vehicleIsland = static_cast<int>(valid.quadTree);
+            m_currentPolygon = static_cast<int>(valid.polygon);
+            m_vehicleIsland = static_cast<int>(valid.island);
         }
         if (mapIndex == IAIPathfinding::instance->getTraceMapIndex())
         {
             m_infantryPolygon = static_cast<int>(valid.polygon);
-            m_infantryIsland = static_cast<int>(valid.quadTree);
+            m_infantryIsland = static_cast<int>(valid.island);
         }
         return;
     }
@@ -1368,7 +1368,7 @@ void BotNavigation::getTraceData(int mapIndex, unsigned int& polygon, unsigned i
     }
     else if (mapIndex == m_mapIndex)
     {
-        polygon = static_cast<unsigned int>(m_vehiclePolygon);
+        polygon = static_cast<unsigned int>(m_currentPolygon);
         island = static_cast<unsigned int>(m_vehicleIsland);
     }
     else
@@ -1380,25 +1380,25 @@ void BotNavigation::getTraceData(int mapIndex, unsigned int& polygon, unsigned i
 // ELF 0x192EA0: append the old route's remaining interior points after recalculating the prefix.
 void BotNavigation::mergeNavigationPoints()
 {
-    const std::vector<NavigationPoint> previous(m_points);
+    const std::vector<NavigationPoint> previous(m_navigationPoints);
     unsigned int index = m_currentPoint;
-    m_polygonPath->m_i0 = 0;
+    m_path->m_i0 = 0;
     calculatePoints();
     // Shipped defect: an empty previous route underflows this unsigned bound.
     for (; index < previous.size() - 1; ++index)
-        m_points.push_back(previous[index]);
+        m_navigationPoints.push_back(previous[index]);
     NavigationPoint last;
-    last.m_point0 = m_goal;
+    last.edgePoint1 = m_goal;
     last.m_pointC = m_goal;
     last.m_position = m_goal;
     last.m_polygon = m_goalPolygon;
-    m_points.push_back(last);
+    m_navigationPoints.push_back(last);
 }
 
 // ELF 0x195390: appends to the caller's vector without clearing it.
 void BotNavigation::getNavigationPoints(std::vector<Vec3>& points) const
 {
-    for (std::vector<NavigationPoint>::const_iterator it = m_points.begin(); it != m_points.end(); ++it)
+    for (std::vector<NavigationPoint>::const_iterator it = m_navigationPoints.begin(); it != m_navigationPoints.end(); ++it)
         points.push_back(it->m_position);
 }
 

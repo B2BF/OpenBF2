@@ -16,7 +16,7 @@
 #include "../AIBotBehaviourPattern/BBPIdle3d.h"
 #include "../AIBotBehaviourPattern/BBPIdleInfantery.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../Main/AIDllFrontier.h"
@@ -42,11 +42,9 @@ IAISettings* settings()
     return static_cast<IAISettings*>(CommonSingletonServer::m_iaiSettings);
 }
 
-// Information::m_objectTypeFlags bits read here ([UNRESOLVED] names): 0x10 and 0x20 select the
-// larger pickup radius, 0x200000 marks an object that can carry passengers (the pickup vehicle).
-const unsigned int kTypeFlag10 = 0x10;
-const unsigned int kTypeFlag20 = 0x20;
-const unsigned int kTypeFlagCarrier = 0x200000;
+// Object-type tests use Information::isOfType (InformationType bits; AIDLL_r enum switch 0x100D3010):
+// ITAir and ITHelicopter select the larger pickup radius; ITSoldier marks a soldier (a requester on
+// foot, whose "vehicle" is the soldier itself); the bot's own equipment must not be one to give a lift.
 
 // The sender id that means "anyone" in a pickup request; a real one makes the request personal.
 const int kAnySender = 0xFF;
@@ -116,12 +114,12 @@ float BBIdle::calculateUrgency(Bot* bot, bool, float modifier)
     float urgency = modifier;
     int pickupPlayerId = -1;
 
-    if (info->isPrimary() && !(info->getObjectTypeFlags() & kTypeFlagCarrier) && mobile)
+    if (info->isPrimary() && !info->isOfType(ITSoldier) && mobile)
     {
         bool moving = false;
         if (bot->isAirBorn())
             moving = true;
-        else if ((info->getObjectTypeFlags() & kTypeFlag10) && mobile->getSpeedMagnitude() > 3.0f)
+        else if (info->isOfType(ITAir) && mobile->getSpeedMagnitude() > 3.0f)
             moving = true;
 
         IPIPhysical* const physical = info->getPhysical();
@@ -262,7 +260,7 @@ void BBIdle::waitForPickup(Bot* bot, unsigned int equipment, Information* equipm
 
         if (pickupPlayerId >= 0 && !fromAnyone)
             continue;
-        if (equipmentInfo->getObjectTypeFlags() & kTypeFlagCarrier)
+        if (equipmentInfo->isOfType(ITSoldier))
             continue;
         // 0x21584E: `cmpl 0x5C(agent), primaryPlayerId` (CommunicationAgent +0x5C).
         if (senderAgent && bbpending::communicationAgentInt92(senderAgent) != primaryPlayerId)
@@ -278,12 +276,11 @@ void BBIdle::waitForPickup(Bot* bot, unsigned int equipment, Information* equipm
         Information* const vehicleInfo = informationManager->getInformation(vehicle->getHandle(bot->getSide()));
         if (!vehicleInfo)
             continue;
-        if (!(vehicleInfo->getObjectTypeFlags() & kTypeFlagCarrier))
+        if (!vehicleInfo->isOfType(ITSoldier))
             continue;
 
-        const unsigned int flags = equipmentInfo->getObjectTypeFlags();
         float maxDistanceSqr;
-        if ((flags & kTypeFlag20) || (flags & kTypeFlag10) || fromAnyone)
+        if (equipmentInfo->isOfType(ITHelicopter) || equipmentInfo->isOfType(ITAir) || fromAnyone)
             maxDistanceSqr = 2500.0f;
         else
             maxDistanceSqr = 625.0f;
@@ -316,9 +313,9 @@ void BBIdle::waitForPickup(Bot* bot, unsigned int equipment, Information* equipm
         if (!m_waitingForPickup[bot->getBotId()] || m_waitStartTime[bot->getBotId()] == 0.0)
             m_waitStartTime[bot->getBotId()] = now;
         const double waited = now - m_waitStartTime[bot->getBotId()];
-        if (!(vehicleInfo->getObjectTypeFlags() & kTypeFlagCarrier) || primary != equipmentInfo)
+        if (!vehicleInfo->isOfType(ITSoldier) || primary != equipmentInfo)
             continue;
-        if (!equipmentInfo->getMobile() || (equipmentInfo->getObjectTypeFlags() & kTypeFlagCarrier) || moving)
+        if (!equipmentInfo->getMobile() || equipmentInfo->isOfType(ITSoldier) || moving)
             continue;
         if (!(waited < 10.0))
             continue;

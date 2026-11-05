@@ -19,7 +19,7 @@ BAPConSharedCondition::BAPConSharedCondition(BAPCondition* condition)
     m_shared->value = false;
     m_shared->references = 1;
     m_condition = condition;
-    condition->m_owner = this;
+    condition->mpOwner = this;
 }
 
 // ELF 0x1E9E60 (C2; C1 0x1E9EA0): shares the cell, owns no condition.

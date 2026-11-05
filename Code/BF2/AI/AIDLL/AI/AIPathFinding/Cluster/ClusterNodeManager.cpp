@@ -50,9 +50,9 @@ ClusterNodeManager::ClusterNodeManager()
     , m_clusterGraph(0)
     , m_goal(0)
     , m_freeNodes(0)
-    , m_numberOfNodes(0)
+    , m_nodeCacheSize(0)
     , m_freeOCData(0)
-    , m_numberOfOCData(0)
+    , m_ocCacheSize(0)
     , m_ocDataHash(checkPointer(new Hash<OCData, ClusterNodeManager, OCData>(kOCDataBuckets)))
     , m_costType(0)
 {
@@ -75,7 +75,7 @@ ClusterNodeManager::~ClusterNodeManager()
         ClusterNode* const node = m_freeNodes;
         m_freeNodes = node->m_next;
         delete node;
-        --m_numberOfNodes;
+        --m_nodeCacheSize;
     }
 
     while (m_freeOCData != 0)
@@ -83,7 +83,7 @@ ClusterNodeManager::~ClusterNodeManager()
         OCData* const data = m_freeOCData;
         m_freeOCData = data->m_next;
         delete data;
-        --m_numberOfOCData;
+        --m_ocCacheSize;
     }
 
     Hash<OCData, ClusterNodeManager, OCData>* const hash = m_ocDataHash;
@@ -95,8 +95,8 @@ ClusterNodeManager::~ClusterNodeManager()
         if (data->m_node != 0)
             delete data->m_node;
         delete data;
-        --m_numberOfOCData;
-        --m_numberOfNodes;
+        --m_ocCacheSize;
+        --m_nodeCacheSize;
         it.m_node = next;
         if (it.m_node == 0)
         {
@@ -115,7 +115,7 @@ ClusterNodeManager::~ClusterNodeManager()
     if (m_goal != 0)
     {
         delete m_goal;
-        --m_numberOfNodes;
+        --m_nodeCacheSize;
     }
 }
 
@@ -263,7 +263,7 @@ ClusterNode* ClusterNodeManager::getNewNode(unsigned short cluster, ClusterNode*
     else
     {
         node = new ClusterNode(cluster, depth);
-        ++m_numberOfNodes;
+        ++m_nodeCacheSize;
     }
     node->m_parent = parent;
     return node;
@@ -282,7 +282,7 @@ ClusterNode* ClusterNodeManager::getNewNode(ClusterNode* source)
     else
     {
         node = new ClusterNode(*source);
-        ++m_numberOfNodes;
+        ++m_nodeCacheSize;
     }
     return node;
 }
@@ -405,7 +405,7 @@ ClusterNodeManager::OCData* ClusterNodeManager::getNewOCData()
         return data;
     }
 
-    ++m_numberOfOCData;
+    ++m_ocCacheSize;
     OCData* const data = new OCData;
     data->m_open = true;
     data->m_closed = false;

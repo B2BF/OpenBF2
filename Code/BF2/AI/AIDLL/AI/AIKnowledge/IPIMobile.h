@@ -21,7 +21,7 @@ public:
     struct ValidPos
     {
         unsigned int polygon;
-        unsigned int quadTree;
+        unsigned int island;    // name: AIDLL_r assert "oldVehicleVP.island != invalidIslandId" (0x100CDD00; +4)
         Vec3 position;
     };
 

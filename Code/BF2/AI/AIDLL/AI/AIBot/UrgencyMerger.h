@@ -1,5 +1,5 @@
 // Combines per-behavior urgency generators for a bot.
-// [INFERRED] Source placement.
+// Header placement [INFERRED]: beside its .cpp, whose path AIDLL_r.dll confirms (AIBot/UrgencyMerger.cpp).
 
 #ifndef AI_AIDLL_AI_AIBOTBEHAVIOUR_URGENCYMERGER_H       // [INFERRED] guard style
 #define AI_AIDLL_AI_AIBOTBEHAVIOUR_URGENCYMERGER_H
@@ -54,7 +54,7 @@ protected:
     /*  4 */ int                m_count;         // the generator count; getSize returns it
     /*  8 */ float*             m_weights;       // null from BotManager's pool
     /* 12 */ UrgencyGenerator** m_generators;
-    /* 16 */ UrgencyGenerator*  m_chosen;        // = 0; the winner of the last updateActiveUrgency
+    /* 16 */ UrgencyGenerator*  mpMaxGenerator;        // = 0; the winner of the last updateActiveUrgency  // name: AIDLL_r assert "mpMaxGenerator != 0" (0x101F9180)
 };
 
 } // namespace ai

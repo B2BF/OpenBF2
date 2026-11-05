@@ -1,6 +1,6 @@
 // Handle pool for AI information. The pool does not own the referenced information objects.
 // [INFERRED] Method names represent the observed pool operations.
-// [INFERRED] Source placement.
+// Source placement: AIDLL_r.dll __FILE__ "Code/BF2//AI/AIDLL/AI/Main/InformationManager.h" (an inline assert).
 
 #ifndef AI_AIDLL_AI_AIKNOWLEDGE_INFORMATIONMANAGER_H
 #define AI_AIDLL_AI_AIKNOWLEDGE_INFORMATIONMANAGER_H

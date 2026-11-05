@@ -4,12 +4,12 @@
 #include "../../BF2/AI/AIDLL/AI/AIKnowledge/BFInformationCourier.h"
 #include "../../BF2/AI/AIDLL/AI/AIKnowledge/InformationFactory.h"
 #include "../../BF2/AI/AIDLL/AI/AIKnowledge/Information.h"
-#include "../../BF2/AI/AIDLL/AI/AIKnowledge/InformationManager.h"
+#include "../../BF2/AI/AIDLL/AI/Main/InformationManager.h"
 #include "../../BF2/AI/AIDLL/AI/AIKnowledge/InformationReal.h"
 #include "../../BF2/AI/AIDLL/AI/AIKnowledge/IPIMobile.h"
 #include "../../BF2/AI/AIDLL/AI/AIKnowledge/IPIMobileKnown.h"
 #include "../../BF2/AI/AIDLL/AI/AIKnowledge/IPIMobileReal.h"
-#include "../../BF2/AI/AIDLL/AI/AIStrategicMap/AerialHeightMap.h"
+#include "../../BF2/AI/AIDLL/AI/AIPathFinding/AerialHeightMap/AerialHeightMap.h"
 #include "../../BF2/AI/AIDLL/AI/Main/AISettingsInterfaces.h"
 #include "../../BF2/AI/AIDLL/AI/Main/CommonSingletonServer.h"
 #include "../../BF2/AI/AIDLL/AI/Main/IAIPathfinding.h"
@@ -37,7 +37,7 @@ using namespace dice::hfe::ai;
 static_assert(sizeof(void*) == 4, "x86 only");
 static_assert(sizeof(IPIMobile::ValidPos) == 20, "retail ValidPos stride");
 static_assert(offsetof(IPIMobile::ValidPos, polygon) == 0, "polygon is the first path output");
-static_assert(offsetof(IPIMobile::ValidPos, quadTree) == 4, "quadTree is the second path output");
+static_assert(offsetof(IPIMobile::ValidPos, island) == 4, "quadTree is the second path output");
 static_assert(offsetof(IPIMobile::ValidPos, position) == 8, "position follows the two indices");
 static_assert(sizeof(IPIMobile) == 72, "retail x86 IPIMobile layout");
 static_assert(sizeof(IPIMobileReal) == 72, "retail x86 IPIMobileReal layout");
@@ -105,7 +105,7 @@ static IPIMobile::ValidPos valid(unsigned int polygon, unsigned int quadTree,
 {
     IPIMobile::ValidPos result;
     result.polygon = polygon;
-    result.quadTree = quadTree;
+    result.island = quadTree;
     result.position.x = x;
     result.position.y = y;
     result.position.z = z;
@@ -114,7 +114,7 @@ static IPIMobile::ValidPos valid(unsigned int polygon, unsigned int quadTree,
 
 static bool equalPos(const IPIMobile::ValidPos& a, const IPIMobile::ValidPos& b)
 {
-    return a.polygon == b.polygon && a.quadTree == b.quadTree
+    return a.polygon == b.polygon && a.island == b.island
         && equalVec(a.position, b.position);
 }
 
@@ -496,7 +496,7 @@ static void modeBaseMaterial()
     expectRawRecords(mobile, infantry, material3, material3, true, "material 3");
     check(materialCalls.size() == 1, "material 3 issues one material query");
     check(materialCalls[0].map == 1, "material map is bool(traceMap == 0)");
-    check(materialCalls[0].firstIndex == material3.quadTree
+    check(materialCalls[0].firstIndex == material3.island
           && materialCalls[0].secondIndex == material3.polygon,
           "material query receives quadTree then polygon");
 

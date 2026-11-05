@@ -18,7 +18,7 @@
 #include "../AIKnowledge/AIInformationGrid.h"
 #include "../AIKnowledge/BFInformationEnvironment.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIUtils/VehicleOccupancy.h"
@@ -52,8 +52,7 @@ public:
     {
         if (!information->getUnit() || !information->hasMobile())
             return false;
-        const unsigned int flags = information->getObjectTypeFlags();
-        if ((flags & 0x80u) || (flags & 0x200000u))
+        if (information->isOfType(ITNaval) || information->isOfType(ITSoldier))
             return false;
 
         bool anyFree = false;

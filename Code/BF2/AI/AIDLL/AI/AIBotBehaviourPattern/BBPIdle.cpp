@@ -7,7 +7,7 @@
 #include "BBPIdle.h"
 
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIUnit.h"
 
 namespace dice {

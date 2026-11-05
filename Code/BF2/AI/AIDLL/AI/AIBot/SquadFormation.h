@@ -32,7 +32,7 @@ public:
         explicit Slot(SwapTemporary) : m_offset() {}
 
         Slot()
-            : m_occupied(false)
+            : hasSquadMemberAssigned(false)
             , m_memberIndex(-1)
             , m_i20(-1)
             , m_b24(false)
@@ -44,10 +44,10 @@ public:
             m_offset.z = 0.0f;
         }
 
-        /*  +0 */ bool m_occupied;       // the flag every deep branch in this class is guarded by
+        /*  +0 */ bool hasSquadMemberAssigned;       // the flag every deep branch in this class is guarded by; name: AIDLL_r assert (0x101B4F00; +0)
         /*  +4 */ int  m_memberIndex;    // = -1; indexes the coordinator's squad-member vector
         /*  +8 */ Vec3 m_offset;         // the position the formation setters compute
-        /* +20 */ int  m_i20;            // = -1; the trailing position (m_slotTargets) this slot falls back to
+        /* +20 */ int  m_i20;            // = -1; the trailing position (m_trailingPositions) this slot falls back to
         /* +24 */ bool m_b24;            // = false [UNRESOLVED]
         /* +28 */ float m_i28;           // legacy inferred name; float proved by leaveFormation's x87 loads/stores
         /* +32 */ int  m_referenceSlot;  // the slot this one is measured from [INFERRED]
@@ -75,7 +75,7 @@ public:
     void selectFormation();                  // / PE inlined at
     int getSquadMemberIndexAtSlot(int slotIndex); // no occupied test
     // ELF 0x1AB6C0: the first slot is occupied (no empty-vector guard).
-    bool hasSquadMembers() { return m_slots[0]->m_occupied; }
+    bool hasSquadMembers() { return m_slots[0]->hasSquadMemberAssigned; }
     bool getSlotWorldPos(int memberIndex, Vec3& position);     // ELF 0x1AC550
     int getFirstFreeTrailingSlot(SquadMember* member);         // ELF 0x1ACA30
     bool isTrailPosAssigned(int trailIndex);                   // ELF 0x1ACB70
@@ -111,7 +111,7 @@ public:
     /*  +12 */ SquadCoordinator* m_coordinator;       // the constructor's argument
     /*  +16 */ int m_formation;                       // = 0 (line); `setFormation` switches on it
     /*  +20 */ Vec3 m_direction;                      // set by `setFormation` per formation
-    /*  +32 */ unsigned int m_maxSquadMembers;        // = IAIGame::getMaxNumberOfSquadMembers
+    /*  +32 */ unsigned int m_numberOfSlots;        // = IAIGame::getMaxNumberOfSquadMembers  // name: AIDLL_r assert 0x101B5980 (PE +0x24)
     /*  +36 */ bool m_b36;                            // = false; shouldSquadMoveOut returns it
     /*  +40 */ float m_formationMaxSpeed;             // FLT_MAX, then 5.0f - see the header note
     /*  +44 */ int m_side;                            // = the coordinator's side
@@ -128,7 +128,7 @@ public:
     /*  +92 */ double m_d92;                          // = 0.0; next movement-stamp time (now + 0.2)
     // [INFERRED] Per-slot breadcrumb targets. Anchor movement beyond six metres shifts the
     // trail and inserts its previous position; construction sizes it to the slot count.
-    /* +100 */ std::vector<std::pair<bool, Vec3> > m_slotTargets;   // (valid, crumb) per index
+    /* +100 */ std::vector<std::pair<bool, Vec3> > m_trailingPositions;   // (valid, crumb) per index  // name: AIDLL_r assert 0x101B7E20 (PE +0x68)
     /* +112 */ Vec3 m_trailingPosition;               // [INFERRED name]; the newest crumb, seeded from m_v72
 };
 

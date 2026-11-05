@@ -13,11 +13,12 @@ cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%BF2_AREA_UPDATE_OUT%\a
 if errorlevel 1 goto failed
 cl %TASK_FLAGS% /I"%BF2_AREA_UPDATE_OUT%" /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%~dp0area_update_runtime.cpp" /Fo"%BF2_AREA_UPDATE_OUT%\fixture.obj" >>"%BF2_AREA_UPDATE_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed
-cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\AIKnowledge\InformationManager.cpp" /Fo"%BF2_AREA_UPDATE_OUT%\pool.obj" >>"%BF2_AREA_UPDATE_OUT%\compile.log" 2>&1
+cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\Main\InformationManager.cpp" /Fo"%BF2_AREA_UPDATE_OUT%\pool.obj" >>"%BF2_AREA_UPDATE_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed
-cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\AIBotBehaviour\CustomCurve.cpp" /Fo"%BF2_AREA_UPDATE_OUT%\curve.obj" >>"%BF2_AREA_UPDATE_OUT%\compile.log" 2>&1
+cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\AIUtils\CustomCurve.cpp" /Fo"%BF2_AREA_UPDATE_OUT%\curve.obj" >>"%BF2_AREA_UPDATE_OUT%\compile.log" 2>&1
+cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\AIUtils\SCurve.cpp" /Fo"%BF2_AREA_UPDATE_OUT%\SCurve.obj" >>"%BF2_AREA_UPDATE_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed
-link /nologo /OPT:REF /INCREMENTAL:NO /MANIFEST:EMBED /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /SUBSYSTEM:CONSOLE /OUT:"%BF2_AREA_UPDATE_OUT%\area_update_runtime.exe" "%BF2_AREA_UPDATE_OUT%\actual.obj" "%BF2_AREA_UPDATE_OUT%\fixture.obj" "%BF2_AREA_UPDATE_OUT%\pool.obj" "%BF2_AREA_UPDATE_OUT%\curve.obj" >"%BF2_AREA_UPDATE_OUT%\link.log" 2>&1
+link /nologo /OPT:REF /INCREMENTAL:NO /MANIFEST:EMBED /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /SUBSYSTEM:CONSOLE /OUT:"%BF2_AREA_UPDATE_OUT%\area_update_runtime.exe" "%BF2_AREA_UPDATE_OUT%\actual.obj" "%BF2_AREA_UPDATE_OUT%\fixture.obj" "%BF2_AREA_UPDATE_OUT%\pool.obj" "%BF2_AREA_UPDATE_OUT%\curve.obj" "%BF2_AREA_UPDATE_OUT%\SCurve.obj" >"%BF2_AREA_UPDATE_OUT%\link.log" 2>&1
 if errorlevel 1 goto failed
 python -I "%~dp0area_update_runtime.py" run "%BF2_AREA_UPDATE_OUT%\area_update_runtime.exe"
 exit /b %errorlevel%

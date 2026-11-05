@@ -67,7 +67,7 @@ BotScript* BBPSuicide::createPlan(Bot* bot)
     // shipped defect: the signed input-31 mask is widened with every upper bit set.
     BAPATrigger* const plan = checkPointer(new BAPATrigger(static_cast<io::PlayerInputMap>(31), start, stop,
                                                         0xFFFFFFFF80000000ULL, m_patternId, 0.0, false));
-    plan->m_owner = this;
+    plan->mpOwner = this;
     return plan;
 }
 

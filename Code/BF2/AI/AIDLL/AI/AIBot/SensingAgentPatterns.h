@@ -1,5 +1,6 @@
 // The sensing agent's plan patterns (libaidll.so 0x1C0490..0x1C3250). [CHOSEN, not recovered]: the
-// four classes stay grouped in one header and one source file.
+// four classes stay grouped in one header. Each has its own source file, as in the retail images
+// (AIDLL_r __FILE__: SensingAgentSoldier/Turret/MouseFreeLookPattern.cpp; SensingAgentNullPattern.cpp).
 
 #ifndef AI_AIDLL_AI_AIBOT_SENSINGAGENTPATTERNS_H
 #define AI_AIDLL_AI_AIBOT_SENSINGAGENTPATTERNS_H

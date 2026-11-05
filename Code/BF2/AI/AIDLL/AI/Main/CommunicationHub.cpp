@@ -19,7 +19,7 @@
 #include "../AIBot/CommunicationAgent.h"
 #include "../AIKnowledge/Information.h"
 #include "../AIKnowledge/IPIPhysical.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "InformationManager.h"
 #include "../../../AIInterface/BFKnowledge/IAIObject.h"
 #include "../../../AIInterface/BFKnowledge/BFTimer.h"
 #include "../../../AIInterface/BFKnowledge/AIPlayer.h"            // IAIPlayer
@@ -60,8 +60,8 @@ CommunicationHub::~CommunicationHub()
 void CommunicationHub::reset()
 {
     const double never = -1000.0;
-    m_type2SentTime[0] = never;
-    m_type2SentTime[1] = never;
+    m_lastReqPickupSendTime[0] = never;
+    m_lastReqPickupSendTime[1] = never;
     m_time44 = never;
     const int areas = static_cast<int>(AIStrategicObjectManager::getInstance()->getStrategicAreas().size());
     if (m_combatStrength[0].empty())
@@ -173,9 +173,9 @@ void CommunicationHub::filterAndSendAIRadioMessage(BotMain*, int senderPlayerId,
     const double now = static_cast<IBFTimer*>(CommonSingletonServer::m_iBFTimer)->getGameTime();
     if (type == 2)
     {
-        if (!(20.0f > now - m_type2SentTime[side - 1]))
+        if (!(20.0f > now - m_lastReqPickupSendTime[side - 1]))
         {
-            m_type2SentTime[side - 1] = static_cast<IBFTimer*>(CommonSingletonServer::m_iBFTimer)->getGameTime();
+            m_lastReqPickupSendTime[side - 1] = static_cast<IBFTimer*>(CommonSingletonServer::m_iBFTimer)->getGameTime();
         }
         else
         {

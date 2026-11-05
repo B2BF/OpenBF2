@@ -1,5 +1,5 @@
 // Owns patrol paths and guard positions and assigns bots to user orders.
-// [INFERRED] Source placement.
+// Header placement [INFERRED]: beside its .cpp, whose path AIDLL_r.dll confirms (AIStrategicEntity/UserOrders/UserOrderManager.cpp: asserts in 0x1007C7E0 / 0x1007C920).
 
 #ifndef AI_AIDLL_AI_MAIN_USERORDERMANAGER_H
 #define AI_AIDLL_AI_MAIN_USERORDERMANAGER_H
@@ -7,7 +7,7 @@
 #include <map>
 #include <string>
 
-#include "AIDllTypes.h"
+#include "../../Main/AIDllTypes.h"
 
 namespace dice {
 namespace hfe {

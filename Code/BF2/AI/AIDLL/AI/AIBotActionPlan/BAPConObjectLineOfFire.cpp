@@ -11,7 +11,7 @@
 #include "../AIKnowledge/IPIArmament.h"
 #include "../AIKnowledge/Information.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../Main/CommonSingletonServer.h"
 #include "../../../AIInterface/BFKnowledge/AIPlayer.h"
 #include "../../../AIInterface/BFKnowledge/AIPlayerFactory.h"
@@ -75,7 +75,7 @@ bool BAPConObjectLineOfFire::evaluate(Bot* bot)
             result = result && !clear;
         }
     }
-    if (result && (self->getObjectTypeFlags() & 0x200000u))
+    if (result && self->isOfType(ITSoldier))
         result = !hasFriendlySoldiersInLineOfFire(bot, self, target);
     return result;
 }
@@ -114,7 +114,7 @@ bool BAPConObjectLineOfFire::hasFriendlySoldiersInLineOfFire(Bot* bot, Informati
         if (!vehicle)
             continue;
         Information* info = bapinline::info(vehicle->getInformation(bot->getSide()));
-        if (info == self || info == target || !info || !(info->getObjectTypeFlags() & 0x200000u))
+        if (info == self || info == target || !info || !info->isOfType(ITSoldier))
             continue;
         const Vec3& p = info->getPosition();
         const Vec3 rel = bapinline::vec3(p.x - origin.m[12], p.y - origin.m[13], p.z - origin.m[14]);

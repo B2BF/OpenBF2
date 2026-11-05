@@ -199,7 +199,7 @@ QTSearchNode* QTSearchNodeManager::getNeighbourOfNode(QTSearchNode* node, unsign
     while (neighbourPolygon == 0xFFFFFFFFu)
     {
         ++edge;
-        if (edge >= m_quadTree->getPolygon(node->m_key)->m_numberOfVertices)
+        if (edge >= m_quadTree->getPolygon(node->m_key)->vertexCount)
         {
             status = nodeStatus::kInvalid;
             return 0;
@@ -225,7 +225,7 @@ QTSearchNode* QTSearchNodeManager::getNeighbourOfNode(QTSearchNode* node, unsign
         return neighbour;
     }
 
-    if (m_allowedClusters != 0 && m_allowedClusters->find(polygon->m_cluster) == m_allowedClusters->end())
+    if (m_allowedClusters != 0 && m_allowedClusters->find(polygon->cluster) == m_allowedClusters->end())
     {
         status = nodeStatus::kInvalid;
         return neighbour;

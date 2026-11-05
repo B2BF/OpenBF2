@@ -13,7 +13,7 @@
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/Information.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../Main/AIDllFrontier.h"
 
 #include <cmath>
@@ -127,7 +127,7 @@ bool BAPWrapperLookAt::execute(Bot* bot, bool& ok, bool& done)
             rel.y = rel.y + 0.0f;
         }
         camera = &self->getControlInfo()->getCameraTransformation();
-        if (self->getObjectTypeFlags() & 0x200000u)
+        if (self->isOfType(ITSoldier))
             rel.y = distance * 0.05f + rel.y;
         m_lookPoint->m_value = bapinline::vec3(rel.x + camera->m[12], rel.y + camera->m[13], rel.z + camera->m[14]);
         if (!m_lookDirection)

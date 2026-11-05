@@ -15,7 +15,7 @@
 #include "../AIKnowledge/BFInformationEnvironment.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIStrategic/SAI.h"
 #include "../AIStrategic/StatusMap.h"
 #include "../AIUtils/checkPointer.h"
@@ -187,7 +187,7 @@ bool SAIMap::update(SAI* sai, double budget)
                 return false;
             }
             Information* information = informationManager->getInformation(m_updateState->m_ids[index]);
-            if (!information || (information->getObjectTypeFlags() & 0x800000))
+            if (!information || information->isOfType(ITNoTemperature))
                 continue;
             if (information->getSecurity() == 0.0f)
                 continue;
@@ -197,7 +197,7 @@ bool SAIMap::update(SAI* sai, double budget)
                  secondary;
                  secondary = informationManager->getInformation(information->getSecondaryObject(it, m_side)))
             {
-                if (!(secondary->getObjectTypeFlags() & 0x800000) && secondary->getSecurity() > 0.0f)
+                if (!secondary->isOfType(ITNoTemperature) && secondary->getSecurity() > 0.0f)
                     updateInformation(secondary, sai, buffer);
             }
         }

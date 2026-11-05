@@ -11,7 +11,7 @@
 #include "../../../AIInterface/BFKnowledge/AIPlayerFactory.h"
 #include "../../../AIInterface/BFKnowledge/AIPlayer.h"
 #include "../AIBot/SquadManager.h"                  // haveHumanPlayerOnOwnSide
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../../../../Math/Mat4.h"
 #include "../../../AIInterface/BFKnowledge/IAIObject.h"
@@ -86,8 +86,8 @@ AIStrategicObject* AIStrategicObjectManager::getClosestObject(const Vec3& positi
 // ELF 0x346D40: the active-area cursor is the lookup result, end() when not found.
 bool AIStrategicObjectManager::setActive(std::string name)
 {
-    m_activeArea = m_strategicAreas.find(name);
-    return m_activeArea != m_strategicAreas.end();
+    m_activeArea = m_strategicAreaMap.find(name);
+    return m_activeArea != m_strategicAreaMap.end();
 }
 
 // "Closest" is the greatest virtual gravity
@@ -162,7 +162,7 @@ const std::vector<SAWayPoint*>& AIStrategicObjectManager::WPContainer::getWayPoi
 const std::vector<SAWayPoint*>& AIStrategicObjectManager::getWaypoints(int type, int a, int b) const
 {
     const std::pair<int, int> key(a < b ? a : b, a > b ? a : b);
-    return m_wayPoints.find(key)->second.getWayPoints(type);
+    return m_waypointMap.find(key)->second.getWayPoints(type);
 }
 
 // ELF 0x348EB0: by the two areas' indices (+0xF0).
@@ -181,14 +181,14 @@ AIStrategicObjectManager::AIStrategicObjectManager()
     , m_wayPointsToDrawSecond(-1)
 {
     m_strategicObjects.resize(0);
-    m_objectsByCategory.resize(0);
+    m_objectsPerCategory.resize(0);
 
     if (!m_instance)
         m_instance = this;
 
-    m_activeArea = m_strategicAreas.end();
+    m_activeArea = m_strategicAreaMap.end();
 
-    m_categoryNames.resize(0);
+    m_categoryToNames.resize(0);
 }
 
 // Deletes owned areas, waypoints and bridges, and clears the singleton if it refers to this object.
@@ -198,17 +198,17 @@ AIStrategicObjectManager::~AIStrategicObjectManager()
     if (m_instance == this)
         m_instance = 0;
 
-    for (std::map<std::string, AIStrategicArea*>::iterator area = m_strategicAreas.begin();
-         area != m_strategicAreas.end(); )
+    for (std::map<std::string, AIStrategicArea*>::iterator area = m_strategicAreaMap.begin();
+         area != m_strategicAreaMap.end(); )
     {
         if (area->second)
             delete area->second;
 
-        m_strategicAreas.erase(area++);
+        m_strategicAreaMap.erase(area++);
     }
 
-    for (std::map<std::pair<int, int>, WPContainer>::iterator entry = m_wayPoints.begin();
-         entry != m_wayPoints.end(); ++entry)
+    for (std::map<std::pair<int, int>, WPContainer>::iterator entry = m_waypointMap.begin();
+         entry != m_waypointMap.end(); ++entry)
     {
         std::vector<SAWayPoint*>& first = entry->second.getWayPoints(0);
 
@@ -240,8 +240,8 @@ void AIStrategicObjectManager::postLoadInitAreas()
 {
     WPContainer prototype;
 
-    for (std::map<std::string, AIStrategicArea*>::iterator entry = m_strategicAreas.begin();
-         entry != m_strategicAreas.end(); ++entry)
+    for (std::map<std::string, AIStrategicArea*>::iterator entry = m_strategicAreaMap.begin();
+         entry != m_strategicAreaMap.end(); ++entry)
     {
         AIStrategicArea* const area = entry->second;
 
@@ -256,14 +256,14 @@ void AIStrategicObjectManager::postLoadInitAreas()
             const int low  = (mine < other)  ? mine : other;
             const int high = (mine >= other) ? mine : other;
 
-            m_wayPoints.insert(
+            m_waypointMap.insert(
                 std::pair<std::pair<int, int>, WPContainer>(std::pair<int, int>(low, high),
                                                             prototype));
         }
     }
 
-    for (std::map<std::pair<int, int>, WPContainer>::iterator entry = m_wayPoints.begin();
-         entry != m_wayPoints.end(); ++entry)
+    for (std::map<std::pair<int, int>, WPContainer>::iterator entry = m_waypointMap.begin();
+         entry != m_waypointMap.end(); ++entry)
     {
         std::vector<SAWayPoint*>& first = entry->second.getWayPoints(0);
 
@@ -308,7 +308,7 @@ void AIStrategicObjectManager::createBridgeSegment(IAIObject* object)
 {
     BridgeSegment* const segment = new BridgeSegment;   // zeroes the position only - +4 stays unset
     segment->m_object = object;
-    segment->m_destroyed = false;
+    segment->isDestroyed = false;
     // The position is zeroed again, as its own statement: the PE stores it a second time outside
     // the new-expression's null-checked constructor block, the ELF copies a zeroed 12-byte temporary.
     const Vec3 origin = { 0.0f, 0.0f, 0.0f };
@@ -340,7 +340,7 @@ void AIStrategicObjectManager::bridgeSegmentDestroyed(IAIObject* object, int val
     {
         if ((*i)->m_object == object)
         {
-            (*i)->m_destroyed = true;
+            (*i)->isDestroyed = true;
             (*i)->m_i4 = value;
             return;
         }
@@ -366,7 +366,7 @@ IAIObject* AIStrategicObjectManager::getClosestDestroyedBridgeSegment(Vec3 from,
     {
         BridgeSegment* const segment = *i;
         segmentPosition = informationManager->getInformation(segment->m_object->getInformation(1))->getPosition();
-        if (!segment->m_destroyed)
+        if (!segment->isDestroyed)
             continue;
         bool ownHuman = false;
         IAIPlayer* const destroyer = players->getPlayerFromId(segment->m_i4);              // +0x20
@@ -405,7 +405,7 @@ void AIStrategicObjectManager::bridgeSegmentRepaired(IAIObject* object)
     {
         if ((*i)->m_object == object)
         {
-            (*i)->m_destroyed = false;
+            (*i)->isDestroyed = false;
             return;
         }
     }
@@ -419,21 +419,21 @@ void AIStrategicObjectManager::bridgeSegmentRepaired(IAIObject* object)
 bool AIStrategicObjectManager::reset()
 {
     m_debugEnabled = false;
-    for (std::map<std::string, AIStrategicArea*>::iterator area = m_strategicAreas.begin();
-         area != m_strategicAreas.end();)
+    for (std::map<std::string, AIStrategicArea*>::iterator area = m_strategicAreaMap.begin();
+         area != m_strategicAreaMap.end();)
     {
         if (area->second)
             delete area->second;
-        m_strategicAreas.erase(area++);
+        m_strategicAreaMap.erase(area++);
     }
     if (!m_areaNames.empty())
         m_areaNames.clear();
-    m_activeArea = m_strategicAreas.end();
+    m_activeArea = m_strategicAreaMap.end();
     m_strategicObjects.resize(0, 0);
-    m_objectsByCategory.resize(0, std::vector<AIStrategicObject*>());
-    m_categoryNames.resize(0, std::string());
-    for (std::map<std::string, int>::iterator category = m_categories.begin(); category != m_categories.end();)
-        m_categories.erase(category++);
+    m_objectsPerCategory.resize(0, std::vector<AIStrategicObject*>());
+    m_categoryToNames.resize(0, std::string());
+    for (std::map<std::string, int>::iterator category = m_namesToCategory.begin(); category != m_namesToCategory.end();)
+        m_namesToCategory.erase(category++);
     return true;
 }
 
@@ -441,8 +441,8 @@ bool AIStrategicObjectManager::reset()
 bool AIStrategicObjectManager::resetAreas()
 {
     m_debugEnabled = false;
-    for (std::map<std::string, AIStrategicArea*>::iterator it = m_strategicAreas.begin();
-         it != m_strategicAreas.end(); ++it)
+    for (std::map<std::string, AIStrategicArea*>::iterator it = m_strategicAreaMap.begin();
+         it != m_strategicAreaMap.end(); ++it)
         it->second->resetStatus();
     return true;
 }
@@ -458,7 +458,7 @@ void AIStrategicObjectManager::resetBridges()
     for (std::list<BridgeSegment*>::iterator it = m_bridgeSegments.begin(); it != m_bridgeSegments.end(); ++it)
     {
         BridgeSegment* const segment = *it;
-        segment->m_destroyed = false;
+        segment->isDestroyed = false;
         Information* const information =
             informationManager->getInformation(segment->m_object->getHandle(1));
         const Vec3 position = information->getPosition();
@@ -535,27 +535,27 @@ int AIStrategicObjectManager::getNumberOfStrategicObjects() const
 const std::vector<AIStrategicObject*>&
 AIStrategicObjectManager::getStrategicObjectsOfCategory(int category) const
 {
-    return m_objectsByCategory[category];
+    return m_objectsPerCategory[category];
 }
 
 // - same shape, four bytes per `std::string`, again unchecked.
 // ELF 0x347910.
 const std::string& AIStrategicObjectManager::getCategoryName(int category) const
 {
-    return m_categoryNames[category];
+    return m_categoryToNames[category];
 }
 
 // ELF 0x345610.
 int AIStrategicObjectManager::getNumberOfCategories()
 {
-    return (int)m_categoryNames.size();
+    return (int)m_categoryToNames.size();
 }
 
 // - `return (char *)this + 32;`
 // ELF 0x3476A0.
 const std::map<std::string, AIStrategicArea*>& AIStrategicObjectManager::getStrategicAreas() const
 {
-    return m_strategicAreas;
+    return m_strategicAreaMap;
 }
 
 // Returns null while no area is active - `m_activeArea` starts at `end` and
@@ -563,7 +563,7 @@ const std::map<std::string, AIStrategicArea*>& AIStrategicObjectManager::getStra
 // ELF 0x345630.
 AIStrategicArea* AIStrategicObjectManager::getActiveArea()
 {
-    if (m_activeArea != m_strategicAreas.end())
+    if (m_activeArea != m_strategicAreaMap.end())
         return m_activeArea->second;
 
     return 0;
@@ -585,8 +585,8 @@ AIStrategicObject* AIStrategicObjectManager::getStrategicObject(int index) const
 // ELF 0x344940 (added by air/s2 for GuardPosition::update): the named area, null when unknown.
 AIStrategicObject* AIStrategicObjectManager::getStrategicObject(const std::string& name) const
 {
-    const std::map<std::string, AIStrategicArea*>::const_iterator it = m_strategicAreas.find(name);
-    if (it != m_strategicAreas.end())
+    const std::map<std::string, AIStrategicArea*>::const_iterator it = m_strategicAreaMap.find(name);
+    if (it != m_strategicAreaMap.end())
         return it->second;
     return 0;
 }
@@ -612,8 +612,8 @@ void AIStrategicObjectManager::clearWaypointToDraw()
 // ELF 0x349040: every waypoint container (+0x58), type 0 then type 1, undraws each waypoint.
 void AIStrategicObjectManager::undrawWayPoints() const
 {
-    for (std::map<std::pair<int, int>, WPContainer>::const_iterator it = m_wayPoints.begin();
-         it != m_wayPoints.end(); ++it)
+    for (std::map<std::pair<int, int>, WPContainer>::const_iterator it = m_waypointMap.begin();
+         it != m_waypointMap.end(); ++it)
     {
         for (int type = 0; type < 2; ++type)
         {
@@ -629,7 +629,7 @@ void AIStrategicObjectManager::undrawWayPoints() const
 // ELF 0x347930.
 int AIStrategicObjectManager::getCategoryFromName(const std::string& name) const
 {
-    return m_categories.find(name)->second;
+    return m_namesToCategory.find(name)->second;
 }
 
 // Adds an object to the category table and assigns its index. The object and category must be valid.
@@ -643,14 +643,14 @@ void AIStrategicObjectManager::addStrategicObject(AIStrategicObject* object)
     m_strategicObjects[index] = object;
     object->m_index = index;
 
-    for (int category = 0; category < (int)m_objectsByCategory.size(); ++category)
+    for (int category = 0; category < (int)m_objectsPerCategory.size(); ++category)
     {
-        m_objectsByCategory[category].resize(index + 1);
+        m_objectsPerCategory[category].resize(index + 1);
 
         if (category == object->m_category)
-            m_objectsByCategory[category][index] = object;
+            m_objectsPerCategory[category][index] = object;
         else
-            m_objectsByCategory[category][index] = 0;
+            m_objectsPerCategory[category][index] = 0;
     }
 
     if (AIRenderUtil::m_instance)
@@ -661,8 +661,8 @@ void AIStrategicObjectManager::addStrategicObject(AIStrategicObject* object)
 // ELF 0x345590.
 void AIStrategicObjectManager::initAreas()
 {
-    for (std::map<std::string, AIStrategicArea*>::iterator i = m_strategicAreas.begin();
-         i != m_strategicAreas.end(); ++i)
+    for (std::map<std::string, AIStrategicArea*>::iterator i = m_strategicAreaMap.begin();
+         i != m_strategicAreaMap.end(); ++i)
     {
         if (!i->second->m_fromControlPoint)
             i->second->init();
@@ -677,16 +677,16 @@ bool AIStrategicObjectManager::createFromControlPoint(const std::string& name,
                                                       float radius,
                                                       const std::string& category)
 {
-    if (m_strategicAreas.find(name) != m_strategicAreas.end())
+    if (m_strategicAreaMap.find(name) != m_strategicAreaMap.end())
     {
-        m_activeArea = m_strategicAreas.end();
+        m_activeArea = m_strategicAreaMap.end();
         return false;
     }
 
     AIStrategicArea* const area = checkPointer(new AIStrategicArea(name, controlPointId, radius));
     if (!area)
     {
-        m_activeArea = m_strategicAreas.end();
+        m_activeArea = m_strategicAreaMap.end();
         return false;
     }
 
@@ -697,9 +697,9 @@ bool AIStrategicObjectManager::createFromControlPoint(const std::string& name,
 
     AIStrategicObjectManager::getInstance()->addStrategicObject(area);
 
-    m_strategicAreas[name] = area;
+    m_strategicAreaMap[name] = area;
     m_areaNames[area] = name;
-    m_activeArea = m_strategicAreas.find(name);
+    m_activeArea = m_strategicAreaMap.find(name);
     return true;
 }
 
@@ -708,7 +708,7 @@ AIStrategicObject* AIStrategicObjectManager::getStrategicObjectOfCategory(int in
 {
     if (index < 0 || index >= static_cast<int>(m_strategicObjects.size()))
         return 0;
-    return m_objectsByCategory[category][index];
+    return m_objectsPerCategory[category][index];
 }
 
 // ELF 0x344A40: as getStrategicObjectOfCategory, but only an area (getType() == 0).
@@ -716,9 +716,9 @@ AIStrategicArea* AIStrategicObjectManager::getStrategicAreaOfCategory(int index,
 {
     if (index < 0 || index >= static_cast<int>(m_strategicObjects.size()))
         return 0;
-    if (!m_objectsByCategory[category][index] || m_objectsByCategory[category][index]->getType() != 0)
+    if (!m_objectsPerCategory[category][index] || m_objectsPerCategory[category][index]->getType() != 0)
         return 0;
-    return static_cast<AIStrategicArea*>(m_objectsByCategory[category][index]);
+    return static_cast<AIStrategicArea*>(m_objectsPerCategory[category][index]);
 }
 
 // ELF 0x344D00: clears the object's category slot (when its category is in range) and erases the
@@ -730,8 +730,8 @@ AIStrategicObject* AIStrategicObjectManager::removeStrategicObject(int index)
 
     AIStrategicObject* const object = m_strategicObjects[index];
     const int category = object->m_category;
-    if (category >= 0 && category < static_cast<int>(m_objectsByCategory.size()))
-        m_objectsByCategory[category][index] = 0;
+    if (category >= 0 && category < static_cast<int>(m_objectsPerCategory.size()))
+        m_objectsPerCategory[category][index] = 0;
 
     for (std::vector<AIStrategicObject*>::iterator it = m_strategicObjects.begin();
          it != m_strategicObjects.end(); ++it)
@@ -755,10 +755,10 @@ AIStrategicObject* AIStrategicObjectManager::getClosestObjectinCategory(const Ve
     float bestGravity = 0.0f;
     const int group =
         static_cast<IAISettings*>(CommonSingletonServer::m_iaiSettings)->getVehicleGroup(equipment);
-    if (category < 0 || category >= static_cast<int>(m_objectsByCategory.size()))
+    if (category < 0 || category >= static_cast<int>(m_objectsPerCategory.size()))
         return best;
 
-    const std::vector<AIStrategicObject*>& objects = m_objectsByCategory[category];
+    const std::vector<AIStrategicObject*>& objects = m_objectsPerCategory[category];
     for (std::vector<AIStrategicObject*>::const_iterator it = objects.begin(); it != objects.end(); ++it)
     {
         if (!(*it)->isAllowedVehicleGroup(group) || (*it)->isExpelledUnit(equipment))
@@ -786,9 +786,9 @@ void AIStrategicObjectManager::setFlankPosition(Vec3 first, Vec3 second)
 bool AIStrategicObjectManager::create(std::string name, Vec2 topLeft, Vec2 centre, float height,
                                       float radius, const std::string& category)
 {
-    if (m_strategicAreas.find(name) != m_strategicAreas.end())
+    if (m_strategicAreaMap.find(name) != m_strategicAreaMap.end())
     {
-        m_activeArea = m_strategicAreas.end();
+        m_activeArea = m_strategicAreaMap.end();
         return false;
     }
 
@@ -796,7 +796,7 @@ bool AIStrategicObjectManager::create(std::string name, Vec2 topLeft, Vec2 centr
         checkPointer(new AIStrategicArea(name, topLeft, centre, height, radius));
     if (!area)
     {
-        m_activeArea = m_strategicAreas.end();
+        m_activeArea = m_strategicAreaMap.end();
         return false;
     }
 
@@ -807,9 +807,9 @@ bool AIStrategicObjectManager::create(std::string name, Vec2 topLeft, Vec2 centr
 
     AIStrategicObjectManager::getInstance()->addStrategicObject(area);
 
-    m_strategicAreas[name] = area;
+    m_strategicAreaMap[name] = area;
     m_areaNames[area] = name;
-    m_activeArea = m_strategicAreas.find(name);
+    m_activeArea = m_strategicAreaMap.find(name);
     return true;
 }
 
@@ -817,7 +817,7 @@ bool AIStrategicObjectManager::create(std::string name, Vec2 topLeft, Vec2 centr
 // rendering and its object slot, then deletes it. AIRenderUtil::m_instance is not null-checked.
 bool AIStrategicObjectManager::removeActive()
 {
-    if (m_activeArea == m_strategicAreas.end())
+    if (m_activeArea == m_strategicAreaMap.end())
         return false;
     AIStrategicArea* area = m_activeArea->second;
     if (!area)
@@ -830,8 +830,8 @@ bool AIStrategicObjectManager::removeActive()
     std::map<AIStrategicArea*, std::string>::iterator name = m_areaNames.find(area);
     if (name != m_areaNames.end())
         m_areaNames.erase(name);
-    m_strategicAreas.erase(m_activeArea);
-    m_activeArea = m_strategicAreas.end();
+    m_strategicAreaMap.erase(m_activeArea);
+    m_activeArea = m_strategicAreaMap.end();
 
     AIRenderUtil::m_instance->unrenderStrategicArea(area);
     AIRenderUtil::m_instance->updateNumberOfStrategicAreas();
@@ -844,8 +844,8 @@ bool AIStrategicObjectManager::removeActive()
 // area gains the active one as a neighbouring object.
 bool AIStrategicObjectManager::addNeighbour(std::string name)
 {
-    std::map<std::string, AIStrategicArea*>::iterator it = m_strategicAreas.find(name);
-    if (it == m_strategicAreas.end())
+    std::map<std::string, AIStrategicArea*>::iterator it = m_strategicAreaMap.find(name);
+    if (it == m_strategicAreaMap.end())
         return false;
     if (m_activeArea->second->m_i400 != it->second->m_i400)
         return false;
@@ -857,11 +857,11 @@ bool AIStrategicObjectManager::addNeighbour(std::string name)
 // ELF 0x346460: both directions, in the image's call order.
 bool AIStrategicObjectManager::addTwoWayNeighbour(std::string first, std::string second)
 {
-    std::map<std::string, AIStrategicArea*>::iterator a = m_strategicAreas.find(first);
-    if (a == m_strategicAreas.end())
+    std::map<std::string, AIStrategicArea*>::iterator a = m_strategicAreaMap.find(first);
+    if (a == m_strategicAreaMap.end())
         return false;
-    std::map<std::string, AIStrategicArea*>::iterator b = m_strategicAreas.find(second);
-    if (b == m_strategicAreas.end())
+    std::map<std::string, AIStrategicArea*>::iterator b = m_strategicAreaMap.find(second);
+    if (b == m_strategicAreaMap.end())
         return false;
     if (a->second->m_i400 != b->second->m_i400)
         return false;
@@ -875,7 +875,7 @@ bool AIStrategicObjectManager::addTwoWayNeighbour(std::string first, std::string
 // ELF 0x346590.
 void AIStrategicObjectManager::removeAllNeighbours()
 {
-    if (m_activeArea != m_strategicAreas.end())
+    if (m_activeArea != m_strategicAreaMap.end())
         m_activeArea->second->removeAllNeighbours();
 }
 
@@ -883,7 +883,7 @@ void AIStrategicObjectManager::removeAllNeighbours()
 // active area). The neighbour list is copied first; the name lookups are unchecked.
 std::string AIStrategicObjectManager::getNeighbours()
 {
-    if (m_activeArea == m_strategicAreas.end())
+    if (m_activeArea == m_strategicAreaMap.end())
         return "";
 
     const std::vector<AIStrategicObject*> neighbours = m_activeArea->second->m_neighbours;
@@ -900,7 +900,7 @@ std::string AIStrategicObjectManager::getNeighbours()
 // ELF 0x3467B0.
 int AIStrategicObjectManager::addObjectTypeFlag(AIStrategicObject::StrategicObjectType type)
 {
-    if (m_activeArea == m_strategicAreas.end() || type == 27)
+    if (m_activeArea == m_strategicAreaMap.end() || type == 27)
         return -1;
     return m_activeArea->second->addObjectTypeFlag(type);
 }
@@ -908,7 +908,7 @@ int AIStrategicObjectManager::addObjectTypeFlag(AIStrategicObject::StrategicObje
 // ELF 0x346800. Shipped defect, preserved: the bit is toggled (xor), not cleared.
 int AIStrategicObjectManager::removeObjectTypeFlag(AIStrategicObject::StrategicObjectType type)
 {
-    if (m_activeArea == m_strategicAreas.end() || type == 27)
+    if (m_activeArea == m_strategicAreaMap.end() || type == 27)
         return -1;
     return m_activeArea->second->m_objectTypeFlags ^= 1 << type;
 }
@@ -916,7 +916,7 @@ int AIStrategicObjectManager::removeObjectTypeFlag(AIStrategicObject::StrategicO
 // ELF 0x346850.
 int AIStrategicObjectManager::setObjectTypeFlags(int flags)
 {
-    if (m_activeArea == m_strategicAreas.end())
+    if (m_activeArea == m_strategicAreaMap.end())
         return -1;
     return m_activeArea->second->setObjectTypeFlags(flags);
 }
@@ -924,7 +924,7 @@ int AIStrategicObjectManager::setObjectTypeFlags(int flags)
 // ELF 0x3468A0: through the virtual getter (slot 18).
 int AIStrategicObjectManager::getObjectTypeFlags()
 {
-    if (m_activeArea == m_strategicAreas.end())
+    if (m_activeArea == m_strategicAreaMap.end())
         return -1;
     return m_activeArea->second->getObjectTypeFlags();
 }
@@ -932,7 +932,7 @@ int AIStrategicObjectManager::getObjectTypeFlags()
 // ELF 0x3468D0.
 void AIStrategicObjectManager::removeAllObjectTypeFlags()
 {
-    if (m_activeArea != m_strategicAreas.end())
+    if (m_activeArea != m_strategicAreaMap.end())
         m_activeArea->second->m_objectTypeFlags = 0;
 }
 
@@ -948,7 +948,7 @@ std::string AIStrategicObjectManager::getObjectTypeFlagMapping() const
 // ELF 0x346DB0: the active area's name, "" without one.
 std::string AIStrategicObjectManager::getActive() const
 {
-    if (m_activeArea == m_strategicAreas.end())
+    if (m_activeArea == m_strategicAreaMap.end())
         return "";
     return m_activeArea->first;
 }
@@ -957,8 +957,8 @@ std::string AIStrategicObjectManager::getActive() const
 std::string AIStrategicObjectManager::list() const
 {
     std::stringstream stream;
-    for (std::map<std::string, AIStrategicArea*>::const_iterator it = m_strategicAreas.begin();
-         it != m_strategicAreas.end(); ++it)
+    for (std::map<std::string, AIStrategicArea*>::const_iterator it = m_strategicAreaMap.begin();
+         it != m_strategicAreaMap.end(); ++it)
     {
         const std::string name = it->first;
         stream << name << std::endl;
@@ -969,7 +969,7 @@ std::string AIStrategicObjectManager::list() const
 // ELF 0x3471A0: false without an active area or pathfinding, or for an unknown map name.
 bool AIStrategicObjectManager::setOrderPosition(std::string map, const Vec3& position)
 {
-    if (m_activeArea == m_strategicAreas.end() || !IAIPathfinding::instance)
+    if (m_activeArea == m_strategicAreaMap.end() || !IAIPathfinding::instance)
         return false;
     const int id = IAIPathfinding::instance->getMapIdFromName(map);
     if (id == -1)
@@ -984,7 +984,7 @@ Vec3 AIStrategicObjectManager::getOrderPosition(std::string map)
     position.x = 0.0f;
     position.y = 0.0f;
     position.z = 0.0f;
-    if (m_activeArea == m_strategicAreas.end() || !IAIPathfinding::instance)
+    if (m_activeArea == m_strategicAreaMap.end() || !IAIPathfinding::instance)
         return position;
     const int id = IAIPathfinding::instance->getMapIdFromName(map);
     if (id == -1)
@@ -996,7 +996,7 @@ Vec3 AIStrategicObjectManager::getOrderPosition(std::string map)
 // active area or pathfinding. The image inlines the x/y/z stream operator.
 std::string AIStrategicObjectManager::listOrderPositions()
 {
-    if (m_activeArea == m_strategicAreas.end() || !IAIPathfinding::instance)
+    if (m_activeArea == m_strategicAreaMap.end() || !IAIPathfinding::instance)
         return "";
 
     std::ostringstream stream;
@@ -1015,8 +1015,8 @@ std::string AIStrategicObjectManager::listOrderPositions()
 std::string AIStrategicObjectManager::getStrategicAreaNames()
 {
     std::string names;
-    for (std::map<std::string, AIStrategicArea*>::const_iterator it = m_strategicAreas.begin();
-         it != m_strategicAreas.end(); ++it)
+    for (std::map<std::string, AIStrategicArea*>::const_iterator it = m_strategicAreaMap.begin();
+         it != m_strategicAreaMap.end(); ++it)
         names = names.empty() ? it->first : names + "\n" + it->first;
     return names;
 }
@@ -1030,19 +1030,19 @@ Vec2 AIStrategicObjectManager::getPosition() const
 // ELF 0x347980: a new last category, its name index and an object row as long as the object list.
 void AIStrategicObjectManager::createNewCategory(const std::string& name)
 {
-    const int index = static_cast<int>(m_categoryNames.size());
-    m_categoryNames.resize(index + 1);
-    m_categoryNames[index] = name;
-    m_categories.insert(std::make_pair(name, index));
-    m_objectsByCategory.resize(index + 1);
-    m_objectsByCategory[index].resize(m_strategicObjects.size());
+    const int index = static_cast<int>(m_categoryToNames.size());
+    m_categoryToNames.resize(index + 1);
+    m_categoryToNames[index] = name;
+    m_namesToCategory.insert(std::make_pair(name, index));
+    m_objectsPerCategory.resize(index + 1);
+    m_objectsPerCategory[index].resize(m_strategicObjects.size());
 }
 
 // ELF 0x347C80: false for an unknown area name.
 bool AIStrategicObjectManager::isInside(const std::string& name, const Vec2& position)
 {
-    std::map<std::string, AIStrategicArea*>::iterator it = m_strategicAreas.find(name);
-    if (it == m_strategicAreas.end())
+    std::map<std::string, AIStrategicArea*>::iterator it = m_strategicAreaMap.find(name);
+    if (it == m_strategicAreaMap.end())
         return false;
     return it->second->isInside(position);
 }
@@ -1052,15 +1052,15 @@ bool AIStrategicObjectManager::isInside(const std::string& name, const Vec2& pos
 void AIStrategicObjectManager::addWayPoint(const Vec3& position, const std::string& map,
                                            const std::string& first, const std::string& second)
 {
-    std::map<std::string, AIStrategicArea*>::iterator a = m_strategicAreas.find(first);
-    if (a == m_strategicAreas.end())
+    std::map<std::string, AIStrategicArea*>::iterator a = m_strategicAreaMap.find(first);
+    if (a == m_strategicAreaMap.end())
     {
         Debug(DebugTypeError, "AI/AIDLL/AI/AIStrategicEntity/AIStrategicObjectManager.cpp", 1144, "")
             << first << " is not the name of a valid strategic area.";
         return;
     }
-    std::map<std::string, AIStrategicArea*>::iterator b = m_strategicAreas.find(second);
-    if (b == m_strategicAreas.end())
+    std::map<std::string, AIStrategicArea*>::iterator b = m_strategicAreaMap.find(second);
+    if (b == m_strategicAreaMap.end())
     {
         Debug(DebugTypeError, "AI/AIDLL/AI/AIStrategicEntity/AIStrategicObjectManager.cpp", 1151, "")
             << second << " is not the name of a valid strategic area.";
@@ -1083,7 +1083,7 @@ void AIStrategicObjectManager::addWayPoint(const Vec3& position, const std::stri
 
     WPContainer container;
     std::map<std::pair<int, int>, WPContainer>::iterator it =
-        m_wayPoints.insert(std::make_pair(std::make_pair(low->m_index, high->m_index), container)).first;
+        m_waypointMap.insert(std::make_pair(std::make_pair(low->m_index, high->m_index), container)).first;
     const int id = IAIPathfinding::instance->getMapIdFromName(map);
     std::vector<SAWayPoint*>& points = it->second.getWayPoints(id);
     points.push_back(checkPointer(new SAWayPoint(position, id)));
@@ -1095,15 +1095,15 @@ void AIStrategicObjectManager::addWayPoint(const Vec3& position, const std::stri
 bool AIStrategicObjectManager::removeWayPoint(const Vec3& position, const std::string& map,
                                               const std::string& first, const std::string& second)
 {
-    std::map<std::string, AIStrategicArea*>::iterator a = m_strategicAreas.find(first);
-    if (a == m_strategicAreas.end())
+    std::map<std::string, AIStrategicArea*>::iterator a = m_strategicAreaMap.find(first);
+    if (a == m_strategicAreaMap.end())
     {
         Debug(DebugTypeError, "AI/AIDLL/AI/AIStrategicEntity/AIStrategicObjectManager.cpp", 1191, "")
             << first << " is not the name of a valid strategic area.";
         return false;
     }
-    std::map<std::string, AIStrategicArea*>::iterator b = m_strategicAreas.find(second);
-    if (b == m_strategicAreas.end())
+    std::map<std::string, AIStrategicArea*>::iterator b = m_strategicAreaMap.find(second);
+    if (b == m_strategicAreaMap.end())
     {
         Debug(DebugTypeError, "AI/AIDLL/AI/AIStrategicEntity/AIStrategicObjectManager.cpp", 1198, "")
             << second << " is not the name of a valid strategic area.";
@@ -1119,7 +1119,7 @@ bool AIStrategicObjectManager::removeWayPoint(const Vec3& position, const std::s
     }
 
     const std::pair<int, int> key(low->m_index, high->m_index);
-    std::map<std::pair<int, int>, WPContainer>::iterator it = m_wayPoints.find(key);
+    std::map<std::pair<int, int>, WPContainer>::iterator it = m_waypointMap.find(key);
     const int id = IAIPathfinding::instance->getMapIdFromName(map);
     std::vector<SAWayPoint*>& points = it->second.getWayPoints(id);
 
@@ -1151,15 +1151,15 @@ bool AIStrategicObjectManager::removeWayPoint(const Vec3& position, const std::s
 void AIStrategicObjectManager::clearWayPoints(const std::string& map, const std::string& first,
                                               const std::string& second)
 {
-    std::map<std::string, AIStrategicArea*>::iterator a = m_strategicAreas.find(first);
-    if (a == m_strategicAreas.end())
+    std::map<std::string, AIStrategicArea*>::iterator a = m_strategicAreaMap.find(first);
+    if (a == m_strategicAreaMap.end())
     {
         Debug(DebugTypeError, "AI/AIDLL/AI/AIStrategicEntity/AIStrategicObjectManager.cpp", 1253, "")
             << first << " is not the name of a valid strategic area.";
         return;
     }
-    std::map<std::string, AIStrategicArea*>::iterator b = m_strategicAreas.find(second);
-    if (b == m_strategicAreas.end())
+    std::map<std::string, AIStrategicArea*>::iterator b = m_strategicAreaMap.find(second);
+    if (b == m_strategicAreaMap.end())
     {
         Debug(DebugTypeError, "AI/AIDLL/AI/AIStrategicEntity/AIStrategicObjectManager.cpp", 1260, "")
             << second << " is not the name of a valid strategic area.";
@@ -1175,7 +1175,7 @@ void AIStrategicObjectManager::clearWayPoints(const std::string& map, const std:
     }
 
     const std::pair<int, int> key(low->m_index, high->m_index);
-    std::map<std::pair<int, int>, WPContainer>::iterator it = m_wayPoints.find(key);
+    std::map<std::pair<int, int>, WPContainer>::iterator it = m_waypointMap.find(key);
     const int id = IAIPathfinding::instance->getMapIdFromName(map);
     std::vector<SAWayPoint*>& points = it->second.getWayPoints(id);
     for (std::vector<SAWayPoint*>::iterator wp = points.begin(); wp != points.end(); ++wp)
@@ -1190,7 +1190,7 @@ void AIStrategicObjectManager::drawWayPoints() const
     if (m_wayPointsToDrawFirst != -1 && m_wayPointsToDrawSecond != -1)
     {
         const std::pair<int, int> key(m_wayPointsToDrawFirst, m_wayPointsToDrawSecond);
-        const WPContainer& container = m_wayPoints.find(key)->second;
+        const WPContainer& container = m_waypointMap.find(key)->second;
         const std::vector<SAWayPoint*>& infantry = container.getWayPoints(0);
         for (std::vector<SAWayPoint*>::const_iterator wp = infantry.begin(); wp != infantry.end(); ++wp)
             (*wp)->draw();
@@ -1200,8 +1200,8 @@ void AIStrategicObjectManager::drawWayPoints() const
         return;
     }
 
-    for (std::map<std::pair<int, int>, WPContainer>::const_iterator it = m_wayPoints.begin();
-         it != m_wayPoints.end(); ++it)
+    for (std::map<std::pair<int, int>, WPContainer>::const_iterator it = m_waypointMap.begin();
+         it != m_waypointMap.end(); ++it)
     {
         const std::vector<SAWayPoint*>& infantry = it->second.getWayPoints(0);
         for (std::vector<SAWayPoint*>::const_iterator wp = infantry.begin(); wp != infantry.end(); ++wp)
@@ -1215,15 +1215,15 @@ void AIStrategicObjectManager::drawWayPoints() const
 // ELF 0x349100: selects the pair (lower, higher index) whose waypoints drawWayPoints shows.
 void AIStrategicObjectManager::setWayPointsToDraw(const std::string& first, const std::string& second)
 {
-    std::map<std::string, AIStrategicArea*>::iterator a = m_strategicAreas.find(first);
-    if (a == m_strategicAreas.end())
+    std::map<std::string, AIStrategicArea*>::iterator a = m_strategicAreaMap.find(first);
+    if (a == m_strategicAreaMap.end())
     {
         Debug(DebugTypeError, "AI/AIDLL/AI/AIStrategicEntity/AIStrategicObjectManager.cpp", 1371, "")
             << first << " is not the name of a valid strategic area.";
         return;
     }
-    std::map<std::string, AIStrategicArea*>::iterator b = m_strategicAreas.find(second);
-    if (b == m_strategicAreas.end())
+    std::map<std::string, AIStrategicArea*>::iterator b = m_strategicAreaMap.find(second);
+    if (b == m_strategicAreaMap.end())
     {
         Debug(DebugTypeError, "AI/AIDLL/AI/AIStrategicEntity/AIStrategicObjectManager.cpp", 1378, "")
             << second << " is not the name of a valid strategic area.";
@@ -1265,8 +1265,8 @@ bool checkLayerStrList(const std::string& list, int layer)
 void AIStrategicObjectManager::streamWaypoints(std::ostringstream& out,
                                                const std::string& excludedLayers) const
 {
-    for (std::map<std::pair<int, int>, WPContainer>::const_iterator it = m_wayPoints.begin();
-         it != m_wayPoints.end(); ++it)
+    for (std::map<std::pair<int, int>, WPContainer>::const_iterator it = m_waypointMap.begin();
+         it != m_waypointMap.end(); ++it)
     {
         AIStrategicArea* const first = getStrategicArea(it->first.first);
         if (!excludedLayers.empty() && checkLayerStrList(excludedLayers, first->m_i400))
@@ -1310,8 +1310,8 @@ void AIStrategicObjectManager::checkAllOrderPositions() const
 // loops; whatever they checked is compiled out).
 void AIStrategicObjectManager::checkAllWayPoints() const
 {
-    for (std::map<std::pair<int, int>, WPContainer>::const_iterator it = m_wayPoints.begin();
-         it != m_wayPoints.end(); ++it)
+    for (std::map<std::pair<int, int>, WPContainer>::const_iterator it = m_waypointMap.begin();
+         it != m_waypointMap.end(); ++it)
     {
         for (int type = 0; type < 2; ++type)
         {

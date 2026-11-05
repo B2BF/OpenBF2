@@ -57,9 +57,9 @@
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../AIPlanInterpreter/BAPContext.h"
 #include "../AIBotActionPlan/BAPVariable.h"
 #include "../AIPlanInterpreter/BotScriptDebugger.h"
@@ -197,7 +197,7 @@ BotScript* BBPFire3d::createPlan(Bot* bot)
         const float radius = targetMobile ? targetPhysical->getRadius() + selfRadius : selfRadius + 0.0f;
         data.m_approachRadius = radius + radius;
         const bool indirect = weapon->getIndirect();
-        const bool flag40 = (targetInfo->getObjectTypeFlags() & 0x40) != 0;
+        const bool flag40 = targetInfo->isOfType(ITGround);
         if (!self->getMobile())
         {
             data.m_mode = 3;
@@ -231,7 +231,7 @@ BotScript* BBPFire3d::createPlan(Bot* bot)
     serial->addStatement(parallel);
     BAPIWFire* const plan = checkPointer(
         new BAPIWFire(bot, target, m_flag20, false, m_weapons[bot->getBotId()], -1, serial, m_patternId));
-    plan->setParent(this);   // +0x04 (BotScript::m_owner)
+    plan->setParent(this);   // +0x04 (BotScript::mpOwner)
     SquadManager::m_instance->shotsFired(bot->getPlayerId(), bot->getSide(), m_targets[bot->getBotId()]);
     return plan;
 }

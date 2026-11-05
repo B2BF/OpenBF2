@@ -23,13 +23,13 @@
 #include "../AIBot/BotNavigation.h"
 #include "../AIBot/SquadMember.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIArmament.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../../../../Core/Debug.h"
 #include "../../../../IO/Input/PlayerInput.h"
 #include "../../../../Math/Mat4.h"
@@ -358,10 +358,10 @@ bool updateInfantryMoveToPosWithObstacles(Bot* bot, const Vec2& target, const Ve
         if (!(info != ignored || includeIgnored) || info == 0)
             continue;
         IPIPhysical* physical = info->getPhysical();
-        if (physical == 0 || (info->getObjectTypeFlags() & 0x200000) != 0)
+        if (physical == 0 || info->isOfType(ITSoldier))
             continue;
         IPIMobile* mobile = info->getMobile();
-        if (mobile == 0 && (info->getObjectTypeFlags() & 0x2000000) == 0)
+        if (mobile == 0 && !info->isOfType(ITObstacle))
             continue;
 
         bool isTarget = false;
@@ -369,7 +369,7 @@ bool updateInfantryMoveToPosWithObstacles(Bot* bot, const Vec2& target, const Ve
             isTarget = true;
         const float health = physical->getHealth();
         bool damaged = false;
-        if ((info->getObjectTypeFlags() & 0x2000000) != 0 || health < IBotManager::instance->getVehicleBailValue())
+        if (info->isOfType(ITObstacle) || health < IBotManager::instance->getVehicleBailValue())
             damaged = true;
         float radius;
         if (!damaged || isTarget)
@@ -452,14 +452,14 @@ bool updateInfantryMoveToPosWithObstacles(Bot* bot, const Vec2& target, const Ve
         to.x = normal3.x * 15.0f + valid.position.x;
         to.y = normal3.y * 15.0f + valid.position.y;
         to.z = normal3.z * 15.0f + valid.position.z;
-        pathfinding->trace(valid.polygon, valid.quadTree, vehicleNumber, valid.position, to, hitFront, polygon,
+        pathfinding->trace(valid.polygon, valid.island, vehicleNumber, valid.position, to, hitFront, polygon,
                            equipmentType, -1, 0.0f, 0, 0);
         // retail: measured from the obstacle's position, not from the valid position traced from
         frontDist = isZeroVec(hitFront) ? 0.0f : distance(hitFront, bestPos3);
         to.x = valid.position.x - normal3.x * 15.0f;
         to.y = valid.position.y - normal3.y * 15.0f;
         to.z = valid.position.z - normal3.z * 15.0f;
-        pathfinding->trace(valid.polygon, valid.quadTree, vehicleNumber, valid.position, to, hitBack, polygon,
+        pathfinding->trace(valid.polygon, valid.island, vehicleNumber, valid.position, to, hitBack, polygon,
                            equipmentType, -1, 0.0f, 0, 0);
     }
     const float backDist = isZeroVec(hitBack) ? 0.0f : distance(hitBack, bestPos3);

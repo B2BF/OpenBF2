@@ -9,7 +9,7 @@
 #include "../AIBot/BotMain.h"
 #include "../AIBotActionPlan/BAPAMoveTo.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../Main/CommonSingletonServer.h"
 #include "../../../AIInterface/BFKnowledge/BFGameEffector.h"
 #include "../../../AIInterface/BFKnowledge/IAIObject.h"

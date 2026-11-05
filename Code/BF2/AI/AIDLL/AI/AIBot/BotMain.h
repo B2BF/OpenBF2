@@ -63,7 +63,7 @@ public:
     // recovered; Bot::C4PlacementType is attested by the placeC4 mangling).
     struct C4State
     {
-        /* +0x00 */ bool placed;
+        /* +0x00 */ bool isPlaced;    // name: AIDLL_r assert "m_c4Explosives.isPlaced" (0x1014B2E0; PE +0x1D8)
         /* +0x04 */ int placementType;
         /* +0x08 */ Vec3 position;
         /* +0x14 */ AIStrategicObject* object;
@@ -569,7 +569,7 @@ private:
     /* 286 */ char         m_pad286[2];
     // Construction uses -DBL_MAX as the timestamp sentinel; reset uses -9999.0.
     // When pollRequestedSoldierPose last pressed lie/crouch; botInPoseTransition is 0.8 s after it.
-    /* 288 */ double       m_poseChangeTime;               // ctor: -DBL_MAX, reset: -9999.0
+    /* 288 */ double       m_soldierPoseAlteredTime;               // ctor: -DBL_MAX, reset: -9999.0  // name: AIDLL_r assert 0x1014C060 (PE +0x148)
     /* 296 */ int          m_requestedSoldierPose;  // = 1 dice spells the getter "Solder"
     // setPoseStatus / checkPoseOk / clearTestResults: [0],[1] crouch, [2],[3] lie.
     /* 300 */ bool         m_poseTestResults[4];            // +300..+303, all false
@@ -609,7 +609,7 @@ private:
 
     // +420..+459: placed (= false, the ctor's last field store), type, position (+428..+436, the
     // ctor zeroes it), object, placed time, life time.
-    /* 420 */ C4State      m_c4;
+    /* 420 */ C4State      m_c4Explosives;   // name: AIDLL_r asserts 0x1014B2E0, 0x1014D180 (PE +0x1D8)
     // Three grenade timestamps. getTimeOfGrenadeThrown requires an index in [0, 3);
     // it performs no bounds check and larger indices read adjacent attack timestamps.
     /* 460 */ double       m_grenadeThrownTime[3];  // +460, +468, +476
@@ -624,7 +624,7 @@ private:
     /* 508 */ int          m_avoidSide;             // = 0
     /* 512 */ bool         m_avoidSideChanged;      // +512 byte = 0; setAvoidSide: switched between two non-zero sides [INFERRED]
     /* 513 */ char         m_pad513[3];
-    /* 516 */ double       m_double516;             // = 0.0; setMoveToStatus: the game time of the last status change
+    /* 516 */ double       m_timeOfLastStateChange;             // = 0.0; setMoveToStatus: the game time of the last status change  // name: AIDLL_r assert in setMoveToStatus 0x1014C250 (PE +0x238)
     /* 524 */ unsigned int m_collidedObject;        // = -1
     /* 528 */ float        m_collidedObjectPosition[3];  // a Vec3 - getCollidedObjectPosition
     /* 540 */ bool         m_ignoreObstacles;       // = false

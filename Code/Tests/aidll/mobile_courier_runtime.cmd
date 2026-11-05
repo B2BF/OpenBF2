@@ -16,8 +16,10 @@ for %%F in (InformationFactory BFInformationCourier Information InformationReal 
   if errorlevel 1 goto failed
 )
 cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\Main\IAIPathfinding.cpp" /Fo"%BF2_MOBILE_COURIER_OUT%\IAIPathfinding.obj" >>"%BF2_MOBILE_COURIER_OUT%\compile.log" 2>&1
+cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\Main\IAIPathfindingSetup.cpp" /Fo"%BF2_MOBILE_COURIER_OUT%\IAIPathfindingSetup.obj" >>"%BF2_MOBILE_COURIER_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed
-cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\AIBotBehaviour\CustomCurve.cpp" /Fo"%BF2_MOBILE_COURIER_OUT%\CustomCurve.obj" >>"%BF2_MOBILE_COURIER_OUT%\compile.log" 2>&1
+cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\AIUtils\CustomCurve.cpp" /Fo"%BF2_MOBILE_COURIER_OUT%\CustomCurve.obj" >>"%BF2_MOBILE_COURIER_OUT%\compile.log" 2>&1
+cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\AIUtils\SCurve.cpp" /Fo"%BF2_MOBILE_COURIER_OUT%\SCurve.obj" >>"%BF2_MOBILE_COURIER_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed
 for %%F in (Debug StringUtil) do (
   cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\Core\%%F.cpp" /Fo"%BF2_MOBILE_COURIER_OUT%\%%F.obj" >>"%BF2_MOBILE_COURIER_OUT%\compile.log" 2>&1
@@ -26,7 +28,7 @@ for %%F in (Debug StringUtil) do (
 cl %TASK_FLAGS% /I"%BF2_MOBILE_COURIER_OUT%" /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%~dp0mobile_courier_runtime.cpp" /Fo"%BF2_MOBILE_COURIER_OUT%\fixture.obj" >>"%BF2_MOBILE_COURIER_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed
 set "O=%BF2_MOBILE_COURIER_OUT%"
-link /nologo /OPT:REF /INCREMENTAL:NO /SUBSYSTEM:CONSOLE /OUT:"%O%\mobile_courier_runtime.exe" "%O%\InformationFactory.obj" "%O%\BFInformationCourier.obj" "%O%\Information.obj" "%O%\InformationReal.obj" "%O%\IPIPhysicalReal.obj" "%O%\IPIArmament.obj" "%O%\IPIArmamentReal.obj" "%O%\IPIUnit.obj" "%O%\IPIMobile.obj" "%O%\IPIMobileReal.obj" "%O%\IPIMobileKnown.obj" "%O%\InformationManager.obj" "%O%\WeaponInfo.obj" "%O%\WeaponInfoReal.obj" "%O%\WeaponInfoManager.obj" "%O%\IAIPathfinding.obj" "%O%\CustomCurve.obj" "%O%\Debug.obj" "%O%\StringUtil.obj" "%O%\fixture.obj" >"%O%\link.log" 2>&1
+link /nologo /OPT:REF /INCREMENTAL:NO /SUBSYSTEM:CONSOLE /OUT:"%O%\mobile_courier_runtime.exe" "%O%\InformationFactory.obj" "%O%\BFInformationCourier.obj" "%O%\Information.obj" "%O%\InformationReal.obj" "%O%\IPIPhysicalReal.obj" "%O%\IPIArmament.obj" "%O%\IPIArmamentReal.obj" "%O%\IPIUnit.obj" "%O%\IPIMobile.obj" "%O%\IPIMobileReal.obj" "%O%\IPIMobileKnown.obj" "%O%\InformationManager.obj" "%O%\WeaponInfo.obj" "%O%\WeaponInfoReal.obj" "%O%\WeaponInfoManager.obj" "%O%\IAIPathfinding.obj" "%O%\IAIPathfindingSetup.obj" "%O%\CustomCurve.obj" "%O%\SCurve.obj" "%O%\Debug.obj" "%O%\StringUtil.obj" "%O%\fixture.obj" >"%O%\link.log" 2>&1
 if errorlevel 1 goto failed
 python -I "%~dp0mobile_courier_runtime.py" run "%O%\mobile_courier_runtime.exe"
 exit /b %errorlevel%

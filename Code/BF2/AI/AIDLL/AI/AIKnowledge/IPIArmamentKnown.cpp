@@ -4,7 +4,7 @@
 #include "IPIArmamentKnown.h"
 
 #include "WeaponInfo.h"
-#include "WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 
 namespace dice {
 namespace hfe {

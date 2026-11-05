@@ -13,8 +13,8 @@
 #include "IPIMobile.h"
 #include "IPIPhysical.h"
 #include "IPIUnit.h"
-#include "InformationManager.h"
-#include "../AIBotBehaviour/CustomCurve.h"                              // SCurve::calculate (static)
+#include "../Main/InformationManager.h"
+#include "../AIUtils/CustomCurve.h"                              // SCurve::calculate (static)
 #include "../Main/CommonSingletonServer.h"
 #include "../../../AIInterface/BFKnowledge/BFTerrain.h"
 #include "../../../AIInterface/BFKnowledge/BFTimer.h"

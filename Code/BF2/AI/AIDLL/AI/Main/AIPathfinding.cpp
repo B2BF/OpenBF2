@@ -26,7 +26,7 @@
 #include "../AIPathFinding/NavMesh/QTSearchNodeManager.h"  // init builds one per local search
 #include "../AIStrategicEntity/AIStrategicObjectManager.h" // loadQuadTrees' tail calls initAreas
 #include "../AIUtils/checkPointer.h"
-#include "AIMineManager.h"               // loadQuadTrees / loadGTSData call IAIMineManager::init
+#include "../AIKnowledge/AIMineManager.h"               // loadQuadTrees / loadGTSData call IAIMineManager::init
 #include "AISettingsInterfaces.h"        // IAISettings::getVehicle / getVehicleMaterialManager
 #include "CommonSingletonServer.h"
 
@@ -53,7 +53,7 @@ AIPathfinding::AIPathfinding()
     : m_activatePathfindingDebugTool(false)
     , m_pathfindingDebugToolVehicleId(0)
     , m_searchPointToSet(0)
-    , m_debugPath(0)
+    , m_path(0)
     , m_debugClusterPath(0)
     , m_d36(-1000.0)
     , m_clusterSearch(false)
@@ -65,8 +65,8 @@ AIPathfinding::AIPathfinding()
     , m_maxWaterDepth(0.5f)
     , m_locking(false)
 {
-    m_debugPath = new QTPath();
-    checkPointer(m_debugPath);
+    m_path = new QTPath();
+    checkPointer(m_path);
 
     m_debugClusterPath = new ClusterNodePath();
     checkPointer(m_debugClusterPath);
@@ -95,7 +95,7 @@ AIPathfinding::~AIPathfinding()
 
     delete m_engine;
     delete m_clusterEngine;
-    delete m_debugPath;
+    delete m_path;
     delete m_debugClusterPath;
     delete m_searchPoint[0];
     delete m_searchPoint[1];
@@ -115,9 +115,9 @@ int AIPathfinding::reset()
     m_d36 = -1000.0;
     m_searchPointToSet = 0;
 
-    m_debugPath->m_nodes.resize(0);
-    m_debugPath->m_i0 = 0;
-    m_debugPath->m_i20 = 0;
+    m_path->m_nodes.resize(0);
+    m_path->m_i0 = 0;
+    m_path->m_i20 = 0;
 
     m_debugClusterPath->m_nodes.resize(0);
     m_debugClusterPath->m_i0 = 0;
@@ -305,7 +305,7 @@ int AIPathfinding::getSearchPointToSet() const
 // ELF 0x3A6720.
 QTPath* AIPathfinding::getDebugPath() const
 {
-    return m_debugPath;
+    return m_path;
 }
 
 // ELF 0x3A6730.
@@ -421,7 +421,7 @@ void AIPathfinding::getPortalCost(std::vector<float>& costs, unsigned short cost
     acquireResource(resource, 2000);
 
     const int vehicleId = settings->getVehicle(m_maps[map]->m_clusterCostVehicles[costType]);
-    QTPath* const path = m_debugPath;
+    QTPath* const path = m_path;
     path->m_nodes.resize(0);
     path->m_i0 = 0;
     path->m_i20 = 0.0f;
@@ -447,7 +447,7 @@ void AIPathfinding::getPortalCost(std::vector<float>& costs, unsigned short cost
                 manager->m_usePathTopologySmoothing = true;
 
             if (localSearch(resource, map, island, fromPolygon, from, toPolygon, to, vehicleId,
-                            m_debugPath) == astarStatus::kFound)
+                            m_path) == astarStatus::kFound)
             {
                 const float dx = to.x - from.x;
                 const float dy = to.y - from.y;
@@ -460,9 +460,9 @@ void AIPathfinding::getPortalCost(std::vector<float>& costs, unsigned short cost
                 while (m_engine->m_searches[resource]->m_status == astarStatus::kSearching)
                     m_engine->update(10.0f);
                 if (localSearch(resource, map, island, fromPolygon, from, toPolygon, to,
-                                vehicleId, m_debugPath) != astarStatus::kFound)
-                    m_debugPath->m_i20 = -1.0f;
-                costs.push_back(m_debugPath->m_i20);
+                                vehicleId, m_path) != astarStatus::kFound)
+                    m_path->m_i20 = -1.0f;
+                costs.push_back(m_path->m_i20);
             }
         }
     }
@@ -470,7 +470,7 @@ void AIPathfinding::getPortalCost(std::vector<float>& costs, unsigned short cost
     releaseResource(resource, 2000);
 }
 
-// ELF 0x3A63B0. Runs the portal-to-portal search on the shared debug path (m_debugPath is
+// ELF 0x3A63B0. Runs the portal-to-portal search on the shared debug path (m_path is
 // emptied first: resize(0), step and cost zeroed) with the vehicle of cluster cost type
 // `costType`. Both polygons must exist and carry a material valid for that vehicle, else the cost
 // is -1 (true). The search is limited to `allowedClusters`; topology smoothing is switched on
@@ -487,7 +487,7 @@ bool AIPathfinding::getPortalCost(float& cost, unsigned int resource, int map, u
     IAISettings* const settings = static_cast<IAISettings*>(CommonSingletonServer::m_iaiSettings);
     QuadTree* const quadTree = m_maps[map]->m_quadTreeManager->getIsland(island);
 
-    QTPath* const path = m_debugPath;
+    QTPath* const path = m_path;
     path->m_nodes.resize(0);
     path->m_i0 = 0;
     path->m_i20 = 0.0f;
@@ -514,7 +514,7 @@ bool AIPathfinding::getPortalCost(float& cost, unsigned int resource, int map, u
         manager->m_usePathTopologySmoothing = true;
 
     const int status = localSearch(resource, map, island, fromPolygon, from, toPolygon, to,
-                                   vehicleId, m_debugPath);
+                                   vehicleId, m_path);
     if (status == astarStatus::kSearching)
         return false;
     if (status != astarStatus::kFound)
@@ -522,7 +522,7 @@ bool AIPathfinding::getPortalCost(float& cost, unsigned int resource, int map, u
         cost = -1.0f;
         return true;
     }
-    if (m_debugPath->m_i20 == 0.0f)
+    if (m_path->m_i20 == 0.0f)
     {
         const float dx = to.x - from.x;
         const float dy = to.y - from.y;
@@ -531,7 +531,7 @@ bool AIPathfinding::getPortalCost(float& cost, unsigned int resource, int map, u
         cost = materials->getMaterialCost(fromMaterial) * cost;
         return true;
     }
-    cost = m_debugPath->m_i20;
+    cost = m_path->m_i20;
     return true;
 }
 
@@ -1001,7 +1001,7 @@ bool AIPathfinding::MapContainer::getEdge(Vec3& first, Vec3& second, unsigned in
 
     first = *quadTree->getVertexForPolygon(polygon, index);
     second = *quadTree->getVertexForPolygon(
-        polygon, static_cast<unsigned char>((index + 1) % record->m_numberOfVertices));
+        polygon, static_cast<unsigned char>((index + 1) % record->vertexCount));
     return true;
 }
 
@@ -1264,9 +1264,9 @@ int AIPathfinding::clusterSearch(int resource, int map, unsigned int island,
     manager->setClusterGraph(m_maps[map]->m_quadTreeManager->getClusterGraph(island));
 
     ClusterNode* const startNode =
-        manager->getNewNode(quadTree->getPolygon(startPolygon)->m_cluster, 0, 0);
+        manager->getNewNode(quadTree->getPolygon(startPolygon)->cluster, 0, 0);
     ClusterNode* const goalNode =
-        manager->getNewNode(quadTree->getPolygon(goalPolygon)->m_cluster, 0, 0);
+        manager->getNewNode(quadTree->getPolygon(goalPolygon)->cluster, 0, 0);
     manager->m_start = start;
     manager->m_goalPosition = goal;
     manager->m_costType = m_maps[map]->m_clusterCostTypes[vehicleId];
@@ -1495,7 +1495,7 @@ bool AIPathfinding::getLineIntersectionWithPolygon(Vec3& intersection, int map,
 // retail.
 int AIPathfinding::getClusterOfPolygon(int map, unsigned int island, unsigned int polygon) const
 {
-    return m_maps[map]->m_quadTreeManager->getIsland(island)->getPolygon(polygon)->m_cluster;
+    return m_maps[map]->m_quadTreeManager->getIsland(island)->getPolygon(polygon)->cluster;
 }
 
 // ELF 0x3A7FD0.
@@ -1815,9 +1815,9 @@ void AIPathfinding::searchPointSelected(bool resetPoints)
     {
         m_d36 = -1000.0;
         m_searchPointToSet = 0;
-        m_debugPath->m_nodes.resize(0);
-        m_debugPath->m_i0 = 0;
-        m_debugPath->m_i20 = 0.0f;
+        m_path->m_nodes.resize(0);
+        m_path->m_i0 = 0;
+        m_path->m_i20 = 0.0f;
         if (resetPoints)
             return;
     }
@@ -1853,7 +1853,7 @@ void AIPathfinding::searchPointSelected(bool resetPoints)
         const int type = m_maps[m_pathfindingDebugToolVehicleId != 3]
                              ->m_clusterCostTypes[m_pathfindingDebugToolVehicleId];
         m_maps[m_pathfindingDebugToolVehicleId != 3]->m_quadTreeManager
-            ->getClusterGraph(island)->drawCluster(polygon->m_cluster, type);
+            ->getClusterGraph(island)->drawCluster(polygon->cluster, type);
     }
     unsigned int toPolygon;
     // shipped defect: this also queries the second endpoint before the first click completes.
@@ -1875,18 +1875,18 @@ void AIPathfinding::searchPointSelected(bool resetPoints)
         return;
     if (!m_clusterSearch)
     {
-        m_debugPath->m_nodes.resize(0);
-        m_debugPath->m_i0 = 0;
-        m_debugPath->m_i20 = 0.0f;
+        m_path->m_nodes.resize(0);
+        m_path->m_i0 = 0;
+        m_path->m_i20 = 0.0f;
         if (localSearch(resource, m_pathfindingDebugToolVehicleId != 3, island, fromPolygon,
                         *m_searchPoint[0], toPolygon, *m_searchPoint[1],
-                        m_pathfindingDebugToolVehicleId, m_debugPath) != 2)
+                        m_pathfindingDebugToolVehicleId, m_path) != 2)
         {
             while (m_engine->m_searches[resource]->m_status == 1)
                 m_engine->update(10.0);
             localSearch(resource, m_pathfindingDebugToolVehicleId != 3, island, fromPolygon,
                         *m_searchPoint[0], toPolygon, *m_searchPoint[1],
-                        m_pathfindingDebugToolVehicleId, m_debugPath);
+                        m_pathfindingDebugToolVehicleId, m_path);
         }
     }
     else
@@ -1921,9 +1921,9 @@ void AIPathfinding::tryPath(const Vec3& from, const Vec3& to)
     m_d36 = -1000.0;
     *m_searchPoint[0] = from;
     *m_searchPoint[1] = to;
-    m_debugPath->m_nodes.resize(0);
-    m_debugPath->m_i0 = 0;
-    m_debugPath->m_i20 = 0.0f;
+    m_path->m_nodes.resize(0);
+    m_path->m_i0 = 0;
+    m_path->m_i20 = 0.0f;
     unsigned int fromPolygon, island, toPolygon;
     getPolygon(*m_searchPoint[0], m_pathfindingDebugToolVehicleId != 3,
                fromPolygon, island, m_pathfindingDebugToolVehicleId);
@@ -1933,18 +1933,18 @@ void AIPathfinding::tryPath(const Vec3& from, const Vec3& to)
                          toPolygon, island, m_pathfindingDebugToolVehicleId);
     if (toPolygon == 0xFFFFFFFFu)
         return;
-    m_debugPath->m_nodes.resize(0);
-    m_debugPath->m_i0 = 0;
-    m_debugPath->m_i20 = 0.0f;
+    m_path->m_nodes.resize(0);
+    m_path->m_i0 = 0;
+    m_path->m_i20 = 0.0f;
     if (localSearch(resource, m_pathfindingDebugToolVehicleId != 3, island, fromPolygon,
                     *m_searchPoint[0], toPolygon, *m_searchPoint[1],
-                    m_pathfindingDebugToolVehicleId, m_debugPath) != 2)
+                    m_pathfindingDebugToolVehicleId, m_path) != 2)
     {
         while (m_engine->m_searches[resource]->m_status == 1)
             m_engine->update(10.0);
         localSearch(resource, m_pathfindingDebugToolVehicleId != 3, island, fromPolygon,
                     *m_searchPoint[0], toPolygon, *m_searchPoint[1],
-                    m_pathfindingDebugToolVehicleId, m_debugPath);
+                    m_pathfindingDebugToolVehicleId, m_path);
     }
     releaseResource(resource, 2000);
 }
@@ -1960,9 +1960,9 @@ void AIPathfinding::tryClusterPath(const Vec3& from, const Vec3& to)
     m_d36 = -1000.0;
     *m_searchPoint[0] = from;
     *m_searchPoint[1] = to;
-    m_debugPath->m_nodes.resize(0);
-    m_debugPath->m_i0 = 0;
-    m_debugPath->m_i20 = 0.0f;
+    m_path->m_nodes.resize(0);
+    m_path->m_i0 = 0;
+    m_path->m_i20 = 0.0f;
     unsigned int fromPolygon, island, toPolygon;
     getPolygon(*m_searchPoint[0], m_pathfindingDebugToolVehicleId != 3,
                fromPolygon, island, m_pathfindingDebugToolVehicleId);
@@ -1993,9 +1993,9 @@ void AIPathfinding::setActivatePathfindingDebugTool(bool active)
     m_activatePathfindingDebugTool = active;
     if (!active)
     {
-        m_debugPath->m_nodes.resize(0);
-        m_debugPath->m_i0 = 0;
-        m_debugPath->m_i20 = 0.0f;
+        m_path->m_nodes.resize(0);
+        m_path->m_i0 = 0;
+        m_path->m_i20 = 0.0f;
         m_searchPointToSet = 0;
     }
 }

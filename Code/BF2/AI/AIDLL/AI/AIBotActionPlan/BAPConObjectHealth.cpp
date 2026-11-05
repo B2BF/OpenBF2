@@ -11,7 +11,7 @@
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/Information.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include <ostream>
 
 namespace dice {

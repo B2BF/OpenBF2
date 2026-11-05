@@ -11,7 +11,7 @@ if errorlevel 1 exit /b 1
 set "TASK_FLAGS=/nologo /c /O2 /MD /std:c++14 /permissive /EHsc /W3 /Gy /DDEDICATED=1 /DBF2_IMAGE_AIDLL"
 cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" /FAs /Fa"%BF2_VEHICLE_OCCUPANCY_OUT%\actual.asm" "%TASK_CODE%\BF2\AI\AIDLL\AI\AIUtils\VehicleOccupancy.cpp" /Fo"%BF2_VEHICLE_OCCUPANCY_OUT%\actual.obj" >"%BF2_VEHICLE_OCCUPANCY_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed
-cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\AIKnowledge\InformationManager.cpp" /Fo"%BF2_VEHICLE_OCCUPANCY_OUT%\manager.obj" >>"%BF2_VEHICLE_OCCUPANCY_OUT%\compile.log" 2>&1
+cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\Main\InformationManager.cpp" /Fo"%BF2_VEHICLE_OCCUPANCY_OUT%\manager.obj" >>"%BF2_VEHICLE_OCCUPANCY_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed
 cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%~dp0vehicle_occupancy_runtime.cpp" /Fo"%BF2_VEHICLE_OCCUPANCY_OUT%\fixture.obj" >>"%BF2_VEHICLE_OCCUPANCY_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed

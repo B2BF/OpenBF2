@@ -13,9 +13,9 @@
 #include "../AIBotBehaviourPattern/BBPC4.h"
 #include "../AIKnowledge/IPIArmament.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../AIStrategic/SAI.h"
 #include "../AIStrategicEntity/AIStrategicObject.h"
 #include "../AIUtils/checkPointer.h"
@@ -71,7 +71,7 @@ float BBC4::calculateUrgency(Bot* bot, bool active, float)
 
     // 0x1FF36E: `testb $0x20,0x6(%esi)` - type flag 0x200000 of the equipment, then the
     // behaviour's own isApplicable (slot +0x34).
-    if (info && (info->getObjectTypeFlags() & 0x200000) && isApplicable(info, bot))
+    if (info && info->isOfType(ITSoldier) && isApplicable(info, bot))
     {
         // 0x1FF41E: the first weapon of type 4 (C4); w keeps the last lookup when none matches.
         std::vector<unsigned int>& weapons = info->getArmament()->getWeapons();
@@ -87,7 +87,7 @@ float BBC4::calculateUrgency(Bot* bot, bool active, float)
         const Bot::C4State c4 = bot->getC4();
         const Vec3 position = info->getPosition();   // slot +0x30, copied
 
-        if (c4.placed)
+        if (c4.isPlaced)
         {
             object = c4.object;
             if (c4.placementType == 0)

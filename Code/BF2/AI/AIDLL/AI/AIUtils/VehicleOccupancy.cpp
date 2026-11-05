@@ -6,7 +6,7 @@
 // 0x36CE90, __tcf_0 0x36CEF0, _GLOBAL__I 0x36CF20).
 #include <iostream>
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../AIBot/SquadManager.h"
 #include "../AIBot/SquadMember.h"

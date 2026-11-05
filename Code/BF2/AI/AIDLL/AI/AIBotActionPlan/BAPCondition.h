@@ -22,7 +22,7 @@ class Bot;
 class BAPCondition
 {
 public:
-    BAPCondition() : m_owner(0) {}   // inline in the image (BAPConAnd() 0x1F3D30 stores +4 = 0)
+    BAPCondition() : mpOwner(0) {}   // inline in the image (BAPConAnd() 0x1F3D30 stores +4 = 0)
 
     virtual bool evaluate(Bot*) = 0;   // no body, slot +0x00; from the base declaration
     virtual BAPConditionType getConditionType() const = 0;   // no body, slot +0x04; from the base declaration
@@ -31,15 +31,15 @@ public:
 
     // [INFERRED] inline (no symbol): statement constructors store themselves at +0x04 of their
     // conditions (BAPALookAtObject 0x1D318B, BAPALookInDir 0x1D3AEB).
-    void setOwner(void* owner) { m_owner = owner; }
+    void setOwner(void* owner) { mpOwner = owner; }
 
 protected:
     // The owner: BAPFlowCEnd's constructor (0x1E3293) stores the owning statement here,
     // BAPBoleanOp::addCondition (BAPConAnd 0x1F40CC) and the list constructors the owning condition.
-    // Mixed pointee types, so untyped. [INFERRED] name; public like BotScript::m_owner, because
+    // Mixed pointee types, so untyped. [INFERRED] name; public like BotScript::mpOwner, because
     // statements of other packages store it inline. [CHOSEN] visibility.
 public:
-    /* +0x04 */ void* m_owner;
+    /* +0x04 */ void* mpOwner;   // name: AIDLL_r asserts 0x101B21C0, 0x101B1340 (+4)
 };
 
 // ELF 0x1F80D0: condition.streamSelf(os) (slot +8); returns os.

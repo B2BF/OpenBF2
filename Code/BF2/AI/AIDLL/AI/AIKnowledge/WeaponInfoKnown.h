@@ -18,7 +18,7 @@ public:
     virtual ~WeaponInfoKnown();
 
     virtual bool   update();
-    virtual int    getShotsInMag(int magazine);
+    virtual int    getShotsInMag(int mag);
     virtual int    getAmmo() const;
     virtual int    getCurrentAmmo() const;
     virtual int    getNumberOfMags() const;
@@ -32,13 +32,13 @@ public:
 private:
     void sample();
 
-    /* +0x0C */ std::vector<int> m_shotsInMag;
+    /* +0x0C */ std::vector<int> m_mags;   // name: AIDLL_r assert 0x1016CB30 (PE +0xC)
     /* +0x18 */ int    m_ammo;
     /* +0x1C */ int    m_currentAmmo;
     /* +0x20 */ bool   m_readyToFire;
     /* +0x24 */ float  m_heat;
     /* +0x28 */ double m_timeOfFiring;
-    /* +0x30 */ double m_sampleTime;   // [INFERRED] name
+    /* +0x30 */ double m_timeStamp;   // name: AIDLL_r assert 0x1016CD60 (PE +0x38)
 };
 
 } } }

@@ -10,7 +10,7 @@
 #include "../AIBot/BotMain.h"
 #include "../AIBotActionPlan/BAPAResetControls.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../Main/AIDllFrontier.h"
 #include "../../../../IO/Input/PlayerInput.h"

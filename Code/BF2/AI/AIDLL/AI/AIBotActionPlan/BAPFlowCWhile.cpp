@@ -27,9 +27,9 @@ BAPFlowCWhile::BAPFlowCWhile(BAPCondition* condition, BAPStatement* loopStatemen
     , m_testCondition(true)
     , m_testOnFinish(true)
 {
-    condition->m_owner = this;
+    condition->mpOwner = this;
     if (m_loopStatement)
-        m_loopStatement->m_owner = this;
+        m_loopStatement->mpOwner = this;
 }
 
 // ELF 0x1E4300 (C2; C1 0x1E4390).
@@ -42,9 +42,9 @@ BAPFlowCWhile::BAPFlowCWhile(BAPCondition* condition, BAPStatement* loopStatemen
     , m_testCondition(true)
     , m_testOnFinish(testOnFinish)
 {
-    condition->m_owner = this;
+    condition->mpOwner = this;
     if (m_loopStatement)
-        m_loopStatement->m_owner = this;
+        m_loopStatement->mpOwner = this;
 }
 
 // ELF 0x1E4420 (D2; D1 0x1E4490, D0 0x1E4500).

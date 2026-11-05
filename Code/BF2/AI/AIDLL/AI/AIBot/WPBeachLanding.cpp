@@ -5,7 +5,7 @@
 
 #include "BotMain.h"
 #include "../AIStrategicEntity/AILandingZone.h"
-#include "../AIStrategicEntity/AILandingZoneManager.h"
+#include "../Main/AILandingZoneManager.h"
 
 // <iostream>'s ios_base::Init object is this TU's static initialisation and teardown (ELF
 // 0x1B86C0, __tcf_0 0x1B8720, _GLOBAL__I 0x1B8750).

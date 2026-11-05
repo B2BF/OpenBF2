@@ -19,9 +19,9 @@
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../Main/AIDllFrontier.h"
 #include "../Main/AISettingsInterfaces.h"
 #include "../Main/CommonSingletonServer.h"
@@ -98,8 +98,8 @@ BBAvoid::~BBAvoid()
 
 // ELF 0x1FBC40 (1,201 insns).
 // Not updating: clears the changed flag and keeps the urgency while the pattern runs, else unInits.
-// Updating: only a soldier (Information type flag 0x200000, byte +6 bit 5; [INFERRED] meaning:
-// BBRevive picks its man-down targets with the same bit) with a mobile plug-in gets past the first
+// Updating: only a soldier (Information::isOfType(ITSoldier), byte +6 bit 5; AIDLL_r names bit 21
+// ITSoldier in its enum switch 0x100D3010 and asserts "!targetPrimaryInfo->isOfType(ITSoldier)") with a mobile plug-in gets past the first
 // tests. Retail quirks kept: two `!isSoldier` blocks can never run (the flag was tested earlier; the
 // image reloads the same stack byte); the bot's own Information is used without a null check; so is
 // the chosen target's Information before insertBehaviourInformation.
@@ -146,7 +146,7 @@ float BBAvoid::calculateUrgency(Bot* bot, bool update, float modifier)
         m_urgency[bot->getBotId()] = total;
         return total;
     }
-    const bool isSoldier = (self->getObjectTypeFlags() & 0x200000u) != 0;   // testb $0x20, 0x6(info)
+    const bool isSoldier = self->isOfType(ITSoldier);   // testb $0x20, 0x6(info)
     if (!isSoldier)
     {
         m_urgency[bot->getBotId()] = total;
@@ -174,7 +174,7 @@ float BBAvoid::calculateUrgency(Bot* bot, bool update, float modifier)
             lookAhead *= 1.5f;                            // rodata 0x49CDC0
     }
     // 0x1FC013: (flags & 0x10) != 0, plus 2; collisionPredicted never reads it.
-    const int predictMode = ((self->getObjectTypeFlags() & 0x10u) != 0) + 2;
+    const int predictMode = (self->isOfType(ITAir)) + 2;
 
     unsigned int changeTarget = bot->getChangeTarget();
     Information* const changeInformation = informationManager->getInformation(changeTarget);
@@ -206,7 +206,7 @@ float BBAvoid::calculateUrgency(Bot* bot, bool update, float modifier)
             obstaclePrimary = obstacle->getPrimaryObject(bot->getSide());
         IPIPhysical* const obstaclePhysical = obstacle->getPhysical();
         if (!obstaclePhysical || selfPrimary == obstaclePrimary || handle == repairTarget || handle == changeTarget
-            || handle == bot->getWantedRepairTarget() || (obstacle->getObjectTypeFlags() & 0x200000u) != 0)
+            || handle == bot->getWantedRepairTarget() || obstacle->isOfType(ITSoldier))
             continue;
 
         // 0x1FC5DB: obstacle sphere centre minus own centre.
@@ -241,7 +241,7 @@ float BBAvoid::calculateUrgency(Bot* bot, bool update, float modifier)
         bool flee = false;
         if (isSoldier)
         {
-            if (bailValue > obstacleHealth || (obstacle->getObjectTypeFlags() & 0x02000000u) != 0)
+            if (bailValue > obstacleHealth || obstacle->isOfType(ITObstacle))
             {
                 if (!activeWeapon || activeWeapon->getWeaponType() != 4)
                     flee = true;
@@ -340,7 +340,7 @@ float BBAvoid::calculateUrgency(Bot* bot, bool update, float modifier)
 
     if (bot->isOrderedBehaviour(m_index) && bot->isTakingOrders())
         total *= bot->getMemory()->m_float8;
-    if ((self->getObjectTypeFlags() & 0x200000u) != 0)
+    if (self->isOfType(ITSoldier))
     {
         // 0x1FC456: IBFTimer +0x08 minus the double at CommunicationAgent +0x60 (fsubl 0x60(%eax)),
         // compared with 5.0f (rodata 0x49CDAC); a recent time doubles the total.

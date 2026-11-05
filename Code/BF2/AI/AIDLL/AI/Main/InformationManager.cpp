@@ -1,4 +1,4 @@
-// [INFERRED] Source placement.
+// [INFERRED] Source placement: beside its header, whose path AIDLL_r.dll confirms (Main/InformationManager.h).
 
 #include "InformationManager.h"
 

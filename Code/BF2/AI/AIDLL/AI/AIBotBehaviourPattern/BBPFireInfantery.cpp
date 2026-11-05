@@ -88,9 +88,9 @@
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../AIPlanInterpreter/BAPContext.h"
 #include "../AIStrategicEntity/AIStrategicArea.h"
 #include "../AIStrategicEntity/AIStrategicObjectManager.h"
@@ -1138,7 +1138,7 @@ BotScript* BBPFireInfantery::createPlanInternal(Bot* bot, bool targetIsLodBot)
     }
 
     const int guidance = weaponInfo->getWeaponGuidanceType();
-    if (guidance != 0 && (selfInfo->getObjectTypeFlags() & 0x200000))
+    if (guidance != 0 && selfInfo->isOfType(ITSoldier))
         return createGuidedPlanInternalInfantry(bot, targetIsLodBot, movePosition);   // 0x2779B1
 
     // The plan variables (0x26543B..0x265819), shared by the wrappers and the fire plans.
@@ -1160,7 +1160,7 @@ BotScript* BBPFireInfantery::createPlanInternal(Bot* bot, bool targetIsLodBot)
 
     const bool placedExplosive = weaponInfo->getWeaponType() == 4;
     const int antiAircraft = armament->isAntiAircraft();
-    const bool targetFlag10 = (targetInfo->getObjectTypeFlags() & 0x10) != 0;
+    const bool targetFlag10 = targetInfo->isOfType(ITAir);
     const bool noMove = targetFlag10 && antiAircraft == 1;                     // -0x246
     bool fireFromHere = (targetFlag10 && antiAircraft == 2) || !pathFound;     // -0x247
     if (weaponInfo->getMaxRange() < 10.0f)
@@ -1174,8 +1174,8 @@ BotScript* BBPFireInfantery::createPlanInternal(Bot* bot, bool targetIsLodBot)
         && squadMember->getSquad()->getValidSaPos(squadMember, squadPosition))
         squadPositionValid = true;
 
-    const bool selfFlag = (selfInfo->getObjectTypeFlags() & 0x200000) != 0;       // -0x249
-    const bool targetFlag = (targetInfo->getObjectTypeFlags() & 0x200000) != 0;   // -0x24A
+    const bool selfFlag = selfInfo->isOfType(ITSoldier);       // -0x249
+    const bool targetFlag = targetInfo->isOfType(ITSoldier);   // -0x24A
     const bool targetIsBot = IBotManager::instance->getBotFromPlayerId(targetInfo->getPlayerId()) != 0;
 
     BAPStatement* branch = 0;   // added to the parallel block at 0x2671C0
@@ -1211,7 +1211,7 @@ BotScript* BBPFireInfantery::createPlanInternal(Bot* bot, bool targetIsLodBot)
             if (IPIMobile* const targetMover = targetInfo->getMobile())
             {
                 const IPIMobile::ValidPos& valid = targetMover->getLastValidPosition(selfMobile->getVehicleNumber());
-                if (valid.quadTree == static_cast<unsigned int>(-1) || valid.polygon == static_cast<unsigned int>(-1))
+                if (valid.island == static_cast<unsigned int>(-1) || valid.polygon == static_cast<unsigned int>(-1))
                     fireFromHere = true;
             }
             if (!fireFromHere && targetIsBot && targetFlag)
@@ -1814,7 +1814,7 @@ BotScript* BBPFireInfantery::createGuidedPlanInternalInfantry(Bot* bot, bool tar
         root->addStatement(checkPointer(new BAPAChangeWeapon(bot, weapon, m_patternId)));
     BAPCombinerParallel* const block = checkPointer(new BAPCombinerParallel(m_patternId, true, -1, false));
     root->addStatement(block);
-    const bool selfFlag = (selfInfo->getObjectTypeFlags() & 0x200000) != 0;
+    const bool selfFlag = selfInfo->isOfType(ITSoldier);
     block->addStatement(newOverrideSensingAgent(selfFlag, m_patternId));   // before the reset here
     block->addStatement(checkPointer(new BAPAResetControls(true, true, true, m_patternId)));
     if (!selfFlag)
@@ -1974,8 +1974,8 @@ BAPStatement* BBPFireInfantery::createFirePlan(Bot* bot, BBPFireInfantery::Firin
     if (weaponInfo->getExplosionRadius() != 0.0f && guidance == 0)
         splash = true;
     SensedObject* const sensed = bot->getSensedObjectFromHandle(target);
-    const bool selfFlag = (selfInfo->getObjectTypeFlags() & 0x200000) != 0;
-    const bool targetFlag = (targetInfo->getObjectTypeFlags() & 0x200000) != 0;
+    const bool selfFlag = selfInfo->isOfType(ITSoldier);
+    const bool targetFlag = targetInfo->isOfType(ITSoldier);
     bool splashAtTarget = false;   // -0x198
     if (!selfFlag && targetFlag && guidance == 0 && weaponInfo->getExplosionRadius() != 0.0f)
         splashAtTarget = true;

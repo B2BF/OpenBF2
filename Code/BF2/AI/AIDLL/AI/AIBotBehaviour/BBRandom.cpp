@@ -12,7 +12,7 @@
 #include "../AIBot/BotMain.h"
 #include "../AIBotBehaviourPattern/BBPRandom.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIUtils/checkPointer.h"
 #include "../AIBot/BotNavigation.h"
 #include "../Main/AISettingsInterfaces.h"

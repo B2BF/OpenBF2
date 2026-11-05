@@ -20,7 +20,7 @@
 #include "../Main/CommonSingletonServer.h"
 #include "../AIKnowledge/BFInformationEnvironment.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../AIKnowledge/UnitPredicate.h"
@@ -301,9 +301,9 @@ SAI* ISAI::create(int side, int gridWidth, int gridHeight, Vec2 min, Vec2 max)
 // Starts the three integer states at -1 and the float accumulator at zero.
 SAI::BotInfo::BotInfo(Bot* bot)
     : m_bot(bot)
-    , m_int04(-1)
-    , m_int08(-1)
-    , m_int0C(-1)
+    , m_currentlyOrderedSquare(-1)
+    , m_lastOrderedSquare(-1)
+    , m_currentlyOccupiedSquare(-1)
     , m_float10(0.0f)
     , m_double14(0.0)
 {
@@ -326,10 +326,10 @@ void SAI::clearStates(float* a, float* b)
 // retained in the signature but unused. +0xE0 is not constructed (no store in either body).
 SAI::SAI(int side, int, int, Vec2, Vec2)
     : m_flagAC(true)
-    , m_behaviourIdle(0)
-    , m_behaviourMoveTo(0)
-    , m_behaviourAvoid(0)
-    , m_behaviourFire(0)
+    , m_idleBehaviourId(0)
+    , m_moveToBehaviourId(0)
+    , m_avoidBehaviourId(0)
+    , m_fireBehaviourId(0)
     , m_intD8(0)
     , m_intDC(0)
     // The strategy cursor starts at `m_strategies.end`, which on a freshly built empty vector is
@@ -361,10 +361,10 @@ SAI::SAI(int side, int, int, Vec2, Vec2)
 {
     m_commander = checkPointer(new CommanderInterface());
 
-    m_behaviourIdle   = BotBehaviourManager::m_instance->getBehaviourId(std::string("Idle"));
-    m_behaviourMoveTo = BotBehaviourManager::m_instance->getBehaviourId(std::string("MoveTo"));
-    m_behaviourAvoid  = BotBehaviourManager::m_instance->getBehaviourId(std::string("Avoid"));
-    m_behaviourFire   = BotBehaviourManager::m_instance->getBehaviourId(std::string("Fire"));
+    m_idleBehaviourId   = BotBehaviourManager::m_instance->getBehaviourId(std::string("Idle"));
+    m_moveToBehaviourId = BotBehaviourManager::m_instance->getBehaviourId(std::string("MoveTo"));
+    m_avoidBehaviourId  = BotBehaviourManager::m_instance->getBehaviourId(std::string("Avoid"));
+    m_fireBehaviourId   = BotBehaviourManager::m_instance->getBehaviourId(std::string("Fire"));
 
     // four deadlines off one clock read. Three at a minute out and one at ten seconds, with the
     // fifth left at zero - so three slow reviews and one fast one, all stamped at construction.
@@ -401,16 +401,16 @@ SAI::SAI(int side, int, int, Vec2, Vec2)
     const IAISettings* const settings =
         static_cast<const IAISettings*>(CommonSingletonServer::m_iaiSettings);
 
-    m_botInfo.resize(settings->getMaxNBots());
+    m_bots.resize(settings->getMaxNBots());
 
     for (int i = 0; i < settings->getMaxNBots(); ++i)
-        m_botInfo[i] = 0;
+        m_bots[i] = 0;
 }
 
 // ELF 0x3257A0 (D2; D1 0x325E70, D0 0x326540; from BF2AI::clear): deletes the commander interface
 // (+0x1F8), the two EnemyStatistics (+0x124/+0x128), delete[]s the four state rows (+0x1E4..+0x1F0),
 // each tested for null; every container member then goes in reverse declaration order. The
-// BotInfo pointers in m_botInfo are not deleted (no BotInfo destructor call in the body).
+// BotInfo pointers in m_bots are not deleted (no BotInfo destructor call in the body).
 SAI::~SAI()
 {
     if (m_commander)
@@ -448,7 +448,7 @@ void SAI::addStrategy(Strategy* strategy)
     container.m_f04 = 0.0f;
     container.m_startTime = 0.0f;
     container.m_i0C = 1;
-    container.m_strategy = strategy;
+    container.strategy = strategy;
     m_strategies.push_back(container);
     m_activeStrategy = &m_strategies[0];
 }
@@ -463,7 +463,7 @@ void SAI::update(double budget)
     const double start = timer->getUpdateTime();
     updateRequestDenyTimers();
 
-    for (std::vector<BotInfo*>::iterator it = m_botInfo.begin(); it != m_botInfo.end(); ++it)
+    for (std::vector<BotInfo*>::iterator it = m_bots.begin(); it != m_bots.end(); ++it)
     {
         if (*it)
         {
@@ -648,20 +648,20 @@ void SAI::setBotIsDead(int botId)
 }
 
 // ELF 0x328DB0: a known bot leaves the strategic bookkeeping (BotInfo::remove); its assigned
-// object (m_int04, read before the removal) and spawn kit (+0x104) are recorded in the dead-bot
+// object (m_currentlyOrderedSquare, read before the removal) and spawn kit (+0x104) are recorded in the dead-bot
 // map (+0x5C, insert_unique), its player's spawn group is reset to 0 (IAIPlayer +0x38), and the
 // record is marked dead.
 void SAI::handleDeadBot(int botId)
 {
-    BotInfo* const info = m_botInfo[botId];
+    BotInfo* const info = m_bots[botId];
     if (!info)
         return;
     const int kit = info->m_bot->getSpawnKit();
-    const int object = m_botInfo[botId]->m_int04;
-    m_botInfo[botId]->remove(this);
+    const int object = m_bots[botId]->m_currentlyOrderedSquare;
+    m_bots[botId]->remove(this);
     m_map5C.insert(std::make_pair(botId, std::make_pair(object, kit)));
-    m_botInfo[botId]->m_bot->getPlayer()->setSpawnGroup(0);
-    m_botInfo[botId]->setAsDead(this);
+    m_bots[botId]->m_bot->getPlayer()->setSpawnGroup(0);
+    m_bots[botId]->setAsDead(this);
 }
 
 // ELF 0x328AE0: a known, living bot is placed at the closest strategic object to its current
@@ -670,17 +670,17 @@ void SAI::handleDeadBot(int botId)
 // match erased. The first spawn after a reset (+0xAC) resets the bridges.
 void SAI::setBotIsAlive(int botId)
 {
-    if (!m_botInfo[botId])
+    if (!m_bots[botId])
         return;
     if (m_flagAC)
     {
         AIStrategicObjectManager::getInstance()->resetBridges();
         m_flagAC = false;
     }
-    if (m_botInfo[botId]->m_bot->isDead())
+    if (m_bots[botId]->m_bot->isDead())
         return;
     Information* const information =
-        informationManager->getInformation(m_botInfo[botId]->m_bot->getCurrentEquipment());
+        informationManager->getInformation(m_bots[botId]->m_bot->getCurrentEquipment());
     if (!information || !information->getUnit())
         return;
     int vehicle = -1;
@@ -690,7 +690,7 @@ void SAI::setBotIsAlive(int botId)
     const Vec3& position = information->getPosition();
     AIStrategicObject* const object =
         AIStrategicObjectManager::getInstance()->getClosestObject(position, equipment, vehicle, m_side);
-    m_botInfo[botId]->respawn(object, this);
+    m_bots[botId]->respawn(object, this);
     for (std::map<int, std::pair<int, int> >::iterator it = m_map5C.begin(); it != m_map5C.end(); ++it)
     {
         if (it->first == botId)
@@ -706,7 +706,7 @@ void SAI::setBotIsAlive(int botId)
 void SAI::removeBot(Bot* bot)
 {
     const int id = bot->getBotId();
-    if (!m_botInfo[id])
+    if (!m_bots[id])
         return;
     std::map<int, std::pair<int, int> >::iterator it = m_map5C.begin();
     for (; it != m_map5C.end(); ++it)
@@ -715,9 +715,9 @@ void SAI::removeBot(Bot* bot)
     if (it != m_map5C.end())
         m_map5C.erase(it);
     else
-        m_botInfo[id]->remove(this);
-    delete m_botInfo[id];
-    m_botInfo[id] = 0;
+        m_bots[id]->remove(this);
+    delete m_bots[id];
+    m_bots[id] = 0;
 }
 
 // Both test the requested bit; x86 masks shift count.
@@ -767,31 +767,31 @@ void SAI::setBotHasChangedEquipment(int botId)
 }
 
 // ELF 0x328FE0: a bot that is not in the free set gives up its assignment - an assigned object
-// (m_int04) is left through removeAssigned(release) + free(false), else a current object
-// (m_int0C) through free(true). Its last ordered square becomes -1, and when its current
+// (m_currentlyOrderedSquare) is left through removeAssigned(release) + free(false), else a current object
+// (m_currentlyOccupiedSquare) through free(true). Its last ordered square becomes -1, and when its current
 // equipment's closest strategic object differs from the current one it moves there (occupy).
 void SAI::handleChangingBot(int botId)
 {
-    if (!m_botInfo[botId])
+    if (!m_bots[botId])
         return;
-    if (m_set44.find(botId) == m_set44.end())
+    if (m_freeBots.find(botId) == m_freeBots.end())
     {
-        BotInfo* const info = m_botInfo[botId];
-        if (info->m_int04 != -1)
+        BotInfo* const info = m_bots[botId];
+        if (info->m_currentlyOrderedSquare != -1)
         {
             AIStrategicObject* const object =
-                AIStrategicObjectManager::getInstance()->getStrategicObject(info->m_int04);
-            m_botInfo[botId]->removeAssigned(object, true, this);
-            m_botInfo[botId]->free(false, this);
+                AIStrategicObjectManager::getInstance()->getStrategicObject(info->m_currentlyOrderedSquare);
+            m_bots[botId]->removeAssigned(object, true, this);
+            m_bots[botId]->free(false, this);
         }
-        else if (info->m_int0C != -1)
+        else if (info->m_currentlyOccupiedSquare != -1)
         {
             info->free(true, this);
         }
     }
-    m_botInfo[botId]->setLastOrderedSquare(-1);
+    m_bots[botId]->setLastOrderedSquare(-1);
     Information* const information =
-        informationManager->getInformation(m_botInfo[botId]->m_bot->getCurrentEquipment());
+        informationManager->getInformation(m_bots[botId]->m_bot->getCurrentEquipment());
     if (!information || !information->getUnit())
         return;
     IPIMobile* const mobile = information->getMobile();
@@ -802,9 +802,9 @@ void SAI::handleChangingBot(int botId)
     const int equipment = information->getUnit()->getEquipmentType();
     AIStrategicObject* const closest =
         manager->getClosestObject(information->getPosition(), equipment, vehicle, m_side);
-    if (closest->getIndex() == m_botInfo[botId]->m_int0C)
+    if (closest->getIndex() == m_bots[botId]->m_currentlyOccupiedSquare)
         return;
-    m_botInfo[botId]->occupy(manager->getStrategicObject(m_botInfo[botId]->m_int0C), closest, this);
+    m_bots[botId]->occupy(manager->getStrategicObject(m_bots[botId]->m_currentlyOccupiedSquare), closest, this);
 }
 
 // find, update the second member of the existing pair, or do nothing.
@@ -1228,7 +1228,7 @@ int SAI::releaseSquadsFromObject(int object, int side)
 }
 
 // ELF 0x32D6D0: the unit leaves the object's assigned set and SAI's occupied set, then
-// m_botInfo[*it]->free(false) runs - with the iterator removeAssigned has already advanced, so
+// m_bots[*it]->free(false) runs - with the iterator removeAssigned has already advanced, so
 // the image frees the *next* assigned unit (`movl (%esi),%eax` reloads it after the call).
 // [CHOSEN, not recovered] When the released unit was the last one, the image reads the old
 // libstdc++ header node's stale value as a bot index; here that second call is skipped.
@@ -1236,9 +1236,9 @@ int SAI::releaseSquadsFromObject(int object, int side)
 bool SAI::releaseUnitFromObject(int object, std::set<int>::iterator& it, int)
 {
     AIStrategicObject* const target = AIStrategicObjectManager::getInstance()->getStrategicObject(object);
-    m_botInfo[*it]->removeAssigned(target, it, true, this);
+    m_bots[*it]->removeAssigned(target, it, true, this);
     if (it != target->getAssignedUnits(m_side).end())
-        m_botInfo[*it]->free(false, this);
+        m_bots[*it]->free(false, this);
     return true;
 }
 
@@ -1266,12 +1266,12 @@ void SAI::equipmentChangedFinished(int botId)
         m_setB0.erase(it);
 }
 
-// ELF 0x32D870: answers the bot's current object index (m_int0C, read first).
+// ELF 0x32D870: answers the bot's current object index (m_currentlyOccupiedSquare, read first).
 int SAI::assignBot(std::set<int>::iterator& it, int object, int botId, bool attacker)
 {
-    const int current = m_botInfo[botId]->m_int0C;
+    const int current = m_bots[botId]->m_currentlyOccupiedSquare;
     AIStrategicObject* const target = AIStrategicObjectManager::getInstance()->getStrategicObject(object);
-    m_botInfo[botId]->assignToObject(it, target, attacker, this);
+    m_bots[botId]->assignToObject(it, target, attacker, this);
     return current;
 }
 
@@ -1308,8 +1308,8 @@ std::string SAI::listStrategies()
     std::ostringstream out;
     for (unsigned int i = 0; i < m_strategies.size(); ++i)
     {
-        if (m_strategies[i].m_strategy)
-            out << i << " " << m_strategies[i].m_strategy->getName() << std::endl;
+        if (m_strategies[i].strategy)
+            out << i << " " << m_strategies[i].strategy->getName() << std::endl;
     }
     return out.str();
 }
@@ -1317,7 +1317,7 @@ std::string SAI::listStrategies()
 // ELF 0x32EA90: the active container's strategy, unguarded.
 Strategy* SAI::getActiveStrategy()
 {
-    return m_activeStrategy->m_strategy;
+    return m_activeStrategy->strategy;
 }
 
 // ELF 0x32EAB0: the active container's three floats (zero, with no active container) and its
@@ -1336,19 +1336,19 @@ Strategy* SAI::getActiveStrategy(float& a, float& b, float& c)
         b = 0.0f;
         c = 0.0f;
     }
-    return m_activeStrategy->m_strategy;
+    return m_activeStrategy->strategy;
 }
 
 // ELF 0x32E2D0: membership in the free set (+0x44).
 bool SAI::isBotFree(int botId) const
 {
-    return m_set44.find(botId) != m_set44.end();
+    return m_freeBots.find(botId) != m_freeBots.end();
 }
 
 // ELF 0x32E320: membership in the occupied set (+0xFC).
 bool SAI::isBotAssigned(int botId) const
 {
-    return m_setFC.find(botId) != m_setFC.end();
+    return m_assignedBots.find(botId) != m_assignedBots.end();
 }
 
 // ELF 0x32CEE0: empty.
@@ -1386,25 +1386,25 @@ int SAI::getSpawnsToPoint(int point) const
     return it->second;
 }
 
-// ELF 0x32E240 / 0x32E270 / 0x32E2A0: the bot's current object (m_int0C), ordered object
-// (m_int04) and last ordered square (m_int08) - indices, not positions (eax, no sret). An unknown
+// ELF 0x32E240 / 0x32E270 / 0x32E2A0: the bot's current object (m_currentlyOccupiedSquare), ordered object
+// (m_currentlyOrderedSquare) and last ordered square (m_lastOrderedSquare) - indices, not positions (eax, no sret). An unknown
 // bot answers -22, -44 and -1 (`movl $0xffffffea/$0xffffffd4/$0xffffffff,%edx`).
 int SAI::getBotCurrentPos(int botId) const
 {
-    const BotInfo* const info = m_botInfo[botId];
-    return info ? info->m_int0C : -22;
+    const BotInfo* const info = m_bots[botId];
+    return info ? info->m_currentlyOccupiedSquare : -22;
 }
 
 int SAI::getBotOrderedPos(int botId) const
 {
-    const BotInfo* const info = m_botInfo[botId];
-    return info ? info->m_int04 : -44;
+    const BotInfo* const info = m_bots[botId];
+    return info ? info->m_currentlyOrderedSquare : -44;
 }
 
 int SAI::getBotLastOrderedPos(int botId) const
 {
-    const BotInfo* const info = m_botInfo[botId];
-    return info ? info->m_int08 : -1;
+    const BotInfo* const info = m_bots[botId];
+    return info ? info->m_lastOrderedSquare : -1;
 }
 
 // Accumulate into the previous totals, then decay; no initial clear.
@@ -1602,7 +1602,7 @@ void SAI::prepareUpdate()
         if (bot)
         {
             BotInfo* const info = checkPointer(new BotInfo(bot));
-            m_botInfo[bot->getBotId()] = info;
+            m_bots[bot->getBotId()] = info;
             if (bot->isDead())
             {
                 m_map5C.insert(std::make_pair(static_cast<int>(bot->getBotId()), std::make_pair(-1, 13)));
@@ -1611,7 +1611,7 @@ void SAI::prepareUpdate()
             }
             else
                 setBotIsAlive(bot->getBotId());
-            (void)m_setFC.find(bot->getBotId()); // shipped discarded lookup
+            (void)m_assignedBots.find(bot->getBotId()); // shipped discarded lookup
         }
     }
 
@@ -1631,7 +1631,7 @@ void SAI::prepareUpdate()
         m_friendlyStrengths[i] = 0.0f;
         m_friendlyCounts[i] = 0.0f;
     }
-    for (std::vector<BotInfo*>::iterator it = m_botInfo.begin(); it != m_botInfo.end(); ++it)
+    for (std::vector<BotInfo*>::iterator it = m_bots.begin(); it != m_bots.end(); ++it)
     {
         if (*it && !(*it)->m_bot->isDead())
         {
@@ -1662,7 +1662,7 @@ void SAI::prepareUpdate()
     for (std::map<int, std::pair<int, int> >::iterator it = m_map5C.begin(); it != m_map5C.end();)
     {
         IAISettings* const settings = static_cast<IAISettings*>(CommonSingletonServer::m_iaiSettings);
-        BotInfo* const info = m_botInfo[it->first];
+        BotInfo* const info = m_bots[it->first];
         if (!info)
         {
             std::map<int, std::pair<int, int> >::iterator removed = it++;
@@ -1680,11 +1680,11 @@ void SAI::prepareUpdate()
 
     for (std::vector<Bot*>::iterator it = m_vectorA0.begin(); it != m_vectorA0.end(); ++it)
     {
-        if (m_botInfo[(*it)->getBotId()])
+        if (m_bots[(*it)->getBotId()])
         {
-            m_botInfo[(*it)->getBotId()]->remove(this);
-            delete m_botInfo[(*it)->getBotId()];
-            m_botInfo[(*it)->getBotId()] = 0;
+            m_bots[(*it)->getBotId()]->remove(this);
+            delete m_bots[(*it)->getBotId()];
+            m_bots[(*it)->getBotId()] = 0;
         }
     }
 #if defined(_MSC_VER)
@@ -1705,8 +1705,8 @@ void SAI::clearSpawnsToPoints()
 void SAI::BotInfo::remove(SAI* sai)
 {
     const int id = m_bot->getBotId();
-    AIStrategicObject* const current = AIStrategicObjectManager::getInstance()->getStrategicObject(m_int0C);
-    AIStrategicObject* const assigned = AIStrategicObjectManager::getInstance()->getStrategicObject(m_int04);
+    AIStrategicObject* const current = AIStrategicObjectManager::getInstance()->getStrategicObject(m_currentlyOccupiedSquare);
+    AIStrategicObject* const assigned = AIStrategicObjectManager::getInstance()->getStrategicObject(m_currentlyOrderedSquare);
     if (assigned)
     {
         removeAssigned(assigned, true, sai);
@@ -1714,13 +1714,13 @@ void SAI::BotInfo::remove(SAI* sai)
     }
     else if (current)
     {
-        if (sai->m_setFC.find(id) != sai->m_setFC.end())
+        if (sai->m_assignedBots.find(id) != sai->m_assignedBots.end())
             free(true, sai);
         current->removeAsPresentUnit(id, sai->m_side);
     }
-    std::set<int>::iterator it = sai->m_set44.find(id);
-    if (it != sai->m_set44.end())
-        sai->m_set44.erase(it);
+    std::set<int>::iterator it = sai->m_freeBots.find(id);
+    if (it != sai->m_freeBots.end())
+        sai->m_freeBots.erase(it);
 }
 
 void SAI::BotInfo::removeAssigned(AIStrategicObject* object, bool release, SAI* sai)
@@ -1737,10 +1737,10 @@ void SAI::BotInfo::occupy(AIStrategicObject* from, AIStrategicObject* to, SAI* s
 
 void SAI::BotInfo::assignToObject(std::set<int>::iterator& it, AIStrategicObject* object, bool attacker, SAI* sai)
 {
-    m_int04 = object->getIndex();
-    m_int08 = object->getIndex();
+    m_currentlyOrderedSquare = object->getIndex();
+    m_lastOrderedSquare = object->getIndex();
     m_double14 = static_cast<IBFTimer*>(CommonSingletonServer::m_iBFTimer)->getGameTime();
-    AIStrategicObject* const current = AIStrategicObjectManager::getInstance()->getStrategicObject(m_int0C);
+    AIStrategicObject* const current = AIStrategicObjectManager::getInstance()->getStrategicObject(m_currentlyOccupiedSquare);
     if (attacker)
         current->unregisterAvailableAttacker(it, sai->m_side);
     else
@@ -1750,45 +1750,45 @@ void SAI::BotInfo::assignToObject(std::set<int>::iterator& it, AIStrategicObject
 
 void SAI::BotInfo::assignToObject(AIStrategicObject* object, bool attacker, SAI* sai)
 {
-    std::set<int>::iterator it = AIStrategicObjectManager::getInstance()->getStrategicObject(m_int0C)->
+    std::set<int>::iterator it = AIStrategicObjectManager::getInstance()->getStrategicObject(m_currentlyOccupiedSquare)->
         getAvailableBots(attacker, sai->m_side).find(m_bot->getBotId());
     assignToObject(it, object, attacker, sai);
 }
 
 void SAI::BotInfo::assign(bool attacker, SAI* sai)
 {
-    std::set<int>::iterator it = sai->m_set44.find(m_bot->getBotId());
+    std::set<int>::iterator it = sai->m_freeBots.find(m_bot->getBotId());
     assign(it, attacker, sai);
 }
 
 void SAI::BotInfo::setAsDead(SAI*)
 {
-    m_int04 = -1;
-    m_int08 = -1;
-    m_int0C = -1;
+    m_currentlyOrderedSquare = -1;
+    m_lastOrderedSquare = -1;
+    m_currentlyOccupiedSquare = -1;
     m_float10 = 0.0f;
 }
 
 void SAI::BotInfo::setAsFree(SAI* sai)
 {
-    sai->m_set44.insert(m_bot->getBotId());
+    sai->m_freeBots.insert(m_bot->getBotId());
 }
 
 // ELF 0x328EF0: with a suitable spawn group the bot enters its transition phase (+0x180),
 // is handled as dead, gets the group and is respawned through the game effector (+0x1C).
 void SAI::handleTeleportingBot(int botId)
 {
-    if (!m_botInfo[botId])
+    if (!m_bots[botId])
         return;
     AIStrategicObject* object;
-    const int group = BotSpawner::findSuitableSpawnGroup(m_side, object, m_botInfo[botId]->m_bot);
+    const int group = BotSpawner::findSuitableSpawnGroup(m_side, object, m_bots[botId]->m_bot);
     if (!group)
         return;
-    m_botInfo[botId]->m_bot->setIsInTransitionPhase(true);
+    m_bots[botId]->m_bot->setIsInTransitionPhase(true);
     handleDeadBot(botId);
-    m_botInfo[botId]->m_bot->getPlayer()->setSpawnGroup(group);
+    m_bots[botId]->m_bot->getPlayer()->setSpawnGroup(group);
     static_cast<IAIGameEffector*>(CommonSingletonServer::m_iaiGameEffector)
-        ->respawnBot(m_botInfo[botId]->m_bot->getPlayer());
+        ->respawnBot(m_bots[botId]->m_bot->getPlayer());
 }
 
 bool SAI::updateStrategicObjects()
@@ -1855,17 +1855,17 @@ void SAI::chooseStrategy()
     if (forced)
     {
         forced->calculatePrerequisite(m_int1F4 ? m_stateB : m_stateA, m_int1F4 ? m_stateD : m_stateC,
-                                      m_activeStrategy->m_strategy, m_side);
+                                      m_activeStrategy->strategy, m_side);
         for (std::vector<StrategyContainer>::iterator it = m_strategies.begin(); it != m_strategies.end(); ++it)
-            if (it->m_strategy == forced)
+            if (it->strategy == forced)
                 changeStrategy(it);
         return;
     }
     for (std::vector<StrategyContainer>::iterator it = m_strategies.begin(); it != m_strategies.end(); ++it)
     {
-        it->m_f04 = it->m_strategy->calculatePrerequisite(
+        it->m_f04 = it->strategy->calculatePrerequisite(
             m_int1F4 ? m_stateB : m_stateA, m_int1F4 ? m_stateD : m_stateC,
-            m_activeStrategy->m_strategy, m_side);
+            m_activeStrategy->strategy, m_side);
         if (total > it->m_f04)              // total is still 0 here
             it->m_f04 = total;
         float ratio;
@@ -1878,7 +1878,7 @@ void SAI::chooseStrategy()
     }
     if (!changed)
     {
-        const float limit = m_activeStrategy->m_strategy->m_f20;
+        const float limit = m_activeStrategy->strategy->m_f20;
         const float p = powf(0.5f, static_cast<float>(m_activeStrategy->m_i0C));
         const float d = 0.5f - p;
         const double threshold = ((d + d) + 1.0f) * limit;
@@ -1921,10 +1921,10 @@ void SAI::changeStrategy(std::vector<StrategyContainer>::iterator& it)
         (*object)->releaseAssignedResources(m_side);
         std::set<int>& attackers = (*object)->getAvailableAttackers(m_side);
         for (unit = attackers.begin(); unit != attackers.end();)
-            m_botInfo[*unit]->free(*object, true, unit, this);
+            m_bots[*unit]->free(*object, true, unit, this);
         std::set<int>& defenders = (*object)->getAvailableDefenders(m_side);
         for (unit = defenders.begin(); unit != defenders.end();)
-            m_botInfo[*unit]->free(*object, false, unit, this);
+            m_bots[*unit]->free(*object, false, unit, this);
     }
     StrategyContainer* const active = m_activeStrategy;
     active->m_i0C = 1;
@@ -1939,8 +1939,8 @@ void SAI::BotInfo::free(AIStrategicObject* object, bool attacker, std::set<int>:
         object->unregisterAvailableAttacker(it, sai->m_side);
     else
         object->unregisterAvailableDefender(it, sai->m_side);
-    sai->m_setFC.erase(sai->m_setFC.find(id));
-    sai->m_set44.insert(m_bot->getBotId());
+    sai->m_assignedBots.erase(sai->m_assignedBots.find(id));
+    sai->m_freeBots.insert(m_bot->getBotId());
 }
 
 // ELF 0x3299A0: every strategic object (no null check) applies the active strategy's
@@ -1950,7 +1950,7 @@ void SAI::modifyStrategicObjectsTemperatures()
     const std::vector<AIStrategicObject*>& objects =
         AIStrategicObjectManager::getInstance()->getStrategicObjects();
     for (std::vector<AIStrategicObject*>::const_iterator it = objects.begin(); it != objects.end(); ++it)
-        (*it)->updateTemperature(m_activeStrategy->m_strategy, m_side);
+        (*it)->updateTemperature(m_activeStrategy->strategy, m_side);
 }
 
 // ELF 0x32F290. The occupied-set find result is unused in the image.
@@ -1970,9 +1970,9 @@ void SAI::BotInfo::occupy(std::set<int>::iterator& it, AIStrategicObject* from, 
         moved = true;
     }
     if (moved)
-        sai->m_setFC.find(id);
+        sai->m_assignedBots.find(id);
     from->removeAsPresentUnit(it, sai->m_side);
-    m_int0C = to->getIndex();
+    m_currentlyOccupiedSquare = to->getIndex();
 }
 
 // ELF 0x32D910. Per strategic area (getType 0): a present bot whose equipment fits a neighbour
@@ -2025,7 +2025,7 @@ void SAI::updateBotPositions()
             if (best == *object)
                 ++unit;
             else
-                m_botInfo[*unit]->occupy(unit, *object, best, this);
+                m_bots[*unit]->occupy(unit, *object, best, this);
         }
 
         const double now = static_cast<IBFTimer*>(CommonSingletonServer::m_iBFTimer)->getGameTime();
@@ -2047,14 +2047,14 @@ void SAI::updateBotPositions()
                 WaypointList* const waypoints = bot->getWaypoints();
                 if (!waypoints->m_flag5 || waypoints->getId() != 1)
                     continue;
-                if (!(now - m_botInfo[*it]->m_double14 > wait))
+                if (!(now - m_bots[*it]->m_double14 > wait))
                     continue;
                 if (bot->getSensedObjects().size() > 1)
                     continue;
                 if (!(*object)->isPresentUnit(*it, m_side))
                     continue;
                 (*object)->retainBot(m_side, *it, this);
-                m_botInfo[*it]->m_double14 = now;
+                m_bots[*it]->m_double14 = now;
             }
         }
     }
@@ -2063,14 +2063,14 @@ void SAI::updateBotPositions()
 void SAI::BotInfo::free(bool release, SAI* sai)
 {
     const int id = m_bot->getBotId();
-    AIStrategicObject* const object = AIStrategicObjectManager::getInstance()->getStrategicObject(m_int0C);
+    AIStrategicObject* const object = AIStrategicObjectManager::getInstance()->getStrategicObject(m_currentlyOccupiedSquare);
     if (release)
     {
         if (!object->unregisterAvailableAttacker(id, sai->m_side))
             object->unregisterAvailableDefender(id, sai->m_side);
-        sai->m_setFC.erase(sai->m_setFC.find(id));
+        sai->m_assignedBots.erase(sai->m_assignedBots.find(id));
     }
-    sai->m_set44.insert(m_bot->getBotId());
+    sai->m_freeBots.insert(m_bot->getBotId());
 }
 
 namespace {
@@ -2115,7 +2115,7 @@ void SAI::updateDistribution()
         {
             while ((*object)->getAvailableAttackers(m_side).size())
             {
-                m_botInfo[*(*object)->getAvailableAttackers(m_side).begin()]->free(true, this);
+                m_bots[*(*object)->getAvailableAttackers(m_side).begin()]->free(true, this);
                 m_flag1CE = true;
             }
         }
@@ -2135,7 +2135,7 @@ void SAI::updateDistribution()
         {
             while ((*object)->getAvailableDefenders(m_side).size())
             {
-                m_botInfo[*(*object)->getAvailableDefenders(m_side).begin()]->free(true, this);
+                m_bots[*(*object)->getAvailableDefenders(m_side).begin()]->free(true, this);
                 m_flag1CE = true;
             }
         }
@@ -2182,21 +2182,21 @@ void SAI::updateDistribution()
 
 void SAI::BotInfo::respawn(AIStrategicObject* object, SAI* sai)
 {
-    m_int0C = object->getIndex();
+    m_currentlyOccupiedSquare = object->getIndex();
     object->setAsPresentUnit(m_bot->getBotId(), sai->m_side);
-    sai->m_setFC.find(m_bot->getBotId());              // result unused in the image
-    sai->m_set44.insert(m_bot->getBotId());
+    sai->m_assignedBots.find(m_bot->getBotId());              // result unused in the image
+    sai->m_freeBots.insert(m_bot->getBotId());
 }
 
 void SAI::BotInfo::assign(std::set<int>::iterator& it, bool attacker, SAI* sai)
 {
-    AIStrategicObject* const object = AIStrategicObjectManager::getInstance()->getStrategicObject(m_int0C);
+    AIStrategicObject* const object = AIStrategicObjectManager::getInstance()->getStrategicObject(m_currentlyOccupiedSquare);
     if (attacker)
         object->registerAvailableAttacker(m_bot->getBotId(), sai->m_side);
     else
         object->registerAvailableDefender(m_bot->getBotId(), sai->m_side);
-    sai->m_set44.erase(it++);
-    sai->m_setFC.insert(m_bot->getBotId());
+    sai->m_freeBots.erase(it++);
+    sai->m_assignedBots.insert(m_bot->getBotId());
 }
 
 void SAI::BotInfo::removeAssigned(AIStrategicObject* object, std::set<int>::iterator& it, bool release, SAI* sai)
@@ -2204,24 +2204,24 @@ void SAI::BotInfo::removeAssigned(AIStrategicObject* object, std::set<int>::iter
     object->getAssignedUnits(sai->m_side).erase(it++);
     if (release)
     {
-        sai->m_setFC.erase(sai->m_setFC.find(m_bot->getBotId()));
+        sai->m_assignedBots.erase(sai->m_assignedBots.find(m_bot->getBotId()));
     }
     else
     {
-        AIStrategicObject* const current = AIStrategicObjectManager::getInstance()->getStrategicObject(m_int0C);
+        AIStrategicObject* const current = AIStrategicObjectManager::getInstance()->getStrategicObject(m_currentlyOccupiedSquare);
         if (current->isAttack(sai->m_side))
             current->registerAvailableAttacker(m_bot->getBotId(), sai->m_side);
         else
             current->registerAvailableDefender(m_bot->getBotId(), sai->m_side);
     }
-    m_int04 = -1;
+    m_currentlyOrderedSquare = -1;
     m_double14 = 0.0;
 }
 
 int SAI::BotInfo::setLastOrderedSquare(int square)
 {
     m_double14 = static_cast<IBFTimer*>(CommonSingletonServer::m_iBFTimer)->getGameTime();
-    m_int08 = square;
+    m_lastOrderedSquare = square;
     return square;
 }
 
@@ -2260,13 +2260,13 @@ void SAI::distributeResources()
     }
     else
     {
-        attackShare = m_activeStrategy->m_strategy->getAggression();
-        defenceShare = 1.0f - m_activeStrategy->m_strategy->getAggression();
+        attackShare = m_activeStrategy->strategy->getAggression();
+        defenceShare = 1.0f - m_activeStrategy->strategy->getAggression();
     }
 
-    for (std::set<int>::iterator it = m_set44.begin(); it != m_set44.end();)
+    for (std::set<int>::iterator it = m_freeBots.begin(); it != m_freeBots.end();)
     {
-        BotInfo* const info = m_botInfo[*it];
+        BotInfo* const info = m_bots[*it];
         if (!info)
         {
             ++it;
@@ -2278,7 +2278,7 @@ void SAI::distributeResources()
             ++it;
             continue;
         }
-        AIStrategicObject* object = manager->getStrategicObject(info->m_int0C);
+        AIStrategicObject* object = manager->getStrategicObject(info->m_currentlyOccupiedSquare);
         if (!object)
         {
             if (!information->getUnit())
@@ -2296,16 +2296,16 @@ void SAI::distributeResources()
                 ++it;
                 continue;
             }
-            m_botInfo[*it]->respawn(object, this);
+            m_bots[*it]->respawn(object, this);
         }
         else
         {
             object->setAsPresentUnit(*it, m_side);
         }
-        if (object->getIndex() != m_botInfo[*it]->m_int08)
+        if (object->getIndex() != m_bots[*it]->m_lastOrderedSquare)
         {
             object->retainBot(m_side, *it, this);
-            m_botInfo[*it]->setLastOrderedSquare(object->getIndex());
+            m_bots[*it]->setLastOrderedSquare(object->getIndex());
         }
         IPIUnit* const unit = information->getUnit();   // not null-checked on this path
         const int attack = m_intD8;
@@ -2325,7 +2325,7 @@ void SAI::distributeResources()
             m_intDC = static_cast<int>(unit->getStrategicStrengths()[1]) + defence;
         m_intE0 -= static_cast<int>(meanStrength(unit));
         lastWasDefence = !toAttack;
-        m_botInfo[*it]->assign(it, toAttack, this);
+        m_bots[*it]->assign(it, toAttack, this);
     }
 
     const float total = static_cast<float>(m_intD8 + m_intDC + m_intE0);
@@ -2362,7 +2362,7 @@ void SAI::distributeResources()
 // strategy runs no defences.
 void SAI::distributeDefence()
 {
-    if (!m_activeStrategy->m_strategy->getNumberOfDefences())
+    if (!m_activeStrategy->strategy->getNumberOfDefences())
         return;
     AIStrategicObjectManager* const manager = AIStrategicObjectManager::getInstance();
     if (!manager->getNumberOfCategories())
@@ -2412,7 +2412,7 @@ void SAI::categoryDistributeDefence(const std::vector<AIStrategicObject*>& objec
     for (; it != squares.end(); ++it)
     {
         ++rank;
-        const unsigned int keep = m_activeStrategy->m_strategy->getNumberOfDefences() * 2;
+        const unsigned int keep = m_activeStrategy->strategy->getNumberOfDefences() * 2;
         if (rank == keep)
             threshold = it->m_value;
         else if (rank > keep && threshold * 0.9f > it->m_value)
@@ -2453,7 +2453,7 @@ void SAI::categoryDistributeDefence(const std::vector<AIStrategicObject*>& objec
         object->setAttack(false, m_side);
         queue.push(object);
         ++count;
-        if (!(m_activeStrategy->m_strategy->getNumberOfDefences() > count))
+        if (!(m_activeStrategy->strategy->getNumberOfDefences() > count))
             break;
     }
     while (!queue.empty())
@@ -2469,7 +2469,7 @@ void SAI::categoryDistributeDefence(const std::vector<AIStrategicObject*>& objec
 // strategy runs no attacks.
 void SAI::distributeAttack()
 {
-    if (!m_activeStrategy->m_strategy->getNumberOfAttacks())
+    if (!m_activeStrategy->strategy->getNumberOfAttacks())
         return;
     AIStrategicObjectManager* const manager = AIStrategicObjectManager::getInstance();
     if (!manager->getNumberOfCategories())
@@ -2522,9 +2522,9 @@ void SAI::categoryDistributeAttack(const std::vector<AIStrategicObject*>& object
     while (it != squares.end())
     {
         ++rank;
-        if (rank <= m_activeStrategy->m_strategy->getNumberOfAttacks())
+        if (rank <= m_activeStrategy->strategy->getNumberOfAttacks())
             threshold = it->m_value;
-        else if (rank > m_activeStrategy->m_strategy->getNumberOfAttacks() * 2
+        else if (rank > m_activeStrategy->strategy->getNumberOfAttacks() * 2
                  || threshold * 0.8f > it->m_value)
             break;
         ++it;
@@ -2561,7 +2561,7 @@ void SAI::categoryDistributeAttack(const std::vector<AIStrategicObject*>& object
     }
 
     it = squares.begin();
-    while (it != squares.end() && !(chosen.size() > m_activeStrategy->m_strategy->getNumberOfAttacks()))
+    while (it != squares.end() && !(chosen.size() > m_activeStrategy->strategy->getNumberOfAttacks()))
     {
         AIStrategicObject* const object = AIStrategicObjectManager::getInstance()->getStrategicObject(it->m_index);
         if (object && object->isAttack(m_side))
@@ -2575,7 +2575,7 @@ void SAI::categoryDistributeAttack(const std::vector<AIStrategicObject*>& object
         }
     }
     it = squares.begin();
-    while (!(chosen.size() > m_activeStrategy->m_strategy->getNumberOfAttacks()) && it != squares.end())
+    while (!(chosen.size() > m_activeStrategy->strategy->getNumberOfAttacks()) && it != squares.end())
     {
         chosen.push_back(*it);
         ++it;

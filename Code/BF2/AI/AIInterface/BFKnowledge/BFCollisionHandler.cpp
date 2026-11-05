@@ -24,7 +24,7 @@
 #include "../../../Game/Objects/IObjectTemplateComponent.h"    // getClassID +0x10
 #include "../../../Game/Objects/Projectiles/GenericProjectile.h"   // IProjectileObject's implementor
 #include "../../../Scene/Object/ObjectTypes/Game/IPlayerControlObject.h"
-#include "../../AIDLL/AI/Main/AIMineManager.h"                 // minePlaced +0x18 / mineRemoved +0x14
+#include "../../AIDLL/AI/AIKnowledge/AIMineManager.h"                 // minePlaced +0x18 / mineRemoved +0x14
 #include <string>
 
 namespace dice {

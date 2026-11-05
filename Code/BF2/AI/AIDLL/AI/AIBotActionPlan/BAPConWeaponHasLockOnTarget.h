@@ -31,7 +31,7 @@ public:
     virtual BAPConditionType getConditionType() const;   // 0x1F24A0, slot +0x04; from the base declaration
 
 private:
-    /* +0x0C */ unsigned int m_unusedC;   // the ctor's second argument; evaluate does not read it
+    /* +0x0C */ unsigned int m_target;   // the ctor's second argument; evaluate does not read it  // name: AIDLL_r assert in the constructor 0x101CE300 (+0xC)
 };
 
 } // namespace ai

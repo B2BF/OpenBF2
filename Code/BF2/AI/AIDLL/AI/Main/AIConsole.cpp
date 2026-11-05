@@ -15,7 +15,7 @@
 #include "../AIBot/WPPatrol.h"
 #include "../AIBot/WPAltitudePatrol.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "InformationManager.h"
 #include "../AIPathFinding/NavMesh/MapProperties.h"
 #include "../AIStrategicEntity/AIStrategicArea.h"
 #include "../AIStrategicEntity/AIStrategicObjectManager.h"
@@ -369,7 +369,7 @@ void AIConsole::botMoveTo(float radius, Vec3 position, int id)
     positions.push_back(position);
     Information* const equipment = informationManager->getInformation(bot->getCurrentEquipment());
     WaypointList* waypoints;
-    if (equipment && (equipment->getObjectTypeFlags() & 0x10))
+    if (equipment && equipment->isOfType(ITAir))
         waypoints = new WPAltitudeMoveTo(radius, radius, radius, 1, positions);
     else
         waypoints = new WPMoveTo(radius, 60.0f, 1, positions, -1);
@@ -385,7 +385,7 @@ void AIConsole::botFlyTo(int id, float first, float second, float third, Vec3 po
     std::list<Vec3> positions;
     positions.push_back(position);
     Information* const equipment = informationManager->getInformation(bot->getCurrentEquipment());
-    if (equipment && (equipment->getObjectTypeFlags() & 0x10))
+    if (equipment && equipment->isOfType(ITAir))
         bot->setWaypoints(new WPAltitudeMoveTo(first, second, third, 1, positions));
 }
 

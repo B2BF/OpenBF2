@@ -46,10 +46,10 @@ namespace dice { namespace hfe { namespace ai {
 // [CHOSEN, not recovered] Only a genuine nonnull identity for the stop test. This
 // fixture-only completion has no interface or layout claim and is never dereferenced.
 class IAIObject {};
-SquadManager::SquadManager() { sides = m_coordinators; }
+SquadManager::SquadManager() { sides = m_Squads; }
 SquadCoordinator::SquadCoordinator(int side, int squadIndex)
     : m_squadIndex(squadIndex), m_side(side), m_strategicAreaAssignment(nullptr),
-      m_i96(-1), m_formation(nullptr), m_i120(0) {}
+      m_squadLeaderIndex(-1), m_formation(nullptr), m_missionStatus(0) {}
 SquadMember::SquadMember(SquadCoordinator* squad, IAIPlayer* player, int squadIndex, int side, int memberIndex)
     : m_squadIndex(squadIndex), m_memberIndex(memberIndex), m_isSquadLeader(false),
       m_playerId(-1), m_player(player), m_bot(nullptr), m_squad(squad), m_side(side), m_request(nullptr) {}
@@ -152,16 +152,16 @@ int main(int argc, char** argv)
     a.m_squadMembers = {&m1};
     if (mode == "leaves")
     {
-        a.m_i120 = (std::numeric_limits<int>::min)();
+        a.m_missionStatus = (std::numeric_limits<int>::min)();
         require(a.getMissionStatus() == (std::numeric_limits<int>::min)(), "full-width status field");
-        a.m_i120 = 258; require(a.getMissionStatus() == 258, "fresh status read");
+        a.m_missionStatus = 258; require(a.getMissionStatus() == 258, "fresh status read");
         require(!a.isSquadAssignedToArea(-123), "null assignment false");
         a.m_strategicAreaAssignment = &area;
         require(a.isSquadAssignedToArea(-123), "signed area index match");
         require(!a.isSquadAssignedToArea(0), "area mismatch");
         area.m_index = (std::numeric_limits<int>::max)();
         require(a.isSquadAssignedToArea(area.m_index), "fresh full-width area index");
-        require(a.m_i120 == 258 && trace.empty(), "leaf getters do not call players or mutate status");
+        require(a.m_missionStatus == 258 && trace.empty(), "leaf getters do not call players or mutate status");
     }
     else if (mode == "empty")
     {
@@ -174,14 +174,14 @@ int main(int argc, char** argv)
     else if (mode == "filter")
     {
         sides[0] = {&a,&b,&c}; sides[1] = {&d};
-        a.m_i120 = 258; a.m_strategicAreaAssignment = &area;
-        b.m_i120 = 2; b.m_strategicAreaAssignment = nullptr;
-        c.m_i120 = 2; c.m_strategicAreaAssignment = &area; c.m_squadMembers = {&m3};
+        a.m_missionStatus = 258; a.m_strategicAreaAssignment = &area;
+        b.m_missionStatus = 2; b.m_strategicAreaAssignment = nullptr;
+        c.m_missionStatus = 2; c.m_strategicAreaAssignment = &area; c.m_squadMembers = {&m3};
         require(manager.getSquadStrengths(1,123,kind) == 0, "mission, null and nonmatching area filters");
         require(trace.empty(), "filtered squads never query player");
         require(manager.getSquadStrengths(1,-123,kind) == 0, "matching dead squad contributes zero");
         require(trace == std::vector<int>({31}), "only matching mission-2 squad queried");
-        trace.clear(); d.m_i120=2; d.m_strategicAreaAssignment=&area; d.m_squadMembers={&m2};
+        trace.clear(); d.m_missionStatus=2; d.m_strategicAreaAssignment=&area; d.m_squadMembers={&m2};
         require(manager.getSquadStrengths(2,-123,kind) == 0, "side two selected");
         require(trace == std::vector<int>({21}), "other side independent");
     }
@@ -214,7 +214,7 @@ int main(int argc, char** argv)
     }
     else if (mode == "outer_append" || mode == "outer_shrink")
     {
-        a.m_i120=b.m_i120=2; a.m_strategicAreaAssignment=b.m_strategicAreaAssignment=&area;
+        a.m_missionStatus=b.m_missionStatus=2; a.m_strategicAreaAssignment=b.m_strategicAreaAssignment=&area;
         b.m_squadMembers={&m2}; sides[0]={&a};
         if(mode=="outer_shrink") sides[0].push_back(&b);
         callback = [&](int id,int call) {
@@ -228,7 +228,7 @@ int main(int argc, char** argv)
         IAIObject identity; p1.alive=true; p1.vehicle=&identity; printTrace=true;
         if(mode=="manager_frontier")
         {
-            a.m_i120=2; a.m_strategicAreaAssignment=&area; sides[0]={&a};
+            a.m_missionStatus=2; a.m_strategicAreaAssignment=&area; sides[0]={&a};
             manager.getSquadStrengths(1,-123,kind);
         }
         else a.getStrategicStrength(kind);

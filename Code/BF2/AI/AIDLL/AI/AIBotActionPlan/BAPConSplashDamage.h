@@ -11,7 +11,7 @@
 #include "BAPConObject.h"
 #include "BAPTypes.h"
 #include "BAPVariable.h"
-#include "../AIBot/Aimer.h"
+#include "Aimer.h"
 
 namespace dice {
 namespace hfe {

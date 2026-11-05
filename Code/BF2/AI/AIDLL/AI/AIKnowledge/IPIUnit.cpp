@@ -11,8 +11,8 @@
 #include "IPIArmament.h"
 #include "IPIPhysical.h"
 #include "WeaponInfo.h"
-#include "WeaponInfoManager.h"
-#include "../AIBotBehaviour/CustomCurve.h"                          // SCurve::calculate (static)
+#include "../AIUtils/WeaponInfoManager.h"
+#include "../AIUtils/CustomCurve.h"                          // SCurve::calculate (static)
 #include "../AIUtils/checkPointer.h"
 #include "../Main/AISettingsInterfaces.h"
 #include "../Main/CommonSingletonServer.h"

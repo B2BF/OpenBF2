@@ -178,7 +178,7 @@ def generate(out):
     paths.append(Path(__file__).with_name('spawn_metadata_runtime.py'))
     (out / 'fixture_sources.json').write_text(
         json.dumps({p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}, indent=2), encoding='utf-8')
-    whole = [CODE / 'BF2' / p for p in (AI + 'AIKnowledge/InformationManager.cpp', 'Core/SpHandlePool.h',
+    whole = [CODE / 'BF2' / p for p in (AI + 'Main/InformationManager.cpp', 'Core/SpHandlePool.h',
                                         'IO/Input/PlayerInput.cpp', 'IO/Input/Input.h', 'Core/Debug.cpp')]
     (out / 'whole_sources.json').write_text(
         json.dumps({p.as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in whole}, indent=2),

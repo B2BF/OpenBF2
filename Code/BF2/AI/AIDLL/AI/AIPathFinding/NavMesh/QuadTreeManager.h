@@ -89,10 +89,10 @@ public:
     // Offsets describe the original 32-byte ELF object; STL layouts vary by compiler.
 
     // One quad-tree/cluster-graph pointer pair per island; each original x86 pair is eight bytes.
-    /*  +0 */ std::vector<std::pair<QuadTree*, ClusterGraph*> > m_islands;
+    /*  +0 */ std::vector<std::pair<QuadTree*, ClusterGraph*> > m_quadTrees;   // name: AIDLL_r asserts 0x10170D30, 0x10173C10 (PE +0, 8-byte entries)
     // Island count stored in the file, initialized by load or save. Runtime count queries
-    // use m_islands.size() instead; construction leaves this field unset.
-    /* +12 */ int m_numberOfIslands;
+    // use m_quadTrees.size() instead; construction leaves this field unset.
+    /* +12 */ int m_treeCount;   // name: AIDLL_r assert 0x10173C10 (PE +0x10)
     /* +16 */ std::list<DebugMesh*> m_debugMeshes;               // node 12
     /* +20 */ std::list<DebugMesh*> m_debugClusterMeshes;        // node 12
     /* +24 */ std::list<std::pair<DrawPrimitive*, DrawPrimitive*> > m_drawnPairs;   // node 16 [INFERRED]

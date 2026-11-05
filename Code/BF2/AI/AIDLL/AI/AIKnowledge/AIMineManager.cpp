@@ -1,3 +1,4 @@
+// Source placement: AIDLL_r.dll __FILE__ "Code\BF2\AI\AIDLL\AI\AIKnowledge\AIMineManager.cpp" (asserts in 0x100B3B60 / 0x100B3C60).
 // static init: ELF 0x2E17C0 (__tcf_0 0x2E1820, _GLOBAL__I 0x2E1850): <iostream>'s Init object only.
 #include <iostream>
 
@@ -9,9 +10,9 @@
 #include "../../../../Core/ClassManager.h"
 #include "../../../AIInterface/BFKnowledge/BFObjectEnvironment.h"   // IAIObjectEnvironment::isAsleep
 #include "../../../AIInterface/BFKnowledge/BFTimer.h"               // IBFTimer::getGameTime
-#include "AIRandom.h"
-#include "CommonSingletonServer.h"
-#include "IAIPathfinding.h"
+#include "../Main/AIRandom.h"
+#include "../Main/CommonSingletonServer.h"
+#include "../Main/IAIPathfinding.h"
 
 namespace dice {
 namespace hfe {
@@ -153,7 +154,7 @@ AIMineManager::AIMineManager()
     // Leaves m_gap64 uninitialized. Creates entries for anti-personnel and anti-tank mines;
     // init later sizes each type's map dimension.
     m_minedPolygons.resize(2);
-    m_polygonData.resize(2);
+    m_minesInPolygon.resize(2);
 }
 
 // The binary tears down exactly the four containers, in reverse declaration order - the settling
@@ -170,7 +171,7 @@ AIMineManager::~AIMineManager()
 void AIMineManager::init(MineType type, unsigned int islandCount)
 {
     m_minedPolygons[type].resize(islandCount);
-    m_polygonData[type].resize(islandCount);
+    m_minesInPolygon[type].resize(islandCount);
 }
 
 // Resets scheduling and scalar state while retaining both mine maps and polygon indices.
@@ -390,7 +391,7 @@ unsigned int AIMineManager::findSeedPolygonForATMine(MineInfo& info)
 void AIMineManager::addNewMineToPolygon(MineType type, unsigned int quadTree, unsigned int polygon)
 {
     const std::pair<std::map<unsigned int, PolygonData>::iterator, bool> result =
-        m_polygonData[type][quadTree].insert(std::make_pair(polygon, PolygonData()));
+        m_minesInPolygon[type][quadTree].insert(std::make_pair(polygon, PolygonData()));
 
     if (result.second)
     {
@@ -409,7 +410,7 @@ void AIMineManager::addNewOtherMineToPolygon(MineType type, unsigned int quadTre
                                              unsigned int polygon)
 {
     const std::pair<std::map<unsigned int, PolygonData>::iterator, bool> result =
-        m_polygonData[type][quadTree].insert(std::make_pair(polygon, PolygonData()));
+        m_minesInPolygon[type][quadTree].insert(std::make_pair(polygon, PolygonData()));
 
     if (result.second)
     {
@@ -425,10 +426,10 @@ void AIMineManager::addNewOtherMineToPolygon(MineType type, unsigned int quadTre
 
 // Removes a mine from an existing polygon entry. The caller must ensure the entry exists.
 // ELF 0x2E14B0
-void AIMineManager::removeMineFromPolygon(MineType type, unsigned int quadTree,
+void AIMineManager::removeMineFromPolygon(MineType type, unsigned int island,
                                           unsigned int polygon)
 {
-    std::map<unsigned int, PolygonData>& polygons = m_polygonData[type][quadTree];
+    std::map<unsigned int, PolygonData>& polygons = m_minesInPolygon[type][island];
 
     // No end check - see above.
     const std::map<unsigned int, PolygonData>::iterator i = polygons.find(polygon);
@@ -437,15 +438,15 @@ void AIMineManager::removeMineFromPolygon(MineType type, unsigned int quadTree,
     if (i->second.m_mines == 0 && i->second.m_otherMines == 0)
     {
         polygons.erase(i);
-        m_minedPolygons[type][quadTree].erase(polygon);
+        m_minedPolygons[type][island].erase(polygon);
     }
 }
 
 // ELF 0x2E15D0
-void AIMineManager::removeOtherMineFromPolygon(MineType type, unsigned int quadTree,
+void AIMineManager::removeOtherMineFromPolygon(MineType type, unsigned int island,
                                                unsigned int polygon)
 {
-    std::map<unsigned int, PolygonData>& polygons = m_polygonData[type][quadTree];
+    std::map<unsigned int, PolygonData>& polygons = m_minesInPolygon[type][island];
 
     const std::map<unsigned int, PolygonData>::iterator i = polygons.find(polygon);
     --i->second.m_otherMines;
@@ -453,7 +454,7 @@ void AIMineManager::removeOtherMineFromPolygon(MineType type, unsigned int quadT
     if (i->second.m_otherMines == 0 && i->second.m_mines == 0)
     {
         polygons.erase(i);
-        m_minedPolygons[type][quadTree].erase(polygon);
+        m_minedPolygons[type][island].erase(polygon);
     }
 }
 

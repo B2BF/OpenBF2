@@ -62,9 +62,9 @@ void normalizeGTSNormal(Vector& normal, Scalar)
 void QuadTree::readGTSDataFromFileDoubles(io::File& file)
 {
     clean();
-    file.read(m_numberOfVertices);
+    file.read(m_vertexCount);
     file.read(m_numberOfPolygons);
-    m_numberOfVertexIndices = m_numberOfPolygons * 3;
+    m_vertexIndexCount = m_numberOfPolygons * 3;
     m_numberOfNeighbours = m_numberOfPolygons * 3;
     file.read(m_double8C);
     file.read(m_double94);
@@ -75,11 +75,11 @@ void QuadTree::readGTSDataFromFileDoubles(io::File& file)
     m_doubleAC = zSize > xSize ? zSize : xSize;
     m_polygons = checkPointer(new Polygon[m_numberOfPolygons]);
     m_array88 = checkPointer(new DoublePolygon[m_numberOfPolygons]);
-    m_array84 = checkPointer(new DoubleVec3[m_numberOfVertices]());
-    m_vertexIndices = checkPointer(new unsigned int[m_numberOfVertexIndices]);
+    m_array84 = checkPointer(new DoubleVec3[m_vertexCount]());
+    m_vertexIndices = checkPointer(new unsigned int[m_vertexIndexCount]);
     m_neighbours = checkPointer(new unsigned int[m_numberOfNeighbours]);
-    file.read(m_array84, m_numberOfVertices * 24);
-    file.read(m_vertexIndices, m_numberOfVertexIndices * 4);
+    file.read(m_array84, m_vertexCount * 24);
+    file.read(m_vertexIndices, m_vertexIndexCount * 4);
     std::vector<unsigned int> polygons;
     DoubleVec3* normals = checkPointer(new DoubleVec3[m_numberOfPolygons]());
     file.read(normals, m_numberOfPolygons * 24);
@@ -93,8 +93,8 @@ void QuadTree::readGTSDataFromFileDoubles(io::File& file)
         polygons.push_back(p);
         m_array88[p].m_numberOfVertices = 3;
         m_array88[p].m_firstIndex = p * 3;
-        m_polygons[p].m_numberOfVertices = 3;
-        m_polygons[p].m_firstIndex = p * 3;
+        m_polygons[p].vertexCount = 3;
+        m_polygons[p].vertexOffset = p * 3;
         const DoubleVec3& av = m_array84[m_vertexIndices[p * 3]];
         const DoubleVec3& bv = m_array84[m_vertexIndices[p * 3 + 1]];
         const DoubleVec3& cv = m_array84[m_vertexIndices[p * 3 + 2]];
@@ -128,9 +128,9 @@ void QuadTree::readGTSDataFromFileDoubles(io::File& file)
 void QuadTree::readGTSDataFromFile(io::File& file)
 {
     clean();
-    file.read(m_numberOfVertices);
+    file.read(m_vertexCount);
     file.read(m_numberOfPolygons);
-    m_numberOfVertexIndices = m_numberOfPolygons * 3;
+    m_vertexIndexCount = m_numberOfPolygons * 3;
     m_numberOfNeighbours = m_numberOfPolygons * 3;
     file.read(m_min);
     file.read(m_max);
@@ -138,11 +138,11 @@ void QuadTree::readGTSDataFromFile(io::File& file)
     const float zSize = m_max.y - m_min.y;
     m_size = zSize > xSize ? zSize : xSize;
     m_polygons = checkPointer(new Polygon[m_numberOfPolygons]);
-    m_vertices = checkPointer(new Vec3[m_numberOfVertices]());
-    m_vertexIndices = checkPointer(new unsigned int[m_numberOfVertexIndices]);
+    m_vertices = checkPointer(new Vec3[m_vertexCount]());
+    m_vertexIndices = checkPointer(new unsigned int[m_vertexIndexCount]);
     m_neighbours = checkPointer(new unsigned int[m_numberOfNeighbours]);
-    file.read(m_vertices, m_numberOfVertices * 12);
-    file.read(m_vertexIndices, m_numberOfVertexIndices * 4);
+    file.read(m_vertices, m_vertexCount * 12);
+    file.read(m_vertexIndices, m_vertexIndexCount * 4);
     std::vector<unsigned int> polygons;
     Vec3* normals = checkPointer(new Vec3[m_numberOfPolygons]());
     file.read(normals, m_numberOfPolygons * 12);
@@ -154,8 +154,8 @@ void QuadTree::readGTSDataFromFile(io::File& file)
     for (unsigned int p = 0; p < m_numberOfPolygons; ++p)
     {
         polygons.push_back(p);
-        m_polygons[p].m_numberOfVertices = 3;
-        m_polygons[p].m_firstIndex = p * 3;
+        m_polygons[p].vertexCount = 3;
+        m_polygons[p].vertexOffset = p * 3;
         if (environment->isAiPositionInsideCombatArea(m_vertices[m_vertexIndices[p * 3]]) &&
             environment->isAiPositionInsideCombatArea(m_vertices[m_vertexIndices[p * 3 + 1]]) &&
             environment->isAiPositionInsideCombatArea(m_vertices[m_vertexIndices[p * 3 + 2]]))
@@ -212,9 +212,9 @@ DoublePolygon* QuadTree::getPolygonDouble(unsigned int polygon) const
 void QuadTree::buildQuadTreeMeshFromOptMesh(GTSDataOptimiser* optimiser)
 {
     m_numberOfPolygons = static_cast<unsigned int>(optimiser->m_polygons.size());
-    m_numberOfVertices = optimiser->getNumberOfVertices();
-    m_numberOfVertexIndices = m_numberOfVertices;
-    m_numberOfNeighbours = m_numberOfVertices;
+    m_vertexCount = optimiser->getNumberOfVertices();
+    m_vertexIndexCount = m_vertexCount;
+    m_numberOfNeighbours = m_vertexCount;
     m_min.x = static_cast<float>(m_double8C);
     m_min.y = static_cast<float>(m_double94);
     m_max.x = static_cast<float>(m_double9C);
@@ -225,9 +225,9 @@ void QuadTree::buildQuadTreeMeshFromOptMesh(GTSDataOptimiser* optimiser)
     delete[] m_polygons;
     m_polygons = checkPointer(new Polygon[m_numberOfPolygons]);
     delete[] m_vertices;
-    m_vertices = checkPointer(new Vec3[m_numberOfVertices]());
+    m_vertices = checkPointer(new Vec3[m_vertexCount]());
     delete[] m_vertexIndices;
-    m_vertexIndices = checkPointer(new unsigned int[m_numberOfVertexIndices]);
+    m_vertexIndices = checkPointer(new unsigned int[m_vertexIndexCount]);
     delete[] m_neighbours;
     m_neighbours = checkPointer(new unsigned int[m_numberOfNeighbours]);
     std::vector<unsigned int> polygons;
@@ -238,13 +238,13 @@ void QuadTree::buildQuadTreeMeshFromOptMesh(GTSDataOptimiser* optimiser)
         if (p->m_material != 0)
             p->m_material = p->m_originalMaterial;
         polygons.push_back(polygon);
-        m_polygons[polygon].m_numberOfVertices = p->m_numberOfVertices;
-        m_polygons[polygon].m_firstIndex = first;
+        m_polygons[polygon].vertexCount = p->m_numberOfVertices;
+        m_polygons[polygon].vertexOffset = first;
         m_polygons[polygon].m_material = p->m_material;
         const DoubleVec3* normal = p->getNormal();
         m_polygons[polygon].m_normal = Vec3{static_cast<float>(normal->x),
             static_cast<float>(normal->y), static_cast<float>(normal->z)};
-        m_polygons[polygon].m_cluster = p->m_cluster;
+        m_polygons[polygon].cluster = p->m_cluster;
         const unsigned char count = p->m_numberOfVertices;
         for (unsigned char corner = 0; corner < count; ++corner)
         {
@@ -267,11 +267,11 @@ void QuadTree::buildQuadTreeMeshFromOptMesh(GTSDataOptimiser* optimiser)
 void QuadTree::removeDuplicateVerticesFromOptMesh()
 {
     std::vector<std::pair<bool, unsigned int> > mapping(
-        m_numberOfVertexIndices, std::make_pair(false, 0u));
+        m_vertexIndexCount, std::make_pair(false, 0u));
     unsigned int count = 0;
     buildQuadTreesForDuplicateVertices(mapping, count);
     Vec3* vertices = checkPointer(new Vec3[count]());
-    for (unsigned int i = 0; i < m_numberOfVertexIndices; ++i)
+    for (unsigned int i = 0; i < m_vertexIndexCount; ++i)
     {
         if (mapping[i].first)
         {
@@ -288,7 +288,7 @@ void QuadTree::removeDuplicateVerticesFromOptMesh()
     }
     delete[] m_vertices;
     m_vertices = vertices;
-    m_numberOfVertices = count;
+    m_vertexCount = count;
 }
 
 // ELF 0x305360.
@@ -332,7 +332,7 @@ void QuadTree::initialDivideQuadsAndTestForDuplicateVertices(std::vector<Vec3*>*
     std::vector<unsigned int>* indices, std::vector<std::pair<Vec2, Vec2> >& bounds)
 {
     appendDuplicateVertexQuadrants(m_min, m_max, bounds);
-    for (unsigned int i = 0; i < m_numberOfVertices; ++i)
+    for (unsigned int i = 0; i < m_vertexCount; ++i)
     {
         Vec3* vertex = m_vertices + i;
         for (unsigned int q = 0; q < 4; ++q)
@@ -420,7 +420,7 @@ QuadTree::QuadTree(unsigned int island)
     : m_island(island)
     , m_numberOfPolygons(0)
     , m_numberOfNodePolygons(0)
-    , m_numberOfVertices(0)
+    , m_vertexCount(0)
     , m_nodes(0)
     , m_polygons(0)
     , m_nodePolygons(0)
@@ -440,7 +440,7 @@ QuadTree::QuadTree(unsigned int island)
     m_max.x = 0.0f;
     m_max.y = 0.0f;
 
-    // m_size, m_numberOfNodes, m_numberOfVertexIndices and m_numberOfNeighbours deliberately not
+    // m_size, m_numberOfNodes, m_vertexIndexCount and m_numberOfNeighbours deliberately not
     // initialised - both binaries step over them.
 }
 
@@ -463,8 +463,8 @@ void QuadTree::clean()
     m_numberOfNodes = 0;
     m_numberOfPolygons = 0;
     m_numberOfNodePolygons = 0;
-    m_numberOfVertices = 0;
-    m_numberOfVertexIndices = 0;
+    m_vertexCount = 0;
+    m_vertexIndexCount = 0;
     m_numberOfNeighbours = 0;
     m_nodes = 0;
     m_polygons = 0;
@@ -522,13 +522,13 @@ void QuadTree::readFromFile(io::File& file)
     m_nodePolygons = checkPointer(new unsigned int[m_numberOfNodePolygons]);
     file.read(m_nodePolygons, sizeof(unsigned int) * m_numberOfNodePolygons);
 
-    file.read(m_numberOfVertices);
-    m_vertices = checkPointer(new Vec3[m_numberOfVertices]());
-    file.read(m_vertices, sizeof(Vec3) * m_numberOfVertices);
+    file.read(m_vertexCount);
+    m_vertices = checkPointer(new Vec3[m_vertexCount]());
+    file.read(m_vertices, sizeof(Vec3) * m_vertexCount);
 
-    file.read(m_numberOfVertexIndices);
-    m_vertexIndices = checkPointer(new unsigned int[m_numberOfVertexIndices]);
-    file.read(m_vertexIndices, sizeof(unsigned int) * m_numberOfVertexIndices);
+    file.read(m_vertexIndexCount);
+    m_vertexIndices = checkPointer(new unsigned int[m_vertexIndexCount]);
+    file.read(m_vertexIndices, sizeof(unsigned int) * m_vertexIndexCount);
 
     file.read(m_numberOfNeighbours);
     m_neighbours = checkPointer(new unsigned int[m_numberOfNeighbours]);
@@ -559,7 +559,7 @@ bool QuadTree::pointWithinPolygonEdges(Polygon* polygon, const Vec3& point) cons
     vec3ToVec2XZ(point, point2);
 
     unsigned char edge = 0;
-    if (polygon->m_numberOfVertices == 0)
+    if (polygon->vertexCount == 0)
         return true;
 
     do
@@ -567,14 +567,14 @@ bool QuadTree::pointWithinPolygonEdges(Polygon* polygon, const Vec3& point) cons
         Vec2 first;
         first.x = 0.0f;
         first.y = 0.0f;
-        vec3ToVec2XZ(m_vertices[m_vertexIndices[polygon->m_firstIndex + edge]], first);
+        vec3ToVec2XZ(m_vertices[m_vertexIndices[polygon->vertexOffset + edge]], first);
 
         Vec2 second;
         second.x = 0.0f;
         second.y = 0.0f;
         const unsigned char next = static_cast<unsigned char>(
-            (edge + 1) % polygon->m_numberOfVertices);
-        vec3ToVec2XZ(m_vertices[m_vertexIndices[polygon->m_firstIndex + next]], second);
+            (edge + 1) % polygon->vertexCount);
+        vec3ToVec2XZ(m_vertices[m_vertexIndices[polygon->vertexOffset + next]], second);
 
         if ((second.y - first.y) * (point2.x - first.x)
             + (point2.y - first.y) * -(second.x - first.x) < -0.001f)
@@ -582,7 +582,7 @@ bool QuadTree::pointWithinPolygonEdges(Polygon* polygon, const Vec3& point) cons
 
         ++edge;
     }
-    while (edge < polygon->m_numberOfVertices);
+    while (edge < polygon->vertexCount);
 
     return true;
 }
@@ -591,7 +591,7 @@ bool QuadTree::pointWithinPolygonEdges(Polygon* polygon, const Vec3& point) cons
 bool QuadTree::withinPolygon(Polygon* polygon, const Vec3& point, float& distanceSquared,
                              float allowedHeightDiff) const
 {
-    const Vec3& first = m_vertices[m_vertexIndices[polygon->m_firstIndex]];
+    const Vec3& first = m_vertices[m_vertexIndices[polygon->vertexOffset]];
 
     Plane3 plane;
     plane.normal = polygon->m_normal;
@@ -644,15 +644,15 @@ void QuadTree::getVerticiesOfPolygon(std::vector<const Vec3*>& vertices,
 {
     Polygon* const candidate = &m_polygons[polygon];
     unsigned char corner = 0;
-    if (candidate->m_numberOfVertices == 0)
+    if (candidate->vertexCount == 0)
         return;
 
     do
     {
-        vertices.push_back(&m_vertices[m_vertexIndices[candidate->m_firstIndex + corner]]);
+        vertices.push_back(&m_vertices[m_vertexIndices[candidate->vertexOffset + corner]]);
         ++corner;
     }
-    while (corner < candidate->m_numberOfVertices);
+    while (corner < candidate->vertexCount);
 }
 
 // ELF 0x3081A0. Retail directly indexes the polygon array; there is no bounds or
@@ -669,7 +669,7 @@ void QuadTree::setMaterialOfPolygon(unsigned int polygon, unsigned char material
 }
 
 // Polygon topology accessors. Each polygon's corners and neighbours share one run of indices
-// starting at m_firstIndex: corner i is m_vertices[m_vertexIndices[first + i]], and the polygon
+// starting at vertexOffset: corner i is m_vertices[m_vertexIndices[first + i]], and the polygon
 // across the edge from corner i to corner i + 1 is m_neighbours[first + i] (UINT_MAX on a border).
 // None of these checks the polygon id; the "safe" variants only wrap the corner index.
 
@@ -685,9 +685,9 @@ Polygon* QuadTree::getPolygon(unsigned int polygon) const
 unsigned int QuadTree::getNeighbourOfPolygon(unsigned int polygon, unsigned char edge) const
 {
     const Polygon* const record = &m_polygons[polygon];
-    if (edge >= record->m_numberOfVertices)
+    if (edge >= record->vertexCount)
         return 0xFFFFFFFFu;
-    return m_neighbours[record->m_firstIndex + edge];
+    return m_neighbours[record->vertexOffset + edge];
 }
 
 // ELF 0x306F80. The start polygon is appended unconditionally (no sentinel or duplicate test,
@@ -697,8 +697,8 @@ void QuadTree::getPolygonsInRadius(std::list<unsigned int>& polygons, unsigned i
 {
     polygons.insert(polygons.end(), polygon);
     const Polygon* const record = &m_polygons[polygon];
-    for (unsigned char edge = 0; edge < record->m_numberOfVertices; ++edge)
-        getPolygonsInRadiusInternal(polygons, m_neighbours[record->m_firstIndex + edge], centre,
+    for (unsigned char edge = 0; edge < record->vertexCount; ++edge)
+        getPolygonsInRadiusInternal(polygons, m_neighbours[record->vertexOffset + edge], centre,
                                     radius);
 }
 
@@ -719,9 +719,9 @@ void QuadTree::getPolygonsInRadiusInternal(std::list<unsigned int>& polygons,
 
     const float radiusSqr = radius * radius;
     const Polygon* const record = &m_polygons[polygon];
-    unsigned char previous = static_cast<unsigned char>(record->m_numberOfVertices - 1);
+    unsigned char previous = static_cast<unsigned char>(record->vertexCount - 1);
 
-    const Vec3& first = m_vertices[m_vertexIndices[record->m_firstIndex]];
+    const Vec3& first = m_vertices[m_vertexIndices[record->vertexOffset]];
     float dx = centre.x - first.x;
     float dy = centre.y - first.y;
     float dz = centre.z - first.z;
@@ -729,10 +729,10 @@ void QuadTree::getPolygonsInRadiusInternal(std::list<unsigned int>& polygons,
 
     if (!touches)
     {
-        for (unsigned char i = 0; i < record->m_numberOfVertices; ++i)
+        for (unsigned char i = 0; i < record->vertexCount; ++i)
         {
-            const Vec3& a = m_vertices[m_vertexIndices[record->m_firstIndex + i]];
-            const Vec3& b = m_vertices[m_vertexIndices[record->m_firstIndex + previous]];
+            const Vec3& a = m_vertices[m_vertexIndices[record->vertexOffset + i]];
+            const Vec3& b = m_vertices[m_vertexIndices[record->vertexOffset + previous]];
 
             dx = centre.x - b.x;
             dy = centre.y - b.y;
@@ -773,8 +773,8 @@ void QuadTree::getPolygonsInRadiusInternal(std::list<unsigned int>& polygons,
     }
 
     polygons.insert(polygons.end(), polygon);
-    for (unsigned char edge = 0; edge < record->m_numberOfVertices; ++edge)
-        getPolygonsInRadiusInternal(polygons, m_neighbours[record->m_firstIndex + edge], centre,
+    for (unsigned char edge = 0; edge < record->vertexCount; ++edge)
+        getPolygonsInRadiusInternal(polygons, m_neighbours[record->vertexOffset + edge], centre,
                                     radius);
 }
 
@@ -784,8 +784,8 @@ void QuadTree::getPolygonsInTriangle(std::list<unsigned int>& polygons, unsigned
 {
     polygons.insert(polygons.end(), polygon);
     const Polygon* const record = &m_polygons[polygon];
-    for (unsigned char edge = 0; edge < record->m_numberOfVertices; ++edge)
-        getPolygonsInTriangleInternal(polygons, m_neighbours[record->m_firstIndex + edge], a, b, c);
+    for (unsigned char edge = 0; edge < record->vertexCount; ++edge)
+        getPolygonsInTriangleInternal(polygons, m_neighbours[record->vertexOffset + edge], a, b, c);
 }
 
 // ELF 0x306AA0. A polygon is taken when corner 0, or the corner `previous` of a pass, lies in the
@@ -807,8 +807,8 @@ void QuadTree::getPolygonsInTriangleInternal(std::list<unsigned int>& polygons,
         return;
 
     const Polygon* const record = &m_polygons[polygon];
-    unsigned char previous = static_cast<unsigned char>(record->m_numberOfVertices - 1);
-    const Vec3& first = m_vertices[m_vertexIndices[record->m_firstIndex]];
+    unsigned char previous = static_cast<unsigned char>(record->vertexCount - 1);
+    const Vec3& first = m_vertices[m_vertexIndices[record->vertexOffset]];
     bool touches = pointWithinPolygon2d(first, triangle, 3);
     if (std::fabs(first.y - a.y) > 2.0f)
         return;
@@ -825,10 +825,10 @@ void QuadTree::getPolygonsInTriangleInternal(std::list<unsigned int>& polygons,
 
     if (!touches)
     {
-        for (unsigned char i = 0; i < record->m_numberOfVertices; ++i)
+        for (unsigned char i = 0; i < record->vertexCount; ++i)
         {
-            const Vec3& current = m_vertices[m_vertexIndices[record->m_firstIndex + i]];
-            const Vec3& corner = m_vertices[m_vertexIndices[record->m_firstIndex + previous]];
+            const Vec3& current = m_vertices[m_vertexIndices[record->vertexOffset + i]];
+            const Vec3& corner = m_vertices[m_vertexIndices[record->vertexOffset + previous]];
             if (std::fabs(corner.y - a.y) > 2.0f)
                 return;
             if (pointWithinPolygon2d(corner, triangle, 3))
@@ -861,17 +861,17 @@ void QuadTree::getPolygonsInTriangleInternal(std::list<unsigned int>& polygons,
     }
 
     polygons.insert(polygons.end(), polygon);
-    for (unsigned char edge = 0; edge < record->m_numberOfVertices; ++edge)
-        getPolygonsInTriangleInternal(polygons, m_neighbours[record->m_firstIndex + edge], a, b, c);
+    for (unsigned char edge = 0; edge < record->vertexCount; ++edge)
+        getPolygonsInTriangleInternal(polygons, m_neighbours[record->vertexOffset + edge], a, b, c);
 }
 
 // ELF 0x3068F0.
 bool QuadTree::isNeighbourOfPolygon(unsigned int polygon, unsigned int neighbour) const
 {
     const Polygon* const record = &m_polygons[polygon];
-    for (unsigned char edge = 0; edge < record->m_numberOfVertices; ++edge)
+    for (unsigned char edge = 0; edge < record->vertexCount; ++edge)
     {
-        if (m_neighbours[record->m_firstIndex + edge] == neighbour)
+        if (m_neighbours[record->vertexOffset + edge] == neighbour)
             return true;
     }
     return false;
@@ -881,22 +881,22 @@ bool QuadTree::isNeighbourOfPolygon(unsigned int polygon, unsigned int neighbour
 unsigned int QuadTree::getSafeNeighbourOfPolygon(unsigned int polygon, unsigned char edge) const
 {
     const Polygon* const record = &m_polygons[polygon];
-    return m_neighbours[record->m_firstIndex + edge % record->m_numberOfVertices];
+    return m_neighbours[record->vertexOffset + edge % record->vertexCount];
 }
 
 // ELF 0x307530.
 const Vec3* QuadTree::getVertexForPolygon(unsigned int polygon, unsigned char corner) const
 {
-    return &m_vertices[m_vertexIndices[m_polygons[polygon].m_firstIndex + corner]];
+    return &m_vertices[m_vertexIndices[m_polygons[polygon].vertexOffset + corner]];
 }
 
 // ELF 0x307560.
 bool QuadTree::isVertexOfPolygon(unsigned int polygon, unsigned int vertex) const
 {
     const Polygon* const record = &m_polygons[polygon];
-    for (unsigned char corner = 0; corner < record->m_numberOfVertices; ++corner)
+    for (unsigned char corner = 0; corner < record->vertexCount; ++corner)
     {
-        if (m_vertexIndices[record->m_firstIndex + corner] == vertex)
+        if (m_vertexIndices[record->vertexOffset + corner] == vertex)
             return true;
     }
     return false;
@@ -906,13 +906,13 @@ bool QuadTree::isVertexOfPolygon(unsigned int polygon, unsigned int vertex) cons
 const Vec3* QuadTree::getSafeVertexForPolygon(unsigned int polygon, unsigned char corner) const
 {
     const Polygon* const record = &m_polygons[polygon];
-    return &m_vertices[m_vertexIndices[record->m_firstIndex + corner % record->m_numberOfVertices]];
+    return &m_vertices[m_vertexIndices[record->vertexOffset + corner % record->vertexCount]];
 }
 
 // ELF 0x307610.
 unsigned int QuadTree::getVertexIndexForPolygon(unsigned int polygon, unsigned char corner) const
 {
-    return m_vertexIndices[m_polygons[polygon].m_firstIndex + corner];
+    return m_vertexIndices[m_polygons[polygon].vertexOffset + corner];
 }
 
 // ELF 0x307640. The corner index wraps modulo the corner count.
@@ -920,7 +920,7 @@ unsigned int QuadTree::getSafeVertexIndexForPolygon(unsigned int polygon,
                                                     unsigned char corner) const
 {
     const Polygon* const record = &m_polygons[polygon];
-    return m_vertexIndices[record->m_firstIndex + corner % record->m_numberOfVertices];
+    return m_vertexIndices[record->vertexOffset + corner % record->vertexCount];
 }
 
 // ELF 0x307680. The corner average. A polygon without corners divides by zero, as in retail.
@@ -930,14 +930,14 @@ void QuadTree::getCentreOfPolygon(Vec3& centre, unsigned int polygon) const
     centre.x = 0.0f;
     centre.y = 0.0f;
     centre.z = 0.0f;
-    for (unsigned char corner = 0; corner < record->m_numberOfVertices; ++corner)
+    for (unsigned char corner = 0; corner < record->vertexCount; ++corner)
     {
-        const Vec3& vertex = m_vertices[m_vertexIndices[record->m_firstIndex + corner]];
+        const Vec3& vertex = m_vertices[m_vertexIndices[record->vertexOffset + corner]];
         centre.x += vertex.x;
         centre.y += vertex.y;
         centre.z += vertex.z;
     }
-    const float inverse = 1.0f / static_cast<float>(record->m_numberOfVertices);
+    const float inverse = 1.0f / static_cast<float>(record->vertexCount);
     centre.x *= inverse;
     centre.y *= inverse;
     centre.z *= inverse;
@@ -956,14 +956,14 @@ bool QuadTree::getNeighbourIndexForPolygon(unsigned char& edge, unsigned int pol
 {
     const Polygon* const record = &m_polygons[polygon];
     edge = 0;
-    if (m_neighbours[record->m_firstIndex] == neighbour)
+    if (m_neighbours[record->vertexOffset] == neighbour)
         return true;
     for (;;)
     {
         ++edge;
-        if (edge >= record->m_numberOfVertices)
+        if (edge >= record->vertexCount)
             return false;
-        if (m_neighbours[record->m_firstIndex + edge] == neighbour)
+        if (m_neighbours[record->vertexOffset + edge] == neighbour)
             return true;
     }
 }
@@ -1008,16 +1008,16 @@ bool QuadTree::getLineIntersectionOnEdgeInPolygon(Vec3& intersection, unsigned i
 
     const Polygon* const record = &m_polygons[polygon];
     edge = 0;
-    if (record->m_numberOfVertices != 0)
+    if (record->vertexCount != 0)
     {
         do
         {
             if (previousPolygon == 0xFFFFFFFFu ||
-                m_neighbours[record->m_firstIndex + edge] != previousPolygon)
+                m_neighbours[record->vertexOffset + edge] != previousPolygon)
             {
-                vec3ToVec2XZ(m_vertices[m_vertexIndices[record->m_firstIndex + edge]], corner);
-                vec3ToVec2XZ(m_vertices[m_vertexIndices[record->m_firstIndex +
-                                                        (edge + 1) % record->m_numberOfVertices]],
+                vec3ToVec2XZ(m_vertices[m_vertexIndices[record->vertexOffset + edge]], corner);
+                vec3ToVec2XZ(m_vertices[m_vertexIndices[record->vertexOffset +
+                                                        (edge + 1) % record->vertexCount]],
                              nextCorner);
 
                 const float scale = 1.0f;
@@ -1101,7 +1101,7 @@ bool QuadTree::getLineIntersectionOnEdgeInPolygon(Vec3& intersection, unsigned i
             }
             ++edge;
         }
-        while (record->m_numberOfVertices > edge);
+        while (record->vertexCount > edge);
     }
 
     if (!(minInvalid > bestMiss))
@@ -1131,9 +1131,9 @@ void QuadTree::getPolygonsWithinBoundary(const Vec3& minimum, const Vec3& maximu
     for (unsigned int polygonId = 0; polygonId < m_numberOfPolygons; ++polygonId)
     {
         const Polygon& polygon = m_polygons[polygonId];
-        for (unsigned int corner = 0; corner < polygon.m_numberOfVertices; ++corner)
+        for (unsigned int corner = 0; corner < polygon.vertexCount; ++corner)
         {
-            const Vec3& vertex = m_vertices[m_vertexIndices[polygon.m_firstIndex + corner]];
+            const Vec3& vertex = m_vertices[m_vertexIndices[polygon.vertexOffset + corner]];
 
             Vec3 local;
             local.x = inverse.m[0] * vertex.x + inverse.m[4] * vertex.y
@@ -1165,9 +1165,9 @@ void QuadTree::getPolygonsWithinBoundaryDoubles(const Vec3& minimum, const Vec3&
     for (unsigned int polygonId = 0; polygonId < m_numberOfPolygons; ++polygonId)
     {
         const Polygon& polygon = m_polygons[polygonId];
-        for (unsigned int corner = 0; corner < polygon.m_numberOfVertices; ++corner)
+        for (unsigned int corner = 0; corner < polygon.vertexCount; ++corner)
         {
-            const DoubleVec3& vertex = m_array84[m_vertexIndices[polygon.m_firstIndex + corner]];
+            const DoubleVec3& vertex = m_array84[m_vertexIndices[polygon.vertexOffset + corner]];
 
             Vec3 local;
             local.x = static_cast<float>(inverse.m[0] * vertex.x + inverse.m[4] * vertex.y
@@ -1189,7 +1189,7 @@ void QuadTree::getPolygonsWithinBoundaryDoubles(const Vec3& minimum, const Vec3&
 }
 
 // ELF 0x308860.
-void QuadTree::initializeDestroyableMapPart(int mapPartId, bool initiallyWalkable,
+void QuadTree::initializeDestroyableMapPart(int pathfindingMapId, bool initiallyWalkable,
                                             const Vec3& minimum, const Vec3& maximum,
                                             const Mat4& transformation, ClusterGraph* graph,
                                             bool useDoubles)
@@ -1230,16 +1230,16 @@ void QuadTree::initializeDestroyableMapPart(int mapPartId, bool initiallyWalkabl
     m_destroyableMapParts.push_back(part);
     part->m_initiallyWalkable = initiallyWalkable;
     if (!initiallyWalkable && !useDoubles)
-        restoreMapPart(mapPartId, graph);
+        restoreMapPart(pathfindingMapId, graph);
     part->m_destroyed = false;
 }
 
 // ELF 0x308C60.
-void QuadTree::destroyMapPart(int mapPartId, ClusterGraph* graph)
+void QuadTree::destroyMapPart(int pathfindingMapId, ClusterGraph* graph)
 {
     if (!m_destroyableMapParts.empty())
     {
-        DestroyableMapPart* const part = m_destroyableMapParts[mapPartId];
+        DestroyableMapPart* const part = m_destroyableMapParts[pathfindingMapId];
         if (part && !part->m_destroyed)
         {
             for (unsigned int i = 0; i < part->m_polygons.size(); ++i)
@@ -1251,7 +1251,7 @@ void QuadTree::destroyMapPart(int mapPartId, ClusterGraph* graph)
             if (graph && !part->m_polygons.empty())
             {
                 const unsigned int first = part->m_polygons[0];
-                graph->m_clusters[m_polygons[first].m_cluster].m_walkable
+                graph->m_clusters[m_polygons[first].cluster].m_walkable
                     = static_cast<unsigned char>(!part->m_initiallyWalkable);
             }
             part->m_destroyed = true;
@@ -1260,11 +1260,11 @@ void QuadTree::destroyMapPart(int mapPartId, ClusterGraph* graph)
 }
 
 // ELF 0x308D20.
-void QuadTree::restoreMapPart(int mapPartId, ClusterGraph* graph)
+void QuadTree::restoreMapPart(int pathfindingMapId, ClusterGraph* graph)
 {
-    if (mapPartId != -1)
+    if (pathfindingMapId != -1)
     {
-        DestroyableMapPart* const part = m_destroyableMapParts[mapPartId];
+        DestroyableMapPart* const part = m_destroyableMapParts[pathfindingMapId];
         if (part)
         {
             for (unsigned int i = 0; i < part->m_polygons.size(); ++i)
@@ -1276,7 +1276,7 @@ void QuadTree::restoreMapPart(int mapPartId, ClusterGraph* graph)
             if (graph && !part->m_polygons.empty())
             {
                 const unsigned int first = part->m_polygons[0];
-                graph->m_clusters[m_polygons[first].m_cluster].m_walkable
+                graph->m_clusters[m_polygons[first].cluster].m_walkable
                     = static_cast<unsigned char>(part->m_initiallyWalkable);
             }
             part->m_destroyed = false;
@@ -1285,11 +1285,11 @@ void QuadTree::restoreMapPart(int mapPartId, ClusterGraph* graph)
 }
 
 // ELF 0x308E30.
-void QuadTree::resetOriginalMaterialOfDestroyableMapPart(int mapPartId, ClusterGraph* graph)
+void QuadTree::resetOriginalMaterialOfDestroyableMapPart(int pathfindingMapId, ClusterGraph* graph)
 {
-    if (mapPartId != -1)
+    if (pathfindingMapId != -1)
     {
-        DestroyableMapPart* const part = m_destroyableMapParts[mapPartId];
+        DestroyableMapPart* const part = m_destroyableMapParts[pathfindingMapId];
         if (part)
         {
             for (unsigned int i = 0; i < part->m_polygons.size(); ++i)
@@ -1298,7 +1298,7 @@ void QuadTree::resetOriginalMaterialOfDestroyableMapPart(int mapPartId, ClusterG
             if (graph && !part->m_polygons.empty())
             {
                 const unsigned int first = part->m_polygons[0];
-                graph->m_clusters[m_polygons[first].m_cluster].m_walkable
+                graph->m_clusters[m_polygons[first].cluster].m_walkable
                     = static_cast<unsigned char>(part->m_initiallyWalkable);
             }
             part->m_destroyed = false;
@@ -1328,10 +1328,10 @@ void QuadTree::saveToFile(io::File& file)
     file.write(m_polygons, sizeof(Polygon) * m_numberOfPolygons);
     file.write(m_numberOfNodePolygons);
     file.write(m_nodePolygons, sizeof(unsigned int) * m_numberOfNodePolygons);
-    file.write(m_numberOfVertices);
-    file.write(m_vertices, sizeof(Vec3) * m_numberOfVertices);
-    file.write(m_numberOfVertexIndices);
-    file.write(m_vertexIndices, sizeof(unsigned int) * m_numberOfVertexIndices);
+    file.write(m_vertexCount);
+    file.write(m_vertices, sizeof(Vec3) * m_vertexCount);
+    file.write(m_vertexIndexCount);
+    file.write(m_vertexIndices, sizeof(unsigned int) * m_vertexIndexCount);
     file.write(m_numberOfNeighbours);
     file.write(m_neighbours, sizeof(unsigned int) * m_numberOfNeighbours);
 }
@@ -1356,15 +1356,15 @@ void QuadTree::drawPolygon(unsigned int polygon, float* height, float time)
 {
     const Polygon* const candidate = &m_polygons[polygon];
     unsigned char corner = 0;
-    if (candidate->m_numberOfVertices == 0)
+    if (candidate->vertexCount == 0)
         return;
 
     do
     {
-        Vec3 start = m_vertices[m_vertexIndices[candidate->m_firstIndex + corner]];
+        Vec3 start = m_vertices[m_vertexIndices[candidate->vertexOffset + corner]];
         const unsigned char next = static_cast<unsigned char>(
-            (corner + 1) % candidate->m_numberOfVertices);
-        Vec3 end = m_vertices[m_vertexIndices[candidate->m_firstIndex + next]];
+            (corner + 1) % candidate->vertexCount);
+        Vec3 end = m_vertices[m_vertexIndices[candidate->vertexOffset + next]];
         if (height)
         {
             end.y = *height;
@@ -1374,7 +1374,7 @@ void QuadTree::drawPolygon(unsigned int polygon, float* height, float time)
             ->createStaticLine(time, 0xFF0000u, start, end, 0.3f);
         ++corner;
     }
-    while (corner < candidate->m_numberOfVertices);
+    while (corner < candidate->vertexCount);
 }
 
 // ELF 0x3068A0. Empty in the shipped image.
@@ -1392,7 +1392,7 @@ Vec3 QuadTree::getPolygonMidPoint(unsigned int polygon)
     midPoint.z = 0.0f;
 
     const Polygon* const candidate = &m_polygons[polygon];
-    for (unsigned char corner = 0; corner < candidate->m_numberOfVertices; ++corner)
+    for (unsigned char corner = 0; corner < candidate->vertexCount; ++corner)
     {
         const Vec3* const vertex = getVertexForPolygon(polygon, corner);
         midPoint.x += vertex->x;
@@ -1400,7 +1400,7 @@ Vec3 QuadTree::getPolygonMidPoint(unsigned int polygon)
         midPoint.z += vertex->z;
     }
 
-    const float scale = 1.0f / static_cast<float>(candidate->m_numberOfVertices);
+    const float scale = 1.0f / static_cast<float>(candidate->vertexCount);
     midPoint.x *= scale;
     midPoint.y *= scale;
     midPoint.z *= scale;
@@ -1450,7 +1450,7 @@ void QuadTree::validateNeighbourRelations() const
     for (unsigned int polygon = 0; polygon < m_numberOfPolygons; ++polygon)
     {
         const Polygon& candidate = m_polygons[polygon];
-        for (unsigned char edge = 0; edge < candidate.m_numberOfVertices; ++edge)
+        for (unsigned char edge = 0; edge < candidate.vertexCount; ++edge)
         {
         }
     }

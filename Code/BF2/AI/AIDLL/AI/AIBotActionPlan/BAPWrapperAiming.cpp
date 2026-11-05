@@ -13,7 +13,7 @@
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/Information.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../Main/AIDllFrontier.h"
 #include "../Main/CommonSingletonServer.h"
 #include "../../../AIInterface/BFKnowledge/BFPhysics.h"
@@ -131,7 +131,7 @@ bool BAPWrapperAiming::execute(Bot* bot, bool& ok, bool& done)
     // Soldier against soldier: short-range weapons aim 0.2 lower, others 0.3 lower at a standing
     // target.
     float yOffset = 0.0f;
-    if ((self->getObjectTypeFlags() & 0x200000u) && (target->getObjectTypeFlags() & 0x200000u)) {
+    if (self->isOfType(ITSoldier) && target->isOfType(ITSoldier)) {
         if (weapon->getMaxRange() < 10.0f)
             yOffset = -0.2f;
         else if (target->getSoldierPose() == SPStanding)
@@ -157,8 +157,8 @@ bool BAPWrapperAiming::execute(Bot* bot, bool& ok, bool& done)
 
     const bool explosive = weapon->getExplosionRadius() != 0.0f && weapon->getWeaponGuidanceType() == 0;
     const bool explosiveShot = explosive && !weapon->getIsThrown();
-    const bool vehicleAtSoldier = !(self->getObjectTypeFlags() & 0x200000u)
-                                  && (target->getObjectTypeFlags() & 0x200000u) && explosiveShot;
+    const bool vehicleAtSoldier = !self->isOfType(ITSoldier)
+                                  && target->isOfType(ITSoldier) && explosiveShot;
     const bool highAbove = bot->getSpawnKit() != 1 && !weapon->getIsThrown() && 30.0f < dy;
     const bool indirect = (sensed->m_flags & 2u) && ((sensed->m_flags & 8u) || vehicleAtSoldier || highAbove)
                           && explosive;
@@ -202,7 +202,7 @@ bool BAPWrapperAiming::execute(Bot* bot, bool& ok, bool& done)
         point.y = point.y + yOffset;
     }
 
-    if (explosive && !weapon->getIsThrown() && !indirect && (target->getObjectTypeFlags() & 0x200000u))
+    if (explosive && !weapon->getIsThrown() && !indirect && target->isOfType(ITSoldier))
         point.y = static_cast<IAITerrain*>(CommonSingletonServer::m_iaiTerrain)->getHeight(point.x, point.z);
     if (m_aimPoint)
         m_aimPoint->m_value = point;

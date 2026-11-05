@@ -19,7 +19,7 @@
 #include "../../AIDLL/AI/Main/CommonSingletonServer.h"
 #include "../../AIDLL/AI/Main/AIEventCourier.h"     // IAIEventCourier - 55 named slots
 #include "../../AIDLL/AI/Main/AISettingsInterfaces.h"  // IAISettings::getDraw
-#include "../../AIDLL/AI/Main/AIMineManager.h"      // IAIMineManager::mineRemoved
+#include "../../AIDLL/AI/AIKnowledge/AIMineManager.h"      // IAIMineManager::mineRemoved
 #include "../../../Game/GameServer/ServerSettings.h"  // the team-ratio inversion below
 #include "../../../Scene/Object/PlayerManager.h"      // the three lookups it needs
 #include "../../AIDLL/AI/DrawPrimitives/DPManager.h"// IDPManager::drawAll / nodrawUpdate

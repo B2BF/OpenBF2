@@ -10,7 +10,7 @@
 #include "../AIBot/BotMain.h"
 #include "../AIBotBehaviourPattern/BBPFire.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../AIUtils/checkPointer.h"
 #include "../Main/AISettingsInterfaces.h"

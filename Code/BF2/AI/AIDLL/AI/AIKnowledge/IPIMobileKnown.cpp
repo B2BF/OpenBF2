@@ -9,7 +9,7 @@
 #include <cmath>
 
 #include "Information.h"
-#include "InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../Main/CommonSingletonServer.h"
 #include "../../../AIInterface/BFKnowledge/BFTimer.h"
 #include "../../../AIInterface/BFKnowledge/IAIObject.h"

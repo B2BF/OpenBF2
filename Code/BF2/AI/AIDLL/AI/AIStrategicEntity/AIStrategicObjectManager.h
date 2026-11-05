@@ -55,7 +55,7 @@ public:
             m_position.z = 0.0f;
         }
 
-        /*  +0 */ bool m_destroyed;       // 0 at creation; `bridgeSegmentDestroyed` sets it to 1
+        /*  +0 */ bool isDestroyed;       // 0 at creation; `bridgeSegmentDestroyed` sets it to 1  // name: AIDLL_r assert "bridge->isDestroyed" (0x10086E40; +0)
         /*  +4 */ int m_i4;              // [UNRESOLVED] - written only by `bridgeSegmentDestroyed`
         /*  +8 */ IAIObject* m_object;   // the search key for all three of the methods above
         /* +12 */ Vec3 m_position;       // [INFERRED] - three zeroed floats, never read here
@@ -175,27 +175,27 @@ private:
     // MSVC's `sizeof` will differ - libstdc++ 3.x puts a `_Rb_tree` in twelve bytes (a header-node
     // pointer, a node count and four bytes of empty comparator) and a `std::list` in four.
     /*   +4 */ std::vector<AIStrategicObject*> m_strategicObjects;
-    /*  +16 */ std::vector<std::vector<AIStrategicObject*> > m_objectsByCategory;
+    /*  +16 */ std::vector<std::vector<AIStrategicObject*> > m_objectsPerCategory;   // name: AIDLL_r assert 0x10086290 (PE +0x14)
 public:
     // [CHOSEN, not recovered] Visibility for the generated inline debug control.
     /*  +28 */ bool m_debugEnabled;                 // false; console enableDebug
 private:
-    /*  +32 */ std::map<std::string, AIStrategicArea*> m_strategicAreas;
+    /*  +32 */ std::map<std::string, AIStrategicArea*> m_strategicAreaMap;   // name: AIDLL_r assert 0x1008B6F0 (PE +0x28)
     // The reverse index. Its value type is `std::string` - read straight off the destructor's
     // `_Rb_tree<AIStrategicArea*, pair<AIStrategicArea* const, std::string>, ...>` teardown.
     /*  +44 */ std::map<AIStrategicArea*, std::string> m_areaNames;
-    // An iterator, not a pointer - one word in this libstdc++, initialised to `m_strategicAreas.end`
+    // An iterator, not a pointer - one word in this libstdc++, initialised to `m_strategicAreaMap.end`
     // by the constructor and compared against `end` by every reader (`getActiveArea`
     // `getObjectTypeFlags`, `setOrderPosition`, `getPosition`).
     /*  +56 */ std::map<std::string, AIStrategicArea*>::iterator m_activeArea;
-    /*  +60 */ std::map<std::string, int> m_categories;
-    /*  +72 */ std::vector<std::string> m_categoryNames;
+    /*  +60 */ std::map<std::string, int> m_namesToCategory;   // name: AIDLL_r assert 0x100892D0 (PE +0x44)
+    /*  +72 */ std::vector<std::string> m_categoryToNames;   // name: AIDLL_r assert 0x100867B0 (PE +0x50)
 public:
     // [CHOSEN, not recovered] Visibility for the generated inline drawing control.
     /*  +84 */ bool m_drawVehicleSearchRadii;       // false; console drawVehicleSearchRadi
 private:
-    /*  +88 */ std::map<std::pair<int, int>, WPContainer> m_wayPoints;
-    // The two halves of a `m_wayPoints` key, both -1 for "nothing selected".
+    /*  +88 */ std::map<std::pair<int, int>, WPContainer> m_waypointMap;   // name: AIDLL_r assert 0x10089680 (PE +0x64)
+    // The two halves of a `m_waypointMap` key, both -1 for "nothing selected".
     // `clearWaypointToDraw` resets only the first of the two; `drawWayPoints` tests both.
     /* +100 */ int m_wayPointsToDrawFirst;
     /* +104 */ int m_wayPointsToDrawSecond;

@@ -6,7 +6,7 @@
 #include "BAPActionInline.h"
 #include "../AIBot/BotMain.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/IPIUnit.h"
@@ -67,7 +67,7 @@ bool BAPARunOverObject::execute(Bot* bot, bool& ok, bool& done)
     hit.z = 0.0f;
     unsigned int polygon;
     const int equipmentType = equipment->getUnit()->getEquipmentType();
-    if (!IAIPathfinding::instance->trace(ownValid.polygon, ownValid.quadTree, mobile->getVehicleNumber(),
+    if (!IAIPathfinding::instance->trace(ownValid.polygon, ownValid.island, mobile->getVehicleNumber(),
                                          ownValid.position, targetValid.position, hit, polygon, equipmentType,
                                          -1, 0.0f, 5, 0))
     {

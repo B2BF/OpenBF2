@@ -5,7 +5,7 @@
 
 #include "BBChangeLandingCraft.h"
 
-#include "CustomCurve.h"
+#include "../AIUtils/CustomCurve.h"
 #include "VehicleUrgencyCalculator.h"
 #include "../AIBot/BotMain.h"
 #include "../AIBot/BotMemory.h"
@@ -14,7 +14,7 @@
 #include "../AIBotBehaviourPattern/BBPChange.h"
 #include "../AIBotBehaviourPattern/BBPChangeLandingCraft.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/IPIUnit.h"
@@ -109,9 +109,9 @@ float BBChangeLandingCraft::calculateUrgency(Bot* bot, bool evaluate, float)
     const float secondaryFactor = 0.25f;
     if (current->isPrimary())
         primary = current;
-    else if (!primary->getUnit()->isOccupied() && !(current->getObjectTypeFlags() & 0x80))
+    else if (!primary->getUnit()->isOccupied() && !current->isOfType(ITNaval))
     {
-        primaryFactor = (current->getObjectTypeFlags() & 0x10) ? 1.5f : 1.0f;
+        primaryFactor = current->isOfType(ITAir) ? 1.5f : 1.0f;
         currentFactor = 0.25f;
     }
     const bool currentIsPrimary = current == primary;
@@ -134,7 +134,7 @@ float BBChangeLandingCraft::calculateUrgency(Bot* bot, bool evaluate, float)
             if (candidate == primary && !primaryUnit->isOccupied() && primaryMobile)
             {
                 const IPIMobile::ValidPos valid = primaryMobile->getLastValidPosition();
-                if (valid.quadTree == 0xFFFFFFFFu)
+                if (valid.island == 0xFFFFFFFFu)
                 { urgency = 0.0f; invalidPosition = true; }
                 else urgency += 100.0f;
             }
@@ -148,7 +148,7 @@ float BBChangeLandingCraft::calculateUrgency(Bot* bot, bool evaluate, float)
     }
 
     bool disembark = false;
-    const bool air = (primary->getObjectTypeFlags() & 0x10) != 0;
+    const bool air = primary->isOfType(ITAir);
     const Vec3& position = current->getPosition();
     bool canDisembark = false;
     if (air)
@@ -194,7 +194,7 @@ float BBChangeLandingCraft::calculateUrgency(Bot* bot, bool evaluate, float)
             }
         }
     }
-    if (!air && !(primary->getObjectTypeFlags() & 0x200000))
+    if (!air && !primary->isOfType(ITSoldier))
     {
         Vec3 normal = {0.0f, 0.0f, 0.0f};
         IAITerrain* terrain = static_cast<IAITerrain*>(CommonSingletonServer::m_iaiTerrain);

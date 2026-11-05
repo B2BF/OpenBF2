@@ -22,7 +22,7 @@
 #include "../AIBot/BotMain.h"                                   // event_isRepaired
 #include "../AIStrategic/SAI.h"                                 // the commander and request events
 #include "../AIKnowledge/Information.h"                          // eventManDown
-#include "../AIKnowledge/InformationManager.h"
+#include "InformationManager.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../../../AIInterface/BFKnowledge/IAIObject.h"
 #include "../../../AIInterface/BFKnowledge/IAIObjectPlugIn.h"   // IAIObjectUnit - eventMissileLock

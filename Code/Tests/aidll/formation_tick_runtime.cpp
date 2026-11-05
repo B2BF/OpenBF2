@@ -39,7 +39,7 @@ static std::uint32_t toBits(float value){std::uint32_t bits;std::memcpy(&bits,&v
 static Vec3 vecBits(std::uint32_t x,std::uint32_t y,std::uint32_t z){return Vec3{fromBits(x),fromBits(y),fromBits(z)};}
 static void sameSlot(const SquadFormation::Slot& a,const SquadFormation::Slot& b)
 {
- require(a.m_occupied==b.m_occupied,"occupied");require(a.m_memberIndex==b.m_memberIndex,"member index");
+ require(a.hasSquadMemberAssigned==b.hasSquadMemberAssigned,"occupied");require(a.m_memberIndex==b.m_memberIndex,"member index");
  require(equal(a.m_offset,b.m_offset),"offset unchanged");require(a.m_i20==b.m_i20,"trailing index");
  require(a.m_b24==b.m_b24,"flag24");require(a.m_i28==b.m_i28,"float28");
  require(a.m_referenceSlot==b.m_referenceSlot,"reference slot unchanged");
@@ -65,11 +65,11 @@ void* CommonSingletonServer::m_iBFTimer=nullptr;
 IBFTimer::IBFTimer(){} IBFTimer::~IBFTimer(){}
 IAIPlayer::~IAIPlayer(){}
 SquadFormation::SquadFormation(SquadCoordinator* c)
- :m_coordinator(c),m_formation(3),m_maxSquadMembers(6),m_b36(false),m_formationMaxSpeed(17),
+ :m_coordinator(c),m_formation(3),m_numberOfSlots(6),m_b36(false),m_formationMaxSpeed(17),
   m_side(0),m_i48(77),m_f52(2),m_b56(true),m_b84(false),m_b85(false),m_i88(88),m_d92(30)
 {m_direction={1,2,3};m_v60={4,5,6};m_v72={7,8,9};m_trailingPosition={10,11,12};}
 SquadCoordinator::SquadCoordinator(int side,int index)
- :m_squadIndex(index),m_side(side),m_formation(nullptr),m_i96(4)
+ :m_squadIndex(index),m_side(side),m_formation(nullptr),m_squadLeaderIndex(4)
 {m_v108={};}
 SquadMember::SquadMember(SquadCoordinator* c,IAIPlayer* p,int squad,int side,int index)
  :m_squadIndex(squad),m_memberIndex(index),m_player(p),m_bot(nullptr),m_squad(c),m_side(side),
@@ -77,7 +77,7 @@ SquadMember::SquadMember(SquadCoordinator* c,IAIPlayer* p,int squad,int side,int
 {m_position={};}
 SquadMember::~SquadMember(){}
 #if defined(LEAF_OBSERVERS)
-SquadMember* SquadCoordinator::getSquadLeader(){event("leader",nullptr,this);return m_squadMembers[m_i96];}
+SquadMember* SquadCoordinator::getSquadLeader(){event("leader",nullptr,this);return m_squadMembers[m_squadLeaderIndex];}
 void SquadCoordinator::getSquadPosition(Vec3& p){event("squadpos",nullptr,this);p=m_v108;}
 SquadMember* SquadCoordinator::getSquadMember(int i){event("member"+std::to_string(i),nullptr,this);return m_squadMembers[i];}
 bool SquadCoordinator::squadHasPosition(){event("valid",nullptr,this);return false;}
@@ -120,7 +120,7 @@ struct State {
    other.m_squadMembers.push_back(&members[i]);slots[i].m_memberIndex=i;slots[i].m_i20=100+i;
    slots[i].m_b24=true;slots[i].m_i28=20.25f+i;slots[i].m_referenceSlot=200+i;
    slots[i].m_offset={30.0f+i,40.0f+i,50.0f+i};
-   f.m_slots.push_back(&slots[i]);f.m_slotTargets.push_back({true,{60.0f+i,70.0f+i,80.0f+i}});path[i]=true;
+   f.m_slots.push_back(&slots[i]);f.m_trailingPositions.push_back({true,{60.0f+i,70.0f+i,80.0f+i}});path[i]=true;
   }
   squad.m_formation=&f;tested=&f;
  }
@@ -130,8 +130,8 @@ struct State {
  void verify(){
   for(int i=0;i<6;++i){sameSlot(slots[i],expected[i]);require(members[i].m_havePath==path[i],"path state");
    require(members[i].m_flag4A==!path[i],"inverse path state");
-   require(f.m_slotTargets[i].first==!reset,"target valid state");
-   require(equal(f.m_slotTargets[i].second,{60.0f+i,70.0f+i,80.0f+i}),"target coordinates retained");}
+   require(f.m_trailingPositions[i].first==!reset,"target valid state");
+   require(equal(f.m_trailingPositions[i].second,{60.0f+i,70.0f+i,80.0f+i}),"target coordinates retained");}
   require(equal(f.m_trailingPosition,reset?f.m_v72:Vec3{10,11,12}),"trailing position copy");
   require(f.m_b85==expected85,"only promotion clears flag85");
   require(f.m_i88==expectedCycle&&f.m_formation==expectedFormation,"scheduler suffix state");
@@ -139,7 +139,7 @@ struct State {
  // Expected m_i20 per slot after a trailing-slot re-deal; everything else must be untouched.
  void verifyTrailIndices(const int (&indices)[6]){
   for(int i=0;i<6;++i){SquadFormation::Slot want=expected[i];want.m_i20=indices[i];sameSlot(slots[i],want);}
-  for(int i=0;i<6;++i)require(f.m_slotTargets[i].first&&equal(f.m_slotTargets[i].second,{60.0f+i,70.0f+i,80.0f+i}),"trail slots leave crumbs alone");
+  for(int i=0;i<6;++i)require(f.m_trailingPositions[i].first&&equal(f.m_trailingPositions[i].second,{60.0f+i,70.0f+i,80.0f+i}),"trail slots leave crumbs alone");
   require(equal(f.m_trailingPosition,{10,11,12}),"trail slots leave the newest crumb alone");
  }
 };
@@ -167,13 +167,13 @@ int main(int argc,char** argv)
 #elif defined(LEAF_OBSERVERS)
  std::string expectedTrace="leader,index,bot,squadpos";int paths=0;
  if(mode=="entry_capture"){
-  f.m_maxSquadMembers=0;
+  f.m_numberOfSlots=0;
   hook=[&](const std::string& n,SquadMember* m,SquadCoordinator* c){
    if(n=="index"){require(m==&s.members[4],"entry leader retained");s.squad.m_squadMembers[4]=&s.members[5];}
    if(n=="bot"){require(m==&s.members[4],"same leader after roster replacement");f.m_coordinator=&s.other;}
    if(n=="squadpos")require(c==&s.other,"fresh coordinator for position");};
  }else if(mode.rfind("near_",0)==0){
-  s.slots[0].m_occupied=true;s.slots[2].m_occupied=true;s.slots[2].m_memberIndex=4;
+  s.slots[0].hasSquadMemberAssigned=true;s.slots[2].hasSquadMemberAssigned=true;s.slots[2].m_memberIndex=4;
   s.members[4].m_position={1,0,0};
   if(mode=="near_flag")s.members[4].m_position={100,0,0};
   expectedTrace+=",position,member4,path,member0,path,reset";
@@ -193,7 +193,7 @@ int main(int argc,char** argv)
    if(n=="reset")require(paths==2,"reset after two path clears");
   };
  }else if(mode=="hidden_pointers"||mode=="hidden_indices"){
-  s.slots[0].m_occupied=s.slots[5].m_occupied=true;s.slots[0].m_memberIndex=4;f.m_b84=true;
+  s.slots[0].hasSquadMemberAssigned=s.slots[5].hasSquadMemberAssigned=true;s.slots[0].m_memberIndex=4;f.m_b84=true;
   expectedTrace+=mode=="hidden_indices"?",reset,member3,path,member2,path":",reset,member5,path,member4,path";
   hook=[&](const std::string& n,SquadMember*,SquadCoordinator*){
    if(n=="reset"){
@@ -204,12 +204,12 @@ int main(int argc,char** argv)
    }
   };
  }else if(mode=="match_live"||mode=="match_retained"||mode=="match_clear_order"){
-  s.slots[0].m_occupied=s.slots[1].m_occupied=true;s.members[0].m_bot=nullptr;
-  if(mode=="match_live"){s.members[1].m_bot=nullptr;f.m_maxSquadMembers=2;}
+  s.slots[0].hasSquadMemberAssigned=s.slots[1].hasSquadMemberAssigned=true;s.members[0].m_bot=nullptr;
+  if(mode=="match_live"){s.members[1].m_bot=nullptr;f.m_numberOfSlots=2;}
   expectedTrace+=mode=="match_live"?",member0,bot,member1,bot,member2,bot,member2,path,reset":",member0,bot,member1,bot,member1,path,reset";
   hook=[&](const std::string& n,SquadMember* m,SquadCoordinator*){
    if(n=="bot"&&m==&s.members[1]){
-    if(mode=="match_live"){f.m_maxSquadMembers=3;s.slots[2].m_occupied=true;f.m_slots.reserve(64);}
+    if(mode=="match_live"){f.m_numberOfSlots=3;s.slots[2].hasSquadMemberAssigned=true;f.m_slots.reserve(64);}
     if(mode=="match_retained"){s.spare=s.slots[1];s.spare.m_memberIndex=3;f.m_slots[1]=&s.spare;}
    }
    if(n=="path"){++paths;require(!s.members[0].m_flag4A,"only new zero path clears");}
@@ -238,14 +238,14 @@ int main(int argc,char** argv)
    if(axis==0){a.x=50;b.x=std::ldexp(1.0f,-22);}if(axis==1){a.y=50;b.y=std::ldexp(1.0f,-22);}if(axis==2){a.z=50;b.z=std::ldexp(1.0f,-22);}}
   require(fixtureFormationRange(a,b)==expected,"wide delta and ordered strict range");
  }else if(mode.rfind("wait_",0)==0){
-  if(mode=="wait_zero")f.m_maxSquadMembers=0;
-  if(mode=="wait_skip_zero")s.slots[0].m_occupied=true;
-  if(mode=="wait_occupied_stop")s.slots[3].m_occupied=true;
+  if(mode=="wait_zero")f.m_numberOfSlots=0;
+  if(mode=="wait_skip_zero")s.slots[0].hasSquadMemberAssigned=true;
+  if(mode=="wait_occupied_stop")s.slots[3].hasSquadMemberAssigned=true;
   s.snapshot();abortCheck=[&]{require(f.m_b36,"wait flag written before occupied frontier");s.verify();require(clockCalls==0,"no timer before frontier");};
   f.updateWaitForSquadMembers(originalTime);require(f.m_b36,"wait flag true");s.verify();require(clockCalls==0,"empty wait skips timing");
  }else if(mode=="scheduler_slot_stop"||mode=="scheduler_speed_stop"){
-  if(mode=="scheduler_slot_stop"){s.slots[0].m_occupied=true;s.squad.m_v108={1,0,0};}
-  if(mode=="scheduler_speed_stop")s.slots[0].m_occupied=true;
+  if(mode=="scheduler_slot_stop"){s.slots[0].hasSquadMemberAssigned=true;s.squad.m_v108={1,0,0};}
+  if(mode=="scheduler_speed_stop")s.slots[0].hasSquadMemberAssigned=true;
   s.snapshot();abortCheck=[&]{
    require(f.m_i88==88&&f.m_formation==3,"suffix counter/selection untouched");
    if(mode=="scheduler_slot_stop")require(!f.m_b36&&f.m_b56&&f.m_formationMaxSpeed==17&&clockCalls==0,"first nested stop prevents following helpers");
@@ -288,7 +288,7 @@ int main(int argc,char** argv)
    require(vehicleCalls==0&&calls.empty(),"empty anchor returns before any member or owner call");
    require(f.m_i48==77&&f.m_f52==2,"forward vector untouched");
   }else{
-   s.slots[0].m_occupied=true;s.slots[0].m_memberIndex=2;s.members[2].m_player=&player;
+   s.slots[0].hasSquadMemberAssigned=true;s.slots[0].m_memberIndex=2;s.members[2].m_player=&player;
    abortCheck=[&]{require(vehicleCalls==1&&vehiclePlayer==&player,"anchor member's player gives its current vehicle once");
     require(f.m_i48==77&&f.m_f52==2,"no forward write before the owner query");};
    f.updateFormationForwardVector();unexpected("occupied forward vector should stop");
@@ -299,44 +299,44 @@ int main(int argc,char** argv)
   else if(mode=="trail_nan_anchor")f.m_v72={std::numeric_limits<float>::quiet_NaN(),0,0};
   else if(mode=="trail_seed"){f.m_trailingPosition={0,0,0};seeded=true;}
   else if(mode=="trail_unoccupied"){}
-  else if(mode=="trail_equal"){s.slots[0].m_occupied=true;f.m_trailingPosition={13,8,9};}
+  else if(mode=="trail_equal"){s.slots[0].hasSquadMemberAssigned=true;f.m_trailingPosition={13,8,9};}
   else if(mode=="trail_far"||mode=="trail_one_slot"){
-   s.slots[0].m_occupied=true;f.m_trailingPosition={13.5f,8,9};shifted=true;
-   f.m_slotTargets[2].first=false;f.m_slotTargets[4].first=false;
-   if(mode=="trail_one_slot")f.m_maxSquadMembers=1;
+   s.slots[0].hasSquadMemberAssigned=true;f.m_trailingPosition={13.5f,8,9};shifted=true;
+   f.m_trailingPositions[2].first=false;f.m_trailingPositions[4].first=false;
+   if(mode=="trail_one_slot")f.m_numberOfSlots=1;
   }else unexpected("trail mode");
-  s.snapshot();const auto oldTargets=f.m_slotTargets;const Vec3 before=f.m_trailingPosition;
+  s.snapshot();const auto oldTargets=f.m_trailingPositions;const Vec3 before=f.m_trailingPosition;
   f.updateTrailingPositions();
   for(int i=0;i<6;++i)sameSlot(s.slots[i],s.expected[i]);
   require(clockCalls==0,"no clock in the breadcrumb pass");
   if(seeded){require(equal(f.m_trailingPosition,f.m_v72),"unset crumb seeded from the anchor");
-   for(int i=0;i<6;++i)require(sameTarget(f.m_slotTargets[i],oldTargets[i]),"seed leaves the history");}
+   for(int i=0;i<6;++i)require(sameTarget(f.m_trailingPositions[i],oldTargets[i]),"seed leaves the history");}
   else if(shifted){
    const int moved=mode=="trail_one_slot"?0:5;
-   for(int i=1;i<6;++i)require(sameTarget(f.m_slotTargets[i],i<=moved?oldTargets[i-1]:oldTargets[i]),"history shifts back one place");
-   require(f.m_slotTargets[0].first&&equal(f.m_slotTargets[0].second,before),"old crumb pushed at the front");
+   for(int i=1;i<6;++i)require(sameTarget(f.m_trailingPositions[i],i<=moved?oldTargets[i-1]:oldTargets[i]),"history shifts back one place");
+   require(f.m_trailingPositions[0].first&&equal(f.m_trailingPositions[0].second,before),"old crumb pushed at the front");
    require(equal(f.m_trailingPosition,f.m_v72),"anchor becomes the newest crumb");
   }else{
    require(equal(f.m_trailingPosition,before),"crumb unchanged");
-   for(int i=0;i<6;++i)require(sameTarget(f.m_slotTargets[i],oldTargets[i]),"history unchanged");
+   for(int i=0;i<6;++i)require(sameTarget(f.m_trailingPositions[i],oldTargets[i]),"history unchanged");
   }
  }else if(mode.rfind("slots_",0)==0||mode=="witness_member_wide"){
   f.m_v72={0,0,0};
-  auto occupy=[&](int slot,float x,float y){s.slots[slot].m_occupied=true;s.members[s.slots[slot].m_memberIndex].m_position={x,y,0};};
+  auto occupy=[&](int slot,float x,float y){s.slots[slot].hasSquadMemberAssigned=true;s.members[s.slots[slot].m_memberIndex].m_position={x,y,0};};
   int want[6]={100,101,102,103,104,105};
   if(mode=="slots_empty"){}
-  else if(mode=="slots_unclaimed"){s.slots[1].m_occupied=true;s.slots[1].m_i20=-1;s.slots[2].m_i20=5;want[1]=-1;want[2]=5;}
+  else if(mode=="slots_unclaimed"){s.slots[1].hasSquadMemberAssigned=true;s.slots[1].m_i20=-1;s.slots[2].m_i20=5;want[1]=-1;want[2]=5;}
   else{
    for(int& w:want)w=-1;
    if(mode=="slots_sorted"){occupy(1,3,0);occupy(2,1,0);occupy(3,2,0);want[2]=0;want[3]=1;want[1]=2;}
    else if(mode=="slots_tie"){occupy(1,2,0);occupy(2,1,0);occupy(3,0,2);want[2]=0;want[1]=1;want[3]=2;}
    else if(mode=="slots_zero_member"){occupy(0,1,0);occupy(2,2,0);want[5]=0;want[2]=1;}
-   else if(mode=="slots_single"){f.m_maxSquadMembers=1;occupy(0,1,0);for(int i=1;i<6;++i)want[i]=100+i;want[0]=0;}
+   else if(mode=="slots_single"){f.m_numberOfSlots=1;occupy(0,1,0);for(int i=1;i<6;++i)want[i]=100+i;want[0]=0;}
    else if(mode=="slots_invalid_position"){occupy(1,5,0);s.members[1].m_positionValid=false;occupy(2,1,0);want[2]=0;want[1]=1;}
    else if(mode=="witness_member_wide"){
     // PE keys 0x3F7FFFB1 (p) > 0x3F7FFFB0 (q): q first, although wide deltas would order them the other way.
     f.m_v72=vecBits(855638016u,0,0);
-    s.slots[1].m_occupied=s.slots[2].m_occupied=true;
+    s.slots[1].hasSquadMemberAssigned=s.slots[2].hasSquadMemberAssigned=true;
     s.members[1].m_position=vecBits(1065353176u,964689920u,0);s.members[2].m_position=vecBits(1065353177u,0,0);
     want[2]=0;want[1]=1;
    }else unexpected("slots mode");
@@ -353,7 +353,7 @@ int main(int argc,char** argv)
  }else if(mode=="join_leader"){
   f.m_b84=true;f.m_b85=false;f.joinSquadLeader();
   require(f.m_b85&&!f.m_b84&&f.m_b56&&clockCalls==0,"unoccupied anchor: flags only, movement flag untouched");
-  s.slots[0].m_occupied=true;f.m_b84=true;f.m_b85=false;f.joinSquadLeader();
+  s.slots[0].hasSquadMemberAssigned=true;f.m_b84=true;f.m_b85=false;f.joinSquadLeader();
   require(f.m_b85&&!f.m_b84&&f.m_b56&&clockCalls==1,"forced movement stamp");
   require(f.m_d92==20.125+0.2&&equal(f.m_v60,f.m_v72),"stamp time and anchor copy");
  }else if(mode=="witness_trail_set"){
@@ -375,35 +375,35 @@ int main(int argc,char** argv)
  }else{
   bool promotion=false,hidden=false,matching=false,change=false,nested=false;
   if(mode=="unoccupied"){}
-  else if(mode=="zero_count_storage")f.m_maxSquadMembers=0;
-  else if(mode=="leader_zero"){s.slots[0].m_occupied=true;s.slots[0].m_memberIndex=4;}
+  else if(mode=="zero_count_storage")f.m_numberOfSlots=0;
+  else if(mode=="leader_zero"){s.slots[0].hasSquadMemberAssigned=true;s.slots[0].m_memberIndex=4;}
   else if(mode.rfind("hidden_",0)==0){
-   hidden=true;f.m_b84=true;f.m_b85=true;s.slots[0].m_occupied=true;s.slots[0].m_memberIndex=4;
-   if(mode=="hidden_nonzero"){s.slots[0].m_memberIndex=0;s.slots[2].m_occupied=true;s.slots[2].m_memberIndex=4;}
+   hidden=true;f.m_b84=true;f.m_b85=true;s.slots[0].hasSquadMemberAssigned=true;s.slots[0].m_memberIndex=4;
+   if(mode=="hidden_nonzero"){s.slots[0].m_memberIndex=0;s.slots[2].hasSquadMemberAssigned=true;s.slots[2].m_memberIndex=4;}
    else if(mode!="hidden_only"){
-    s.slots[1].m_occupied=true;s.slots[5].m_occupied=true;change=true;
-    if(mode=="hidden_holes"){s.slots[5].m_occupied=false;s.slots[3].m_occupied=true;}
+    s.slots[1].hasSquadMemberAssigned=true;s.slots[5].hasSquadMemberAssigned=true;change=true;
+    if(mode=="hidden_holes"){s.slots[5].hasSquadMemberAssigned=false;s.slots[3].hasSquadMemberAssigned=true;}
     if(mode=="hidden_duplicate")s.slots[5].m_memberIndex=4;
     if(mode=="hidden_reset_stop"){s.squad.m_v108={1,0,0};nested=true;}
    }
   }else if(mode.rfind("match_",0)==0){
-   matching=true;s.slots[0].m_occupied=true;s.members[0].m_bot=nullptr;s.slots[1].m_occupied=true;change=true;f.m_b85=true;
+   matching=true;s.slots[0].hasSquadMemberAssigned=true;s.members[0].m_bot=nullptr;s.slots[1].hasSquadMemberAssigned=true;change=true;f.m_b85=true;
    if(mode=="match_human"){s.members[4].m_bot=nullptr;s.members[0].m_bot=s.members[2].m_bot;s.members[1].m_bot=nullptr;}
    if(mode=="match_same"){s.members[0].m_bot=s.members[1].m_bot;change=false;}
    if(mode=="match_none"){s.members[1].m_bot=nullptr;change=false;}
-   if(mode=="match_skip"){s.slots[1].m_occupied=false;s.slots[3].m_occupied=true;}
-   if(mode=="match_first")s.slots[3].m_occupied=true;
+   if(mode=="match_skip"){s.slots[1].hasSquadMemberAssigned=false;s.slots[3].hasSquadMemberAssigned=true;}
+   if(mode=="match_first")s.slots[3].hasSquadMemberAssigned=true;
    if(mode=="match_reset_stop"){s.squad.m_v108={1,0,0};nested=true;}
   }else{
-   promotion=true;s.slots[0].m_occupied=true;s.slots[2].m_occupied=true;s.slots[2].m_memberIndex=4;
+   promotion=true;s.slots[0].hasSquadMemberAssigned=true;s.slots[2].hasSquadMemberAssigned=true;s.slots[2].m_memberIndex=4;
    s.members[4].m_position={1,0,0};change=true;
    if(mode=="equal"||mode=="force_equal"){s.members[4].m_position.x=50;change=false;}
    if(mode=="far"){s.members[4].m_position.x=51;change=false;}
    if(mode=="nan"||mode=="force_nan"){s.members[4].m_position.x=std::numeric_limits<float>::quiet_NaN();change=false;}
    if(mode=="force_equal"||mode=="force_nan"){f.m_b85=true;change=true;}
    if(mode=="invalid_position")s.members[4].m_positionValid=false;
-   if(mode=="empty_anchor")s.slots[0].m_occupied=false;
-   if(mode=="duplicate_leader"){s.slots[1].m_occupied=true;s.slots[1].m_memberIndex=4;}
+   if(mode=="empty_anchor")s.slots[0].hasSquadMemberAssigned=false;
+   if(mode=="duplicate_leader"){s.slots[1].hasSquadMemberAssigned=true;s.slots[1].m_memberIndex=4;}
    if(mode=="near_reset_stop"){s.squad.m_v108={1,0,0};nested=true;}
   }
   s.snapshot();
@@ -411,8 +411,8 @@ int main(int argc,char** argv)
    if(hidden){const int other=mode=="hidden_holes"?3:5;const int id=s.slots[other].m_memberIndex;s.payload(0,id);s.payload(other,4);
     if(!nested){s.path[id]=false;s.path[4]=false;s.expectReset();}}
    if(matching){const int other=mode=="match_skip"?3:1;s.payload(0,other);s.payload(other,0);s.path[other]=false;if(!nested)s.expectReset();}
-   if(promotion){const int oldSlot=mode=="duplicate_leader"?1:2;const bool occupied=s.slots[0].m_occupied;
-    s.payload(0,4);s.expected[0].m_occupied=true;s.payload(oldSlot,0);s.expected[oldSlot].m_occupied=occupied;
+   if(promotion){const int oldSlot=mode=="duplicate_leader"?1:2;const bool occupied=s.slots[0].hasSquadMemberAssigned;
+    s.payload(0,4);s.expected[0].hasSquadMemberAssigned=true;s.payload(oldSlot,0);s.expected[oldSlot].hasSquadMemberAssigned=occupied;
     s.path[4]=s.path[0]=false;s.expected85=false;if(!nested)s.expectReset();}
   }
   if(nested)abortCheck=[&]{s.verify();require(clockCalls==0,"nested world-position stop precedes timer");};

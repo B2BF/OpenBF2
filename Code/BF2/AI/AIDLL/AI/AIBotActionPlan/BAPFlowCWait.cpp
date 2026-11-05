@@ -14,7 +14,7 @@ BAPFlowCWait::BAPFlowCWait(BAPCondition* condition, int patternId)
     : BAPFlowControl(patternId)
     , m_condition(condition)
 {
-    condition->m_owner = this;
+    condition->mpOwner = this;
 }
 
 // ELF 0x1E4060 (D2; D1 0x1E40C0, D0 0x1E4120).

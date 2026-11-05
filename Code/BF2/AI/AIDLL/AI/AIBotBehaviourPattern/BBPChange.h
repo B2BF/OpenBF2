@@ -37,7 +37,7 @@ private:
     // Every array is new[]'d with IAISettings::getMaxNBots (slot 0) entries and indexed by Bot::getBotId.
     /* +0x08 */ int m_patternId;                // the constructor argument: the pattern id the plan nodes carry
     /* +0x0C */ unsigned int* m_targets;        // init: the vehicle/seat handle
-    /* +0x10 */ Vec3* m_entryPositions;         // value-initialised (0,0,0); init(handle, pos, ...) only
+    /* +0x10 */ Vec3* m_noPathfindingPos;         // value-initialised (0,0,0); init(handle, pos, ...) only  // name: AIDLL_r assert 0x100FB800 (+0x10)
     /* +0x14 */ bool* m_sameVehicle;            // [INFERRED] name: init's first bool, BBChange passes "same primary object"
     /* +0x18 */ bool* m_getInConfirm;           // init's second bool and setGetInConfirm (named after the setter)
 };

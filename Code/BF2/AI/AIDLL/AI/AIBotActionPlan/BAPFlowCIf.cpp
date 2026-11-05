@@ -32,11 +32,11 @@ BAPFlowCIf::BAPFlowCIf(BAPCondition* condition, BAPStatement* trueStatement, BAP
     , m_reevaluate(reevaluate)
     , m_keepElse(keepElse)
 {
-    condition->m_owner = this;
+    condition->mpOwner = this;
     if (m_trueStatement)
-        m_trueStatement->m_owner = this;
+        m_trueStatement->mpOwner = this;
     if (m_falseStatement)
-        m_falseStatement->m_owner = this;
+        m_falseStatement->mpOwner = this;
 }
 
 // ELF 0x1E3690 (D2; D1 0x1E3720, D0 0x1E37B0).

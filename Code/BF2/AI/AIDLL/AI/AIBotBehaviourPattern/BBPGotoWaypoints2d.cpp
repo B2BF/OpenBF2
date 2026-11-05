@@ -20,7 +20,7 @@
 #include "../AIBotActionPlan/BAPInfoWrapper.h"
 #include "../AIBotActionPlan/BAPIWMoveTo.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIControlInfo.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIPlanInterpreter/BAPContext.h"
@@ -88,7 +88,7 @@ BotScript* finishRoute(Bot* bot, BAPCombinerSerial* serial, const Vec3& goal, in
     parallel->addStatement(new BAPAUseFlareOnMissileLock(bot, 0x800000000000ULL, patternId));
     parallel->addStatement(serial);
     BAPIWMoveTo* const root = checkPointer(new BAPIWMoveTo(goal, parallel, patternId));
-    root->setParent(owner);   // +0x04 (BotScript::m_owner)
+    root->setParent(owner);   // +0x04 (BotScript::mpOwner)
     return root;
 }
 

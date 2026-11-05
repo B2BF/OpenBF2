@@ -1,27 +1,17 @@
 // Samples a supplied curve function into a table for later evaluation.
 // [RETIRE-WHEN: aidll-02-skeleton] Remove when the corresponding implementation is complete and validated.
-// [INFERRED] Source placement.
+// Header placement [INFERRED]: beside its .cpp, whose path retail libaidll.so 1.50 embeds (AIUtils/CustomCurve.cpp).
 
 #ifndef AI_AIDLL_AI_AIBOTBEHAVIOUR_CUSTOMCURVE_H       // [INFERRED] guard style
 #define AI_AIDLL_AI_AIBOTBEHAVIOUR_CUSTOMCURVE_H
 
 #include <cmath>
 
+#include "SCurve.h"                    // SCurve (AIUtils/SCurve.cpp); kept reachable through this header
+
 namespace dice {
 namespace hfe {
 namespace ai {
-
-// Static curve table with no per-instance state. Construction initializes the shared
-// table and destruction releases it.
-class SCurve
-{
-public:
-    SCurve();                          // - calls init, nothing else
-    ~SCurve();
-    static void  init();
-    static float calculate(float x);   // - the only one with a NaN guard
-    static float* curveValues;
-};
 
 class JCurve
 {

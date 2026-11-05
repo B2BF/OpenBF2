@@ -22,7 +22,7 @@
 #include "../AIBotActionPlan/BAPConTime.h"
 #include "../AIBotActionPlan/BAPICTurnLock.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIControlInfo.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/IPIUnit.h"
@@ -243,7 +243,7 @@ BotScript* BBPAvoidCollisionInfantery::createPlan(Bot* bot)
     parallel->addStatement(checkPointer(new BAPAMergeSoldierInputs(m_id)));
     serial->addStatement(parallel);
     serial->addStatement(checkPointer(new BAPICTurnLock(false)));
-    serial->setParent(this);   // +0x04 (BotScript::m_owner)
+    serial->setParent(this);   // +0x04 (BotScript::mpOwner)
     return serial;
 }
 

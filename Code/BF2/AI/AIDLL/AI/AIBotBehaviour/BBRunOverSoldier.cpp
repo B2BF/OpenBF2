@@ -16,7 +16,7 @@
 #include "../AIBot/SensedObject.h"
 #include "../AIBotBehaviourPattern/BBPRunOverSoldier.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/IPIUnit.h"
@@ -91,7 +91,7 @@ float BBRunOverSoldier::calculateUrgency(Bot* bot, bool recalculate, float)
             || (flags & SensedObject::SENSE_INDIRECT))
             continue;
         Information* const info = informationManager->getInformation(it->second->m_handle);
-        if (!info || !(info->getObjectTypeFlags() & 0x200000))
+        if (!info || !info->isOfType(ITSoldier))
             continue;
         if (info->getSide() == bot->getSide() || info->getSide() == 0)
             continue;
@@ -122,7 +122,7 @@ float BBRunOverSoldier::calculateUrgency(Bot* bot, bool recalculate, float)
         if (distance > maxDistance)
             continue;
         const IPIMobile::ValidPos& targetValid = targetMobile->getLastValidPosition(mobile->getVehicleNumber());
-        if (targetValid.quadTree == static_cast<unsigned int>(-1) || targetValid.polygon == static_cast<unsigned int>(-1))
+        if (targetValid.island == static_cast<unsigned int>(-1) || targetValid.polygon == static_cast<unsigned int>(-1))
             continue;
         const IPIMobile::ValidPos& valid = mobile->getLastValidPosition();
         IAIPathfinding* const pathfinding = IAIPathfinding::instance;
@@ -131,7 +131,7 @@ float BBRunOverSoldier::calculateUrgency(Bot* bot, bool recalculate, float)
         end.y = 0.0f;
         end.z = 0.0f;
         unsigned int endPolygon;
-        if (pathfinding->trace(valid.polygon, valid.quadTree, mobile->getVehicleNumber(), valid.position,
+        if (pathfinding->trace(valid.polygon, valid.island, mobile->getVehicleNumber(), valid.position,
                                targetValid.position, end, endPolygon, equipmentType, -1, 0.0f, 5, 0))
         {
             m_targets[bot->getBotId()] = it->first;

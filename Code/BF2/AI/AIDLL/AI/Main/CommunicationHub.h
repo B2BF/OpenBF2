@@ -55,7 +55,7 @@ public:
 
     // These timestamps are uninitialized until reset is called.
     // Game time of each side's last sent type-2 message (indexed side - 1); reset: -1000.0.
-    /*  +4 */ double m_type2SentTime[2];
+    /*  +4 */ double m_lastReqPickupSendTime[2];  // name: AIDLL_r assert (0x10079AD0)
     // Two per-side combat-strength vectors. Each original ELF element occupies 12 bytes.
     /* +20 */ std::vector<std::pair<CombatStrengthType, double> > m_combatStrength[2];
     // enemySpottedByAI: last report of a strength-type 4/5 enemy, either side; reset: -1000.0.

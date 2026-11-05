@@ -30,10 +30,10 @@
 #include "../AIKnowledge/IPIControlInfo.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIPlanInterpreter/BAPContext.h"
 #include "../AIPlanInterpreter/BotScriptDebugger.h"
-#include "../AIStrategicMap/AerialHeightMap.h"
+#include "../AIPathFinding/AerialHeightMap/AerialHeightMap.h"
 #include "../AIUtils/checkPointer.h"
 #include "../Main/AISettingsInterfaces.h"
 #include "../Main/CommonSingletonServer.h"
@@ -104,7 +104,7 @@ BotScript* BBPIdle3d::createPlan(Bot* bot)
     IPIMobile* const mobile = equipment->getMobile();
     Information* const primary = informationManager->getInformation(equipment->getPrimaryObject(bot->getSide()));
     bool airborne = false;
-    if (bot->isAirBorn() || ((primary->getObjectTypeFlags() & 0x10) && mobile->getSpeedMagnitude() > 3.0f))
+    if (bot->isAirBorn() || (primary->isOfType(ITAir) && mobile->getSpeedMagnitude() > 3.0f))
         airborne = true;
 
     if (bot->hasPlan() && static_cast<BAPStatement*>(bot->getPlan())->getPatternId() == m_patternId
@@ -139,7 +139,7 @@ BotScript* BBPIdle3d::createPlan(Bot* bot)
 
     const int pickupPlayerId = m_pickupPlayerId[bot->getBotId()];
     const bool anyPosition = pickupPlayerId == 0xFF;
-    if (pickupPlayerId >= 0 && !(primary->getObjectTypeFlags() & 0x200000))
+    if (pickupPlayerId >= 0 && !primary->isOfType(ITSoldier))
     {
         IAIPlayer* const passenger =
             static_cast<IAIPlayerFactory*>(CommonSingletonServer::m_iaiPlayerFactory)->getPlayerFromId(pickupPlayerId);
@@ -180,7 +180,7 @@ BotScript* BBPIdle3d::createPlan(Bot* bot)
     if (airborne)
     {
         Vec3 destination = equipment->getPosition();   // +0x30
-        if (!(primary->getObjectTypeFlags() & 0x20) || primary->getArmament())
+        if (!primary->isOfType(ITHelicopter) || primary->getArmament())
         {
             const Mat4& heading = equipment->getTransformation();   // +0x3C
             Vec3 direction;
@@ -213,7 +213,7 @@ BotScript* BBPIdle3d::createPlan(Bot* bot)
     serial->addStatement(parallel);
 
     BAPIWIdle* const idle = checkPointer(new BAPIWIdle(equipment->getPosition(), serial, m_patternId, bot));
-    idle->setParent(this);   // +0x04 (BotScript::m_owner)
+    idle->setParent(this);   // +0x04 (BotScript::mpOwner)
     bot->getBotNavigation()->clearProgress();
     return idle;
 }

@@ -3,7 +3,7 @@
 #include <iostream>
 #include "BAPConWeaponTargetReachable.h"
 #include "BAPActionInline.h"
-#include "../AIBot/Aimer.h"
+#include "Aimer.h"
 #include "../AIBot/BotMain.h"
 #include "../AIKnowledge/Information.h"
 #include "../AIKnowledge/IPIMobile.h"

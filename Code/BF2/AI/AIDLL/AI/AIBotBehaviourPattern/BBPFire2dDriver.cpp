@@ -53,9 +53,9 @@
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../AIPlanInterpreter/BAPContext.h"
 #include "../AIPlanInterpreter/BotScriptDebugger.h"
 #include "../AIUtils/TraceUtils.h"
@@ -417,7 +417,7 @@ BotScript* BBPFire2dDriver::createPlan(Bot* bot)
     BAPIWFire* const plan = checkPointer(new BAPIWFire(bot, m_targets[bot->getBotId()], m_flag20, tooClose, weapon, -1,
                                                        statement, m_patternId));
     plan->setInt28(lineOfFire);
-    plan->setParent(this);   // +0x04 (BotScript::m_owner)
+    plan->setParent(this);   // +0x04 (BotScript::mpOwner)
     SquadManager::m_instance->shotsFired(bot->getPlayerId(), bot->getSide(), m_targets[bot->getBotId()]);
     return plan;
 }

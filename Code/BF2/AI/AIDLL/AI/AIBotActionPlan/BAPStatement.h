@@ -9,7 +9,7 @@
 
 #include <iosfwd>
 #include <string>
-#include "../AIPlanInterpreter/BotScript.h"
+#include "BotScript.h"
 #include "../AIPlanInterpreter/BotScriptDebugger.h"
 #include "BAPTypes.h"
 
@@ -37,8 +37,8 @@ public:
     virtual void streamSelf(std::ostream&) const;   // 0x1F8260, slot +0x1C; from the base declaration
 
     // [INFERRED] inline (no symbol): wrappers and combiners store themselves at +0x04 of their
-    // child statements (BAPIWIdle 0x1F7480, BAPIWMoveTo 0x1F7820). Same as writing m_owner.
-    void setParent(void* parent) { m_owner = parent; }
+    // child statements (BAPIWIdle 0x1F7480, BAPIWMoveTo 0x1F7820). Same as writing mpOwner.
+    void setParent(void* parent) { mpOwner = parent; }
 
     // [INFERRED] inline (no symbol): patterns compare the current plan's +0x10 with their own id to
     // keep it (BBPIdleInfantery::createPlan 0x28F718, BBPGotoWaypointSoldier::createPlan 0x2847DF).
@@ -61,7 +61,7 @@ protected:
     explicit BAPStatement(int patternId, unsigned long long controls = 0)
         : m_controls(controls), m_patternId(patternId) { ++news; }
 
-    // +0x04 is BotScript::m_owner (the parent node or the behaviour).
+    // +0x04 is BotScript::mpOwner (the parent node or the behaviour).
     /* +0x08 */ unsigned long long m_controls;  // = 0; getControls 0x1CDB10 returns it; actions store their
                                                 // `unsigned long long` constructor argument (BAPAIdle 0x1D28B2)
     /* +0x10 */ int m_patternId;                // trailing constructor `int`: the creating pattern's id [INFERRED] name

@@ -5,7 +5,7 @@
 
 #include "FireObject.h"
 #include "Information.h"
-#include "InformationManager.h"
+#include "../Main/InformationManager.h"
 
 namespace dice { namespace hfe { namespace ai {
 

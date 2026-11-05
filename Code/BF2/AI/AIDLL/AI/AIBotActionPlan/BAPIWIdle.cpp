@@ -20,7 +20,7 @@ BAPIWIdle::BAPIWIdle(const Vec3& position, BAPStatement* statement, int tag, Bot
     m_bot = bot;
     if (bot && bot->getSquadMember())
         m_bot->getSquadMember()->setIsIdle(true);
-    m_statement->m_owner = this;
+    m_statement->mpOwner = this;
 }
 
 // ELF 0x1F75D0 (D1; D2 0x1F7510 region, D0 0x1F7650): clears the idle flag, deletes the child

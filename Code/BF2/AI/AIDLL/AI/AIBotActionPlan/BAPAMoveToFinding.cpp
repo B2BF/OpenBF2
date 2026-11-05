@@ -156,7 +156,7 @@ int BAPAMoveToFinding::update(Vec2& point, bool& reached, bool& done, float)
         const Vec3 target = bapinline::vec3(point.x, self->getPosition().y, point.y);
         double sinceStart;
         int artillerySide;
-        if (!(self->getObjectTypeFlags() & 0x10u)) {
+        if (!self->isOfType(ITAir)) {
             const int side = m_bot->getSide();
             if (SquadManager::m_instance->isInArtilleryDangerZone(target, side, sinceStart, artillerySide)
                 && !SquadManager::m_instance->isInArtilleryDangerZone(self->getPosition(), m_bot->getSide(),
@@ -165,7 +165,7 @@ int BAPAMoveToFinding::update(Vec2& point, bool& reached, bool& done, float)
                 goto finish;
             }
         }
-        if (self->getObjectTypeFlags() & 0x200000u) {
+        if (self->isOfType(ITSoldier)) {
             SquadMember* member;
             if (SquadManager::m_instance->isInArtilleryDangerZone(self->getPosition(), m_bot->getSide(), sinceStart,
                                                                   artillerySide)

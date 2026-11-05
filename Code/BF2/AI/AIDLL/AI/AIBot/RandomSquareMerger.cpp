@@ -42,7 +42,7 @@ float RandomSquareMerger::updateActiveUrgency(Bot* bot)
         }
     }
     float pick = static_cast<float>(AIRandom::m_instance->next()) * 2.3283064e-10f * total;
-    m_chosen = 0;
+    mpMaxGenerator = 0;
     int index = 0;
     for (; index < m_count; ++index)
     {
@@ -51,9 +51,9 @@ float RandomSquareMerger::updateActiveUrgency(Bot* bot)
             const float active = m_generators[index]->getActiveUrgency(bot);    // +0x0C
             pick = pick - active;
             if (active / total > 0.01f)
-                m_chosen = m_generators[index]->getChosenGenerator();         // +0x20
+                mpMaxGenerator = m_generators[index]->getChosenGenerator();         // +0x20
         }
-        if (pick <= 0.0f && m_chosen != 0)
+        if (pick <= 0.0f && mpMaxGenerator != 0)
             break;
     }
     return m_generators[index]->getActiveUrgency(bot);

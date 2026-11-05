@@ -3,7 +3,7 @@
 
 #include "WeaponInfoKnown.h"
 
-#include "../AIBotBehaviour/CustomCurve.h"                          // SCurve::calculate (static)
+#include "../AIUtils/CustomCurve.h"                          // SCurve::calculate (static)
 #include "../Main/CommonSingletonServer.h"
 #include "../../../AIInterface/BFKnowledge/BFTimer.h"
 
@@ -31,12 +31,12 @@ void WeaponInfoKnown::sample()
 // 0x2DD420: samples the weapon now, then the shots of each magazine (the magazine count is
 // re-read every iteration).
 WeaponInfoKnown::WeaponInfoKnown(IWeapon* weapon)
-    : WeaponInfo(weapon), m_shotsInMag()
+    : WeaponInfo(weapon), m_mags()
 {
     sample();
-    m_sampleTime = gameTime();
+    m_timeStamp = gameTime();
     for (int i = 0; i < m_weapon->getNumberOfMags(); ++i)                   // +0xCC
-        m_shotsInMag.push_back(m_weapon->getAmmoInMag(i));                  // +0xC0
+        m_mags.push_back(m_weapon->getAmmoInMag(i));                  // +0xC0
 }
 
 WeaponInfoKnown::~WeaponInfoKnown()
@@ -47,21 +47,21 @@ WeaponInfoKnown::~WeaponInfoKnown()
 bool WeaponInfoKnown::update()
 {
     const double now = gameTime();
-    if (now > m_sampleTime + 1.0f)
+    if (now > m_timeStamp + 1.0f)
     {
         sample();
-        m_sampleTime = now;
-        m_shotsInMag.resize(0);
+        m_timeStamp = now;
+        m_mags.resize(0);
         for (int i = 0; i < m_weapon->getNumberOfMags(); ++i)               // +0xCC
-            m_shotsInMag.push_back(m_weapon->getAmmoInMag(i));              // +0xC0
+            m_mags.push_back(m_weapon->getAmmoInMag(i));              // +0xC0
     }
     return true;
 }
 
 // 0x2DD990 (unchecked index).
-int WeaponInfoKnown::getShotsInMag(int magazine)
+int WeaponInfoKnown::getShotsInMag(int mag)
 {
-    return m_shotsInMag[magazine];
+    return m_mags[mag];
 }
 
 int WeaponInfoKnown::getAmmo() const
@@ -77,7 +77,7 @@ int WeaponInfoKnown::getCurrentAmmo() const
 // 0x2DD9D0: the number of sampled magazines.
 int WeaponInfoKnown::getNumberOfMags() const
 {
-    return static_cast<int>(m_shotsInMag.size());
+    return static_cast<int>(m_mags.size());
 }
 
 bool WeaponInfoKnown::isReadyToFire() const
@@ -110,7 +110,7 @@ float WeaponInfoKnown::getSecurity() const
 // 0x2DDA80: one minus the SCurve of a fifth of the sample's age.
 float WeaponInfoKnown::getSecurity(double time) const
 {
-    return 1.0f - SCurve::calculate(static_cast<float>((time - m_sampleTime) * 0.2));
+    return 1.0f - SCurve::calculate(static_cast<float>((time - m_timeStamp) * 0.2));
 }
 
 } } }

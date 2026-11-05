@@ -14,7 +14,7 @@
 #include "../AIKnowledge/IPIArmament.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../Main/CommonSingletonServer.h"
 #include "../../../AIInterface/BFKnowledge/BFTimer.h"
 
@@ -83,7 +83,7 @@ bool EntryPlaneAimAt::execute(BotScript* script, Bot* bot, bool& ok, bool& done)
     float throttle = 1.0f;
     float distance;
     bool useForward = false;
-    if ((target->getObjectTypeFlags() & 0x10) != 0)
+    if (target->isOfType(ITAir))
     {
         const bool indirect = weapon->getIndirect();
         const float gravity = weapon->getGravityModifier();

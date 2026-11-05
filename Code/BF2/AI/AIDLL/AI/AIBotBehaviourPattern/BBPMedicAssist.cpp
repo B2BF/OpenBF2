@@ -43,13 +43,13 @@
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/IPIUnit.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../AIPlanInterpreter/BAPContext.h"
 #include "../AIPlanInterpreter/BotScriptDebugger.h"
 #include "../Main/IBotManager.h"
 #include "WeaponChoice.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIUtils/checkPointer.h"
 #include "../Main/AISettingsInterfaces.h"
 #include "../Main/CommonSingletonServer.h"
@@ -331,7 +331,7 @@ BotScript* BBPMedicAssist::createPlan(Bot* bot)
                                                                  equipment->getControlInfo()->getLookControls(), m_id, 0,
                                                                  yOffset)));
         BAPASoldierPose* pose;
-        if ((target->getObjectTypeFlags() & 0x200000u) && (kit == 5 || kit == 3))
+        if (target->isOfType(ITSoldier) && (kit == 5 || kit == 3))
             pose = checkPointer(new BAPASoldierPose(SPStanding, checkPointer(new BAPConTrue()), m_id,
                                                     m_target[bot->getBotId()], true));   // 0x294D90
         else
@@ -438,7 +438,7 @@ BotScript* BBPMedicAssist::createPlan(Bot* bot)
     // 0x29278F
     BAPIWFire* const root = checkPointer(
         new BAPIWFire(bot, m_target[bot->getBotId()], targetVacant, false, weaponIndex, -1, serial, m_id));
-    root->setParent(this);   // +0x04 (BotScript::m_owner)
+    root->setParent(this);   // +0x04 (BotScript::mpOwner)
     static_cast<BotMain*>(bot)->resetAllControls(true, true, true);
     return root;
 }

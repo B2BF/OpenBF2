@@ -11,7 +11,7 @@
 #include "../AIKnowledge/IPIUnit.h"
 #include "../AIKnowledge/Information.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 
 namespace dice {
 namespace hfe {
@@ -48,7 +48,7 @@ bool BAPAUseFlareOnMissileLock::execute(Bot* bot, bool& ok, bool& failed)
         m_lockTime = now;
     }
     double wait = time;
-    if (!(info->getObjectTypeFlags() & 0x10u))
+    if (!info->isOfType(ITAir))
         wait = 0.0;
     if (locked && wait <= now - m_lockTime) {
         io::PlayerInput* input = bot->getInput();

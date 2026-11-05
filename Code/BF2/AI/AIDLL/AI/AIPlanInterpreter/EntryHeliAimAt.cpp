@@ -14,7 +14,7 @@
 #include "../AIKnowledge/IPIArmament.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../Main/CommonSingletonServer.h"
 #include "../../../AIInterface/BFKnowledge/BFTimer.h"
 
@@ -81,7 +81,7 @@ bool EntryHeliAimAt::execute(BotScript* script, Bot* bot, bool& ok, bool& done)
     const float y = position.y - targetPosition.y;
     const float z = position.z - targetPosition.z;
     const float distance = std::sqrt(x * x + y * y + z * z);
-    const bool airborne = (target->getObjectTypeFlags() & 0x10) != 0;
+    const bool airborne = target->isOfType(ITAir);
     bool solved;
     if (airborne)
     {

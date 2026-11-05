@@ -35,7 +35,7 @@ struct StrategyContainer
     float m_f04;          // +0x04, [UNRESOLVED] role; SAI::reset zeroes it
     float m_startTime;    // +0x08, [INFERRED] name
     int   m_i0C;          // +0x0C, = 1 [UNRESOLVED]
-    Strategy* m_strategy; // +0x10, borrowed; owned by the StrategyManager
+    Strategy* strategy; // +0x10, borrowed; owned by the StrategyManager; name: AIDLL_r assert "stratIter->strategy != 0" (0x1015BA90)
 };
 
 // Running weighted averages over a fixed number of strength categories.
@@ -171,14 +171,14 @@ public:
         // ELF 0x32F5B0: removeAssigned through object->getAssignedUnits(side).find(id) (no end
         // check in the image).
         void removeAssigned(AIStrategicObject* object, bool release, SAI* sai);
-        // ELF 0x32FF30: m_int04/m_int08/m_int0C = -1, m_float10 = 0.0f.
+        // ELF 0x32FF30: m_currentlyOrderedSquare/m_lastOrderedSquare/m_currentlyOccupiedSquare = -1, m_float10 = 0.0f.
         void setAsDead(SAI* sai);
         // ELF 0x32FF70: the id enters the free set (+0x44).
         void setAsFree(SAI* sai);
         // ELF 0x32FDF0: unregister the bot from the object's attacker/defender set (advancing
         // it), move its id from SAI's occupied set (+0xFC) to the free set (+0x44).
         void free(AIStrategicObject* object, bool attacker, std::set<int>::iterator& it, SAI* sai);
-        // ELF 0x32FC80: with release, unregister from the current object (m_int0C) and leave the
+        // ELF 0x32FC80: with release, unregister from the current object (m_currentlyOccupiedSquare) and leave the
         // occupied set; the id always enters the free set (+0x44).
         void free(bool release, SAI* sai);
         // ELF 0x32F0E0: the bot respawned at an object: present there, id into the free set.
@@ -189,14 +189,14 @@ public:
         int setLastOrderedSquare(int square);       // ELF 0x32FFD0; stamps m_double14
         // ELF 0x32F660: leave the object's assigned set (erasing under the iterator); with
         // release also SAI's occupied set (+0xFC), otherwise become an available attacker or
-        // defender of the current object (m_int0C). Clears m_int04 and m_double14.
+        // defender of the current object (m_currentlyOccupiedSquare). Clears m_currentlyOrderedSquare and m_double14.
         void removeAssigned(AIStrategicObject* object, std::set<int>::iterator& it, bool release, SAI* sai);
         // ELF 0x32F290: the bot moves from one object's present set (advancing it) to another's,
-        // keeping its attacker/defender role there; m_int0C becomes the new object's index.
+        // keeping its attacker/defender role there; m_currentlyOccupiedSquare becomes the new object's index.
         void occupy(std::set<int>::iterator& it, AIStrategicObject* from, AIStrategicObject* to, SAI* sai);
         // ELF 0x32F1F0: the iterator overload with from->getPresentUnits(side).find(id).
         void occupy(AIStrategicObject* from, AIStrategicObject* to, SAI* sai);
-        // ELF 0x32F950: ordered to the object (m_int04 = m_int08 = its index, m_double14 = now);
+        // ELF 0x32F950: ordered to the object (m_currentlyOrderedSquare = m_lastOrderedSquare = its index, m_double14 = now);
         // leaves the current object's attackers/defenders under the iterator and joins the
         // object's assigned set.
         void assignToObject(std::set<int>::iterator& it, AIStrategicObject* object, bool attacker, SAI* sai);
@@ -207,9 +207,9 @@ public:
         void assign(bool attacker, SAI* sai);
 
         /* +0x00 */ Bot*   m_bot;
-        /* +0x04 */ int    m_int04;       // = -1
-        /* +0x08 */ int    m_int08;       // = -1
-        /* +0x0C */ int    m_int0C;       // = -1
+        /* +0x04 */ int    m_currentlyOrderedSquare;       // = -1  // name: AIDLL_r asserts 0x10157690, 0x10159C00 (+4)
+        /* +0x08 */ int    m_lastOrderedSquare;       // = -1  // name: AIDLL_r assert 0x101596A0 (+8)
+        /* +0x0C */ int    m_currentlyOccupiedSquare;       // = -1  // name: AIDLL_r asserts 0x10157250, 0x10159C00 (+0xC)
         /* +0x10 */ float  m_float10;     // = 0.0f; update accumulates the frame interval here
         /* +0x14 */ double m_double14;    // = 0.0
     };
@@ -321,8 +321,8 @@ private:
 
     /* +0x02C */ std::vector<int> m_vector2C;        // 4-byte element; type [UNRESOLVED]
     /* +0x038 */ std::vector<int> m_vector38;        // 4-byte element; type [UNRESOLVED]
-    /* +0x044 */ std::set<int>    m_set44;
-    /* +0x050 */ std::vector<BotInfo*> m_botInfo;    // resized to getMaxNBots by the constructor
+    /* +0x044 */ std::set<int>    m_freeBots;   // name: AIDLL_r assert "sai->m_freeBots" 0x10157AB0 (PE +0x4C)
+    /* +0x050 */ std::vector<BotInfo*> m_bots;    // resized to getMaxNBots by the constructor  // name: AIDLL_r assert "m_bots[botId] != 0" 0x1015CF40 (PE +0x58)
     /* +0x05C */ std::map<int, std::pair<int, int> > m_map5C;
 
     // Five doubles. Four are stamped from the timer at construction: three at now + 60 and one at
@@ -342,17 +342,17 @@ private:
 
     // four behaviour IDS resolved by name at construction, through BotBehaviourManager. If a
     // behaviour is missing the manager returns -1 and the id is stored anyway.
-    /* +0x0C8 */ int m_behaviourIdle;                // "Idle"
-    /* +0x0CC */ int m_behaviourMoveTo;              // "MoveTo"
-    /* +0x0D0 */ int m_behaviourAvoid;               // "Avoid"
-    /* +0x0D4 */ int m_behaviourFire;                // "Fire"
+    /* +0x0C8 */ int m_idleBehaviourId;                // "Idle"  // name: AIDLL_r assert 0x10160AB0 (PE +0xEC)
+    /* +0x0CC */ int m_moveToBehaviourId;              // "MoveTo"  // name: AIDLL_r assert 0x10160AB0 (PE +0xF0)
+    /* +0x0D0 */ int m_avoidBehaviourId;               // "Avoid"  // name: AIDLL_r assert 0x10160AB0 (PE +0xF4)
+    /* +0x0D4 */ int m_fireBehaviourId;                // "Fire"  // name: AIDLL_r assert 0x10160AB0 (PE +0xF8)
 
     /* +0x0D8 */ int m_intD8;                        // [UNRESOLVED] - the ctor zeroes it
     /* +0x0DC */ int m_intDC;                        // [UNRESOLVED] - the ctor zeroes it
     /* +0x0E0 */ int m_intE0;                        // [UNRESOLVED]; not constructed, updateDistribution zeroes it
     /* +0x0E4 */ std::map<int, std::map<int, int> > m_mapE4;   // a map of maps - node 32
     /* +0x0F0 */ std::set<int> m_setF0;
-    /* +0x0FC */ std::set<int> m_setFC;
+    /* +0x0FC */ std::set<int> m_assignedBots;   // name: AIDLL_r assert "sai->m_assignedBots" 0x10157AB0 (PE +0x120)
     /* +0x108 */ std::list<int> m_list108;           // 4-byte element; type [UNRESOLVED]
     /* +0x10C */ std::list<int> m_list10C;           // 4-byte element; type [UNRESOLVED]
     /* +0x110 */ std::list<int> m_list110;           // teleporter ids (registerTeleporter)

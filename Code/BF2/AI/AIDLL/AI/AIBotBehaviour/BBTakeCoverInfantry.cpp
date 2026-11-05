@@ -1,7 +1,7 @@
 // Infantry cover selection and per-quadrant threat bookkeeping.
 
 #include "BBTakeCoverInfantry.h"
-#include "CustomCurve.h"
+#include "../AIUtils/CustomCurve.h"
 #include "../AIBot/BotMain.h"
 #include "../AIBot/BotMemory.h"
 #include "../AIBot/SensedObject.h"

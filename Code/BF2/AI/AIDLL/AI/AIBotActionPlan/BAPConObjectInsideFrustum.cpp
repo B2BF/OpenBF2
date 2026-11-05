@@ -38,7 +38,7 @@ bool BAPConObjectInsideFrustum::evaluate(Bot* bot)
     if (m_initialize) {
         m_initialize = false;
         const float farDistance = bot->getPlayer()->getViewDistance();
-        if (self->getObjectTypeFlags() & 0x400000u) {
+        if (self->isOfType(ITObstructedView)) {
             const Mat4& camera = *static_cast<const Mat4*>(bot->getPlayer()->getCameraTransformation());
             m_frustum.setPerspective(1.570796371f, 1.0f, 0.01f, farDistance, camera);
         } else {

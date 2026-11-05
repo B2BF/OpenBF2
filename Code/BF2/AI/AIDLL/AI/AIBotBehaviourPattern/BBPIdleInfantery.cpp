@@ -21,10 +21,10 @@
 #include "../AIBotActionPlan/BAPFlowCWhile.h"
 #include "../AIBotActionPlan/BAPIWIdle.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIArmament.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../AIPlanInterpreter/BAPContext.h"
 #include "../AIPlanInterpreter/BotScriptDebugger.h"
 #include "../AIStrategicEntity/AIStrategicObject.h"
@@ -126,7 +126,7 @@ BotScript* BBPIdleInfantery::createPlan(Bot* bot)
                     parallel->addStatement(ifNotZoomed);
                 }
             }
-            if (equipment->getObjectTypeFlags() & 0x200000)
+            if (equipment->isOfType(ITSoldier))
             {
                 BAPASoldierPose* const pose = checkPointer(
                     new BAPASoldierPose(static_cast<SoldierPose>(2), checkPointer(new BAPConTrue()), m_patternId, true));
@@ -137,7 +137,7 @@ BotScript* BBPIdleInfantery::createPlan(Bot* bot)
 
     BAPFlowCWhile* const loop = checkPointer(new BAPFlowCWhile(checkPointer(new BAPConTrue()), parallel, m_patternId));
     BAPIWIdle* const idle = checkPointer(new BAPIWIdle(equipment->getPosition(), loop, m_patternId, bot));
-    idle->setParent(this);   // +0x04 (BotScript::m_owner)
+    idle->setParent(this);   // +0x04 (BotScript::mpOwner)
     return idle;
 }
 

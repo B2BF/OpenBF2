@@ -10,7 +10,7 @@
 #include "../AIBot/BotMain.h"
 #include "../AIBotActionPlan/BAPAMoveTo3dObject.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIMobile.h"
 #include "../../../../IO/Input/PlayerInput.h"
 #include "../../../../Math/Mat4.h"
@@ -66,7 +66,7 @@ bool EntryPlaneMoveToObject::execute(BotScript* script, Bot* bot, bool& ok, bool
     const Mat4& transform = info->getTransformation();
     const float speed = info->getMobile()->getSpeedMagnitude();
     float throttle;
-    if ((target->getObjectTypeFlags() & 0x10) != 0)
+    if (target->isOfType(ITAir))
     {
         io::PlayerInput* const input = bot->getInput();
         throttle = ((input->mappingFlags >> 3) & 1ULL) ? input->inputs[3] : 0.0f;

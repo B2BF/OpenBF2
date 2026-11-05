@@ -7,7 +7,7 @@
 #include "../Main/AIDllFrontier.h"
 #include "../Main/CommonSingletonServer.h"
 #include "BotMain.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/Information.h"
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../../../AIInterface/BFKnowledge/BFTimer.h"
@@ -87,10 +87,10 @@ void BotSenses::reset()
     m_frustumStep = 0;
     m_collectTime = -1000000.0;
 
-    m_set64.clear();
-    m_list76.clear();
+    m_hearingMemHelperSet.clear();
+    m_hearingMemCheckQueue.clear();
     // The constructor never did this; the cursor at +80 becomes valid here for the first time.
-    m_cursor80 = m_list76.end();
+    m_cursor80 = m_hearingMemCheckQueue.end();
 
     // The fire list owns its objects; the attacker map below only borrows them.
     for (std::list<FireEntry>::iterator it = m_list84.begin(); it != m_list84.end(); ++it)
@@ -256,7 +256,7 @@ void BotSenses::see(const double& slice)
     Information* const equipment = informationManager->getInformation(m_bot->getCurrentEquipment());
     m_bot->getName();
     const Mat4& camera = *static_cast<const Mat4*>(m_bot->getPlayer()->getCameraTransformation());
-    m_viewMode = (equipment->getObjectTypeFlags() & 0x400000u) != 0;
+    m_viewMode = equipment->isOfType(ITObstructedView);
     if (m_seeState == 3)
     {
         m_bot->setQuadSeen();
@@ -287,7 +287,7 @@ void BotSenses::see(const double& slice)
         m_candidates.resize(0);
         const int side = m_bot->getSide();
         bool vehicleSight = false;
-        if ((equipment->getObjectTypeFlags() & 0x10u) || (equipment->getObjectTypeFlags() & 0x20u))
+        if (equipment->isOfType(ITAir) || equipment->isOfType(ITHelicopter))
             vehicleSight = true;
         SideFilter filter(side, equipment->getPosition(), viewDistance * viewDistance, vehicleSight);
         const float ownRadius = equipment->getPhysical()->getRadius();
@@ -303,8 +303,8 @@ void BotSenses::see(const double& slice)
             bool take = m_frustum->inside(object->getPosition(), radius);
             if (!take)
             {
-                if (!(equipment->getObjectTypeFlags() & 0x200000u)
-                    && (!information || (information->getObjectTypeFlags() & 0x200000u)))
+                if (!equipment->isOfType(ITSoldier)
+                    && (!information || information->isOfType(ITSoldier)))
                 {
                     take = vehicleSight && isCloseAndInFront(equipment, object);
                 }
@@ -413,7 +413,7 @@ void BotSenses::see(const double& slice)
             bool keepRider = false;
             if (IPIUnit* const unit = target->getUnit())
             {
-                if (!(target->getObjectTypeFlags() & 0x200000u))
+                if (!target->isOfType(ITSoldier))
                 {
                     if (unit->hasExposedSoldier())
                     {
@@ -464,7 +464,7 @@ void BotSenses::see(const double& slice)
             else if (10 < samples)
                 samples = 10;
             unsigned int part = static_cast<unsigned int>(-1);
-            const bool soldier = (target->getObjectTypeFlags() & 0x200000u) != 0;
+            const bool soldier = target->isOfType(ITSoldier);
             for (int k = 0; k < samples; ++k)
             {
                 Vec3 point;
@@ -533,17 +533,17 @@ void BotSenses::updateHearing(const double& slice)
     const double budget = slice;
     if (!informationManager->getInformation(m_bot->getCurrentEquipment()))
         return;
-    const unsigned int count = static_cast<unsigned int>(m_list76.size());
+    const unsigned int count = static_cast<unsigned int>(m_hearingMemCheckQueue.size());
     const int side = m_bot->getSide();
     for (unsigned int i = 0; i < count && timer->getUpdateTime() < static_cast<double>(start + budget); ++i)
     {
-        SensedObject* const object = m_list76.front().second;
-        m_list76.erase(m_list76.begin());
+        SensedObject* const object = m_hearingMemCheckQueue.front().second;
+        m_hearingMemCheckQueue.erase(m_hearingMemCheckQueue.begin());
         const unsigned int handle = object->m_handle;
         Information* information = informationManager->getInformation(handle);
         if (!information || (!information->getMobile() && !information->getArmament()))
         {
-            m_set64.erase(handle);
+            m_hearingMemHelperSet.erase(handle);
             const unsigned int flags = object->m_flags;
             object->m_flags = flags & ~SensedObject::SENSE_HEARD;
             if (!(flags & SensedObject::SENSE_SEEN))
@@ -581,7 +581,7 @@ void BotSenses::updateHearing(const double& slice)
         {
             if (30.0 < now - object->m_lastSensedTime)
             {
-                m_set64.erase(handle);
+                m_hearingMemHelperSet.erase(handle);
                 const unsigned int flags = object->m_flags;
                 object->m_flags = flags & ~SensedObject::SENSE_HEARD;
                 if (!(flags & SensedObject::SENSE_SEEN))
@@ -597,7 +597,7 @@ void BotSenses::updateHearing(const double& slice)
             object->m_flags &= ~SensedObject::SENSE_HEARD_NOW;
             object->m_lastSensedTime = now;
         }
-        m_list76.push_back(TimedObject(now, object));
+        m_hearingMemCheckQueue.push_back(TimedObject(now, object));
     }
 }
 
@@ -838,13 +838,13 @@ void BotSenses::event_heardObject(unsigned int handle)
         return;
     if (information->getSide() == m_bot->getSide())
         return;
-    if (!(equipment->getObjectTypeFlags() & 0x200000u) && (information->getObjectTypeFlags() & 0x200000u))
+    if (!equipment->isOfType(ITSoldier) && information->isOfType(ITSoldier))
         return;
     const float strength = hear(handle, information);
     if (!(0.0f < strength))
         return;
     const int side = m_bot->getSide();
-    const std::pair<std::set<unsigned int>::iterator, bool> inserted = m_set64.insert(handle);
+    const std::pair<std::set<unsigned int>::iterator, bool> inserted = m_hearingMemHelperSet.insert(handle);
     if (!inserted.second)
     {
         // The image does not check the find result.
@@ -889,7 +889,7 @@ void BotSenses::event_heardObject(unsigned int handle)
         weight = strength;
     if (primary->setTime(now, weight))
         primary->getAIObject()->addInformationToGrid(side);
-    m_list76.push_back(TimedObject(now, object));
+    m_hearingMemCheckQueue.push_back(TimedObject(now, object));
 }
 
 // ELF 0x19D8F0 (1152 bytes). Zero unless the bot has equipment, 1.5 s have passed since its own
@@ -938,7 +938,7 @@ float BotSenses::hear(unsigned int, Information* information)
                 weaponRadius = weapon->getSoundSphereRadius();
         }
     }
-    if (information->getObjectTypeFlags() & 0x200000u)
+    if (information->isOfType(ITSoldier))
     {
         const int pose = information->getSoldierPose();
         if (pose != 1 && !(pose < 1))
@@ -1126,7 +1126,7 @@ void BotSenses::updateSeeing(const double& slice)
 
     // As in the image, the equipment information is used without a null check.
     Information* const equipment = informationManager->getInformation(m_bot->getCurrentEquipment());
-    const bool ownSoldier = (equipment->getObjectTypeFlags() & 0x200000u) != 0;
+    const bool ownSoldier = equipment->isOfType(ITSoldier);
     const float ownRadius3 = equipment->getPhysical()->getRadius() * 3.0f;
     std::vector<IAIObject*> ignore;
     ignore.push_back(equipment->getAIObject()->getPrimaryObject());
@@ -1164,7 +1164,7 @@ void BotSenses::updateSeeing(const double& slice)
         {
             IAIObject* const target = information->getAIObject();
             const bool primary = information->isPrimary();
-            const bool soldier = (information->getObjectTypeFlags() & 0x200000u) != 0;
+            const bool soldier = information->isOfType(ITSoldier);
             const float radius = target->getBoundingRadius();
             const Vec3& position = target->getPosition();
             const float dx = position.x - eye.x;
@@ -1186,7 +1186,7 @@ void BotSenses::updateSeeing(const double& slice)
                     }
                 }
             }
-            const bool vehicleSight = (equipment->getObjectTypeFlags() & 0x10u) || (equipment->getObjectTypeFlags() & 0x20u);
+            const bool vehicleSight = equipment->isOfType(ITAir) || equipment->isOfType(ITHelicopter);
             const bool consider = inView || (vehicleSight && isCloseAndInFront(equipment, target));
             bool visible = consider;
             Vec3 point;
@@ -1371,7 +1371,7 @@ void BotSenses::updateSeeing(const double& slice)
                 // As in the image, the equipment information is used without a null check.
                 Information* const own = informationManager->getInformation(m_bot->getCurrentEquipment());
                 IPIArmament* const armament = own->getArmament();
-                const bool canEngage = armament && (lost->getObjectTypeFlags() & 0x10u) && 0 < armament->isAntiAircraft();
+                const bool canEngage = armament && lost->isOfType(ITAir) && 0 < armament->isAntiAircraft();
                 if (60.0 < unseen || !primary || (!own->getMobile() && 5.0 < unseen)
                     || (canEngage && 5.0 < unseen) || (m_bot->getIsGoingForFlag() && 5.0 < unseen))
                     forget = true;

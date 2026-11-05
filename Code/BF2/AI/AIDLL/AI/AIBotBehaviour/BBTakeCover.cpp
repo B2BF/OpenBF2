@@ -5,7 +5,7 @@
 
 #include "BBTakeCover.h"
 
-#include "CustomCurve.h"
+#include "../AIUtils/CustomCurve.h"
 #include "../AIBot/BotMain.h"
 #include "../AIBot/BotMemory.h"
 #include "../AIBotBehaviourPattern/BBPTakeCover.h"

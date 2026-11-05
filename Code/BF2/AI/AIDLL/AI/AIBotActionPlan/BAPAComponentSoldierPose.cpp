@@ -97,7 +97,7 @@ bool BAPAComponentSoldierPose::objectForcesCrouch() const
     if (m_object == 0xFFFFFFFFu)
         return false;
     Information* info = bapinline::info(m_object);
-    if (!info || !(info->getObjectTypeFlags() & 0x200000u))
+    if (!info || !info->isOfType(ITSoldier))
         return false;
     IAIPlayer* player = static_cast<IAIPlayerFactory*>(CommonSingletonServer::m_iaiPlayerFactory)
                             ->getPlayerFromId(info->getPlayerId());

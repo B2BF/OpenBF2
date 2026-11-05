@@ -13,7 +13,7 @@
 #include "../Main/CommonSingletonServer.h"
 #include "../AIBot/BotMain.h"
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../AIKnowledge/IPIControlInfo.h"
 #include "InfanteryControl.h"
 #include "../../../../IO/Input/PlayerInput.h"
@@ -105,7 +105,7 @@ void mouseControlLookAtDirection(Bot* bot, const Vec3& dir, const Mat4& camera, 
     float maxX;
     Information* info = informationManager->getInformation(bot->getCurrentEquipment());
     const float skill = static_cast<IAISettings*>(CommonSingletonServer::m_iaiSettings)->getBotSkill();
-    if (info == 0 || (info->getObjectTypeFlags() & 0x200000) == 0)
+    if (info == 0 || !info->isOfType(ITSoldier))
     {
         static float maxXInputNew = 1.0f;        // ELF 0x4BDD10
         maxY = (4.0f - maxYInputNew) * skill + maxYInputNew;

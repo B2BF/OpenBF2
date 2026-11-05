@@ -11,7 +11,7 @@
 #include "../AIKnowledge/IPIPhysical.h"
 #include "../AIKnowledge/Information.h"
 #include "../AIKnowledge/WeaponInfo.h"
-#include "../AIKnowledge/WeaponInfoManager.h"
+#include "../AIUtils/WeaponInfoManager.h"
 #include "../../../AIInterface/BFKnowledge/IAIObject.h"
 
 namespace dice {
@@ -22,7 +22,7 @@ namespace ai {
 BAPConWeaponHasLockOnTarget::BAPConWeaponHasLockOnTarget(BAPVariable<WeaponInfo*>* weapon, unsigned int unused)
 {
     m_weapon = weapon;
-    m_unusedC = unused;
+    m_target = unused;
 }
 
 // ELF 0x1F23B0 (D0 0x1F23D0): base only.

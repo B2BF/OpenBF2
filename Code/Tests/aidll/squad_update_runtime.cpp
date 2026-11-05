@@ -36,11 +36,11 @@ using Rosters=std::vector<SquadCoordinator*>[2];
 using PositionMap=std::map<int,double>;
 using Messages=std::list<SquadManager::CommanderMessage*>;
 #define MEMBER_ACCESS(Tag,Type,Member) struct Tag { using type=Type SquadManager::*; friend type nativeMember(Tag); }; template struct NativeAccess<Tag,&SquadManager::Member>;
-MEMBER_ACCESS(RostersTag,Rosters,m_coordinators)
+MEMBER_ACCESS(RostersTag,Rosters,m_Squads)
 MEMBER_ACCESS(SquadCursorTag,int,m_squadCursor)
 MEMBER_ACCESS(SideCursorTag,int,m_sideCursor)
-MEMBER_ACCESS(FirstBlockTag,SquadManager::SideBlock,m_sideBlock0)
-MEMBER_ACCESS(SecondBlockTag,SquadManager::SideBlock,m_sideBlock1)
+using Blocks=SquadManager::SideBlock[2];
+MEMBER_ACCESS(BlocksTag,Blocks,m_artillery)
 MEMBER_ACCESS(DurationTag,double,m_double156)
 MEMBER_ACCESS(FloatTag,float,m_float152)
 MEMBER_ACCESS(PositionsTag,PositionMap,m_playerValidPositions)
@@ -50,7 +50,7 @@ static SquadManager* tested;
 static Rosters& sides() { return tested->*nativeMember(RostersTag{}); }
 static int& squadCursor() { return tested->*nativeMember(SquadCursorTag{}); }
 static int& sideCursor() { return tested->*nativeMember(SideCursorTag{}); }
-static SquadManager::SideBlock& block(int side) { return side?tested->*nativeMember(SecondBlockTag{}):tested->*nativeMember(FirstBlockTag{}); }
+static SquadManager::SideBlock& block(int side) { return (tested->*nativeMember(BlocksTag{}))[side?1:0]; }
 static double& duration() { return tested->*nativeMember(DurationTag{}); }
 static std::string mode,calls;
 static int maximumSquads=1,maxQueries,pathCalls,humanCalls;
@@ -98,7 +98,7 @@ int main(int argc,char** argv) {
         require(squadCursor()==0 && sideCursor()==1 && duration()==25.0 && manager->*nativeMember(FloatTag{})==40.0f,"real constructor scalar stores");
         require(sides()[0].empty() && sides()[1].empty() && (manager->*nativeMember(PositionsTag{})).empty() && (manager->*nativeMember(MessagesTag{})).empty(),"real native containers empty");
         for(int side=0;side<2;++side) {
-            require(!block(side).m_b0,"side active flag initialized");
+            require(!block(side).incomingArtillery,"side active flag initialized");
             const Vec3 positions[]={block(side).m_artilleryPosition,block(side).m_fleePos0,block(side).m_fleePos1};
             for(const Vec3& p:positions) require(p.x==0 && p.y==0 && p.z==0,"three real Vec3 values zero initialized");
             byteValue(&block(side).m_artilleryStartTime,sizeof(double),0xa5,"timestamp representation remains unwritten");
@@ -119,14 +119,14 @@ int main(int argc,char** argv) {
     block(0).m_artilleryStartTime=block(1).m_artilleryStartTime=10.0;
     const std::string pathPass="p0:0,p0:1,p1:0,p1:1";
     if(mode.compare(0,4,"art_")==0) {
-        block(0).m_b0=true;
+        block(0).incomingArtillery=true;
         std::string wanted=pathPass; bool active0=false,active1=false;
-        if(mode=="art_inactive") { block(0).m_b0=false; wanted=""; }
+        if(mode=="art_inactive") { block(0).incomingArtillery=false; wanted=""; }
         else if(mode=="art_equal" || mode=="art_future") { expectedTime=mode=="art_equal"?35.0:34.0; wanted=""; active0=true; }
         else if(mode=="art_first") {}
         else if(mode=="art_just_after") expectedTime=std::nextafter(35.0,36.0);
-        else if(mode=="art_second") { block(0).m_b0=false; block(1).m_b0=true; }
-        else if(mode=="art_both") { block(1).m_b0=true; wanted+=","+pathPass; }
+        else if(mode=="art_second") { block(0).incomingArtillery=false; block(1).incomingArtillery=true; }
+        else if(mode=="art_both") { block(1).incomingArtillery=true; wanted+=","+pathPass; }
         else if(mode=="art_time_nan" || mode=="art_duration_nan" || mode=="art_start_nan") {
             if(mode=="art_time_nan") expectedTime=std::numeric_limits<double>::quiet_NaN();
             else if(mode=="art_duration_nan") duration()=std::numeric_limits<double>::quiet_NaN();
@@ -134,13 +134,13 @@ int main(int argc,char** argv) {
             wanted=""; active0=true;
         }
         else if(mode=="art_enable_second") {
-            onPath=[&](SquadCoordinator*) { if(pathCalls==1) block(1).m_b0=true; }; wanted+=","+pathPass;
+            onPath=[&](SquadCoordinator*) { if(pathCalls==1) block(1).incomingArtillery=true; }; wanted+=","+pathPass;
         }
         else if(mode=="art_disable_second") {
-            block(1).m_b0=true; onPath=[&](SquadCoordinator*) { if(pathCalls==1) block(1).m_b0=false; };
+            block(1).incomingArtillery=true; onPath=[&](SquadCoordinator*) { if(pathCalls==1) block(1).incomingArtillery=false; };
         }
         else if(mode=="art_duration_change") {
-            block(1).m_b0=true; active1=true; onPath=[&](SquadCoordinator*) { if(pathCalls==1) duration()=100; };
+            block(1).incomingArtillery=true; active1=true; onPath=[&](SquadCoordinator*) { if(pathCalls==1) duration()=100; };
         }
         else if(mode=="art_grow") {
             onPath=[&](SquadCoordinator*) { if(pathCalls==1) { sides()[0].reserve(sides()[0].capacity()+7); sides()[0].push_back(&e); } };
@@ -151,16 +151,16 @@ int main(int argc,char** argv) {
             onPath=[&](SquadCoordinator*) { if(pathCalls==1) { sides()[0].reserve(sides()[0].capacity()+7); sides()[0][1]=&e; } };
             wanted="p0:0,p0:2,p1:0,p1:1";
         }
-        else if(mode=="art_rearm_first") { onPath=[&](SquadCoordinator*) { if(pathCalls==1) block(0).m_b0=true; }; active0=true; }
+        else if(mode=="art_rearm_first") { onPath=[&](SquadCoordinator*) { if(pathCalls==1) block(0).incomingArtillery=true; }; active0=true; }
         else unexpected("unknown artillery mode");
         const auto mutation=onPath;
         onPath=[&](SquadCoordinator* coordinator) {
-            if(mode=="art_both") require(block(0).m_b0==false && block(1).m_b0==(pathCalls<=4),"side clear precedes each full traversal");
-            else if(pathCalls==1) require(mode=="art_second"?!block(1).m_b0:!block(0).m_b0,"expired flag cleared before callback");
+            if(mode=="art_both") require(block(0).incomingArtillery==false && block(1).incomingArtillery==(pathCalls<=4),"side clear precedes each full traversal");
+            else if(pathCalls==1) require(mode=="art_second"?!block(1).incomingArtillery:!block(0).incomingArtillery,"expired flag cleared before callback");
             if(mutation) mutation(coordinator);
         };
         manager.updateArtilleryStatus(expectedTime); expect(wanted);
-        require(block(0).m_b0==active0 && block(1).m_b0==active1,"final artillery flags");
+        require(block(0).incomingArtillery==active0 && block(1).incomingArtillery==active1,"final artillery flags");
     } else {
         std::string wanted="messages,u0:0"; int wantedSide=0,wantedCursor=0;
         if(mode=="tick_cycle") {
@@ -189,7 +189,7 @@ int main(int argc,char** argv) {
             sideCursor()=0; wanted="messages,u1:0"; wantedSide=1; wantedCursor=4;
             onUpdate=[](SquadCoordinator*) { sides()[0].clear(); squadCursor()=3; };
         }
-        else if(mode=="tick_artillery_order") { block(0).m_b0=true; wanted=pathPass+",messages,u0:0"; }
+        else if(mode=="tick_artillery_order") { block(0).incomingArtillery=true; wanted=pathPass+",messages,u0:0"; }
         else if(mode=="tick_message_mutation") {
             wanted="messages,u0:2,humans"; wantedSide=1;
             onMessages=[&]() { sideCursor()=0; squadCursor()=1; sides()[1].reserve(sides()[1].capacity()+7); sides()[1][1]=&e; };

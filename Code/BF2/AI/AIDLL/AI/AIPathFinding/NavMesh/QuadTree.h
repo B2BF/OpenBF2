@@ -32,10 +32,10 @@ class Polygon
 public:
     Polygon() { m_normal.x = 0.0f; m_normal.y = 0.0f; m_normal.z = 0.0f; }
 
-    /* +0x00 */ unsigned char  m_numberOfVertices;  // bounds every corner / edge index (0x3068B0, 0x307560)
+    /* +0x00 */ unsigned char  vertexCount;  // bounds every corner / edge index (0x3068B0, 0x307560)  // name: AIDLL_r assert "p.vertexCount" 0x101871C0 (+0)
     /* +0x01 */ unsigned char  m_material;          // get/setMaterialOfPolygon (0x3081A0 / 0x3081C0)
-    /* +0x02 */ unsigned short m_cluster;           // ClusterGraph::getClusterId (0x314E10)
-    /* +0x04 */ unsigned int   m_firstIndex;        // into m_vertexIndices and m_neighbours
+    /* +0x02 */ unsigned short cluster;             // ClusterGraph::getClusterId (0x314E10)  // name: AIDLL_r assert "p->cluster == cId" (0x10175A40; +2)
+    /* +0x04 */ unsigned int   vertexOffset;        // into m_vertexIndices and m_neighbours  // name: AIDLL_r assert "p.vertexOffset" 0x101871C0 (+4)
     /* +0x08 */ Vec3           m_normal;            // getNormalOfPolygon returns its address (0x307760)
 };
 
@@ -180,8 +180,8 @@ private:
     /* +0x54 */ unsigned int   m_numberOfNodes;
     /* +0x58 */ unsigned int   m_numberOfPolygons;   // getPolygon's bound (0x3069A0)
     /* +0x5C */ unsigned int   m_numberOfNodePolygons;
-    /* +0x60 */ unsigned int   m_numberOfVertices;
-    /* +0x64 */ unsigned int   m_numberOfVertexIndices;
+    /* +0x60 */ unsigned int   m_vertexCount;   // name: AIDLL_r assert 0x1018C4A0 (PE +0x70)
+    /* +0x64 */ unsigned int   m_vertexIndexCount;   // name: AIDLL_r assert 0x1018CF30 (PE +0x74)
     /* +0x68 */ unsigned int   m_numberOfNeighbours;
     /* +0x6C */ QuadTreeNode*  m_nodes;
     /* +0x70 */ Polygon*       m_polygons;

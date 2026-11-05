@@ -17,7 +17,7 @@
 #include "../Main/IBotManager.h"
 #include "../AIBot/BotMain.h"                       // Bot::getCurrentEquipment
 #include "../AIKnowledge/Information.h"
-#include "../AIKnowledge/InformationManager.h"
+#include "../Main/InformationManager.h"
 
 namespace dice {
 namespace hfe {
@@ -35,14 +35,14 @@ AIStrategicObject::AIStrategicObject(float radius, float f148)
     m_statistics[3] = new EnemyStatistics(2);
 
     const std::set<int> empty;
-    m_set20[0] = empty;
-    m_set20[1] = empty;
-    m_set44[0] = empty;
-    m_set44[1] = empty;
+    m_availableAttackers[0] = empty;
+    m_availableAttackers[1] = empty;
+    m_availableDefenders[0] = empty;
+    m_availableDefenders[1] = empty;
     m_set68[0] = empty;
     m_set68[1] = empty;
-    m_set92[0] = empty;
-    m_set92[1] = empty;
+    m_presentUnits[0] = empty;
+    m_presentUnits[1] = empty;
 
     m_status[0] = StatusMap::Neutral;
     m_status[1] = StatusMap::Neutral;
@@ -134,26 +134,26 @@ int AIStrategicObject::releaseAssignedResources(int side)
 std::set<int>& AIStrategicObject::getAvailableBots(bool attackers, int side)
 {
     if (attackers)
-        return m_set20[side - 1];
-    return m_set44[side - 1];
+        return m_availableAttackers[side - 1];
+    return m_availableDefenders[side - 1];
 }
 
 // ELF 0x3422D0.
 std::set<int>& AIStrategicObject::getAvailableAttackers(int side)
 {
-    return m_set20[side - 1];
+    return m_availableAttackers[side - 1];
 }
 
 // ELF 0x3422F0.
 std::set<int>& AIStrategicObject::getAvailableDefenders(int side)
 {
-    return m_set44[side - 1];
+    return m_availableDefenders[side - 1];
 }
 
 // ELF 0x3426E0.
 bool AIStrategicObject::unregisterAvailableAttacker(std::set<int>::iterator& it, int side)
 {
-    std::set<int>& units = m_set20[side - 1];
+    std::set<int>& units = m_availableAttackers[side - 1];
     if (it == units.end())
         return false;
     units.erase(it++);
@@ -163,7 +163,7 @@ bool AIStrategicObject::unregisterAvailableAttacker(std::set<int>::iterator& it,
 // ELF 0x342780.
 bool AIStrategicObject::unregisterAvailableDefender(std::set<int>::iterator& it, int side)
 {
-    std::set<int>& units = m_set44[side - 1];
+    std::set<int>& units = m_availableDefenders[side - 1];
     if (it == units.end())
         return false;
     units.erase(it++);
@@ -173,28 +173,28 @@ bool AIStrategicObject::unregisterAvailableDefender(std::set<int>::iterator& it,
 // ELF 0x341FF0.
 bool AIStrategicObject::registerAvailableAttacker(int unit, int side)
 {
-    m_set20[side - 1].insert(unit);
+    m_availableAttackers[side - 1].insert(unit);
     return true;
 }
 
 // ELF 0x342040.
 bool AIStrategicObject::registerAvailableDefender(int unit, int side)
 {
-    m_set44[side - 1].insert(unit);
+    m_availableDefenders[side - 1].insert(unit);
     return true;
 }
 
 // ELF 0x342600.
 bool AIStrategicObject::unregisterAvailableAttacker(int unit, int side)
 {
-    std::set<int>::iterator it = m_set20[side - 1].find(unit);
+    std::set<int>::iterator it = m_availableAttackers[side - 1].find(unit);
     return unregisterAvailableAttacker(it, side);
 }
 
 // ELF 0x342670.
 bool AIStrategicObject::unregisterAvailableDefender(int unit, int side)
 {
-    std::set<int>::iterator it = m_set44[side - 1].find(unit);
+    std::set<int>::iterator it = m_availableDefenders[side - 1].find(unit);
     return unregisterAvailableDefender(it, side);
 }
 
@@ -207,32 +207,32 @@ std::set<int>& AIStrategicObject::getAssignedUnits(int side)
 // ELF 0x3423E0.
 std::set<int>& AIStrategicObject::getPresentUnits(int side)
 {
-    return m_set92[side - 1];
+    return m_presentUnits[side - 1];
 }
 
 // ELF 0x342400.
 bool AIStrategicObject::isPresentUnit(int unit, int side) const
 {
-    return m_set92[side - 1].find(unit) != m_set92[side - 1].end();
+    return m_presentUnits[side - 1].find(unit) != m_presentUnits[side - 1].end();
 }
 
 // ELF 0x342460.
 std::pair<std::set<int>::iterator, bool> AIStrategicObject::setAsPresentUnit(int unit, int side)
 {
-    return m_set92[side - 1].insert(unit);
+    return m_presentUnits[side - 1].insert(unit);
 }
 
 // ELF 0x342550.
 void AIStrategicObject::removeAsPresentUnit(std::set<int>::iterator& it, int side)
 {
-    m_set92[side - 1].erase(it++);
+    m_presentUnits[side - 1].erase(it++);
 }
 
 // ELF 0x3424C0.
 std::set<int>::iterator AIStrategicObject::removeAsPresentUnit(int unit, int side)
 {
-    std::set<int>::iterator it = m_set92[side - 1].find(unit);
-    if (it != m_set92[side - 1].end())
+    std::set<int>::iterator it = m_presentUnits[side - 1].find(unit);
+    if (it != m_presentUnits[side - 1].end())
         removeAsPresentUnit(it, side);
     return it;
 }
@@ -442,9 +442,9 @@ bool AIStrategicObject::bookBot(bool attacker, int side, std::set<int>::iterator
 {
     const int unit = *it;
     if (attacker)
-        m_set20[side - 1].find(unit);
+        m_availableAttackers[side - 1].find(unit);
     else
-        m_set44[side - 1].find(unit);
+        m_availableDefenders[side - 1].find(unit);
     Bot* const bot = IBotManager::instance->getBotFromId(unit);
     InformationManager* const manager = informationManager;
     Information* const information = manager->getInformation(bot->getCurrentEquipment());
@@ -455,26 +455,26 @@ bool AIStrategicObject::bookBot(bool attacker, int side, std::set<int>::iterator
 int AIStrategicObject::getNumberOfAvailableBots(bool attackers, int side) const
 {
     if (attackers)
-        return static_cast<int>(m_set20[side - 1].size());
-    return static_cast<int>(m_set44[side - 1].size());
+        return static_cast<int>(m_availableAttackers[side - 1].size());
+    return static_cast<int>(m_availableDefenders[side - 1].size());
 }
 
 // ELF 0x342360.
 int AIStrategicObject::getNumberOfAvailableAttackers(int side) const
 {
-    return static_cast<int>(m_set20[side - 1].size());
+    return static_cast<int>(m_availableAttackers[side - 1].size());
 }
 
 // ELF 0x342380.
 int AIStrategicObject::getNumberOfAvailableDefenders(int side) const
 {
-    return static_cast<int>(m_set44[side - 1].size());
+    return static_cast<int>(m_availableDefenders[side - 1].size());
 }
 
 // ELF 0x3423C0.
 int AIStrategicObject::getNumberOfPresentUnits(int side) const
 {
-    return static_cast<int>(m_set92[side - 1].size());
+    return static_cast<int>(m_presentUnits[side - 1].size());
 }
 
 // ELF 0x3425F0.
@@ -486,16 +486,16 @@ EnemyStatistics& AIStrategicObject::getStrategicStatistics(int side) const
 // ELF 0x342820.
 int AIStrategicObject::unregisterAllAvailableAttackers(int side)
 {
-    const int count = static_cast<int>(m_set20[side - 1].size());
-    m_set20[side - 1].clear();
+    const int count = static_cast<int>(m_availableAttackers[side - 1].size());
+    m_availableAttackers[side - 1].clear();
     return count;
 }
 
 // ELF 0x3428B0.
 int AIStrategicObject::unregisterAllAvailableDefenders(int side)
 {
-    const int count = static_cast<int>(m_set44[side - 1].size());
-    m_set44[side - 1].clear();
+    const int count = static_cast<int>(m_availableDefenders[side - 1].size());
+    m_availableDefenders[side - 1].clear();
     return count;
 }
 
