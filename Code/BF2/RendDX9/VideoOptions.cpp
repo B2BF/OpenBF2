@@ -148,20 +148,6 @@ int __fastcall videoOptions_getQuality(void* self, void*, int index)
 
 namespace {
 
-// [TEMP] [CHOSEN, not recovered] Resolution changes remain a logged skip during login.
-// Reports hits 1..4 and powers of two. [RETIRE-WHEN: rc-login-reset-hold]
-// Restore both calls after a live device reset verifies all default-pool resources are released.
-inline void noteResChangeHeld(int resIndex, int aaIndex)
-{
-    static unsigned int hits = 0;
-    ++hits;
-    if (hits > 4u && (hits & (hits - 1u)) != 0u)
-        return;
-    ::renddx9abi::logf("VideoOptions::apply: resolution/AA changed (res#%d, aa#%d); the resolution "
-                       "change sub_1000F8D0 is HELD (RC, RW-251) - the device keeps its current mode; "
-                       "the change is marked applied (hit #%u)", resIndex, aaIndex, hits);
-}
-
 // clamp(v - 1, 0, 1), the shape the original open-codes five times in a row.
 inline int clampMinusOne(int v)
 {
@@ -632,18 +618,20 @@ void __fastcall videoOptions_apply(void* self, void*)
     if (terrain)
         writeRendererByte(terrain, 0x41C, 1);
 
-    // [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: rc-login-reset-hold]
-    // Resolution and AA resets remain held; applied-state bookkeeping still advances.
-    // Restore reset calls after the login path survives device reset and resource rebinding.
+    // A changed resolution, then a changed antialiasing, each re-applies the selected mode. Both
+    // calls pass the selected resolution's record; the applied indices start at -1, so the first
+    // apply always changes the mode and posts the resolution event the menu viewport follows.
+    // The second gameLoaded test is a fresh read, as shipped.
+    const Mode40* const modes = reinterpret_cast<const Mode40*>(vo->modeCache.first);
     if (!vo->gameLoaded && vo->minusOneD4 != vo->minusOneDC)
     {
-        noteResChangeHeld(vo->minusOneDC, vo->minusOneD8);                          // 0x10010365 held
+        videoOptionsChangeResolution(vo, reinterpret_cast<const Mode40*>(vo->modeCache.first) + vo->minusOneDC);
         vo->minusOneD4 = vo->minusOneDC;   // applied resolution = selected
         vo->minusOneD0 = vo->minusOneD8;   // applied AA = selected
     }
     if (!vo->gameLoaded && vo->minusOneD0 != vo->minusOneD8)
     {
-        noteResChangeHeld(vo->minusOneDC, vo->minusOneD8);                          // 0x100103AE held
+        videoOptionsChangeResolution(vo, reinterpret_cast<const Mode40*>(vo->modeCache.first) + vo->minusOneDC);
         vo->minusOneD0 = vo->minusOneD8;   // applied AA = selected
     }
 
@@ -1363,9 +1351,11 @@ void videoOptionsInitialize(void* base)
     vo->minusOneD4 = -1;
     vo->minusOneD0 = -1;
 
-    // [CHOSEN, not recovered] Skip automatic detection and preset 1 at initialization.
-    // This avoids the startup benchmark and its 800x600/AA-off reset; profile application
-    // supplies requested settings later.
+    // The detection result is discarded; preset 1 then selects "800x600" and "Off", so the first
+    // apply changes the mode, applies any GSWindowSizeX/Y override and posts the resolution event
+    // the menu viewport is sized from.
+    videoOptions_slot34(vo, 0);
+    videoOptions_applyQualityPreset(vo, 0, 1);
 
     ::renddx9abi::logf("VideoOptions::initialize: %dx%d @%dHz skipMip=%d; quality row = all 2 "
                        "(getQuality(0)=%d terrain, getQuality(7)=%d filter); maxQuality[7]=%d",
