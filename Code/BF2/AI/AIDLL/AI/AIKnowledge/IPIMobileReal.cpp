@@ -2,6 +2,10 @@
 
 #include "IPIMobileReal.h"
 
+// <iostream>'s ios_base::Init object is this TU's static initialisation and teardown (ELF
+// 0x2EFB80, __tcf_0 0x2EFBE0, _GLOBAL__I 0x2EFC10).
+#include <iostream>
+
 #include <cmath>
 
 #include "Information.h"
@@ -66,6 +70,7 @@ void IPIMobileReal::getPositionEstimate(Vec3& position)
     position = m_information->getPosition();
 }
 
+// ELF 0x2EF900. The information's position moved by the speed over (time - now).
 void IPIMobileReal::getPositionEstimate(double time, Vec3& position)
 {
     position = m_information->getPosition();

@@ -78,9 +78,9 @@ static Map* load(const char* name)
 
 static void appendIsland(Map* destination, Map* source)
 {
-    destination->m_quadTreeManager->m_islands.push_back(
-        source->m_quadTreeManager->m_islands[0]);
-    source->m_quadTreeManager->m_islands.clear();
+    destination->m_quadTreeManager->m_quadTrees.push_back(
+        source->m_quadTreeManager->m_quadTrees[0]);
+    source->m_quadTreeManager->m_quadTrees.clear();
 }
 
 static AIPathfinding* pathWith(Map* map)

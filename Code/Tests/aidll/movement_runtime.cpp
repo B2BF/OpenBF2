@@ -54,7 +54,7 @@ SquadMember::~SquadMember() {}
 SquadCoordinator::SquadCoordinator(int side, int index)
     : m_squadIndex(index), m_side(side), m_v28{21.0f, 22.0f, 23.0f}, m_formation(nullptr) {}
 SquadFormation::SquadFormation(SquadCoordinator* squad)
-    : m_coordinator(squad), m_maxSquadMembers(0) {}
+    : m_coordinator(squad), m_numberOfSlots(0) {}
 IAIPlayer::~IAIPlayer() {}
 
 #if defined(MOVEMENT_OBSERVERS)

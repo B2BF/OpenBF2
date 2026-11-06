@@ -2,6 +2,10 @@
 
 #include "IPICover.h"
 
+// <iostream>'s ios_base::Init object is this TU's static initialisation and teardown (ELF
+// 0x2EE3F0, __tcf_0 0x2EE450, _GLOBAL__I 0x2EE480).
+#include <iostream>
+
 #include "Information.h"
 #include "../Main/CommonSingletonServer.h"
 #include "../../../AIInterface/BFKnowledge/BFTimer.h"

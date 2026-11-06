@@ -58,7 +58,7 @@ def generate(out):
          {"getNSides": 'return observeSides();'}),
         ("IBFCollisionHandler", "AI/AIInterface/BFKnowledge/BFCollisionHandler.h", "ObservedCollision", '',
          {"updateBotProjectiles": 'observeCollision();'}),
-        ("IAIMineManager", AI + "Main/AIMineManager.h", "ObservedMines", '',
+        ("IAIMineManager", AI + "AIKnowledge/AIMineManager.h", "ObservedMines", '',
          {"update": 'trace("mines");'}),
         ("IAIObjectEnvironment", "AI/AIInterface/BFKnowledge/BFObjectEnvironment.h", "ObservedEnvironment", '',
          {"damageSeverelyDamagedVehicles": 'trace("damage");'}),

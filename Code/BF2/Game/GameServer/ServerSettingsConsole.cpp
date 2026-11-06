@@ -68,15 +68,10 @@ std::string svNumReservedSlotsSet(int value)
     return svReceiver()->setNumReservedSlots(value);
 }
 
-// [CHOSEN, not recovered] Release configurations floor the requested player count
-// at two; development configurations retain the raw setter for single-player tests.
-// The getter supplies the effective value.
+// Stores the requested player count unchanged, as retail does; the getter applies the ranked
+// override.
 void svNumPlayersNeededToStartSet(int value)
 {
-#if defined(NDEBUG)
-    if (value < 2)
-        value = 2;
-#endif
     svReceiver()->m_playersNeededToStart = value;
 }
 
@@ -354,7 +349,7 @@ BF2_CONSOLE_GETSET_1(numReservedSlots, int, svReceiver() != 0, svReceiver()->m_n
 
 // numPlayersNeededToStart: ConsoleClass668, PE slot 0x82ACB4 -> ctor 0x4D0AF0 / exec 0x4D0C40;
 // ELF registration 0x87B109A / executor 0x87C22A0. Retail SET is a raw field write; GET uses
-// the effective ranked getter. The pre-existing chosen release-build floor remains in its helper.
+// the effective ranked getter. The helper keeps that raw write.
 BF2_CONSOLE_PROPERTY_FN(numPlayersNeededToStart, int, svReceiver() != 0,
                         svReceiver()->getNumPlayersNeededToStart(),
                         svNumPlayersNeededToStartSet, kSvConsoleTag)

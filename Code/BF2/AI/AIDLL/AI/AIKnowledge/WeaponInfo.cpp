@@ -1,6 +1,10 @@
 
 #include "WeaponInfo.h"
 
+// <iostream>'s ios_base::Init object is this TU's static initialisation and teardown (ELF
+// 0x2DD370, __tcf_0 0x2DD3D0, _GLOBAL__I 0x2DD400).
+#include <iostream>
+
 namespace dice { namespace hfe { namespace ai {
 
 WeaponInfo::WeaponInfo(IWeapon* weapon)

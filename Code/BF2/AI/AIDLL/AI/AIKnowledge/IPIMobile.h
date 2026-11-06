@@ -21,7 +21,7 @@ public:
     struct ValidPos
     {
         unsigned int polygon;
-        unsigned int quadTree;
+        unsigned int island;    // name: AIDLL_r assert "oldVehicleVP.island != invalidIslandId" (0x100CDD00; +4)
         Vec3 position;
     };
 
@@ -57,6 +57,11 @@ public:
     float getAvoidCollisionLookAhead() const;
     float getSprintStamina() const;
 
+    // [INFERRED] inline reader of +0x08: BFPathfindingCourier::getLastValidSquadleaderPosition
+    // (ELF 0x2E83BD) reads `mobile+8 != -1` and copies +0x10..+0x18 without a call; also
+    // BotNavigation::reset / initPathfinding (ELF 0x190A70 / 0x1902B0) read the infantry
+    // polygon and island (+0x08 / +0x0C) directly.
+    const ValidPos& getLastValidInfantryPos() const { return m_lastValidInfantryPos; }
     const ValidPos& getLastValidPosition() const;
     const ValidPos& getLastValidPosition(int vehicleNumber) const;
     void setLastValidInfantryPosInternal(const ValidPos& position);

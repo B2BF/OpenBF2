@@ -25,9 +25,10 @@
 #include "../IWeaponObject.h"
 #include "../Networkables/Networkables.h"
 #include "../../../AI/AIInterface/BFKnowledge/BFCollisionHandler.h"
+#include "../../../AI/AIDLL/AI/Main/CommonSingletonServer.h"   // m_iBFCollisionHandler
 #include "../../../Core/Ids.h"
 #include "../../../Core/Debug.h"                     // getStickTransformation's retail error arm
-#include "../../../Core/Random.h"                    // g_random - retail distribution sampler
+#include "../../../Core/Random.h"                    // Rand - retail distribution sampler
 #include "../../../Core/System.h"                    // launch clocks / ticks
 #include "../../../Core/WeakPtr.h"                   // the +0x174 ctrl read - PCO's idiom
 #include "../../../Geom/IGeometryTemplate.h"
@@ -49,10 +50,6 @@
 
 namespace dice {
 namespace hfe {
-namespace ai {
-// Stored as an erased pointer; IBFCollisionHandler does not derive from IBase.
-extern IBase* g_bfCollisionHandler;
-}
 namespace world {
 
 extern IBase* materialManager;      // ds:0x8AD2820, defined in Core/Globals.cpp
@@ -85,20 +82,20 @@ float sampleRandomDistribution(const RandomDistribution& distribution)
         break;
     case CRD_UNIFORM:
         sample = distribution.value
-            + (distribution.variation - distribution.value) * unitRandom(g_random);
+            + (distribution.variation - distribution.value) * unitRandom(Rand);
         break;
     case CRD_EXPONENTIAL:
-        sample = -distribution.value * static_cast<float>(std::log(unitRandom(g_random)));
+        sample = -distribution.value * static_cast<float>(std::log(unitRandom(Rand)));
         break;
     case CRD_NORMAL:
-        sample = distribution.value + g_random.getNormal() * distribution.variation;
+        sample = distribution.value + Rand.getNormal() * distribution.variation;
         break;
     default:
         sample = 0.0f;
         break;
     }
 
-    if (distribution.relative && unitRandom(g_random) <= 0.5f)
+    if (distribution.relative && unitRandom(Rand) <= 0.5f)
         sample = -sample;
     return sample;
 }
@@ -511,8 +508,8 @@ void GenericProjectile::resetProjectile(bool a2)
         gameLogic->removeProjectile(this);
 
     // . Drop this projectile from the AI's collision tracking before the trail goes.
-    if (ai::g_bfCollisionHandler)
-        reinterpret_cast<ai::IBFCollisionHandler*>(ai::g_bfCollisionHandler)
+    if (ai::CommonSingletonServer::m_iBFCollisionHandler)
+        static_cast<ai::IBFCollisionHandler*>(ai::CommonSingletonServer::m_iBFCollisionHandler)
             ->handleProjectileTimeout(static_cast<IProjectileObject*>(this), this);
 
     destroyTrailEffect();
@@ -1052,8 +1049,8 @@ void GenericProjectile::detonate(bool forced)
     objectManager->postMessage(this, static_cast<TemplateMessage>(32), destroyDelay);
 
     // . The same removal resetProjectile does, and the last thing detonate does.
-    if (ai::g_bfCollisionHandler)
-        reinterpret_cast<ai::IBFCollisionHandler*>(ai::g_bfCollisionHandler)
+    if (ai::CommonSingletonServer::m_iBFCollisionHandler)
+        static_cast<ai::IBFCollisionHandler*>(ai::CommonSingletonServer::m_iBFCollisionHandler)
             ->handleProjectileTimeout(static_cast<IProjectileObject*>(this), this);
 }
 

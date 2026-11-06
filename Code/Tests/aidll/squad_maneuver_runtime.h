@@ -5,5 +5,5 @@
 #include "../../BF2/AI/AIDLL/AI/AIBot/BotMain.h"
 #include "../../BF2/AI/AIInterface/BFKnowledge/AIPlayer.h"
 #include "../../BF2/AI/AIDLL/AI/AIKnowledge/Information.h"
-#include "../../BF2/AI/AIDLL/AI/AIKnowledge/InformationManager.h"
+#include "../../BF2/AI/AIDLL/AI/Main/InformationManager.h"
 #include "../../BF2/AI/AIDLL/AI/Main/AIDllFrontier.h"

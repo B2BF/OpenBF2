@@ -138,7 +138,7 @@ void resetSimpleCollisionCall(bool result)
 namespace dice {
 namespace hfe {
 
-Random g_random;
+Random Rand;
 
 unsigned int Random::getRaw()
 {

@@ -15,8 +15,14 @@ extern ClassManager* classManager;
 
 namespace ai {
 
+// ELF 0x2EC020 / 0x2EC040; engine ELF 0x841BE50 / 0x841BE60.
+ISingletonServerUpdater::ISingletonServerUpdater()
+{
+}
+
 // Shared out-of-line destructor used by engine and DLL updater classes. Keep it before
 // update in the interface: update occupies ELF +0x08 and PE +0x04.
+// ELF 0x2EC060 / 0x2EC080 / 0x2EC0A0
 ISingletonServerUpdater::~ISingletonServerUpdater()
 {
 }
@@ -53,12 +59,14 @@ void* CommonSingletonServer::m_iAIMineManager                      = 0;
 
 // - a bare `ret`. See the header: the base publishes the entry point and does
 // nothing with it. AISingletonServer::updateStaticMethods is the one that is actually called.
+// ELF 0x2EB570
 void CommonSingletonServer::updateStaticMethods()
 {
 }
 
 // Refreshes all 28 singleton pointers in order. Missing names store null without logging
 // or reporting failure; callers must validate the interfaces they require.
+// ELF 0x2EB580
 void CommonSingletonServer::updateStaticMethodsInternal()
 {
     m_iAimerHelper                       = classManager->getSimpleSingleton("AimerHelper");
@@ -92,6 +100,7 @@ void CommonSingletonServer::updateStaticMethodsInternal()
 }
 
 // The same twenty-eight, same order, all nulled.
+// ELF 0x2EB410
 void CommonSingletonServer::clearAllStaticMethods()
 {
     m_iAimerHelper                       = 0;

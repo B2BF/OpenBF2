@@ -16,9 +16,9 @@ public:
     BotMemory();
     ~BotMemory();
 
-    void reset();                   // [FRONTIER]
-    // Adjusts the urgency assigned to behaviour by amount.
-    void modifyBehaviourUrgency(BotBehaviour* behaviour, double amount);   // [FRONTIER]
+    void reset();
+    // ELF 0x18F2D0 returns a float (x87 st0): the urgency factor for behaviour at time.
+    float modifyBehaviourUrgency(BotBehaviour* behaviour, double time);
 
     // Retail x86 field offsets.
     /*  0 */ int    m_int0;         // = -1 and BotMain writes it again from outside

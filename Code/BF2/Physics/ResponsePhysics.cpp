@@ -513,7 +513,7 @@ void ResponsePhysics::addEffect(int ownMaterial, int otherMaterial, Vec3 speed, 
         m_effect0.sound = 0;
         record = &m_effect0;
     }
-    const unsigned int raw = g_random.getRaw();
+    const unsigned int raw = Rand.getRaw();
     record->timer = static_cast<float>(static_cast<int>(((raw >> 7) | 1u) + 1u)) * 0.000000059604645f + 0.5f;
     record->position = point;
     record->normal = normal;

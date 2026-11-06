@@ -14,7 +14,7 @@
 
 namespace dice {
 namespace hfe {
-namespace ai { class AIObjectUnit; class WeaponObject; }   // field readers, friended below
+namespace ai { class AIObjectUnit; class WeaponObject; class BFCollisionHandler; class BFObjectEnvironment; }   // field readers, friended below
 namespace world {
 
 class ArtilleryHandler;
@@ -153,8 +153,11 @@ public:
 protected:
     friend struct BaseTemplateConsoleAccess;      // recovered direct-field console executors
     friend class SimpleObject;
+    friend class ai::BFObjectEnvironment;        // the spawner query reads m_aiTemplate directly
     friend class ai::AIObjectUnit;               // m_aiTemplate (+296) of a soldier's KIT - the
                                                 // AIObjectUnit reads the kit template directly.
+    friend class ai::BFCollisionHandler;         // m_aiTemplate (+296) - handleProjectileDamage's
+                                                // AI weapon template lookup
     friend class ai::WeaponObject;               // a projectile's m_drag (+64), m_mass (+92) and
                                                 // WeaponObject reads gravity configuration directly.
     friend class GenericFireArm;                 // m_aiTemplate (+296) - GenericFireArm::init

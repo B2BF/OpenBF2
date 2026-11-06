@@ -61,8 +61,8 @@ static void query(Map* map,MaterialManager* materials,Vec3 p,bool expected,unsig
     CHECK(actualIsland==(expected?island:invalid));
 }
 static void append(Map* destination,Map* from) {
-    destination->m_quadTreeManager->m_islands.push_back(from->m_quadTreeManager->m_islands[0]);
-    from->m_quadTreeManager->m_islands.clear();
+    destination->m_quadTreeManager->m_quadTrees.push_back(from->m_quadTreeManager->m_quadTrees[0]);
+    from->m_quadTreeManager->m_quadTrees.clear();
 }
 int main(int argc,char** argv) {
     SetErrorMode(SEM_NOGPFAULTERRORBOX|SEM_FAILCRITICALERRORS);
@@ -83,7 +83,7 @@ int main(int argc,char** argv) {
         Map* map;
         if(mode=="empty_tree") {
             map=new Map("never-loaded",0);
-            map->m_quadTreeManager->m_islands.push_back(std::make_pair(new QuadTree(0),static_cast<ClusterGraph*>(nullptr)));
+            map->m_quadTreeManager->m_quadTrees.push_back(std::make_pair(new QuadTree(0),static_cast<ClusterGraph*>(nullptr)));
         } else map=load("empty_leaf");
         query(map,nullptr,{0,0,0},false);
     } else if(mode=="leaf_success") {

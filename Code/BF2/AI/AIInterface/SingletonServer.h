@@ -14,6 +14,7 @@ class IAIEventCourier;
 class ISingletonServerUpdater
 {
 public:
+    ISingletonServerUpdater();
     virtual ~ISingletonServerUpdater();
     virtual void update() = 0;
 };

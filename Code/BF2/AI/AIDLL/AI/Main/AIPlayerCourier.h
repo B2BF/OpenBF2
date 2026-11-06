@@ -25,10 +25,12 @@ class IAIPlayerCourier
 public:
     IAIPlayerCourier();
     virtual ~IAIPlayerCourier();
-    virtual int getSelectedVehicle(int) = 0;
-    virtual int getRepairTarget(int) = 0;
-    virtual int getReviveTarget(int) = 0;
-    virtual int getMineDefuseTarget(int) = 0;
+    // The engine side (AIInterface/IAIPlayerCourier.h) reads the first three as world::IObject*
+    // and the fourth as an unsigned grid id; the ELF names are const (0x3B2E90..0x3B3040).
+    virtual world::IObject* getSelectedVehicle(int playerId) const = 0;
+    virtual world::IObject* getRepairTarget(int playerId) const = 0;
+    virtual world::IObject* getReviveTarget(int playerId) const = 0;
+    virtual unsigned int getMineDefuseTarget(int playerId) const = 0;
 };
 
 // AIPlayerCourier - sizeof == 4, from BF2AI::init step 12.
@@ -39,10 +41,10 @@ public:
     virtual ~AIPlayerCourier();
 
     // IAIPlayerCourier
-    virtual int getSelectedVehicle(int);
-    virtual int getRepairTarget(int);
-    virtual int getReviveTarget(int);
-    virtual int getMineDefuseTarget(int);
+    virtual world::IObject* getSelectedVehicle(int playerId) const;
+    virtual world::IObject* getRepairTarget(int playerId) const;
+    virtual world::IObject* getReviveTarget(int playerId) const;
+    virtual unsigned int getMineDefuseTarget(int playerId) const;
 
 };
 

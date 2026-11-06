@@ -20,6 +20,13 @@ class IBase;
 
 namespace ai {
 
+class IAIObject;
+
+// bf2 0x842B700, the first function of AIPlayerFactory.cpp's text (exported, `T`): whether any
+// unit of the object's primary object or of its secondary objects other than `exclude` is
+// occupied. AIEventListener's vehicle-exit arm uses it.
+bool isOccupiedObject(IAIObject* object, IAIObject* exclude);
+
 class IAIPlayerFactory
 {
 public:

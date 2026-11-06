@@ -5,6 +5,7 @@
 #include <vector>
 #include <map>
 #include <string>
+#include "../../Math/Vec3.h"
 
 namespace dice {
 namespace hfe {
@@ -23,6 +24,12 @@ public:
     // Test the player vehicle against area filters, or terrain bounds when no inclusion applies.
     // Null players and players without a controllable vehicle return false.
     bool isPlayerInside(world::IPlayer* player);
+
+    // Append pathfinding-enabled areas; return true only when the resulting list has one area.
+    bool getAiCombatAreas(std::vector<CombatArea*>& areas) const;
+
+    // Apply inclusions and then exclusions from a borrowed AI area list.
+    bool isAiPositionInside(const Vec3& position, const std::vector<CombatArea*>& areas) const;
 
     // Return the category grace period in seconds. Null objects, ladders, and absent entries
     // use the default. A non-null object must have a valid template.

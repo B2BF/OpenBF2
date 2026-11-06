@@ -19,7 +19,8 @@ public:
     // Returns the next tempered random value. [CHOSEN] Name for an inline operation.
     unsigned int next()
     {
-        if (m_index > kStateSize - 1)
+        // Unsigned comparison, including the inlined draws at ELF 0x30C60D / 0x30CD9F.
+        if (static_cast<unsigned int>(m_index) > kStateSize - 1)
             generateNumbers();
 
         unsigned int y = m_state[m_index++];
@@ -48,7 +49,10 @@ private:
     // this index before the draw: PE spills its running weight to float only
     // across the refill call. No new state, virtual slot or random policy.
     friend class BotSpawner;
+public:
+    // [CHOSEN, not recovered] Visibility for the generated inline seed property.
     /* +0x000 */ int          m_seed;
+private:
     /* +0x004 */ unsigned int m_state[kStateSize];
     /* +0x9C4 */ int          m_index;
 };

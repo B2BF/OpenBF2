@@ -43,7 +43,17 @@ public:
     virtual bool predicate(IAIObject* object) = 0;   // +0x00, both images
 };
 
-class DestroyableObject;      // BFObjectEnvironment::getAllDestroyableObjects, by value in a vector
+// Object-local navigation bounds and transformation, returned by getAllDestroyableObjects.
+// ELF bf2 0x8401390 writes the byte, both vectors and the complete matrix; libaidll's
+// drawDynamicAIObjects consumes a 92-byte element. Member names are [INFERRED].
+class DestroyableObject
+{
+public:
+    /* +0x00 */ bool initiallyWalkable;
+    /* +0x04 */ Vec3 min;
+    /* +0x10 */ Vec3 max;
+    /* +0x1C */ Mat4 transform;
+};
 class TargetData;             // BFObjectEnvironment::getTargetObjects, likewise
 class IWeapon;                // BFObjectEnvironment::hasIndirectLineOfFire
 class IKitTemplate;           // KitTemplateManager's two containers

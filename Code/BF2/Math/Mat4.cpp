@@ -1,5 +1,8 @@
 // Matrix transforms, affine inversion, rotations, and text serialization.
 
+// static init: ELF 0x49B9F0 (__tcf_0 0x49BA50, _GLOBAL__I 0x49BA80): <iostream>'s Init object only.
+#include <iostream>
+
 #include "Mat4.h"
 
 #include <cfloat>
@@ -10,6 +13,7 @@
 namespace dice {
 namespace hfe {
 
+// ELF 0x499440.
 const Mat4& Mat4::getZero()
 {
     static const Mat4 zero = {{ 0.0f, 0.0f, 0.0f, 0.0f,  0.0f, 0.0f, 0.0f, 0.0f,
@@ -17,6 +21,7 @@ const Mat4& Mat4::getZero()
     return zero;
 }
 
+// ELF 0x499300.
 const Mat4& Mat4::getIdentity()
 {
     static const Mat4 identity = {{
@@ -28,6 +33,7 @@ const Mat4& Mat4::getIdentity()
     return identity;
 }
 
+// ELF 0x498D50.
 Mat4 Mat4::operator*(const Mat4& rhs) const
 {
     Mat4 result;
@@ -46,6 +52,7 @@ Mat4 Mat4::operator*(const Mat4& rhs) const
 }
 
 // Writes the full row-major product of lhs and rhs. Output must not alias either input.
+// ELF 0x4996D0.
 void Mat4::fullMult(const Mat4& lhs, const Mat4& rhs)
 {
     for (int column = 0; column < 4; ++column)
@@ -61,6 +68,7 @@ void Mat4::fullMult(const Mat4& lhs, const Mat4& rhs)
     }
 }
 
+// ELF 0x499910.
 void Mat4::mult(const Mat4& lhs, const Mat4& rhs)
 {
     // Unlike operator*, this is the engine's affine fast path: the final column is restored to
@@ -84,6 +92,7 @@ void Mat4::mult(const Mat4& lhs, const Mat4& rhs)
     m[15] = 1.0f;
 }
 
+// ELF 0x499220.
 void Mat4::setInverse(const Mat4& source)
 {
     // BF2's ordinary transform inverse assumes an orthonormal 3x3 rotation.  A separate
@@ -110,6 +119,113 @@ void Mat4::setInverse(const Mat4& source)
               source.m[9] * source.m[13] +
               source.m[10] * source.m[14]);
     m[15] = 1.0f;
+}
+
+// ELF 0x4990D0; bf2 0x83B57B0. Reload factors for each sequential store, including aliases.
+Mat4& Mat4::scale(const Vec3& factors)
+{
+    m[0] = factors.x * m[0];
+    m[4] = factors.x * m[4];
+    m[8] = factors.x * m[8];
+    m[12] = factors.x * m[12];
+    m[1] = factors.y * m[1];
+    m[5] = factors.y * m[5];
+    m[9] = factors.y * m[9];
+    m[13] = factors.y * m[13];
+    m[2] = factors.z * m[2];
+    m[6] = factors.z * m[6];
+    m[10] = factors.z * m[10];
+    m[14] = factors.z * m[14];
+    return *this;
+}
+
+// ELF 0x499150; bf2 0x83B5830.
+Mat4& Mat4::rotScale(const Vec3& factors)
+{
+    m[0] = factors.x * m[0];
+    m[4] = factors.x * m[4];
+    m[8] = factors.x * m[8];
+    m[1] = factors.y * m[1];
+    m[5] = factors.y * m[5];
+    m[9] = factors.y * m[9];
+    m[2] = factors.z * m[2];
+    m[6] = factors.z * m[6];
+    m[10] = factors.z * m[10];
+    return *this;
+}
+
+// ELF 0x4991B0; bf2 0x83B5890.
+Mat4& Mat4::setTranspose(const Mat4& source)
+{
+    for (int row = 0; row < 4; ++row)
+        for (int column = 0; column < 4; ++column)
+            m[row * 4 + column] = source.m[column * 4 + row];
+    return *this;
+}
+
+// ELF 0x499580; bf2 0x83B5C30.
+const Mat4& Mat4::getTexScaleBias()
+{
+    static const Mat4 scalebias = {{
+        0.5f, 0.0f, 0.0f, 0.0f,
+        0.0f, -0.5f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.5f, 0.5f, 0.0f, 1.0f
+    }};
+    return scalebias;
+}
+
+// ELF 0x49AA60; bf2 0x83B6FB0.
+int calcProjectionMatrix(Mat4& m, float fov, float aspectScale,
+                         float nearDistance, float farDistance)
+{
+    const float distance = farDistance - nearDistance;
+    if (distance < FLT_EPSILON)
+        return -20000;
+
+    const float halfAngle = fov * 0.5f;
+    const float sine = sinf(halfAngle);
+    const float cosine = cosf(halfAngle);
+    const float cotangent = cosine / sine;
+    const float depth = farDistance / distance;
+    const float x = cotangent * aspectScale;
+    if (depth == 1.0f)
+    {
+        m = Mat4{{x, 0.0f, 0.0f, 0.0f,
+                  0.0f, cotangent, 0.0f, 0.0f,
+                  0.0f, 0.0f, 1.0f, 1.0f,
+                  0.0f, 0.0f, -nearDistance, 0.0f}};
+    }
+    else
+    {
+        m = Mat4{{x, 0.0f, 0.0f, 0.0f,
+                  0.0f, cotangent, 0.0f, 0.0f,
+                  0.0f, 0.0f, depth, 1.0f,
+                  0.0f, 0.0f, -depth * nearDistance, 0.0f}};
+    }
+    return 0;
+}
+
+// ELF 0x49AC20; bf2 0x83B7160.
+Mat4& calcRotationMatrixFromAllVectors(Mat4& m, const Vec3& forward, const Vec3& up,
+                                       const Vec3& right, const Vec3& eye)
+{
+    m.m[0] = right.x;
+    m.m[4] = right.y;
+    m.m[8] = right.z;
+    m.m[12] = -(eye.x * right.x + eye.y * right.y + eye.z * right.z);
+    m.m[1] = up.x;
+    m.m[5] = up.y;
+    m.m[9] = up.z;
+    m.m[13] = -(eye.x * up.x + eye.y * up.y + eye.z * up.z);
+    m.m[2] = forward.x;
+    m.m[6] = forward.y;
+    m.m[10] = forward.z;
+    const float z = -(eye.x * forward.x + eye.y * forward.y + eye.z * forward.z);
+    m.m[3] = m.m[7] = m.m[11] = 0.0f;
+    m.m[15] = 1.0f;
+    m.m[14] = z;
+    return m;
 }
 
 namespace {
@@ -164,6 +280,7 @@ float clampUnit(float value)
 
 } // unnamed namespace
 
+// ELF 0x499CA0.
 void setRotationZXY(Mat4& matrix, float zDegrees, float xDegrees, float yDegrees)
 {
     Rotation3 rotateZ = identityRotation();
@@ -231,6 +348,7 @@ void setRotationZXY(Mat4& matrix, float zDegrees, float xDegrees, float yDegrees
     matrix.m[10] = rotation.m[8];
 }
 
+// ELF 0x49A380.
 void getRotationZXY(const Mat4& matrix, float& zDegrees, float& xDegrees, float& yDegrees)
 {
     const float sineX = matrix.m[9];
@@ -267,6 +385,7 @@ void getRotationZXY(const Mat4& matrix, float& zDegrees, float& xDegrees, float&
 
 // Overwrites m with an X-axis rotation in degrees, including identity translation.
 
+// ELF 0x499A90.
 void setRotateXDeg(Mat4& m, float degrees)
 {
     m = Mat4::getIdentity();
@@ -284,6 +403,7 @@ void setRotateXDeg(Mat4& m, float degrees)
 
 // Overwrites m with a Y-axis rotation in degrees, including identity translation.
 
+// ELF 0x499B40.
 void setRotateYDeg(Mat4& m, float degrees)
 {
     m = Mat4::getIdentity();
@@ -299,6 +419,7 @@ void setRotateYDeg(Mat4& m, float degrees)
 }
 
 // The Z twin of the above, same "identity first, then the four terms" shape.
+// ELF 0x499BF0.
 void setRotateZDeg(Mat4& m, float degrees)
 {
     m = Mat4::getIdentity();
@@ -315,6 +436,7 @@ void setRotateZDeg(Mat4& m, float degrees)
 
 // lhs * rhs, but only the nine rotation elements are computed and stored - the
 // translation row and the fourth column of `this` keep whatever they held. See the header.
+// ELF 0x49B0D0.
 void Mat4::rotMult(const Mat4& lhs, const Mat4& rhs)
 {
     for (int row = 0; row < 3; ++row)
@@ -330,6 +452,7 @@ void Mat4::rotMult(const Mat4& lhs, const Mat4& rhs)
 
 // The change-of-basis rotation about an arbitrary line - see the header for the
 // four steps and for the up-hint's degenerate case.
+// ELF 0x49A650.
 void setRotateAboutLine(Mat4& m, float degrees, const Vec3& axis)
 {
     Vec3 up;
@@ -398,6 +521,7 @@ std::ostream& operator<<(std::ostream& out, const Mat4& m)
 }
 
 
+// ELF 0x49AD00.
 void calcLookAtMatrix(Mat4& m, const Vec3& eye, const Vec3& target, const Vec3& up)
 {
     float* f = m.m;

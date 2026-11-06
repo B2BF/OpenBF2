@@ -1,12 +1,6 @@
 // [INFERRED] Source placement.
-// [FRONTIER] Remaining methods stop by name until implemented.
-// [TEMP] Temporary implementation boundaries remain.
-// [CHOSEN, not recovered] Temporary implementation boundaries remain.
-// [RETIRE-WHEN: aidll-01-adapters] Complete and validate the remaining BFTimer operations.
 
 #include "BFTimer.h"
-
-#include "AIFrontier.h"
 
 #include "../../AIDLL/AI/Main/CommonSingletonServer.h"
 #include "../../../Core/ClassManager.h"
@@ -25,29 +19,32 @@ extern ClassManager* classManager;
 namespace ai {
 
 // First wins in, exact match out.
+// ELF 0x841C100 / 0x841C180.
 IBFTimer::IBFTimer()
 {
     if (!CommonSingletonServer::m_iBFTimer)
         classManager->registerSimpleSingleton(std::string("IBFTimer"), this);
 }
 
+// ELF 0x841C200 / 0x841C280 / 0x841C300.
 IBFTimer::~IBFTimer()
 {
     if (CommonSingletonServer::m_iBFTimer == this)
         classManager->unregisterSimpleSingleton(std::string("IBFTimer"));
 }
 
+// ELF 0x841BEB0 / 0x841BF00.
 BFTimer::BFTimer()
-    : m_paused(false)
-    , m_resetMark(0.0)
-    , m_wallClock(new BFTimerWallClock)
 {
-    bfTimerNow(m_wallClock);
+    BFTimerWallClock* const clock = new BFTimerWallClock;
+    bfTimerNow(clock);
+    m_wallClock = clock;
     reset();
 }
 
 // the vptr reset, `operator delete` on the wall
 // clock, then the base destructor. It really does free the eight bytes the ctor allocated.
+// ELF 0x841BF50 / 0x841BF80 / 0x841BFB0.
 BFTimer::~BFTimer()
 {
     delete m_wallClock;
@@ -58,18 +55,21 @@ BFTimer::~BFTimer()
 
 // - `push ebp / mov ebp, esp / pop ebp / jmp WorldPref::getWorldTime`. A tail
 // jump: the timer owns no game clock, it forwards to WorldPref.
+// ELF 0x841BFF0.
 double BFTimer::getGameTime() const
 {
     return WorldPref::getWorldTime();
 }
 
 // - the same shape, to WorldPref::getTickTime.
+// ELF 0x841C000.
 double BFTimer::getTimeIncrease() const
 {
     return WorldPref::getTickTime();
 }
 
 // Returns elapsed wall-clock time in seconds, including the microsecond fraction.
+// ELF 0x841C010.
 double BFTimer::getUpdateTime() const
 {
     BFTimerWallClock now;
@@ -79,12 +79,14 @@ double BFTimer::getUpdateTime() const
 }
 
 // Returns the system wall-clock time.
+// ELF 0x841C0E0.
 double BFTimer::getWallClockTime() const
 {
     return g_system->getWallClockTime();
 }
 
 // - two tail jumps, one per branch.
+// ELF 0x841C060.
 void BFTimer::setPause(bool paused)
 {
     if (paused)
@@ -94,11 +96,13 @@ void BFTimer::setPause(bool paused)
 }
 
 // - `movzx eax, byte ptr [eax+4]`.
+// ELF 0x841C080.
 bool BFTimer::getPause()
 {
     return m_paused;
 }
 
+// ELF 0x841C0B0.
 void BFTimer::reset()
 {
     m_paused = false;
@@ -108,11 +112,13 @@ void BFTimer::reset()
 
 // each. not virtual - absent from the vtable, and setPause is
 // their only caller.
+// ELF 0x841C090.
 void BFTimer::pause()
 {
     m_paused = true;
 }
 
+// ELF 0x841C0A0.
 void BFTimer::unpause()
 {
     m_paused = false;

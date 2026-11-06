@@ -108,7 +108,7 @@ SOURCES = [AI + 'AIKnowledge/' + name for name in (
 SOURCES += [BFK + 'IWeapon.h', BFK + 'IAIObject.h', BFK + 'IAIObjectPlugIn.h',
             BFK + 'PlanePolygon.cpp', BFK + 'PlanePolygon.h',
             'Math/Vec3.cpp', 'Math/Vec3.h', AI + 'Main/AISettingsInterfaces.h',
-            AI + 'Main/IAIPathfinding.cpp', AI + 'Main/IAIPathfinding.h']
+            AI + 'Main/IAIPathfinding.cpp', AI + 'Main/IAIPathfindingSetup.cpp', AI + 'Main/IAIPathfinding.h']
 
 
 def generate(out):

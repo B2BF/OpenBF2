@@ -38,7 +38,7 @@ namespace dice { namespace hfe { namespace ai {
 // [CHOSEN, not recovered] Native lifetime setup solely for the queried fields.
 SquadCoordinator::SquadCoordinator(int side, int squadIndex)
     : m_squadIndex(squadIndex), m_side(side), m_strategicAreaAssignment(nullptr),
-      m_i40(4), m_i44(0), m_i60(0), m_i96(-1), m_formation(nullptr), m_i120(0) {}
+      m_i40(4), m_i44(0), m_i60(0), m_squadLeaderIndex(-1), m_formation(nullptr), m_missionStatus(0) {}
 AIStrategicObject::AIStrategicObject(float, float) {}
 AIStrategicObject::~AIStrategicObject() {}
 AIStrategicArea::AIStrategicArea(const std::string& name, unsigned int, float radius)
@@ -57,10 +57,10 @@ int main(int argc, char** argv)
         AIStrategicArea a("first", 1, 0.0f), b("second", 2, 0.0f);
         if (mode == "null")
         {
-            first.m_i40 = 123; first.m_i44 = -3; first.m_i60 = 10; first.m_i120 = 4;
+            first.m_i40 = 123; first.m_i44 = -3; first.m_i60 = 10; first.m_missionStatus = 4;
             require(!first.isSquadAssignedToAnyArea(), "null assignment false despite nonzero neighboring state");
             require(first.getSquadStrategicAreaAssignment() == nullptr, "stored null returned");
-            require(first.m_i40 == 123 && first.m_i44 == -3 && first.m_i60 == 10 && first.m_i120 == 4,
+            require(first.m_i40 == 123 && first.m_i44 == -3 && first.m_i60 == 10 && first.m_missionStatus == 4,
                     "queries leave neighboring state untouched");
             require(destroyedAreas == 0, "no area lifetime effects");
         }
@@ -83,14 +83,14 @@ int main(int argc, char** argv)
         else if (mode == "unassign")
         {
             first.m_strategicAreaAssignment = &a; second.m_strategicAreaAssignment = &b;
-            first.m_i40 = -9; first.m_i44 = 51; first.m_i120 = 123;
+            first.m_i40 = -9; first.m_i44 = 51; first.m_missionStatus = 123;
             first.m_i60 = 777; first.m_side = 13; first.m_squadIndex = -29;
             first.m_v28 = {1,2,3}; first.m_v64 = {4,5,6};
             require(first.isSquadAssignedToAnyArea(), "assigned before real unassignment");
             first.unAssignSquad();
             require(!first.isSquadAssignedToAnyArea(), "real unassignment makes query false");
             require(first.getSquadStrategicAreaAssignment() == nullptr, "real unassignment clears pointer");
-            require(first.m_i40 == 4 && first.m_i44 == 0 && first.m_i120 == 0, "actual three other stores preserved");
+            require(first.m_i40 == 4 && first.m_i44 == 0 && first.m_missionStatus == 0, "actual three other stores preserved");
             require(first.m_i60 == 777 && first.m_side == 13 && first.m_squadIndex == -29, "unrelated scalar fields preserved");
             require(first.m_v28.x == 1 && first.m_v28.y == 2 && first.m_v28.z == 3 &&
                     first.m_v64.x == 4 && first.m_v64.y == 5 && first.m_v64.z == 6, "neighbor vectors preserved");

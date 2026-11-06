@@ -18,10 +18,12 @@ namespace ai {
 class IWeapon;
 
 // ai::WeaponType - the name is the mangled parameter type of WeaponTemplate::init; the enumerator
-// names are [CHOSEN], from how WeaponObject::init derives each value: a replenishing ammo component
-// gives 1 (ReplenishingType RTHeal) or 2 (RTAmmo), a projectile with a resurrect collision component
-// gives 3, with a sticky collision component 4 (checked in that order, overriding the ammo answer)
-// anything else 0. AIObjectArmament counts only type-0 weapons into a unit's battle strength, and
+// names 0..3 are [CHOSEN], from how WeaponObject::init derives each value: a replenishing ammo
+// component gives 1 (ReplenishingType RTHeal) or 2 (RTAmmo), a projectile with a resurrect collision
+// component gives 3, with a sticky collision component 4 (checked in that order, overriding the ammo
+// answer), anything else 0. 4 is DICE's `WTC4`: AIDLL_r.dll (BoosterPack2 debug build) BBC4.cpp asserts
+// "wInfo->getWeaponType() == WTC4" ("Expected C4 weapon type"), string at 0x1029E0AC.
+// AIObjectArmament counts only type-0 weapons into a unit's battle strength, and
 // WeaponObject::getReplenishRadius answers only for 1 and 2.
 enum WeaponType
 {
@@ -29,7 +31,7 @@ enum WeaponType
     WTHeal        = 1,
     WTAmmo        = 2,
     WTResurrect   = 3,
-    WTSticky      = 4
+    WTC4          = 4
 };
 
 // ai::WeaponGuidingSystem - mangled name attested; enumerators [CHOSEN] after world::TargetSystem

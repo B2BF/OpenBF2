@@ -12,7 +12,7 @@ if errorlevel 1 exit /b 1
 set "TASK_FLAGS=/nologo /c /O2 /MD /std:c++14 /permissive /EHsc /W3 /Gy /DDEDICATED=1 /DBF2_IMAGE_AIDLL"
 cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\AIKnowledge\Information.cpp" /Fo"%BF2_INFORMATION_FRONTIERS_OUT%\actual.obj" >"%BF2_INFORMATION_FRONTIERS_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed
-cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\AIKnowledge\InformationManager.cpp" /Fo"%BF2_INFORMATION_FRONTIERS_OUT%\manager.obj" >>"%BF2_INFORMATION_FRONTIERS_OUT%\compile.log" 2>&1
+cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\Main\InformationManager.cpp" /Fo"%BF2_INFORMATION_FRONTIERS_OUT%\manager.obj" >>"%BF2_INFORMATION_FRONTIERS_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed
 cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\AIKnowledge\IPIUnit.cpp" /Fo"%BF2_INFORMATION_FRONTIERS_OUT%\IPIUnit.obj" >>"%BF2_INFORMATION_FRONTIERS_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed
@@ -24,9 +24,10 @@ cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIIn
 if errorlevel 1 goto failed
 cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\Math\Vec3.cpp" /Fo"%BF2_INFORMATION_FRONTIERS_OUT%\Vec3.obj" >>"%BF2_INFORMATION_FRONTIERS_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed
-cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\AIKnowledge\WeaponInfoManager.cpp" /Fo"%BF2_INFORMATION_FRONTIERS_OUT%\WeaponInfoManager.obj" >>"%BF2_INFORMATION_FRONTIERS_OUT%\compile.log" 2>&1
+cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\AIUtils\WeaponInfoManager.cpp" /Fo"%BF2_INFORMATION_FRONTIERS_OUT%\WeaponInfoManager.obj" >>"%BF2_INFORMATION_FRONTIERS_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed
-cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\AIBotBehaviour\CustomCurve.cpp" /Fo"%BF2_INFORMATION_FRONTIERS_OUT%\CustomCurve.obj" >>"%BF2_INFORMATION_FRONTIERS_OUT%\compile.log" 2>&1
+cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\AIUtils\CustomCurve.cpp" /Fo"%BF2_INFORMATION_FRONTIERS_OUT%\CustomCurve.obj" >>"%BF2_INFORMATION_FRONTIERS_OUT%\compile.log" 2>&1
+cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\AIUtils\SCurve.cpp" /Fo"%BF2_INFORMATION_FRONTIERS_OUT%\SCurve.obj" >>"%BF2_INFORMATION_FRONTIERS_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed
 for %%F in (Debug StringUtil) do (
   cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\Core\%%F.cpp" /Fo"%BF2_INFORMATION_FRONTIERS_OUT%\%%F.obj" >>"%BF2_INFORMATION_FRONTIERS_OUT%\compile.log" 2>&1
@@ -34,7 +35,7 @@ for %%F in (Debug StringUtil) do (
 )
 cl %TASK_FLAGS% /I"%BF2_INFORMATION_FRONTIERS_OUT%" /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%~dp0information_frontiers_runtime.cpp" /Fo"%BF2_INFORMATION_FRONTIERS_OUT%\fixture.obj" >>"%BF2_INFORMATION_FRONTIERS_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed
-link /nologo /MACHINE:X86 /OPT:REF /INCREMENTAL:NO /SUBSYSTEM:CONSOLE /OUT:"%BF2_INFORMATION_FRONTIERS_OUT%\information_frontiers_runtime.exe" "%BF2_INFORMATION_FRONTIERS_OUT%\actual.obj" "%BF2_INFORMATION_FRONTIERS_OUT%\manager.obj" "%BF2_INFORMATION_FRONTIERS_OUT%\IPIUnit.obj" "%BF2_INFORMATION_FRONTIERS_OUT%\IPICover.obj" "%BF2_INFORMATION_FRONTIERS_OUT%\IPIMobile.obj" "%BF2_INFORMATION_FRONTIERS_OUT%\PlanePolygon.obj" "%BF2_INFORMATION_FRONTIERS_OUT%\Vec3.obj" "%BF2_INFORMATION_FRONTIERS_OUT%\WeaponInfoManager.obj" "%BF2_INFORMATION_FRONTIERS_OUT%\CustomCurve.obj" "%BF2_INFORMATION_FRONTIERS_OUT%\Debug.obj" "%BF2_INFORMATION_FRONTIERS_OUT%\StringUtil.obj" "%BF2_INFORMATION_FRONTIERS_OUT%\fixture.obj" >"%BF2_INFORMATION_FRONTIERS_OUT%\link.log" 2>&1
+link /nologo /MACHINE:X86 /OPT:REF /INCREMENTAL:NO /SUBSYSTEM:CONSOLE /OUT:"%BF2_INFORMATION_FRONTIERS_OUT%\information_frontiers_runtime.exe" "%BF2_INFORMATION_FRONTIERS_OUT%\actual.obj" "%BF2_INFORMATION_FRONTIERS_OUT%\manager.obj" "%BF2_INFORMATION_FRONTIERS_OUT%\IPIUnit.obj" "%BF2_INFORMATION_FRONTIERS_OUT%\IPICover.obj" "%BF2_INFORMATION_FRONTIERS_OUT%\IPIMobile.obj" "%BF2_INFORMATION_FRONTIERS_OUT%\PlanePolygon.obj" "%BF2_INFORMATION_FRONTIERS_OUT%\Vec3.obj" "%BF2_INFORMATION_FRONTIERS_OUT%\WeaponInfoManager.obj" "%BF2_INFORMATION_FRONTIERS_OUT%\CustomCurve.obj" "%BF2_INFORMATION_FRONTIERS_OUT%\SCurve.obj" "%BF2_INFORMATION_FRONTIERS_OUT%\Debug.obj" "%BF2_INFORMATION_FRONTIERS_OUT%\StringUtil.obj" "%BF2_INFORMATION_FRONTIERS_OUT%\fixture.obj" >"%BF2_INFORMATION_FRONTIERS_OUT%\link.log" 2>&1
 if errorlevel 1 goto failed
 python -I "%~dp0information_frontiers_runtime.py" run "%BF2_INFORMATION_FRONTIERS_OUT%\information_frontiers_runtime.exe"
 exit /b %errorlevel%

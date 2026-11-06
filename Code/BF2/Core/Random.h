@@ -60,7 +60,9 @@ static_assert(sizeof(Random) == 4, "Random must retain its shipped x86 layout");
 static_assert(sizeof(RandomDistribution) == 0x14,
               "RandomDistribution must retain its shipped x86 layout");
 
-extern Random g_random;                        // ELF ds:0x8ABBCB0 [CHOSEN symbol name]
+// The image's random instance, defined in Random.cpp: dice::hfe::Rand in both retail images
+// (bf2 ds:0x8ABBCB0, libaidll BSS 0x4DD454); the engine and the AI DLL each have their own.
+extern Random Rand;
 
 } // namespace hfe
 } // namespace dice

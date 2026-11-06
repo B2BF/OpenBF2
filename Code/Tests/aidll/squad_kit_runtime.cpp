@@ -48,9 +48,9 @@ static int observeKit(int identity, int value)
 namespace dice { namespace hfe { namespace ai {
 // [CHOSEN, not recovered] Fixture-only lifetimes and collaborator. Each native STL
 // member constructs/destructs normally; unrelated engine/formation work is omitted.
-SquadManager::SquadManager() { sideVectors = m_coordinators; }
+SquadManager::SquadManager() { sideVectors = m_Squads; }
 SquadCoordinator::SquadCoordinator(int side, int squadIndex)
-    : m_squadIndex(squadIndex), m_side(side), m_i96(-1), m_formation(nullptr) {}
+    : m_squadIndex(squadIndex), m_side(side), m_squadLeaderIndex(-1), m_formation(nullptr) {}
 SquadMember::SquadMember(SquadCoordinator* squad, IAIPlayer* player,
                         int squadIndex, int side, int memberIndex)
     : m_squadIndex(squadIndex), m_memberIndex(memberIndex), m_isSquadLeader(false),

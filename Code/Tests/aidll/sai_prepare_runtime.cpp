@@ -75,8 +75,8 @@ void operator delete(void* pointer, std::size_t) noexcept { ::operator delete(po
 
 static void checkCtor(SAI::BotInfo* info, Bot* bot)
 {
-    require(info && info->m_bot == bot && info->m_int04 == -1 && info->m_int08 == -1 &&
-            info->m_int0C == -1 && info->m_float10 == 0.0f && info->m_double14 == 0.0,
+    require(info && info->m_bot == bot && info->m_currentlyOrderedSquare == -1 && info->m_lastOrderedSquare == -1 &&
+            info->m_currentlyOccupiedSquare == -1 && info->m_float10 == 0.0f && info->m_double14 == 0.0,
             "actual BotInfo constructor fields precede next callback");
     remember(info);
 }
@@ -162,12 +162,12 @@ namespace dice { namespace hfe { namespace ai {
 ISAI::~ISAI() {}
 SAI::SAI(int side, int, int, Vec2, Vec2) : m_side(side)
 {
-    slots = &m_botInfo; pending = &m_vector94; removing = &m_vectorA0;
+    slots = &m_bots; pending = &m_vector94; removing = &m_vectorA0;
     spawnRequests = &m_map5C; spawnCounts = &m_map1D8; teleports = &m_list110;
-    unchangedSet = &m_setFC;
+    unchangedSet = &m_assignedBots;
     totals[0] = m_enemyStrengths; totals[1] = m_enemyCounts;
     totals[2] = m_friendlyStrengths; totals[3] = m_friendlyCounts;
-    m_botInfo.resize(10, nullptr); m_vector94.reserve(10); m_vectorA0.reserve(10);
+    m_bots.resize(10, nullptr); m_vector94.reserve(10); m_vectorA0.reserve(10);
     for (int a = 0; a < 4; ++a) for (int i = 0; i < 6; ++i) totals[a][i] = float(100 * (a + 1) + i);
 }
 SAI::~SAI() {}

@@ -4,7 +4,7 @@
 #include "../../BF2/AI/AIDLL/AI/Main/BotManager.h"
 #include "../../BF2/AI/AIDLL/AI/Main/CommonSingletonServer.h"
 #include "../../BF2/AI/AIDLL/AI/Main/AISettingsInterfaces.h"
-#include "../../BF2/AI/AIDLL/AI/Main/AIMineManager.h"
+#include "../../BF2/AI/AIDLL/AI/AIKnowledge/AIMineManager.h"
 #include "../../BF2/AI/AIDLL/AI/AIBot/BotMain.h"
 #include "../../BF2/AI/AIDLL/AI/AIBot/SquadManager.h"
 #include "../../BF2/AI/AIDLL/AI/AIStrategic/SAI.h"

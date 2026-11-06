@@ -2784,7 +2784,7 @@ void PlayerControlObject::getUnmannedInput(io::PlayerInput& input)
         + static_cast<int>(30.0f * *pcoUnmannedInputTime);
 #endif
     const auto randomInteger = []() -> float {
-        return static_cast<float>((static_cast<int>(g_random.getRaw()) >> 7 | 1) + 1);
+        return static_cast<float>((static_cast<int>(Rand.getRaw()) >> 7 | 1) + 1);
     };
     const float inverseRange = 0.000000059604645f;
     const int majorAxis = static_cast<int>(std::ceil(randomInteger() * (2.0f * inverseRange)));

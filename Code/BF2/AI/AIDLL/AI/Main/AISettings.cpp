@@ -3,20 +3,36 @@
 #include "AISettings.h"
 
 
-#include "AIDllFrontier.h"
+#include <cstring>
+#include <ios>
 #include "../../../../Core/Debug.h"
 #include "../../../../Core/ClassManager.h"
 #include "CommonSingletonServer.h"
-#include "../../../../Core/ConsoleObjectMacro.h"   // the aiSettings.* bindings at the foot
 #include "AIMain.h"                                // IAIMain::spawnBots - setAutoSpawnBots' trigger
 #include "AILODManager.h"                          // setViewDistance's second broadcast
 #include "AIRandom.h"                            // addBotName's weight draw
+#include "AIRadio.h"                             // the destructor's first delete
 #include "IBotManager.h"                           // setViewDistance walks the bot pool
 #include "../AIBot/BotMain.h"                      // Bot::isDeactivated / Bot::getPlayer
 #include "../AIPathFinding/Material/Material.h"     // materialId console spelling and extractor
 #include "../AIPathFinding/Material/MaterialManager.h"
 #include "../AIUtils/checkPointer.h"
+#include "../AIPlanInterpreter/BAPInterpreter.h"   // the per-vehicle plan interpreter pool
+#include "../AIBotBehaviour/BotBehaviour.h"           // the destructor's virtual deleting destructors
+#include "../AIBotBehaviourPattern/PlanGenerator.h"   // (complete types, or delete skips them)
 #include "../../../AIInterface/BFKnowledge/AIPlayer.h"  // IAIPlayer::setViewDistance, slot +0x68
+#include "../AIUtils/DebugRendering/AIRenderUtil.h"
+
+namespace {
+// [CHOSEN, not recovered] These three original TUs share this source file; retain their
+// three independent stream-initialization lifetimes with explicit objects.
+// static init: ELF 0x3C1570 (__tcf_0 0x3C15D0, _GLOBAL__I 0x3C1600).
+std::ios_base::Init aiSettingsStreams;
+// static init: ELF 0x3E7400 (__tcf_0 0x3E7460, _GLOBAL__I 0x3E7490).
+std::ios_base::Init iaiSettingsStreams;
+// static init: ELF 0x3E77B0 (__tcf_0 0x3E7810, _GLOBAL__I 0x3E7840).
+std::ios_base::Init iaiSettingsModifierStreams;
+}
 
 namespace dice {
 namespace hfe {
@@ -25,89 +41,104 @@ extern ClassManager* classManager;
 namespace ai {
 
 // Returns whether AI configuration overrides the game menu settings.
+// ELF 0x3C1530.
 bool AISettings::overrideMenuSettings() const
 {
     return m_overrideMenuSettings;
 }
 
 // The same byte, under a second name. See above.
+// ELF 0x3C1540.
 bool AISettings::getOverrideMenuSettings() const
 {
     return m_overrideMenuSettings;
 }
 
 
-// Recovered accessors and the remaining explicitly named stops follow in shipped declaration order.
-// The production stops below diagnose and abort; none returns a fabricated value.
+// Recovered accessors follow the shipped declaration order.
+// ELF 0x3BEF90.
 int AISettings::getNumberOfBehaviours() const
 {
-    return m_numberOfBehaviours;
+    return m_behaviourCount;
 }
 
+// ELF 0x3BEFA0.
 int AISettings::getNumberOfVehicles() const
 {
-    return static_cast<int>(m_behaviours.size());
+    return static_cast<int>(m_behaviourPool.size());
 }
 
-float* AISettings::getVehicleMods(int vehicle) const
+// ELF 0x3C0EF0.
+float* AISettings::getVehicleMods(int vehicleTypeId) const
 {
-    return m_vehicleMods[vehicle];
+    return m_vehicleMods[vehicleTypeId];
 }
 
+// ELF 0x3BF640.
 BotBehaviour* AISettings::getBehaviour(int vehicle, int index) const
 {
-    return m_behaviours[vehicle][index];
+    return m_behaviourPool[vehicle][index];
 }
 
+// ELF 0x3BF670.
 BotBehaviour* AISettings::getDefaultBehaviour(int vehicle) const
 {
     const int index = m_defaultBehaviour[vehicle];
     if (index != -1)
-        return m_behaviours[vehicle][index];
+        return m_behaviourPool[vehicle][index];
     return 0;
 }
 
-void* AISettings::getPlanInterpreter(int vehicle) const
+// ELF 0x3BF6B0.
+PlanInterpreter* AISettings::getPlanInterpreter(int vehicle) const
 {
-    return m_planInterpreters[vehicle];
+    return m_planInterpreterPool[vehicle];
 }
 
+// ELF 0x3BF6D0.
 PlanGenerator* AISettings::getPlanGenerator(int vehicle, int index) const
 {
-    return m_planGenerators[vehicle][index];
+    return m_planGeneratorPool[vehicle][index];
 }
 
+// ELF 0x3C0230.
 float AISettings::getStatsViewDistance() const
 {
     return m_statsViewDistance;
 }
 
+// ELF 0x3C0250.
 bool AISettings::getDrawBotStats() const
 {
     return m_drawBotStats;
 }
 
+// ELF 0x3C01F0.
 int AISettings::getNBattleStrengths()
 {
     return 6;
 }
 
+// ELF 0x3C0200.
 int AISettings::getNStrategicStrengths()
 {
     return 2;
 }
 
+// ELF 0x3C0220.
 int AISettings::getInformationGridDimension() const
 {
     return m_informationGridDimension;
 }
 
+// ELF 0x3C0A00.
 float AISettings::getSAIUpdateFrequency() const
 {
     return m_saiUpdateFrequency;
 }
 
 // [INFERRED] reference spelling, proven borrowed string object.
+// ELF 0x3BF320.
 const std::string& AISettings::getVehicle(int vehicle) const
 {
     if (vehicle < 0 || vehicle >= static_cast<int>(m_vehicleNames.size()))
@@ -121,53 +152,62 @@ const std::string& AISettings::getVehicle(int vehicle) const
     return m_vehicleNames[vehicle];
 }
 
+// ELF 0x3BF4A0.
 int AISettings::getVehicle(const std::string& name) const
 {
     // (!) guarded, and the sibling below is not. Same map type, same find, opposite discipline.
-    const std::map<std::string, int>::const_iterator i = m_vehicleIndex.find(name);
-    if (i == m_vehicleIndex.end())
+    const std::map<std::string, int>::const_iterator i = m_vehicleIdMap.find(name);
+    if (i == m_vehicleIdMap.end())
         return -1;
     return i->second;
 }
 
 // Every lookup/index is unchecked in both images.
+// ELF 0x3BF500.
 const std::string& AISettings::getVehicleClusterMapping(const std::string& name) const
 {
-    const int vehicle = m_vehicleIndex.find(name)->second;
+    const int vehicle = m_vehicleIdMap.find(name)->second;
     return m_vehicleNames[m_clusterCostTypes[vehicle]];
 }
 
+// ELF 0x3BF570.
 int AISettings::getClusterCostType(int index) const
 {
     return m_clusterCostTypes[index];
 }
 
+// ELF 0x3BF590.
 const std::vector<int>& AISettings::getClusterCostTypes() const
 {
     return m_clusterCostTypes;
 }
 
+// ELF 0x3C0950.
 int AISettings::getNumberOfVehicleGroups() const
 {
     return static_cast<int>(m_vehicleGroupNames.size());
 }
 
+// ELF 0x3C0970.
 int AISettings::getVehicleGroup(int index) const
 {
     return m_vehicleGroups[index];
 }
 
+// ELF 0x3C0990.
 int AISettings::getVehicleGroup(const std::string& name) const
 {
     // Requires an existing group name; the lookup result is dereferenced without checking end().
-    return m_vehicleGroupIndex.find(name)->second;
+    return m_namesToVehicleGroups.find(name)->second;
 }
 
+// ELF 0x3C09E0.
 const std::string& AISettings::getVehicleGroupName(int group) const
 {
     return m_vehicleGroupNames[group];
 }
 
+// ELF 0x3C0A60.
 float* AISettings::getStandardPersonality(int side) const
 {
     // (!) 1-based. The binary computes `this + 176 + 4*side`, i.e. this array at +180 subscripted
@@ -175,11 +215,13 @@ float* AISettings::getStandardPersonality(int side) const
     return m_standardPersonality[side - 1];
 }
 
+// ELF 0x3C0A80.
 BotMoralAdmin* AISettings::getStandardMoralAdmin(int side) const
 {
     return m_standardMoralAdmin[side - 1];
 }
 
+// ELF 0x3C0AD0.
 bool AISettings::hasActiveRenderer() const
 {
     // This unsupported operation emits an error diagnostic.
@@ -187,17 +229,20 @@ bool AISettings::hasActiveRenderer() const
     return false;
 }
 
+// ELF 0x3C0C00.
 bool AISettings::getDraw() const
 {
     return m_draw;
 }
 
 // - a bare member return, the shape every accessor in this run has.
+// ELF 0x3C4140.
 const std::map<int, ISensingAgentPattern*>& AISettings::getSensingAgentPatterns() const
 {
     return m_sensingAgentPatterns;
 }
 
+// ELF 0x3C0E20.
 ISensingAgentPattern* AISettings::getSensingAgentPattern(int id) const
 {
     const std::map<int, ISensingAgentPattern*>::const_iterator i = m_sensingAgentPatterns.find(id);
@@ -206,38 +251,45 @@ ISensingAgentPattern* AISettings::getSensingAgentPattern(int id) const
     return i->second;
 }
 
+// ELF 0x3C0E70.
 ISensingAgentPattern* AISettings::getSensingAgentNullPattern() const
 {
-    return m_sensingAgentNullPattern;
+    return m_nullPattern;
 }
 
+// ELF 0x3C0FD0.
 int AISettings::getManDownEquipmentType()
 {
     // Preserve virtual dispatch so derived getVehicle implementations are honored.
     return getVehicle(m_manDownEquipment);
 }
 
+// ELF 0x3C1090.
 bool AISettings::isValidMaterial(int vehicle, unsigned char material) const
 {
-    return m_vehicleMaterialManagers[vehicle]->isValidMaterial(material);
+    return m_materialManagers[vehicle]->isValidMaterial(material);
 }
 
+// ELF 0x3C1110.
 float AISettings::getVehicleMaterialCost(const std::string& name, unsigned char material) const
 {
-    return m_vehicleMaterialManagers[getVehicle(name)]->getMaterialCost(material);
+    return m_materialManagers[getVehicle(name)]->getMaterialCost(material);
 }
 
+// ELF 0x3C10D0.
 float AISettings::getVehicleMaterialCost(int vehicle, unsigned char material) const
 {
-    return m_vehicleMaterialManagers[vehicle]->getMaterialCost(material);
+    return m_materialManagers[vehicle]->getMaterialCost(material);
 }
 
+// ELF 0x3C1170.
 MaterialManager* AISettings::getVehicleMaterialManager(int vehicle) const
 {
-    return m_vehicleMaterialManagers[vehicle];
+    return m_materialManagers[vehicle];
 }
 
 // Returns the next bot name and rotates the roster for the following request.
+// ELF 0x3C1480.
 const std::string& AISettings::getBotName() const
 {
     m_botNames.push_back(m_botNames.front());
@@ -247,92 +299,164 @@ const std::string& AISettings::getBotName() const
 }
 
 // The shared bot value narrows, the settings value does not.
+// ELF 0x3BEF50.
 void AISettings::setMaxNumberOfBehaviours(int count)
 {
     BotMain::setNBehaviours(static_cast<unsigned char>(count));
-    m_numberOfBehaviours = count;
+    m_behaviourCount = count;
 }
 
-void AISettings::setVehicleMods(int, float *)
+// ELF 0x3C0F10: grows the table to the vehicle (new slots null), then stores the set.
+void AISettings::setVehicleMods(int vehicle, float* mods)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::AISettings::setVehicleMods");
+    if (static_cast<int>(m_vehicleMods.size()) <= vehicle)
+        m_vehicleMods.resize(vehicle + 1, 0);
+    m_vehicleMods[vehicle] = mods;
 }
 
-void AISettings::addBehaviour(int, int, BotBehaviour *)
+// ELF 0x3BF730.
+void AISettings::addBehaviour(int vehicleTypeId, int behaviourId, BotBehaviour* behaviour)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::AISettings::addBehaviour");
+    prepareBehaviourPool(vehicleTypeId, behaviourId);
+    m_behaviourPool[vehicleTypeId][behaviourId] = behaviour;
 }
 
-void AISettings::setDefaultBehaviour(int, int)
+// ELF 0x3BF7A0: the pool is prepared for (vehicle, index) although only the default slot is set.
+void AISettings::setDefaultBehaviour(int vehicleTypeId, int behaviourId)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::AISettings::setDefaultBehaviour");
+    prepareBehaviourPool(vehicleTypeId, behaviourId);
+    m_defaultBehaviour[vehicleTypeId] = behaviourId;
 }
 
-void AISettings::addInterpreterEntry(int, BAPEntry *)
+// ELF 0x3BF870: BAPInterpreter::addEntry(entry) on the vehicle's interpreter.
+void AISettings::addInterpreterEntry(int vehicleTypeId, BAPEntry* entry)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::AISettings::addInterpreterEntry");
+    preparePlanInterpreterPool(vehicleTypeId);
+    static_cast<BAPInterpreter*>(m_planInterpreterPool[vehicleTypeId])->addEntry(entry);
 }
 
-void AISettings::addInterpreterEntry(int, BotLodLevel, BAPEntry *)
+// ELF 0x3BF8D0.
+void AISettings::addInterpreterEntry(int vehicleTypeId, BotLodLevel lod, BAPEntry* entry)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::AISettings::addInterpreterEntry");
+    preparePlanInterpreterPool(vehicleTypeId);
+    static_cast<BAPInterpreter*>(m_planInterpreterPool[vehicleTypeId])->addEntry(lod, entry);
 }
 
-void AISettings::removeInterpreterEntry(int, BotLodLevel, BAPEntry *)
+// ELF 0x3BF930.
+void AISettings::removeInterpreterEntry(int vehicleTypeId, BotLodLevel lod, BAPEntry* entry)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::AISettings::removeInterpreterEntry");
+    preparePlanInterpreterPool(vehicleTypeId);
+    static_cast<BAPInterpreter*>(m_planInterpreterPool[vehicleTypeId])->removeEntry(lod, entry);
 }
 
-void AISettings::activateDefaultInterpreter(int, BAPStatementType, BotLodLevel)
+// ELF 0x3BF990.
+void AISettings::activateDefaultInterpreter(int vehicleTypeId, BAPStatementType type, BotLodLevel lod)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::AISettings::activateDefaultInterpreter");
+    preparePlanInterpreterPool(vehicleTypeId);
+    static_cast<BAPInterpreter*>(m_planInterpreterPool[vehicleTypeId])->activateEntry(type, lod);
 }
 
-void AISettings::addGenerator(int, int, PlanGenerator *)
+// ELF 0x3BF800.
+void AISettings::addGenerator(int vehicleTypeId, int behaviourId, PlanGenerator* generator)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::AISettings::addGenerator");
+    preparePlanGeneratorPool(vehicleTypeId, behaviourId);
+    m_planGeneratorPool[vehicleTypeId][behaviourId] = generator;
 }
 
-void AISettings::setBasicBotWeights(float *)
+// ELF 0x3BFA20: one behaviour list per vehicle up to `vehicle`; a list too short for `index` is
+// sized to the number of behaviours (not to index + 1); the default table grows with -1 entries.
+// Every size test is signed (`cmpl ...; jg`).
+void AISettings::prepareBehaviourPool(int vehicleTypeId, int behaviourId)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::AISettings::setBasicBotWeights");
+    if (static_cast<int>(m_behaviourPool.size()) <= vehicleTypeId)
+        m_behaviourPool.resize(vehicleTypeId + 1, std::vector<BotBehaviour*>());
+    std::vector<BotBehaviour*>& behaviours = m_behaviourPool[vehicleTypeId];
+    if (static_cast<int>(behaviours.size()) <= behaviourId)
+        behaviours.resize(m_behaviourCount, 0);
+    prepareVehicleGroup(vehicleTypeId);
+    if (static_cast<int>(m_defaultBehaviour.size()) <= vehicleTypeId)
+        m_defaultBehaviour.resize(vehicleTypeId + 1, -1);
 }
 
+// ELF 0x3BFC50: as prepareBehaviourPool, with the vehicle group prepared before the inner list.
+void AISettings::preparePlanGeneratorPool(int vehicleTypeId, int behaviourId)
+{
+    if (static_cast<int>(m_planGeneratorPool.size()) <= vehicleTypeId)
+        m_planGeneratorPool.resize(vehicleTypeId + 1, std::vector<PlanGenerator*>());
+    prepareVehicleGroup(vehicleTypeId);
+    std::vector<PlanGenerator*>& generators = m_planGeneratorPool[vehicleTypeId];
+    if (static_cast<int>(generators.size()) <= behaviourId)
+        generators.resize(m_behaviourCount, 0);
+}
+
+// ELF 0x3BFDE0: one `new BAPInterpreter(45)` (operator new 0x10; 45 statement types) per missing
+// vehicle, each checked (checkPointer, the Debug at line 46) and pushed back.
+void AISettings::preparePlanInterpreterPool(int vehicle)
+{
+    if (static_cast<int>(m_planInterpreterPool.size()) <= vehicle)
+    {
+        for (unsigned int i = m_planInterpreterPool.size(); i < static_cast<unsigned int>(vehicle + 1); ++i)
+            m_planInterpreterPool.push_back(checkPointer(new BAPInterpreter(45)));
+    }
+    prepareVehicleGroup(vehicle);
+}
+
+// ELF 0x3C0040: the vehicle-group table grows to the vehicle with group 0.
+void AISettings::prepareVehicleGroup(int vehicle)
+{
+    if (vehicle >= static_cast<int>(m_vehicleGroups.size()))
+        m_vehicleGroups.resize(vehicle + 1, 0);
+}
+
+// ELF 0x3BF9F0: the class static BotMain reads (BotMain::setBasicWeights).
+void AISettings::setBasicBotWeights(float* weights)
+{
+    BotMain::setBasicWeights(weights);
+}
+
+// ELF 0x3C0240.
 void AISettings::setStatsViewDistance(float distance)
 {
     m_statsViewDistance = distance;
 }
 
+// ELF 0x3C0260.
 void AISettings::setDrawBotStats(bool draw)
 {
     m_drawBotStats = draw;
 }
 
+// ELF 0x3C0210.
 void AISettings::setInformationGridDimension(int dimension)
 {
     m_informationGridDimension = dimension;
 }
 
+// ELF 0x3C0280.
 void AISettings::setNSides(int sides)
 {
     m_nSides = sides;
 }
 
+// ELF 0x3C0A10.
 void AISettings::setSAIUpdateFrequency(float frequency)
 {
     m_saiUpdateFrequency = frequency;
 }
 
+// ELF 0x3C0A20.
 void AISettings::setStandardPersonality(float* weights, int side)
 {
     m_standardPersonality[side - 1] = weights;
 }
 
+// ELF 0x3C0A40.
 void AISettings::setStandardMoralAdmin(BotMoralAdmin* admin, int side)
 {
     m_standardMoralAdmin[side - 1] = admin;
 }
 
+// ELF 0x3C0AB0.
 void AISettings::setRespawnAllowed(bool allowed)
 {
     m_respawnAllowed = allowed;
@@ -340,32 +464,36 @@ void AISettings::setRespawnAllowed(bool allowed)
 
 // Duplicate insertion failure is deliberately ignored; the three
 // parallel vectors still grow, while the name map retains the first id.
+// ELF 0x3BEFC0.
 void AISettings::setVehicle(const std::string& name)
 {
-    const int id = static_cast<int>(m_vehicleIndex.size());
-    m_vehicleIndex.insert(std::make_pair(name, id));
+    const int id = static_cast<int>(m_vehicleIdMap.size());
+    m_vehicleIdMap.insert(std::make_pair(name, id));
     m_vehicleNames.push_back(name);
-    m_vehicleMaterialManagers.push_back(checkPointer(new MaterialManager));
+    m_materialManagers.push_back(checkPointer(new MaterialManager));
     m_clusterCostTypes.push_back(-1);
 }
 
 // Both map finds are intentionally unguarded.
+// ELF 0x3BF5A0.
 void AISettings::setVehicleClusterMapping(const std::string& vehicle,
                                           const std::string& clusterVehicle)
 {
-    const int vehicleId = m_vehicleIndex.find(vehicle)->second;
-    const int clusterVehicleId = m_vehicleIndex.find(clusterVehicle)->second;
+    const int vehicleId = m_vehicleIdMap.find(vehicle)->second;
+    const int clusterVehicleId = m_vehicleIdMap.find(clusterVehicle)->second;
     m_clusterCostTypes[vehicleId] = clusterVehicleId;
 }
 
 // Retail uses resize rather than push_back and ignores duplicates.
+// ELF 0x3C0640.
 void AISettings::createVehicleGroup(const std::string& name)
 {
     const int id = static_cast<int>(m_vehicleGroupNames.size());
     m_vehicleGroupNames.resize(m_vehicleGroupNames.size() + 1, name);
-    m_vehicleGroupIndex.insert(std::make_pair(name, id));
+    m_namesToVehicleGroups.insert(std::make_pair(name, id));
 }
 
+// ELF 0x3C0790.
 void AISettings::addVehicleToVehicleGroup(int vehicle, const std::string& group)
 {
     // [PLATFORM] This single expression is load-bearing: PE captures the destination before the
@@ -373,6 +501,7 @@ void AISettings::addVehicleToVehicleGroup(int vehicle, const std::string& group)
     m_vehicleGroups[vehicle] = getVehicleGroup(group);
 }
 
+// ELF 0x3C07D0.
 void AISettings::addVehicleToVehicleGroup(const std::string& vehicle,
                                           const std::string& group)
 {
@@ -392,6 +521,7 @@ void AISettings::addVehicleToVehicleGroup(const std::string& vehicle,
 
 // Stores the auto-spawn flag. Enabling also requests immediate spawning when IAIMain
 // exists; disabling performs no spawn action.
+// ELF 0x3C0EA0.
 void AISettings::setAutoSpawnBots(bool enable)
 {
     m_autoSpawnBots = enable;
@@ -400,39 +530,50 @@ void AISettings::setAutoSpawnBots(bool enable)
         IAIMain::m_instance->spawnBots();
 }
 
-void AISettings::setDraw(bool)
+// ELF 0x3C0C10. Disabling drawing clears render objects without a singleton guard.
+void AISettings::setDraw(bool draw)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::AISettings::setDraw");
+    m_draw = draw;
+    if (!draw)
+        AIRenderUtil::m_instance->unrenderAll();
 }
 
-void AISettings::setSensingAgentPatternName(const std::string&)
+// ELF 0x3C0C50: registers the name under the next index (insert_unique: a known name keeps its
+// index).
+void AISettings::setSensingAgentPatternName(const std::string& name)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::AISettings::setSensingAgentPatternName");
+    const int index = static_cast<int>(m_sensingAgentPatternIds.size());
+    m_sensingAgentPatternIds.insert(std::pair<const std::string, int>(name, index));
 }
 
+// ELF 0x3C0D80.
 void AISettings::setSensingAgentNullPattern(ISensingAgentPattern* pattern)
 {
-    m_sensingAgentNullPattern = pattern;
+    m_nullPattern = pattern;
 }
 
-void AISettings::addSensingAgentPattern(int, ISensingAgentPattern *)
+// ELF 0x3C0DA0: insert_unique(vehicle, pattern) into the +0x6C map.
+void AISettings::addSensingAgentPattern(int vehicle, ISensingAgentPattern* pattern)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::AISettings::addSensingAgentPattern");
+    m_sensingAgentPatterns.insert(std::pair<const int, ISensingAgentPattern*>(vehicle, pattern));
 }
 
+// ELF 0x3C0FF0.
 void AISettings::setManDownEquipment(const std::string& equipment)
 {
     m_manDownEquipment = equipment;
 }
 
+// ELF 0x3C1020.
 void AISettings::setVehicleMaterialCost(const std::string& vehicle,
                                         unsigned char material,
                                         float cost)
 {
-    m_vehicleMaterialManagers[getVehicle(vehicle)]->setMaterialCost(material, cost);
+    m_materialManagers[getVehicle(vehicle)]->setMaterialCost(material, cost);
 }
 
 // Adds a name to the bot-name roster used by getBotName.
+// ELF 0x3C1190.
 void AISettings::addBotName(const std::string& first, const std::string& last)
 {
     const unsigned int count = static_cast<unsigned int>(m_botNames.size());
@@ -458,6 +599,7 @@ void AISettings::addBotName(const std::string& first, const std::string& last)
     m_botNames.insert(position, std::pair<float, std::string>(weight, first + " " + last));
 }
 
+// ELF 0x3C1520.
 void AISettings::setBotNameUnused(const std::string&)
 {
     // (*) five bytes in the binary - a bare `ret`. dice declared it, the .ai console binds it, and
@@ -465,10 +607,10 @@ void AISettings::setBotNameUnused(const std::string&)
 }
 
 
-// Initializes AI settings and their default values.
+// ELF 0x3BD020 / 0x3BD5B0. Initializes AI settings and their default values.
 AISettings::AISettings()
     : m_maxNBots(-1)
-    , m_numberOfBehaviours(0)
+    , m_behaviourCount(0)
     , m_viewDistance(-1.0f)
     , m_statsViewDistance(30.0f)
     , m_botSkill(0.75f)
@@ -483,7 +625,7 @@ AISettings::AISettings()
     , m_overrideMenuSettings(false)
     , m_drawBotStats(true)
 {
-    // Defect 1: m_sensingAgentNullPattern is deliberately not initialised here. See above.
+    // Defect 1: m_nullPattern is deliberately not initialised here. See above.
 
     // Both arrays are indexed [side - 1]; the constructor nulls all four words.
     m_standardMoralAdmin[0]  = 0;
@@ -508,104 +650,122 @@ AISettings::AISettings()
 
 // Registers the first settings/modifier instance using roster-static guards.
 // Those guards can remain stale until updateStaticMethods refreshes the roster.
+// ELF 0x3E7100 / 0x3E71A0.
 IAISettings::IAISettings()
 {
     if (!CommonSingletonServer::m_iaiSettings)
         classManager->registerSimpleSingleton("IAISettings", this);
 }
 
+// ELF 0x3E7240 / 0x3E72D0 / 0x3E7360.
 IAISettings::~IAISettings()
 {
     if (CommonSingletonServer::m_iaiSettings == this)
         classManager->unregisterSimpleSingleton("IAISettings");
 }
 
+// ELF 0x3E74B0 / 0x3E7550.
 IAISettingsModifier::IAISettingsModifier()
 {
     if (!CommonSingletonServer::m_iaiSettingsModifier)
         classManager->registerSimpleSingleton("IAISettingsModifier", this);
 }
 
+// ELF 0x3E75F0 / 0x3E7680 / 0x3E7710.
 IAISettingsModifier::~IAISettingsModifier()
 {
     if (CommonSingletonServer::m_iaiSettingsModifier == this)
         classManager->unregisterSimpleSingleton("IAISettingsModifier");
 }
 
-// Remaining recovered field accessors. The constructor now supplies their proven backing fields;
-// AISettings teardown remains a separate named frontier below.
+// Remaining recovered field accessors.
 
+// ELF 0x3BEF20.
 int AISettings::getMaxNBots() const
 {
     return m_maxNBots;
 }
 
+// ELF 0x3BEF30.
 bool AISettings::getmaxBotsIncludeHumans() const
 {
     return m_maxBotsIncludeHumans;
 }
 
+// ELF 0x3BEF40.
 float AISettings::getIgnoreCommanderDistance() const
 {
     return m_ignoreCommanderDistance;
 }
 
+// ELF 0x3C00F0.
 float AISettings::getViewDistance() const
 {
     return m_viewDistance;
 }
 
+// ELF 0x3C0620.
 float AISettings::getBotSkill() const
 {
     return m_botSkill;
 }
 
+// ELF 0x3C0290.
 int AISettings::getNSides() const
 {
     return m_nSides;
 }
 
+// ELF 0x3C0AA0.
 bool AISettings::isRespawnAllowed() const
 {
     return m_respawnAllowed;
 }
 
+// ELF 0x3C0E90.
 bool AISettings::getAutoSpawnBots() const
 {
     return m_autoSpawnBots;
 }
 
+// ELF 0x3C0BD0.
 const float* AISettings::getArmourClassValues() const
 {
     return m_armourClassValues;
 }
 
+// ELF 0x3C0BE0.
 float AISettings::getArmourClassValue(int index) const
 {
     return m_armourClassValues[index];
 }
 
+// ELF 0x3BF700.
 void AISettings::setMaxNBots(int n)
 {
     m_maxNBots = n;
 }
 
+// ELF 0x3BF710.
 void AISettings::maxBotsIncludeHumans(bool include)
 {
     m_maxBotsIncludeHumans = include;
 }
 
+// ELF 0x3BF720.
 void AISettings::setIgnoreCommanderDistance(float distance)
 {
     m_ignoreCommanderDistance = distance;
 }
 
+// ELF 0x3C0630.
 void AISettings::setBotSkill(float skill)
 {
     m_botSkill = skill;
 }
 
 // Sets the AI view distance and propagates it to every live bot player.
+// ELF 0x3C0100.
 void AISettings::setViewDistance(float distance)
 {
     m_viewDistance = distance;
@@ -639,179 +799,78 @@ void AISettings::setViewDistance(float distance)
     }
 }
 
+// ELF 0x3C1550.
 void AISettings::setOverrideMenuSettings(bool override_)
 {
     m_overrideMenuSettings = override_;
 }
 
-void AISettings::reset()
+// ELF 0x3C02A0. Resets only the shipped subset of settings and registries.
+bool AISettings::reset()
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::AISettings::reset");
+    if (AIRadio::m_instance)
+        AIRadio::m_instance->reset();
+    // shipped defect: deleted entries stay in their vectors and can be deleted again.
+    for (unsigned int row = 0; row < m_behaviourPool.size(); ++row)
+        for (unsigned int i = 0; i < m_behaviourPool[row].size(); ++i)
+            if (m_behaviourPool[row][i])
+                delete m_behaviourPool[row][i];
+    for (unsigned int row = 0; row < m_planGeneratorPool.size(); ++row)
+        for (unsigned int i = 0; i < m_planGeneratorPool[row].size(); ++i)
+            if (m_planGeneratorPool[row][i])
+                delete m_planGeneratorPool[row][i];
+    for (unsigned int i = 0; i < m_planInterpreterPool.size(); ++i)
+        if (m_planInterpreterPool[i])
+            delete m_planInterpreterPool[i];
+    m_vehicleIdMap.clear();
+    m_vehicleNames.resize(0);
+    m_sensingAgentPatternIds.clear();
+    m_sensingAgentPatterns.clear();
+    m_maxNBots = -1;
+    // [UNRESOLVED] Types/names of the two words at +0x10/+0x14; both are zeroed here.
+    std::memset(m_gap16, 0, sizeof(m_gap16));
+    m_behaviourCount = 0;
+    m_informationGridDimension = 32;
+    m_viewDistance = 600.0f;
+    m_nSides = 0;
+    m_standardPersonality[0] = 0;
+    m_statsViewDistance = 512.0f;
+    m_standardPersonality[1] = 0;
+    m_autoSpawnBots = false;
+    m_botSkill = 0.75f;
+    m_respawnAllowed = true;
+    m_draw = false;
+    m_saiUpdateFrequency = 2.0f;
+    m_standardMoralAdmin[0] = 0;
+    m_standardMoralAdmin[1] = 0;
+    return true;
 }
 
 
-// [FRONTIER] Destruction requires cleanup of owned settings collections.
-// [RETIRE-WHEN: aidll-02-skeleton] Complete and validate the corresponding AISettings operation.
+// ELF 0x3BE130 (1772 B; the other variants are 0x3BDA40 and 0x3BE820). The shipped body first deletes
+// AIRadio::m_instance (null-tested, nonvirtual D1 + operator delete). Nothing in libaidll.so
+// constructs an AIRadio (see AIRadio.h), so the pointer is null and the step does nothing; it is
+// kept because the instruction is there. Then every behaviour and every plan generator (per
+// vehicle row) and every plan interpreter go through their virtual deleting destructors (+4),
+// and every vehicle material manager through its nonvirtual one. The pointers are not cleared.
+// The containers, the strings and both interface bases follow as members.
 AISettings::~AISettings()
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::AISettings::~AISettings");
-}
-
-// Console bindings for bot population and startup settings.
-// [RETIRE-WHEN: aidll-02-skeleton] Remove when the corresponding implementation is complete and validated.
-
-namespace {
-
-const char* const kAiSettingsConsoleTag = "aiSettings";
-
-// Every forwarder takes the same receiver, and the [CHOSEN] caveat above covers all of them.
-AISettings* consoleAiSettings()
-{
-    return static_cast<AISettings*>(
-        static_cast<IAISettings*>(CommonSingletonServer::m_iaiSettings));
-}
-
-void consoleAiSettingsSetMaxNBots(int n)                { consoleAiSettings()->setMaxNBots(n); }
-void consoleAiSettingsSetNSides(int sides)              { consoleAiSettings()->setNSides(sides); }
-void consoleAiSettingsSetBotSkill(float skill)          { consoleAiSettings()->setBotSkill(skill); }
-void consoleAiSettingsMaxBotsIncludeHumans(bool include){ consoleAiSettings()->maxBotsIncludeHumans(include); }
-void consoleAiSettingsSetInformationGridDimension(int d){ consoleAiSettings()->setInformationGridDimension(d); }
-// the only forwarder here that is not A store: `setAutoSpawnBots` also calls
-// `IAIMain::spawnBots`, so this console line has a side effect the other five do not.
-void consoleAiSettingsSetAutoSpawnBots(bool enable) { consoleAiSettings()->setAutoSpawnBots(enable); }
-// two arguments for one name: the console splits `addBotName T. Karlsson` on whitespace and
-// the receiver puts the space back. See addBotName's own note.
-void consoleAiSettingsAddBotName(std::string first, std::string last)
-                                                        { consoleAiSettings()->addBotName(first, last); }
-
-// The recovered roster classes dispatch through the registered write interface and report
-// inactive while it is absent. Their argument type strings and relative order are paired in both
-// generated-console images.
-IAISettingsModifier* consoleAiSettingsModifier()
-{
-    return static_cast<IAISettingsModifier*>(CommonSingletonServer::m_iaiSettingsModifier);
-}
-
-void consoleAiSettingsSetMaxNumberOfBehaviours(int count)
-{
-    consoleAiSettingsModifier()->setMaxNumberOfBehaviours(count);
-}
-
-void consoleAiSettingsSetVehicle(std::string name)
-{
-    consoleAiSettingsModifier()->setVehicle(name);
-}
-
-void consoleAiSettingsSetVehicleClusterMapping(std::string vehicle,
-                                                std::string clusterVehicle)
-{
-    consoleAiSettingsModifier()->setVehicleClusterMapping(vehicle, clusterVehicle);
-}
-
-void consoleAiSettingsSetVehicleMaterialCost(std::string vehicle,
-                                              materialId material,
-                                              float cost)
-{
-    consoleAiSettingsModifier()->setVehicleMaterialCost(vehicle, material, cost);
-}
-
-void consoleAiSettingsSetManDownEquipment(std::string equipment)
-{
-    consoleAiSettingsModifier()->setManDownEquipment(equipment);
-}
-
-void consoleAiSettingsCreateVehicleGroup(std::string name)
-{
-    consoleAiSettingsModifier()->createVehicleGroup(name);
-}
-
-void consoleAiSettingsAddVehicleToVehicleGroup(std::string vehicle,
-                                                std::string group)
-{
-    consoleAiSettingsModifier()->addVehicleToVehicleGroup(vehicle, group);
-}
-
-// Generic generated arguments retain the shared temp-and-commit extraction rule. materialId is the
-// one recovered exception: its generated class calls the AI material extractor directly into the
-// byte-sized static storage.
-template <class T>
-void convertAiSettingsRosterArgument(const std::string& text, T& storage)
-{
-    T value = storage;
-    std::istringstream stream(text);
-    stream >> value;
-    if (!stream.fail())
-        storage = value;
-}
-
-void convertAiSettingsRosterArgument(const std::string& text, materialId& storage)
-{
-    std::istringstream stream(text);
-    ::dice::hfe::ai::operator>>(stream, storage);
-}
-
-} // anonymous namespace
-
-// Console bindings for AI settings and vehicle definitions.
-// [RETIRE-WHEN: aidll-02-skeleton] Remove when the corresponding implementation is complete and validated.
-BF2_CONSOLE_OBJECT("aiSettings", 2, 0)
-BF2_CONSOLE_METHOD_1(setMaxNBots, consoleAiSettingsSetMaxNBots, int, kAiSettingsConsoleTag)
-BF2_CONSOLE_METHOD_1(setNSides, consoleAiSettingsSetNSides, int, kAiSettingsConsoleTag)
-BF2_CONSOLE_METHOD_1(setBotSkill, consoleAiSettingsSetBotSkill, float, kAiSettingsConsoleTag)
-BF2_CONSOLE_METHOD_1(maxBotsIncludeHumans, consoleAiSettingsMaxBotsIncludeHumans, bool, kAiSettingsConsoleTag)
-BF2_CONSOLE_METHOD_1(setInformationGridDimension, consoleAiSettingsSetInformationGridDimension, int, kAiSettingsConsoleTag)
-// Exposes the auto-spawn setting used by level scripts.
-BF2_CONSOLE_METHOD_1(setAutoSpawnBots, consoleAiSettingsSetAutoSpawnBots, bool, kAiSettingsConsoleTag)
-// Registers the command used by BotNames.ai to populate the bot-name roster.
-BF2_CONSOLE_METHOD_2(addBotName, consoleAiSettingsAddBotName, std::string, std::string, kAiSettingsConsoleTag)
-
-// ELF generated classes 262/267/268/269/270/283/284 and the matching PE CRT initializer order. The
-// temporary BF2_CC_CONVERT specialization keeps every ordinary conversion unchanged while routing
-// the `materialId` spelling through Material.cpp rather than std's character extractor.
-#pragma push_macro("BF2_CC_CONVERT")
-#undef BF2_CC_CONVERT
-#define BF2_CC_CONVERT(T, oneBasedIndex)                                                           \
-        if (index == (oneBasedIndex))                                                              \
-        {                                                                                          \
-            static T s;                                                                            \
-            convertAiSettingsRosterArgument(value, s);                                             \
-            m_args[(oneBasedIndex) - 1] = reinterpret_cast<std::string*>(&s);                      \
-        }
-
-BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(setMaxNumberOfBehaviours,
-                                   consoleAiSettingsSetMaxNumberOfBehaviours,
-                                   CommonSingletonServer::m_iaiSettingsModifier != 0,
-                                   int, kAiSettingsConsoleTag)
-BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(setVehicle, consoleAiSettingsSetVehicle,
-                                   CommonSingletonServer::m_iaiSettingsModifier != 0,
-                                   std::string, kAiSettingsConsoleTag)
-BF2_CONSOLE_METHOD_2_STATIC_ACTIVE(setVehicleClusterMapping,
-                                   consoleAiSettingsSetVehicleClusterMapping,
-                                   CommonSingletonServer::m_iaiSettingsModifier != 0,
-                                   std::string, std::string, kAiSettingsConsoleTag)
-BF2_CONSOLE_METHOD_3_STATIC_ACTIVE(setVehicleMaterialCost,
-                                   consoleAiSettingsSetVehicleMaterialCost,
-                                   CommonSingletonServer::m_iaiSettingsModifier != 0,
-                                   std::string, materialId, float, kAiSettingsConsoleTag)
-BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(setManDownEquipment,
-                                   consoleAiSettingsSetManDownEquipment,
-                                   CommonSingletonServer::m_iaiSettingsModifier != 0,
-                                   std::string, kAiSettingsConsoleTag)
-BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(createVehicleGroup,
-                                   consoleAiSettingsCreateVehicleGroup,
-                                   CommonSingletonServer::m_iaiSettingsModifier != 0,
-                                   std::string, kAiSettingsConsoleTag)
-BF2_CONSOLE_METHOD_2_STATIC_ACTIVE(addVehicleToVehicleGroup,
-                                   consoleAiSettingsAddVehicleToVehicleGroup,
-                                   CommonSingletonServer::m_iaiSettingsModifier != 0,
-                                   std::string, std::string, kAiSettingsConsoleTag)
-
-#pragma pop_macro("BF2_CC_CONVERT")
-
-// Handed to the console registry by AIModule::init, beside the `ai` object's list.
-ConsoleObjectList& aiSettingsConsoleObjects()
-{
-    return consoleBindingList(kAiSettingsConsoleTag);
+    delete AIRadio::m_instance;
+    for (unsigned int row = 0; row < m_behaviourPool.size(); ++row)
+        for (unsigned int i = 0; i < m_behaviourPool[row].size(); ++i)
+            if (m_behaviourPool[row][i])
+                delete m_behaviourPool[row][i];
+    for (unsigned int row = 0; row < m_planGeneratorPool.size(); ++row)
+        for (unsigned int i = 0; i < m_planGeneratorPool[row].size(); ++i)
+            if (m_planGeneratorPool[row][i])
+                delete m_planGeneratorPool[row][i];
+    for (unsigned int i = 0; i < m_planInterpreterPool.size(); ++i)
+        if (m_planInterpreterPool[i])
+            delete m_planInterpreterPool[i];
+    for (unsigned int i = 0; i < m_materialManagers.size(); ++i)
+        if (m_materialManagers[i])
+            delete m_materialManagers[i];
 }
 
 } // namespace ai

@@ -122,7 +122,7 @@ void WeaponObject::init(world::IObject* object)
         if (projectileTemplate->getComponentFromClassID(world::CID_ResurrectCollisionCompTemplate))
             weaponType = WTResurrect;                                                   // +0x60
         else if (projectileTemplate->getComponentFromClassID(world::CID_StickyCollisionCompTemplate))
-            weaponType = WTSticky;
+            weaponType = WTC4;
     }
 
     float gravityModifier = 1.0f;

@@ -89,8 +89,8 @@ def generate(out):
     actual += ['}',found[0],'} }']
     (out/'random_kit_actual.cpp').write_text('\n\n'.join(actual), encoding='utf-8')
     (out/'source.json').write_text(json.dumps(evidence, indent=2), encoding='utf-8')
-    whole_paths=['BF2/AI/AIDLL/AI/AIKnowledge/InformationManager.cpp',
-                 'BF2/AI/AIDLL/AI/AIKnowledge/InformationManager.h','BF2/Core/SpHandlePool.h']
+    whole_paths=['BF2/AI/AIDLL/AI/Main/InformationManager.cpp',
+                 'BF2/AI/AIDLL/AI/Main/InformationManager.h','BF2/Core/SpHandlePool.h']
     (out/'whole_sources.json').write_text(json.dumps([
         dict(source=(CODE/relative).as_posix(),sha256=hashlib.sha256((CODE/relative).read_bytes()).hexdigest())
         for relative in whole_paths],indent=2),encoding='utf-8')

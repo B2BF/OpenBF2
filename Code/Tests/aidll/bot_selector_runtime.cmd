@@ -18,13 +18,14 @@ for %%F in (Information IPIUnit WeaponInfoManager) do (
   if errorlevel 1 goto failed
 )
 rem IPIUnit's recovered nonvirtual occupancy helpers require its whole implementation and helpers.
-cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\AIBotBehaviour\CustomCurve.cpp" /Fo"%BF2_BOT_SELECTOR_OUT%\CustomCurve.obj" >>"%BF2_BOT_SELECTOR_OUT%\compile.log" 2>&1
+cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\AIUtils\CustomCurve.cpp" /Fo"%BF2_BOT_SELECTOR_OUT%\CustomCurve.obj" >>"%BF2_BOT_SELECTOR_OUT%\compile.log" 2>&1
+cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\AIUtils\SCurve.cpp" /Fo"%BF2_BOT_SELECTOR_OUT%\SCurve.obj" >>"%BF2_BOT_SELECTOR_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed
 for %%F in (Debug StringUtil) do (
   cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\Core\%%F.cpp" /Fo"%BF2_BOT_SELECTOR_OUT%\%%F.obj" >>"%BF2_BOT_SELECTOR_OUT%\compile.log" 2>&1
   if errorlevel 1 goto failed
 )
-link /nologo /OPT:REF /INCREMENTAL:NO /SUBSYSTEM:CONSOLE /OUT:"%BF2_BOT_SELECTOR_OUT%\bot_selector_runtime.exe" "%BF2_BOT_SELECTOR_OUT%\actual.obj" "%BF2_BOT_SELECTOR_OUT%\fixture.obj" "%BF2_BOT_SELECTOR_OUT%\Information.obj" "%BF2_BOT_SELECTOR_OUT%\IPIUnit.obj" "%BF2_BOT_SELECTOR_OUT%\WeaponInfoManager.obj" "%BF2_BOT_SELECTOR_OUT%\CustomCurve.obj" "%BF2_BOT_SELECTOR_OUT%\Debug.obj" "%BF2_BOT_SELECTOR_OUT%\StringUtil.obj" >"%BF2_BOT_SELECTOR_OUT%\link.log" 2>&1
+link /nologo /OPT:REF /INCREMENTAL:NO /SUBSYSTEM:CONSOLE /OUT:"%BF2_BOT_SELECTOR_OUT%\bot_selector_runtime.exe" "%BF2_BOT_SELECTOR_OUT%\actual.obj" "%BF2_BOT_SELECTOR_OUT%\fixture.obj" "%BF2_BOT_SELECTOR_OUT%\Information.obj" "%BF2_BOT_SELECTOR_OUT%\IPIUnit.obj" "%BF2_BOT_SELECTOR_OUT%\WeaponInfoManager.obj" "%BF2_BOT_SELECTOR_OUT%\CustomCurve.obj" "%BF2_BOT_SELECTOR_OUT%\SCurve.obj" "%BF2_BOT_SELECTOR_OUT%\Debug.obj" "%BF2_BOT_SELECTOR_OUT%\StringUtil.obj" >"%BF2_BOT_SELECTOR_OUT%\link.log" 2>&1
 if errorlevel 1 goto failed
 python -I "%~dp0bot_selector_runtime.py" run "%BF2_BOT_SELECTOR_OUT%\bot_selector_runtime.exe"
 exit /b %errorlevel%

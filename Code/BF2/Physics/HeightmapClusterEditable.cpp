@@ -526,7 +526,7 @@ void HeightmapClusterEditable::smooth(int x, int z, float radius, float strength
 
 // ; Noise: every inside sample gets a uniform draw in
 // [-strength, +strength) added (no falloff), from a local generator seeded with
-// time(0) & 0x7FFFFFFF - not the engine's g_random.
+// time(0) & 0x7FFFFFFF - not the engine's Rand.
 void HeightmapClusterEditable::random(int x, int z, float radius, float strength, int flags)
 {
     const int extent = getHeightmapSize() * getClusterSize() / 2;
@@ -717,7 +717,7 @@ void HeightmapClusterEditable::smoothEdges(int width, float amplitude, float fal
             float offset;
             if (falloff == 0.0f)
             {
-                offset = randomRange(g_random, -amplitude, amplitude);
+                offset = randomRange(Rand, -amplitude, amplitude);
             }
             else
             {

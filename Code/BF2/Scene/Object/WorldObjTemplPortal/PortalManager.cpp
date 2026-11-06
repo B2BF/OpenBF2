@@ -2,6 +2,8 @@
 // Sector transitions remain unimplemented and require the original 0.01 re-test offset.
 
 #include "PortalManager.h"
+#include <cstdio>
+#include <cstdlib>
 
 #include "../../../Core/Ids.h"       // IID_IBase, world::IID_IPortalManager - the two ids
                                      // queryInterface compares against, both loaded from globals in
@@ -130,12 +132,17 @@ int PortalManager::getDebugLevel() const
 // [CHOSEN, not recovered] Portal registration, event, and update operations remain
 // incomplete. Attaching PortalPassing must preserve replacement without deleting the
 // previous registration data.
+// [FRONTIER] Registering a portal-passing object stops here instead of silently dropping the
+// object: update() is recovered only for an empty passing-object map. No stock BF2 1.50 object
+// template sets isPortalPassing (none of the 9007 files in Objects_server.zip mention portals).
 void PortalManager::registerPortalPassingObject(IObject* object, const Vec3& portalPassingCoordinate)
 {
     (void)object;
     (void)portalPassingCoordinate;
-    // [CHOSEN, not recovered] - see above. Does nothing; the real one publishes a PortalPassing
-    // component onto the object and records it here.
+    std::fprintf(stderr, "[FRONTIER] dice::hfe::world::PortalManager::registerPortalPassingObject reached"
+                         " (PortalPassing component and passing-object record unrecovered)\n");
+    std::fflush(stderr);
+    std::abort();
 }
 
 // Removes a portal registration by detaching the component before releasing it, then deletes data and erases the entry.
@@ -241,14 +248,19 @@ PortalManager::PortalCollision* PortalManager::checkAddPortalCollision(
                 // against the real one still behaves sanely against this.
 }
 
-// [CHOSEN, not recovered] portal-transition update; currently performs no work.
-// Required behavior uses frame-to-frame position deltas, ignoring deltaTime, with temporary list/vector
-// storage per call. Portal event, passing, sector and collider operations remain to be connected.
+// ELF 0x8326A70. The body walks the passing-object map (+0x08); with no passing objects it only
+// constructs and frees its temporary collision list and vector, so it has no effect (the branch
+// at 0x8326AD5 to 0x8327092). deltaTime is not read. The per-object portal crossing, sector and
+// event part is unrecovered and stops.
 void PortalManager::update(float deltaTime)
 {
-    (void)deltaTime;    // unused in the real body too - see above
-    // [CHOSEN, not recovered]. Does nothing, so no sector transitions occur and no PortalEvent is
-    // ever broadcast. This is the single largest behavioural gap in the class.
+    (void)deltaTime;
+    if (m_passingObjects.empty())
+        return;
+    std::fprintf(stderr, "[FRONTIER] dice::hfe::world::PortalManager::update reached with portal-passing"
+                         " objects (crossing, sector and event dispatch unrecovered)\n");
+    std::fflush(stderr);
+    std::abort();
 }
 
 } // namespace world

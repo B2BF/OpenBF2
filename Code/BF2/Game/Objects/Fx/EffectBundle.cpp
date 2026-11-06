@@ -71,7 +71,7 @@ void normalize(Vec3& value)
 float unitRandom()
 {
     // sign draw / Random helpers: signed shift after setting bit 7.
-    return static_cast<float>((static_cast<int>(g_random.getRaw() | 0x80u) >> 7) + 1)
+    return static_cast<float>((static_cast<int>(Rand.getRaw() | 0x80u) >> 7) + 1)
         * 0.000000059604645f;
 }
 float sample(const RandomDistribution& distribution)
@@ -86,7 +86,7 @@ float sample(const RandomDistribution& distribution)
         result = distribution.value + (distribution.variation - distribution.value) * unitRandom();
         break;
     case CRD_EXPONENTIAL: result = -distribution.value * std::log(unitRandom()); break;
-    case CRD_NORMAL: result = distribution.value + g_random.getNormal() * distribution.variation; break;
+    case CRD_NORMAL: result = distribution.value + Rand.getNormal() * distribution.variation; break;
     default: result = 0.0f; break;
     }
     return result * sign;

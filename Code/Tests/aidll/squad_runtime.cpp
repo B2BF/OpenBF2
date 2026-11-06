@@ -225,7 +225,7 @@ int main(int argc, char** argv)
     {
         SquadFormation formation(&coordinator);
         expectCalls("side,size");
-        require(formation.m_slots.size() == 3 && formation.m_slotTargets.size() == 3,
+        require(formation.m_slots.size() == 3 && formation.m_trailingPositions.size() == 3,
                 "three parallel formation slots");
         require(formation.m_side == 1 && formation.getFormationMaxSpeed() == 5.0f,
                 "formation side and empty speed");
@@ -233,7 +233,7 @@ int main(int argc, char** argv)
         if (mode == "formation_constructor")
         {
             for (int i = 0; i < 3; ++i)
-                require(!formation.m_slots[i]->m_occupied && !formation.m_slotTargets[i].first,
+                require(!formation.m_slots[i]->hasSquadMemberAssigned && !formation.m_trailingPositions[i].first,
                         "formation starts empty");
             require(same(formation.m_direction, Vec3{1, 0, 0}) &&
                     same(formation.m_slots[0]->m_offset, Vec3{0, 0, 0}) &&
@@ -242,7 +242,7 @@ int main(int argc, char** argv)
         }
         else if (mode.compare(0, 5, "join_") == 0)
         {
-            formation.m_slots[0]->m_occupied = true;
+            formation.m_slots[0]->hasSquadMemberAssigned = true;
             formation.m_slots[0]->m_memberIndex = mode == "join_duplicate" ? 1 : 0;
             formation.m_v72 = {4, 5, 6}; formation.m_v60 = {7, 8, 9};
             formation.m_b56 = true;
@@ -251,7 +251,7 @@ int main(int argc, char** argv)
             slot->m_i20 = 88; slot->m_b24 = true; slot->m_i28 = 99;
             slot->m_offset = {2, 4, 6}; slot->m_referenceSlot = 77;
             if (mode == "join_full")
-                for (auto* s : formation.m_slots) { s->m_occupied = true; s->m_memberIndex = 9; }
+                for (auto* s : formation.m_slots) { s->hasSquadMemberAssigned = true; s->m_memberIndex = 9; }
             formation.joinFormation(1);
             expectCalls("time,member");
             require(formation.m_b56 && std::fabs(formation.m_d92 - 10.2) < 1e-12 &&
@@ -264,8 +264,8 @@ int main(int argc, char** argv)
             }
             else
             {
-                require(slot->m_occupied && slot->m_memberIndex == 1 && slot->m_i20 == -1 &&
-                        !slot->m_b24 && slot->m_i28 == 0 && !formation.m_slots[2]->m_occupied,
+                require(slot->hasSquadMemberAssigned && slot->m_memberIndex == 1 && slot->m_i20 == -1 &&
+                        !slot->m_b24 && slot->m_i28 == 0 && !formation.m_slots[2]->hasSquadMemberAssigned,
                         "first free slot admission");
                 require(same(slot->m_offset, Vec3{2, 4, 6}) && slot->m_referenceSlot == 77,
                         "admission preserves slot geometry");
@@ -277,7 +277,7 @@ int main(int argc, char** argv)
         {
             formation.m_b56 = true; formation.m_d92 = 9.0;
             formation.m_v60 = {0, 0, 0}; formation.m_v72 = {3, 0, 0};
-            formation.m_slots[0]->m_occupied = mode != "movement_empty";
+            formation.m_slots[0]->hasSquadMemberAssigned = mode != "movement_empty";
             if (mode == "movement_distance_boundary") formation.m_v72.x = 2;
             if (mode == "movement_deadline_boundary") timer.now = 9;
             if (mode == "movement_nan_distance") formation.m_v72.x = std::numeric_limits<float>::quiet_NaN();
@@ -303,12 +303,12 @@ int main(int argc, char** argv)
         }
         else if (mode.compare(0, 6, "reset_") == 0)
         {
-            formation.m_slots[0]->m_occupied = mode != "reset_empty";
+            formation.m_slots[0]->hasSquadMemberAssigned = mode != "reset_empty";
             coordinatorHasPosition = mode == "reset_frontier";
             formation.m_v72 = {11, 12, 13};
             for (unsigned i = 0; i != 3; ++i)
             {
-                formation.m_slotTargets[i] = std::make_pair(true, Vec3{4, 5, 6});
+                formation.m_trailingPositions[i] = std::make_pair(true, Vec3{4, 5, 6});
                 formation.m_slots[i]->m_i20 = 42;
                 formation.m_slots[i]->m_memberIndex = 20 + i;
                 formation.m_slots[i]->m_b24 = true;
@@ -318,10 +318,10 @@ int main(int argc, char** argv)
             expectCalls(mode == "reset_empty" ? "" : "position");
             require(same(formation.m_trailingPosition, Vec3{11, 12, 13}), "trailing anchor copy");
             for (unsigned i = 0; i != 3; ++i)
-                require(!formation.m_slotTargets[i].first && same(formation.m_slotTargets[i].second, Vec3{4, 5, 6}) &&
+                require(!formation.m_trailingPositions[i].first && same(formation.m_trailingPositions[i].second, Vec3{4, 5, 6}) &&
                         formation.m_slots[i]->m_i20 == -1 && formation.m_slots[i]->m_memberIndex == 20 + i &&
                         formation.m_slots[i]->m_b24, "trailing reset clears only validity and slot target index");
-            require(formation.m_slots[0]->m_occupied == (mode != "reset_empty"), "reset preserves occupancy");
+            require(formation.m_slots[0]->hasSquadMemberAssigned == (mode != "reset_empty"), "reset preserves occupancy");
         }
         else return 2;
         observedFormation = nullptr;

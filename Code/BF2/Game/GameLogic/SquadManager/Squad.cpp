@@ -435,12 +435,10 @@ bool Squad::removeFromSquad(int playerId, bool skipScriptEvent, bool kicked)
 
     if (ai::g_aiInstance && ai::aiInstance()->isInitialized())
     {
-        const int teamId = player->getTeam();                                  // player unchecked
-        (void)teamId;
         //  / PE 0x45F844 reads the team before the courier call with
         // (playerId, current m_squadId, teamId), ELF +0x90 / PE +0x8C.
-        // [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: aidll-02-skeleton]
-        BF2_AI_FRONTIER("dice::hfe::Squad::removeFromSquad (AIEventCourier::event_removedFromSquad)");
+        const int teamId = player->getTeam();                                  // player unchecked
+        ai::BFSingletonServer::m_iaiEventCourier->event_removedFromSquad(playerId, m_squadId, teamId);
     }
 
     if (m_members.empty())                                                      // +0x144

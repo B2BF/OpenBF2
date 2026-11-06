@@ -9,6 +9,7 @@
 #include "AIFrontier.h"
 
 #include "../../AIDLL/AI/Main/CommonSingletonServer.h"
+#include "../../AIDLL/AI/AIUtils/DebugRendering/IBFGraph.h"
 #include "../../../Core/ClassManager.h"
 
 namespace dice {
@@ -46,7 +47,7 @@ IBFGraph* BFGraphCreator::createGraph()
 
 void BFGraphCreator::destroyGraph(IBFGraph* graph)
 {
-    // ELF: `if (graph) graph->[vtable +0x04]` - Itanium's deleting destructor, which is what
+    // ELF 0x842E610: `if (graph) graph->[vtable +0x04]` - Itanium's deleting destructor, which is what
     // `delete` compiles to. The null guard is dice's and is kept.
     if (graph)
         delete graph;

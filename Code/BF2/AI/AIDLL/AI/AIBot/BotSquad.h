@@ -58,8 +58,14 @@ public:
     void recieveAttackCommanderOrder();
     void recieveDefendCommanderOrder();
     void recieveMoveCommanderOrder();
+    void acceptCommanderOrder();
+    void declineCommanderOrder();
     void acceptSquadOrder();
     void declineSquadOrder();
+
+    // [INFERRED] inline accessor: CommanderInterface's Bot overloads (ELF 0x3232D0..) read +4
+    // directly.
+    int getSquadId() const { return m_squadId; }
 
 private:
     /*  0 */ BotMain* m_bot;        // the ctor argument

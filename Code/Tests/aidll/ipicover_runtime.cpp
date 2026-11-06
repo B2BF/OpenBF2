@@ -61,7 +61,7 @@ namespace dice { namespace hfe { namespace ai {
 // focused link. No production IPICover/PlanePolygon definition is supplied by the fixture.
 Information::Information(IAIObject* object, double time)
     : m_objectTypeFlags(0), m_allowedTimeDiff(0), m_strength(0), m_basicTemp(0), m_time(time),
-      m_object(object), m_booked(false), m_bookingPlayerId(-1), m_armament(nullptr),
+      m_object(object), m_isBooked(false), m_bookingPlayerId(-1), m_armament(nullptr),
       m_controlInfo(nullptr), m_cover(nullptr), m_mobile(nullptr), m_physical(nullptr), m_unit(nullptr) {}
 Information::~Information() {}
 int Information::getInformationSort() { unexpected("Information::getInformationSort"); }

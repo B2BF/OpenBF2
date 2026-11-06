@@ -175,7 +175,7 @@ public:
     bool filterTeamTail(IEventWrapper& wrapper, world::IPlayer* sender, world::IPlayer* receiver);
     bool filterLocalTail(IEventWrapper& wrapper, world::IPlayer* sender, world::IPlayer* receiver);
     void handleRadioMessageReceivedEvent(RadioMessageReceivedEvent*, void*);
-    void sendRadioMessageToAI(IEventWrapper&, int);                                     //  [FRONTIER]
+    void sendRadioMessageToAI(IEventWrapper&, int);                                     // ELF 0x080B5A80
     // : `if (m_isWaitingForClients) ++m_clientAckedEndOfRoundGuard` -
     void clientAckedEndOfRoundGuard(int connectionId);
     virtual bool changePlayerName(int, const std::string&);                            // +0x168

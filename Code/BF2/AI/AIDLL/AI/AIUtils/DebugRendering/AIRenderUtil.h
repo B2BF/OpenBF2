@@ -1,7 +1,5 @@
 // Owns AI debug-drawing handles allocated by the primitive manager.
 // The dedicated build leaves per-frame render operations empty; console-driven operations remain active.
-// [FRONTIER] Remaining render methods stop until implemented.
-// [RETIRE-WHEN: aidll-02-skeleton] Implement and validate the remaining rendering operations.
 // [RETIRE-WHEN: botmain-bases] Remove when the corresponding implementation is complete and validated.
 // [INFERRED] Source placement.
 
@@ -40,6 +38,7 @@ public:
     struct BotPrimitives
     {
         BotPrimitives();
+        BotPrimitives(const BotPrimitives&);
         BotPrimitives(DrawPrimitive* line0, DrawPrimitive* line1, DrawPrimitive* circle0,
                       DrawPrimitive* circle1, DrawPrimitive* line2, DrawPrimitive* line3,
                       DrawPrimitive* text3d);
@@ -61,6 +60,9 @@ public:
     struct StrategicAreaPrimitives
     {
         StrategicAreaPrimitives();
+        // Every constructor resizes the circle vector to exactly two entries after copying it.
+        StrategicAreaPrimitives(const StrategicAreaPrimitives&);
+        ~StrategicAreaPrimitives();
         StrategicAreaPrimitives(DrawPrimitive* line0, DrawPrimitive* line1,
                                 const std::vector<DrawPrimitive*>& lines, DrawPrimitive* circle0,
                                 DrawPrimitive* circle1, DrawPrimitive* text3d,
@@ -80,6 +82,7 @@ public:
     struct LandingZonePrimitives
     {
         LandingZonePrimitives();
+        LandingZonePrimitives(const LandingZonePrimitives&);
         LandingZonePrimitives(DrawPrimitive* line0, DrawPrimitive* line1, DrawPrimitive* line2,
                               DrawPrimitive* line3, DrawPrimitive* text3d);
 
@@ -95,6 +98,7 @@ public:
     struct PatrolPathPrimitives
     {
         PatrolPathPrimitives();
+        PatrolPathPrimitives(const PatrolPathPrimitives&);
         // the text comes first here and last in memory - see the header block.
         PatrolPathPrimitives(DrawPrimitive* text3d,
                              const std::vector<std::pair<DrawPrimitive*, DrawPrimitive*> >& segments);
@@ -108,6 +112,7 @@ public:
     struct GuardPositionPrimitives
     {
         GuardPositionPrimitives();
+        GuardPositionPrimitives(const GuardPositionPrimitives&);
         // Same inversion as PatrolPathPrimitives.
         GuardPositionPrimitives(DrawPrimitive* text3d,
                                 const std::pair<DrawPrimitive*, DrawPrimitive*>& marker);
@@ -121,6 +126,7 @@ public:
     struct CoverPositionPrimitives
     {
         CoverPositionPrimitives();
+        CoverPositionPrimitives(const CoverPositionPrimitives&);
         CoverPositionPrimitives(DrawPrimitive* line0, DrawPrimitive* line1,
                                 const std::vector<DrawPrimitive*>& linesA,
                                 const std::vector<DrawPrimitive*>& linesB,
@@ -142,13 +148,13 @@ public:
     void exit();                                                          // - empty in retail
 
     // the render half. Every one of these with a five-byte body is empty in retail.
-    void setCoordinate(const Vec3& position);                             // [FRONTIER]
-    void renderStrategies();                                              // [FRONTIER]
+    void setCoordinate(const Vec3& position);
+    void renderStrategies();
     void renderBot(BotMain*, const std::pair<float, float>&, const std::pair<float, float>&,
                    float, const std::pair<float, float>&);                // - empty
     void addSensingLine(const Vec3& from, const Vec3& to, int side, bool visible);
-    void drawArrow(float, unsigned int, const Vec3&, const Vec3&);        // [FRONTIER]
-    void drawAxisPoint(float, unsigned int, const Vec3&, const Vec3&, float);  // [FRONTIER]
+    void drawArrow(float lifeTime, unsigned int colour, const Vec3& position, const Vec3& direction);
+    void drawAxisPoint(float, unsigned int, const Vec3&, const Vec3&, float);
     void renderPath(int, bool, const std::vector<Vec3>&, unsigned int);   // - empty
     void renderWaypointList(BotMain*);                                    // - empty
     void renderPathFinding(BotMain*);                                     // - empty
@@ -158,21 +164,21 @@ public:
     void renderBotStats(BotMain*, const std::pair<float, float>&, const std::pair<float, float>&,
                         float, const std::pair<float, float>&);           // - empty
     void renderBehaviourStats(BotMain*, std::vector<std::string>&);       // - empty
-    void renderPatrolPath(const std::string&, PatrolPath*);               // [FRONTIER]
-    void renderGuardPosition(const std::string&, GuardPosition*);         // [FRONTIER]
-    void renderCoverPosition(int);                                        // [FRONTIER]
-    void redenderPathfindingDebug();                                      // [FRONTIER]
+    void renderPatrolPath(const std::string&, PatrolPath*);
+    void renderGuardPosition(const std::string&, GuardPosition*);
+    void renderCoverPosition(int);
+    void redenderPathfindingDebug();
                                                                           // dice's spelling
     void renderObstacleInfo(Bot*);                                        // - empty
     void initAIMeshRendering();                                           // - empty
     void cleanUpAIMeshRendering();                                        // - empty
     void renderAIMeshes();                                                // - empty
 
-    // the unrender half. All written except the two blocked on a missing type.
+    // the unrender half.
     void unrenderAll();
-    void unrenderBot(Bot*);                                               // [FRONTIER]
+    void unrenderBot(Bot*);
     void unrenderAllBots();
-    void unrenderStrategicArea(AIStrategicArea*);                         // [FRONTIER]
+    void unrenderStrategicArea(AIStrategicArea*);
     void unrenderAllStrategicAreas();
     void unrenderPatrolPath(PatrolPath*);
     void unrenderAllPatrolPaths();
@@ -192,8 +198,8 @@ public:
 
 private:
     /* +0x00 */ std::vector<Vec3> m_sensingLine;      // rebuilt from scratch by every addSensingLine
-    /* +0x0C */ std::vector<std::string> m_text;      // [UNRESOLVED] role - only the destructor
-                                                      // which releases each string, proves the type
+    /* +0x0C */ std::vector<std::string> m_text;      // the 2D text lines setCoordinate and
+                                                      // renderStrategies rebuild
     /* +0x18 */ std::vector<BotPrimitives> m_botPrimitives;              // indexed by Bot::getBotId
     /* +0x24 */ std::vector<StrategicAreaPrimitives> m_strategicAreaPrimitives;
     /* +0x30 */ std::vector<LandingZonePrimitives> m_landingZonePrimitives;
@@ -202,8 +208,8 @@ private:
     /* +0x54 */ std::vector<CoverPositionPrimitives> m_coverPositionPrimitives;
 
     // The five loose handles, named by the delete slot each goes to.
-    /* +0x60 */ DrawPrimitive* m_text2dA;             // delete2dText, from unrenderAll
-    /* +0x64 */ DrawPrimitive* m_text2dB;             // delete2dText, from unrenderAll
+    /* +0x60 */ DrawPrimitive* m_text2dA;             // setCoordinate's text; delete2dText, from unrenderAll
+    /* +0x64 */ DrawPrimitive* m_text2dB;             // renderStrategies' text; delete2dText, from unrenderAll
     /* +0x68 */ DrawPrimitive* m_pathCircleA;         // deleteCircle, from unrendenderPathfindingDebug
     /* +0x6C */ DrawPrimitive* m_pathCircleB;         // deleteCircle, from unrendenderPathfindingDebug
     /* +0x70 */ DrawPrimitive* m_pathLine;            // deleteLine, from unrendenderPathfindingDebug

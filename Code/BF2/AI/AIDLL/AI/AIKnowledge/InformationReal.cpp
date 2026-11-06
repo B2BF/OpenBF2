@@ -1,12 +1,16 @@
 
 #include "InformationReal.h"
 
+// <iostream>'s ios_base::Init object is this TU's static initialisation and teardown (ELF
+// 0x2DCB90, __tcf_0 0x2DCBF0, _GLOBAL__I 0x2DCC20).
+#include <iostream>
+
 #include <cmath>
 
 #include "IPIPhysical.h"
 #include "IPIUnit.h"
-#include "InformationManager.h"
-#include "../AIStrategicMap/AerialHeightMap.h"
+#include "../Main/InformationManager.h"
+#include "../AIPathFinding/AerialHeightMap/AerialHeightMap.h"
 #include "../Main/CommonSingletonServer.h"
 #include "../../../../Math/Mat4.h"
 #include "../../../AIInterface/BFKnowledge/BFTimer.h"                // IBFTimer::getGameTime

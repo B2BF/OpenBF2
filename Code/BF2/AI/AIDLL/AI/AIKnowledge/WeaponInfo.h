@@ -70,6 +70,12 @@ public:
     IAIObject* getLockedTarget() const;
     const std::string& getName() const;
 
+public:
+    // [CHOSEN, not recovered] added by ai-w1-e-fire (coord/ai-requests.md): the image reads +0x04
+    // inline (BBPFireInfantery::createPlan passes it to IAIPlayer::getNumShotsFired and
+    // IAIObjectEnvironment::hasIndirectLineOfFire).
+    IWeapon* getWeapon() const { return m_weapon; }
+
 protected:
     friend class IPIArmament;                 // retail IPIArmament::rearm reads both fields directly
     /* +0x04 */ IWeapon* m_weapon;

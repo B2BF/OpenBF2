@@ -13,6 +13,7 @@
 namespace dice { namespace hfe {
 class ISound;
 class TriggerableTargetNetworkable;
+namespace ai { class BAPConTriggerableActive; class BBPTriggerable; }
 namespace world {
 class TriggerableTemplate;
 class TriggerableTargetTemplate;
@@ -51,6 +52,10 @@ public:
 private:
     friend class TriggerableManager; // Retail reads the cached template and toggles +16C directly.
     friend class TriggerableTarget;
+    // [INFERRED] friendship: the AI condition reads +16C inline (libaidll ELF 0x1EAF50).
+    friend class ai::BAPConTriggerableActive;
+    // [INFERRED] friendship: the pattern reads the cached template inline (libaidll ELF 0x2A6F56).
+    friend class ai::BBPTriggerable;
     int m_refCount;                                 // +140
     const TriggerableTemplate* m_template;           // +144
     int m_id;                                       // +148

@@ -1,7 +1,5 @@
 // Bot Action Plan registry and AI commands, recovered from the symbolized libaidll.so.
 // AI/Main/AIConsole.cpp is attested; this header path is [INFERRED].
-// frontier: the constructor omits MapProperties; teardown, reset and most commands remain unwritten.
-// [RETIRE-WHEN: aidll-02-skeleton] Complete those bodies and the missing constructor state.
 
 #ifndef AI_AIDLL_AI_MAIN_AICONSOLE_H
 #define AI_AIDLL_AI_MAIN_AICONSOLE_H
@@ -16,6 +14,7 @@ namespace hfe {
 namespace ai {
 
 class BAPEntry;
+class Bot;
 class IAIMain;
 class ISensingAgentPattern;
 class MapProperties;
@@ -49,17 +48,18 @@ public:
     // constructs SquadManager. It returns void: the binding emits no result
     // and the two exits do not materialize a common return value.
     void init(int);
-    void addBot(std::string, int, std::string, std::string);
-    void addUnspawnedBot(std::string, int, std::string);
+    int addBot(std::string, int, std::string, std::string);              // ConsoleClass186 stores the int
+    int addUnspawnedBot(std::string, int, std::string);                  // ConsoleClass187 stores the int
     void updateBot(int);
-    void killBotName(const std::string&);
-    void killBotId(int);
+    std::string killBotName(const std::string&);                         // ConsoleClass191 assigns the string
+    std::string killBotId(int);                                          // ConsoleClass190 assigns the string
     void killAllBots();
-    void* getBotFromId(int);
+    Bot* getBotFromId(int);
     void botMoveTo(float, Vec3, int);
     void botFlyTo(int, float, float, float, Vec3);
-    void botSetWaypoints_Patrol(int, float, int, Vec3, Vec3, Vec3);
-    void botSetWaypoints_Patrol3d(int, float, int, Vec3, Vec3, Vec3);
+    // ConsoleClass196/197 pass a zero Vec3 for an omitted sixth argument [INFERRED spelling: value-initialised].
+    void botSetWaypoints_Patrol(int, float, int, Vec3, Vec3, Vec3 = Vec3());
+    void botSetWaypoints_Patrol3d(int, float, int, Vec3, Vec3, Vec3 = Vec3());
     void botGiveOrder(int, std::string, std::string);
 
     // Behaviors and modifier weights.
@@ -74,7 +74,7 @@ public:
     std::string getActiveBehaviourModifiers();
     float getBehaviourModifier(std::string);
     void setBehaviourModifier(std::string, float);
-    void listBehaviourModifiers();
+    std::string listBehaviourModifiers();                                // ConsoleClass310 assigns the string
 
     // Plan interpreter.
     void addInterpreterEntry(std::string, std::string);
@@ -101,12 +101,12 @@ public:
     Vec3 getRendCameraRotation();                                   // ; retail returns zero
     void freeCameraFire();
     void removeCameraText();                                        // ; retail no-op
-    void showAISettings();
-    void createLODManager(float, float);
-    void saveAll(const std::string&, const std::string&);
+    std::string showAISettings();                                        // ConsoleClass311 assigns the string
+    std::string createLODManager(float, float);                         // ConsoleClass315 discards the string
+    bool saveAll(const std::string&, const std::string&);                // ConsoleClass476 stores the bool
     void debug();                                                   // ; retail no-op
-    float getCurrentPitchAngle();
-    float getCurrentYawAngle();
+    float getCurrentPitchAngle() const;
+    float getCurrentYawAngle() const;
 
     // Neither body uses this. Keep member declarations: getFastThreshold calls through an object;
     // identical-code folding prevents establishing staticness from these bodies alone.
@@ -121,14 +121,13 @@ public:
     /* +16 */ std::map<std::string, float*>::iterator m_activeBehaviourModifiers;   // [INFERRED]
     /* +20 */ std::map<std::string, BAPEntry*> m_bapEntries;              // 42 owned primitives
     /* +32 */ std::map<std::string, Strategy*> m_strategies;              // [INFERRED] name
-    /* +44 */ char m_gap44[4];      // [UNRESOLVED]
+    /* +44 */ char m_gap44[4];      // [UNRESOLVED]; constructor zeroes this word
     /* +48 */ std::map<std::string, ISensingAgentPattern*> m_sensingAgentPatterns;  // 4 owned patterns
-    // Retail construction allocates MapProperties and calls setMaxSlope. Its destination is
-    // [UNRESOLVED], so that allocation is not implemented here.
+    // Retail construction allocates MapProperties and calls setMaxSlope, then loses the pointer.
     // init writes +60; getActiveAIMain reads the static instance instead. Other readers of this
     // cached pointer are [UNRESOLVED]; do not assume it is dead.
     /* +60 */ AIMain* m_aiMain;
-    /* +64 */ char m_gap64[4];      // [UNRESOLVED]; this is the one that may be the MapProperties*
+    /* +64 */ char m_gap64[4];      // [UNRESOLVED]; unwritten by the constructor
 
     // Published by the constructor ( via GOT ), cleared by retail teardown.
     // BF2AI::clear deletes through this pointer.

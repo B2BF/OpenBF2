@@ -25,7 +25,7 @@ public:
     {
     public:
         explicit PortalEventCallback(AIObjectMobile* owner) : m_owner(owner) {}
-        virtual void handleEvent(world::PortalEvent* event);     // [FRONTIER]
+        virtual void handleEvent(world::PortalEvent* event);
 
     private:
         /* +0x04 */ AIObjectMobile* m_owner;

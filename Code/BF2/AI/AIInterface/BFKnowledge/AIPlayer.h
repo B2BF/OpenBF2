@@ -1,6 +1,5 @@
 // AI view of an engine player, implemented by AIPlayer in the executable.
 // [INFERRED] Return types are derived from implementations; preserve virtual declaration order.
-// [RETIRE-WHEN: aidll-02-skeleton] Remove when the corresponding implementation is complete and validated.
 // [INFERRED] Source placement.
 
 #ifndef AI_AIINTERFACE_BFKNOWLEDGE_AIPLAYER_H      // [INFERRED] guard style
@@ -66,13 +65,12 @@ public:
 
 // Forwards player state and actions to a borrowed world::IPlayer.
 // The wrapped player must outlive this object.
-// [RETIRE-WHEN: aidll-02-skeleton] Remove when the corresponding implementation is complete and validated.
 class AIPlayer : public IAIPlayer
 {
 public:
     explicit AIPlayer(world::IPlayer* player);
-    AIPlayer();                                  // [FRONTIER]
-    virtual ~AIPlayer();                         // [FRONTIER]
+    AIPlayer();
+    virtual ~AIPlayer();
 
     virtual void reset();
     virtual world::IPlayer* getPlayer() const;
@@ -90,24 +88,24 @@ public:
     virtual void setSpawnKit(int kit);
     virtual int getSpawnGroup() const;
     virtual int getSpawnKit() const;                                // forwards getKit
-    virtual unsigned int getPlayerControlObjectId();                // [FRONTIER]
-    virtual IAIObject* getSoldier();                                // [FRONTIER]
-    virtual IAIObject* getDefaultVehicle();                         // [FRONTIER]
+    virtual unsigned int getPlayerControlObjectId();
+    virtual IAIObject* getSoldier();
+    virtual IAIObject* getDefaultVehicle();
     virtual IAIObject* getCurrentVehicle();
     virtual float getFieldOfView();
-    virtual float getFieldOfViewModifier();                         // [FRONTIER]
-    virtual float getStandardFieldOfView();                         // [FRONTIER]
-    virtual float getViewDistance();                                // [FRONTIER]
-    virtual void setViewDistance(float distance);                   // [FRONTIER]
+    virtual float getFieldOfViewModifier();
+    virtual float getStandardFieldOfView();
+    virtual float getViewDistance();
+    virtual void setViewDistance(float distance);
     virtual int getSide();
-    virtual void setSide(int side);                                 // [FRONTIER]
-    virtual int getNumShotsFired(IWeapon* weapon);                  // [FRONTIER]
-    virtual void removePlayerFromGame();                            // [FRONTIER]
-    virtual void setName(const std::string& name);                  // [FRONTIER]
-    virtual int getScore();                                         // [FRONTIER]
-    virtual void setIsAIPlayer(bool isAI);                          // [FRONTIER]
+    virtual void setSide(int side);
+    virtual int getNumShotsFired(IWeapon* weapon);
+    virtual void removePlayerFromGame();                            // bf2 0x83FC3D0
+    virtual void setName(const std::string& name);
+    virtual int getScore();
+    virtual void setIsAIPlayer(bool isAI);
     virtual bool getIsAIPlayer();
-    virtual const void* getCameraTransformation() const;            // [FRONTIER]
+    virtual const void* getCameraTransformation() const;
     virtual const void* getPlayerInput() const;
 
     // ds: - one `Mat4`, allocated by whichever `AIPlayer` is constructed first and never

@@ -48,10 +48,12 @@ const PlayerInputName kPlayerInputNames[] = {
     { PISayAll, "PISayAll" }, { PISayTeam, "PISayTeam" },
     { PINextItem, "PINextItem" }, { PIPrevItem, "PIPrevItem" },
     { PICommunication, "PICommunication" }, { PIShowScoreBoard, "PIShowScoreBoard" },
-    { PINone, "PINone" },
+    // Reader-only aliases precede PINone in the shipped comparison chain.
+    { PINone, "PINumInput" }, { PINone, "PINotInUse" }, { PINone, "PINone" },
 };
 const int kPlayerInputNameCount = sizeof(kPlayerInputNames) / sizeof(kPlayerInputNames[0]);
 
+#if !defined(BF2_IMAGE_AIDLL)
 struct GameInputName { GameInputMap value; const char* name; };
 const GameInputName kGameInputNames[] = {
     { GIMenu, "GIMenu" },
@@ -130,21 +132,26 @@ const GameInputName kGameInputNames[] = {
     { GILeader, "GILeader" },
     { GINone, "GINone" },
 };
+#endif
 
 
 } // namespace
 
 // the switch-to-literal writer.
+// ELF 0x48D5A0; engine 0x84A18C0. Values 0..64 print; all others leave the stream untouched.
 std::ostream& operator<<(std::ostream& stream, PlayerInputMap value)
 {
-    for (int i = 0; i < kPlayerInputNameCount; ++i)
+    for (int i = 0; i < kPlayerInputNameCount - 3; ++i)
     {
         if (kPlayerInputNames[i].value == value)
             return stream << kPlayerInputNames[i].name;
     }
+    if (value == PINone)
+        return stream << "PINone";
     return stream;                                  // out-of-range writes nothing
 }
 
+#if !defined(BF2_IMAGE_AIDLL)
 std::ostream& operator<<(std::ostream& stream, GameInputMap value)
 {
     for (const auto& row : kGameInputNames)
@@ -154,6 +161,7 @@ std::ostream& operator<<(std::ostream& stream, GameInputMap value)
     }
     return stream;
 }
+#endif
 
 namespace {
 // Source-level factoring of the identical unrolled comparison chains. Preserve
@@ -183,6 +191,8 @@ void parseInputName(const std::string& token, Enum& value,
 }
 }
 
+// ELF 0x48D8A0; engine 0x84A1B60. Numeric tokens of at most two characters pass through
+// the enum writer, then the same ordered comparisons; sscanf accepts a numeric prefix.
 std::istream& operator>>(std::istream& stream, PlayerInputMap& value)
 {
     std::string token;
@@ -191,6 +201,7 @@ std::istream& operator>>(std::istream& stream, PlayerInputMap& value)
     return stream;
 }
 
+#if !defined(BF2_IMAGE_AIDLL)
 std::istream& operator>>(std::istream& stream, GameInputMap& value)
 {
     std::string token;
@@ -198,7 +209,9 @@ std::istream& operator>>(std::istream& stream, GameInputMap& value)
     parseInputName(token, value, kGameInputNames, GINone);
     return stream;
 }
+#endif
 
+// ELF 0x490240; engine 0x84A4240. Conversion to narrow text precedes numeric parsing.
 std::wistream& operator>>(std::wistream& stream, PlayerInputMap& value)
 {
     std::wstring token;
@@ -207,6 +220,7 @@ std::wistream& operator>>(std::wistream& stream, PlayerInputMap& value)
     return stream;
 }
 
+#if !defined(BF2_IMAGE_AIDLL)
 std::wistream& operator>>(std::wistream& stream, GameInputMap& value)
 {
     std::wstring token;
@@ -214,6 +228,7 @@ std::wistream& operator>>(std::wistream& stream, GameInputMap& value)
     parseInputName(hfe::makeNarrow(token), value, kGameInputNames, GINone);
     return stream;
 }
+#endif
 
 } // namespace io
 } // namespace hfe

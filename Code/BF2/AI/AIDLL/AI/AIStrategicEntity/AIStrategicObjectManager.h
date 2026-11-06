@@ -5,6 +5,7 @@
 
 #include <list>
 #include <map>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -13,6 +14,7 @@
 // `dice::hfe::Math::Vec2/Vec3`, not classes in `dice::hfe`, so a local `struct Vec3;` is a
 // redefinition with a different basic type (C2371). The header has to come in.
 #include "../../../../Math/Vec3.h"
+#include "AIStrategicObject.h"                       // StrategicObjectType
 
 namespace dice {
 namespace hfe {
@@ -30,6 +32,10 @@ public:
     class WPContainer
     {
     public:
+        WPContainer();                                   // ELF 0x343340 (C2; C1 0x343380)
+        WPContainer(const WPContainer& other);           // ELF 0x3433C0 (C2; C1 0x3434F0)
+        ~WPContainer();                                  // ELF 0x343660 (D2; D1 0x3436D0)
+
         std::vector<SAWayPoint*>& getWayPoints(int type);
         const std::vector<SAWayPoint*>& getWayPoints(int type) const;
 
@@ -49,7 +55,7 @@ public:
             m_position.z = 0.0f;
         }
 
-        /*  +0 */ bool m_destroyed;       // 0 at creation; `bridgeSegmentDestroyed` sets it to 1
+        /*  +0 */ bool isDestroyed;       // 0 at creation; `bridgeSegmentDestroyed` sets it to 1  // name: AIDLL_r assert "bridge->isDestroyed" (0x10086E40; +0)
         /*  +4 */ int m_i4;              // [UNRESOLVED] - written only by `bridgeSegmentDestroyed`
         /*  +8 */ IAIObject* m_object;   // the search key for all three of the methods above
         /* +12 */ Vec3 m_position;       // [INFERRED] - three zeroed floats, never read here
@@ -71,11 +77,14 @@ public:
     AIStrategicObject* getStrategicObject(const std::string&) const;
     AIStrategicObject* getStrategicObjectOfCategory(int, int) const;
     void addStrategicObject(AIStrategicObject*);
-    void removeStrategicObject(int);
+    // ELF 0x344D00: the removed object, or 0 for an index out of range.
+    AIStrategicObject* removeStrategicObject(int index);
     AIStrategicObject* getClosestObject(const Vec3&, int) const;
     AIStrategicObject* getClosestObject(const Vec3&, int, bool) const;
     AIStrategicObject* getClosestObject(const Vec3&, int, int, int) const;
-    AIStrategicObject* getClosestObjectinCategory(const Vec3&, int, int, int, int) const;
+    // ELF 0x345020. [INFERRED] parameter names, from their uses.
+    AIStrategicObject* getClosestObjectinCategory(const Vec3& position, int side, int category,
+                                                  int equipment, int vehicle) const;
 
     // strategic areas
     AIStrategicArea* getStrategicArea(int) const;
@@ -83,24 +92,29 @@ public:
     const std::map<std::string, AIStrategicArea*>& getStrategicAreas() const;
     std::string getStrategicAreaNames();
     AIStrategicArea* getActiveArea();
-    void setActive(std::string);
+    bool setActive(std::string name);       // ELF 0x346D40; answers whether the name was found
     std::string getActive() const;
     // Initializes strategic areas; has no return value.
     void initAreas();
     void postLoadInitAreas();
     Vec2 getPosition() const;
     bool isInside(const std::string&, const Vec2&);
-    void create(std::string, Vec2, Vec2, float, float, const std::string&);
+    // ELF 0x3456D0: answers false (and clears the active area) for a duplicate name or a failed
+    // allocation, true after creating and selecting the area.
+    bool create(std::string name, Vec2 topLeft, Vec2 centre, float height, float radius,
+                const std::string& category = "");   // ConsoleClass417 passes "" for five arguments
     // Creates an area from a control point. Returns false for duplicate names or allocation
     // failure and true after successful creation.
-    bool createFromControlPoint(const std::string&, unsigned, float, const std::string&);
-    void removeActive();
+    // ConsoleClass419 passes "" when the category is omitted.
+    bool createFromControlPoint(const std::string&, unsigned, float, const std::string& = "");
+    bool removeActive();                    // ELF 0x3461A0; false without an active area
     void setFlankPosition(Vec3, Vec3);
     std::string list() const;
 
     // neighbours
-    void addNeighbour(std::string);
-    void addTwoWayNeighbour(std::string, std::string);
+    // ELF 0x3463B0 / 0x346460: false for an unknown name or areas of different layers (+0x190).
+    bool addNeighbour(std::string);
+    bool addTwoWayNeighbour(std::string, std::string);
     void removeAllNeighbours();
     std::string getNeighbours();
 
@@ -111,9 +125,10 @@ public:
     void createNewCategory(const std::string&);
 
     // object type flags
-    void addObjectTypeFlag(int);
-    void removeObjectTypeFlag(int);
-    void setObjectTypeFlags(int);
+    // The active area's new flag word, or -1 without an active area (or for type 27).
+    int addObjectTypeFlag(AIStrategicObject::StrategicObjectType);     // ELF 0x3467B0
+    int removeObjectTypeFlag(AIStrategicObject::StrategicObjectType);  // ELF 0x346800
+    int setObjectTypeFlags(int);                                       // ELF 0x346850
     int getObjectTypeFlags();
     void removeAllObjectTypeFlags();
     std::string getObjectTypeFlagMapping() const;
@@ -122,11 +137,11 @@ public:
     bool setOrderPosition(std::string, const Vec3&);
     Vec3 getOrderPosition(std::string);
     std::string listOrderPositions();
-    std::string checkAllOrderPositions() const;
+    void checkAllOrderPositions() const;    // ELF 0x34A150: no result (plain retl)
 
     // waypoints
     void addWayPoint(const Vec3&, const std::string&, const std::string&, const std::string&);
-    void removeWayPoint(const Vec3&, const std::string&, const std::string&, const std::string&);
+    bool removeWayPoint(const Vec3&, const std::string&, const std::string&, const std::string&);
     void clearWayPoints(const std::string&, const std::string&, const std::string&);
     const std::vector<SAWayPoint*>& getWaypoints(int, int, int) const;
     const std::vector<SAWayPoint*>& getWaypoints(int, const AIStrategicArea*, const AIStrategicArea*) const;
@@ -134,7 +149,10 @@ public:
     void undrawWayPoints() const;
     void setWayPointsToDraw(const std::string&, const std::string&);
     void clearWaypointToDraw();
-    std::string checkAllWayPoints() const;
+    void checkAllWayPoints() const;         // ELF 0x34A350: no result (plain retl)
+    // ELF 0x349610: an `aiStrategicArea.addWayPoint` line per waypoint, skipping containers whose
+    // first area's layer is listed in `excludedLayers` ("|"-separated).
+    void streamWaypoints(std::ostringstream& out, const std::string& excludedLayers) const;
 
     // bridges
     void createBridgeSegment(IAIObject*);
@@ -143,7 +161,11 @@ public:
     void resetBridges();
     void bridgeSegmentDestroyed(IAIObject*, int);
     void bridgeSegmentRepaired(IAIObject*);
-    bool getClosestDestroyedBridgeSegment(Vec3, bool, int, Vec3&, float&);
+    // Returns the nearest destroyed segment's object (ELF 0x349ED0 returns the pointer; the mangled
+    // name carries no return type). `position` receives the segment record's position, `distance`
+    // the squared distance.
+    IAIObject* getClosestDestroyedBridgeSegment(Vec3 from, bool repairRequested, int side, Vec3& position,
+                                                float& distance);
 
     static AIStrategicObjectManager* m_instance;
 
@@ -153,26 +175,28 @@ private:
     // MSVC's `sizeof` will differ - libstdc++ 3.x puts a `_Rb_tree` in twelve bytes (a header-node
     // pointer, a node count and four bytes of empty comparator) and a `std::list` in four.
     /*   +4 */ std::vector<AIStrategicObject*> m_strategicObjects;
-    /*  +16 */ std::vector<std::vector<AIStrategicObject*> > m_objectsByCategory;
-    // [UNRESOLVED] Cleared by construction and resets, but no implemented method sets or
-    // reads it. The current name does not establish its meaning.
-    /*  +28 */ bool m_areasInitialised;
-    /*  +32 */ std::map<std::string, AIStrategicArea*> m_strategicAreas;
+    /*  +16 */ std::vector<std::vector<AIStrategicObject*> > m_objectsPerCategory;   // name: AIDLL_r assert 0x10086290 (PE +0x14)
+public:
+    // [CHOSEN, not recovered] Visibility for the generated inline debug control.
+    /*  +28 */ bool m_debugEnabled;                 // false; console enableDebug
+private:
+    /*  +32 */ std::map<std::string, AIStrategicArea*> m_strategicAreaMap;   // name: AIDLL_r assert 0x1008B6F0 (PE +0x28)
     // The reverse index. Its value type is `std::string` - read straight off the destructor's
     // `_Rb_tree<AIStrategicArea*, pair<AIStrategicArea* const, std::string>, ...>` teardown.
     /*  +44 */ std::map<AIStrategicArea*, std::string> m_areaNames;
-    // An iterator, not a pointer - one word in this libstdc++, initialised to `m_strategicAreas.end`
+    // An iterator, not a pointer - one word in this libstdc++, initialised to `m_strategicAreaMap.end`
     // by the constructor and compared against `end` by every reader (`getActiveArea`
     // `getObjectTypeFlags`, `setOrderPosition`, `getPosition`).
     /*  +56 */ std::map<std::string, AIStrategicArea*>::iterator m_activeArea;
-    /*  +60 */ std::map<std::string, int> m_categories;
-    /*  +72 */ std::vector<std::string> m_categoryNames;
-    // Written 0 by the constructor and never touched again anywhere in this class. [UNRESOLVED].
-    /*  +84 */ bool m_b84;
-    /*  +88 */ std::map<std::pair<int, int>, WPContainer> m_wayPoints;
-    // The two halves of a `m_wayPoints` key, both -1 for "nothing selected".
-    // `clearWaypointToDraw` resets only the first of the two. `drawWayPoints` tests
-    // only the first as well, so the stale second half is never read - but it is left stale.
+    /*  +60 */ std::map<std::string, int> m_namesToCategory;   // name: AIDLL_r assert 0x100892D0 (PE +0x44)
+    /*  +72 */ std::vector<std::string> m_categoryToNames;   // name: AIDLL_r assert 0x100867B0 (PE +0x50)
+public:
+    // [CHOSEN, not recovered] Visibility for the generated inline drawing control.
+    /*  +84 */ bool m_drawVehicleSearchRadii;       // false; console drawVehicleSearchRadi
+private:
+    /*  +88 */ std::map<std::pair<int, int>, WPContainer> m_waypointMap;   // name: AIDLL_r assert 0x10089680 (PE +0x64)
+    // The two halves of a `m_waypointMap` key, both -1 for "nothing selected".
+    // `clearWaypointToDraw` resets only the first of the two; `drawWayPoints` tests both.
     /* +100 */ int m_wayPointsToDrawFirst;
     /* +104 */ int m_wayPointsToDrawSecond;
     /* +108 */ std::list<BridgeSegment*> m_bridgeSegments;

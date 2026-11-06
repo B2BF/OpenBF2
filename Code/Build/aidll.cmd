@@ -123,101 +123,9 @@ rem            at 0x18F020 (with setInputIsMapped and the bool overload). [PLATF
 rem            NOT identical: the shared TU also instantiates Input<GameInputMap,74>, which
 rem            the retail DLL does not carry - dead code here, recorded rather than split.
 rem ===========================================================================
-set SOURCES=^
- "%ROOT%\Core\DllModule.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIBot\BotMain.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIBot\BotNavigation.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIBot\BotSquad.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIBot\SensingAgent.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIBot\CommunicationAgent.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIBot\BotSenses.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIPlanInterpreter\BAPContext.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIKnowledge\InformationManager.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIKnowledge\Information.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIKnowledge\WeaponInfo.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIKnowledge\IPIArmament.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIKnowledge\IPIArmamentReal.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIKnowledge\IPICover.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIKnowledge\IPIMobile.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIKnowledge\IPIMobileReal.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIKnowledge\IPIMobileKnown.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIKnowledge\IPIUnit.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIKnowledge\InformationReal.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIKnowledge\WeaponInfoReal.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIKnowledge\IPIPhysicalReal.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIUtils\VehicleOccupancy.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIKnowledge\BFInformationEnvironment.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIKnowledge\AIInformationGrid.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIUtils\DebugRendering\AIRenderUtil.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIKnowledge\BFInformationCourier.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIKnowledge\InformationFactory.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIStrategicMap\BFStrategicEnvironment.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIStrategicMap\BotSpawner.cpp" ^
- "%ROOT%\AI\AIDLL\AI\DrawPrimitives\DPManager.cpp" ^
- "%ROOT%\AI\AIDLL\AI\Main\AICollisionHandler.cpp" ^
- "%ROOT%\AI\AIDLL\AI\Main\AIEventCourier.cpp" ^
- "%ROOT%\AI\AIDLL\AI\Main\AIMineManager.cpp" ^
- "%ROOT%\AI\AIDLL\AI\Main\AIPlayerCourier.cpp" ^
- "%ROOT%\AI\AIDLL\AI\Main\BFPathfindingCourier.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIPathFinding\Material\Material.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIPathFinding\Material\MaterialManager.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIPathFinding\NavMesh\MapProperties.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIPathFinding\NavMesh\QuadTreeManager.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIPathFinding\NavMesh\QuadTree.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIPathFinding\NavMesh\QuadTreeNode.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIPathFinding\Cluster\ClusterGraph.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIPathFinding\Cluster\ClusterNodeManager.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIPathFinding\NavMesh\QTSearchNodeManager.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIStrategicMap\AerialHeightMap.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIPlanInterpreter\BAPEntries.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIBot\SensingAgentPatterns.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIBot\SquadManager.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIBot\SquadCoordinator.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIBot\SquadFormation.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIBot\SquadMember.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIBotBehaviour\CustomCurve.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIBot\BotMemory.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIBot\BotSubObjects.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIBotBehaviour\UrgencyMerger.cpp" ^
- "%ROOT%\AI\AIDLL\AI\Main\AIConsole.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIBotBehaviour\UrgeCurve.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIStrategicEntity\CoverPosition\CPNodeManager.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIStrategicEntity\CoverPosition\CoverPositionManager.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIStrategicEntity\AIStrategicObjectManager.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIStrategicEntity\AILandingZoneManager.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIStrategicEntity\AIStrategicObject.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIStrategicEntity\AIStrategicArea.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIStrategicEntity\SAWayPoint.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIStrategic\SAI.cpp" ^
- "%ROOT%\AI\AIDLL\AI\Main\BotBehaviourManager.cpp" ^
- "%ROOT%\AI\AIDLL\AI\Main\CommunicationHub.cpp" ^
- "%ROOT%\AI\AIDLL\AI\Main\StrategyManager.cpp" ^
- "%ROOT%\AI\AIDLL\AI\Main\AIPathfinding.cpp" ^
- "%ROOT%\AI\AIDLL\AI\Main\IAIPathfinding.cpp" ^
- "%ROOT%\AI\AIDLL\AI\Main\UserOrderManager.cpp" ^
- "%ROOT%\AI\AIDLL\AI\AIKnowledge\WeaponInfoManager.cpp" ^
- "%ROOT%\AI\AIDLL\AI\Main\AIMain.cpp" ^
- "%ROOT%\AI\AIDLL\AI\Main\AIModule.cpp" ^
- "%ROOT%\AI\AIDLL\AI\Main\AIRandom.cpp" ^
- "%ROOT%\AI\AIDLL\AI\Main\AILODManager.cpp" ^
- "%ROOT%\AI\AIDLL\AI\Main\IBotManager.cpp" ^
- "%ROOT%\AI\AIDLL\AI\Main\AISettings.cpp" ^
- "%ROOT%\AI\AIDLL\AI\Main\AISingletonServer.cpp" ^
- "%ROOT%\AI\AIDLL\AI\Main\BF2AI.cpp" ^
- "%ROOT%\AI\AIDLL\AI\Main\BotManager.cpp" ^
- "%ROOT%\AI\AIDLL\AI\Main\CommonSingletonServer.cpp" ^
- "%ROOT%\AI\AIInterface\BFKnowledge\PlanePolygon.cpp" ^
- "%ROOT%\Core\DllGlobals.cpp" ^
- "%ROOT%\Core\ConsoleObjects.cpp" ^
- "%ROOT%\Core\ConsoleObjectBase.cpp" ^
- "%ROOT%\Core\Debug.cpp" ^
- "%ROOT%\Math\Frustum.cpp" ^
- "%ROOT%\Math\Mat4Inverse.cpp" ^
- "%ROOT%\Math\Plane3.cpp" ^
- "%ROOT%\Math\Vec3.cpp" ^
- "%ROOT%\IO\File\File.cpp" ^
- "%ROOT%\IO\Input\PlayerInput.cpp" ^
- "%ROOT%\Core\StringUtil.cpp"
+rem The source list is Code\Build\aidll_sources.txt (shared with CMake; one path per line, link order).
+rem It is read line by line: one 440-file "set SOURCES=" line exceeds cmd.exe's 8191-character limit.
+set MANIFEST=%~dp0aidll_sources.txt
 
 echo [1/4] compiling
 set OK=0
@@ -225,16 +133,20 @@ set BAD=0
 set /a OBJN=0
 set OBJ_RSP=%OUT%\aidll_objects.rsp
 type nul > "%OBJ_RSP%"
-for %%F in (%SOURCES%) do (
-    set /a OBJN+=1
-    cl %FLAGS% /Fo"%OUT%\!OBJN!_%%~nF.obj" "%%F" >"%OUT%\cl_%%~nF.log" 2>&1
-    if errorlevel 1 (
-        set /a BAD+=1
-        echo   COMPILE FAIL %%~nxF
-        type "%OUT%\cl_%%~nF.log"
-    ) else (
-        set /a OK+=1
-        echo "%OUT%\!OBJN!_%%~nF.obj">>"%OBJ_RSP%"
+for /f "usebackq eol=# tokens=* delims=" %%L in ("%MANIFEST%") do (
+    set "REL=%%L"
+    set "SRC=%ROOT%\!REL:/=\!"
+    for %%F in ("!SRC!") do (
+        set /a OBJN+=1
+        cl %FLAGS% /Fo"%OUT%\!OBJN!_%%~nF.obj" "%%~fF" >"%OUT%\cl_%%~nF.log" 2>&1
+        if errorlevel 1 (
+            set /a BAD+=1
+            echo   COMPILE FAIL %%~nxF
+            type "%OUT%\cl_%%~nF.log"
+        ) else (
+            set /a OK+=1
+            echo "%OUT%\!OBJN!_%%~nF.obj">>"%OBJ_RSP%"
+        )
     )
 )
 echo   %OK% compiled, %BAD% failed

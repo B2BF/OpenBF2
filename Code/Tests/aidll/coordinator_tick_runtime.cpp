@@ -42,7 +42,7 @@ namespace dice { namespace hfe { namespace ai {
 // [CHOSEN, not recovered] Native field/STL lifetimes without publication or deep construction.
 SquadCoordinator::SquadCoordinator(int side, int index)
     : m_squadIndex(index), m_side(side), m_strategicAreaAssignment(nullptr), m_i40(4),
-      m_i44(789), m_formation(nullptr), m_i120(0), m_d124(-999.0) {}
+      m_i44(789), m_formation(nullptr), m_missionStatus(0), m_d124(-999.0) {}
 SquadMember::SquadMember(SquadCoordinator* squad, IAIPlayer* player, int squadIndex, int side, int index)
     : m_squadIndex(squadIndex), m_memberIndex(index), m_player(player), m_bot(nullptr),
       m_squad(squad), m_side(side), m_havePath(true), m_request(nullptr), m_flag4A(false) {}
@@ -205,7 +205,7 @@ int main(int argc, char** argv)
     }
     else
     {
-        if (mode == "empty") squad.m_i120 = 258;
+        if (mode == "empty") squad.m_missionStatus = 258;
         else if (mode == "timestamp_bits")
         {
             const unsigned long long bits = 0x7ff8000000001234ULL;
@@ -252,7 +252,7 @@ int main(int argc, char** argv)
         }
         else
         {
-            squad.m_i120 = 2; squad.m_i40 = 0; squad.m_strategicAreaAssignment = &area;
+            squad.m_missionStatus = 2; squad.m_i40 = 0; squad.m_strategicAreaAssignment = &area;
             area.m_status[0] = area.m_status[1] = StatusMap::Hostile;
             expectedCalls = "m0:1,c0";
             if (mode == "commander")
@@ -341,7 +341,7 @@ int main(int argc, char** argv)
             require(calls == expectedCalls, "exact query order and arguments");
             if (tail) require(squad.m_i44 == 789, "no unassignment on a tail case");
             else if (expectedUnassigned)
-                require(!squad.m_strategicAreaAssignment && squad.m_i40 == 4 && squad.m_i44 == 0 && squad.m_i120 == 0,
+                require(!squad.m_strategicAreaAssignment && squad.m_i40 == 4 && squad.m_i44 == 0 && squad.m_missionStatus == 0,
                         "all four real unassignment stores");
             else require(squad.m_i44 == 789, "no unassignment when refused");
         }

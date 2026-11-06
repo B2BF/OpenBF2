@@ -1,6 +1,10 @@
 // [INFERRED] Source placement.
 
 #include "UrgeCurve.h"
+#include <iostream>
+// Original UCLinear.cpp and UCXInverse.cpp are combined here; both only initialized iostreams.
+// static init: ELF 0x226350, 0x2263B0, 0x2263E0
+// static init: ELF 0x226530, 0x226590, 0x2265C0
 
 #include <algorithm>            // std::max - see the argument-order note in the header
 

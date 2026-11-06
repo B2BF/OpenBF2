@@ -238,7 +238,7 @@ IBotManager::~IBotManager() {}
 IBotManagerModifier::IBotManagerModifier() {}
 IBotManagerModifier::~IBotManagerModifier() {}
 Information::Information(IAIObject* object, double time)
-    : m_objectTypeFlags(0), m_strength(0.0f), m_time(time), m_object(object), m_booked(false), m_bookingPlayerId(-1),
+    : m_objectTypeFlags(0), m_strength(0.0f), m_time(time), m_object(object), m_isBooked(false), m_bookingPlayerId(-1),
       m_armament(nullptr), m_controlInfo(nullptr), m_cover(nullptr), m_mobile(nullptr), m_physical(nullptr),
       m_unit(nullptr)
 {
@@ -285,7 +285,7 @@ BotManager::BotInfo::BotInfo(Bot* bot)
 {
 }
 BotManager::BotManager()
-    : m_queuePriorityA(new BotQueue), m_queuePriorityB(new BotQueue), m_queueSensing(new SensingQueue),
+    : m_planned(new BotQueue), m_unplanned(new BotQueue), m_sensingQueue(new SensingQueue),
       m_lodLevelFullPriority(fullPriority), m_plannedDecisionMakingThresholdFull(plannedThreshold),
       m_unplannedDecisionMakingThresholdFull(unplannedThreshold), m_planExecutionsThisTick(7),
       m_tickCount180(8), m_tickCount184(9), m_planHalfToggle(initialToggle), m_planCursor(initialCursor)
@@ -303,10 +303,10 @@ BotManager::BotManager()
     view.occupiedObjects = &m_occupiedObjects;
     view.pathCursor = &m_pathfindingCursor;
     view.hearingResume = &m_hearingResumeId;
-    view.infos = &m_botInfos;
-    view.queueA = m_queuePriorityA;
-    view.queueB = m_queuePriorityB;
-    view.sensing = m_queueSensing;
+    view.infos = &m_bots;
+    view.queueA = m_planned;
+    view.queueB = m_unplanned;
+    view.sensing = m_sensingQueue;
     view.cursor = &m_planCursor;
     view.toggle = &m_planHalfToggle;
     view.executions = &m_planExecutionsThisTick;
@@ -315,9 +315,9 @@ BotManager::BotManager()
 }
 BotManager::~BotManager()
 {
-    delete m_queuePriorityA;
-    delete m_queuePriorityB;
-    delete m_queueSensing;
+    delete m_planned;
+    delete m_unplanned;
+    delete m_sensingQueue;
 }
 BotMain::BotMain(IAIPlayer*, unsigned int, float*, float, int, BotOrder*, BotMemory*, PlanInterpreter*, int,
                  UrgencyGenerator*, UrgencyGenerator**)

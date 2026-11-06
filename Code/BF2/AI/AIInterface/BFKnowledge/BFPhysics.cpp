@@ -1,15 +1,10 @@
 // [INFERRED] Source placement.
-// [FRONTIER] Remaining methods stop by name until implemented.
-// [TEMP] Temporary implementation boundaries remain.
-// [CHOSEN, not recovered] Temporary implementation boundaries remain.
-// [RETIRE-WHEN: aidll-01-adapters] Complete and validate the remaining BFPhysics operations.
 
 #include "BFPhysics.h"
 
-#include "AIFrontier.h"
-
 #include "../../AIDLL/AI/Main/CommonSingletonServer.h"
 #include "../../../Core/ClassManager.h"
+#include "../../../Physics/BasicPhysicsSystem.h"   // IPhysicsSystem::getGravity (+0x20)
 
 namespace dice {
 namespace hfe {
@@ -19,31 +14,36 @@ extern ClassManager* classManager;
 namespace ai {
 
 // First wins in, exact match out.
+// ELF 0x840E790 / 0x840E810.
 IAIPhysics::IAIPhysics()
 {
     if (!CommonSingletonServer::m_iaiPhysics)
         classManager->registerSimpleSingleton(std::string("IAIPhysics"), this);
 }
 
+// ELF 0x840E890 / 0x840E910 / 0x840E990.
 IAIPhysics::~IAIPhysics()
 {
     if (CommonSingletonServer::m_iaiPhysics == this)
         classManager->unregisterSimpleSingleton(std::string("IAIPhysics"));
 }
 
+// ELF 0x840B740 / 0x840B770.
 BFPhysics::BFPhysics()
 {
 }
 
+// ELF 0x840B7A0 / 0x840B7C0 / 0x840B7E0.
 BFPhysics::~BFPhysics()
 {
 }
 
-// - world::basicPhysicsSystem (ds:) vtable +0x20.
-// The whole class is a one-call forwarder; four bytes, one virtual.
+// bf2 0x840B810: a forwarder to world::basicPhysicsSystem's getGravity (IPhysicsSystem +0x20),
+// no null guard.
+// ELF 0x840B810.
 float BFPhysics::getGravity() const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::BFPhysics::getGravity");
+    return static_cast<world::IPhysicsSystem*>(world::basicPhysicsSystem)->getGravity();
 }
 
 } // namespace ai

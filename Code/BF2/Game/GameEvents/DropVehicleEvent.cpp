@@ -43,16 +43,15 @@ DropVehicleEvent::DropVehicleEvent(float positionX, float positionZ, int team, b
 {
 }
 
-#if !DEDICATED
 // PE7B2460, all16 instructions read. Do not delegate to the default ctor:
-// the retail client does not initialize m_field15, even though serialize reads it.
+// ELF 0x840F690 inlines the same producer in BFCommander::dropVehicle.
+// shipped defect: m_field15 is not initialized, even though serialize reads it.
 DropVehicleEvent::DropVehicleEvent(int team, Vec2 position) : GameEvent()
 {
     m_positionX = position.x;
     m_positionZ = position.y;
     m_team = static_cast<unsigned char>(team);
 }
-#endif
 
 int DropVehicleEvent::getType() const
 {

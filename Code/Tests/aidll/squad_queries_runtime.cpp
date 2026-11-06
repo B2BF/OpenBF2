@@ -17,7 +17,7 @@ using namespace dice::hfe::ai;
 static_assert(sizeof(void*) == 4, "MSVC x86 fixture only");
 static_assert(sizeof(Vec3) == 12, "three float coordinates");
 static_assert(std::is_same<decltype(SquadMember::m_squad), SquadCoordinator*>::value, "squad pointer type");
-static_assert(std::is_same<decltype(SquadCoordinator::m_i96), int>::value, "signed leader index");
+static_assert(std::is_same<decltype(SquadCoordinator::m_squadLeaderIndex), int>::value, "signed leader index");
 static_assert(std::is_same<decltype(SquadCoordinator::m_squadMembers), std::vector<SquadMember*>>::value, "native pointer vector");
 static_assert(std::is_same<decltype(SquadCoordinator::m_v108), Vec3>::value, "position type");
 static_assert(std::is_same<decltype(&SquadMember::getSquad), SquadCoordinator*(SquadMember::*)()>::value, "non-const pointer query");
@@ -26,7 +26,7 @@ static_assert(std::is_same<decltype(&SquadCoordinator::getSquadLeader), SquadMem
 
 namespace dice { namespace hfe { namespace ai {
 SquadCoordinator::SquadCoordinator(int side, int squadIndex)
-    : m_squadIndex(squadIndex), m_side(side), m_i96(-1), m_formation(nullptr), m_v108{0,0,0} {}
+    : m_squadIndex(squadIndex), m_side(side), m_squadLeaderIndex(-1), m_formation(nullptr), m_v108{0,0,0} {}
 SquadMember::SquadMember(SquadCoordinator* squad, IAIPlayer* player, int squadIndex, int side, int memberIndex)
     : m_squadIndex(squadIndex), m_memberIndex(memberIndex), m_isSquadLeader(false),
       m_playerId(-1), m_player(player), m_bot(nullptr), m_squad(squad), m_side(side), m_request(nullptr) {}
@@ -51,7 +51,7 @@ int main(int argc, char** argv)
     {
         std::printf("{\"pointer_bytes\":%zu,\"vec3_bytes\":%zu,\"member_bytes\":%zu,\"member_squad_offset\":%zu,\"coordinator_bytes\":%zu,\"leader_index_offset\":%zu,\"position_offset\":%zu,\"vector_bytes\":%zu,\"list_bytes\":%zu}\n",
             sizeof(void*), sizeof(Vec3), sizeof(SquadMember), offsetof(SquadMember,m_squad),
-            sizeof(SquadCoordinator), offsetof(SquadCoordinator,m_i96), offsetof(SquadCoordinator,m_v108),
+            sizeof(SquadCoordinator), offsetof(SquadCoordinator,m_squadLeaderIndex), offsetof(SquadCoordinator,m_v108),
             sizeof(std::vector<SquadMember*>), sizeof(std::list<int>));
         return 0;
     }
@@ -89,22 +89,22 @@ int main(int argc, char** argv)
     else if (mode == "leader")
     {
         first.m_squadMembers = {&member, nullptr, &another};
-        first.m_i96 = 0;
+        first.m_squadLeaderIndex = 0;
         require(first.getSquadLeader() == &member, "first leader index");
-        first.m_i96 = 2;
+        first.m_squadLeaderIndex = 2;
         require(first.getSquadLeader() == &another, "last leader index");
         first.m_squadMembers[2] = &member;
         require(first.getSquadLeader() == &member, "fresh indexed entry");
         first.m_squadMembers.reserve(first.m_squadMembers.capacity() + 17);
         first.m_squadMembers[2] = &another;
         require(first.getSquadLeader() == &another, "native vector relocation uses current storage");
-        first.m_i96 = 1;
+        first.m_squadLeaderIndex = 1;
         require(first.getSquadLeader() == nullptr, "in-bounds null entry returned unchanged");
-        require(first.m_squadMembers.size() == 3 && first.m_i96 == 1, "no roster or leader mutation");
+        require(first.m_squadMembers.size() == 3 && first.m_squadLeaderIndex == 1, "no roster or leader mutation");
     }
     else if (mode == "chain")
     {
-        first.m_squadMembers = {&another, &member}; first.m_i96 = 0;
+        first.m_squadMembers = {&another, &member}; first.m_squadLeaderIndex = 0;
         second.m_v108 = {4,5,6};
         Vec3 output = {};
         member.getSquad()->getSquadLeader()->getSquad()->getSquadPosition(output);

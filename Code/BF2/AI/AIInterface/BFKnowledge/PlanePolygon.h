@@ -1,9 +1,5 @@
 // Planar polygon geometry and transforms.
-// [FRONTIER] Intersection and containment operations remain incomplete.
 // [INFERRED] Source placement.
-// [TEMP] Temporary implementation boundaries remain.
-// [CHOSEN, not recovered] Temporary implementation boundaries remain.
-// [RETIRE-WHEN: aidll-07-knowledge] Complete and validate the remaining PlanePolygon operations.
 
 #ifndef AI_AIINTERFACE_BFKNOWLEDGE_PLANEPOLYGON_H
 #define AI_AIINTERFACE_BFKNOWLEDGE_PLANEPOLYGON_H
@@ -38,15 +34,16 @@ class PlanePolygon : public IPlanePolygon
 public:
     PlanePolygon();
     explicit PlanePolygon(const std::list<Vec2>& vertices);
-    PlanePolygon(BoundingBox* box, const Mat4& transformation); // [FRONTIER]
+    PlanePolygon(BoundingBox* box, const Mat4& transformation);
+    PlanePolygon(const Vec3& direction, BoundingBox* box);
     virtual ~PlanePolygon();
 
     virtual IPlanePolygon* fromTransform(const Mat4& transformation) const;
     virtual void setVertices(std::list<Vec2>& vertices);
     virtual const std::list<Vec2>& getVertices() const;
     virtual void getScaledVertices(std::list<Vec2>& out, const Vec2& scale) const;
-    virtual bool intersects(const Vec2& a, const Vec2& b) const;   // [FRONTIER]
-    virtual bool isInside(const Vec2& a, const Vec2& b) const;     // [FRONTIER]
+    virtual bool intersects(const Vec2& a, const Vec2& b) const;
+    virtual bool isInside(const Vec2& a, const Vec2& b) const;
 
 private:
     /* +0x04 */ std::list<Vec2> m_vertices;

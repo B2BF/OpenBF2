@@ -3,9 +3,13 @@
 #include "Plane3.h"
 #include "Mat4.h"
 
+// static init: ELF 0x49C1D0, 0x49C230, 0x49C260 (std::__ioinit).
+#include <iostream>
+
 namespace dice {
 namespace hfe {
 
+// ELF 0x49BDA0; engine ELF 0x83B8110.
 // n' = R * n (the 3x3, row-vector form: n'.x = m0*nx + m4*ny + m8*nz ...);
 // the plane's point p = -n * d goes through the full affine (R * p + t, t = m12..m14) and
 // d' = -(n' . p').
@@ -23,7 +27,23 @@ Plane3 Plane3::transform(const Plane3& plane, const Mat4& m)
     return r;
 }
 
-// aidll / The body constructs one point on the plane as
+// ELF 0x49BEE0; engine ELF 0x83B8240.
+void Plane3::projectVector(const Vec3& v, Vec3& out)
+{
+    const float nx = normal.x, ny = normal.y, nz = normal.z;
+    const float xx = nx * nx, yy = ny * ny, zz = nz * nz;
+    const float xy = -nx * ny, xz = -nx * nz, yz = -ny * nz;
+    const float vx = v.x, vy = v.y, vz = v.z;
+    // No normalization: the projection is scaled by the squared normal length.
+    const float x = vx * (yy + zz) + vy * xy + vz * xz;
+    const float y = xy * vx + vy * (zz + xx) + vz * yz;
+    const float z = xz * vx + vy * yz + vz * (xx + yy);
+    out.x = x;
+    out.y = y;
+    out.z = z;
+}
+
+// ELF 0x49C020; engine ELF 0x83B8360. The body constructs one point on the plane as
 // `-normal * d`, intersects the infinite line, records whether the parameter lies in [0, 1], and
 // returns true for every non-parallel line. The range flag does not control the return value.
 // On a parallel line neither output is written.
@@ -51,7 +71,7 @@ bool Plane3::intersectLine(const Vec3& a, const Vec3& b, Vec3& out, bool& inside
     return true;
 }
 
-// transcribed term for term (a2 = p1, a3 = p2, a4 = p3 in the decompile).
+// ELF 0x493FD0; engine ELF 0x83B0B50. Originally emitted in Frustum.cpp.
 Vec3 intersect(const Plane3& p1, const Plane3& p2, const Plane3& p3)
 {
     const float n1x = p1.normal.x, n1y = p1.normal.y, n1z = p1.normal.z;

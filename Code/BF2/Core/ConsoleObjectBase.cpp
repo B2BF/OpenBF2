@@ -1,6 +1,9 @@
 // Path:     [INFERRED] - see ConsoleObjectBase.h header block.
 // Contents: recovered from bf2.i64 (ELF, symbolised), 0x83be630 - 0x83beab6.
 
+// static init: ELF 0x4863B0 (__tcf_0 0x486410, _GLOBAL__I 0x486440): <iostream>'s Init object only.
+#include <iostream>
+
 #include "ConsoleObjectBase.h"
 #include "ConsoleObjectMacro.h"   // consoleBindingList / the three default accessors
 #include <cstdio>
@@ -13,6 +16,7 @@ namespace hfe {
 
 // Converts typed arguments or stores raw string pointers, executes the binding and formats its result.
 // setArgFromString uses one-based indices; argument storage belongs to the generated binding.
+// ELF 0x486320; engine 0x83BE630. Slots +0x68, +0x7C, +0x60, +0x64 are attested in both images.
 std::string ConsoleObjectBaseImpl::execute(std::string* args, int argCount)
 {
     // [TEMP] [CHOSEN, not recovered] BF2_TRACE_CONSOLE logs each invoked binding.

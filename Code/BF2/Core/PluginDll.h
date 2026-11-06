@@ -3,6 +3,13 @@
 #ifndef CORE_PLUGINDLL_H
 #define CORE_PLUGINDLL_H
 
+#if !defined(_WIN32)
+// [PLATFORM] ELF wrappers over dlopen/dlsym/dlclose, defined in PluginDll.cpp.
+void* LoadLibrary(const char* name);
+void* GetProcAddress(void* handle, const char* name);
+bool  FreeLibrary(void* handle);
+#endif
+
 namespace dice {
 namespace hfe {
 

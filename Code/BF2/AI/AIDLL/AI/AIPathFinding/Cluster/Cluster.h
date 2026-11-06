@@ -7,18 +7,28 @@
 
 namespace dice {
 namespace hfe {
+
+namespace io { class File; }
+
 namespace ai {
 
 class Cluster
 {
 public:
-    Cluster() {}      // empty
-    ~Cluster() {}     // empty
+    Cluster();
+    ~Cluster();
 
-    /* +0x00 */ unsigned char  m_unread00[8];         // [UNRESOLVED] - see the note above
+    // Reads the cluster's polygon list of a GTS file; see the definition.
+    void readGTSDataFromFile(unsigned int* polygons, unsigned int& count, unsigned int first,
+                             io::File& file);
+
+    /* +0x00 */ unsigned int   m_firstPolygon;        // [INFERRED] name: into ClusterGraph::m_clusterPolygons
+    /* +0x04 */ unsigned int   m_numberOfPolygons;    // [INFERRED] name: resetTempMemberSizes copies it
     /* +0x08 */ unsigned short m_firstPortal;         // getClusterPortal's base
     /* +0x0A */ unsigned short m_numberOfPortals;     // getClusterPortal's stride
-    /* +0x0C */ unsigned char  m_unread0C[4];         // index 2 (+0x0E): map-part walkability state
+    /* +0x0C */ unsigned short m_firstPortalCost;     // [INFERRED] name: getCostBetweenClustersPortals' base
+    /* +0x0E */ unsigned char  m_walkable;            // [INFERRED] name: map-part walkability state
+    /* +0x0F */ unsigned char  m_unread0F;
 };
 
 typedef char ClusterIsTheFileRecord[sizeof(Cluster) == 16 ? 1 : -1];

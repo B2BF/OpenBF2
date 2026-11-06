@@ -1,12 +1,7 @@
-// [FRONTIER] Remaining methods stop by name until implemented.
-// [TEMP] Temporary implementation boundaries remain.
-// [RETIRE-WHEN: aidll-07-knowledge] Complete and validate the remaining AIObjectMobile operations.
-
 #include "AIObjectMobile.h"
 
 #include <cmath>
 
-#include "AIFrontier.h"
 #include "AITemplateMobile.h"
 
 #include "../SingletonServer.h"                              // BFSingletonServer::m_iInformationFactory
@@ -16,6 +11,8 @@
 #include "../../AIDLL/AI/Main/CommonSingletonServer.h"
 
 #include "../../../Core/Ids.h"
+#include "../../../Core/Debug.h"
+#include "../../../Scene/Object/WorldObjTemplPortal/PortalEvent.h"
 #include "../../../Game/Objects/IObject.h"
 #include "../../../Game/Objects/ISoldier.h"
 #include "../../../Game/Objects/ObjectLayoutAccess.h"        // IObject +0x44, the physics node
@@ -229,14 +226,16 @@ float AIObjectMobile::getSprintStamina() const
     return 0.0f;
 }
 
-// read: type 0 stores the event's portal id in
-// the owner's m_lastPassedPortal, type 1 stores -1, and anything else is retail's
-// Debug(Error, "AI/AIInterface/BFKnowledge/AIObjectMobile.cpp", 57) "Unwanted event sent to
-// callback". It needs world::PortalEvent::getType / getPortalId, which this tree does not declare.
-// [FRONTIER] [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: aidll-07-knowledge]
-void AIObjectMobile::PortalEventCallback::handleEvent(world::PortalEvent* /*event*/)
+// ELF 0x8417450. Preserve the repeated type query before the leave-sector branch.
+void AIObjectMobile::PortalEventCallback::handleEvent(world::PortalEvent* event)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::AIObjectMobile::PortalEventCallback::handleEvent (world::PortalEvent)");
+    if (event->getType() == world::PORTAL_EVENT_ENTER_SECTOR)
+        m_owner->m_lastPassedPortal = static_cast<int>(event->getPortalId());
+    else if (event->getType() == world::PORTAL_EVENT_LEAVE_SECTOR)
+        m_owner->m_lastPassedPortal = -1;
+    else
+        Debug(DebugTypeError, "AI/AIInterface/BFKnowledge/AIObjectMobile.cpp", 57)
+            << "Unwanted event sent to callback";
 }
 
 } // namespace ai

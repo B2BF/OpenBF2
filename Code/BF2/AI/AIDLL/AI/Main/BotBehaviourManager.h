@@ -13,14 +13,17 @@ namespace dice {
 namespace hfe {
 namespace ai {
 
+class BotBehaviour;
 class UrgeCurve;
 
 // Factory interface for constructing bot behaviors.
 class BBCreateFunction
 {
 public:
-    virtual int operator()(int behaviourId, std::string& name, int mode,
-                           UrgeCurve* urgeCurve, float* weights) = 0;
+    // Returns the new behaviour (`movl %edi, %eax` after `new BB...`); an unknown pattern name
+    // still builds the behaviour, with a null pattern.
+    virtual BotBehaviour* operator()(int behaviourId, std::string& name, int mode,
+                                     UrgeCurve* urgeCurve, float* weights) = 0;
 };
 
 class BotBehaviourManager
@@ -41,7 +44,9 @@ public:
 
     // the factory dispatch
     // Called by `AIConsole::setVehicleBehaviour` , which is the `.ai` script binding.
-    int create(std::string behaviourName, std::string createFunctionName, std::string name,
+    // Returns the created behaviour, or null with `message` set (AIConsole::setVehicleBehaviour
+    // registers a non-null result).
+    BotBehaviour* create(std::string behaviourName, std::string createFunctionName, std::string name,
                int mode, std::string urgeCurveName, float* weights, std::string& message);
 
     // the urge-curve factories

@@ -131,7 +131,7 @@ private:
     // [UNRESOLVED] Four-byte member left uninitialized and unread by the implemented methods.
     /* +0x20 */ int  m_unwritten20;
 
-    /* +0x24 */ Cell*   m_cells;       // `new Cell[m_dimX * m_dimZ + 1]` - see the header block
+    /* +0x24 */ Cell*   m_grid;       // `new Cell[m_dimX * m_dimZ + 1]` - see the header block  // name: AIDLL_r assert 0x101FAC00 (+0x24)
     /* +0x28 */ InfoMap m_infos;       // id -> record; in this libstdc++
     /* +0x34 */ mutable std::vector<InfoInfo*> m_visited;   // the scratchpad; `mutable` is required
                                                             // because three `const` queries fill it

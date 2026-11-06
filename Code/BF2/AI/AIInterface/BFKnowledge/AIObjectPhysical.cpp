@@ -1,12 +1,8 @@
 // [INFERRED] Source placement.
-// [FRONTIER] Remaining methods stop by name until implemented.
-// [TEMP] Temporary implementation boundaries remain.
-// [CHOSEN, not recovered] Temporary implementation boundaries remain.
-// [RETIRE-WHEN: aidll-07-knowledge] Complete and validate the remaining AIObjectPhysical operations.
 
 #include "AIObjectPhysical.h"
 
-#include "AIFrontier.h"
+#include "../../AIDLL/AI/AIUtils/checkPointer.h"
 #include "AITemplatePhysical.h"
 #include "BFGame.h"                                          // IAIGame::getIsPrecaching (+0x68)
 
@@ -18,15 +14,18 @@
 #include "../../../Core/Ids.h"
 #include "../../../Game/Objects/DestroyableObjectTemplate.h" // usedByAi / initiallyWalkable / corners
 #include "../../../Game/Objects/GameLogicComp/IArmorGLComp.h"
+#include "../../../Game/Objects/GameLogicComp/ArmorGLCompTemplate.h"   // getTimeToStayAsWreck
 #include "../../../Game/Objects/IObject.h"
 #include "../../../Game/Objects/IObjectTemplate.h"
 #include "../../../Game/Objects/IPlayer.h"
 #include "../../../Game/Objects/ObjectLayoutAccess.h"
 #include "../../../Math/LocalBoundingBox.h"
+#include "../../../Math/BoundingBox.h"
 #include "../../../Physics/ICollisionMesh.h"
 #include "../../../Physics/IPhysicsNode.h"
 #include "../../../Physics/IResponsePhysics.h"
 #include "../../../Physics/PhysicsUtil.h"                    // hfe::resetPhysics
+#include "../../../Physics/SoldierResponse.h"                // m_byteFA (+0xFA), a friend
 #include "../../../Scene/Object/ObjectTypes/Game/IPlayerControlObject.h"
 
 namespace dice {
@@ -56,12 +55,14 @@ world::IResponsePhysics* responsePhysics(world::IObject* object)
 } // anonymous namespace
 
 // . +0x0C is left unwritten.
+// ELF 0x8419940 / 0x8419980.
 AIObjectPhysical::AIObjectPhysical(IAIObject* object, AITemplatePhysical* aiTemplate)
     : IAIObjectPhysical(object), m_template(aiTemplate), m_physicsNode(0), m_mapPosId(-1)
 {
 }
 
 // A pathfinding-relevant object gives its map entry back.
+// ELF 0x8419AD0 / 0x8419B30 / 0x8419B90.
 AIObjectPhysical::~AIObjectPhysical()
 {
     if (m_template->m_affectsPathfinding)
@@ -69,12 +70,14 @@ AIObjectPhysical::~AIObjectPhysical()
             m_mapPosId, m_object);                                                  // +0xC4
 }
 
+// ELF 0x8419D00.
 int AIObjectPhysical::getId() const
 {
     return AIOFPhysical;
 }
 
 // - the factory's three-argument request under this plug-in's own id.
+// ELF 0x8419BF0.
 void AIObjectPhysical::createInformationPlugIn(unsigned int handle, bool real)
 {
     informationFactory()->requestInformationPlugin(handle, getId(), real);         // +0x20
@@ -87,6 +90,7 @@ void AIObjectPhysical::createInformationPlugIn(unsigned int handle, bool real)
 // announces itself as a bridge.
 // The template is cast to DestroyableObjectTemplate unchecked - only such templates can set
 // m_affectsPathfinding (AITemplatePhysical::initFromObject).
+// ELF 0x84199C0.
 void AIObjectPhysical::init()
 {
     m_maxHealth = m_template->m_maxHealth;
@@ -109,11 +113,13 @@ void AIObjectPhysical::init()
 }
 
 // empty.
+// ELF 0x841A740.
 void AIObjectPhysical::update()
 {
 }
 
 // Returns 1,000,000 when there is no armour component.
+// ELF 0x841A170.
 float AIObjectPhysical::getHealth()
 {
     world::IArmorGLComp* const armor =
@@ -124,32 +130,38 @@ float AIObjectPhysical::getHealth()
 }
 
 // / - template reads.
+// ELF 0x8419C40.
 float AIObjectPhysical::getMaxHealth() const
 {
     return m_template->m_maxHealth;
 }
 
+// ELF 0x8419C50.
 float AIObjectPhysical::getMass() const
 {
     return m_template->m_mass;
 }
 
+// ELF 0x8419CC0.
 float AIObjectPhysical::getVolume() const
 {
     return m_template->m_volume;
 }
 
+// ELF 0x8419CE0.
 float AIObjectPhysical::getBestArmour() const
 {
     return m_template->m_bestArmour;
 }
 
+// ELF 0x8419CF0.
 int AIObjectPhysical::getStrType() const
 {
     return m_template->m_strType;
 }
 
 // a constant, whatever the direction.
+// ELF 0x8419CD0.
 float AIObjectPhysical::getArmour(const Vec3& /*direction*/) const
 {
     return 1.0f;
@@ -157,6 +169,7 @@ float AIObjectPhysical::getArmour(const Vec3& /*direction*/) const
 
 // an object without collision LOD 1 calls abort - retail's own, not a
 // frontier. Otherwise the collision mesh's LOD-1 box.
+// ELF 0x841A1A0.
 const LocalBoundingBox* AIObjectPhysical::getLocalBoundingBox() const
 {
     if (!m_object->getObject()->hasCollisionLod(1))                                 // +0xCC
@@ -164,21 +177,33 @@ const LocalBoundingBox* AIObjectPhysical::getLocalBoundingBox() const
     return collisionMesh(m_object->getObject())->getBoundingBox(1);                 // +0x58
 }
 
-// `new BoundingBox` (0x60 B, eight zeroed corners), initWithLocalBoundingBox(
-// getLocalBoundingBox), transform(object->getAbsoluteTransformation), checkPointer'd. The
-// BoundingBox class is not in this tree.
+// ELF 0x841A280. Allocation precedes the virtual queries; initialization follows them.
 BoundingBox* AIObjectPhysical::getCurrentBoundingBox()
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::AIObjectPhysical::getCurrentBoundingBox (BoundingBox)");
+    BoundingBox* const box = new BoundingBox;
+    const LocalBoundingBox* const local = getLocalBoundingBox();
+    const Mat4& transformation = m_object->getObject()->getAbsoluteTransformation();
+    for (int i = 0; i < 8; ++i)
+        box->m_corners[i] = Vec3{ 0.0f, 0.0f, 0.0f };
+    box->initWithLocalBoundingBox(*local);
+    box->transform(transformation);
+    return checkPointer(box);
 }
 
-// the same with the caller's transformation.
-BoundingBox* AIObjectPhysical::getBoundingBox(const Mat4& /*transformation*/)
+// ELF 0x841A400.
+BoundingBox* AIObjectPhysical::getBoundingBox(const Mat4& transformation)
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::AIObjectPhysical::getBoundingBox (BoundingBox)");
+    BoundingBox* const box = new BoundingBox;
+    const LocalBoundingBox* const local = getLocalBoundingBox();
+    for (int i = 0; i < 8; ++i)
+        box->m_corners[i] = Vec3{ 0.0f, 0.0f, 0.0f };
+    box->initWithLocalBoundingBox(*local);
+    box->transform(transformation);
+    return checkPointer(box);
 }
 
 // The collision mesh's LOD-1 radius, 0 without that LOD.
+// ELF 0x8419C60.
 float AIObjectPhysical::getRadius() const
 {
     if (!m_object->getObject()->hasCollisionLod(1))                                 // +0xCC
@@ -188,6 +213,7 @@ float AIObjectPhysical::getRadius() const
 
 // The box centre, recomputed first when stale - through a const pointer, as
 // retail does (the derived data is cached state).
+// ELF 0x841A200.
 Vec3 AIObjectPhysical::getSphereLocalOffset() const
 {
     LocalBoundingBox* const box = const_cast<LocalBoundingBox*>(getLocalBoundingBox());   // +0x30
@@ -197,6 +223,7 @@ Vec3 AIObjectPhysical::getSphereLocalOffset() const
 }
 
 // the radius about the centre.
+// ELF 0x841A250.
 float AIObjectPhysical::getSmallestRadius() const
 {
     LocalBoundingBox* const box = const_cast<LocalBoundingBox*>(getLocalBoundingBox());
@@ -205,33 +232,89 @@ float AIObjectPhysical::getSmallestRadius() const
     return box->m_radiusFromCentre;
 }
 
-// the LOD-1 box's longer horizontal side split into equal circles along its middle
-// (pushed into `out` as Vec2), the step returned. Read; not yet transcribed.
-float AIObjectPhysical::getSubSpheres2d(std::vector<Vec2>& /*out*/) const
+// ELF 0x8419E50. Appends circles along the longer horizontal side; returns their spacing.
+float AIObjectPhysical::getSubSpheres2d(std::vector<Vec2>& out) const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::AIObjectPhysical::getSubSpheres2d");
+    const LocalBoundingBox* const minimum = getLocalBoundingBox();
+    const LocalBoundingBox* const maximum = getLocalBoundingBox();
+    const float minX = minimum->m_min.x;
+    const float minZ = minimum->m_min.z;
+    const float width = maximum->m_max.x - minX;
+    const float depth = maximum->m_max.z - minZ;
+    if (depth > width)
+    {
+        if (width != 0.0f)
+        {
+            const float count = depth / width;
+            if (count > 1.0f)
+            {
+                Vec2 position = { minX + width * 0.5f, minZ };
+                const float step = depth / (count + 1.0f);
+                for (int i = 0; static_cast<float>(i) < count; ++i)
+                {
+                    position.y += step;
+                    out.push_back(position);
+                }
+                return step;
+            }
+        }
+    }
+    else if (width > depth && depth != 0.0f)
+    {
+        const float count = width / depth;
+        if (count > 1.0f)
+        {
+            Vec2 position = { minX, minZ + depth * 0.5f };
+            const float step = width / (count + 1.0f);
+            for (int i = 0; static_cast<float>(i) < count; ++i)
+            {
+                position.x += step;
+                out.push_back(position);
+            }
+            return step;
+        }
+    }
+    // shipped defect: both coordinates use x, with two independent virtual queries.
+    const float x = getSphereLocalOffset().x;
+    const float z = getSphereLocalOffset().x;
+    out.push_back(Vec2{ x, z });
+    return getSmallestRadius();
 }
 
+// ELF 0x841A090.
 bool AIObjectPhysical::isTouchingTerrain(Vec3& out) const
 {
     return responsePhysics(m_object->getObject())->getIsIntersectingTerrain(out);   // +0x7C
 }
 
-// false while the physics node sleeps; a soldier answers the negation of a raw
-// byte at +0xFA of its response physics (the soldier physics' ground flag - no class for it in this
-// tree); anything else asks the node's getIsInAir (+0x1B0).
+// bf2 0x841A0C0 (ELF listing). The ISoldier query comes first; then false while the physics node
+// sleeps (+0x11C); a soldier answers the negation of its response physics' ground-contact byte
+// (SoldierResponsePhysics +0xFA, the object asked for again); anything else asks the node's
+// getIsInAir (+0x1B0).
 bool AIObjectPhysical::isInAir() const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::AIObjectPhysical::isInAir (soldier response physics +0xFA)");
+    void* const soldier = m_object->getObject()->queryInterface(world::IID_ISoldier);      // +0x0C
+    if (m_physicsNode->getIsSleeping())                                             // +0x11C
+        return false;
+    if (soldier)
+    {
+        const world::SoldierResponsePhysics* const response =
+            static_cast<world::SoldierResponsePhysics*>(
+                world::object_detail::LayoutAccess::responsePhysics(m_object->getObject()));
+        return !response->m_byteFA;
+    }
+    return m_physicsNode->getIsInAir();                                             // +0x1B0
 }
 
 // strictly above zero (`setnbe` after fucomip - unordered is false).
+// ELF 0x841A140.
 bool AIObjectPhysical::isInWater() const
 {
     return m_physicsNode->getUnderWater() > 0.0f;                                   // +0x10C
 }
 
 // The engine object is asked for and discarded; the answer is always 0.
+// ELF 0x841A560.
 int AIObjectPhysical::getMaterial() const
 {
     m_object->getObject();
@@ -240,6 +323,7 @@ int AIObjectPhysical::getMaterial() const
 
 // The occupying player's man-down clock, when it has a
 // control object, an occupant, and that occupant is down. The occupant is asked for twice.
+// ELF 0x841A580.
 float AIObjectPhysical::getManDownTimeLeft() const
 {
     world::IPlayerControlObject* const pco = static_cast<world::IPlayerControlObject*>(
@@ -252,14 +336,21 @@ float AIObjectPhysical::getManDownTimeLeft() const
     return player->getManDownTimeLeft();                                            // +0xF8
 }
 
-// the ArmorGLCompTemplate component's +0x110 accessor (not declared in this tree)
-// 1.0 without the component.
+// bf2 0x841A5F0 (ELF listing). The object's template component of class ArmorGLCompTemplate
+// (IObjectTemplate +0x60, getComponentFromClassID) answers its +0x110 slot, which the ELF primary
+// vtable (_ZTVN4dice3hfe5world19ArmorGLCompTemplateE) holds as getTimeToStayAsWreck; 1.0 without
+// the component.
 float AIObjectPhysical::getMaxManDownTime() const
 {
-    BF2_AI_FRONTIER("dice::hfe::ai::AIObjectPhysical::getMaxManDownTime (ArmorGLCompTemplate +0x110)");
+    world::ArmorGLCompTemplate* const armorTemplate = static_cast<world::ArmorGLCompTemplate*>(
+        m_object->getObject()->getTemplate()->getComponentFromClassID(world::CID_ArmorGLCompTemplate));
+    if (!armorTemplate)
+        return 1.0f;
+    return armorTemplate->getTimeToStayAsWreck();                                   // +0x110
 }
 
 // status 1 on the armour component.
+// ELF 0x841A640.
 bool AIObjectPhysical::getManDown() const
 {
     world::IArmorGLComp* const armor =
@@ -269,11 +360,13 @@ bool AIObjectPhysical::getManDown() const
     return false;
 }
 
+// ELF 0x841A680.
 bool AIObjectPhysical::doesAffectPathfinding() const
 {
     return m_template->m_affectsPathfinding;
 }
 
+// ELF 0x841A730.
 int AIObjectPhysical::getMapPosId() const
 {
     return m_mapPosId;
@@ -283,6 +376,7 @@ int AIObjectPhysical::getMapPosId() const
 // physics node and the response physics of the node's object are switched together, and an enable
 // resets the object's physics (hfe::resetPhysics, player control objects included). Both answer
 // true for the owning side whether or not anything changed.
+// ELF 0x8419D90.
 bool AIObjectPhysical::enablePhysics(int side)
 {
     if (side != m_object->getSide())                                                // +0x12C
@@ -296,6 +390,7 @@ bool AIObjectPhysical::enablePhysics(int side)
     return true;
 }
 
+// ELF 0x8419D10.
 bool AIObjectPhysical::disablePhysics(int side)
 {
     if (side != m_object->getSide())
@@ -308,6 +403,7 @@ bool AIObjectPhysical::disablePhysics(int side)
     return true;
 }
 
+// ELF 0x8419E30.
 bool AIObjectPhysical::hasPhysicsEnabled()
 {
     return m_physicsNode->getEnabled();                                             // +0x1C

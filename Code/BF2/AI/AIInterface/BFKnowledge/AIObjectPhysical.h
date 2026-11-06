@@ -34,19 +34,20 @@ public:
     virtual float getArmour(const Vec3& direction) const;       // +0x28
     virtual float getBestArmour() const;                        // +0x2C
     virtual const LocalBoundingBox* getLocalBoundingBox() const;    // +0x30
-    virtual BoundingBox* getCurrentBoundingBox();               // +0x34, [FRONTIER]
-    virtual BoundingBox* getBoundingBox(const Mat4& transformation);   // +0x38, [FRONTIER]
+    // Returns a new transformed box; the caller owns it.
+    virtual BoundingBox* getCurrentBoundingBox();               // +0x34
+    virtual BoundingBox* getBoundingBox(const Mat4& transformation);   // +0x38
     virtual float getRadius() const;                            // +0x3C
     virtual Vec3 getSphereLocalOffset() const;                  // +0x40
     virtual float getSmallestRadius() const;                    // +0x44
-    virtual float getSubSpheres2d(std::vector<Vec2>& out) const;    // +0x48, [FRONTIER]
+    virtual float getSubSpheres2d(std::vector<Vec2>& out) const;    // +0x48
     virtual int getStrType() const;                             // +0x4C
     virtual bool isTouchingTerrain(Vec3& out) const;            // +0x50
-    virtual bool isInAir() const;                               // +0x54, [FRONTIER]
+    virtual bool isInAir() const;                               // +0x54
     virtual bool isInWater() const;                             // +0x58
     virtual int getMaterial() const;                            // +0x5C
     virtual float getManDownTimeLeft() const;                   // +0x60
-    virtual float getMaxManDownTime() const;                    // +0x64, [FRONTIER]
+    virtual float getMaxManDownTime() const;                    // +0x64
     virtual bool getManDown() const;                            // +0x68
     virtual bool doesAffectPathfinding() const;                 // +0x6C
     virtual int getMapPosId() const;                            // +0x70

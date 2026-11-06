@@ -213,7 +213,7 @@ public:
         return false;
     }
     void setTextGamma(float) override { unexpected("setTextGamma"); }
-    float getTextGamma() override { unexpected("getTextGamma"); }
+    float getTextGamma() const override { unexpected("getTextGamma"); }
     void drawAll() override { unexpected("drawAll"); }
     void nodrawUpdate() override { unexpected("nodrawUpdate"); }
     int deleteAll() override { unexpected("deleteAll"); }

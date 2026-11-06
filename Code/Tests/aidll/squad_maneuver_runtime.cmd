@@ -9,7 +9,7 @@ if not exist "%BF2_SQUAD_MANEUVER_OUT%" mkdir "%BF2_SQUAD_MANEUVER_OUT%"
 python -I "%~dp0squad_maneuver_runtime.py" generate "%BF2_SQUAD_MANEUVER_OUT%"
 if errorlevel 1 exit /b 1
 set "TASK_FLAGS=/nologo /c /O2 /MD /std:c++14 /permissive /EHsc /W3 /Gy /DDEDICATED=1 /DBF2_IMAGE_AIDLL"
-cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\AIKnowledge\InformationManager.cpp" /Fo"%BF2_SQUAD_MANEUVER_OUT%\manager.obj" >"%BF2_SQUAD_MANEUVER_OUT%\compile.log" 2>&1
+cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%TASK_CODE%\BF2\AI\AIDLL\AI\Main\InformationManager.cpp" /Fo"%BF2_SQUAD_MANEUVER_OUT%\manager.obj" >"%BF2_SQUAD_MANEUVER_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed
 cl %TASK_FLAGS% /FI"%TASK_CODE%\BF2\Core\BuildConfig.h" "%BF2_SQUAD_MANEUVER_OUT%\actual.cpp" /Fo"%BF2_SQUAD_MANEUVER_OUT%\actual.obj" >>"%BF2_SQUAD_MANEUVER_OUT%\compile.log" 2>&1
 if errorlevel 1 goto failed

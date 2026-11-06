@@ -1,13 +1,17 @@
 // [INFERRED] Source placement.
 #include "Information.h"
 
+// <iostream>'s ios_base::Init object is this TU's static initialisation and teardown (ELF
+// 0x2D9460, __tcf_0 0x2D94C0, _GLOBAL__I 0x2D94F0).
+#include <iostream>
+
 #include "IPIArmament.h"
 #include "IPIControlInfo.h"
 #include "IPICover.h"
 #include "IPIMobile.h"
 #include "IPIPhysical.h"
 #include "IPIUnit.h"
-#include "InformationManager.h"
+#include "../Main/InformationManager.h"
 #include "../../../AIInterface/BFKnowledge/IAIObjectPlugIn.h"   // IAIObject, IAIObjectMobile
 
 namespace dice { namespace hfe { namespace ai {
@@ -15,7 +19,7 @@ namespace dice { namespace hfe { namespace ai {
 // the time, the owner, not booked, no plug-in. The
 // +0x04..+0x14 prefix is not touched here (the subclass constructors write it).
 Information::Information(IAIObject* object, double time)
-    : m_time(time), m_object(object), m_booked(false), m_bookingPlayerId(-1),
+    : m_time(time), m_object(object), m_isBooked(false), m_bookingPlayerId(-1),
       m_armament(0), m_controlInfo(0), m_cover(0), m_mobile(0), m_physical(0), m_unit(0)
 {
 }
@@ -259,7 +263,7 @@ int Information::getBookingPlayerId()
 
 bool Information::isBooked()
 {
-    return m_booked;
+    return m_isBooked;
 }
 
 // Compares the id alone - a cancelled booking (-1) is "booked by" player -1.
@@ -270,13 +274,13 @@ bool Information::isBookedBy(int playerId)
 
 void Information::bookVehicle(int playerId)
 {
-    m_booked = true;
+    m_isBooked = true;
     m_bookingPlayerId = playerId;
 }
 
 void Information::cancelBookVehicle()
 {
-    m_booked = false;
+    m_isBooked = false;
     m_bookingPlayerId = -1;
 }
 

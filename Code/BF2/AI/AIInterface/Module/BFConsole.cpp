@@ -1,12 +1,13 @@
 
 #include "BFConsole.h"
 
-#include <cstdio>       // the [FRONTIER] stops - stderr, not Debug; see the note at the first one
-#include <cstdlib>      // std::abort - same
+#include <sstream>
 
 #include "../../AIDLL/AI/AIUtils/checkPointer.h"
 #include "../../AIDLL/AI/Main/CommonSingletonServer.h"
 #include "../../../Core/ClassManager.h"
+#include "../../../Core/Debug.h"
+#include "../../../Core/Ids.h"
 #include "../AIInstance.h"
 #include "../SingletonServer.h"
 #include "../Main/AIEventListener.h"
@@ -48,13 +49,23 @@
 #include "../BFKnowledge/WeaponTemplateManager.h"
 #include "../../../Core/ConsoleObjectMacro.h"
 #include "../../../Core/StringUtil.h"
+#include "../../../Game/IGameLogic.h"                  // addAIRadioMessage: gameLogic
+#include "../../../Game/IGame.h"
+#include "../../../Game/Objects/IPlayer.h"
+#include "../../../Scene/Object/PlayerManager.h"
+#include "../../../Game/GameLogic/ScoreSystem/ScoreManager.h"
+#include "../../../Physics/BasicPhysicsSystem.h"
+#include "../../../Game/GameLogic/GameLogic.h"         // getVoiceMessages
+#include "../../../Game/GameLogic/VoiceMessages.h"     // namesToIds
 
+#include <cstring>
 #include <string>
 
 namespace dice {
 namespace hfe {
 
 extern ClassManager* classManager;
+namespace world { extern IBase* scoreManager; }
 
 namespace ai {
 
@@ -130,7 +141,7 @@ KitTemplate* getActiveKitTemplate()
 
 namespace {
 // [CHOSEN] native list key. Retail pushes every generated binding of this TU onto one list
-// this tree's recovered subset - aiTemplate, aiTemplatePlugIn and kitTemplate so far
+// this tree's recovered subset - aiTemplate, aiTemplatePlugIn, kitTemplate and aiComm so far
 // shares this one.
 const char* const kKitTemplateConsoleTag = "hfe.ai.kitTemplate";
 
@@ -655,6 +666,18 @@ BF2_CONSOLE_METHOD_2_STATIC_ACTIVE(setBattleStrength, consoleKitTemplateSetBattl
     getActiveKitTemplate() != 0, CombatStrengthType, int, kKitTemplateConsoleTag)
 #pragma pop_macro("BF2_CC_CONVERT")
 
+// aiComm (ConsoleClass262, bf2 0x887E470): access 2, category 0; active while the console exists.
+// The executor copies the name and forwards the three floats to the console instance.
+namespace {
+void consoleAddAIRadioMessage(std::string name, float modifier, float maxSendPeriod, float receiveTimeToLive)
+{
+    BFConsole::m_instance->addAIRadioMessage(name, modifier, maxSendPeriod, receiveTimeToLive);
+}
+} // namespace
+BF2_CONSOLE_OBJECT("aiComm", 2, 0)
+BF2_CONSOLE_METHOD_4_STATIC_ACTIVE(addAIRadioMessage, consoleAddAIRadioMessage, BFConsole::m_instance != 0,
+    std::string, float, float, float, kKitTemplateConsoleTag)
+
 ConsoleObjectList& kitTemplateConsoleObjects()
 {
     return consoleBindingList(kKitTemplateConsoleTag);
@@ -665,6 +688,7 @@ ConsoleObjectList& kitTemplateConsoleObjects()
 BFConsole* BFConsole::m_instance = 0;
 
 // Initializes console state and registers the AI adapter types. Registration keeps the first singleton.
+// ELF 0x887ED00 / 0x887F790.
 BFConsole::BFConsole()
     : m_skipBulkClear(false)
     , m_singletonsCreated(false)
@@ -694,6 +718,7 @@ BFConsole::BFConsole()
 }
 
 // Unregisters this console instance when it is the active singleton.
+// ELF 0x8880190 / 0x88802C0.
 BFConsole::~BFConsole()
 {
     if (m_instance == this)
@@ -701,12 +726,14 @@ BFConsole::~BFConsole()
 }
 
 // Returns null in this build.
+// ELF 0x8881B50.
 void* BFConsole::getSinglePlayerInstance()
 {
     return 0;
 }
 
 // Constructs the engine-side AI adapters and refreshes cached singleton interfaces.
+// ELF 0x88803F0.
 void BFConsole::createSingletons()
 {
     if (!m_singletonsCreated)
@@ -761,6 +788,7 @@ void BFConsole::createSingletons()
 
 // Destroys the engine-side AI adapters and refreshes cached interfaces.
 // m_skipBulkClear suppresses one clearing pass.
+// ELF 0x8881300.
 void BFConsole::clearSingletons()
 {
     if (m_skipBulkClear)
@@ -815,8 +843,7 @@ void BFConsole::clearSingletons()
 }
 
 // Initializes the AI adapters needed for a game.
-// [FRONTIER] [TEMP] [CHOSEN, not recovered]
-// [RETIRE-WHEN: aidll-01-adapters] Replace remaining adapter stops with validated implementations.
+// ELF 0x8881430.
 void BFConsole::aiMainInit()
 {
     // the two world adapters - see the block above.
@@ -842,21 +869,66 @@ void BFConsole::aiMainInit()
     AITemplateManager::m_instance->createWreckTemplates();
 }
 
+// bf2 0x88816E0 (1135 B; recovered on the client track, docs/macos-c-singleplayer.md). The
+// collision handler drops every tracked projectile (+0x08); the three template managers are
+// deleted (nonvirtual destructors) and the kit manager through its deleting destructor (+0x10);
+// all four are built again (their constructors install the singletons), each allocation checked
+// like createSingletons (the Debug arms log and carry on); finally the AI game is told it is
+// precaching (IAIGame +0x64, true).
+// ELF 0x88816E0.
 void BFConsole::reset()
 {
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::ai::BFConsole::reset reached\n");
-    std::fflush(stderr);
-    std::abort();
+    if (CommonSingletonServer::m_iBFCollisionHandler)
+        static_cast<IBFCollisionHandler*>(CommonSingletonServer::m_iBFCollisionHandler)->removeAllProjectiles();
+    if (AITemplateManager::m_instance)
+        delete AITemplateManager::m_instance;
+    if (AITemplatePlugInManager::m_instance)
+        delete AITemplatePlugInManager::m_instance;
+    if (WeaponTemplateManager::m_instance)
+        delete WeaponTemplateManager::m_instance;
+    if (KitTemplateManager::m_instance)
+        delete static_cast<IKitTemplateManager*>(KitTemplateManager::m_instance);
+
+    AITemplateManager* templateManager = new AITemplateManager;             // 0x24
+    checkPointer(templateManager);
+    AITemplatePlugInManager* plugInManager = new AITemplatePlugInManager;   // 0x20
+    checkPointer(plugInManager);
+    WeaponTemplateManager* weaponTemplates = new WeaponTemplateManager(6);  // 0x24
+    checkPointer(weaponTemplates);
+    KitTemplateManager* kitTemplates = new KitTemplateManager;              // 0x2C
+    checkPointer(kitTemplates);
+
+    if (CommonSingletonServer::m_iaiGame)
+        static_cast<IAIGame*>(CommonSingletonServer::m_iaiGame)->setIsPrecaching(true);
 }
 
-void BFConsole::addAIRadioMessage(const std::string& /*name*/, float, float, float)
+// bf2 0x8881BE0 (Hex-Rays; called only by the aiComm.addAIRadioMessage executor, ConsoleClass262).
+// The voice message id comes from GameLogic's VoiceMessages (no voice, no filter); the radio
+// message type from the name table the constructor filled, read without an end() test (an
+// unknown name reads the header node, as shipped). Both maps keep an existing entry
+// (insert_unique): settings[(unsigned char)id] = {type, modifier, max send period, receive time to
+// live}, voices[type] = (unsigned char)id. AIRadioMessages.ai calls it once per message.
+// ELF 0x8881B60.
+void BFConsole::addAIRadioMessage(const std::string& name, float modifier, float maxSendPeriod,
+                                  float receiveTimeToLive)
 {
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::ai::BFConsole::addAIRadioMessage reached\n");
-    std::fflush(stderr);
-    std::abort();
+    int messageId;
+    const std::string filter;
+    const std::string voice;
+    static_cast<GameLogic*>(gameLogic)->getVoiceMessages()->namesToIds(&messageId, 0, 0, name, voice, filter);
+    const AIRadioMessageType type = m_radioMessageTypes.find(name)->second;
+    AIRadioMessageSettings settings;
+    const int typeWord = static_cast<int>(type);
+    std::memcpy(settings.m_opaque0, &typeWord, sizeof(typeWord));
+    settings.m_modifier = modifier;
+    settings.m_maxSendPeriod = maxSendPeriod;
+    settings.m_receiveTimeToLive = receiveTimeToLive;
+    m_messageSettings.insert(std::make_pair(static_cast<unsigned char>(messageId), settings));
+    m_messageVoices.insert(std::make_pair(type, static_cast<unsigned char>(messageId)));
 }
 
 // Resolves radio-message identifiers through the module courier.
+// ELF 0x8881D90.
 bool BFConsole::getAIMessageSettings(int voiceId, AIRadioMessageSettings& settings)
 {
     // The key is the low byte - see the block above.
@@ -870,6 +942,7 @@ bool BFConsole::getAIMessageSettings(int voiceId, AIRadioMessageSettings& settin
     return true;
 }
 
+// ELF 0x8881E00.
 bool BFConsole::getVoiceFromAiMessageType(AIRadioMessageType type, int& voice)
 {
     std::map<AIRadioMessageType, unsigned char>::const_iterator it = m_messageVoices.find(type);
@@ -880,11 +953,101 @@ bool BFConsole::getVoiceFromAiMessageType(AIRadioMessageType type, int& voice)
     return true;
 }
 
-void BFConsole::code(const std::string&)
+// ELF 0x8881E50. ConsoleClass268's returned-string assignment also attests the result type.
+std::string BFConsole::code(const std::string& command)
 {
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::ai::BFConsole::code reached\n");
-    std::fflush(stderr);
-    std::abort();
+    std::stringstream result;
+    world::IScoreManager* const scores = static_cast<world::IScoreManager*>(world::scoreManager);
+    world::IPlayer* const player = world::playerManager->getLocalHumanPlayer();
+    Debug(DebugTypeError, "AI/AIInterface/Module/BFConsole.cpp", 322, "") << "Does not work";
+    if (!player)
+    {
+        result << "Error, could not find local player.";
+        return result.str();
+    }
+
+    const unsigned int team = static_cast<unsigned int>(player->getTeam());
+    const int tickets = scores->getTeamScore(team)->m_tickets;
+    float fraction = 0.0f;
+    bool reduceTickets = true;
+    if (equalsIgnoreCase(std::string(command.c_str()), std::string("Tobias.Karlsson")))
+    {
+        if (game)
+            game->queryInterface(IID_IGameServer);
+        else
+            result << "Error, no game server active.";
+        // shipped defect: the failed server lookup does not prevent the ticket change.
+        fraction = 0.25f;
+    }
+    else if (equalsIgnoreCase(std::string(command.c_str()), std::string("Jonathan.Gustavsson")))
+    {
+        if (gameLogic->getGameStatus() == 1)
+            result << "Error, no active BotManager found.";
+        else
+            result << "Error, game must be running for this command.";
+        return result.str();
+    }
+    else if (equalsIgnoreCase(std::string(command.c_str()), std::string("Thomas.Skoldenborg")) ||
+             equalsIgnoreCase(std::string(command.c_str()), std::string("Thomas.Sk\xF6ldenborg")))
+    {
+        fraction = 0.33f;
+    }
+    else if (equalsIgnoreCase(std::string(command.c_str()), std::string("TheAllSeeingEyeOfTheAIProgrammer")))
+    {
+        fraction = 0.5f;
+    }
+    else if (equalsIgnoreCase(std::string(command.c_str()), std::string("BotsCanCheatToo")))
+    {
+        result << "The bots are CHEATING now, be aware.";
+        fraction = 0.75f;
+    }
+    else if (equalsIgnoreCase(std::string(command.c_str()), std::string("ChallengeMyComputer")))
+    {
+        result << "There goes the FRAME RATE.";
+        fraction = 0.75f;
+    }
+    else if (equalsIgnoreCase(std::string(command.c_str()), std::string("EarthWalk")))
+    {
+        static_cast<world::IPhysicsSystem*>(world::basicPhysicsSystem)->setGravity(-10.0f);
+        result << "GRAVITY set to EARTH. Home sweet home.";
+        reduceTickets = false;
+    }
+    else if (equalsIgnoreCase(std::string(command.c_str()), std::string("MoonWalk")))
+    {
+        static_cast<world::IPhysicsSystem*>(world::basicPhysicsSystem)->setGravity(-1.67f);
+        result << "GRAVITY set to MOON. Let's dance!";
+        fraction = 0.75f;
+    }
+    else if (equalsIgnoreCase(std::string(command.c_str()), std::string("SpaceWalk")))
+    {
+        static_cast<world::IPhysicsSystem*>(world::basicPhysicsSystem)->setGravity(-0.1f);
+        result << "GRAVITY set to SPACE. Better hold on tight!";
+        fraction = 0.5f;
+    }
+    else if (equalsIgnoreCase(std::string(command.c_str()), std::string("FUBAR")))
+    {
+        result << "QWERTY!";
+        reduceTickets = false;
+    }
+    else
+    {
+        result << "Trying to cheat? \nShame on you! \n Feel my Wrath.";
+        const int remaining = tickets < 2 ? tickets : 1;
+        scores->getTeamScore(team)->setTickets(remaining);
+        reduceTickets = false;
+    }
+
+    if (reduceTickets)
+    {
+        world::TeamScore* const score = scores->getTeamScore(team);
+        const float remaining = static_cast<float>(tickets) * fraction;
+        score->setTickets(static_cast<int>(remaining));
+    }
+    // shipped defect: a busy loop only polls tickets and increments a local counter.
+    for (int i = 0; i < tickets - scores->getTeamScore(team)->m_tickets; ++i)
+    {
+    }
+    return result.str();
 }
 
 // Registers the module courier interface for access through the singleton registry.

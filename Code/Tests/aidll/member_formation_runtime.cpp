@@ -49,14 +49,14 @@ namespace dice { namespace hfe { namespace ai {
 // claim retail construction. Every touched scalar and all native containers live.
 SquadCoordinator::SquadCoordinator(int side, int index)
     : m_squadIndex(index), m_side(side), m_strategicAreaAssignment(nullptr), m_i40(4),
-      m_i44(0), m_formation(nullptr), m_i120(0), m_d124(-999.0) {}
+      m_i44(0), m_formation(nullptr), m_missionStatus(0), m_d124(-999.0) {}
 SquadMember::SquadMember(SquadCoordinator* squad, IAIPlayer* player, int squadIndex, int side, int index)
     : m_squadIndex(squadIndex), m_memberIndex(index), m_player(player), m_bot(nullptr),
       m_squad(squad), m_side(side), m_havePath(true), m_request(nullptr), m_position{},
       m_positionValid(false), m_flag49(true), m_flag4A(false), m_flag4B(true) {}
 SquadMember::~SquadMember() {}
 SquadFormation::SquadFormation(SquadCoordinator* coordinator)
-    : m_coordinator(coordinator), m_maxSquadMembers(0) {}
+    : m_coordinator(coordinator), m_numberOfSlots(0) {}
 IAIPlayer::~IAIPlayer() {}
 IAIMain* IAIMain::m_instance = nullptr;
 bool SAI::isPlayerCommander() { unexpected("unselected mission commander"); }

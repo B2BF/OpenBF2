@@ -1,5 +1,5 @@
 // Loads engine plugins for client and dedicated images; source path [INFERRED].
-// Windows unload calls optional deinitDll and reports exceptions. ELF unload only closes the library.
+// Windows unload calls optional deinitDll and reports exceptions. Linux also deinitializes before close.
 
 #include "PluginDll.h"
 
@@ -113,9 +113,19 @@ bool FreeLibraryBf(void* handle, const char* diagnosticName)
         return false;
     }
 #else
-    // : the bare wrapper call. No deinitDll lookup, no diagnostic, and the
-    // second argument is never read.
     (void)diagnosticName;
+#if defined(__linux__)
+    // [CHOSEN, not recovered] Native-port design, not retail: unregister AI/console singletons before dlclose
+    // so a map reload cannot reuse stale objects. Retail ELF 0x83C3400 only closes the library;
+    // Win32 BF2.exe 0x446CE0 calls deinitDll first. AIModule::close (ELF 0x3EECB0)
+    // unregisters the AI singleton; preserve that teardown before unmapping native libaidll.so.
+    if (handle)
+    {
+        DeinitDllFn deinitDll = reinterpret_cast<DeinitDllFn>(::GetProcAddress(handle, "deinitDll"));
+        if (deinitDll)
+            deinitDll();
+    }
+#endif
     return ::FreeLibrary(handle);
 #endif
 }

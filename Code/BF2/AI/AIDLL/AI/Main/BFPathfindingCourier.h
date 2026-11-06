@@ -33,7 +33,8 @@ public:
     virtual bool isVehicleUsed(unsigned int) const = 0;
     virtual bool isValidPosition(int, int, const Vec3&) const = 0;
     virtual bool isValidPosition(const Vec3&) const = 0;
-    virtual void getLastValidSquadleaderPosition(const Vec3&) const = 0;
+    // Returns by value (ELF `ret $4`: hidden result pointer), not void.
+    virtual Vec3 getLastValidSquadleaderPosition(const Vec3&) const = 0;
     virtual int getVehicleNumberFromName(const std::string&) const = 0;
     // bool
     // with no widening before `ret 10h` - an int return would need the `movzx` it lacks. (The ELF's
@@ -53,7 +54,7 @@ public:
     virtual bool isVehicleUsed(unsigned int) const;
     virtual bool isValidPosition(int, int, const Vec3&) const;
     virtual bool isValidPosition(const Vec3&) const;
-    virtual void getLastValidSquadleaderPosition(const Vec3&) const;
+    virtual Vec3 getLastValidSquadleaderPosition(const Vec3&) const;
     virtual int getVehicleNumberFromName(const std::string&) const;
     virtual bool findClosestValidInfantryPolygon(Vec3&, const Vec3&, const Vec3&, unsigned int) const;
 

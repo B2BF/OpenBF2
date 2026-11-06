@@ -205,9 +205,9 @@ float EngineSound::updateAudioRpm(bool engineOn, float input, int material)
                                  + m_velocity.y * m_velocity.y
                                  + m_velocity.z * m_velocity.z;
         const float low = amount * -0.30000001f;
-        const float noiseDraw = static_cast<float>(((g_random.getRaw() >> 7) | 1u) + 1u);
+        const float noiseDraw = static_cast<float>(((Rand.getRaw() >> 7) | 1u) + 1u);
         m_noiseRpm = (amount - low) * noiseDraw * 0.000000059604645f + low;
-        const float delayDraw = static_cast<float>(((g_random.getRaw() >> 7) | 1u) + 1u);
+        const float delayDraw = static_cast<float>(((Rand.getRaw() >> 7) | 1u) + 1u);
         m_noiseCountdown = static_cast<int>((std::sqrt(speedSquared) * 0.033333335f
                                            * 23.0f + 2.0f)
                                           * delayDraw * 0.000000059604645f);

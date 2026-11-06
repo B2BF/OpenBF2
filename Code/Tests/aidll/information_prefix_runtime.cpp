@@ -51,7 +51,7 @@ struct LegacyInformationLayout
 namespace dice { namespace hfe { namespace ai {
 Information::Information(IAIObject* object, double time)
     : m_objectTypeFlags(0), m_strength(0.0f), m_time(time), m_object(object),
-      m_booked(false), m_bookingPlayerId(-1), m_armament(nullptr), m_controlInfo(nullptr),
+      m_isBooked(false), m_bookingPlayerId(-1), m_armament(nullptr), m_controlInfo(nullptr),
       m_cover(nullptr), m_mobile(nullptr), m_physical(nullptr), m_unit(nullptr)
 {
     static_assert(sizeof(void*) == 4, "MSVC x86 only");
@@ -61,7 +61,7 @@ Information::Information(IAIObject* object, double time)
     static_assert(offsetof(Information, m_strength) == offsetof(LegacyInformationLayout, unwritten) + 12, "float split");
     static_assert(offsetof(Information, m_time) == offsetof(LegacyInformationLayout, time), "time offset preserved");
     static_assert(offsetof(Information, m_object) == offsetof(LegacyInformationLayout, object), "object offset preserved");
-    static_assert(offsetof(Information, m_booked) == offsetof(LegacyInformationLayout, bool24), "bool offset preserved");
+    static_assert(offsetof(Information, m_isBooked) == offsetof(LegacyInformationLayout, bool24), "bool offset preserved");
     static_assert(offsetof(Information, m_bookingPlayerId) == offsetof(LegacyInformationLayout, int28), "integer offset preserved");
     static_assert(offsetof(Information, m_armament) == offsetof(LegacyInformationLayout, plugIn4), "plugin4 offset preserved");
     static_assert(offsetof(Information, m_controlInfo) == offsetof(LegacyInformationLayout, plugIn5), "plugin5 offset preserved");

@@ -8,6 +8,17 @@
 namespace dice {
 namespace hfe {
 
+struct Plane3;
+struct Ray3;
+class Frustum;
+struct LocalBoundingBox;
+
+// Intersects the infinite ray line with a plane. Near-parallel lines leave position unchanged.
+// Negative ray parameters are accepted.
+bool findIntersection(const Plane3& plane, const Ray3& ray, Vec3& position);
+// Tests the box against the frustum's six planes using its cached normal sign masks.
+bool intersect(const Frustum& frustum, const LocalBoundingBox& box);
+
 // Sum of squared per-axis distances from the centre to the box <= radius^2. (`>=` on r*r, as
 // shipped - a sphere exactly touching counts.)
 bool sphereIntersectsAABB(const Vec3& centre, float radius, const Vec3& boxMin, const Vec3& boxMax);

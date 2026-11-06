@@ -1,5 +1,8 @@
 // Console binding registration and lookup. [INFERRED] Source placement.
 
+// static init: ELF 0x4872D0 (__tcf_0 0x487330, _GLOBAL__I 0x487360): <iostream>'s Init object only.
+#include <iostream>
+
 #include "ConsoleObjects.h"
 
 #include <string.h>     // strncasecmp / _strnicmp - see prefixMatchesNoCase below

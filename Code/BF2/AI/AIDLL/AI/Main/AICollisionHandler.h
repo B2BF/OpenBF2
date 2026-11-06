@@ -1,6 +1,8 @@
 // Handles collisions in the AI module.
-// Preserve virtual declaration order. [INFERRED] Return types require validation where implementations remain incomplete.
-// [RETIRE-WHEN: aidll-02-skeleton] Remove when the corresponding implementation is complete and validated.
+// Preserve virtual declaration order. Parameter types are attested by the libaidll.so mangled
+// names. [INFERRED] the int return types: the shipped bodies of handleIndirectProjectileHit,
+// handleProjectileMiss, shooterUpdate and handleProjectileTimeout set no return value and
+// every engine caller discards it; victimUpdate answers 0/1 and BFCollisionHandler tests it.
 // [INFERRED] Source placement.
 
 #ifndef AI_AIDLL_AI_MAIN_AICOLLISIONHANDLER_H
@@ -52,6 +54,11 @@ public:
     virtual int shooterUpdate(int, int, world::IObject *, IAIObject *, const Vec3&);
     virtual int handleProjectileTimeout(int, int, const Vec3&, bool);
 
+    // Non-virtual helpers (mangled names in libaidll.so; [INFERRED] access and return spelling:
+    // checkIfGrenade and updateBotsOnProjectile set no return value, isC4 materialises a bool).
+    void checkIfGrenade(Bot* bot, IAIObject* projectile, const Vec3& position);   // 0x382D00
+    bool isC4(IAIObject* object);                                                 // 0x382FE0
+    void updateBotsOnProjectile(IAIObject* projectile, const Vec3& position);     // 0x3830B0
 };
 
 } // namespace ai

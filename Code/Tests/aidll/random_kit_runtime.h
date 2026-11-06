@@ -8,7 +8,7 @@
 #include "../../BF2/AI/AIDLL/AI/AIStrategicEntity/AIStrategicArea.h"
 #include "../../BF2/AI/AIDLL/AI/AIKnowledge/BFInformationEnvironment.h"
 #include "../../BF2/AI/AIDLL/AI/AIKnowledge/Information.h"
-#include "../../BF2/AI/AIDLL/AI/AIKnowledge/InformationManager.h"
+#include "../../BF2/AI/AIDLL/AI/Main/InformationManager.h"
 #include "../../BF2/AI/AIDLL/AI/AIKnowledge/IPIPhysical.h"
 #include "../../BF2/AI/AIDLL/AI/AIStrategic/SAI.h"
 #include "../../BF2/AI/AIDLL/AI/Main/AIMain.h"

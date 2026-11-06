@@ -230,9 +230,7 @@ Player::Player(int index, world::CPersistentExplosionEffectManager* explosionEff
     , m_profileId(0)
     , m_field2E0(1.0f)
     , m_field2E4(0.0f)
-    , m_field2E8(0)
-    , m_field2EC(0)
-    , m_field2F0(0)
+    , m_tearGasPosition()
     , m_field2F4(0.0f)
     , m_field2F8(1.0f)
     , m_gasDamage(0.0f)
@@ -2192,10 +2190,7 @@ void Player::setBlurryVision(float fadeTime, float holdTime, float damage)
         if (vehicle)
         {
             const Vec3& position = vehicle->getAbsolutePosition();
-            // These existing three dword carriers hold float bits, not numeric integers.
-            std::memcpy(&m_field2E8, &position.x, sizeof(float));
-            std::memcpy(&m_field2EC, &position.y, sizeof(float));
-            std::memcpy(&m_field2F0, &position.z, sizeof(float));
+            m_tearGasPosition = position;
         }
     }
     m_field2E4 = damage;

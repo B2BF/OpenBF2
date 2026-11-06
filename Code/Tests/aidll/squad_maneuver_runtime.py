@@ -69,7 +69,7 @@ def generate(out):
     mocks.append('} } }');(out/'mocks.inl').write_text('\n'.join(mocks),encoding='utf-8')
     paths=[Path(__file__).with_suffix(s) for s in ('.h','.cpp','.py','.cmd')]+[Path(__file__).with_name('spawn_metadata_runtime.py')]
     (out/'fixture_sources.json').write_text(json.dumps({p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in paths},indent=2),encoding='utf-8')
-    paths=[CODE/'BF2'/p for p in (AI+'AIKnowledge/InformationManager.cpp',AI+'AIKnowledge/InformationManager.h','Core/SpHandlePool.h',AI+'AIKnowledge/Information.h',AI+'AIBot/SquadCoordinator.h',AI+'AIBot/SquadMember.h',AI+'AIBot/BotMain.h','AI/AIInterface/BFKnowledge/AIPlayer.h')]
+    paths=[CODE/'BF2'/p for p in (AI+'Main/InformationManager.cpp',AI+'Main/InformationManager.h','Core/SpHandlePool.h',AI+'AIKnowledge/Information.h',AI+'AIBot/SquadCoordinator.h',AI+'AIBot/SquadMember.h',AI+'AIBot/BotMain.h','AI/AIInterface/BFKnowledge/AIPlayer.h')]
     (out/'whole_sources.json').write_text(json.dumps({p.as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in paths},indent=2),encoding='utf-8')
 
 def run(out):
