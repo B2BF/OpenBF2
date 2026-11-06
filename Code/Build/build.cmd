@@ -118,6 +118,10 @@ for /r "%ROOT%" %%F in (*.cpp) do (
             rem directory is excluded here; CMakeLists.txt mirrors this with bf2_voipserver_only_sources.
             echo %%F | find /i "\BF2\VoipServer\" >nul
             if not errorlevel 1 set "ENGINE_OBJECT=0"
+            rem Code\BF2\Memory is the recovered Memory.dll, its own image (Code\Build\memory.cmd); the
+            rem engine keeps its own memory:: stubs. CMakeLists.txt skips the directory the same way.
+            echo %%F | find /i "\BF2\Memory\" >nul
+            if not errorlevel 1 set "ENGINE_OBJECT=0"
             if /i "%%~fF"=="%ROOT%\Core\DllModule.cpp" set "ENGINE_OBJECT=0"
             rem The side-DLL image owns its globals translation unit.
             rem It defines the nineteen names initDll fills, zero-initialised; Core\Globals.cpp is

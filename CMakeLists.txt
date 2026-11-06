@@ -113,7 +113,10 @@ set(bf2_engine_sources)
 set(bf2_engine_headers)
 foreach(component_path IN LISTS bf2_component_paths)
     get_filename_component(component_name "${component_path}" NAME)
-    if(IS_DIRECTORY "${component_path}" AND NOT component_name STREQUAL "External")
+    # Memory is the recovered Memory.dll, its own image (bf2_memory, Code/BF2/Memory/CMakeLists.txt);
+    # the engine keeps its own memory:: stubs, so its units must not join the engine source list.
+    if(IS_DIRECTORY "${component_path}" AND NOT component_name STREQUAL "External"
+       AND NOT component_name STREQUAL "Memory")
         file(GLOB_RECURSE component_sources
             CONFIGURE_DEPENDS
             "${component_path}/*.cpp"
@@ -1636,6 +1639,11 @@ set_property(TARGET bf2_syntaxcheck PROPERTY FOLDER "Diagnostics")
 endif()
 
 include(CTest)
+
+# bf2_memory - the rebuilt Memory.dll (Code/BF2/Memory). Built on request only (EXCLUDE_FROM_ALL)
+# and linked into no game image (issue #7). Its tests join CTest when BF2_MEMORY_TESTS is ON.
+add_subdirectory(Code/BF2/Memory)
+
 # The focused checks mirror Code/Tests/*.cmd, which are MSVC x86 gates; they are not part of the
 # Linux port (its checks are the dice_py runtime check and the production run).
 if(BUILD_TESTING AND MSVC)
