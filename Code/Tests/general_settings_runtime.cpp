@@ -80,7 +80,7 @@ static bool optionDefaults(GeneralSettings& g)
         && F::minimapTransparency(g)==204.0f && F::viewIntroMovie(g) && !F::outOfVoting(g)
         && F::bftv(g).empty() && !F::confirmQuit(g) && !F::lcdDisplayModes(g)
         && F::mapIconAlpha(g)==255.0f && F::allowPunkBuster(g) && F::itemSelectionReverseItems(g)
-        && F::autoReload(g) && F::toggleFilters(g)==63616;
+        && F::autoReload(g) && F::toggleFilters(g)==0;
 }
 // The remainder setDefaults (+1C) owns before dispatching +20.
 static bool outerDefaults(GeneralSettings& g,int earliest,int latest)
@@ -101,7 +101,7 @@ static std::string defaultScript(int date)
         "GeneralSettings.setBFTVSaveDirectory \"\"\nGeneralSettings.setConfirmQuit 0\nGeneralSettings.setMapIconAlphaTransparency 255\n"
         "GeneralSettings.setUseAdvancedServerBrowser 0\nGeneralSettings.setUseBots 0\nGeneralSettings.setMaxBots 64\n"
         "GeneralSettings.setMaxBotsIncludeHumans 0\nGeneralSettings.setBotSkill 0.5\n")+row+
-        "GeneralSettings.setAllowPunkBuster 1\nGeneralSettings.setItemSelectionReverseItems 1\nGeneralSettings.setToggleFilters 63616\n"
+        "GeneralSettings.setAllowPunkBuster 1\nGeneralSettings.setItemSelectionReverseItems 1\nGeneralSettings.setToggleFilters 0\n"
         "GeneralSettings.setAutoReload 1\nGeneralSettings.setAutoReady 0\nGeneralSettings.setConnectionType 5\nGeneralSettings.setLCDDisplayModes 0\n";
 }
 static void scramble(GeneralSettings& g)
