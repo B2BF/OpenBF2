@@ -11,6 +11,7 @@
 #include "../RendMisc/IRenderView.h"   // the transparency-AA probe's getViewport
 #if BF2_PLUGIN_ABI_NATIVE
 #include "../Core/SettingsRepostitory.h"
+#include "../Game/VideoSettings.h"     // IVideoSettings::applyToOptions, the startup handoff
 #endif
 
 #define WIN32_LEAN_AND_MEAN
@@ -1238,7 +1239,20 @@ bool initializeD3DSubsystems(void* renderer)
     // constructor.
     videoOptionsInitialize(renderer);
 
-    // [FRONTIER] VideoSettings still lacks the VideoOptions handoff.
+    // The host's VideoSettings pushes its pending record (the profile's Video.con, already loaded
+    // by LocalProfileManager::init) into the fresh options: qualities, resolution, antialiasing and
+    // view distance. Renderer::initialize's first apply then switches to that mode. The singleton
+    // is not null-tested, as shipped.
+    {
+        IBase* const videoSettings =
+            classManager->getSingleton(renddx9abi::HostString("VideoSettings"));
+#if BF2_PLUGIN_ABI_NATIVE
+        static_cast<IVideoSettings*>(videoSettings)->applyToOptions(b->embeddedVideoOptions());
+#else
+#error "The VideoSettings handoff requires BF2_PLUGIN_ABI_NATIVE=1 (see docs/architecture.md)"
+#endif
+    }
+
     // Construct StateManager before EffectManager so subsequent draws can publish state.
     if (!createStateManager(b->device))
         return false;
