@@ -315,7 +315,9 @@ const float kByteToUnit = 0.0039215689f;
 GeneralSettings::GeneralSettings() : m_refCount(1)
 {
     m_lcdDisplayModes = false;
-    m_toggleFilters = 63616;
+    // [CHOSEN, not recovered] Retail seeds 63616 (PunkBuster, all map sizes, same version and
+    // same mod); new profiles start with no server browser filters. See docs/server-browser-filters.md.
+    m_toggleFilters = 0;
     setDefaults();
 }
 
@@ -485,7 +487,9 @@ void GeneralSettings::setDefaultValues()
     m_allowPunkBuster = true;
     m_itemSelectionReverseItems = true;
     m_autoReload = true;
-    m_toggleFilters = 63616;
+    // [CHOSEN, not recovered] Retail seeds 63616; new profiles start with no server browser
+    // filters. See docs/server-browser-filters.md.
+    m_toggleFilters = 0;
 }
 
 // Reloads General.con to discard unsaved options while retaining server-browser and
