@@ -622,7 +622,6 @@ void __fastcall videoOptions_apply(void* self, void*)
     // calls pass the selected resolution's record; the applied indices start at -1, so the first
     // apply always changes the mode and posts the resolution event the menu viewport follows.
     // The second gameLoaded test is a fresh read, as shipped.
-    const Mode40* const modes = reinterpret_cast<const Mode40*>(vo->modeCache.first);
     if (!vo->gameLoaded && vo->minusOneD4 != vo->minusOneDC)
     {
         videoOptionsChangeResolution(vo, reinterpret_cast<const Mode40*>(vo->modeCache.first) + vo->minusOneDC);

@@ -1249,10 +1249,7 @@ bool initializeD3DSubsystems(void* renderer)
 #if BF2_PLUGIN_ABI_NATIVE
         static_cast<IVideoSettings*>(videoSettings)->applyToOptions(b->embeddedVideoOptions());
 #else
-        // IVideoSettings slot +0x28, applyToOptions(IVideoOptions*).
-        typedef void (__thiscall* ApplyToOptionsFn)(void*, void*);
-        reinterpret_cast<ApplyToOptionsFn>((*reinterpret_cast<void***>(videoSettings))[0x28 / 4])(
-            videoSettings, b->embeddedVideoOptions());
+#error "The VideoSettings handoff requires BF2_PLUGIN_ABI_NATIVE=1 (see docs/architecture.md)"
 #endif
     }
 
