@@ -32,7 +32,7 @@
 
 // [CHOSEN, not recovered] The images that play Bink movies: x86 imports binkw32.dll; the macOS
 // client and Windows x64 implement the same entry points on the vendored FFmpeg Bink decoders
-// (BF2_BINK_PORT: RendDX9Abi/BinkFFmpeg.cpp, docs/macos-c-bink.md; owner decision 2026-11-07).
+// (BF2_BINK_PORT: RendDX9Abi/BinkFFmpeg.cpp, Code/BF2/External/ffmpeg-bink/README.md; owner decision 2026-11-07).
 #if defined(_M_IX86) || BF2_BINK_PORT
 #define BF2_VIDEO_BINK 1
 #else

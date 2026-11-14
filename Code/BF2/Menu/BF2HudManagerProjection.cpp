@@ -38,7 +38,7 @@ float affineComponent(float a, float ma, float b, float mb,
                               + static_cast<double>(c) * mc + translation);
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     float result;
     // [CHOSEN, not recovered] Preserve x87 retained products and additions.
     result = bf2x87::affine(a, ma, b, mb, c, mc, translation);
@@ -75,7 +75,7 @@ float screenCoordinate(float numerator, float denominator)
     return static_cast<float>(static_cast<double>(numerator) / denominator);
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     float result;
     // [CHOSEN, not recovered] Preserve x87 division before float store.
     result = bf2x87::store(bf2x87::div(bf2x87::wide(numerator), bf2x87::wide(denominator)));
@@ -124,7 +124,7 @@ void projectToScreen(const Vec3& clip, float halfWidth, float height, Vec3& resu
     result.y = outputY;
     result.z = outputZ;
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     const float half = 0.5f;
     // The PE divides by transformed Z, not by a homogeneous W. Unordered,
     // zero and negative Z take the same hidden-point arm; X/Y stay zero.

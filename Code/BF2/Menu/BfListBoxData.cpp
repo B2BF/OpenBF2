@@ -20,17 +20,11 @@
 #include <emmintrin.h>
 #endif
 namespace dice { namespace meme {
-// [FRONTIER] [TEMP] [CHOSEN, not recovered] Releases a cell resource through an unidentified
-// interface. [INFERRED] Name and void return. BF2.exe clearCell (7C4CE7) and copyCell (7C4A5B) call
-// the list's +48 object at vtable +20 with the cell's resource index and discard the result; the
-// object's interface is not identified, so this stops before any call.
-// [RETIRE-WHEN: LISTBOX-CELL-RESOURCE] Identify the +48 owner and its typed +20 method, call it
-// here, and validate a list box that clears cells with a resource attached.
-void releaseListBoxCellResource(dice::hfe::IBase*, int)
+// [INFERRED] Name and void return. clearCell (7C4CF3) and copyCell (7C4A67): the list's +0x48 resource
+// at +0x20 with the cell's resource index, the result discarded. Callers test the resource first.
+void releaseListBoxCellResource(dice::hfe::IBase* resource, int resourceIndex)
 {
-    std::fprintf(stderr, "[FRONTIER] dice::meme::releaseListBoxCellResource reached\n");
-    std::fflush(stderr);
-    std::abort();
+    static_cast<IListBoxCellResource*>(resource)->releaseCell(resourceIndex);
 }
 namespace {
 // PE's x87 fistp integer conversion, including its saved rounding mode. This
@@ -57,7 +51,7 @@ int truncateListWidth(double value)
     return _mm_cvttsd_si32(_mm_set_sd(value));
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     unsigned short original, truncating;
     int result;
     // [CHOSEN, not recovered] Preserve x87 truncating int32 with integer indefinite.
@@ -756,7 +750,7 @@ int BfListBoxData::measureText(System* system, std::wstring text, int column, in
     *fontMode = mode;
     return index;
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     int characters[256];
     std::string narrow;
     std::wstring wide;

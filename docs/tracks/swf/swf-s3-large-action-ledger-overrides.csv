@@ -1,0 +1,21 @@
+address,symbol,file,status,reason
+0x1008AFE0,tu_string::operator<(const char*) const,Code/BF2/External/base/container.h,done,verified: unsigned byte strcmp and signed less-than result; no base edit
+0x1008B070,tu_string::operator>(const char*) const,Code/BF2/External/base/container.h,done,verified: unsigned byte strcmp and signed greater-than result; no base edit
+0x1008BF70,weak_ptr<T>::operator=(T*),Code/BF2/External/base/smart_ptr.h,done,verified: raw-pointer store then proxy acquisition and release-store-retain; typed native base adjustment
+0x1008C830,gameswf::math_acos,Code/BF2/External/gameswf/gameswf_action.cpp,done,verified: argument conversion then CRT acos then double result cleanup/publication; native CRT accuracy limit
+0x1008C890,gameswf::math_asin,Code/BF2/External/gameswf/gameswf_action.cpp,done,verified: argument conversion then CRT asin then double result cleanup/publication; native CRT accuracy limit
+0x1008CBC0,gameswf::math_sqrt,Code/BF2/External/gameswf/gameswf_action.cpp,done,verified: scalar sqrt and double result cleanup/publication; no floating-environment equivalence claim
+0x1008CDF0,gameswf::math_pow,Code/BF2/External/gameswf/gameswf_action.cpp,done,verified: first then second conversion then CRT pow and double result cleanup/publication; native CRT accuracy limit
+0x1008D2E0,array<weak_ptr<T>>::push_back,Code/BF2/External/base/container.h,done,verified: resize then proxy assignment then raw-pointer copy; no base edit
+0x1008D350,array<weak_ptr<T>>::remove,Code/BF2/External/base/container.h,done,verified: sole-element clear or destructor then overlapping tail move and count decrement
+0x1008D3F0,weak_ptr<T>::operator smart_ptr<T>(),Code/BF2/External/base/smart_ptr.h,done,verified: proxy expiry then pointer copy and retain via native typed base adjustment
+0x10096BF0,gameswf::path::tesselate,Code/BF2/External/gameswf/gameswf_shape.cpp,done,verified: decrement styles then begin path ordered curves and end path; read-only shape comparison
+0x10096C50,gameswf::write_coord_array,Code/BF2/External/gameswf/gameswf_shape.cpp,done,verified: LE32 count then ordered LE16 coordinates; native tu_file callback bridge; read-only
+0x10096EE0,gameswf::mesh_set::output_cached_data,Code/BF2/External/gameswf/gameswf_shape.cpp,done,verified: tolerance then mesh count/data then line count/styles/data; read-only
+0x10096FC0,gameswf::shape_character_def::tesselate,Code/BF2/External/gameswf/gameswf_shape.cpp,done,verified: begin then new-shape boundary or path then final end; read-only
+0x10097020,gameswf::shape_character_def::compute_bound,Code/BF2/External/gameswf/gameswf_shape.cpp,done,verified: initial extrema then path starts and edge anchors only; read-only
+0x100970D0,gameswf::shape_character_def::output_cached_data,Code/BF2/External/gameswf/gameswf_shape.cpp,done,verified: cached-set count then ordered output; options unused; read-only
+0x10097740,gameswf::read_coord_array,Code/BF2/External/gameswf/gameswf_shape.cpp,done,verified: LE32 count then resize then ordered LE16 coordinates; read-only
+0x100977A0,gameswf::mesh::set_tri_strip,Code/BF2/External/gameswf/gameswf_shape.cpp,done,verified: resize 2*count then x/y qword truncation to low signed short; read-only
+0x1009C690,array<gameswf::as_value>::remove,Code/BF2/External/base/container.h,done,verified: sole-element clear or full value destruction before overlapping tail move and count decrement
+0x1009C700,array<gameswf::as_value>::insert,Code/BF2/External/base/container.h,done,verified: resize then overlapping tail move then placement copy; no extra destruction

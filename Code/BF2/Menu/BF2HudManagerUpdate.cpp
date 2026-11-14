@@ -78,7 +78,7 @@ bool subtractTimer(float& timer, float delta, bool inclusive)
     return inclusive ? remaining <= 0.0 : remaining < 0.0;
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     bool expired;
     // [CHOSEN, not recovered] Preserve x87 ordered retained timer expiry after store.
     expired = bf2x87::subtractTimer(timer, delta, inclusive);
@@ -110,7 +110,7 @@ bool addDemoTimer(float& timer, float delta)
     return elapsed >= threshold;
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     const float threshold = 10.0f;
     bool due;
     // [CHOSEN, not recovered] Preserve x87 ordered retained timer threshold after store.
@@ -356,7 +356,7 @@ void BF2HudManager::updateMapPosition(world::IPlayer* player, Vec3 direction)
     }
     hudMap->setPlayerPosition(position, heading);
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     if (!player || !player->getCamera() || !hudMap) return;
     world::ICameraObject* camera = player->getCamera();
     if (player->getIsCommander() && (hudMap->m_overheadZoomActive

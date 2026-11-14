@@ -1,4 +1,4 @@
-// [CHOSEN, not recovered] Owner-requested macOS port, docs/macos-c-g4-effect.md.
+// [CHOSEN, not recovered] Owner-requested macOS port.
 // Handoff of offline-translated shader records from the D3DX effect facade (Effect.cpp)
 // to the Metal device's CreateVertexShader/CreatePixelShader. No D3D or Objective-C types.
 #ifndef BF2_METAL_EFFECTSHADERS_H

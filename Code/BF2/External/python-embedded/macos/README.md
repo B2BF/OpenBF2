@@ -62,5 +62,4 @@ vector before its count using C11 atomics; old vectors remain deliberately retai
 upstream requires. These changes apply on Linux too. Windows branches remain unchanged.
 
 The focused check in `Code/Tests/s2_10_threads` drives four concurrent producers and
-40,000 callbacks against the real library. See [S2.10 results](../../../../../docs/macos-s2-10-threads.md)
-for coverage and the owner-run server TSan bundle.
+40,000 callbacks against the real library.

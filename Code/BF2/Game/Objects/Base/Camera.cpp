@@ -17,6 +17,11 @@
 #include "../../../Physics/HeightmapCluster.h"
 #include "../../../Physics/IPhysicsNode.h"
 #include "../IPlayer.h"
+#include "../../../Scene/Object/ObjectManager.h"      // updateCloseVehicleShake's grid query
+#include "../../../Scene/Object/ObjectPredicator.h"   // its two heavy-engine filters
+#if !DEDICATED
+#include "../../../IO/Input/FalconHaptics.h"           // updateShakeForce (ledger N2)
+#endif
 #include <cmath>
 #include <vector>
 #include "../ObjectLayoutAccess.h"      // geometry(IObject*) - +0x38
@@ -36,6 +41,19 @@ namespace world {
 // reference/value shape. Keeping the reference form preserves the shipped global rather than
 // turning the value into an unrelated per-camera literal.
 const float& g_explosionShakeTime = 0.6f;
+
+// The rest of the TU's reference-backed tuning, same shape (ELF symbols at 0x8AAE0A4..0x8AAE0F8,
+// values from the static initializer 0x81DF518..0x81DF6D2).
+const float& g_vehicleShakeFrequency = 10.0f;    // 0x8AAE0A4
+const float& g_vehicleShakeDistance = 7.0f;      // 0x8AAE0AC
+const float& g_vehicleShakeAmplitude = 0.2f;     // 0x8AAE0B4
+const float& g_recoilAmplitude = 0.6f;           // 0x8AAE0BC
+const float& g_recoilSpeed = 1.0f;               // 0x8AAE0C4
+const float& g_explosionShakeAmplitude = 2.0f;   // 0x8AAE0D8
+const float& g_explosionShakeFrequency = 7.0f;   // 0x8AAE0E0
+const float& g_checkCloseVehicleFreq = 1.0f;     // 0x8AAE0E8
+const float& g_speedShakeAmp = 0.5f;             // 0x8AAE0F0
+const float& g_speedShakeFrequency = 40.0f;      // 0x8AAE0F8
 
 // ds:0x8ABAF24 in the ELF, with the matching singleton slot in both PEs.  Core/Globals.cpp owns
 // the storage; every shipped camera terrain/water query dereferences it without a null guard.
@@ -300,7 +318,7 @@ Camera::Camera(const CameraTemplate* templ)
     , m_float208(-1.0f)
     , m_externCameraTrans(Mat4::getIdentity())
     , m_previousViewMode(1)
-    , m_dword250(8)
+    , m_savedViewMode(8)
     , m_traceObjectId(0)
     , m_dword258(-1)
     , m_float25C(1.0f)
@@ -310,14 +328,23 @@ Camera::Camera(const CameraTemplate* templ)
     , m_explosionShakePeak(0.0f)
     // m_explosionShakeStartTime is deliberately absent: both shipped ctors leave the qword
     // untouched, and handleExplosion writes it before the accepted-shake path can consume it.
+    // ELF 0x81DABC3..0x81DAC3E zero +0x2B4..+0x2EC (two more empty vectors, a byte and words among
+    // them); the still-unnamed bytes are value-initialised to the same zeros.
+    , m_cameraPresentationPrefix()
+    , m_speedShakeTime(0.0f)
     , m_speedShakeRoll(0.0f)
+    , m_unresolved2CC(0)
+    , m_closeVehicles()
+    , m_cameraPresentationSuffix()
     , m_updateCameraRecoil(false)
     , m_recoilImpulseSpeed(0.0f)
     , m_recoilImpulseSize(0.0f)
     , m_explosionShakeTimeRemaining(0.0f)
     , m_explosionShakeMagnitude(1.0f)
+    , m_closeVehicleShakePhaseX(0.0f)
+    , m_closeVehicleShakePhaseY(0.0f)
     , m_cameraRecoilX(0.0f)
-    , m_recoilState314(0.0f)
+    , m_closeVehicleCheckTime(0.0f)
     , m_soldierShakeX(0.0f)
     , m_soldierShakeY(0.0f)
     , m_cameraRecoilY(0.0f)
@@ -358,6 +385,261 @@ void Camera::handleExplosion(float amount)
     {
         m_explosionShakePeak = amount;
         m_explosionShakeStartTime = g_system->getExactTime();
+    }
+}
+
+namespace {
+const float kTwoPi = 6.2831855f;   // ELF 0x888F9F4
+
+// The close-vehicle scan's filters (ELF vtables 0x88A5828 / 0x88A5810): a mobile physics root of at
+// least the given mass whose player-control object is occupied, then the flag test.
+class HeavyEnginePredicator : public ObjectFlagPredicator
+{
+public:
+    explicit HeavyEnginePredicator(unsigned int flags) : ObjectFlagPredicator(flags) {}
+    bool predicate(IObject* object) { return heavyEngine(object, 10000.0f); }   // ELF 0x81E00E0
+    bool performCulling(IObject*) { return true; }                             // ELF 0x81E0190
+protected:
+    bool heavyEngine(IObject* object, float minimumMass)
+    {
+        typedef object_detail::LayoutAccess L;
+        IObject* const root = getRootParent(object);
+        IPlayerControlObject* pco = 0;
+        for (IObject* node = root; node; node = L::parent(node))
+        {
+            pco = static_cast<IPlayerControlObject*>(node->queryInterface(IID_IPlayerControlObject));
+            if (pco)
+                break;
+        }
+        IPhysicsNode* const physics = static_cast<IPhysicsNode*>(L::physicsNode(root));   // unguarded root
+        if (!physics || !physics->getIsMobile())
+            return false;
+        if (!(physics->getMass() >= minimumMass))   // jb: smaller or unordered
+            return false;
+        if (!pco || !pco->isOccupied())
+            return false;
+        return ObjectFlagPredicator::predicate(object);
+    }
+};
+
+class HeavyEngineForcePredicator : public HeavyEnginePredicator
+{
+public:
+    explicit HeavyEngineForcePredicator(unsigned int flags) : HeavyEnginePredicator(flags) {}
+    bool predicate(IObject* object) { return heavyEngine(object, 2000.0f); }    // ELF 0x81E01A0
+    bool performCulling(IObject*) { return true; }                             // ELF 0x81E0250
+};
+} // namespace
+
+// ELF 0x81DBA90 / BF2.exe 0x5A3EA0. BF2.exe also drives the Novint "ShakeForce" effects from the
+// shake values here (io::updateShakeForce, ledger N2); the ELF has that block compiled out.
+void Camera::handleUpdate(float deltaTime, unsigned int flags)
+{
+    typedef object_detail::LayoutAccess L;
+
+    if (flags & 4)
+    {
+        if (!getNetworkable())                                   // ELF +0xD8 / PE +0xD4
+            return;
+        RotationalBundle::handleUpdate(deltaTime, flags);
+        return;
+    }
+
+    IPlayer* const local = playerManager->getLocalHumanPlayer();
+    IPlayerControlObject* pco = 0;
+    for (IObject* node = this; node; node = L::parent(node))
+    {
+        pco = static_cast<IPlayerControlObject*>(node->queryInterface(IID_IPlayerControlObject));
+        if (pco)
+            break;
+    }
+
+    if (pco && local && pco->getOccupingPlayer() == local)
+    {
+        updateCameraRecoil(deltaTime);
+        updateCameraShake(deltaTime);
+#if !DEDICATED
+        // BF2.exe 0x5A3F4F..0x5A41D7 (ledger N2): the Novint ShakeForce effects follow the shake.
+        io::updateShakeForce(pco, m_explosionShakeRoll, m_speedShakeRoll, m_soldierShakePitch, m_cameraRecoilY);
+#endif
+    }
+
+    m_frameTime += deltaTime;
+
+    if (pco)
+    {
+        if (local && pco->getOccupingPlayer() == local)
+        {
+            if (m_closeVehicleCheckTime > 1.0f / g_checkCloseVehicleFreq)
+            {
+                updateCloseVehicleShake();
+                m_closeVehicleCheckTime = 0.0f;
+            }
+            else
+            {
+                m_closeVehicleCheckTime += deltaTime;
+            }
+        }
+
+        if (IPlayer* const occupant = pco->getOccupingPlayer())
+        {
+            // The occupant's free camera takes view mode 5 and restores the saved mode after.
+            if (occupant->getFreeCameraEnabled())
+            {
+                if (m_savedViewMode == 8)
+                {
+                    m_savedViewMode = getViewMode();
+                    setViewMode(static_cast<CameraViewMode>(5), 0, false);
+                }
+            }
+            else if (m_savedViewMode != 8)
+            {
+                setViewMode(static_cast<CameraViewMode>(m_savedViewMode), 0, false);
+                m_savedViewMode = 8;
+            }
+        }
+    }
+
+    RotationalBundle::handleUpdate(deltaTime, flags);
+}
+
+// ELF 0x81DC1D0 / BF2.exe 0x5A1A10: one sine period of vertical recoil per impulse.
+void Camera::updateCameraRecoil(float deltaTime)
+{
+    if (!m_updateCameraRecoil)
+    {
+        m_cameraRecoilX = 0.0f;
+        m_cameraRecoilY = 0.0f;
+        return;
+    }
+    m_cameraRecoilX = deltaTime * m_recoilImpulseSpeed * g_recoilSpeed + m_cameraRecoilX;
+    if (m_cameraRecoilX > 1.0f)
+    {
+        m_updateCameraRecoil = false;
+        m_cameraRecoilX = 0.0f;
+    }
+    m_cameraRecoilY = sinf(kTwoPi * m_cameraRecoilX) * (g_recoilAmplitude * m_recoilImpulseSize);
+}
+
+// ELF 0x81DC270 / BF2.exe 0x5A1A90: the speed shake, the two close-vehicle shakes (on foot only)
+// and the explosion shake.
+void Camera::updateCameraShake(float deltaTime)
+{
+    typedef object_detail::LayoutAccess L;
+    IObject* const parent = L::parent(this);
+    const CameraTemplate* const templ = static_cast<const CameraTemplate*>(m_template);
+
+    IObject* const root = getRootParent(this);
+    IPhysicsNode* const physics = static_cast<IPhysicsNode*>(L::physicsNode(root));
+    if (physics && templ->getCameraShakeStartSpeed() > 0.0f)
+    {
+        const Vec3& velocity = physics->getPositionalSpeed();
+        const float speed = sqrtf(velocity.x * velocity.x + velocity.y * velocity.y + velocity.z * velocity.z);
+        if (speed > templ->getCameraShakeStartSpeed())
+        {
+            m_speedShakeTime += deltaTime;
+            const float range = templ->getCameraShakeMaxSpeed() - templ->getCameraShakeStartSpeed();
+            float scale = 1.0f;
+            if (range > 0.0f)
+            {
+                scale = (speed - templ->getCameraShakeStartSpeed()) / range;
+                if (0.0f > scale)
+                    scale = 0.0f;
+                else if (scale > 1.0f)
+                    scale = 1.0f;
+            }
+            const float amplitude = scale * g_speedShakeAmp;
+            m_speedShakeRoll = sinf(fmodf(m_speedShakeTime * g_speedShakeFrequency, kTwoPi)) * amplitude;
+        }
+        else
+        {
+            m_speedShakeRoll = 0.0f;
+        }
+    }
+
+    const bool onFoot = parent && L::objectTemplate(parent)->getClassID() == CID_SoldierTemplate;
+    if (onFoot && m_soldierShakeX > 0.0f)
+    {
+        m_closeVehicleShakePhaseX = deltaTime * g_vehicleShakeFrequency + m_closeVehicleShakePhaseX;
+        if (m_closeVehicleShakePhaseX > 1.0f)
+            m_closeVehicleShakePhaseX -= 1.0f;
+        m_soldierShakeRoll = sinf(kTwoPi * m_closeVehicleShakePhaseX) * (m_soldierShakeX * g_vehicleShakeAmplitude);
+    }
+    else
+    {
+        m_closeVehicleShakePhaseX = 0.0f;
+        m_soldierShakeRoll = 0.0f;
+    }
+
+    const bool onFootY = parent && L::objectTemplate(parent)->getClassID() == CID_SoldierTemplate;
+    if (onFootY && m_soldierShakeY > 0.0f)
+    {
+        m_closeVehicleShakePhaseY = deltaTime * g_vehicleShakeFrequency + m_closeVehicleShakePhaseY;
+        if (m_closeVehicleShakePhaseY > 1.0f)
+            m_closeVehicleShakePhaseY -= 1.0f;
+        m_soldierShakePitch = sinf(kTwoPi * m_closeVehicleShakePhaseY) * (m_soldierShakeY * g_vehicleShakeAmplitude);
+    }
+    else
+    {
+        m_closeVehicleShakePhaseY = 0.0f;
+        m_soldierShakePitch = 0.0f;
+    }
+
+    if (m_explosionShakeTimeRemaining > 0.0f)
+    {
+        m_explosionShakeTimeRemaining -= deltaTime;
+        const float progress = 1.0f - m_explosionShakeTimeRemaining / g_explosionShakeTime;
+        const float amplitude = (1.0f - progress) * (g_explosionShakeAmplitude * m_explosionShakeMagnitude);
+        m_explosionShakeRoll = sinf(progress * kTwoPi * g_explosionShakeFrequency) * amplitude;
+    }
+    else
+    {
+        m_explosionShakeTimeRemaining = 0.0f;
+        m_explosionShakeRoll = 0.0f;
+    }
+}
+
+// ELF 0x81DC550 / BF2.exe 0x5A3830: in the two first-person modes, the strongest nearby heavy
+// vehicle sets each close-vehicle shake: (distance limit - distance) / limit, the camera's own
+// root excluded.
+void Camera::updateCloseVehicleShake()
+{
+    m_soldierShakeX = 0.0f;
+    m_soldierShakeY = 0.0f;
+    if (static_cast<unsigned int>(m_viewMode - 1) > 1u)
+        return;
+
+    {
+        HeavyEnginePredicator heavy(0x1000008);
+        objectManager->getObjectsFromGrid(getAbsolutePosition(), g_vehicleShakeDistance, m_closeVehicles, &heavy);
+        for (std::vector<IObject*>::iterator it = m_closeVehicles.begin(); it != m_closeVehicles.end(); ++it)
+        {
+            IObject* const vehicle = *it;
+            if (getRootParent(this) == vehicle)
+                continue;
+            const Vec3& own = getAbsolutePosition();
+            const Vec3& other = vehicle->getAbsolutePosition();
+            const float dx = other.x - own.x, dy = other.y - own.y, dz = other.z - own.z;
+            const float strength = (g_vehicleShakeDistance - sqrtf(dx * dx + dy * dy + dz * dz)) / g_vehicleShakeDistance;
+            if (strength > m_soldierShakeX)
+                m_soldierShakeX = strength;
+        }
+    }
+    {
+        HeavyEngineForcePredicator force(0x1000008);
+        objectManager->getObjectsFromGrid(getAbsolutePosition(), g_vehicleShakeDistance, m_closeVehicles, &force);
+        for (std::vector<IObject*>::iterator it = m_closeVehicles.begin(); it != m_closeVehicles.end(); ++it)
+        {
+            IObject* const vehicle = *it;
+            if (getRootParent(this) == vehicle)
+                continue;
+            const Vec3& own = getAbsolutePosition();
+            const Vec3& other = vehicle->getAbsolutePosition();
+            const float dx = other.x - own.x, dy = other.y - own.y, dz = other.z - own.z;
+            const float strength = (g_vehicleShakeDistance - sqrtf(dx * dx + dy * dy + dz * dz)) / g_vehicleShakeDistance;
+            if (strength > m_soldierShakeY)
+                m_soldierShakeY = strength;
+        }
     }
 }
 
@@ -673,8 +955,8 @@ const Mat4& Camera::getTransformation(float deltaTime)
 // / BF2.exe 0x5A2920, 306 B. The dedicated image ends after the
 // absolute-transform copy; the client retains a runtime isDedicated() gate around animation,
 // roll and surface constraints. The immediate parent is queried twice, as in 0x5A2955..0x5A2970.
-// Camera constructors ELF 0x81DA960 / client 0x5A4F90 zero all four consumed roll components.
-// Their update producers remain separate Camera::handleUpdate recovery work.
+// Camera constructors ELF 0x81DA960 / client 0x5A4F90 zero all four consumed roll components;
+// Camera::handleUpdate's updateCameraRecoil, updateCameraShake and updateCloseVehicleShake produce them.
 const Mat4& Camera::getTransformationCVMInside(float)
 {
     m_defaultTransformation = getAbsoluteTransformation();   // virtual +0x84
@@ -1381,7 +1663,7 @@ void Camera::handleMessage(TemplateMessage message, IPlayer* player, bool flag)
     const int m = static_cast<int>(message);
     if (m == 2)
     {
-        m_dword250 = 8;                                          // before the player test, as shipped
+        m_savedViewMode = 8;                                          // before the player test, as shipped
         if (player)
         {
             if (!player->getIsAIPlayer())                        // ELF +0x64 / BF2.exe +0x60

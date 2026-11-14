@@ -1,0 +1,12 @@
+# [TEMP] [CHOSEN, not recovered] Server identity during a normal loopback join.
+# Run loopback.py --input-script ui-menufix-loading.
+timeout 300
+move 400 300
+wait-ms 3000
+capture loading-early
+wait-ms 5000
+capture loading-query
+wait-log ingameMap.tga
+wait-ms 3000
+capture loaded-server-identity
+quit

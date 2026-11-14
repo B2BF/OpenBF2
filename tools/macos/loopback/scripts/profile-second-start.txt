@@ -1,0 +1,10 @@
+# [TEMP] [CHOSEN, not recovered] Second start of the same install (loopback --profiles-from the
+# first-start run): the saved default user must be preselected, showing the PREFIX field and
+# SELECT ACCOUNT without any click (docs/macos-profile-prefix.md).
+timeout 90
+wait-log mods/bf2/Movies/menu.bik
+wait-ms 3000
+move 400 300
+capture second-start
+wait-ms 250
+quit

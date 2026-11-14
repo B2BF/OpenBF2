@@ -106,7 +106,7 @@ void rotateQuad(Quad* quad, const float center[2], float radians)
         quad->corners[i].y = dy * cosine - dx * sine + center[1];
     }
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     float cosine, sine;
     // [CHOSEN, not recovered] Preserve x87 float trig stores.
     cosine = bf2x87::store(bf2x87::cosine(bf2x87::wide(radians)));

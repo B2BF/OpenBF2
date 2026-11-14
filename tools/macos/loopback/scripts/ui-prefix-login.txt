@@ -1,0 +1,23 @@
+# [TEMP] [CHOSEN, not recovered] PREFIX label capture at 800x600.
+# The BF2_SWF_PREFIX_TRACE tracer was removed after the investigation.
+# The harness saves default user 0001. Let the stock movie preselect that row
+# on startup and after Back; neither screen is helped by a profile click.
+timeout 90
+wait-log mods/bf2/Movies/menu.bik
+wait-ms 3000
+move 400 300
+capture prefix-startup
+wait-ms 250
+click 280 414
+wait-ms 1000
+move 400 300
+capture prefix-manage
+wait-ms 250
+click 248 414
+wait-ms 1000
+move 400 300
+capture prefix-after-back
+wait-ms 2000
+capture prefix-after-back-stable
+wait-ms 250
+quit

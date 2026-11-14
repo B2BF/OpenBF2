@@ -133,7 +133,7 @@ static_assert(offsetof(DimensionCacheValue, bloomVerticalOffsets) == 0x6C0, "blo
 // PE 0x100861E0
 DimensionCacheValue::DimensionCacheValue()
 {
-    // [CHOSEN, not recovered] Memory-safety exception (docs/tracks/rend/codex/rules.md): the words
+    // [CHOSEN, not recovered] Memory-safety exception (docs/macos-port.md): the words
     // the image leaves unwritten are zeroed as well, so the map insertion never copies an
     // uninitialised draw-record word. Every word the image writes is zero here too.
     std::memset(static_cast<void*>(this), 0, sizeof *this);

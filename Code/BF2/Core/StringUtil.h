@@ -68,6 +68,11 @@ std::wstring getFixPathDelimiters(const std::wstring&, wchar_t);
 std::wstring getFixPath(const std::wstring&, wchar_t);
 
 bool        isPathAbsolute(const std::string&);
+#if defined(__APPLE__) && !DEDICATED
+// [CHOSEN, not recovered] macOS client: a '/' path whose first component exists at the host root
+// ("/Users", "/private", "/Volumes", ...). Game paths with a leading '/' keep the Windows meaning.
+bool        isHostAbsolutePath(const std::string&);
+#endif
 // Recursively removes doubled forward slashes; backslashes are unchanged.
 void        removeDoubleSlashes(std::string&);
 // Collapses /../ segments and repeated forward slashes, preserving an absolute leading slash.

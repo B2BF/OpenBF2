@@ -1,0 +1,16 @@
+(version 1)
+; [TEMP] [CHOSEN, not recovered] c-loopback: dedicated server policy for the loopback join.
+; Milestone 1 / S2.9 offline rules, tightened: the server may only answer loopback peers
+; (the client's ephemeral port is not known in advance) and may only bind the game port
+; 16890 and the GameSpy LAN query port 29911. Paths are supplied by loopback.py.
+(allow default)
+(deny network-outbound)
+(allow network-outbound (remote ip "localhost:*"))
+(deny network-outbound (remote unix-socket (path-literal "/private/var/run/mDNSResponder")))
+(deny network-bind)
+(allow network-bind (local ip "*:16890") (local ip "localhost:16890")
+                    (local ip "*:29911") (local ip "localhost:29911"))
+(deny network-bind (local ip "*:16567"))
+(deny file-write* (subpath (param "OWNER_HOME")))
+(allow file-write* (subpath (param "RUN_OUT")))
+(deny file-write* (subpath (param "GAME_ROOT")))

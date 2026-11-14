@@ -137,6 +137,8 @@ cl %FLAGS% "%~dp0..\BF2\Physics\SoldierResponse.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS% "%~dp0..\BF2\Game\DemoRecorder\DemoRecorder.cpp"
 if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\Game\DemoRecorder\DemoSpectatorCamera.cpp"
+if errorlevel 1 set /a RC+=1
 cl %FLAGS% "%~dp0..\BF2\Game\Objects\Base\Camera.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS% "%~dp0..\BF2\Game\Objects\Fx\EffectBundle.cpp"
@@ -584,6 +586,8 @@ cl %FLAGS% "%~dp0..\BF2\Game\GameLogic\ScoreSystem\ScoreManager.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS% "%~dp0..\BF2\Game\EndOfRoundInfo.cpp"
 if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\Game\DemoAvailableInfo.cpp"
+if errorlevel 1 set /a RC+=1
 @rem PythonHost.cpp needs the CPython 2.3.4 headers (%PYINC%, now set at the top of this file).
 cl %FLAGS% %PYINC% "%~dp0..\BF2\Game\Python\PythonHost.cpp"
 if errorlevel 1 set /a RC+=1
@@ -696,6 +700,11 @@ if errorlevel 1 set /a RC+=1
 cl %FLAGS% "%~dp0..\BF2\Game\Persistence\GSServerSideNameValidation.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS% "%~dp0..\BF2\Game\GameServer\GameServer.cpp"
+if errorlevel 1 set /a RC+=1
+@rem PunkBuster: the server glue and the BF2-side PB_* functions, in the dedicated image too (2026-11-13).
+cl %FLAGS% "%~dp0..\BF2\Game\PunkBuster\PbServer.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\Game\PunkBuster\PbGame.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS% "%~dp0..\BF2\Game\Objects\Game\StickyProjectileManager.cpp"
 if errorlevel 1 set /a RC+=1
@@ -1195,8 +1204,6 @@ cl %FLAGS0% "%~dp0..\BF2\Menu\ProfileConsoleBindings.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS0% "%~dp0..\BF2\Menu\ClientUiFrontiers.cpp"
 if errorlevel 1 set /a RC+=1
-cl %FLAGS0% "%~dp0..\BF2\Game\Main\BF2ClientFrontiers.cpp"
-if errorlevel 1 set /a RC+=1
 cl %FLAGS0% "%~dp0..\BF2\Game\LocalProfileManager.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS0% "%~dp0..\BF2\Game\ProfileManager.cpp"
@@ -1422,6 +1429,10 @@ cl %FLAGS0% "%~dp0..\BF2\External\BFMeme\Action.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS0% "%~dp0..\BF2\External\BFMeme\Function.cpp"
 if errorlevel 1 set /a RC+=1
+cl %FLAGS0% "%~dp0..\BF2\External\BFMeme\Tree.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS0% "%~dp0..\BF2\Menu\Bf2TileNode.cpp"
+if errorlevel 1 set /a RC+=1
 cl %FLAGS0% "%~dp0..\BF2\External\BFMeme\TypeDescriptor.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS0% "%~dp0..\BF2\External\BFMeme\NamedObjectRegistry.cpp"
@@ -1596,6 +1607,19 @@ if errorlevel 1 set /a RC+=1
 @rem (2026-09-14): whole-body #if !DEDICATED, so this is the only configuration in which any of them
 @rem compiles to anything. Game\GameClient\ has no other TU.
 cl %FLAGS0% "%~dp0..\BF2\Game\GameClient\GameClient.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS0% "%~dp0..\BF2\Game\PunkBuster\PbClient.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS0% "%~dp0..\BF2\Game\PunkBuster\PbGame.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS0% "%~dp0..\BF2\Game\PunkBuster\PbServer.cpp"
+if errorlevel 1 set /a RC+=1
+@rem Ledger N2 17a: the Soldier's Novint control-box profile switch (client body only).
+cl %FLAGS0% "%~dp0..\BF2\Game\Objects\Game\SoldierHapticProfile.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS0% "%~dp0..\BF2\Game\PunkBuster\PbCommandHook.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS0% "%~dp0..\BF2\Game\DistributedLightRenderer\DistributedLightRenderer.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS0% "%~dp0..\BF2\IO\Network\ProtocolLayer\NetClient.cpp"
 if errorlevel 1 set /a RC+=1

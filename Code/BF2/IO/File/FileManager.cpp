@@ -39,26 +39,8 @@ static const char* const kRootOverloadReplacement = "";
 // Absolute paths bypass substitution.
 namespace {
 
-#if defined(__APPLE__) && !DEDICATED
-// [CHOSEN, not recovered] macOS client port (docs/macos-c-metal-ingame.md, loading screen).
-// Game paths may start with '/': SwiffPlayer's "$/Levels/<level>/Info/loadMap.png" reaches open()
-// as "/Levels/...". On Windows isPathAbsolute only accepts drive paths, so such a name is prefixed
-// with each search-path entry ("mods/bf2/" + "/Levels/..."). On a POSIX host every '/' path counts
-// as absolute and the lookup went to the host root. Host-absolute paths in the client come from
-// the absolute @HOME@ substitution (or a developer's own absolute path); they are told apart by a
-// first component that exists at the host root ("/Users", "/private", "/Volumes", ...). Any
-// other '/' path keeps the Windows meaning.
-bool isHostAbsolutePath(const std::string& path)
-{
-    if (!isPathAbsolute(path))
-        return false;
-    const std::string::size_type end = path.find('/', 1);
-    const std::string first = path.substr(0, end);
-    struct stat st;
-    return first.size() > 1 && ::stat(first.c_str(), &st) == 0;
-}
-#endif
-
+// macOS client: isHostAbsolutePath (Core/StringUtil) tells host paths from game paths with a
+// leading '/' (SwiffPlayer's "$/Levels/<level>/Info/loadMap.png" reaches open() as "/Levels/...").
 
 // `base` is the search-path entry being tried. `out` receives the expanded result.
 void expandPath(std::string& path, const std::string& base, std::string* out,

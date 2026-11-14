@@ -5,7 +5,10 @@ cd "$(dirname "$0")/../../.."
 root=$PWD
 stage="$root/out/d3dxfx"
 build="$root/out/build/s1c-fx-coverage/tools"
-upstream=${MOJOSHADER_SOURCE:-/Users/krauzi/Source/OpenBF2-wt/s0-shader-proto/out/third_party/mojoshader}
+upstream=${MOJOSHADER_SOURCE:-}
+if [ ! -f out/third_party/mojoshader/CMakeLists.txt ] && [ -z "$upstream" ]; then
+    echo "Set MOJOSHADER_SOURCE to a local MojoShader checkout (or provide out/third_party/mojoshader)." >&2; exit 2
+fi
 mingw=${MINGW_CC:-/usr/local/bin/i686-w64-mingw32-gcc}
 mkdir -p "$build" "$stage/logs" "$root/out/third_party"
 "$mingw" -std=c99 -O2 -Wall -Wextra -Werror -static-libgcc \

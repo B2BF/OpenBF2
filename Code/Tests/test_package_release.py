@@ -191,6 +191,26 @@ class PackageReleaseTests(unittest.TestCase):
                         for entry in ("openbf2_cfg", "16890", "sv.internet 0", "mapList.append"):
                             self.assertNotIn(entry, readme)
 
+    def test_macos_signing_notes(self):
+        # Release CI packages Developer ID signed binaries; every other run packages ad-hoc ones.
+        for signing in ("adhoc", "developer-id"):
+            self.args.platform = "macos-arm64"
+            self.args.macos_signing = signing
+            self.args.output_dir = Path(self.temp.name) / ("packages-" + signing)
+            self.populate()
+            self.package()
+            for role in ("client", "server"):
+                with self.subTest(signing=signing, role=role):
+                    name = "openbf2-macos-arm64-" + role
+                    with zipfile.ZipFile(self.args.output_dir / (name + ".zip")) as archive:
+                        readme = archive.read(name + "/README.txt").decode()
+                        metadata = json.loads(archive.read(name + "/build-info.json"))
+                    self.assertEqual(metadata["macos_signing"], signing)
+                    notarized = signing == "developer-id"
+                    self.assertEqual("this archive is notarized" in readme, notarized)
+                    self.assertEqual("ad-hoc signed, not notarized" in readme, not notarized)
+                    self.assertEqual("xattr -dr com.apple.quarantine ." in readme, not notarized)
+
 
 if __name__ == "__main__":
     unittest.main()

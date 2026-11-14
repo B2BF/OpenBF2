@@ -34,14 +34,18 @@ for variant in ('popup', 'missing', 'missing-popup'):
     (out / (variant + '.swf')).write_bytes(b'FWS\x07' + struct.pack('<I', len(data) + 8) + data)
 PY
 EXE="$BUILD/bf2_swiff_offline_connect_popup_check"
-"$EXE" "$OUT/popup.swf"
+"$EXE" "$OUT/popup.swf" 2>"$OUT/popup.stderr"
+grep -q "offline connecttoip declined: popups connecttoip navigation failed" "$OUT/popup.stderr"
+if grep -q "FRONTIER" "$OUT/popup.stderr"; then cat "$OUT/popup.stderr"; exit 1; fi
 python3 - "$EXE" "$OUT" <<'PY'
-import pathlib, signal, subprocess, sys
+import pathlib, subprocess, sys
 exe, out = sys.argv[1], pathlib.Path(sys.argv[2])
 for fixture, mode, reason in [('missing-popup.swf', 'missing-popup', 'main-menu popups clip absent'),
                               ('missing.swf', 'missing-label', 'popups connecttoip frame absent')]:
     result = subprocess.run([exe, str(out / fixture), mode], capture_output=True, text=True)
-    assert result.returncode == -signal.SIGABRT, (fixture, result.returncode, result.stderr)
-    assert '[FRONTIER] dice::hfe::ui::openOfflineConnectPopup: ' + reason in result.stderr, result.stderr
-print('Offline Connect to IP frontiers: 2/2 named aborts passed')
+    assert result.returncode == 0, (fixture, result.returncode, result.stderr)
+    assert '[FRONTIER]' not in result.stderr, result.stderr
+    line = '[SwiffPlayer] offline connecttoip declined: ' + reason
+    assert result.stderr.count(line) == 1, result.stderr
+print('Offline Connect to IP declines: 2/2 quiet declines passed')
 PY

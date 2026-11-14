@@ -182,7 +182,7 @@ AIMain::AIMain()
     m_sai[2] = 0;
 }
 
-// ELF 0x39D390 (D1, 538 B; recovered on the client track, docs/macos-c-singleplayer.md). The
+// ELF 0x39D390 (D1, 538 B; recovered on the client track). The
 // per-side SAIs 1..getNSides() go through their virtual deleting destructor (+4) and are zeroed
 // - the side count is asked again on every pass (IAISettings +0x40) - then the bot manager the
 // same way. The containers and the IAIMain base follow as members.

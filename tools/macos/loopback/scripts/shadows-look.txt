@@ -1,0 +1,60 @@
+# [TEMP] shadows-look (c-shadows): join-and-spawn, then look around in 12 steps, walk forward and look again.
+include join-and-spawn
+# [TEMP] c-shadows: look around in 12 steps, then walk forward and look again
+move-rel 100 0
+wait-ms 1200
+capture look-01
+move-rel 100 0
+wait-ms 1200
+capture look-02
+move-rel 100 0
+wait-ms 1200
+capture look-03
+move-rel 100 0
+wait-ms 1200
+capture look-04
+move-rel 100 0
+wait-ms 1200
+capture look-05
+move-rel 100 0
+wait-ms 1200
+capture look-06
+move-rel 100 0
+wait-ms 1200
+capture look-07
+move-rel 100 0
+wait-ms 1200
+capture look-08
+move-rel 100 0
+wait-ms 1200
+capture look-09
+move-rel 100 0
+wait-ms 1200
+capture look-10
+move-rel 100 0
+wait-ms 1200
+capture look-11
+move-rel 100 0
+wait-ms 1200
+capture look-12
+key w 4000
+wait-ms 500
+move-rel 200 0
+wait-ms 1200
+capture walk-1
+move-rel 200 0
+wait-ms 1200
+capture walk-2
+move-rel 200 0
+wait-ms 1200
+capture walk-3
+move-rel 200 0
+wait-ms 1200
+capture walk-4
+move-rel 200 0
+wait-ms 1200
+capture walk-5
+move-rel 200 0
+wait-ms 1200
+capture walk-6
+log shadows-look done

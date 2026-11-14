@@ -1,7 +1,11 @@
 // [CHOSEN, not recovered] G3b resource factories, declarations, queries and subresource copies.
     Query* activeQuery=nullptr;
-    [[noreturn]] static void formatStop(const char* method,D3DFORMAT format) {
-        char name[200]; std::snprintf(name,sizeof(name),"%s format 0x%08x",method,unsigned(format)); frontier(name);
+    // [CHOSEN, not recovered] A format this device does not offer (CheckDeviceFormat answers
+    // NOTAVAILABLE for it) is refused with D3DERR_INVALIDCALL, as the D3D9 runtime refuses a
+    // resource whose format the driver lacks; the first refusal per format is logged.
+    static HRESULT formatRefused(const char* method,D3DFORMAT format) {
+        char name[200]; std::snprintf(name,sizeof(name),"%s format 0x%08x",method,unsigned(format));
+        bf2gfx::unsupported(name); return D3DERR_INVALIDCALL;
     }
     HRESULT image(unsigned w,unsigned h,unsigned d,unsigned& levels,DWORD usage,D3DFORMAT format,D3DPOOL pool,
                   D3DRESOURCETYPE kind,HANDLE* shared,std::shared_ptr<Image>& out,unsigned samples=1) {
@@ -10,20 +14,21 @@
             kind==D3DRTYPE_VOLUMETEXTURE?"IDirect3DDevice9::CreateVolumeTexture":
             usage==D3DUSAGE_RENDERTARGET?"IDirect3DDevice9::CreateRenderTarget":
             usage==D3DUSAGE_DEPTHSTENCIL?"IDirect3DDevice9::CreateDepthStencilSurface":"IDirect3DDevice9::CreateOffscreenPlainSurface";
-        if(!bf2metal::formatSupported(format)) formatStop(method,format);
+        if(!bf2metal::formatSupported(format)) return formatRefused(method,format);
         // D3DPOOL_SCRATCH: CPU storage like SYSTEMMEM; the device-access checks (StretchRect,
         // UpdateSurface, GetRenderTargetData, sampling) name DEFAULT/SYSTEMMEM and so refuse it, as
         // the D3D9 runtime does. The screenshot capture loads the back buffer into one (PE 0x10005200).
+        // D3D9 rules: another pool value is invalid, and shared handles exist only on D3D9Ex.
         if(pool!=D3DPOOL_DEFAULT && pool!=D3DPOOL_MANAGED && pool!=D3DPOOL_SYSTEMMEM && pool!=D3DPOOL_SCRATCH)
-            frontier("IDirect3DDevice9::CreateResource pool");
-        if(shared) frontier("IDirect3DDevice9::CreateResource shared handle");
+            return D3DERR_INVALIDCALL;
+        if(shared) return D3DERR_INVALIDCALL;
         if(!w || !h || !d || w>8192 || h>8192 || d>256 || (kind==D3DRTYPE_VOLUMETEXTURE && (w>256 || h>256)) ||
             (usage&~(D3DUSAGE_RENDERTARGET|D3DUSAGE_DEPTHSTENCIL|D3DUSAGE_DYNAMIC)) ||
             ((usage&3) && pool!=D3DPOOL_DEFAULT) || ((usage&3)==3) || ((usage&D3DUSAGE_DYNAMIC)&&pool!=D3DPOOL_DEFAULT)) return D3DERR_INVALIDCALL;
         const bool depth=format==D3DFMT_D24S8 || format==D3DFMT_D16;
         if(bool(usage&D3DUSAGE_DEPTHSTENCIL)!=depth || (depth && kind==D3DRTYPE_VOLUMETEXTURE) ||
             ((usage&3) && !bf2metal::formatRenderable(format)) || (kind==D3DRTYPE_VOLUMETEXTURE && bf2metal::formatBlock(format)>1))
-            formatStop(method,format);
+            return formatRefused(method,format);
         unsigned maxLevels=1; for(unsigned n=std::max(w,std::max(h,d));n>1;n>>=1) ++maxLevels;
         if(!levels) levels=maxLevels; if(levels>maxLevels) return D3DERR_INVALIDCALL;
         if(bf2metal::formatBlock(format)>1 && (w%4 || h%4)) return D3DERR_INVALIDCALL;
@@ -48,7 +53,7 @@
     }
     HRESULT STDMETHODCALLTYPE CreateVolumeTexture(UINT w,UINT h,UINT d,UINT levels,DWORD u,D3DFORMAT f,D3DPOOL p,IDirect3DVolumeTexture9** out,HANDLE* shared) override {
         mainThread("IDirect3DDevice9::CreateVolumeTexture"); if(!out) return D3DERR_INVALIDCALL; *out=nullptr;
-        if(u&3) frontier("IDirect3DDevice9::CreateVolumeTexture render/depth target");
+        if(u&3) return D3DERR_INVALIDCALL; // D3D9: volume textures cannot be render or depth targets.
         std::shared_ptr<Image> im; const HRESULT hr=image(w,h,d,levels,u,f,p,D3DRTYPE_VOLUMETEXTURE,shared,im); if(FAILED(hr)) return hr;
         auto* t=new VolumeTexture(this,native,"IDirect3DVolumeTexture9",D3DRTYPE_VOLUMETEXTURE,im,w,h,d,levels,u,f,p);
         *out=t; t->AddRef(); return D3D_OK;
@@ -64,18 +69,20 @@
     }
     // [CHOSEN, not recovered] Multisampled surfaces (MetalBridge createTexture samples): a sample
     // count and quality CheckDeviceMultiSampleType does not offer is D3DERR_NOTAVAILABLE (the
-    // runtime's answer, Wine wined3d_texture_init); 0 with a quality and a lockable multisampled
-    // render target have no established answer and stop by name.
+    // runtime's answer, Wine wined3d_texture_init). A quality without multisampling (NONE offers
+    // no quality levels) and a lockable multisampled render target (a Metal multisample texture
+    // has no CPU storage) are refused with D3DERR_INVALIDCALL. Retail creates neither: its AA
+    // targets come from the video options' (type, quality) pairs and are never lockable.
     HRESULT multisample(const char* method,D3DFORMAT f,D3DMULTISAMPLE_TYPE samples,DWORD quality,bool lockable,unsigned& count) {
         count=1;
         if(samples==D3DMULTISAMPLE_NONE) {
-            if(quality) { char name[160]; std::snprintf(name,sizeof(name),"%s quality without multisample",method); frontier(name); }
+            if(quality) { bf2gfx::unsupported(std::string(method)+" quality without multisample"); return D3DERR_INVALIDCALL; }
             return D3D_OK;
         }
         DWORD levels=0;
         if(FAILED(parent->CheckDeviceMultiSampleType(0,D3DDEVTYPE_HAL,f,TRUE,samples,&levels)) || quality>=levels)
             return D3DERR_NOTAVAILABLE;
-        if(lockable) { char name[160]; std::snprintf(name,sizeof(name),"%s lockable multisample",method); frontier(name); }
+        if(lockable) { bf2gfx::unsupported(std::string(method)+" lockable multisample"); return D3DERR_INVALIDCALL; }
         count=unsigned(samples); return D3D_OK;
     }
     HRESULT STDMETHODCALLTYPE CreateRenderTarget(UINT w,UINT h,D3DFORMAT f,D3DMULTISAMPLE_TYPE samples,DWORD quality,BOOL lockable,IDirect3DSurface9** out,HANDLE* shared) override {
@@ -89,7 +96,7 @@
     HRESULT STDMETHODCALLTYPE CreateDepthStencilSurface(UINT w,UINT h,D3DFORMAT f,D3DMULTISAMPLE_TYPE samples,DWORD quality,BOOL,IDirect3DSurface9** out,HANDLE* shared) override {
         mainThread("IDirect3DDevice9::CreateDepthStencilSurface");
         if(out) *out=nullptr;
-        if(f!=D3DFMT_D24S8 && f!=D3DFMT_D16) formatStop("IDirect3DDevice9::CreateDepthStencilSurface",f);
+        if(f!=D3DFMT_D24S8 && f!=D3DFMT_D16) return formatRefused("IDirect3DDevice9::CreateDepthStencilSurface",f);
         unsigned count=1; const HRESULT hr=multisample("IDirect3DDevice9::CreateDepthStencilSurface",f,samples,quality,false,count);
         if(FAILED(hr)) return hr;
         return surface(w,h,f,D3DUSAGE_DEPTHSTENCIL,D3DPOOL_DEFAULT,false,out,shared,count);
@@ -100,9 +107,10 @@
         return surface(w,h,f,0,p,true,out,shared);
     }
     static HRESULT bufferArgs(unsigned length,DWORD usage,D3DPOOL pool,HANDLE* shared) {
-        if(shared) frontier("IDirect3DDevice9::CreateBuffer shared handle");
-        if(pool!=D3DPOOL_DEFAULT && pool!=D3DPOOL_MANAGED && pool!=D3DPOOL_SYSTEMMEM)
-            frontier("IDirect3DDevice9::CreateBuffer pool");
+        // D3D9 rules: shared handles exist only on D3D9Ex; buffers take DEFAULT, MANAGED or
+        // SYSTEMMEM (SCRATCH and any other value are invalid).
+        if(shared) return D3DERR_INVALIDCALL;
+        if(pool!=D3DPOOL_DEFAULT && pool!=D3DPOOL_MANAGED && pool!=D3DPOOL_SYSTEMMEM) return D3DERR_INVALIDCALL;
         if(!length || (usage&~(D3DUSAGE_DYNAMIC|D3DUSAGE_WRITEONLY)) || ((usage&D3DUSAGE_DYNAMIC)&&pool!=D3DPOOL_DEFAULT)) return D3DERR_INVALIDCALL;
         return D3D_OK;
     }
@@ -114,7 +122,7 @@
     }
     HRESULT STDMETHODCALLTYPE CreateIndexBuffer(UINT length,DWORD usage,D3DFORMAT f,D3DPOOL pool,IDirect3DIndexBuffer9** out,HANDLE* shared) override {
         mainThread("IDirect3DDevice9::CreateIndexBuffer"); if(!out) return D3DERR_INVALIDCALL; *out=nullptr;
-        if(f!=D3DFMT_INDEX16 && f!=D3DFMT_INDEX32) formatStop("IDirect3DDevice9::CreateIndexBuffer",f);
+        if(f!=D3DFMT_INDEX16 && f!=D3DFMT_INDEX32) return D3DERR_INVALIDCALL; // D3D9: index formats are 16 or 32 bit
         if(length%(f==D3DFMT_INDEX16?2:4)) return D3DERR_INVALIDCALL;
         const HRESULT hr=bufferArgs(length,usage,pool,shared); if(FAILED(hr)) return hr;
         auto* b=new IndexBuffer(this,native,"IDirect3DIndexBuffer9",D3DINDEXBUFFER_DESC{f,D3DRTYPE_INDEXBUFFER,usage,pool,length});
@@ -130,12 +138,18 @@
             if(e.Stream==255 && e.Type==D3DDECLTYPE_UNUSED) {
                 if(i==0 || e.Offset || e.Method || e.Usage || e.UsageIndex) return D3DERR_INVALIDCALL;
                 d->native=bf2metal::createLayout(d->mapped.data(),unsigned(d->mapped.size()));
-                if(!d->native) frontier("IDirect3DDevice9::CreateVertexDeclaration type/attribute limit");
+                if(!d->native) { bf2gfx::unsupported("IDirect3DDevice9::CreateVertexDeclaration type/attribute limit"); return D3DERR_INVALIDCALL; }
                 *out=d.release(); (*out)->AddRef(); return D3D_OK;
             }
             if(i==64 || e.Stream>=16 || e.UsageIndex>=16) return D3DERR_INVALIDCALL;
-            if(e.Method || e.Usage>10 || e.Type==13 || e.Type==14 || e.Type>16 || e.Offset>2047)
-                frontier("IDirect3DDevice9::CreateVertexDeclaration type/usage/method");
+            // [CHOSEN, not recovered] Tessellation methods (no patch caps), the FOG/DEPTH/SAMPLE
+            // usages and UDEC3/DEC3N (absent from caps DeclTypes) are refused with
+            // D3DERR_INVALIDCALL. The shipped meshes declare types 0, 1, 2 and 4 only and the
+            // tree's declarations use usages 0..10.
+            if(e.Method || e.Usage>10 || e.Type==13 || e.Type==14 || e.Type>16 || e.Offset>2047) {
+                bf2gfx::unsupported("IDirect3DDevice9::CreateVertexDeclaration type/usage/method");
+                return D3DERR_INVALIDCALL;
+            }
             for(const auto& prev:d->mapped) if(prev.usage==e.Usage && prev.index==e.UsageIndex) return D3DERR_INVALIDCALL;
             d->mapped.push_back({e.Stream,e.Offset,e.Type,e.Usage,e.UsageIndex});
         }
@@ -157,21 +171,27 @@
         if(!s || !d || s->owner!=this || d->owner!=this || s==d || s->plane->locked || d->plane->locked) return D3DERR_INVALIDCALL;
         auto& a=*s->plane; auto& b=*d->plane; RECT sr,dr;
         if(!rectangle(sourceRect,a,sr) || !rectangle(destRect,b,dr)) return D3DERR_INVALIDCALL;
-        if(filter!=D3DTEXF_NONE && filter!=D3DTEXF_POINT && filter!=D3DTEXF_LINEAR) frontier("IDirect3DDevice9::StretchRect filter");
+        if(filter!=D3DTEXF_NONE && filter!=D3DTEXF_POINT && filter!=D3DTEXF_LINEAR) return D3DERR_INVALIDCALL; // as StretchRect
         // X8R8G8B8 <-> A8R8G8B8 share their byte layout; the CPU copy reads X as opaque, as D3D9
         // samples it. Retail Terrain::drawMain copies the X8R8G8B8 back buffer into its A8R8G8B8
         // scratch target this way under multisampling (TerrainDraw.cpp, device +0x88).
         const bool xrgb=(a.format==D3DFMT_X8R8G8B8 && b.format==D3DFMT_A8R8G8B8) ||
             (a.format==D3DFMT_A8R8G8B8 && b.format==D3DFMT_X8R8G8B8);
-        if(a.format!=b.format && !xrgb) frontier("IDirect3DDevice9::StretchRect format conversion");
-        // A multisampled source resolves (its read() goes through a resolve); a multisampled
-        // destination's D3D9 contract is not established.
-        if(b.samples>1) frontier("IDirect3DDevice9::StretchRect into a multisampled surface");
+        // [CHOSEN, not recovered] Other conversions are refused (CheckDeviceFormatConversion
+        // offers only the X8/A8 pair); retail copies only same-format or X8/A8 surfaces.
+        if(a.format!=b.format && !xrgb) { bf2gfx::unsupported("IDirect3DDevice9::StretchRect format conversion"); return D3DERR_INVALIDCALL; }
+        // A multisampled source resolves (its read() goes through a resolve). A multisampled
+        // destination: same-size, same-format GPU copies between targets go through copyColor
+        // below like single-sample ones when the bridge supports them; the CPU paths cannot
+        // write a multisample texture, so those are refused with D3DERR_INVALIDCALL.
+        const bool multisampledDest=b.samples>1;
         const unsigned block=a.block(), size=bf2metal::formatBytes(a.format);
         const unsigned sw=sr.right-sr.left, sh=sr.bottom-sr.top, dw=dr.right-dr.left, dh=dr.bottom-dr.top;
         if(a.format==D3DFMT_D24S8 || a.format==D3DFMT_D16) {
+            // D3D9 rules: depth/stencil StretchRect copies whole same-size surfaces, unfiltered,
+            // between DEFAULT-pool surfaces.
             if(sw!=dw || sh!=dh || filter!=D3DTEXF_NONE || a.pool==D3DPOOL_SYSTEMMEM || b.pool==D3DPOOL_SYSTEMMEM)
-                frontier("IDirect3DDevice9::StretchRect depth scaling/readback");
+                return D3DERR_INVALIDCALL;
             return bf2metal::copyTextureRegion(native,a.image->native,a.level,a.slice,sr.left,sr.top,
                 b.image->native,b.level,b.slice,dr.left,dr.top,sw,sh)?D3D_OK:D3DERR_DEVICELOST;
         }
@@ -186,13 +206,14 @@
             // X8 formats read as opaque, as the CPU path converts them.
             const bool opaque=a.format==D3DFMT_X8R8G8B8 || a.format==D3DFMT_X8B8G8R8 ||
                 b.format==D3DFMT_X8R8G8B8 || b.format==D3DFMT_X8B8G8R8;
-            if(bf2metal::copyColor(native,a.image->native,sr.left,sr.top,b.image->native,b.level,b.slice,
+            if(!multisampledDest && bf2metal::copyColor(native,a.image->native,sr.left,sr.top,b.image->native,b.level,b.slice,
                     dr.left,dr.top,sw,sh,opaque)) return D3D_OK;
         }
+        if(multisampledDest) { bf2gfx::unsupported("IDirect3DDevice9::StretchRect into a multisampled surface"); return D3DERR_INVALIDCALL; }
         if(!a.image->native && b.image->native && sw==dw && sh==dh) {
             // [CHOSEN, not recovered] A same-size copy out of a SYSTEMMEM surface (UpdateSurface)
             // uploads just the rectangle. Reading the whole destination back and writing all of
-            // it again cost ~90% of an in-game frame with nametags (docs/macos-c-handplay-1.md).
+            // it again cost ~90% of an in-game frame with nametags.
             if(!a.read()) return D3DERR_DEVICELOST;      // SYSTEMMEM: sizes the CPU storage only
             const unsigned char* from=a.bytes.data()+(sr.top/block)*a.pitch()+(sr.left/block)*size;
             return bf2metal::uploadRegion(native,b.image->native,b.level,b.slice,dr.left,dr.top,sw,sh,from,a.pitch())
@@ -204,10 +225,12 @@
                 std::memcpy(b.bytes.data()+(dr.top/block+y)*b.pitch()+(dr.left/block)*size,
                     a.bytes.data()+(sr.top/block+y)*a.pitch()+(sr.left/block)*size,((sw+block-1)/block)*size);
         } else {
-            if(block>1) frontier("IDirect3DDevice9::StretchRect compressed scaling");
+            if(block>1) return D3DERR_INVALIDCALL; // D3D9: compressed surfaces cannot be stretched
             if(!bf2metal::resample(a.format,a.bytes.data()+sr.top*a.pitch()+sr.left*size,sw,sh,a.pitch(),
-                b.bytes.data()+dr.top*b.pitch()+dr.left*size,dw,dh,b.pitch(),filter==D3DTEXF_LINEAR))
-                frontier("IDirect3DDevice9::StretchRect scaling format");
+                b.bytes.data()+dr.top*b.pitch()+dr.left*size,dw,dh,b.pitch(),filter==D3DTEXF_LINEAR)) {
+                bf2gfx::unsupported("IDirect3DDevice9::StretchRect scaling format");
+                return D3DERR_INVALIDCALL;
+            }
         }
         return b.write()?D3D_OK:D3DERR_DEVICELOST;
     }

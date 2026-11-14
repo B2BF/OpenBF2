@@ -1,0 +1,21 @@
+# [TEMP] console check: open the console, type, capture before and after Enter.
+timeout 300
+wait-log ingameMap.tga
+wait-ms 5000
+key escape
+wait-ms 4000
+key grave
+wait-ms 1000
+type spawnManager.setPlayerKit 3
+wait-ms 500
+capture typed
+key enter
+wait-ms 1000
+capture executed
+type game.sayAll hello
+key enter
+wait-ms 1000
+capture executed-2
+key grave
+wait-ms 1000
+capture closed

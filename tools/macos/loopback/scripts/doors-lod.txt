@@ -1,0 +1,27 @@
+# [TEMP] rend-doors: the warehouse doors at each static-mesh LOD. Needs
+# --client-env BF2_CLIENT_CONSOLE_FULL_ACCESS=1 for renderer.globalStaticMeshLodDistanceScale.
+# lrgstrgbuilding_03.tweak: setSubGeometryLodDistance 0 0 50 / 0 1 600. Scaling the switch
+# distances down forces the far LODs at the same camera position. The most frequent spawn point,
+# -145.5/154.2/-42.0, has no sight of the warehouse; from there the soldier walks east of the
+# construction site and south to -165/-97, about 20 m in front of the north gable.
+include join-and-spawn
+wait-ms 2000
+wait-log-else 3 notEast pos=-145.5/154.
+log doors: east spawn point, walking round the construction site
+walk-to -130/154/-45 1.5 15000
+walk-to -130/154/-95 1.5 25000
+walk-to -165/154/-97 1.5 25000
+label notEast
+aim -185.27/156/-117 1.5 6000
+wait-ms 1500
+capture lod-default
+console renderer.globalStaticMeshLodDistanceScale 0.05
+wait-ms 1500
+capture lod-scale-005
+console renderer.globalStaticMeshLodDistanceScale 0.001
+wait-ms 1500
+capture lod-scale-0001
+console renderer.globalStaticMeshLodDistanceScale 1
+wait-ms 1500
+capture lod-restored
+log doors: done

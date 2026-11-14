@@ -1,0 +1,184 @@
+# [TEMP] rend-handcheck: AA / Print Screen / near plane / grenade tinnitus on dalian_plant.
+# Same script for every antialiasing setting, so the capture moments line up.
+include join-and-spawn
+log hc: start
+move-rel -300 0
+wait-ms 1500
+capture aa-a
+move-rel 0 -250
+wait-ms 1500
+capture aa-up
+move-rel 0 250
+wait-ms 1000
+log hc: printscreen
+capture ps-before
+key 0x69
+capture ps-at
+wait-ms 2000
+capture ps-after
+log hc: near plane - walk into the wall ahead
+key-down w
+wait-ms 4500
+capture near-wall-1
+wait-ms 800
+key-up w
+wait-ms 600
+capture near-wall-2
+move-rel 250 0
+wait-ms 1000
+capture near-wall-3
+move-rel -500 0
+wait-ms 1000
+capture near-wall-4
+move-rel 250 0
+wait-ms 500
+key z
+wait-ms 2500
+capture near-prone-1
+move-rel 0 250
+wait-ms 1000
+capture near-prone-down
+move-rel 0 -500
+wait-ms 1000
+capture near-prone-up
+move-rel 0 250
+key z
+wait-ms 2500
+log hc: turn to the open hall
+move-rel 1200 0
+wait-ms 1500
+capture open-hall
+log hc: control grenade (thrown level, far)
+key 4
+wait-ms 2000
+button-down 0
+wait-ms 400
+button-up 0
+wait-ms 300
+capture far-00
+wait-ms 300
+capture far-01
+wait-ms 300
+capture far-02
+wait-ms 300
+capture far-03
+wait-ms 300
+capture far-04
+wait-ms 300
+capture far-05
+wait-ms 300
+capture far-06
+wait-ms 300
+capture far-07
+wait-ms 300
+capture far-08
+wait-ms 300
+capture far-09
+wait-ms 300
+capture far-10
+wait-ms 300
+capture far-11
+log hc: grenade at own feet, then turn slowly
+key 4
+wait-ms 2000
+move-rel 0 900
+wait-ms 600
+button-down 0
+wait-ms 400
+button-up 0
+wait-ms 300
+move-rel 0 -820
+wait-ms 1200
+move-rel 25 0
+wait-ms 120
+capture feet-00
+move-rel 25 0
+wait-ms 120
+capture feet-01
+move-rel 25 0
+wait-ms 120
+capture feet-02
+move-rel 25 0
+wait-ms 120
+capture feet-03
+move-rel 25 0
+wait-ms 120
+capture feet-04
+move-rel 25 0
+wait-ms 120
+capture feet-05
+move-rel 25 0
+wait-ms 120
+capture feet-06
+move-rel 25 0
+wait-ms 120
+capture feet-07
+move-rel 25 0
+wait-ms 120
+capture feet-08
+move-rel 25 0
+wait-ms 120
+capture feet-09
+move-rel 25 0
+wait-ms 120
+capture feet-10
+move-rel 25 0
+wait-ms 120
+capture feet-11
+move-rel 25 0
+wait-ms 120
+capture feet-12
+move-rel 25 0
+wait-ms 120
+capture feet-13
+move-rel 25 0
+wait-ms 120
+capture feet-14
+move-rel 25 0
+wait-ms 120
+capture feet-15
+move-rel 25 0
+wait-ms 120
+capture feet-16
+move-rel 25 0
+wait-ms 120
+capture feet-17
+move-rel 25 0
+wait-ms 120
+capture feet-18
+move-rel 25 0
+wait-ms 120
+capture feet-19
+move-rel 25 0
+wait-ms 120
+capture feet-20
+move-rel 25 0
+wait-ms 120
+capture feet-21
+move-rel 25 0
+wait-ms 120
+capture feet-22
+move-rel 25 0
+wait-ms 120
+capture feet-23
+move-rel 25 0
+wait-ms 120
+capture feet-24
+move-rel 25 0
+wait-ms 120
+capture feet-25
+move-rel 25 0
+wait-ms 120
+capture feet-26
+move-rel 25 0
+wait-ms 120
+capture feet-27
+move-rel 25 0
+wait-ms 120
+capture feet-28
+move-rel 25 0
+wait-ms 120
+capture feet-29
+wait-ms 2000
+capture feet-late
+log hc: done

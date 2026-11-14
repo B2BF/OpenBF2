@@ -22,8 +22,40 @@ struct Life {
     HRESULT device(IDirect3DDevice9** out) {
         if(!out) return D3DERR_INVALIDCALL; *out=owner; owner->AddRef(); return D3D_OK;
     }
-    [[noreturn]] void stop(const char* method) const {
-        char name[192]; std::snprintf(name,sizeof(name),"%s::%s",iface,method); frontier(name);
+};
+// D3D9 private data (IDirect3DResource9::Set/Get/FreePrivateData): bytes per GUID, or with
+// D3DSPD_IUNKNOWN an interface pointer the resource references until it is freed or replaced.
+struct PrivateData {
+    struct Entry { std::vector<unsigned char> bytes; IUnknown* object=nullptr; };
+    std::map<std::string,Entry> entries;
+    static std::string key(REFGUID id) { return std::string(reinterpret_cast<const char*>(&id),sizeof(GUID)); }
+    ~PrivateData() { for(auto& e:entries) if(e.second.object) e.second.object->Release(); }
+    HRESULT set(REFGUID id,const void* data,DWORD size,DWORD flags) {
+        if(flags&~1u) return D3DERR_INVALIDCALL;
+        Entry e;
+        if(flags&1) { // D3DSPD_IUNKNOWN
+            if(size!=sizeof(IUnknown*) || !data) return D3DERR_INVALIDCALL;
+            std::memcpy(&e.object,data,sizeof(e.object)); if(!e.object) return D3DERR_INVALIDCALL;
+            e.object->AddRef(); e.bytes.assign(static_cast<const unsigned char*>(data),static_cast<const unsigned char*>(data)+size);
+        } else {
+            if(!data && size) return D3DERR_INVALIDCALL;
+            if(size) e.bytes.assign(static_cast<const unsigned char*>(data),static_cast<const unsigned char*>(data)+size);
+        }
+        free(id); entries[key(id)]=std::move(e); return D3D_OK;
+    }
+    HRESULT get(REFGUID id,void* data,DWORD* size) const {
+        if(!size) return D3DERR_INVALIDCALL;
+        const auto it=entries.find(key(id)); if(it==entries.end()) return D3DERR_NOTFOUND;
+        const DWORD n=DWORD(it->second.bytes.size());
+        if(!data) { *size=n; return D3D_OK; }
+        if(*size<n) { *size=n; return D3DERR_MOREDATA; }
+        if(it->second.object) it->second.object->AddRef(); // D3D9 hands out a reference
+        if(n) std::memcpy(data,it->second.bytes.data(),n); *size=n; return D3D_OK;
+    }
+    HRESULT free(REFGUID id) {
+        const auto it=entries.find(key(id)); if(it==entries.end()) return D3DERR_NOTFOUND;
+        if(it->second.object) it->second.object->Release();
+        entries.erase(it); return D3D_OK;
     }
 };
 template<class I> struct Binding {
@@ -78,9 +110,10 @@ public:
         }
         return E_NOINTERFACE;
     }
-    HRESULT STDMETHODCALLTYPE SetPrivateData(REFGUID,const void*,DWORD,DWORD) override { stop("SetPrivateData"); }
-    HRESULT STDMETHODCALLTYPE GetPrivateData(REFGUID,void*,DWORD*) override { stop("GetPrivateData"); }
-    HRESULT STDMETHODCALLTYPE FreePrivateData(REFGUID) override { stop("FreePrivateData"); }
+    PrivateData privateData;
+    HRESULT STDMETHODCALLTYPE SetPrivateData(REFGUID id,const void* data,DWORD size,DWORD flags) override { return privateData.set(id,data,size,flags); }
+    HRESULT STDMETHODCALLTYPE GetPrivateData(REFGUID id,void* data,DWORD* size) override { return privateData.get(id,data,size); }
+    HRESULT STDMETHODCALLTYPE FreePrivateData(REFGUID id) override { return privateData.free(id); }
     // No managed residency eviction exists in Metal. These are deliberately inert hints.
     DWORD STDMETHODCALLTYPE SetPriority(DWORD) override { return 0; }
     DWORD STDMETHODCALLTYPE GetPriority() override { return 0; }
@@ -197,9 +230,12 @@ public:
     }
     DWORD STDMETHODCALLTYPE GetLOD() override { return lod; }
     DWORD STDMETHODCALLTYPE GetLevelCount() override { return levels; }
-    HRESULT STDMETHODCALLTYPE SetAutoGenFilterType(D3DTEXTUREFILTERTYPE) override { this->stop("SetAutoGenFilterType"); }
-    D3DTEXTUREFILTERTYPE STDMETHODCALLTYPE GetAutoGenFilterType() override { this->stop("GetAutoGenFilterType"); }
-    void STDMETHODCALLTYPE GenerateMipSubLevels() override { this->stop("GenerateMipSubLevels"); }
+    // D3D9 rules for a texture created without D3DUSAGE_AUTOGENMIPMAP, which this device never
+    // creates (CreateTexture refuses the usage): the filter cannot be set and reads NONE, and
+    // GenerateMipSubLevels does nothing.
+    HRESULT STDMETHODCALLTYPE SetAutoGenFilterType(D3DTEXTUREFILTERTYPE) override { return D3DERR_INVALIDCALL; }
+    D3DTEXTUREFILTERTYPE STDMETHODCALLTYPE GetAutoGenFilterType() override { return D3DTEXF_NONE; }
+    void STDMETHODCALLTYPE GenerateMipSubLevels() override {}
     HRESULT surface(unsigned l,unsigned face,IDirect3DSurface9** out) {
         if(!out) return D3DERR_INVALIDCALL; *out=nullptr;
         if(l>=levels || face>=planes.size()/levels) return D3DERR_INVALIDCALL;
@@ -245,7 +281,14 @@ public:
         if(!out || l>=levels) return D3DERR_INVALIDCALL; const auto& p=*planes[l];
         *out={p.format,D3DRTYPE_VOLUME,p.usage,p.pool,p.w,p.h,p.d}; return D3D_OK;
     }
-    STOP(HRESULT,GetVolumeLevel,(UINT,IDirect3DVolume9**),"IDirect3DVolumeTexture9")
+    // [CHOSEN, not recovered] No IDirect3DVolume9 object is modelled; the levels are reached
+    // through LockBox. No tree or retail call reads a volume level (the volume textures are
+    // filled by D3DX and LockBox).
+    HRESULT STDMETHODCALLTYPE GetVolumeLevel(UINT,IDirect3DVolume9** out) override {
+        if(out) *out=nullptr;
+        bf2gfx::unsupported("IDirect3DVolumeTexture9::GetVolumeLevel (no volume objects)");
+        return D3DERR_INVALIDCALL;
+    }
     HRESULT STDMETHODCALLTYPE LockBox(UINT l,D3DLOCKED_BOX* out,const D3DBOX* b,DWORD f) override {
         return l<levels?planes[l]->lock(out,b,f):D3DERR_INVALIDCALL;
     }
@@ -282,8 +325,7 @@ public:
             // references ([queue commandBuffer]); draws resolve `native` per call (DeviceDraw).
             // The former waitIdle here committed and waited on the GPU for every discard lock
             // (each font run and Swiff shape), so a loading-screen repaint cost ~43 ms and the
-            // level load, which repaints on each file open, never finished
-            // (docs/macos-c-join-stall.md).
+            // level load, which repaints on each file open, never finished.
             bf2metal::destroyBuffer(native); native=fresh;
         } else if(!(flags&D3DLOCK_NOOVERWRITE) && !bf2metal::waitIdle(this->frame)) return D3DERR_DEVICELOST;
         ++locks; *out=static_cast<unsigned char*>(bf2metal::bufferBytes(native))+offset; return D3D_OK;

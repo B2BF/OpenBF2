@@ -1,5 +1,5 @@
-// [TEMP] [CHOSEN, not recovered] gameswf case-insensitive strings under the POSIX force-includes
-// (docs/macos-c-asan-heap.md). PlatformCompat.h renames `stricmp`; tu_string's member of that
+// [TEMP] [CHOSEN, not recovered] gameswf case-insensitive strings under the POSIX force-includes.
+// PlatformCompat.h renames `stricmp`; tu_string's member of that
 // name must still compare, or every stringi_hash lookup (ActionScript _global) misses.
 #include "base/container.h"
 #include <cstdio>

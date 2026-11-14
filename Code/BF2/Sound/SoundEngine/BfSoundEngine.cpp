@@ -681,7 +681,8 @@ int BfSoundEngine::getEaxVersion() const
     return 0;
 }
 
-int BfSoundEngine::queryPlayingSamples(int* count)
+// BF2Audio.dll 0x10004B80: no records - the count is zeroed and the list is null.
+const PlayingSampleInfo* BfSoundEngine::queryPlayingSamples(int* count)
 {
     if (count)
         *count = 0;

@@ -297,7 +297,7 @@ def main():
         wine_compile(args, output, jobs)
     incomplete = collect(output, jobs)
     if incomplete:
-        print("Wine batch incomplete/unavailable; results mark unattempted jobs not_run. Maintainer must rerun.", file=sys.stderr)
+        print("Wine batch incomplete/unavailable; results mark unattempted jobs not_run. Coordinator must rerun.", file=sys.stderr)
     if args.metal:
         rc = subprocess.run([str(BUILD / "metal-compile"), str(output / "msl"), str(output / "results.csv")]).returncode
         subprocess.run([sys.executable, str(Path(__file__).with_name("classify-metal.py")),

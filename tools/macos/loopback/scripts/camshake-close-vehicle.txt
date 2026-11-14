@@ -1,0 +1,54 @@
+# [TEMP] camshake-close-vehicle: --map strike_at_karkand --ai (bots move): spawn at Gasstation, idle by the
+# armour while bots board it (close-vehicle shake), then enter and fire (batch 22 evidence).
+# The numeric evidence came from a temporary camera probe that is not in the tree (ledger, batch 22).
+timeout 300
+log waiting for the level load
+wait-log ingameMap.tga
+wait-ms 3000
+capture loaded
+# "MAP LOADED, SELECT THE JOIN GAME BUTTON OR PRESS ESCAPE TO ENTER THE GAME" (Swiff menu, window path)
+# Click JOIN GAME rather than pressing Escape: Escape went to the main menu in 2 of 5 runs (ai-bot, 2026-11-01).
+click 745 583
+# The spawn screen opens with its map shown (Bf2MenuMapNode +0x68D is zeroed now; the old
+# "press Enter twice" workaround covered for that uninitialised field, R-game-2).
+wait-ms 3000
+capture spawn-screen-first
+capture spawn-screen
+# Kit 0, Special Forces (SelectKit0 10 73 246 69: "spawnManager.setPlayerKit 0"); in-game HUD pointer path.
+hud-click 130 107
+wait-ms 500
+# Gasstation, the US main base on Strike at Karkand (sp-menu-start.txt's pick).
+hud-click 594 467
+wait-ms 500
+capture selected
+hud-click 728 546
+wait-log-else 15 spawned [PLAY] alive=1
+label spawned
+wait-ms 1500
+capture spawned
+log cam: idle by the armour (bots board it)
+walk-to tmpl:ustnk_m1a2,usaav_m6,usapc_lav25 5 20000
+wait-ms 20000
+capture near-armour
+log cam: enter the tank
+walk-to tmpl:ustnk_m1a2,usaav_m6,usapc_lav25 2 40000
+face tmpl:ustnk_m1a2,usaav_m6,usapc_lav25 5 3000
+key e
+wait-ms 3000
+capture in-vehicle
+log cam: fire
+button-down 0
+wait-ms 120
+capture fire-1
+wait-ms 400
+button-up 0
+wait-ms 4000
+button-down 0
+wait-ms 500
+button-up 0
+wait-ms 4000
+button-down 0
+wait-ms 500
+button-up 0
+wait-ms 3000
+log cam: done

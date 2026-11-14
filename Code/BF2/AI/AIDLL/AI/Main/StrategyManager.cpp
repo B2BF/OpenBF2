@@ -104,7 +104,7 @@ Strategy* StrategyManager::getForcedStrategy(int team)
     return m_forcedStrategy[team - 1];
 }
 
-// ELF 0x3EA7D0 (1192 B; recovered on the client track, docs/macos-c-singleplayer.md). Clears the
+// ELF 0x3EA7D0 (1192 B; recovered on the client track). Clears the
 // forced strategies and the debug flag, then empties the three owning maps one node at a time:
 // value deleted first (Strategy and StrategyPrerequisite through their nonvirtual destructors,
 // conditions through the virtual deleting destructor, vtable +4), then the node erased. The

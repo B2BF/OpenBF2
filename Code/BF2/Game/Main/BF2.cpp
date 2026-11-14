@@ -1,5 +1,8 @@
 // Application entry points and engine-facade lifecycle. [INFERRED] source placement.
 
+#if defined(__APPLE__) && !DEDICATED
+#include "../../Platform/macOS/Warmup.h"   // [CHOSEN] +warmupLevel (port addition)
+#endif
 #include "BF2.h"
 
 #include "BF2Engine.h"                              // [INFERRED] path: Game/Main/BF2Engine.cpp is
@@ -172,8 +175,15 @@ bool BF2::init(const std::string& commandLine)
         startImmediately = true;
 
     if (startImmediately)
-        m_engine->startGame(false, true);           // TWO bools: 0x8052979 xor eax,eax -> [esp+4];
+    {
+        const bool started = m_engine->startGame(false, true);   // TWO bools: 0x8052979 xor eax,eax -> [esp+4];
                                                     // mov edx,1 -> [esp+8]; call at 0x805298B
+#if defined(__APPLE__) && !DEDICATED
+        bf2warmup::startResult(started);            // [CHOSEN] +warmupLevel: a failed start exits
+#else
+        (void)started;
+#endif
+    }
 
 #if defined(_WIN32) && !DEDICATED
     // BF2.exe 0x401FE5: hand the window BF2's message handler (slot +0x30). The window exists only

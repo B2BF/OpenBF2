@@ -52,8 +52,8 @@ QuadTreeManager::QuadTreeManager()
     // m_treeCount deliberately not initialised - the binary steps over it.
 }
 
-// ELF 0x30DD40 (D2; D1 0x30DE30; first recovered on the client track,
-// docs/macos-c-singleplayer.md): destroyQuadTrees, unloadDebugMeshes, unloadDebugClusterMeshes, then the four lists and the
+// ELF 0x30DD40 (D2; D1 0x30DE30; first recovered on the client track):
+// destroyQuadTrees, unloadDebugMeshes, unloadDebugClusterMeshes, then the four lists and the
 // island vector go as members.
 QuadTreeManager::~QuadTreeManager()
 {

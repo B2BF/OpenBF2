@@ -188,7 +188,6 @@ BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(setConnectionType, generalSettings()->setConn
 BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(setLCDDisplayModes, generalSettings()->setLCDDisplayModes, ::dice::hfe::g_generalSettings != 0, bool, kSettingsConsoleTag)
 
 // [CHOSEN, not recovered] Owner's tutorial option, saved with the general settings.
-// See docs/macos-feat-tutoff.md for the content-preserving config fallback.
 // Only these new commands are available at end-user access; retail bindings keep access 2.
 BF2_CONSOLE_OBJECT("GeneralSettings", 1, 0)
 BF2_CONSOLE_METHOD_1_STATIC_ACTIVE(setShowTutorialMessages, generalSettings()->setShowTutorialMessages, ::dice::hfe::g_generalSettings != 0, bool, kSettingsConsoleTag)

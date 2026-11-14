@@ -4,7 +4,8 @@
 #include <string>
 #include <vector>
 #include "../Core/IBase.h"
-#if !DEDICATED
+// The interface is declared in every image (the dedicated AI reaches it through BFGame's menu
+// arm, which no dedicated module can trigger); the implementation is client-only.
 namespace dice { namespace hfe {
 
 // Favourite/history entry. [INFERRED] Field names follow serialized settings.
@@ -116,6 +117,7 @@ public:
     // +164 is the deleting destructor (4B7B20), the one slot still withheld: see ~GeneralSettings.
 };
 
+#if !DEDICATED
 struct GeneralSettingsFixture;
 class GeneralSettings final : public IGeneralSettings {
 public:
@@ -248,7 +250,7 @@ public:
     bool  getLCDDisplayModes() const override      { return m_lcdDisplayModes; }   //+15C
     void  setLCDDisplayModes(bool value) override  { m_lcdDisplayModes = value; }  //+160
 
-    // [CHOSEN, not recovered] Owner's tutorial option; see docs/macos-feat-tutoff.md.
+    // [CHOSEN, not recovered] Owner's tutorial option.
     // Native-only accessors leave the recovered virtual interface unchanged.
     bool getShowTutorialMessages() const { return m_showTutorialMessages; }
     void setShowTutorialMessages(bool value) { m_showTutorialMessages = value; }
@@ -292,6 +294,6 @@ private:
     bool m_showTutorialMessages;
 };
 
+#endif // !DEDICATED
 } }
-#endif
 #endif

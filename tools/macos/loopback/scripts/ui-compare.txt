@@ -1,0 +1,81 @@
+# [TEMP] ui-compare: the menu, loading, spawn-selection and HUD screens at fixed points, for a
+# side-by-side with the retail client (tools/windows/dinput8proxy/ui-compare-retail.txt takes the
+# same steps with fixed waits). 800x600 client / HUD coordinates. Run with --spawn-time 1.
+# Hover states: every button that matters is captured with the cursor away and over it.
+timeout 400
+log ui-compare: connecting / loading
+move 400 300
+wait-ms 1500
+capture boot
+move 200 15
+wait-ms 600
+capture boot-hover-multiplayer
+move 400 300
+wait-ms 4000
+capture load-a
+wait-ms 8000
+capture load-b
+wait-ms 8000
+capture load-c
+wait-ms 8000
+capture load-d
+wait-log ingameMap.tga
+wait-ms 3000
+# The loaded-map screen: cursor away, over JOIN GAME, over an inactive tab, over the active tab.
+move 400 300
+wait-ms 800
+capture loaded
+move 745 583
+wait-ms 800
+capture loaded-hover-join
+move 200 47
+wait-ms 800
+capture loaded-hover-tab
+move 466 47
+wait-ms 800
+capture loaded-hover-activetab
+move 400 300
+# Let the round start settle before joining (the retail reference joins a running round).
+wait-ms 25000
+capture loaded-late
+# JOIN GAME: the spawn screen right after loading (no Enter toggling), at 1 s and 5 s.
+click 745 583
+wait-ms 1000
+capture spawn-1s
+wait-ms 4000
+capture spawn-5s
+# The HUD pointer homed then over DONE, and away again.
+pointer 400 300
+wait-ms 1000
+capture spawn-pointer
+pointer 728 546
+wait-ms 1000
+capture spawn-hover-done
+pointer 130 107
+wait-ms 1000
+capture spawn-hover-kit0
+# kit 0, Construction Site, DONE
+hud-click 130 107
+wait-ms 1000
+hud-click 432 282
+wait-ms 1000
+capture spawn-selected
+hud-click 728 546
+wait-log-else 12 spawned [PLAY] alive=1
+label spawned
+wait-ms 3000
+capture hud
+# Die through the spawn screen's SUICIDE button and capture the spawn screen after death.
+key enter
+wait-ms 2500
+capture menu-for-suicide
+hud-click 604 546
+wait-ms 1500
+capture dead-1s
+wait-ms 3000
+capture dead-4s
+pointer 400 300
+wait-ms 1000
+capture dead-pointer
+log ui-compare done
+quit

@@ -226,7 +226,7 @@ namespace gameswf
 	}
 
 
-	struct text_character_def : public character_def, public definition_bounds_provider
+	struct text_character_def : public character_def
 	{
 		movie_definition_sub*	m_root_def;
 		rect	m_rect;
@@ -385,7 +385,7 @@ namespace gameswf
 	//
 
 
-	struct edit_text_character_def : public character_def, public definition_bounds_provider
+	struct edit_text_character_def : public character_def
 	// A definition for a text display character, whose text can
 	// be changed at runtime (by script or host).
 	{

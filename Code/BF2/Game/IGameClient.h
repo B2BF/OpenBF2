@@ -61,23 +61,24 @@ public:
     virtual void slot44(int) = 0;
     // +0x48  demo playback restart (gameLogic reset / restartDemoPlayback, the recorder rewound). PE 4D2650.
     virtual void restartDemo() = 0;
-    // +0x4C  demo playback pause/resume on the recorder. PE 4D26C0.
-    virtual void setDemoPaused(bool paused) = 0;
-    // [UNRESOLVED] Demo-playback method names and corresponding recorder members.
-    virtual void slot50() = 0;
-    virtual int  slot54() = 0;
-    virtual bool slot58() = 0;
+    // +0x4C  the spectator camera's next/previous player. PE 4D26C0. [INFERRED] name.
+    virtual void demoSwitchPlayer(bool next) = 0;
+    // +0x50 / +0x54 / +0x58  the spectator camera's nextCamera / getCurrentDemoPlayerId /
+    // getIsFreeFlying. PE 4D2700 / 4D2730 / 4D2760. [INFERRED] names.
+    virtual void demoNextCamera() = 0;
+    virtual int  demoGetCurrentPlayerId() = 0;
+    virtual bool demoIsFreeFlying() = 0;
     // +0x5C  setPause(!getPause()). PE 4D2790.
     virtual void togglePause() = 0;
     // +0x60  BF2Engine's pause state machine (ELF 0x4038A0 / 0x403060 callers). PE 4D27B0.
     virtual void setPause(bool paused) = 0;
     // +0x64   - the +0x144 byte (comdat-folded with Game::getAbortLoadLevel).
     virtual bool getPause() = 0;
-    // +0x68  the recorder exists and is in playback. PE 4D2800.
-    virtual bool isDemoPlaying() = 0;
-    // +0x6C  a recorded demo handed to the profile (LocalProfileManager +0xA4, DemoLibrary
-    //        refresh). PE 4D3D60. [UNRESOLVED] name and both int roles.
-    virtual void slot6C(int a, int b) = 0;
+    // +0x68  the recorder reached the end of its packet stream (PE +0xEC). PE 4D2800. [INFERRED] name.
+    virtual bool isDemoAtEnd() = 0;
+    // +0x6C  a demo the server announced, bookmarked in the profile (LocalProfileManager +0xA4,
+    //        DemoLibrary +0x44). PE 4D3D60. [INFERRED] name and argument roles.
+    virtual void addDemoBookmark(const std::string& url, const std::string& mapName) = 0;
     // +0x70  BF2Engine::mainLoop's pre-frame gate: true once requestDisconnect ran. PE 4D28B0.
     virtual bool getDisconnectRequested() = 0;
     // +0x74  EngineBase's client-only ghost hook: the +0x158 byte, set by ECNetwork event 4.

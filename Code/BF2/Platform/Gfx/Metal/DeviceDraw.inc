@@ -1,5 +1,4 @@
 // [CHOSEN, not recovered] G4 shader creation and programmable draws. Included in class Device.
-// See docs/macos-c-g4-effect.md for the D3D9-to-Metal conventions and remaining frontiers.
     template<class Object,class I> HRESULT createShader(const DWORD* function,I** out,bool vertex,const char* method) {
         mainThread(method);
         if(!out || !function) return D3DERR_INVALIDCALL; *out=nullptr;
@@ -90,10 +89,10 @@
         std::map<std::string,bf2metal::Program*> programs;
         ~ProgramCache() { for(auto& p:programs) bf2metal::destroyProgram(p.second); }
     } ffpPrograms;
-    // D3D9 fog with a vertex shader (docs/macos-c-metal-ingame.md): FOGTABLEMODE NONE uses the
+    // D3D9 fog with a vertex shader: FOGTABLEMODE NONE uses the
     // vertex shader's oFog (FOGVERTEXMODE is ignored); EXP/EXP2/LINEAR table fog uses the pixel's
     // depth. ps_3_0 has no fixed-function fog. Fills the fog constants for buffer(3).
-    unsigned fogFor(const VertexShaderObject& vs,const bf2fx::Shader* ps,float constants[8]) const {
+    unsigned fogFor(const std::string& vsMsl,const bf2fx::Shader* ps,float constants[8]) const {
         const auto& r=state.raw.render;
         if(!r[28] || (ps && ps->major>=3)) return 0;
         const DWORD c=r[34];
@@ -104,14 +103,15 @@
             if(r[35]>3) frontier("IDirect3DDevice9::Draw state D3DRS_FOGTABLEMODE value");
             return 3;
         }
-        return vs.record->msl.find("[[user(fog)]]")!=std::string::npos?1:2;
+        return vsMsl.find("[[user(fog)]]")!=std::string::npos?1:2;
     }
     // The fragment program for this draw: the shader's own, or a variant for fog and for ps_1_x
     // samplers bound to cube/volume textures (FragmentVariant, Shaders.inc).
-    bf2metal::Program* fragmentProgram(PixelShaderObject& ps,unsigned fog) {
-        FragmentVariant v; v.fog=fog;
+    bf2metal::Program* fragmentProgram(PixelShaderObject& ps,unsigned fog,const bf2metal::StateMapping& m) {
+        FragmentVariant v; v.fog=fog; v.flat=state.raw.render[9]==1; // D3DRS_SHADEMODE = D3DSHADE_FLAT
         bf2metal::ProgramDesc desc; desc.vertex=false;
         for(const auto& s:ps.record->samplers) {
+            if(s.index<16 && m.sampler[s.index].lodBias!=0) v.bias.push_back({s.index,m.sampler[s.index].lodBias});
             unsigned kind=s.kind;
             if(ps.record->major==1 && kind==0 && s.index<16) if(auto* t=state.textures[s.index].ptr) {
                 const unsigned bound=dynamic_cast<CubeTexture*>(t)?1:dynamic_cast<VolumeTexture*>(t)?2:0;
@@ -119,7 +119,7 @@
             }
             desc.samplers.push_back({s.index,kind});
         }
-        if(!v.fog && v.samplers.empty()) return ps.program;
+        if(!v.fog && !v.flat && v.samplers.empty() && v.bias.empty()) return ps.program;
         auto& cached=ps.variants[v.key()];
         if(!cached) {
             std::string error;
@@ -130,10 +130,12 @@
         }
         return cached;
     }
-    bf2metal::Program* fixedFunctionPixel(const VertexShaderObject& vs,float factor[4],unsigned fog) {
+    // ffVertex: the vertex stage is fixed-function too (FixedFunctionDraw.inc), which already applied
+    // each stage's D3DTSS_TEXCOORDINDEX generation and D3DTSS_TEXTURETRANSFORMFLAGS and wrote stage
+    // i's coordinates to texcoord i; the pixel stage only divides by the PROJECTED component.
+    bf2metal::Program* fixedFunctionPixel(const std::string& vsMsl,float factor[4],unsigned fog,const bf2metal::StateMapping& m,bool ffVertex=false) {
         const auto& st=state.raw.stage; const auto& r=state.raw.render;
         if(r[29]) frontier("IDirect3DDevice9::Draw fixed-function pixel pipeline D3DRS_SPECULARENABLE");
-        const std::string& vsMsl=vs.record->msl;
         auto output=[&](const std::string& user) { return vsMsl.find("[[user("+user+")]]")!=std::string::npos; };
         std::string inputs, args, body;
         auto declare=[&](const std::string& user) {
@@ -171,8 +173,8 @@
         };
         for(unsigned i=0;i<8 && st[i][1]!=1;++i) {
             const DWORD* s=st[i];
-            if(s[24]) frontier("IDirect3DDevice9::Draw fixed-function pixel texture transform");
-            if(s[11]>>16) frontier("IDirect3DDevice9::Draw fixed-function pixel texture-coordinate generation");
+            if(!ffVertex && s[24]) frontier("IDirect3DDevice9::Draw fixed-function pixel texture transform");
+            if(!ffVertex && (s[11]>>16)) frontier("IDirect3DDevice9::Draw fixed-function pixel texture-coordinate generation");
             if(s[28]!=1) frontier("IDirect3DDevice9::Draw fixed-function pixel D3DTSS_RESULTARG");
             bool usesTexture=false;
             for(unsigned k:{2u,3u,5u,6u}) usesTexture=usesTexture || (s[k]&15)==2;
@@ -181,10 +183,18 @@
             if(usesTexture && state.textures[i].ptr) {
                 auto* t=state.textures[i].ptr;
                 const unsigned kind=dynamic_cast<CubeTexture*>(t)?1:dynamic_cast<VolumeTexture*>(t)?2:0;
-                const std::string user="texcoord"+std::to_string(s[11]&0xffff), n=std::to_string(i);
-                const std::string coord=declare(user)?"in.v_"+user:"float4(0.0)";
+                const std::string user="texcoord"+std::to_string(ffVertex?i:(s[11]&0xffff)), n=std::to_string(i);
+                std::string coord=declare(user)?"in.v_"+user:"float4(0.0)";
+                if(ffVertex && (s[24]&256)) {
+                    // D3DTTFF_PROJECTED: divide by the last of the COUNT components (w without a count)
+                    const unsigned count=s[24]&255, last=count>=2 && count<=4?count-1:3;
+                    if(kind) frontier("IDirect3DDevice9::Draw fixed-function pixel projected cube/volume coordinates");
+                    coord="float4("+coord+".xy / "+coord+std::string(1,'.')+"xyzw"[last]+", 0.0, 1.0)";
+                }
                 args+=std::string(",\n\t")+(kind==1?"texturecube":kind==2?"texture3d":"texture2d")+"<float> t"+n+" [[texture("+n+")]], sampler s"+n+" [[sampler("+n+")]]";
-                body+="\ttex = t"+n+".sample(s"+n+", "+coord+(kind?".xyz":".xy")+");\n";
+                // D3DSAMP_MIPMAPLODBIAS as an MSL bias (Shaders.inc lodBiasSamples).
+                const std::string bias=m.sampler[i].lodBias!=0?", bias("+biasLiteral(m.sampler[i].lodBias)+")":"";
+                body+="\ttex = t"+n+".sample(s"+n+", "+coord+(kind?".xyz":".xy")+bias+");\n";
                 samplers.push_back({i,kind});
             }
             // D3D9 with no texture on the stage: an operation that reads D3DTA_TEXTURE as an
@@ -213,7 +223,7 @@
             "\tbf2_ffp_out output; output.color = current;\n"
             "\treturn output;\n}\n";
         // The alpha test (and its bf2_alpha argument) is patched exactly as for translated shaders.
-        FragmentVariant variant; variant.fog=fog;
+        FragmentVariant variant; variant.fog=fog; variant.flat=r[9]==1; // D3DRS_SHADEMODE = D3DSHADE_FLAT
         std::string patched, error;
         if(!patchMsl(msl,false,patched,error,&variant)) frontier("IDirect3DDevice9::Draw fixed-function pixel MSL");
         auto& cached=ffpPrograms.programs[variant.key()+"|"+msl];
@@ -256,20 +266,24 @@
         auto* decl=dynamic_cast<Declaration*>(state.declaration.ptr);
         bf2metal::DrawCall call;
         if(const char* why=programmableState(call.state,ps?ps->record.get():nullptr,src.type==D3DPT_POINTLIST)) { drawOutcome="refused state (skipped)"; skipRefused(why); return D3D_OK; }
-        if(!vs) frontier("IDirect3DDevice9::Draw fixed-function vertex processing");
-        if(!decl) frontier("IDirect3DDevice9::Draw without a vertex declaration (FVF)");
+        if(!decl) { drawOutcome="no vertex declaration or FVF"; return D3DERR_INVALIDCALL; } // D3D9: a draw needs one
+        // [CHOSEN, not recovered] No vertex shader: fixed-function vertex processing (FFVertex.h).
+        FFDraw ff;
+        if(!vs) { if(const char* why=fixedFunctionVertex(*decl,ff)) { drawOutcome="refused state (skipped)"; skipRefused(why); return D3D_OK; } }
         const auto& r=state.raw.render;
         if(call.state.clipMask) { drawOutcome="refused state (skipped)"; skipRefused("IDirect3DDevice9::Draw state D3DRS_CLIPPLANEENABLE (user clip planes)"); return D3D_OK; }
         if(call.state.srgbWrite) { drawOutcome="refused state (skipped)"; skipRefused("IDirect3DDevice9::Draw state D3DRS_SRGBWRITEENABLE"); return D3D_OK; }
         for(unsigned i=0;i<21;++i) {
             const auto& s=call.state.sampler[i];
-            if(s.lodBias!=0) { drawOutcome="refused state (skipped)"; skipRefused("IDirect3DDevice9::Draw state D3DSAMP_MIPMAPLODBIAS (nonzero)"); return D3D_OK; }
+            // Pixel samplers take the bias in the fragment program (fragmentProgram, fixedFunctionPixel).
+            if(i>=16 && s.lodBias!=0) { drawOutcome="refused state (skipped)"; skipRefused("IDirect3DDevice9::Draw state D3DSAMP_MIPMAPLODBIAS on a vertex/displacement sampler"); return D3D_OK; }
             if(s.srgb) { drawOutcome="refused state (skipped)"; skipRefused("IDirect3DDevice9::Draw state D3DSAMP_SRGBTEXTURE"); return D3D_OK; }
         }
-        call.vertex=vs->program; call.layout=decl->native;
-        const unsigned fog=fogFor(*vs,ps?ps->record.get():nullptr,call.fragmentFog);
-        if(ps) call.fragment=fragmentProgram(*ps,call.state.colorMask?fog:0);
-        else if(call.state.colorMask) call.fragment=fixedFunctionPixel(*vs,call.fragmentFactor,fog);
+        const std::string& vsMsl=vs?vs->record->msl:ff.msl;
+        call.vertex=vs?vs->program:ff.program; call.layout=decl->native;
+        const unsigned fog=fogFor(vsMsl,ps?ps->record.get():nullptr,call.fragmentFog);
+        if(ps) call.fragment=fragmentProgram(*ps,call.state.colorMask?fog:0,call.state);
+        else if(call.state.colorMask) call.fragment=fixedFunctionPixel(vsMsl,call.fragmentFactor,fog,call.state,!vs);
         if(activeQuery) call.occlusion=activeQuery->occlusion;
         auto* color=static_cast<Surface*>(colorTarget.ptr); auto* depth=static_cast<Surface*>(depthTarget.ptr);
         if(color->plane->locked || (depth && depth->plane->locked)) { drawOutcome="locked target"; return D3DERR_INVALIDCALL; }
@@ -300,7 +314,8 @@
         call.scissor[0]=unsigned(sx0); call.scissor[1]=unsigned(sy0);
         call.scissor[2]=unsigned(sx1-sx0); call.scissor[3]=unsigned(sy1-sy0);
         call.fragmentAlpha[0]=call.state.alphaTest?float(r[25]):0.0f; call.fragmentAlpha[1]=float(r[24]&255);
-        if(!packUniforms(*vs->record,state.vf,state.vi,state.vb,call.vertexConstants) ||
+        if(!vs) call.vertexConstants=std::move(ff.constants);
+        if((vs && !packUniforms(*vs->record,state.vf,state.vi,state.vb,call.vertexConstants)) ||
             (ps && !packUniforms(*ps->record,state.pf,state.pi,state.pb,call.fragmentConstants)))
             frontier("IDirect3DDevice9::Draw shader constant register beyond the device constant file");
         for(unsigned i=0;i<21;++i) if(auto* t=state.textures[i].ptr) {

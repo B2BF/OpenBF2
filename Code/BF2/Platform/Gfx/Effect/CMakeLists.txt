@@ -8,14 +8,14 @@ target_compile_options(bf2_fx_runtime PRIVATE
     "SHELL:-include ${BF2_ROOT}/Core/BuildConfig.h" -Wall -Wextra -Werror -Wno-deprecated-declarations)
 # [CHOSEN, not recovered] Native effect front end (no compiler dependency): D3DX effect source
 # parser, Description builder and the asm-block assembler. The shader compiler (vkd3d-shader)
-# and translator (MojoShader) plug in through bf2fx::ShaderBackend (docs/macos-c-native-fx.md).
+# and translator (MojoShader) plug in through bf2fx::ShaderBackend.
 add_library(bf2_fx_native STATIC D3DAsm.cpp FxBuild.cpp FxParser.cpp FxStates.cpp)
 target_include_directories(bf2_fx_native PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_features(bf2_fx_native PUBLIC cxx_std_17)
 target_compile_definitions(bf2_fx_native PRIVATE DEDICATED=0 BF2_IMAGE_RENDDX9=1)
 target_compile_options(bf2_fx_native PRIVATE
     "SHELL:-include ${BF2_ROOT}/Core/BuildConfig.h" -Wall -Wextra -Werror -Wno-deprecated-declarations)
-# [CHOSEN, not recovered] Native effect compiler for the client (docs/macos-c-native-fx2.md):
+# [CHOSEN, not recovered] Native effect compiler for the client:
 # vkd3d-shader (patched, LGPL-2.1+) and MojoShader (s1c patches, zlib), both built offline by
 # tools/macos/nativefx/build.sh into out/build/nativefx. They are required: there is
 # no alternate effect compiler or offline-cache-only client configuration.
@@ -48,6 +48,29 @@ if(EXISTS "${_nd}/vkd3d/.libs/libvkd3d-shader.a" AND EXISTS "${_nd}/vkd3d/.libs/
             message(STATUS "Native effect dependency ${_lib}: ${_slice_error}")
         endif()
     endforeach()
+endif()
+# [CHOSEN, not recovered] A deps build made before the current vkd3d patches still links, but its
+# compiler refuses what the patches fixed (macos_metal_device closureHigherProfileChecks fails with
+# E5017 against one without 0011). build-vkd3d.sh records the applied patch names; say so loudly
+# when they are missing or differ. Rebuild with tools/macos/nativefx/build.sh into a new directory.
+if(BF2_FX_NATIVE_AVAILABLE)
+    file(GLOB _want_patches RELATIVE "${BF2_FX_REPO}/tools/macos/vkd3d-patches" "${BF2_FX_REPO}/tools/macos/vkd3d-patches/*.patch")
+    list(SORT _want_patches)
+    set(_have_patches)
+    if(EXISTS "${_nd}/vkd3d-src/.bf2-patches")
+        file(STRINGS "${_nd}/vkd3d-src/.bf2-patches" _have_patches)
+        list(SORT _have_patches)
+    endif()
+    if(NOT _have_patches STREQUAL _want_patches)
+        set(_missing ${_want_patches})
+        if(_have_patches)
+            list(REMOVE_ITEM _missing ${_have_patches})
+        endif()
+        message(WARNING "BF2_FX_NATIVE_DEPS=${_nd} was not built from the current tools/macos/vkd3d-patches "
+            "(no vkd3d-src/.bf2-patches record, or missing: ${_missing}). Native effect builds can refuse what "
+            "those patches fix. Rebuild with: sh tools/macos/nativefx/build.sh (into a new directory, keeping "
+            "the existing one).")
+    endif()
 endif()
 set(BF2_FX_NATIVE_AVAILABLE ${BF2_FX_NATIVE_AVAILABLE} PARENT_SCOPE)
 # Only the renderer-linked client needs the compiler; server-only builds (bf2, bf2_aidll) do not.

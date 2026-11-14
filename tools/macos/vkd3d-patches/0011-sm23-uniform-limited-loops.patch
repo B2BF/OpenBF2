@@ -1,0 +1,35 @@
+[CHOSEN, not recovered] vkd3d-shader 2.1 patch for the BF2 macOS port (LGPL-2.1+, as vkd3d).
+SM2/3 loops whose limit is an int uniform (xpack RaShaderSTM_Shadows.hlsl, for q < ShadowCount)
+stopped at "Loops with user-defined limiter int uniform". They are emitted as rep 255 with the
+loop body's conditional break, which keeps the exit test; D3D9 clamps rep counts to 255 too.
+
+--- a/libs/vkd3d-shader/hlsl_codegen.c	2026-11-12 13:53:56
++++ b/libs/vkd3d-shader/hlsl_codegen.c	2026-11-12 13:53:56
+@@ -8141,7 +8141,9 @@
+         return false;
+     loop = hlsl_ir_loop(instr);
+ 
+-    if (!loop->limiter)
++    /* BF2 macOS port: a loop with an int-uniform limiter is emitted like any other loop
++     * (rep 255 with the body's conditional break, see sm1_generate_vsir_instr_loop), so it
++     * needs the same constant. */
+     {
+         ctx->d3d255intconst = allocate_register(ctx, allocator, 4, 4, 0, false, false, false);
+         TRACE("Allocated D3D255INTCONST to %s.\n",
+@@ -11799,11 +11801,11 @@
+     struct vkd3d_shader_instruction *ins;
+     struct vsir_src_operand *src;
+ 
+-    if (loop->limiter)
+-    {
+-        hlsl_fixme(ctx, &instr->loc, "Loops with user-defined limiter int uniform.");
+-        return;
+-    }
++    /* BF2 macOS port: d3dcompiler emits a loop bounded by an int uniform (the "limiter",
++     * e.g. for (q = 0; q < ShadowCount; ++q)) as rep i# with that uniform. The loop body
++     * still holds its exit test (identify_loop_limiters only records the limiter), so the
++     * loop runs as rep 255 with that conditional break: the same iterations, since D3D9
++     * clamps a rep count to 255 as well. */
+ 
+     if (!(ins = generate_vsir_add_program_instruction(ctx, program, &instr->loc, VSIR_OP_REP, 0, 1)))
+         return;

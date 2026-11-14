@@ -1,0 +1,5 @@
+address,size,symbol,file,base_rev,match,confidence,anchor,boundary,reason,csv_size,ninstr,file_inferred
+0x100D6500,12,FUN_100D6500,Code/BF2/External/gameswf/gameswf_action.cpp,r586,inline,high,static:objdump:0x100D6E60,ghidra-missing:objdump-entry,atexit-registers-s_built_ins-teardown,,4,1
+0x100D6520,342,FUN_100D6520,Code/BF2/External/gameswf/gameswf_action.cpp,r586,inline,high,static:objdump:0x100F9368,ghidra-missing:objdump-entry,22-property-name-constructions-and-atexit;includes-base-mystery-quality-entry,,70,1
+0x100D6DE0,44,FUN_100D6DE0,Code/BF2/External/gameswf/gameswf_action.cpp,r586,inline,high,static:objdump:0x100D6520,,22-property-name-destructors;reverse-order,,17,1
+0x100D6E60,10,FUN_100D6E60,Code/BF2/External/gameswf/gameswf_action.cpp,r586,inline,high,static:objdump:0x100F94CC,,s_built_ins-hash-teardown;math_init-publishes-same-global,,2,1

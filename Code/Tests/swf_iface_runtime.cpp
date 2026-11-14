@@ -2,6 +2,7 @@
 // No engine startup, renderer device, game content or network is used.
 #include <cmath>
 #include <cstdio>
+#include <type_traits>
 #include <cstdlib>
 #include <cstring>
 #include <cwchar>
@@ -575,7 +576,7 @@ static void timer_checks()
 
 static void bounds_checks()
 {
-	struct definition : character_def, definition_bounds_provider
+	struct definition : character_def
 	{
 		rect bounds;
 		mutable int calls = 0;
@@ -595,6 +596,14 @@ static void bounds_checks()
 	smart_ptr<movie_interface> instance = movie_definition->create_instance();
 	movie* root = instance->get_root_movie();
 	character* root_character = root->cast_to_character();
+	// The retail definition hierarchy (C1): the bounds slot is pure on character_def (table 0x100DF268
+	// +0x20), a movie definition is no character_def, and ref_counted is a shared virtual base.
+	static_assert(std::is_abstract<character_def>::value, "character_def +0x20 bounds slot is pure");
+	static_assert(!std::is_base_of<character_def, gameswf::movie_definition>::value, "movie definitions are not character_defs");
+	static_assert(std::is_base_of<ref_counted, character_def>::value && std::is_base_of<ref_counted, gameswf::movie_definition>::value,
+		"both sides reach ref_counted");
+	check(dynamic_cast<character_def*>(static_cast<ref_counted*>(movie_definition.get_ptr())) == NULL,
+		"the root movie definition is not a character_def");
 	const rect empty = root_character->get_bound_copy();
 	check(empty.m_x_min == 0 && empty.m_x_max == 0 && empty.m_y_min == 0 && empty.m_y_max == 0, "empty sprite bounds are zero");
 	movie_definition_sub* dictionary = static_cast<movie_definition_sub*>(movie_definition.get_ptr());
@@ -678,7 +687,7 @@ static void focus_lifetime_checks()
 	movie_definition_sub* dictionary = static_cast<movie_definition_sub*>(definition.get_ptr());
 	character_def* text_definition = dictionary->get_character_def(1);
 	check(text_definition != NULL, "synthetic edit-text definition");
-	const rect text_bounds = get_definition_bounds(text_definition);
+	const rect text_bounds = text_definition->get_bound_copy();
 	check(text_bounds.m_x_min == 0 && text_bounds.m_x_max == 20, "edit-text definition bounds provider");
 	smart_ptr<character> field = text_definition->create_character_instance(root, 1);
 	check(field->get_bound_copy().m_y_max == 20, "edit-text instance bounds provider");
@@ -1593,6 +1602,7 @@ static void character_interface_checks()
 	{
 		as_value* source;
 		explicit sink_definition(as_value* value) : source(value) {}
+		rect get_bound_copy() const override { rect empty = { 0, 0, 0, 0 }; return empty; }   // a concrete definition answers +0x20
 		character* create_character_instance(movie* parent, int id) override
 		{
 			return new text_sink(this, parent, id, source);
@@ -1629,28 +1639,15 @@ int main(int argc, char** argv)
 		buffer.execute(&env);
 		return 0;
 	}
-	if (argc == 2 && std::strcmp(argv[1], "--unsupported-depth") == 0)
-	{
-		observer handler;
-		handler.render_handler::set_depth(1);
-		return 1;
-	}
 	if (argc == 2 && std::strcmp(argv[1], "--missing-async-input") == 0)
 	{
 		set_async_key_state_callback(NULL);
-		(void)is_key_down(13);
-		return 1;
+		return is_key_down(13) ? 1 : 0;   // no host adapter: Enter reads up
 	}
 	if (argc == 2 && std::strcmp(argv[1], "--text-tab-invalid") == 0)
 	{
 		text_property_checks(true);
 		return 1;
-	}
-	if (argc == 2 && std::strcmp(argv[1], "--unknown-bounds") == 0)
-	{
-		character_def unknown;
-		(void)get_definition_bounds(&unknown);
-		std::abort();
 	}
 	if (argc == 2 && (std::strcmp(argv[1], "--enumerate-null") == 0
 		|| std::strcmp(argv[1], "--enumerate-function") == 0))

@@ -1,0 +1,157 @@
+# [TEMP] render-view-dalian: fixed poses and world-point views, one capture per named view, for renderer
+# screenshot comparisons (our macOS / Windows clients, the retail client through the dinput8 proxy).
+# Compare the scene without the pistol (see the Standard scenarios docs for the region). Waits: wait-log on the
+# capture file and on the BF2_PLAY_TRACE position after a teleport; a client without the trace falls
+# through after 5 s.
+include join-and-spawn
+log scenario: render-view-dalian start
+# Scene only: the HUD (with the chat lines, minimap, kill messages) off. renderer.drawHud has the
+# player console's access level in retail too; the first-person meshes (renderer.draw1pMeshes) do not,
+# so the pistol (slot 2, a small one-handed first-person model) is drawn and comparisons crop it.
+console renderer.drawHud 0
+wait-ms 300
+key 2
+wait-ms 1200
+log scenario: view horizon (the hills, the sea horizon and the sky to the north-east)
+aim -67.5/155.5/157.65 0.5 3000
+wait-ms 250
+aim -67.5/155.5/157.65 0.15 2000
+wait-ms 250
+aim -67.5/155.5/157.65 0.08 1500
+# switch away and back right before the capture: the draw animation ends in a fixed
+# pose and the idle sway only starts after a few seconds without input (owner's idea)
+key 1
+wait-ms 400
+key 2
+wait-ms 1200
+capture view-horizon
+wait-log view-horizon.png
+# check: reports the view error right after the capture
+aim -67.5/155.5/157.65 0.08 300
+log scenario: view water (the lake and the cooling towers to the south)
+aim -80/154.5/106 0.5 3000
+wait-ms 250
+aim -80/154.5/106 0.15 2000
+wait-ms 250
+aim -80/154.5/106 0.08 1500
+# switch away and back right before the capture: the draw animation ends in a fixed
+# pose and the idle sway only starts after a few seconds without input (owner's idea)
+key 1
+wait-ms 400
+key 2
+wait-ms 1200
+capture view-water
+wait-log view-water.png
+# check: reports the view error right after the capture
+aim -80/154.5/106 0.08 300
+console renderer.drawHud 1
+wait-ms 300
+key j
+wait-ms 300
+type goto road
+key enter
+wait-log-else 5 at-road pos=-89.6/
+label at-road
+console renderer.drawHud 0
+# settle after the teleport: weapon raise and landing finish before the aim
+wait-ms 2000
+# second teleport to the same pose after settling: the landing then repeats to the centimetre
+console renderer.drawHud 1
+key j
+wait-ms 300
+type goto road
+key enter
+wait-ms 1500
+console renderer.drawHud 0
+wait-ms 1500
+log scenario: view road (the dirt road and terrain detail towards the storage hall)
+aim -100/150.5/157 0.5 3000
+wait-ms 250
+aim -100/150.5/157 0.15 2000
+wait-ms 250
+aim -100/150.5/157 0.08 1500
+# switch away and back right before the capture: the draw animation ends in a fixed
+# pose and the idle sway only starts after a few seconds without input (owner's idea)
+key 1
+wait-ms 400
+key 2
+wait-ms 1200
+capture view-road
+wait-log view-road.png
+# check: reports the view error right after the capture
+aim -100/150.5/157 0.08 300
+console renderer.drawHud 1
+wait-ms 300
+key j
+wait-ms 300
+type goto site
+key enter
+wait-log-else 5 at-site pos=-159.7/
+label at-site
+console renderer.drawHud 0
+# settle after the teleport: weapon raise and landing finish before the aim
+wait-ms 2000
+# second teleport to the same pose after settling: the landing then repeats to the centimetre
+console renderer.drawHud 1
+key j
+wait-ms 300
+type goto site
+key enter
+wait-ms 1500
+console renderer.drawHud 0
+wait-ms 1500
+log scenario: view shadows (scaffolding, crane and tank shadows on the yard)
+aim -212/153.2/-52 0.5 3000
+wait-ms 250
+aim -212/153.2/-52 0.15 2000
+wait-ms 250
+aim -212/153.2/-52 0.08 1500
+# switch away and back right before the capture: the draw animation ends in a fixed
+# pose and the idle sway only starts after a few seconds without input (owner's idea)
+key 1
+wait-ms 400
+key 2
+wait-ms 1200
+capture view-shadows
+wait-log view-shadows.png
+# check: reports the view error right after the capture
+aim -212/153.2/-52 0.08 300
+console renderer.drawHud 1
+wait-ms 300
+key j
+wait-ms 300
+type goto entrance
+key enter
+wait-log-else 5 at-entrance pos=-190.0/
+label at-entrance
+console renderer.drawHud 0
+# settle after the teleport: weapon raise and landing finish before the aim
+wait-ms 2000
+# second teleport to the same pose after settling: the landing then repeats to the centimetre
+console renderer.drawHud 1
+key j
+wait-ms 300
+type goto entrance
+key enter
+wait-ms 1500
+console renderer.drawHud 0
+wait-ms 1500
+log scenario: view vegetation (birch trees and bushes at the main entrance)
+aim -223/158/-248 0.5 3000
+wait-ms 250
+aim -223/158/-248 0.15 2000
+wait-ms 250
+aim -223/158/-248 0.08 1500
+# switch away and back right before the capture: the draw animation ends in a fixed
+# pose and the idle sway only starts after a few seconds without input (owner's idea)
+key 1
+wait-ms 400
+key 2
+wait-ms 1200
+capture view-vegetation
+wait-log view-vegetation.png
+# check: reports the view error right after the capture
+aim -223/158/-248 0.08 300
+console renderer.drawHud 1
+log scenario: render-view-dalian done
+quit

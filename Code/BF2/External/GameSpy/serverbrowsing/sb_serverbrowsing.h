@@ -208,6 +208,14 @@ startSearchPort - The initial port to begin searching for servers on
 endSearchPort - The final port to search. All ports between start and end will be queried. */
 SBError ServerBrowserLANUpdate(ServerBrowser sb, SBBool async, unsigned short startSearchPort, unsigned short endSearchPort);
 
+#if !defined(_WIN32)
+/* ServerBrowserLANSendError
+-------------------
+[CHOSEN, not recovered] Not in the SDK. The errno of the first failed broadcast send of the
+last ServerBrowserLANUpdate, or 0 when every send went out. */
+int ServerBrowserLANSendError(ServerBrowser sb);
+#endif
+
 /* ServerBrowserAuxUpdateIP
 -------------------
 Manually updates a server given an IP address and query port. Use to manually add servers to the list when you just

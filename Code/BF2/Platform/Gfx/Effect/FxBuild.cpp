@@ -175,6 +175,11 @@ private:
         if(v.unsizedArray) {
             if(!v.init || v.init->kind!=Expr::List) fail("Unsized array without initializer list: "+v.name,v.line);
             if(v.type.base==Base::String) return uint32_t(strings(*v.init).size());
+            // D3DX9 accepts unsized shader-object arrays whose initializer is a list of compile
+            // expressions (xpack RaShaderSTM.fx `VertexShader vsStaticMesh_Array[] = { compile
+            // vs_1_1 f(false), compile vs_1_1 f(true) };`): one element per list entry.
+            if(v.type.base==Base::VertexShader || v.type.base==Base::PixelShader)
+                return uint32_t(v.init->args.size());
             // d3dx9 sizes an unsized numeric array by its flattened initializer.
             Constant c;if(!eval(*v.init,c,nullptr)) fail("Non-constant initializer: "+v.name,v.line);
             uint32_t per=v.type.numeric()?v.type.rows*v.type.cols:1;
@@ -388,7 +393,24 @@ private:
             if(be_.compile(job,t,s.bytecode,error)) compiled_[job.key]=s.bytecode;
             else ok=false;
         }
+        if(!ok && stage==VertexShader && report_ && report_->higherVertexProfile && job.profile.rfind("vs_",0)==0 &&
+           job.profile!="vs_3_0" && (error.find("E5017")!=std::string::npos || error.find("E9015")!=std::string::npos)) {
+            // BuildReport::higherVertexProfile: the requested profile's lowering is the gap, not
+            // the source; compile it as vs_3_0 and keep reporting the requested version.
+            ShaderJob high=job;high.profile="vs_3_0";high.key="vs_3_0|"+job.key;
+            std::string error3;Bytes code3;
+            std::string& t=shaderText_[1];
+            if(t.empty()) t=compilerText(fx_,text_,stage);
+            if(be_.compile(high,t,code3,error3)) {
+                s.bytecode=std::move(code3);compiled_[job.key]=s.bytecode;ok=true;++report_->higherVertexProfileUses;
+            } else error+=" (vs_3_0: "+error3+")";
+        }
         if(ok && !be_.reflect(s,{},error)) ok=false;
+        if(ok && job.profile.size()==6 && job.profile[2]=='_' && job.profile[4]=='_' && s.major==3 && job.profile!="vs_3_0" && stage==VertexShader) {
+            // Reported version: the requested profile (see BuildReport::higherVertexProfile).
+            s.major=uint32_t(job.profile[3]-'0');
+            s.minor=job.profile[5]=='x'?1u:uint32_t(job.profile[5]-'0');
+        }
         if(!ok) {
             std::string what=(job.function.empty()?std::string("asm"):job.profile+" "+job.function)+": "+error;
             if(!report_ || !report_->tolerateShaderFailures) fail(what,line);
@@ -418,9 +440,24 @@ private:
             std::string name;const Expr* index;
             if(!reference(e,name,index)) fail("Unsupported shader assignment: "+source(e),line);
             Constant c;uint32_t element=0;
-            if(index) {if(!eval(*index,c,nullptr) || c.v.size()!=1) fail("Non-constant shader array index: "+source(e),line);element=uint32_t(c.v[0]);}
             uint32_t id=object();
-            Shader s;s.object=id;s.stage=stage;s.selectorKind=2;s.selectorParameter=uint32_t(index_.at(name));s.selectorElement=element;
+            Shader s;s.object=id;s.stage=stage;s.selectorKind=2;s.selectorParameter=uint32_t(index_.at(name));
+            if(index && !(eval(*index,c,nullptr) && c.v.size()==1)) {
+                // D3DX9: an array indexed by a parameter (xpack RaShaderSTM.fx
+                // `(vsStaticMesh_AccumBuffer_Array[ PointSun ])`, TerrainShader_Hi.fx
+                // `[NightTimeMode]`, `[ShadowCount]`) is a shader selector whose index the effect
+                // evaluates when the pass is applied (preshader): mov out0, <parameter>.
+                std::string iname;const Expr* inner;
+                if(!reference(*index,iname,inner) || inner) fail("Unsupported shader array index: "+source(e),line);
+                const Variable& ig=*globals_[index_.at(iname)];
+                if(!ig.type.numeric() || ig.type.matrix || ig.type.vector || ig.arraySize)
+                    fail("Unsupported shader array index type: "+source(e),line);
+                Binding b;b.type=type(ig.type,iname,1);b.set=2;b.index=0;b.count=1;
+                Instruction mov;mov.opcode=1;mov.elements=1;mov.operands.resize(2);mov.operands[0].kind=0;mov.operands[1].kind=1;
+                s.preshader.inputs=1;s.preshader.bindings={b};s.preshader.instructions={mov};
+                s.selectorKind=1;
+            } else if(index) element=uint32_t(c.v[0]);
+            s.selectorElement=element;
             d_.shaders.push_back(std::move(s));
             v.words={id};return v;
         }

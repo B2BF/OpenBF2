@@ -1,12 +1,12 @@
 // [CHOSEN, not recovered] The Bink 1 API subset Video.cpp calls (Bink.h), implemented for the macOS
 // client and Windows x64 on the vendored FFmpeg 7.1.1 Bink decoders (Code/BF2/External/ffmpeg-bink,
-// LGPL-2.1+). Owner decisions 2026-11-01 and 2026-11-07 (docs/macos-c-bink.md): play the shipped
+// LGPL-2.1+). Owner decisions 2026-11-01 and 2026-11-07 (Code/BF2/External/ffmpeg-bink/README.md): play the shipped
 // .bik movies natively; Windows x86 keeps RAD's binkw32.dll, which is not recovered.
 //
 // This file is the platform-neutral part: the .bik container reader, decoding, the movie clock and
 // the colour conversion. The sound device is a BinkPortAudioOutput (BinkAudioCoreAudio.cpp on
 // macOS, BinkAudioDirectSound.cpp on Windows x64). It is port code: the clock and the conversion
-// reproduce what the black-box harness (Code/Tests/movies, docs/tracks/bink/README.md) measured on
+// reproduce what the black-box harness (Code/Tests/movies, Code/BF2/External/ffmpeg-bink/README.md) measured on
 // retail binkw32.dll through its exported API, not binkw32's internals.
 
 #include "Bink.h"
@@ -532,7 +532,7 @@ void BinkClose(HBINK bnk)
     closeHandle(static_cast<BinkHandle*>(bnk));
 }
 
-// Nonzero while the clock has not reached FrameNum. Measured on retail (docs/tracks/bink):
+// Nonzero while the clock has not reached FrameNum. Measured on retail (Code/BF2/External/ffmpeg-bink/README.md):
 // - the picture runs on the wall clock, not on the sound device's position (a card running 10 %
 //   fast or slow does not change the movie's length);
 // - with sound, a late picture catches up: Wait answers 0 on every call until it is on time;
@@ -611,7 +611,7 @@ void BinkNextFrame(HBINK bnk)
 } // extern "C"
 
 // YUV 4:2:0 to BGRx (BINKSURFACE32), as measured on retail binkw32 (Code/Tests/movies harness and
-// tools/bink/fit_colour.py, docs/tracks/bink/README.md; fitted on 14 frames, 3.4 M pixels, and
+// tools/bink/fit_colour.py, Code/BF2/External/ffmpeg-bink/README.md; fitted on 14 frames, 3.4 M pixels, and
 // checked on 36 frames of all seven movies, which now match retail exactly in B, G and R):
 // - its planar output equals FFmpeg's decoded planes, so only this conversion can differ;
 // - chroma is not interpolated: pixel (x, y) uses U/V sample (x/2, y/2);

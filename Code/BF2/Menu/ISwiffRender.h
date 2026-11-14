@@ -15,7 +15,7 @@ struct ISwiffRender : public IBase
     virtual int   uploadAlpha(unsigned int w, unsigned int h, const void* data) = 0;       //  7 +0x1C
 #if !defined(_MSC_VER)
     // [CHOSEN, not recovered] SwiffPlayer 0x10005B56 passes its image::rgb*; RendDX9
-    // 0x101529D0 ignores it and answers -1 (docs/macos-c-swiff-re.md).
+    // 0x101529D0 ignores it and answers -1.
     virtual int   slot8(void* rgbImage) = 0;
 #else
     virtual int   slot8(int a) = 0;                                                        // +0x20
@@ -55,7 +55,7 @@ struct ISwiffRender : public IBase
 #if !defined(_MSC_VER)
     // [CHOSEN, not recovered] Shipped text hit / selection outs are pointers: SwiffPlayer
     // 0x10005E20/0x10005E50 push stack-slot addresses; RendDX9 0x100A48C0 and 0x10152080 store
-    // through them (docs/macos-c-swiff-re.md).
+    // through them.
     virtual char  fontForward32(void* font, int* outPos, float x, float y) = 0;
     virtual char  fontForward40(void* font, int* outA, int* outB) = 0;
 #else

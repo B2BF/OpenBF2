@@ -1,0 +1,67 @@
+# [TEMP] rend-doors: Dalian Plant visual checks.
+# 1. The green warehouse lrgstrgbuilding_03 (StaticObjects.con: -185.273/160.651/-146.112) seen
+#    from Construction Site: its gable doors use BaseDetailDirtNDetail.
+# 2. A nametag over the sky: the Construction Site control-point marker seen from 8 m west of the
+#    control point (-151.846/153.170/-58.924, gpm_coop/16), looking up past it; then the sun
+#    (Sky.con flareDirection 0.38/-0.72/-0.57, so the flare is at -that).
+# 3. Glow halos: the nearest glow3 bundle (Alpha_One), zoomed through the scope.
+include join-and-spawn
+log doors: start
+aim -185.27/157/-146.11 1.5 6000
+wait-ms 1500
+capture wh-1
+button-down 1
+wait-ms 120
+button-up 1
+wait-ms 1500
+capture wh-zoom
+button-down 1
+wait-ms 120
+button-up 1
+wait-ms 1000
+log doors: walk out of the construction site to the west of the control point
+walk-to -160/153.2/-59 2 20000
+aim -185.27/157/-146.11 1.5 6000
+wait-ms 1000
+capture wh-2
+log doors: control-point marker over the sky
+aim -151.85/158/-58.92 2 6000
+wait-ms 800
+capture tag-sky-1
+aim -151.85/162/-58.92 2 6000
+wait-ms 800
+capture tag-sky-2
+aim -151.85/166/-58.92 2 6000
+wait-ms 800
+capture tag-sky-3
+key z
+wait-ms 2500
+aim -151.85/160/-58.92 2 6000
+wait-ms 800
+capture tag-sky-prone
+aim friend 1.5 5000
+wait-ms 800
+capture tag-friend-prone
+key z
+wait-ms 2500
+log doors: the sun flare
+aim -540/875/511 2 6000
+wait-ms 800
+capture sun-1
+aim friend 1.5 5000
+wait-ms 800
+capture tag-friend
+log doors: glow halos
+aim tmpl:glow3 1 6000
+wait-ms 800
+capture glow-1
+button-down 1
+wait-ms 120
+button-up 1
+wait-ms 1500
+capture glow-zoom
+button-down 1
+wait-ms 120
+button-up 1
+wait-ms 1000
+log doors: done

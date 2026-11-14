@@ -115,21 +115,6 @@ namespace gameswf
 
 	const array<profile_record*>& get_profile_records() { return s_profile_records; }
 
-	// [CHOSEN, not recovered] S3 bridge to the native provider hierarchy.
-	// [RETIRE-WHEN: swf-native-definition-bounds] Replace the cross-cast when
-	// the common retail definition hierarchy is recovered and its callers validated.
-	rect get_definition_bounds(const character_def* definition)
-	{
-		if (const definition_bounds_provider* provider =
-			dynamic_cast<const definition_bounds_provider*>(definition))
-			return provider->get_bound_copy();
-		// [TEMP] [CHOSEN, not recovered] Only unmapped legacy/native definitions
-		// reach this boundary; every shipped loader's concrete definition is a provider.
-		std::fprintf(stderr, "[FRONTIER] gameswf::get_definition_bounds unsupported native provider reached\n");
-		std::fflush(stderr);
-		std::abort();
-	}
-
 #ifndef NDEBUG
 	bool	s_verbose_debug = true;
 #else
@@ -458,8 +443,8 @@ namespace gameswf
 			m_retail_word_88(1000),
 			m_jpeg_in(0)
 		{
-			// SwiffPlayer.dll 0x10077FB0 initializes the root definition ID to zero.
-			set_character_id(0);
+			// SwiffPlayer.dll 0x10077FB0 zeroes +0x08..+0x34. A movie definition has no definition ID
+			// (it is not a character_def); see sprite_definition_of for the reads that land there.
 		}
 
 		~movie_def_impl()
@@ -2760,7 +2745,9 @@ namespace gameswf
 	// and displayed in the parent movie's display list.
 
 
-	struct sprite_definition : public movie_definition_sub, public definition_bounds_provider
+	// SwiffPlayer.dll ctor 0x1007B5A0: movie_definition_sub at +0 (table 0x100E0138) and character_def at
+	// +8 (table 0x100E0108), sharing the virtual ref_counted at +0x40.
+	struct sprite_definition : public movie_definition_sub, public character_def
 	{
 		movie_definition_sub*	     m_movie_def;		// parent movie.
 		array<array<execute_tag*> >  m_playlist;	// movie control events for each frame.
@@ -3080,6 +3067,18 @@ namespace gameswf
 		return value && value[0] == '1' && value[1] == '\0';
 	}
 	static bool s_trace_mouse_pass = false;
+
+	// [CHOSEN, not recovered] The root-definition reads. Retail keeps a sprite's definition as the
+	// character_def pointer at sprite +0xC8 and reads the ID (+0x10, duplicateMovieClip 0x100759CF) and
+	// the registered class (+0x14, on_event_load 0x10081911) through it even for a ROOT sprite, whose
+	// definition is a movie_def_impl and no character_def. Those offsets are movie_def_impl members:
+	// 0x10077FB0 zeroes them (ID 0, no class), and once the movie has loaded they may hold container
+	// state, which retail then reads as an ID or a class - undefined. The native types do not overlap,
+	// so a root sprite answers the constructor's values: no sprite_definition, ID 0, no class.
+	static sprite_definition* sprite_definition_of(movie_definition_sub* def)
+	{
+		return dynamic_cast<sprite_definition*>(def);
+	}
 
 	struct sprite_instance : public character
 	{
@@ -5283,7 +5282,10 @@ namespace gameswf
 			// 0x10081911 compares directly with the global publication, even
 			// when another movie has replaced this sprite's own tree root.
 			if (this != get_global_root_movie())
-				cls = static_cast<as_as_function*>(m_def->m_registered_class);
+			{
+				sprite_definition* sprite_def = sprite_definition_of(m_def.get_ptr());
+				cls = sprite_def ? static_cast<as_as_function*>(sprite_def->m_registered_class) : NULL;
+			}
 			if (cls != NULL && cls->m_properties->m_instance_prototype != NULL)
 			{
 				bind_class_prototype(cls.get_ptr());
@@ -5299,16 +5301,12 @@ namespace gameswf
 			// SwiffPlayer.dll 0x10081A12 / 0x10081A7E read concrete fields,
 			// without a script-visible "prototype" or "__constructor__" lookup.
 			as_object* class_proto = cls->m_properties->m_instance_prototype->cast_to_as_object();
-			if (class_proto == NULL)
-			{
-				// [TEMP] [CHOSEN, not recovered] S3 bridge: a native movie
-				// cannot supply the retail object's constructor field.
-				// [RETIRE-WHEN: swf-native-script-object] Recover the common
-				// constructor provider and validate a movie-valued class prototype.
-				std::fprintf(stderr, "[FRONTIER] gameswf::sprite_instance::bind_class_prototype non-object prototype reached\n");
-				std::fflush(stderr);
-				std::abort();
-			}
+			// [CHOSEN, not recovered] A movie clip as class prototype supplies no constructor.
+			// Retail reads the field at the clip's secondary-interface offset, unrelated movie
+			// state, and publishes it as __constructor__ and the super target; only super() would
+			// use it. Retail 1.50 binds the instance, runs the registered class once and links the
+			// clip as its __proto__ (probe v2 tests 4, 7, 8 green; no fault).
+			if (class_proto == NULL) return NULL;
 			return class_proto->m_constructor.get_ptr();
 		}
 
@@ -5525,7 +5523,8 @@ namespace gameswf
 		sprite_instance* sprite = sprite_this(fn);
 		sprite_instance* root = static_cast<sprite_instance*>(sprite->get_root_movie());
 		array<swf_event*> handlers;
-		character* ch = root->add_display_object(sprite->m_def->get_character_id(), name.c_str(), handlers,
+		sprite_definition* sprite_def = sprite_definition_of(sprite->m_def.get_ptr());   // root: ID 0
+		character* ch = root->add_display_object(sprite_def ? sprite_def->get_character_id() : 0, name.c_str(), handlers,
 			static_cast<Uint16>(depth), true, sprite->get_cxform(), sprite->get_matrix(), sprite->get_ratio(), 0);
 		fn.result->set_as_object_interface(ch);
 	}

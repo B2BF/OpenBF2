@@ -1,7 +1,7 @@
 // [TEMP] [CHOSEN, not recovered] Production Video movie policy with engine-free allocation,
 // listener, log and Bink observers. No decoder, GPU, content or client launch.
 //
-// Policy since 2026-11-07 (docs/tracks/bink/README.md): macOS and Windows x64 play movies through
+// Policy since 2026-11-07 (Code/BF2/External/ffmpeg-bink/README.md): macOS and Windows x64 play movies through
 // the Bink stand-in, as x86 does through binkw32.dll; the "movie skipped" refusal is retired.
 // This fixture links Video.cpp against fake Bink entry points and checks what Video does with
 // them: sound selection, the two-root path search, the summary read, pause/resume on device

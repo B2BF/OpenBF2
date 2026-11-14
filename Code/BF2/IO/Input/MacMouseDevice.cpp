@@ -313,7 +313,7 @@ void MacMouseDevice::push(unsigned int offset, unsigned int data, unsigned int t
 }
 
 // [CHOSEN] Relative motion, in DirectInput counts. With a GCMouse connected the counts are its
-// unaccelerated device deltas (onRawMouseMove, docs/macos-c-raw-mouse.md). Without one (a
+// unaccelerated device deltas (onRawMouseMove). Without one (a
 // trackpad-only Mac) they fall back to NSEvent deltas, one point per count, which carry the
 // system pointer acceleration. Fractions are carried to the next report so slow motion is kept.
 void MacMouseDevice::addMotion(double dx, double dy, unsigned int timeMs)

@@ -11,7 +11,12 @@
 #include <cstring>
 #include <new>
 #include <limits>
-namespace dice { namespace hfe { namespace io { IBase* inputDeviceManager = 0; } } }
+namespace dice { namespace hfe {
+// The frame update's collaborators; this fixture never reaches it (no device, update returns first).
+IBase* g_controlSettings = 0;
+IBase* g_hapticSettings = 0;
+namespace io { IBase* inputDeviceManager = 0; IBase* controlMapManager = 0; float inputSampleLatency = 0.0f; }
+} }
 using namespace dice::hfe;
 using namespace dice::hfe::io;
 int main()
@@ -63,8 +68,8 @@ int main()
     }
     check(!api->getInvertAxis(static_cast<InputDeviceAxes>(4))
         && api->getAxisScale(static_cast<InputDeviceAxes>(4)) == 0, "greater-than-count rejection");
-    api->setAxisAdd(IDA_X, 12);
-    check(api->getAxisAdd(IDA_X) == 0, "recovered axis-add no-op");
+    api->setAxisAdd(IDAxis_0, 12);
+    check(api->getAxisAdd(IDAxis_0) == 0, "recovered axis-add no-op");
     float x = 7, y = 9;
     api->peakXYAxis(x, y);
     check(x == 0 && y == 0, "inherited zero peak");
@@ -77,12 +82,12 @@ int main()
     device->m_buttonLatency[31] = 0.75f;
     check(api->buttonPressedSampleLatency(static_cast<InputDeviceButtons>(0x80000001u)) == 0.25f, "lowest latency bit wins");
     check(api->buttonPressedSampleLatency(static_cast<InputDeviceButtons>(0x80000000u)) == 0.75f, "latency high bit");
-    check(api->buttonPressedSampleLatency(IDB_NONE) == 0, "zero latency mask");
-    InputDeviceAxes axis = IDA_Z;
+    check(api->buttonPressedSampleLatency(static_cast<InputDeviceButtons>(0)) == 0, "zero latency mask");
+    InputDeviceAxes axis = IDAxis_2;
     InputDeviceButtons button = static_cast<InputDeviceButtons>(7);
     InputDeviceKeys key = static_cast<InputDeviceKeys>(8);
     bool negative = true;
-    check(!api->getNextInput(axis, button, key, negative) && axis == IDA_Z && button == 7 && key == 8 && negative,
+    check(!api->getNextInput(axis, button, key, negative) && axis == IDAxis_2 && button == 7 && key == 8 && negative,
         "inactive mapping leaves outputs untouched");
     device->m_active = true;
     check(!api->isActive() && !api->getNextInput(axis, button, key, negative), "null device second guard");
@@ -93,6 +98,8 @@ int main()
     api->addRef();
     check(api->getRef() == 2 && api->release() == 1, "reference increment/decrement");
     check(api->release() == 0, "real final release and destructor");
-    std::printf("FalconDevice: %d checks, %d failures; native size %u\n", checks, failed, unsigned(sizeof(FalconDevice)));
-    return failed != 0;
+    std::printf("falcon device runtime %d/%d checks passed (native size %u)\n", checks - failed, checks,
+        unsigned(sizeof(FalconDevice)));
+    std::fflush(stdout);
+    return failed != 0 ? 1 : 0;
 }

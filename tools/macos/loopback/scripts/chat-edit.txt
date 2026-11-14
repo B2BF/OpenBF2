@@ -1,0 +1,32 @@
+# [TEMP] chat-edit (c-chat-edit): after the spawn, open the team chat (K), type with a backspace,
+# send it with Enter, then open the chat (J) again and cancel it with Escape. Exercises the HUD
+# edit node's paintSelf (edit box text and cursor) and onEvent1 (backspace key).
+include join-and-spawn
+log chat: open
+wait-ms 2000
+key k
+wait-ms 1000
+capture chat-open
+type hellox
+wait-ms 300
+key backspace
+wait-ms 300
+type " mac"
+wait-ms 800
+capture chat-typed
+# Captures land some 140 frames after the request: hold the state until it is written.
+wait-ms 4000
+key enter
+wait-ms 2000
+capture chat-sent
+log chat: reopen and cancel
+key j
+wait-ms 1000
+type abc
+wait-ms 800
+capture chat-reopen
+wait-ms 4000
+key escape
+wait-ms 1500
+capture chat-cancelled
+log chat-edit done

@@ -1,6 +1,6 @@
 // [FRONTIER] [TEMP] [CHOSEN, not recovered] The ten binkw32.dll imports (Bink.h) for native POSIX
 // renderer images other than macOS, where no Bink runtime exists; they stop at Video's named
-// frontiers first. macOS implements the entry points in BinkFFmpeg.cpp (docs/macos-c-bink.md). These bodies keep a
+// frontiers first. macOS implements the entry points in BinkFFmpeg.cpp (Code/BF2/External/ffmpeg-bink/README.md). These bodies keep a
 // renderer link honest. Each one reports itself and aborts, never returning a handle or a result.
 // [RETIRE-WHEN: posix-bink-decoder] Remove when the owner chooses a Bink runtime or replacement
 // decoder for macOS (docs/macos-port.md, "Bink, Novint and VoIP capture (S2.8)").

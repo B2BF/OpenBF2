@@ -1,0 +1,62 @@
+# [TEMP] sp-menu-start: (reused home with an offline account, BF2_REUSE_HOME) LOGIN -> SELECT ACCOUNT ->
+# SINGLEPLAYER -> Strike At Karkand, VETERAN -> START SINGLEPLAYER -> JOIN GAME -> kit, Gasstation -> DONE.
+# Client-hosted (docs/macos-c-input-script.md). 800x600. Run with BF2_AI_SPAWN_ONLY=1.
+timeout 300
+# The runner passes +restart 1 (no intros): the login page is up once menu.bik plays.
+wait-log mods/bf2/Movies/menu.bik
+wait-ms 3000
+capture login
+move 260 187
+wait-ms 300
+click 260 187
+wait-ms 1500
+move 531 414
+wait-ms 300
+click 531 414
+wait-ms 5000
+capture main
+move 333 15
+wait-ms 300
+click 333 15
+wait-ms 3000
+capture sp-page
+move 64 421
+wait-ms 300
+click 64 421
+wait-ms 1500
+move 147 204
+wait-ms 300
+click 147 204
+wait-ms 1500
+capture sp-chosen
+move 730 585
+wait-ms 300
+click 730 585
+wait-ms 3000
+capture loading
+wait-log ingameMap.tga
+wait-ms 5000
+capture loaded
+click 745 583
+wait-ms 4000
+key enter
+wait-ms 1500
+key enter
+wait-ms 3000
+capture spawn-screen
+hud-click 130 240
+wait-ms 1000
+# Gasstation, the US main base on Strike at Karkand.
+hud-click 594 467
+wait-ms 1000
+capture kit
+hud-click 728 546
+wait-ms 20000
+capture spawned
+key-down tab
+wait-ms 1500
+capture scoreboard
+key-up tab
+wait-ms 60000
+capture hold-60
+end

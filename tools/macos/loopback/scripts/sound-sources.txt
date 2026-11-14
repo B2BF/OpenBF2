@@ -1,0 +1,28 @@
+# [TEMP] sound.showSoundSources: BfSound::drawSoundSources draws each playing sample (text, cross,
+# circles, velocity line). The shipped BF2Audio.dll reports no samples, so this shows nothing
+# unless the engine is patched to report some; open the console, enable, close it, capture.
+# sound.showSoundSources is access-restricted (retail answers "Unauthorised method!"): run with
+# --client-env BF2_CLIENT_CONSOLE_FULL_ACCESS=1.
+timeout 300
+wait-log ingameMap.tga
+wait-ms 3000
+click 745 583
+wait-ms 3000
+hud-click 130 107
+wait-ms 500
+hud-click 432 282
+wait-ms 500
+hud-click 728 546
+wait-log-else 12 spawned [PLAY] alive=1
+label spawned
+wait-ms 1500
+capture before
+key grave
+wait-ms 1000
+type sound.showSoundSources 1
+key enter
+wait-ms 500
+capture console
+key grave
+wait-ms 2000
+capture sound-sources

@@ -1,0 +1,67 @@
+# [TEMP] demo-play: watch a recorded demo (loopback --play-demo; demo_cycle.py; docs/tracks/game/demo.md).
+# The level loads from the demo's own data blocks; the loaded-map screen waits for JOIN GAME as on a
+# live join. Then the spectator camera is driven with the shipped keys (demo.md, "Keys"): right mouse
+# = follow camera, Space = next player, Shift+Space = previous player, 1..9 = simulation rates
+# (1 = 0 = pause, 2 = 100, 7 = 150). The presses wait 15 s after JOIN GAME, so the recorded players
+# have spawned (with nobody alive the follow camera falls back to free flight, as in retail).
+# demo_cycle.py judges the follow-* captures (consecutive frames must differ) and the
+# "[PLAY] demo ... followPos=" lines (the followed player must move), besides [FRONTIER], crash and
+# script completion. A capture is taken at the next presented frame, so every capture that is
+# followed by an input waits 300 ms first (without it, follow-next showed the state after Shift+Space).
+timeout 240
+log waiting for the demo level load
+wait-log ingameMap.tga
+wait-ms 3000
+capture demo-loaded
+wait-ms 300
+click 745 583
+log demo: entered playback
+wait-ms 3000
+capture demo-view-1
+wait-ms 12000
+log demo: right mouse - follow camera
+button-down 1
+wait-ms 300
+button-up 1
+wait-ms 2000
+log demo: follow phase
+capture follow-1
+wait-ms 1000
+capture follow-2
+wait-ms 1000
+capture follow-3
+wait-ms 1000
+capture follow-4
+wait-ms 300
+log demo: space - next player
+key space 300
+wait-ms 2000
+capture follow-next
+wait-ms 300
+log demo: shift+space - previous player
+key-down leftshift
+key space 300
+key-up leftshift
+wait-ms 2000
+capture follow-prev
+wait-ms 300
+log demo: key 7 - 150 percent
+key 7 300
+wait-ms 2000
+capture follow-fast
+wait-ms 300
+log demo: key 1 - pause
+key 1 300
+wait-ms 1500
+capture paused-1
+wait-ms 1500
+capture paused-2
+wait-ms 300
+log demo: key 2 - normal speed
+key 2 300
+wait-ms 2000
+capture follow-resumed-1
+wait-ms 1000
+capture follow-resumed-2
+log demo: watched
+wait-ms 60000

@@ -1,7 +1,9 @@
 // Diagnostic frontier support, [CHOSEN, not recovered]. Default behavior logs and aborts.
 // BF2_RENDDX9_FRONTIER=continue permits call-order investigation only; it does not validate behavior.
 // Unknown-arity placeholders can unbalance the x86 stack when allowed to return, so only the first
-// frontier reached in such a run is reliable. Keep abort as the default.
+// frontier reached in such a run is reliable. Keep abort as the default for development.
+// [CHOSEN, not recovered] Release packages built by CI compile with BF2_FRONTIER_DEFAULT_CONTINUE=1:
+// they log and continue unless the env var says "abort" (see frontierTrapEnabled in Frontier.cpp).
 // [RETIRE-WHEN: RW-48] Delete this helper when the last RD9_FRONTIER in the image is recovered.
 
 #ifndef RENDDX9ABI_FRONTIER_H

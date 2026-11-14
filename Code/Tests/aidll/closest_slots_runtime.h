@@ -1,7 +1,6 @@
 // [TEMP] Real headers and native chosen lifetimes; no retail object-layout claim.
 #pragma once
 #include "../../BF2/AI/AIDLL/AI/AIBot/SquadFormation.h"
-#include "../../BF2/AI/AIInterface/BFKnowledge/AIFrontier.h"
 #include <cfloat>
 #include <cstdio>
 #include <cstdlib>

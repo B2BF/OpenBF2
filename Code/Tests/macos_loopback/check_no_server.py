@@ -21,7 +21,7 @@ runner = repo / 'tools/macos/loopback/loopback.py'
 def check(label, options, sandbox_ok=True):
     with tempfile.TemporaryDirectory(prefix='ui-spstart-check-', dir='/private/tmp') as tmp:
         owner = pathlib.Path(tmp)
-        lock = owner / 'Source/OpenBF2-wt/coord/run/loopback.lock'
+        lock = owner / 'Library/Caches/OpenBF2-loopback/loopback.lock'
         lock.parent.mkdir(parents=True)
         lock.write_text('existing lock\n')
         content = owner / 'content'

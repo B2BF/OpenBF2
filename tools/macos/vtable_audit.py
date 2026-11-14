@@ -634,8 +634,8 @@ def check_postproduction(compiler):
     return dict(pair='post-production-native-calls', view=dict(header='Code/BF2/RendMisc/NativePostProductionSlots.h', cls='native_post::Calls'), host=dict(header=source, cls='kPostProdVtable'), slots=len(roles), provider_slots=len(functions), errors=errors, reserved=[])
 
 
-# Evidence-derived native signatures of the five former argument-mapping stops
-# (docs/macos-c-swiff-re.md). Each row: expression, exact native type, PE evidence.
+# Evidence-derived native signatures of the five former argument-mapping stops.
+# Each row: expression, exact native type, PE evidence.
 SWIFF_TRANSPORT_CONTRACTS = [
     ('&ui::ISwiffRender::slot8', 'int (ui::ISwiffRender::*)(void*)',
      'SwiffPlayer 0x10005B56 push image::rgb*; RendDX9 0x101529D0 or eax,-1; ret 4'),

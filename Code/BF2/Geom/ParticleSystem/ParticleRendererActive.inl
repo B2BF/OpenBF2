@@ -20,7 +20,7 @@ static int psmParticleRound(float value)
     return _mm_cvtss_si32(_mm_set_ss(value));
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     int rounded;
     // [CHOSEN, not recovered] Preserve x87 current-mode FRNDINT and integer indefinite.
     rounded = bf2x87::integer<int>(bf2x87::wide(value), false);

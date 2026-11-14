@@ -93,7 +93,7 @@ bool readRegistryString(RegKeyCategory category, const std::string& name,
 Registry* registry = &rinstance;
 
 #if !defined(_WIN32) && !DEDICATED
-// [CHOSEN, not recovered] File syntax and owner decision: docs/macos-r1-registry-file.md.
+// [CHOSEN, not recovered] File syntax and owner decision: docs/macos-write-paths.md (Registry.con).
 namespace posixRegistry {
 namespace {
 std::string trim(const std::string& text)
@@ -192,7 +192,7 @@ std::string Registry::getString(RegKeyCategory category, const std::string& name
     return result;
 #elif !DEDICATED
     // [CHOSEN, not recovered] POSIX clients read Registry.con; missing values retain the
-    // Windows absent-key defaults introduced in docs/macos-c-asan-heap.md.
+    // Windows absent-key defaults.
     const std::string path = std::string("SOFTWARE\\Electronic Arts\\EA Games\\") +
         (modName.empty() ? "Battlefield 2" : modName);
     std::string result;

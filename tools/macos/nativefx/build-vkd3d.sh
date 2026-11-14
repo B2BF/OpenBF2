@@ -44,14 +44,24 @@ if [ "$(cat "$src/.bf2-stamp" 2>/dev/null)" != "$stamp" ]; then
     done
     echo "$stamp" > "$src/.bf2-stamp"
 fi
+# The applied patch names, for the configure-time check in Code/BF2/Platform/Gfx/Effect/CMakeLists.txt.
+(cd "$root/tools/macos/vkd3d-patches" && ls *.patch 2>/dev/null) > "$src/.bf2-patches"
+# [CHOSEN, not recovered] TRACE/WARN/FIXME arguments are evaluated even with VKD3D_SHADER_DEBUG=none
+# (about 5 % of an effect build went to debug-string formatting); compile the debug log out.
+cflags="-O2 -g -arch $arch -DVKD3D_NO_TRACE_MESSAGES -DVKD3D_NO_DEBUG_MESSAGES"
+if [ -f "$bld/Makefile" ] && [ "$(cat "$bld/.bf2-cflags" 2>/dev/null)" != "$cflags" ]; then
+    rm -f "$bld/Makefile"   # reconfigure for the new flags
+fi
 if [ ! -f "$bld/Makefile" ]; then
     host_args=
     if [ "$arch" != "$(uname -m)" ]; then
         host_args="--build=$(sh "$src/bin/config.guess") --host=$arch-apple-darwin"
     fi
-    (cd "$bld" && CC=clang OBJC=clang CFLAGS="-O2 -g -arch $arch" LDFLAGS="-arch $arch" SONAME_LIBVULKAN=libvulkan.dylib \
+    (cd "$bld" && CC=clang OBJC=clang CFLAGS="$cflags" LDFLAGS="-arch $arch" SONAME_LIBVULKAN=libvulkan.dylib \
         "$root/$src/configure" $host_args --disable-tests --disable-demos --disable-shared \
         --without-ncurses --without-opengl --without-xcb --without-spirv-tools) > "$log/vkd3d-configure.log" 2>&1
+    echo "$cflags" > "$bld/.bf2-cflags"
+    (cd "$bld" && make clean) > /dev/null 2>&1 || true
 fi
 (cd "$bld" && make -f Makefile -f "$root/tools/macos/nativefx/headers.mk" nativefx-headers) > "$log/vkd3d-generated.log" 2>&1
 (cd "$bld" && make -j6 libvkd3d-shader.la vkd3d-compiler) > "$log/vkd3d-build.log" 2>&1

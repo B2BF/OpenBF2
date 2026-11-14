@@ -1,0 +1,52 @@
+# [TEMP] shadows-view: the High-quality shadow / depth check at a fixed pose and
+# view: terrain, hillsides and the first-person weapon, before, during and after full-auto fire
+# (the black blotches appeared when the player fired). Measure the black fraction on rows 10-80 % of
+# each capture (max channel <= 3). Waits: wait-log on the capture file.
+include join-and-spawn
+log scenario: shadows-view start
+# coarse aim, then two fine re-aims on the settled view (see render-view-dalian)
+aim -212/153.2/-52 0.5 3000
+wait-ms 250
+aim -212/153.2/-52 0.15 2000
+wait-ms 250
+aim -212/153.2/-52 0.08 1500
+wait-ms 300
+capture view-pre
+wait-log view-pre.png
+log scenario: fire (captures during the burst)
+button-down 0
+wait-ms 120
+capture fire-01
+wait-ms 120
+capture fire-02
+wait-ms 120
+capture fire-03
+button-up 0
+wait-ms 1500
+capture after-01
+wait-log after-01.png
+log scenario: second burst, re-aimed
+aim -212/153.2/-52 0.5 3000
+wait-ms 250
+aim -212/153.2/-52 0.15 2000
+wait-ms 250
+aim -212/153.2/-52 0.08 1500
+wait-ms 300
+button-down 0
+wait-ms 300
+capture fire-04
+button-up 0
+wait-ms 1500
+capture after-02
+wait-log after-02.png
+log scenario: hillside view (aim higher, over the building)
+aim -212/165/-52 0.5 3000
+wait-ms 250
+aim -212/165/-52 0.15 2000
+wait-ms 250
+aim -212/165/-52 0.08 1500
+wait-ms 300
+capture view-hill
+wait-log view-hill.png
+log scenario: shadows-view done
+quit

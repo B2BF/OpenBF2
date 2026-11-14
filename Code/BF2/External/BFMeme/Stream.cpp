@@ -7,21 +7,11 @@
 #include "Event.h"
 #include "Action.h"
 #include "Function.h"
+#include "Tree.h"
 #include <cstdio>
 #include <cstdlib>
 namespace dice { namespace meme {
-// [FRONTIER] [TEMP] [CHOSEN, not recovered] BF2.exe 83D010 publishes the "dice::meme::Tree"
-// descriptor (table 94F4D8, base Object, factory 83CFF0: twelve bytes, table 94F440, two zeroed
-// fields). No Tree class exists in this tree, so the descriptor is not published; the null-type
-// streamTree branch stops here instead.
-// [RETIRE-WHEN: MEME-TREE-FAMILY] Recover dice::meme::Tree (table 94F440 and its bodies), then
-// define this as Tree::getClassType() and validate a .con/menu load that streams a tree.
-TypeDescriptor* getTreeClassType()
-{
-    std::fprintf(stderr, "[FRONTIER] dice::meme::getTreeClassType reached\n");
-    std::fflush(stderr);
-    std::abort();
-}
+TypeDescriptor* getTreeClassType() { return Tree::getClassType(); }   // 0x83D010 (Tree.cpp)
 TypeDescriptor* getEventClassType() { return Event::getClassType(); }
 TypeDescriptor* getActionClassType() { return Action::getClassType(); }
 TypeDescriptor* getFunctionClassType() { return Function::getClassType(); }

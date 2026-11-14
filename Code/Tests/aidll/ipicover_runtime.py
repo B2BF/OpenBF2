@@ -23,7 +23,7 @@ SOURCES = [AI + 'AIKnowledge/IPICover.cpp', AI + 'AIKnowledge/IPICover.h',
            AI + 'Main/CommonSingletonServer.h', INTERFACE + 'IAIObject.h',
            INTERFACE + 'IAIObjectPlugIn.h', INTERFACE + 'BFTimer.h',
            INTERFACE + 'PlanePolygon.cpp', INTERFACE + 'PlanePolygon.h',
-           INTERFACE + 'AIFrontier.h', 'Math/Vec3.cpp', 'Math/Vec3.h', 'Math/Mat4.h',
+           'Math/Vec3.cpp', 'Math/Vec3.h', 'Math/Mat4.h',
            'Core/IBase.h', 'Game/Objects/IObjectComponent.h']
 
 NORMAL = ['constructor', 'constructor_capture', 'null_outline', 'replacement',

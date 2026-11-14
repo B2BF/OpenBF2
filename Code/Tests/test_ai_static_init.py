@@ -94,7 +94,7 @@ class SourceDefinitions(unittest.TestCase):
 class OriginalInstructions(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        binary = Path(evidence.BIN_DIR) / "ia-32/libaidll.so"
+        binary = Path(evidence.BIN_DIR or "/nonexistent") / "ia-32/libaidll.so"
         if not binary.exists():
             raise unittest.SkipTest("original ia-32 image unavailable")
         cls.image = evidence.Image("ia-32", str(binary))

@@ -14,6 +14,7 @@
 #include "../Core/System.h"
 #include "../Game/HudInformationLayer.h"
 #include "../Game/Main/BF2ClientSeams.h"
+#include "../Game/VoipClient/BF2VoipClient.h"         // bf2VoipClient slots (vtable 0x89C1A8)
 #include "../Game/IGame.h"
 #include "../Game/IGameLogic.h"
 #include "../Game/GameEvents/VoipPlayerMuteEvent.h"
@@ -23,7 +24,6 @@
 #include "../Game/Objects/GameLogicComp/IArmorGLComp.h" // hit points +3C / +84
 #include "../Scene/Object/PlayerManager.h"
 #include <algorithm>
-#include <cstdio>     // appendLeaderVoipCells [FRONTIER] diagnostic.
 #include <cstdlib>
 #include <cstring>
 #include <new>
@@ -95,7 +95,7 @@ void updateCooldown(float deadline, double now, float duration, float& remaining
     fraction = static_cast<float>(left / duration);
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     float* remainingValue = &remaining;
     float* fractionValue = &fraction;
     // [CHOSEN, not recovered] Preserve x87 retained remaining value for fraction.
@@ -352,7 +352,6 @@ void HudCommander::appendMemberCells(world::IPlayer* player, int slot, int squad
 }
 
 // Appends the squad leader's voice-chat indicators.
-// [RETIRE-WHEN: client-voip-optional] Complete and validate the corresponding HudCommander operation.
 void HudCommander::appendLeaderVoipCells(int squad)
 {
     const int sel = isSquadSelected(squad);                                       // +0x30
@@ -393,13 +392,8 @@ void HudCommander::appendLeaderVoipCells(int squad)
     const meme::Color& cell = commanderCellColors[sel];
     m_data->appendImageCell0x7c8300(32, m_textures[13], 15.0f, 15.0f, 0.0f, m_field0bc,
         cell.r, cell.g, cell.b, cell.a);
-    if (!bf2VoipClient) {                                                         // see the banner
-        std::fprintf(stderr, "[FRONTIER] dice::hfe::hud::HudCommander::appendLeaderVoipCells "
-                             "reached with no voice client (BF2.exe 79410A reads bf2VoipClient "
-                             "+0xA0 unguarded; client-voip-optional, RW-94)\n");
-        std::fflush(stderr);
-        std::abort();
-    }
+    // BF2.exe 0x79410A reads bf2VoipClient +0xA0 with no null test: the client image always constructs
+    // the voice client in BF2Engine::initEngine (0x40C351).
     // ds:97DE40, a never-written .data word: opaque yellow while the leader channel is in use.
     static const meme::Color kLeaderChannelColor = {1.0f, 1.0f, 0.0f, 1.0f};
     const meme::Color& frameColor = bf2VoipClient->getUsingLeaderChannel()       // retail +0xA0

@@ -404,7 +404,7 @@ void objectDrawerQueryGrid(const void* frustum, ObjectDrawerSet& out,
     // [CHOSEN, not recovered] Non-PE builds link the native world::ObjectManager, whose grid-query
     // overloads follow the ELF table order (ObjectManager.h): the PE offsets +0x40/+0x4C name
     // other overloads there (+0x40 is the sphere query), so the frustum queries returned nothing
-    // and no static, bundled or skinned mesh was ever submitted (docs/macos-c-metal-ingame.md).
+    // and no static, bundled or skinned mesh was ever submitted.
     // Called by name instead; ObjectDrawerFlagPredicator keeps ObjectPredicator's table.
     world::ObjectManager* const manager =
         reinterpret_cast<world::ObjectManager*>(::dice::hfe::objectManager);

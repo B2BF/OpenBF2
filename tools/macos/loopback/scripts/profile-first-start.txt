@@ -1,0 +1,18 @@
+# [TEMP] [CHOSEN, not recovered] First start of a fresh install (loopback --default-profile none):
+# the client creates Profiles/Default, nothing is preselected yet. Select the offline row and
+# log in, which saves it as GlobalSettings.defaultUser (docs/macos-profile-prefix.md).
+timeout 90
+wait-log mods/bf2/Movies/menu.bik
+wait-ms 3000
+move 400 300
+capture first-start
+wait-ms 250
+click 300 187
+wait-ms 1000
+capture row-selected
+wait-ms 250
+click 536 414
+wait-ms 4000
+capture logged-in
+wait-ms 250
+quit

@@ -119,7 +119,7 @@ float radiusOf(Information* info, Bot* bot)
 
 } // namespace
 
-// ELF 0x236A20. Stack-slot map and branch order in docs/macos-ai-w1-f-urgency.md.
+// ELF 0x236A20.
 BotScript* BBPChange::createPlan(Bot* bot)
 {
     const unsigned int botId = bot->getBotId();                                  // esi

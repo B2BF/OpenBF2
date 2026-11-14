@@ -8,6 +8,7 @@
 #include "../Core/Ids.h"
 #include "../RendMisc/IRenderer.h"
 #include "../Core/SettingsRepostitory.h"  // settings - "GSLoadLevel" gates the antialiasing push
+#include <cstdio>                       // [CHOSEN] sscanf for the new-profile resolution pick
 #include <new>
 #include <ostream>
 #include <sstream>
@@ -152,9 +153,69 @@ bool VideoSettings::apply()
     return true;
 }
 
+namespace {
+
+// [CHOSEN, not recovered] The renderer's resolution entry ("%ix%i@%iHz") a new profile starts
+// with: the largest that fits the renderer's desktop mode (IRenderer +0xDC, the adapter's
+// GetAdapterDisplayMode; the Metal backend answers the main display's point size), preferring the
+// desktop's refresh rate, then the highest. Empty when no entry fits or no mode is reported.
+std::string desktopFitResolution(dx9rend::IRenderer* renderer, const std::vector<std::string>& list)
+{
+    unsigned int width = 0, height = 0, hz = 0;
+    if (!renderer->getDesktopMode(width, height, hz))
+        return std::string();
+    const int desktopWidth = static_cast<int>(width), desktopHeight = static_cast<int>(height);
+    const int desktopHz = static_cast<int>(hz);
+    std::string best;
+    long long bestArea = 0;
+    int bestHz = 0;
+    bool bestHzMatches = false;
+    for (const std::string& entry : list) {
+        int width = 0, height = 0, hz = 0;
+        if (std::sscanf(entry.c_str(), "%dx%d@%d", &width, &height, &hz) != 3)
+            continue;
+        if (width > desktopWidth || height > desktopHeight)
+            continue;
+        const long long area = static_cast<long long>(width) * height;
+        const bool hzMatches = hz == desktopHz;
+        if (area > bestArea
+            || (area == bestArea && hzMatches && !bestHzMatches)
+            || (area == bestArea && hzMatches == bestHzMatches && hz > bestHz)) {
+            best = entry;
+            bestArea = area;
+            bestHz = hz;
+            bestHzMatches = hzMatches;
+        }
+    }
+    return best;
+}
+
+// [CHOSEN, not recovered] Owner decision 2026-11-14: the High scheme also takes the highest
+// antialiasing the renderer lists for the selected mode ("Off", then "%dSamples"); retail's High
+// preset stages "Off". The list is rebuilt per resolution, so this runs after a resolution change.
+void selectMaxAntialiasing(IVideoOptions* options)
+{
+    const std::vector<std::string>& list = options->getDynamicOptionList(0);
+    std::string best;
+    int bestSamples = 0;
+    for (const std::string& entry : list) {
+        int samples = 0;
+        if (std::sscanf(entry.c_str(), "%dSamples", &samples) == 1 && samples > bestSamples) {
+            best = entry;
+            bestSamples = samples;
+        }
+    }
+    if (!best.empty())
+        options->setDynamicOption(0, best);
+}
+
+} // namespace
+
 // (359 B). The pending record takes the constructor defaults field by field, then, with a
 // renderer, the sixteen range values are read interleaved (+08 then +0C per index), the detected
 // scheme replaces the default one and the scheme is pushed to the renderer with argument 1.
+// Only the two new-profile paths call this (LocalProfileManager::createDefaultProfile 4A8113 and
+// createProfile 4AAAA8); existing profiles keep their Video.con.
 void VideoSettings::setDefaults()
 {
     m_pending.terrainQuality = 2;
@@ -181,6 +242,18 @@ void VideoSettings::setDefaults()
     }
     m_pending.videoOptionScheme = detectVideoOptionScheme();
     applyVideoOptionScheme(1);
+    // [CHOSEN, not recovered] High stages "1024x768"; a new profile takes the largest listed
+    // resolution that fits the desktop instead, when one does.
+    const std::string resolution = desktopFitResolution(renderer, getResolutionList());
+    if (!resolution.empty()) {
+        options->setDynamicOption(1, resolution);
+        if (m_pending.videoOptionScheme == 2)
+            selectMaxAntialiasing(options);
+        readOptions(options);
+    }
+    std::fprintf(stderr, "[CHOSEN, not recovered] VideoSettings::setDefaults: new profile at scheme %d, "
+                         "resolution %s, antialiasing %s\n", m_pending.videoOptionScheme,
+                 m_pending.resolution.c_str(), m_pending.antialiasing.c_str());
 }
 
 // (20 B)
@@ -207,7 +280,12 @@ void VideoSettings::applyToOptions(IVideoOptions* options)
     options->setViewDistanceScale(m_pending.viewDistanceScale);
 }
 
-// (34 B)
+// (34 B). Retail answers the renderer's autodetect (RendDX9 0x1000F6E0: CPU benchmark x CPU-vendor
+// multiplier, RAM, pixel-shader major and the 2005 ATI/NVIDIA device whitelist), which caps every
+// GPU it does not list at Medium and a CPU it cannot identify at Low, so no current machine gets
+// High. [CHOSEN, not recovered] Owner decision 2026-11-14: with a renderer the answer is the High
+// scheme (2) on every platform; the renderer's heuristic still runs and is logged. Its callers are
+// setDefaults (new profiles) and the options page's detectVideoScheme (reset to default).
 int VideoSettings::detectVideoOptionScheme()
 {
     if (!g_bf2Render)
@@ -215,10 +293,14 @@ int VideoSettings::detectVideoOptionScheme()
     dx9rend::IRenderer* renderer = g_bf2Render->getRenderer();
     if (!renderer)
         return 1;
-    return renderer->getVideoOptions()->detectQualityLevel();
+    const int detected = renderer->getVideoOptions()->detectQualityLevel();
+    std::fprintf(stderr, "[CHOSEN, not recovered] VideoSettings::detectVideoOptionScheme: renderer "
+                         "autodetect %d, answering High (2)\n", detected);
+    return 2;
 }
 
 // (57 B): the argument is never read; the pending scheme is what reaches the renderer.
+// [CHOSEN, not recovered] For the High scheme the highest listed antialiasing follows the preset.
 void VideoSettings::applyVideoOptionScheme(int /*unused*/)
 {
     if (!g_bf2Render)
@@ -228,6 +310,10 @@ void VideoSettings::applyVideoOptionScheme(int /*unused*/)
         return;
     IVideoOptions* options = renderer->getVideoOptions();
     options->applyQualityPreset(m_pending.videoOptionScheme);
+    // [CHOSEN, not recovered] High (new profiles, reset to default, the High choice) adds the
+    // highest listed antialiasing; see selectMaxAntialiasing.
+    if (m_pending.videoOptionScheme == 2)
+        selectMaxAntialiasing(options);
     readOptions(options);
 }
 

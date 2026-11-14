@@ -59,7 +59,12 @@ const std::string& clientDataDirectory()
 
 int acquireClientInstanceLock()
 {
-    const std::string path = clientDataDirectory() + "/Client.lock";
+    // [CHOSEN, not recovered] Retail BF2.exe guards with the named mutex
+    // "Battlefield2_Instance_Mutex" and writes no lock file. The macOS lock file lives in the game
+    // folder (the working directory the setup app starts the client in), where retail writes its
+    // other non-profile files; only profiles go to the client data directory (owner, 2026-11-14;
+    // docs/macos-write-paths.md).
+    const std::string path = "Client.lock";
     const int fd = open(path.c_str(), O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, 0600);
     if (fd < 0)
         pathFailure("open instance lock", path, errno);

@@ -1,0 +1,35 @@
+# [TEMP] fourway: mouse-look gain calibration (counts per degree of yaw and pitch) on a rebuilt client
+# with BF2_PLAY_TRACE (one [PLAY] fwd line a second). Run with the render-view-dalian scenario's
+# pose (loopback.py --scenario render-view-dalian --input-script <this>), --spawn-time 1.
+include join-and-spawn
+log calib: start
+wait-ms 2500
+log calib: yaw0
+move-rel 200 0
+wait-ms 2500
+log calib: yaw1
+move-rel 200 0
+wait-ms 2500
+log calib: yaw2
+move-rel 200 0
+wait-ms 2500
+log calib: yaw3
+move-rel -600 0
+wait-ms 2500
+log calib: yaw4
+move-rel 0 150
+wait-ms 2500
+log calib: pitch1
+move-rel 0 -300
+wait-ms 2500
+log calib: pitch2
+move-rel 0 150
+wait-ms 2500
+log calib: pitch3
+move-rel 0 3000
+wait-ms 2500
+log calib: pitch-clamp-down
+move-rel 0 -6000
+wait-ms 2500
+log calib: pitch-clamp-up
+quit

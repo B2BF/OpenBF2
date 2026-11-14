@@ -166,7 +166,7 @@ public:
     virtual void  setInteractiveMode(bool b) { m_interactiveMode = b; }
     virtual bool  getInteractiveMode() const { return m_interactiveMode; }
     virtual int   getEaxVersion() const;
-    virtual int   queryPlayingSamples(int* count);
+    virtual const PlayingSampleInfo* queryPlayingSamples(int* count);   // 0x10004B80
     virtual void  setProfilerClient(IProfilerClient* p);
     virtual bool  loadMusic(const char* name);
     virtual bool  playMusic();

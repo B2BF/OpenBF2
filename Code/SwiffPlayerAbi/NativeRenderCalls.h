@@ -9,8 +9,7 @@ namespace dice { namespace hfe { namespace ui { namespace native_render {
 inline ISwiffRender* view(void* object) { return static_cast<ISwiffRender*>(object); }
 
 // The five former argument-mapping stops (slots 8, 32, 33, 34, 53) follow the
-// shipped SwiffPlayer.dll forwarders and RendDX9.dll SwiffRender bodies; the
-// instruction evidence is in docs/macos-c-swiff-re.md.
+// shipped SwiffPlayer.dll forwarders and RendDX9.dll SwiffRender bodies.
 inline int rcCreateEmpty(void* rc) { return view(rc)->slot6(); }
 inline int rcUploadAlpha(void* rc, unsigned w, unsigned h, const void* data) { return view(rc)->uploadAlpha(w,h,data); }
 // 0x10005B56: `push edi` (the image::rgb*) then call +0x20; RendDX9 0x101529D0 `or eax,-1; ret 4`.

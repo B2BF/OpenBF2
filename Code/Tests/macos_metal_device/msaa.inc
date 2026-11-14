@@ -1,4 +1,4 @@
-// [TEMP] [CHOSEN, not recovered] Multisampled surfaces (rend-msaa, docs/macos-r-msaa.md), run on a
+// [TEMP] [CHOSEN, not recovered] Multisampled surfaces (rend-msaa), run on a
 // device whose back buffer is 4x: creation and refusals, clear + StretchRect resolve, the D3D9
 // GetRenderTargetData refusal, a mismatched render target/depth pair, StretchRect into the
 // multisampled back buffer, and the screenshot copy (SCRATCH surface, D3DXLoadSurfaceFromSurface,

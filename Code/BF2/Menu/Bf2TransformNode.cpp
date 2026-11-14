@@ -38,7 +38,7 @@ bool sumNotLess(float first, float second, float limit) // 7C1ED1..7C1EEE, unord
     return !(sum < limit);
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     bool result;
     // [CHOSEN, not recovered] Preserve x87 unordered-or-not-less sum.
     result = bf2x87::sumNotLess(first, second, limit);
@@ -74,7 +74,7 @@ bool stateEnabled(float value) // 7C1EF3..7C1F24; decoded value stays in x87
     return !(decoded < 1.0);
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     const float one = 1.0f;
     bool result;
     // [CHOSEN, not recovered] Preserve x87 unspilled decoded state comparison.

@@ -14,7 +14,6 @@
 #include "../BF2/Core/EventManager.h"
 #include "../BF2/Game/HudInformationLayer.h"
 #include "../BF2/Game/IGame.h"
-#include "../BF2/Core/SoundSeamFrontier.h"
 #include "../BF2/Game/Main/BF2ClientSeams.h"
 #include "../BF2/External/BFMeme/System.h"
 #include "../BF2/External/BFMeme/NamedObjectRegistry.h"
@@ -1104,16 +1103,6 @@ int main(int argc, char** argv)
         CHECK(m.m_suppliesActive);
     }
     players.local = nullptr; players.byId = nullptr;
-
-    // Sound frontiers report and continue: count every hit and rate-limit after
-    // the third without aborting or silencing subsequent reports.
-    {
-        unsigned int soundHits = 0;
-        for (int i = 0; i != 300; ++i)
-            soundSeamFrontier(soundHits, "hud_map_create_runtime::soundSeamProbe",
-                              "fixture probe, no engine sound owner", "stop", "aSound");
-        CHECK(soundHits == 300u);
-    }
 
     hudManager = nullptr;
     destroyHudStorage(singleton);

@@ -6,7 +6,7 @@ import argparse, json
 from pathlib import Path
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--cfx", default=str(Path.home() / "Source/OpenBF2-wt/c-fx-permutations/out/c-fx"))
+ap.add_argument("--cfx", required=True, help="the c-fx-permutations prebuild output directory (out/c-fx)")
 ap.add_argument("--config", default="L3S1F3T3")
 ap.add_argument("--output", default="out/nativefx")
 a = ap.parse_args()

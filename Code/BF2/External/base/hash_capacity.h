@@ -10,7 +10,6 @@ namespace tu_util {
 // Returns the raw bucket-count bits for a positive signed 32-bit request.
 // The table reproduces SwiffPlayer's 24-bit, nearest-rounding arithmetic;
 // inherited 53/64-bit precision and directed rounding have different tables.
-// Evidence and the complete request intervals: docs/macos-swf-hashsize.md.
 inline uint32_t hash_raw_capacity(int requested_size)
 {
     static_assert(sizeof(int) == 4, "SwiffPlayer capacity requests are 32-bit");

@@ -88,40 +88,6 @@ template<class Module> void lifetime()
     watchedAllocation = nullptr;
 }
 
-static void frontier(const char* mode, const char* expected)
-{
-    char executable[MAX_PATH];
-    GetModuleFileNameA(nullptr, executable, MAX_PATH);
-    std::string command = std::string("\"") + executable + "\" " + mode;
-    SECURITY_ATTRIBUTES security{sizeof(security), nullptr, TRUE};
-    HANDLE readPipe = nullptr, writePipe = nullptr;
-    if (!CreatePipe(&readPipe, &writePipe, &security, 0)) { check(false, "create diagnostic pipe"); return; }
-    SetHandleInformation(readPipe, HANDLE_FLAG_INHERIT, 0);
-    STARTUPINFOA startup{};
-    startup.cb = sizeof(startup);
-    startup.dwFlags = STARTF_USESTDHANDLES;
-    startup.hStdOutput = writePipe;
-    startup.hStdError = writePipe;
-    startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
-    PROCESS_INFORMATION process{};
-    const BOOL started = CreateProcessA(nullptr, &command[0], nullptr, nullptr, TRUE,
-        CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process);
-    CloseHandle(writePipe);
-    check(started != FALSE, "start frontier child");
-    if (!started) { CloseHandle(readPipe); return; }
-    const DWORD wait = WaitForSingleObject(process.hProcess, 10000);
-    check(wait == WAIT_OBJECT_0, "frontier child terminates promptly");
-    if (wait != WAIT_OBJECT_0) TerminateProcess(process.hProcess, 99);
-    DWORD exitCode = 0;
-    GetExitCodeProcess(process.hProcess, &exitCode);
-    std::string output;
-    char buffer[512]; DWORD count;
-    while (ReadFile(readPipe, buffer, sizeof(buffer), &count, nullptr) && count) output.append(buffer, count);
-    CloseHandle(readPipe); CloseHandle(process.hThread); CloseHandle(process.hProcess);
-    check(exitCode != 0 && exitCode != STILL_ACTIVE, "frontier cannot return success");
-    check(output.find(expected) == 0, "first output is qualified flushed frontier diagnostic");
-    check(output.find("unexpected return") == std::string::npos, "frontier never returns");
-}
 
 static void bindings()
 {
@@ -185,36 +151,16 @@ static void bindings()
     check(mainConsoleObjects->getConsoleObjects().size() == before, "registry restored after full module lifecycle");
 }
 
-int main(int argc, char** argv)
+int main()
 {
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
-    if (argc == 2) {
-        auto& list = hudConsoleObjects();
-        auto iter = list.begin();
-        std::advance(iter, std::atoi(argv[1]));
-        ConsoleObjectBaseImpl* object = static_cast<ConsoleObjectBaseImpl*>(*iter);
-        if (std::strstr(argv[1], "-method")) object->executeObjectMethod();
-        else if (std::strstr(argv[1], "-convert")) object->setArgFromString(1, "1");
-        else if (std::strstr(argv[1], "-format")) object->getReturnValueAsString();
-        else object->execute(nullptr, 0);
-        std::puts("unexpected return");
-        return 0;
-    }
     lifetime<HudConsoleModule>();
     lifetime<ProfileConsoleModule>();
     bindings();
-    frontier("0", "[FRONTIER] dice::hfe::hud::HudConsoleBinding::execute: hudManager.refresh");
-    frontier("16", "[FRONTIER] dice::hfe::hud::HudConsoleBinding::execute: hudManager.setSpottedAngle");
-    // The index has to name a row that is still a stop, and the list shrinks as families
-    // land: 107 createCompassNode went with family C, 116 createButtonNode with family M.
-    // 93 setPictureNodeAlphaMask is deliberately chosen instead - no shipped HUD script
-    // calls it, so it is the last kind of row any family will convert. If it ever does
-    // become a real invoker, repoint this at another uncalled row (127, 134, 145, 146).
-    frontier("93", "[FRONTIER] dice::hfe::hud::HudConsoleBinding::execute: hudBuilder.setPictureNodeAlphaMask");
-    frontier("0-method", "[FRONTIER] dice::hfe::hud::HudConsoleBinding::executeObjectMethod:");
-    frontier("16-convert", "[FRONTIER] dice::hfe::hud::HudConsoleBinding::setArgFromString:");
-    frontier("0-format", "[FRONTIER] dice::hfe::hud::HudConsoleBinding::getReturnValueAsString:");
+    // Every HUD (frontier batch 7) and profile (batch 8) row now has its invoker; the stop checks went
+    // with them. Their behaviour is covered on macOS (bf2_game_frontier_check, loopback hud-console,
+    // hud-builder-console and profile-console).
     std::printf("Client console modules: %u/%u checks passed\n", checks-failures, checks);
     return failures ? 1 : 0;
 }

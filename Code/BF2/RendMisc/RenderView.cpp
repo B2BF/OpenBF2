@@ -320,7 +320,7 @@ void RenderView::setFov(float fovRadians)
     m_dirty42C = 1;
     m_dirty42D = 1;
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     if (!s_referenceFovValid)
     {
         s_referenceFov      = fovRadians;
@@ -415,7 +415,7 @@ void RenderView::setAdjustedFov(float radians)
 #endif
     setFov(radians);
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     float scale;
     if (m_aspect <= 0.5625f)
         scale = 1.7777778f;

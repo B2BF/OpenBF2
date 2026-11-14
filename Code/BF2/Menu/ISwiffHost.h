@@ -452,7 +452,7 @@ struct ISwiffHost : public IBase
     virtual std::string getJoinPassword() = 0;                                      //  96 +0x180  0x488240  +0xE20  joinServer
     virtual void setJoinPassword(const std::string& password) = 0;                  //  97 +0x184  0x488260  startGame: "" after a join
     virtual bool playSound(const std::string& name) = 0;                            //  98 +0x188  0x493C70  event 6 (dice.bf2.Sound.playSound)
-    virtual void slot18C(int a) = 0;                                                //  99 +0x18C  0x488920  ds:0xA23DC0 +0xB4 [UNRESOLVED]
+    virtual void slot18C(int a) = 0;                                                //  99 +0x18C  0x488920  g_bfSound->setMuteState(1, a)
     virtual bool getModCount(int* out) = 0;                                         // 100 +0x190  0x48A260  ModInfo list size
     virtual bool getModAt(int index, IModInfo::Mod* out) = 0;                       // 101 +0x194  0x4A2B00  *out = mods[index] (0x481490); [INFERRED] name, pointer spelling
     virtual bool requestActivateMod(const std::string* mod) = 0;                    // 102 +0x198  0x493CE0  event 11; null -> "no mod specified"

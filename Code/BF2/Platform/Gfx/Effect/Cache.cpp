@@ -1,4 +1,4 @@
-// [CHOSEN, not recovered] Owner-requested macOS CPU effect cache; see docs/macos-s2-fx-runtime.md.
+// [CHOSEN, not recovered] Owner-requested macOS CPU effect cache.
 #if defined(__APPLE__)
 #include "Cache.h"
 #include "Wire.h"

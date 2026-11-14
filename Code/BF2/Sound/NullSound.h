@@ -98,6 +98,21 @@ public:
 
 // Core sound-engine interface shared with the audio DLL. Preserve virtual declaration order.
 
+// One playing sample as ISoundEngine::queryPlayingSamples hands it out: 0x2C bytes, the fields
+// BF2.exe's BfSound::drawSoundSources (0x7E0E80) reads. Names are [INFERRED] from the overlay's
+// "V:"/"O:"/"P:" labels and from how each field is drawn. The shipped BF2Audio.dll never returns
+// any (0x10004B80: count 0, null).
+struct PlayingSampleInfo
+{
+    Vec3  position;       // +0x00
+    float minDistance;    // +0x0C  first circle radius
+    float maxDistance;    // +0x10  second circle radius; <= 0 draws twice minDistance
+    float volume;         // +0x14  "V: %.2f"
+    float obstruction;    // +0x18  "O: %.2f"
+    Vec3  velocity;       // +0x1C  drawn from position when longer than sqrt(0.1)
+    float pitch;          // +0x28  "P: %.2f"
+};
+
 class ISoundEngine
 {
 public:
@@ -153,7 +168,7 @@ public:
     virtual void  setInteractiveMode(bool) = 0;                              // +0xA8
     virtual bool  getInteractiveMode() const = 0;                            // +0xAC
     virtual int   getEaxVersion() const = 0;                                 // +0xB0
-    virtual int   queryPlayingSamples(int*) = 0;                             // +0xB4 [CHOSEN ret]
+    virtual const PlayingSampleInfo* queryPlayingSamples(int* count) = 0;    // +0xB4 (BF2.exe walks the result)
     virtual void  setProfilerClient(IProfilerClient*) = 0;                   // +0xB8
     virtual bool  loadMusic(const char*) = 0;                                // +0xBC [CHOSEN ret]
     virtual bool  playMusic() = 0;                                           // +0xC0 [CHOSEN ret] -
@@ -300,7 +315,7 @@ public:
     virtual void  setInteractiveMode(bool) {}
     virtual bool  getInteractiveMode() const { return false; }              // xor eax
     virtual int   getEaxVersion() const { return 0; }                       // xor eax
-    virtual int   queryPlayingSamples(int*) { return 0; }                   // xor eax
+    virtual const PlayingSampleInfo* queryPlayingSamples(int*) { return 0; } // xor eax
     virtual void  setProfilerClient(IProfilerClient*) {}
     virtual bool  loadMusic(const char*) { return true; }                   // mov eax, 1 / mov al, 1
     virtual bool  playMusic() { return true; }                              // mov eax, 1 / mov al, 1

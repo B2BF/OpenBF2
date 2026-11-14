@@ -25,7 +25,7 @@ namespace gameswf
 
 
 #if !defined(_MSC_VER)
-	// [TEMP] c-swf-disconnect display-list tracer (docs/macos-c-swf-disconnect.md), off unless
+	// [TEMP] c-swf-disconnect display-list tracer, off unless
 	// BF2_SWF_LIST_TRACE=1. One flushed stderr line per event, prefixed "[swf-list]"; a line
 	// identical to the previous one is counted, not repeated. g_swf_mouse_pass_depth is the
 	// nesting of sprite mouse passes, so a line can say whether it ran inside one.

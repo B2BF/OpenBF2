@@ -44,7 +44,7 @@ namespace gameswf
 	// shipped `reinterpret_cast<const Uint16*>(wide)` handed over 'W',0,'e',0,... and every
 	// localized menu string ended after its first character. dice_utf16 converts one wchar_t
 	// to one Uint16 (count-preserving; above U+FFFF becomes U+FFFD). The temporary lives to
-	// the end of the full expression that names it (docs/macos-c-asan-heap.md).
+	// the end of the full expression that names it.
 	struct dice_utf16
 	{
 		explicit dice_utf16(const wchar_t* wide)

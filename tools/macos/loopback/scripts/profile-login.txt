@@ -1,0 +1,18 @@
+# [TEMP] [CHOSEN, not recovered] Login dialog, SELECT ACCOUNT, connecting screen, main menu at 800x600 (docs/macos-profile-prefix.md).
+timeout 120
+wait-log mods/bf2/Movies/menu.bik
+wait-ms 3000
+move 400 300
+capture login-startup
+wait-ms 250
+click 536 414
+wait-ms 100
+capture connecting-100ms
+wait-ms 400
+capture connecting-500ms
+wait-ms 700
+capture connecting-1200ms
+wait-ms 4000
+capture after-login
+wait-ms 250
+quit

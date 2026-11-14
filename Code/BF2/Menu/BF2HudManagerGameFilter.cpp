@@ -16,6 +16,7 @@
 #include "../Game/IGameLogic.h"
 #include "../Game/Main/BF2.h"
 #include "../Game/Main/BF2ClientSeams.h"
+#include "../Game/VoipClient/BF2VoipClient.h"         // bf2VoipClient slots (vtable 0x89C1A8)
 #include "../Game/Objects/IObject.h"
 #include "../Game/Objects/IPlayer.h"
 #include "../Game/GameLogic/SquadManager/ISquadManager.h"

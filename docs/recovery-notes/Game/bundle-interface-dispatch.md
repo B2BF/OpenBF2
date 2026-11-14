@@ -56,7 +56,7 @@ the methods and their ordering, not native x86-64 byte offsets.
 ## Validation scope
 
 The pre-fix source, optimized object and disassembly are preserved locally under
-`/home/user/bf2-linux-bundle-nullcall/before`. A second source snapshot is under
+`bf2-linux-bundle-nullcall/before`. A second source snapshot is under
 `out/bundle-sound-dispatch-20261003`; both have SHA-256
 `e1510b00c99e5ab933135f6ee66784d1c7bc241fb9b0d3d7fb717fab06ece4a7`.
 The original optimized TU shows direct pure-virtual relocations in both affected
@@ -66,7 +66,7 @@ slot `+E8` and the driver-decal interface at `+230` and `+240`, with no direct
 pure-virtual relocation in either method.
 
 The isolated `linux-x64` build of `bf2` and `dice_py_check_run` passed under
-`/home/user/bf2-linux-bundle-nullcall/build`. This is a strict link, with the
+`bf2-linux-bundle-nullcall/build`. This is a strict link, with the
 normal optimized preset and static C++ runtime. The Python check passed 40
 builtin imports, the 64-bit PyCObject roundtrip, zlib and loopback UDP.
 
@@ -102,7 +102,7 @@ The runner accepts `--mode sound` or `--mode decal`, and an optional `--baseline
 path to a saved complete production TU. It preserves that TU's bodies and only
 relocates its relative include paths. It neither disables virtual-call
 optimization nor suppresses linker errors. Linux results are under
-`/home/user/bf2-bundle-sound-fixture-20261003/{before,after-final}`; Windows results
+`bf2-bundle-sound-fixture-20261003/{before,after-final}`; Windows results
 are under `out/bundle-sound-dispatch-20261003`.
 
 An isolated Karkand `gpm_cq 32` server run used loopback port **17691**, private
@@ -113,7 +113,7 @@ roughly 35–36 FPS for another 45 seconds, then exited normally through console
 `quit` at about 49 seconds. No frontier or crash was observed.
 The game port and query port `30691` both rebound immediately after the test.
 Runtime evidence is under `out/bundle-interface-nullcall-20261003/runtime`;
-the private content tree is `/home/user/bf2-bundle-nullcall-runtime-20261003/game`.
+the private content tree is `bf2-bundle-nullcall-runtime-20261003/game`.
 AI, PunkBuster and VOIP were disabled; the run was LAN/unranked and had no clients.
 
 The sound-setter breakpoint did not fire with that server-content copy and no

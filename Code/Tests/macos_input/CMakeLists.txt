@@ -1,4 +1,4 @@
-# [TEMP] macOS input review harness (docs/macos-c-input-review.md). A standalone project like
+# [TEMP] macOS input review harness. A standalone project like
 # Code/Tests/macos_host, so it builds without the client:
 #
 #   cmake -S Code/Tests/macos_input -B out/build/macos-input-test -DCMAKE_BUILD_TYPE=RelWithDebInfo
@@ -11,7 +11,7 @@
 # engine-facing device interfaces report. Exit status 0 when every check passes.
 # [RETIRE-WHEN: macos-client-window] Fold into the client's test suite once bf2_client runs input.
 cmake_minimum_required(VERSION 3.21)
-# GCMouse (MacRawMouse.mm) needs macOS 11, the port's minimum (docs/macos-c-raw-mouse.md).
+# GCMouse (MacRawMouse.mm) needs macOS 11, the port's minimum.
 set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS version")
 project(macos_input_test LANGUAGES C CXX OBJCXX)
 

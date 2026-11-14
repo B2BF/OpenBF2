@@ -1,12 +1,15 @@
-// dice::meme::SliderNode. Constructor, metadata, both child accessors and
-// visitChildren are read in full from BF2.exe; the six per-frame/event bodies
-// below are named frontiers with their addresses and byte counts recorded.
+// dice::meme::SliderNode, read in full from BF2.exe 0x833660..0x833DD2 (BFMeme library slider; the
+// HUD builds Bf2FixedSliderNode). x87 intermediates are carried in double and stored as float
+// where the shipped code stores them; the owner dropped the bit-exact goal (2026-11-05).
 #include "SliderNode.h"
 #if !DEDICATED
 #include "TypeDescriptor.h"
 #include "Style.h"   // dice::meme::Rect is defined here
-#include <cstdio>
-#include <cstdlib>
+#include "Data.h"
+#include "SliderNodeMath.h"
+#include "NodeState.h"
+#include "Stream.h"
+#include "System.h"
 namespace dice { namespace meme {
 
 // Node() first, then nine own words in the shipped order: the vptr
@@ -68,40 +71,155 @@ void SliderNode::visitChildren(System* system, NodeState* state, const Rect* bou
 }
 
 
-// [FRONTIER] [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: slider-node-bodies]
-// Unfinished drawing and input methods diagnose and stop on use; BfFixedSliderNode shares these boundaries.
+using namespace slider;
 
-namespace {
-void sliderFrontier(const char* method, const char* site)
+// 833700: the thumb's width on a track of the given width.
+float SliderNode::thumbExtent(const float* width) const
 {
-    std::fprintf(stderr, "[FRONTIER] dice::meme::SliderNode::%s reached (BF2.exe %s)\n",
-                 method, site);
-    std::fflush(stderr);
-    std::abort();
-}
+    return static_cast<float>(m_thumbSpan / orderedSpan(m_minimum, m_maximum) * *width);
 }
 
-bool SliderNode::streamProperties(System*, Stream*)
-{ sliderFrontier("streamProperties", "833660, 151 B"); return false; }
+// 833740: places the thumb from the bound value; nothing without a Data. The value
+// scale uses the plain max - min (not the ordered span) as shipped.
+void SliderNode::syncFromData(System* system, const float* width)
+{
+    if (!m_data) return;
+    const double thumb = m_thumbSpan / orderedSpan(m_minimum, m_maximum) * *width;
+    const float scale = static_cast<float>((*width - thumb) /
+        (static_cast<double>(m_maximum) - m_minimum));
+    m_thumbOffset = static_cast<float>(
+        (static_cast<double>(m_data->getFloat(system)) - m_minimum) * scale);
+}
 
-void SliderNode::paint(System*, const NodeState*, const Rect*, const Rect*, RenderContext*)
-{ sliderFrontier("paint", "833B80, 269 B"); }
+// 833660: Node's properties, then the cursor (thumb) node, the bound Data and the three
+// range floats, each stream answer gating the next.
+bool SliderNode::streamProperties(System* system, Stream* stream)
+{
+    if (!Node::streamProperties(system, stream)) return false;
+    if (!stream->streamNode0x84(system, m_child1, "Cursor node", nullptr)) return false;
+    if (!stream->streamData(system, m_data, "Data", nullptr)) return false;
+    if (!stream->streamFloat(&m_minimum, "Minimum value")) return false;
+    if (!stream->streamFloat(&m_maximum, "Maximum value")) return false;
+    return stream->streamFloat(&m_thumbSpan, "Number visible");
+}
 
-bool SliderNode::update(System*, const NodeState*, const Rect*, float)
-{ sliderFrontier("update", "833C90, 325 B"); return false; }
+// 833B80: the thumb rectangle, painted with the slider's own state; under an effect it
+// gets a child context (the parent, no effect, the decoded state and its rate) as a
+// TransformNode builds one. Then Node's own paint.
+void SliderNode::paint(System* system, const NodeState* state, const Rect* bounds,
+                       const Rect* clip, RenderContext* context)
+{
+    if (m_child1) {
+        Rect thumb = *bounds;
+        thumb.x = bounds->x + m_thumbOffset;
+        thumb.width = static_cast<float>(m_thumbSpan / orderedSpan(m_minimum, m_maximum) * thumb.width);
+        if (context->effect) {
+            RenderContext child = {context, nullptr, context->field08, context->field0c,
+                                   context->field10, decodedState(m_state.current), 1.0f};
+            child.field10 = stateRate(m_state);
+            m_child1->paint(system, &m_state, &thumb, clip, &child);
+        } else {
+            m_child1->paint(system, &m_state, &thumb, clip, context);
+        }
+    }
+    Node::paint(system, state, bounds, clip, context);
+}
 
-bool SliderNode::updateSelf(System*, const NodeState*, const Rect*, float)
-{ sliderFrontier("updateSelf", "833810, 233 B"); return false; }
+// 833C90: the slider's state follows the pointer over the thumb (only while the parent
+// is pressed, edges included, NaN inside) and the parent's decoded state; then the thumb
+// updates, and a refusal stops the walk before Node's own update.
+bool SliderNode::update(System* system, const NodeState* state, const Rect* bounds, float delta)
+{
+    Rect thumb = *bounds;
+    thumb.x = bounds->x + m_thumbOffset;
+    thumb.width = static_cast<float>(m_thumbSpan / orderedSpan(m_minimum, m_maximum) * thumb.width);
+    bool inside = false;
+    if (state->target < 0.0f) inside = pointerInside(system->getPointerPosition(), thumb);
+    const bool enabled = !(decodedState(state->target) < 1.0f);
+    updateNodeState(&m_state, system, this, m_child1, &thumb, delta, inside, enabled);
+    if (m_child1 && !m_child1->update(system, &m_state, &thumb, delta)) return false;
+    return Node::update(system, state, bounds, delta);
+}
 
-bool SliderNode::onEvent1(System*, const Rect*, const NodeState*, int, int, int)
-{ sliderFrontier("onEvent1", "833900, 292 B"); return false; }
+// 833810: while a press is held the thumb follows the pointer (clamped into the track,
+// less the grab offset, kept inside [0, width - thumb]) and writes the value back to the
+// Data; otherwise it is placed from the Data. Always true.
+bool SliderNode::updateSelf(System* system, const NodeState* state, const Rect* rect, float)
+{
+    if (!m_data) return true;
+    if (!pressHeld(state, system)) {
+        syncFromData(system, &rect->width);
+        return true;
+    }
+    const float* pointer = system->getPointerPosition();
+    float position[2] = {pointer[0], pointer[1]};
+    clampToRect(position, rect);
+    position[0] = position[0] - rect->x;
+    const double thumb = m_thumbSpan / orderedSpan(m_minimum, m_maximum) * rect->width;
+    const double offset = static_cast<double>(position[0]) - m_grabOffset;
+    m_thumbOffset = static_cast<float>(offset);
+    if (offset < 0.0) m_thumbOffset = 0.0f;
+    const double limit = rect->width - thumb;
+    if (!(m_thumbOffset < limit) && !(limit != limit) && !(m_thumbOffset != m_thumbOffset))
+        m_thumbOffset = static_cast<float>(limit);
+    const double value = m_thumbOffset /
+        ((rect->width - thumb) / (static_cast<double>(m_maximum) - m_minimum)) + m_minimum;
+    m_data->setFloat(system, static_cast<float>(value));
+    return true;
+}
 
-// One shipped body serves both slots +78 and +7C; it is not duplicated code.
-bool SliderNode::onEvent2(System*, const Rect*, const NodeState*, int, int)
-{ sliderFrontier("onEvent2", "833A30, 46 B, shared with onEvent3"); return false; }
+// 833900: a primary press (first 1, second 1) that is not already held locks the pointer
+// and records where on the thumb it landed. A press beside the thumb pages it by whole
+// thumb widths towards the pointer (clamped at both track ends), then the slider updates
+// once with a zero delta. A held or other press is refused.
+bool SliderNode::onEvent1(System* system, const Rect* rect, const NodeState* state,
+                          int first, int, int second)
+{
+    if (pressHeld(state, system)) return false;
+    if (first != 1 || second != 1) return false;
+    system->lockPointer();
+    const float* pointer = system->getPointerPosition();
+    const float local = static_cast<float>(static_cast<double>(pointer[0]) - rect->x);
+    m_grabOffset = static_cast<float>(static_cast<double>(local) - m_thumbOffset);
+    const float grab = m_grabOffset;
+    const float page = thumbExtent(&rect->width);
+    if (grab < 0.0f) {
+        do {
+            m_thumbOffset = static_cast<float>(static_cast<double>(m_thumbOffset) - page);
+            m_grabOffset = static_cast<float>(static_cast<double>(page) + m_grabOffset);
+            if (m_thumbOffset < 0.0f) {
+                m_grabOffset = local;
+                m_thumbOffset = 0.0f;
+            }
+        } while (m_grabOffset < 0.0f);
+    }
+    while (m_grabOffset > page) {
+        m_thumbOffset = static_cast<float>(static_cast<double>(page) + m_thumbOffset);
+        m_grabOffset = static_cast<float>(static_cast<double>(m_grabOffset) - page);
+        if (static_cast<double>(page) + m_thumbOffset >= rect->width) {   // `test ah,1`: NaN skips
+            m_thumbOffset = static_cast<float>(static_cast<double>(rect->width) - page);
+            m_grabOffset = static_cast<float>(static_cast<double>(local) - m_thumbOffset);
+        }
+    }
+    updateSelf(system, state, rect, 0.0f);
+    return true;
+}
 
-bool SliderNode::onEvent3(System*, const Rect*, const NodeState*, int, int)
-{ sliderFrontier("onEvent3", "833A30, 46 B, shared with onEvent2"); return false; }
+// 833A30, both slots +78 and +7C: the release of the primary press unlocks the pointer and
+// re-places the thumb from the Data. Never consumes the event.
+bool SliderNode::onEvent2(System* system, const Rect* rect, const NodeState*, int first, int)
+{
+    if (first == 1) {
+        system->unlockPointer();
+        syncFromData(system, &rect->width);
+    }
+    return false;
+}
+
+bool SliderNode::onEvent3(System* system, const Rect* rect, const NodeState* state, int first, int index)
+{
+    return SliderNode::onEvent2(system, rect, state, first, index);
+}
 
 } }
 #endif

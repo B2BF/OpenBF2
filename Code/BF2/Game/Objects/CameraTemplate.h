@@ -79,6 +79,9 @@ public:
     // NOT A shipped function. Camera::handleExplosion reads template +704 directly in both
     // ports (ELF +0x2C0 / PE +0x370); this accessor is only the typed C++ home for that proven read.
     float getCameraShakeSensitivity() const { return m_cameraShakeSensitivity; }
+    // Likewise for Camera::updateCameraShake's direct reads of +708 / +712 (ELF 0x81DC291, 0x81DC4BF).
+    float getCameraShakeStartSpeed() const { return m_cameraShakeStartSpeed; }
+    float getCameraShakeMaxSpeed() const { return m_cameraShakeMaxSpeed; }
 
 protected:
     // layout, offsets 532..807. RotationalBundleTemplate occupies 0..531.

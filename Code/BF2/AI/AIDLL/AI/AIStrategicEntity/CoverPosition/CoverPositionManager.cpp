@@ -53,7 +53,7 @@ CoverPositionManager::CoverPositionManager()
         m_instance = this;
 }
 
-// ELF 0x357680 (D1, 337 B; recovered on the client track, docs/macos-c-singleplayer.md): the
+// ELF 0x357680 (D1, 337 B; recovered on the client track): the
 // singleton is zeroed when it is this one, the CPNode pathfinding engine is deleted, every cover
 // position is deleted (CoverPosition D1 0x352EA0 destroys members only) and the vector emptied;
 // the distance table and the position vector then go as members.

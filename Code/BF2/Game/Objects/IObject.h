@@ -20,6 +20,7 @@ struct LocalBoundingBox;
 namespace io { class INetworkable; class PlayerInput; }
 namespace geom { class IGeometry; }
 namespace hud { class BF2HudManager; class HudVehicleInformation; class HudAmmo; class HudMessages; }
+class DistributedLightRenderer;
 class BF2FrameInterpolator;         // Game/Main/BF2FrameInterpolator.h - reads +0x08/+0x38 directly
 namespace world {
 
@@ -264,6 +265,8 @@ protected:
     friend class hud::HudVehicleInformation; // PE78B940/78B4E0: kit ability component+60
     friend class hud::HudAmmo; // PE7A5600/7A59D0/7A8460: HUD component fields+54/+60/+6C
     friend class hud::HudMessages; // PE79E1B0/79E450: cached weapon/vehicle HUD components
+    // traceAllObjects (46C580) tests the flags and geometry fields; assignWorkItem reads the id.
+    friend class hfe::DistributedLightRenderer;
     // Bundle::handleMessage walks the raw sibling/parent links and reads the armor field directly
     // rather than dispatching getSibling()/getParent(), exactly as both ports do.
     friend class Bundle;

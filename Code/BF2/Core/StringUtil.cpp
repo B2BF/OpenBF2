@@ -1,6 +1,9 @@
 // Shared string comparisons, hashing, formatting and path helpers.
 // Source path is attested by anonymous-namespace symbols.
 
+#if defined(__APPLE__)
+#include <sys/stat.h>
+#endif
 #include "StringUtil.h"
 
 #include <cstdarg>      // formatString is variadic
@@ -348,6 +351,24 @@ bool isPathAbsolute(const std::string& s)
 #endif
 }
 
+#if defined(__APPLE__) && !DEDICATED
+// [CHOSEN, not recovered] macOS client port. On Windows
+// isPathAbsolute only accepts drive paths, so game paths such as "/Levels/..." (SwiffPlayer) or
+// "/objects/..." (SF and booster mesh texture names) are relative. On a POSIX host every '/' path
+// would count as absolute; host-absolute paths in the client come from the absolute @HOME@
+// substitution (or a developer's own absolute path) and are told apart by a first component that
+// exists at the host root.
+bool isHostAbsolutePath(const std::string& path)
+{
+    if (!isPathAbsolute(path))
+        return false;
+    const std::string::size_type end = path.find('/', 1);
+    const std::string first = path.substr(0, end);
+    struct stat st;
+    return first.size() > 1 && ::stat(first.c_str(), &st) == 0;
+}
+#endif
+
 // Normalizes both slash forms to c. fixPath additionally ensures a trailing separator;
 // both preserve an empty string as empty.
 // ELF 0x48B3E0.
@@ -528,22 +549,27 @@ void goUpInPath_worker(std::string& path)
 }
 } // anonymous namespace
 
-// ELF 0x48B930; engine ELF 0x83D1090.
+// ELF 0x48B930; engine ELF 0x83D1090: isPathAbsolute, the worker, then "/" re-inserted for an
+// absolute path (on ELF exactly a path with a leading '/').
+// PE BF2.exe 0x00431BE0: a jump to the worker 0x00431B60, no restore. Drive paths never had a
+// leading '/', and a game path's leading '/' is dropped, which is what lets "/objects/..."
+// texture names (SF and booster meshes) resolve in the archives mounted at "objects/".
 void goUpInPath(std::string& path)
 {
-    // The worker strips a leading '/'; the ELF restores it for an absolute path, and on ELF an
-    // absolute path is exactly one with a leading '/'.
-    // [PLATFORM] isPathAbsolute also accepts drive paths (C:/...) on Windows, which never had a
-    // leading '/'; restoring one there yields "/C:/..." and breaks every file lookup. Windows
-    // restores the slash only when the path started with one. [INFERRED] PE body not compared.
 #if defined(_WIN32)
-    const bool absolute = !path.empty() && path[0] == '/';
+    goUpInPath_worker(path);
+#else
+#if defined(__APPLE__) && !DEDICATED
+    // [PLATFORM] the client keeps the Windows meaning for game paths; only host-absolute paths
+    // (isHostAbsolutePath) get their '/' back.
+    const bool absolute = isHostAbsolutePath(path);
 #else
     const bool absolute = isPathAbsolute(path);
 #endif
     goUpInPath_worker(path);
     if (absolute)
         path.insert(0, "/");
+#endif
 }
 
 // ELF 0x48B330; RendDX9.dll PE 0x100752B0 (hidden-result wrapper over 0x10075970). Returns the final path component without its last extension. Names without a dot remain unchanged.

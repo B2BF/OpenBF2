@@ -11,6 +11,8 @@ void mainThread(const char* method);
 Adapter* createAdapter();
 void destroyAdapter(Adapter*);
 const char* adapterName(Adapter*);
+// The GPU's PCI vendor and device IDs (Apple silicon: 0x106B, 0).
+void adapterPciIds(Adapter*, unsigned& vendor, unsigned& device);
 bool supportsBC(Adapter*);
 // The view is a borrowed Cocoa NSView with a CAMetalLayer, retained by Frame.
 // samples > 1: a multisampled back buffer (and auto depth) resolved into the single-sample
@@ -21,6 +23,8 @@ void destroyFrame(Frame*);
 bool reset(Frame*, unsigned width, unsigned height, bool vsync, bool depth, unsigned samples = 1);
 // True when the GPU renders a colour (BGRA8) and D24S8-class depth target at this sample count.
 bool supportsSamples(Adapter*, unsigned samples);
+// The GPU's recommended working set in bytes (IDirect3DDevice9::GetAvailableTextureMem).
+unsigned availableTextureMemory(Frame*);
 void dimensions(Frame*, unsigned& width, unsigned& height);
 bool resized(Frame*);
 bool healthy(Frame*);

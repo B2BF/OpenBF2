@@ -1,0 +1,169 @@
+# [TEMP] rend-handcheck: vehicle TV view
+# NOTE: the two 'key enter' after JOIN GAME below are the obsolete R-game-2 workaround (Bf2MenuMapNode
+# +0x68D is zeroed now); they are harmless but no longer needed.
+# [TEMP] join-and-spawn: from the loaded-map screen to a spawned soldier (docs/macos-c-input-script.md).
+# Coordinates are 800x600: the harness runs +szx 800 +szy 600, which is also the HUD's own layout
+# space (Menu_client.zip HUD/HudSetup/SpawnInterface/*.con).
+timeout 300
+log waiting for the level load
+wait-log ingameMap.tga
+wait-ms 5000
+capture loaded
+# "MAP LOADED, SELECT THE JOIN GAME BUTTON OR PRESS ESCAPE TO ENTER THE GAME" (Swiff menu, window path)
+# Click JOIN GAME rather than pressing Escape: Escape went to the main menu in 2 of 5 runs (ai-bot, 2026-11-01).
+click 745 583
+# The spawn screen (HUD mode 1) opens, but on first entry its map is often hidden: HUD mode 1
+# does not set MapShow (HudInformationAdapter), only leaving a mode through the default arm does.
+# Enter (c_GIEnter) closes and reopens the spawn screen, as a player would, which shows it.
+wait-ms 4000
+capture spawn-screen-first
+key enter
+wait-ms 1500
+key enter
+wait-ms 3000
+capture spawn-screen
+# Kit 0, Special Forces (SelectKit0 10 73 246 69: "spawnManager.setPlayerKit 0"); in-game HUD pointer path.
+hud-click 130 107
+wait-ms 1000
+# Spawn point: in spawn mode a press on the map picks the nearest spawn group
+# (Bf2MenuMapNode::pickSpawnGroup; within the icon pick radius). [hc] the US main base (combat-area centred map).
+hud-click 466 138
+wait-ms 1000
+capture selected
+# DoneButton 666 539 124 17, mouse area 0 -5 124 22: "hudManager.setDone 1"
+hud-click 728 546
+wait-ms 10000
+capture spawned-1
+log hc: jet start
+wait-ms 1500
+log hc: nametags in the open
+aim friend 1.5 5000
+wait-ms 600
+capture tag-stand
+key z
+wait-ms 2500
+aim friend 1.5 5000
+wait-ms 600
+capture tag-prone
+move-rel 0 -100
+wait-ms 800
+capture tag-prone-up
+move-rel 0 100
+key z
+wait-ms 2500
+walk-to tmpl:usair_f15 3 30000
+face tmpl:usair_f15 5 3000
+capture a-at-jet
+key e 150
+wait-log-else 5 route vehicle=usair_f15
+log hc: entered from a near spawn
+wait-ms 3500
+capture a-jet-seat-a
+log hc: rear seat (F2)
+key f2 150
+wait-ms 3000
+capture a-jet-rear-w1
+log hc: alternate view on weapon 1 (laser Maverick, right mouse)
+button-down 1
+wait-ms 150
+button-up 1
+wait-ms 2000
+capture a-jet-alt-w1
+button-down 1
+wait-ms 150
+button-up 1
+wait-ms 2000
+capture a-jet-alt-w1-off
+log hc: TV Maverick (2)
+key 2 150
+wait-ms 2500
+capture a-jet-rear-w2
+button-down 1
+wait-ms 150
+button-up 1
+wait-ms 2000
+capture a-jet-tv-1
+wait-ms 600
+capture a-jet-tv-2
+move-rel 150 60
+wait-ms 1500
+capture a-jet-tv-3
+log hc: leave the alternate view
+button-down 1
+wait-ms 150
+button-up 1
+wait-ms 2000
+capture a-jet-tv-off
+log hc: alternate view again, then exit while in it
+button-down 1
+wait-ms 150
+button-up 1
+wait-ms 2000
+capture a-jet-tv-4
+key e 150
+wait-ms 3000
+capture a-jet-exited
+wait-ms 1500
+capture a-jet-exited-2
+wait-log-else 0.1 end ZZZ-never-ZZZ
+label route
+log hc: far spawn - route up to the airfield platform
+walk-to -505/35/595 4 30000
+walk-to -477/37/569 4 30000
+walk-to -442/37/546 4 30000
+walk-to -430/39/620 4 30000
+walk-to tmpl:usair_f15 3 40000
+face tmpl:usair_f15 5 3000
+capture b-at-jet
+log hc: enter (E)
+key e 150
+wait-ms 3500
+capture b-jet-seat-a
+log hc: rear seat (F2)
+key f2 150
+wait-ms 3000
+capture b-jet-rear-w1
+log hc: alternate view on weapon 1 (laser Maverick, right mouse)
+button-down 1
+wait-ms 150
+button-up 1
+wait-ms 2000
+capture b-jet-alt-w1
+button-down 1
+wait-ms 150
+button-up 1
+wait-ms 2000
+capture b-jet-alt-w1-off
+log hc: TV Maverick (2)
+key 2 150
+wait-ms 2500
+capture b-jet-rear-w2
+button-down 1
+wait-ms 150
+button-up 1
+wait-ms 2000
+capture b-jet-tv-1
+wait-ms 600
+capture b-jet-tv-2
+move-rel 150 60
+wait-ms 1500
+capture b-jet-tv-3
+log hc: leave the alternate view
+button-down 1
+wait-ms 150
+button-up 1
+wait-ms 2000
+capture b-jet-tv-off
+log hc: alternate view again, then exit while in it
+button-down 1
+wait-ms 150
+button-up 1
+wait-ms 2000
+capture b-jet-tv-4
+key e 150
+wait-ms 3000
+capture b-jet-exited
+wait-ms 1500
+capture b-jet-exited-2
+label end
+log hc: jet done

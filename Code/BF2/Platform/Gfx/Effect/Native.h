@@ -1,9 +1,10 @@
 // [CHOSEN, not recovered] Native (Wine-free) effect compilation for the macOS client:
 // vkd3d-shader (LGPL-2.1+, LICENSE.vkd3d) compiles each shader to D3D9 bytecode, the effect
 // parser/builder (FxBuild.h) produces the Description, MojoShader translates to MSL.
-// See docs/macos-c-native-fx.md and docs/macos-c-native-fx2.md.
+// Build setup: docs/building.md (macOS).
 #pragma once
 #include "Cache.h"
+#include "FxBuild.h"
 #include <functional>
 #include <future>
 #include <string>
@@ -47,6 +48,14 @@ using Done = std::function<void(const Entry&)>;
 std::shared_future<Entry> submit(const std::string& key, const Request& request, std::string text, Done done);
 Entry wait(const std::string& key, const std::shared_future<Entry>& future);
 size_t pending();
+
+// Shader-level memo (Native.cpp): the text a shader job of a D3DX-accepted request compiles,
+// reduced to what `entry` reaches, whitespace collapsed. False when the text does not parse or
+// has no such function (the job then compiles the full text). Counts are process totals.
+bool trimSource(const std::string& text, const std::string& entry, std::string& out);
+void memoCounts(unsigned& hits, unsigned& misses);
+// One shader job's compile (profile ladder and MojoShader probe) of `source` (text + wrapper).
+bool compileJob(const ShaderJob& job, const std::string& source, Bytes& bytecode, std::string& error);
 
 } // namespace native
 } // namespace bf2fx

@@ -3,6 +3,11 @@
 
 Both manifest prewarming and runtime request replay use cache-tool's production key
 and wire codec. A compiler refusal is a failed job, never a usable cache entry.
+
+Validator caveat: fxcompile loads the retail d3dx9_25.dll natively but Wine's builtin d3d9.dll,
+whose shader validator (Direct3DShaderValidatorCreate9) is a stub that accepts everything. Outcomes
+here therefore miss validator refusals (X5111, X5500, ...) that native Windows reports; the refusal
+table takes those from a native run (refusal_table.py --native-result, Code/Tests/effect_check).
 """
 import argparse
 import hashlib
@@ -198,6 +203,11 @@ def main():
         raise ValueError("No requests selected; supply --manifest, --requests or --retarget")
     if a.capture_only:
         (cache / "requests.txt").write_text("".join(key + "\n" for key, _, _ in requests))
+        # job id -> request key of every captured job (next_attempts.py reads it).
+        index_path = cache / "capture-index.json"
+        index = json.loads(index_path.read_text()) if index_path.exists() else {}
+        index.update({job: key for key, jobs in aliases.items() for job in jobs})
+        index_path.write_text(json.dumps(index, indent=0, sort_keys=True) + "\n")
         print(f"Captured {len(requests)} unique requests; no compiler was run")
         return 0
     batch = []

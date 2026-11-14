@@ -1,0 +1,14 @@
+# [TEMP] console-quit (rend-hud): spawn, then quit with the console `quit` command, which runs
+# BF2Engine::shutdown (HUD manager delete, then shutdownEngine and the renderer deinit). Judge the
+# run from client.log and client.result: exit code 0 and no RendDX9Init.cpp release fatal.
+include join-and-spawn
+timeout 300
+wait-ms 3000
+key grave
+wait-ms 1000
+type quit
+wait-ms 500
+capture typed-quit
+log console quit sent
+key enter
+wait-ms 60000

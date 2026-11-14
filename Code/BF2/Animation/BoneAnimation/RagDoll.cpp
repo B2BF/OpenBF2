@@ -6,8 +6,10 @@
 
 #include <cfloat>       // FLT_EPSILON - the inlined Vec3::normalize guard
 #include <cmath>        // sqrtf / fabsf
-#include <cstdio>       // fprintf / fflush - the two [FRONTIER] stops
+#include <cstdio>
 #include <cstdlib>      // abort
+#include <list>
+#include <string>
 #include <vector>
 
 #include "../../Core/Ids.h"                        // CID_TriggerableTargetTemplate
@@ -25,6 +27,8 @@
 #include "../../Math/LocalBoundingBox.h"
 #include "../../IO/BitStream.h"
 #include "../../Core/IBase.h"
+#include "../../Core/SmartItf.h"                 // classManager - the DebugRenderer singleton
+#include "../../Core/ClassManager.h"
 
 namespace dice {
 
@@ -763,21 +767,161 @@ void RagDoll::checkDistanceLessThanConstraints()
 }
 
 
-// Client debug line/constraint drawing remains a named stop; dedicated servers do not draw constraints.
-// [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: ragdoll-debug-draw]
+// Constraint debug drawing: each segment is the renderer's debug cylinder (CID 81016) stretched
+// between its two points, 0.002 thick, coloured through the mesh's IID 80007 interface.
+namespace {
 
-void RagDoll::drawDebugLine(const Vec3& /*from*/, const Vec3& /*to*/, const hfe::Vec4& /*colour*/)
+// "DebugRenderer" (geom::IDebugRenderer, GeomMisc/DebugRenderer.h): the slots used here, in table
+// order. Declared locally, as AI's DebugRenderer.cpp does for its writer.
+class IDebugGeometryQueue : public hfe::IBase
 {
-    std::fprintf(stderr, "[FRONTIER] dice::anim::RagDoll::drawDebugLine reached\n");
-    std::fflush(stderr);
-    std::abort();
+public:
+    virtual void flush() = 0;                                                           // +0x10
+    virtual void queueGeometry(unsigned int classId, const hfe::Mat4& transform,
+                               const std::string& technique) = 0;                       // +0x14
+    virtual hfe::IBase* acquireGeometry(unsigned int classId) = 0;                           // +0x18
+
+protected:
+    ~IDebugGeometryQueue() {}
+};
+
+// The debug mesh's table up to its colour setter: entry 62 (+0xF8) of the DebugCylinderMesh table
+// (RendDX9 PE 0x1020BD00, GeomMisc/DebugCylinderMesh.cpp). The entries before it are not called.
+class IDebugMeshColour : public hfe::IBase
+{
+public:
+    virtual void unused10() = 0;
+    virtual void unused14() = 0;
+    virtual void unused18() = 0;
+    virtual void unused1C() = 0;
+    virtual void unused20() = 0;
+    virtual void unused24() = 0;
+    virtual void unused28() = 0;
+    virtual void unused2C() = 0;
+    virtual void unused30() = 0;
+    virtual void unused34() = 0;
+    virtual void unused38() = 0;
+    virtual void unused3C() = 0;
+    virtual void unused40() = 0;
+    virtual void unused44() = 0;
+    virtual void unused48() = 0;
+    virtual void unused4C() = 0;
+    virtual void unused50() = 0;
+    virtual void unused54() = 0;
+    virtual void unused58() = 0;
+    virtual void unused5C() = 0;
+    virtual void unused60() = 0;
+    virtual void unused64() = 0;
+    virtual void unused68() = 0;
+    virtual void unused6C() = 0;
+    virtual void unused70() = 0;
+    virtual void unused74() = 0;
+    virtual void unused78() = 0;
+    virtual void unused7C() = 0;
+    virtual void unused80() = 0;
+    virtual void unused84() = 0;
+    virtual void unused88() = 0;
+    virtual void unused8C() = 0;
+    virtual void unused90() = 0;
+    virtual void unused94() = 0;
+    virtual void unused98() = 0;
+    virtual void unused9C() = 0;
+    virtual void unusedA0() = 0;
+    virtual void unusedA4() = 0;
+    virtual void unusedA8() = 0;
+    virtual void unusedAC() = 0;
+    virtual void unusedB0() = 0;
+    virtual void unusedB4() = 0;
+    virtual void unusedB8() = 0;
+    virtual void unusedBC() = 0;
+    virtual void unusedC0() = 0;
+    virtual void unusedC4() = 0;
+    virtual void unusedC8() = 0;
+    virtual void unusedCC() = 0;
+    virtual void unusedD0() = 0;
+    virtual void unusedD4() = 0;
+    virtual void unusedD8() = 0;
+    virtual void unusedDC() = 0;
+    virtual void unusedE0() = 0;
+    virtual void unusedE4() = 0;
+    virtual void unusedE8() = 0;
+    virtual void unusedEC() = 0;
+    virtual void unusedF0() = 0;
+    virtual void unusedF4() = 0;
+    virtual void setColour(const hfe::Vec4& colour) = 0;                                // +0xF8
+
+protected:
+    ~IDebugMeshColour() {}
+};
+
+const unsigned int kDebugCylinderMesh  = 81016u;   // CID_DebugCylinderMesh (BF2.exe ds:0x94F660)
+const unsigned int kIDebugCylinderMesh = 80007u;   // IID_IDebugCylinderMesh (BF2.exe ds:0x94F5D0)
+
+IDebugGeometryQueue* debugRenderer()
+{
+    return static_cast<IDebugGeometryQueue*>(hfe::classManager->getSingleton(std::string("DebugRenderer")));
 }
 
+// The shared segment body (BF2.exe 0x7E71B0..0x7E7450, ELF 0x8343F40): scale(0.002, 0.002, |d|)
+// times the orthonormal basis built from d, translated to the midpoint, queued and coloured. The
+// renderer and the acquired geometry are used unchecked; only the colour interface is tested.
+void queueSegment(IDebugGeometryQueue* renderer, const hfe::Vec3& from, const hfe::Vec3& to,
+                  const hfe::Vec4& colour)
+{
+    hfe::Vec3 d;
+    d.x = to.x - from.x;
+    d.y = to.y - from.y;
+    d.z = to.z - from.z;
+
+    hfe::Mat4 transform = hfe::Mat4::getIdentity();
+    hfe::Vec3 thickness;
+    thickness.x = 0.002f;
+    thickness.y = 0.002f;
+    thickness.z = std::sqrt(d.z * d.z + d.y * d.y + d.x * d.x);
+    transform.scale(thickness);
+
+    // Rows: x (1,0,0), y (0,1,0), z = d; y.makeOrthonormalBasis(z, x), as the call is made.
+    hfe::Vec3 right; right.x = 1.0f; right.y = 0.0f; right.z = 0.0f;
+    hfe::Vec3 up;    up.x    = 0.0f; up.y    = 1.0f; up.z    = 0.0f;
+    hfe::Vec3 forward = d;
+    up.makeOrthonormalBasis(forward, right);
+    hfe::Mat4 basis = hfe::Mat4::getIdentity();
+    basis.m[0]  = right.x;   basis.m[1]  = right.y;   basis.m[2]  = right.z;
+    basis.m[4]  = up.x;      basis.m[5]  = up.y;      basis.m[6]  = up.z;
+    basis.m[8]  = forward.x; basis.m[9]  = forward.y; basis.m[10] = forward.z;
+    basis.m[12] = d.x * 0.5f + from.x;
+    basis.m[13] = d.y * 0.5f + from.y;
+    basis.m[14] = d.z * 0.5f + from.z;
+
+    const hfe::Mat4 scaled = transform;
+    transform.mult(scaled, basis);
+
+    renderer->queueGeometry(kDebugCylinderMesh, transform, std::string(""));
+    hfe::IBase* geometry = renderer->acquireGeometry(kDebugCylinderMesh);
+    IDebugMeshColour* mesh = static_cast<IDebugMeshColour*>(geometry->queryInterface(kIDebugCylinderMesh));
+    if (mesh)
+        mesh->setColour(colour);
+}
+
+} // namespace
+
+// ELF 0x8343F40. No caller in the ELF, and BF2.exe has no copy (the linker dropped it); kept as the
+// ELF has it.
+void RagDoll::drawDebugLine(const Vec3& from, const Vec3& to, const hfe::Vec4& colour)
+{
+    queueSegment(debugRenderer(), from, to, colour);
+}
+
+// BF2.exe 0x7E7160 (ELF 0x83458D0): every distance constraint as a red segment between its two
+// particles. The renderer is looked up once, before the loop.
 void RagDoll::drawConstraints()
 {
-    std::fprintf(stderr, "[FRONTIER] dice::anim::RagDoll::drawConstraints reached\n");
-    std::fflush(stderr);
-    std::abort();
+    IDebugGeometryQueue* renderer = debugRenderer();
+    hfe::Vec4 red;
+    red.x = 1.0f; red.y = 0.0f; red.z = 0.0f; red.w = 1.0f;
+    for (std::list<RagDollTemplate::Constraint>::iterator it = m_template->m_distanceConstraints.begin();
+         it != m_template->m_distanceConstraints.end(); ++it)
+        queueSegment(renderer, m_particles[it->m_a].m_position, m_particles[it->m_b].m_position, red);
 }
 
 

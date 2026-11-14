@@ -1,0 +1,38 @@
+[CHOSEN, not recovered] vkd3d-shader 2.1 patch for the BF2 macOS port (LGPL-2.1+, as vkd3d).
+VKD3D_NO_TRACE_MESSAGES / VKD3D_NO_DEBUG_MESSAGES define the channel forms as TRACE_(ch, args...),
+but the sources write TRACE_(ch)(fmt, ...), so the debug-log-free build did not compile. The channel
+forms become a never-run statement: the arguments (debug_hlsl_* string formatting, about 5 % of an
+effect build with the log off at run time) are not evaluated, and if/else binding is kept.
+
+--- a/include/private/vkd3d_common.h	2026-11-12 23:22:39
++++ b/include/private/vkd3d_common.h	2026-11-12 23:22:40
+@@ -128,8 +128,11 @@
+         } while (0)
+ 
+ #ifdef VKD3D_NO_TRACE_MESSAGES
++static inline void vkd3d_dbg_discard(const char *fmt, ...) { (void)fmt; }
++/* The channel forms are used as TRACE_(ch)(fmt, ...): a never-run statement keeps the arguments
++ * unevaluated and binds correctly inside if/else. */
+ #define TRACE(args...) do { } while (0)
+-#define TRACE_(ch, args...) do { } while (0)
++#define TRACE_(ch) while (0) vkd3d_dbg_discard
+ #define TRACE_ON() (false)
+ #define TRACE_ON_(ch) (false)
+ #define TRACE_TEXT(text, size) do { } while (0)
+@@ -138,13 +141,13 @@
+ 
+ #ifdef VKD3D_NO_DEBUG_MESSAGES
+ #define WARN(args...) do { } while (0)
+-#define WARN_(ch, args...) do { } while (0)
++#define WARN_(ch) while (0) vkd3d_dbg_discard
+ #define FIXME(args...) do { } while (0)
+-#define FIXME_(ch, args...) do { } while (0)
++#define FIXME_(ch) while (0) vkd3d_dbg_discard
+ #define WARN_ON() (false)
+ #define WARN_ON_(ch) (false)
+ #define FIXME_ONCE(args...) do { } while (0)
+-#define FIXME_ONCE_(ch, args...) do { } while (0)
++#define FIXME_ONCE_(ch) while (0) vkd3d_dbg_discard
+ #endif
+ 
+ #ifdef VKD3D_NO_ERROR_MESSAGES

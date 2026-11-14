@@ -1,0 +1,119 @@
+# [TEMP] zoom-rose: weapon zoom HUD and commo rose selection (owner SP hand test 2026-11-06).
+# Dalian, US Assault kit (kit 2: M16A2, weaponHud guiIndex 4 / altGuiIndex 52 like the AK-101).
+# 1. Right mouse button zooms: retail switches the HUD to GuiIndex 52 (no crosshair), then back.
+# 2. Commo rose (Q held): pointer up onto "GO GO GO" (Interface_1:2), then release Q.
+# 3. Commo rose again: pointer up in 40-count steps (captures) to the top clamp, left click while Q
+#    is held, then release Q. Retail sends "GO GO GO" here; releasing Q alone sends nothing.
+# Coordinates are 800x600 HUD space; run with --spawn-time 1.
+timeout 300
+log waiting for the level load
+wait-log ingameMap.tga
+wait-ms 3000
+click 745 583
+wait-ms 3000
+capture spawn-screen
+# Kit 2, Assault (SelectKit2 10 205 246 69)
+hud-click 130 239
+wait-ms 500
+hud-click 432 282
+wait-ms 500
+capture selected
+hud-click 728 546
+wait-log-else 12 spawned [PLAY] alive=1
+label spawned
+wait-ms 2500
+capture spawned
+log zoom: right button down
+button-down 1
+wait-ms 120
+button-up 1
+wait-ms 1500
+capture zoomed
+log zoom: right button again (zoom out)
+button-down 1
+wait-ms 120
+button-up 1
+wait-ms 1500
+capture unzoomed
+log rose A: Q held, pointer up, release Q
+key-down q
+wait-ms 800
+capture roseA-open
+move-rel 0 -20
+wait-ms 150
+move-rel 0 -20
+wait-ms 150
+move-rel 0 -20
+wait-ms 600
+capture roseA-hover
+key-up q
+wait-ms 300
+capture roseA-released
+wait-ms 1500
+capture roseA-after
+wait-ms 3000
+log rose B: Q held, pointer up in 40-count steps, left click, release Q
+key-down q
+wait-ms 800
+capture roseB-open
+move-rel 0 -20
+wait-ms 100
+move-rel 0 -20
+wait-ms 500
+capture roseB-up040
+move-rel 0 -20
+wait-ms 100
+move-rel 0 -20
+wait-ms 500
+capture roseB-up080
+move-rel 0 -20
+wait-ms 100
+move-rel 0 -20
+wait-ms 500
+capture roseB-up120
+move-rel 0 -20
+wait-ms 100
+move-rel 0 -20
+wait-ms 500
+capture roseB-up160
+move-rel 0 -20
+wait-ms 100
+move-rel 0 -20
+wait-ms 500
+capture roseB-up200
+move-rel 0 -20
+wait-ms 100
+move-rel 0 -20
+wait-ms 500
+capture roseB-up240
+move-rel 0 -20
+wait-ms 100
+move-rel 0 -20
+wait-ms 500
+capture roseB-up280
+move-rel 0 -20
+wait-ms 100
+move-rel 0 -20
+wait-ms 500
+capture roseB-up320
+move-rel 0 -20
+wait-ms 100
+move-rel 0 -20
+wait-ms 500
+capture roseB-up360
+move-rel 0 -20
+wait-ms 100
+move-rel 0 -20
+wait-ms 500
+capture roseB-up400
+button-down 0
+wait-ms 120
+button-up 0
+wait-ms 300
+capture roseB-clicked
+key-up q
+wait-ms 1500
+capture roseB-after
+wait-ms 2000
+log zoom-rose done
+quit

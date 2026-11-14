@@ -722,7 +722,7 @@ void HudVehicleInformation::setMouseLook(bool active)
         if (aligned) m_guiIndex = m_field0a4;
     }
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     world::IPlayer* player = world::playerManager->getLocalHumanPlayer();
     if (!player || !player->getCamera() || !player->getCamera()->getToggleMouseLook())
         return;

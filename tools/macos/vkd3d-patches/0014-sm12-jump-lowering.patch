@@ -1,0 +1,363 @@
+[CHOSEN, not recovered] vkd3d-shader 2.1 patch for the BF2 macOS port (LGPL-2.1+, as vkd3d).
+SM1/2 jump lowering. 0012's array-bound unroll (for (q < Count) { if (...) break; o.t[q] = ...; })
+now runs for every profile: the unrolled iterations keep their exits as flag stores, so SM1/2
+flattening sees guarded blocks without jumps, as D3DX9_25's vs_1_1 output has no flow control.
+Below SM3 such loops failed with E5017 ("Flattening conditional blocks with non-discard jump
+instructions") and the effect layer compiled the vertex shader internally as vs_3_0.
+Flattening a conditional store selects between the new value and the variable's old value.
+Where no store to those components can have run before (a block-local temporary such as mul()'s
+per-component result), the old value is undefined and the store keeps its new value instead: the
+select read a temp register before any write, which D3D9's shader validator rejects in vs_1_1 and
+ps_2_0, and a NaN there would leak through the lerp-style select. Parameters, inputs, uniforms
+and globals always count as initialized.
+In a loop bounded that way, D3DX9_25 drops the last iteration when every store in it overwrites
+a constant 0 (zero-initialized Out.ShadowTexCoord[q]: three of four elements written, the fourth
+stays 0); a last store over a non-constant value keeps the full bound. Measured with
+D3DXCompileShader on the Code/Tests/sm1_jump_lowering probe cases.
+
+--- a/libs/vkd3d-shader/hlsl_codegen.c	2026-11-13 15:22:16
++++ b/libs/vkd3d-shader/hlsl_codegen.c	2026-11-13 15:22:16
+@@ -5183,10 +5183,158 @@
+     hlsl_error(ctx, &instr->loc, VKD3D_SHADER_ERROR_HLSL_CANNOT_FLATTEN,
+             "Conditional branches with side effects cannot be flattened.");
+     return false;
++}
++
++/* BF2 macOS port: the components a store writes, as (start, writemask) in component indices of
++ * its variable; false for a non-constant (relative) path. */
++static bool flatten_store_components(struct hlsl_ctx *ctx, const struct hlsl_ir_store *store,
++        unsigned int *start, uint32_t *writemask)
++{
++    unsigned int count;
++
++    if (!hlsl_component_index_range_from_deref(ctx, &store->lhs, start, &count) || count >= 32)
++        return false;
++    *writemask = store->writemask;
++    if (!hlsl_is_numeric_type(store->rhs.node->data_type) || !*writemask)
++        *writemask = (1u << count) - 1;
++    return true;
+ }
+ 
++static bool flatten_stores_overlap(struct hlsl_ctx *ctx, const struct hlsl_ir_store *store,
++        const struct hlsl_ir_store *target, unsigned int target_start, uint32_t target_mask)
++{
++    unsigned int start, i, j;
++    uint32_t mask;
++
++    if (store->lhs.var != target->lhs.var)
++        return false;
++    if (!flatten_store_components(ctx, store, &start, &mask))
++        return true;
++    for (i = 0; i < 32; ++i)
++    {
++        if (!(mask & (1u << i)))
++            continue;
++        for (j = 0; j < 4; ++j)
++        {
++            if ((target_mask & (1u << j)) && start + i == target_start + j)
++                return true;
++        }
++    }
++    return false;
++}
++
++/* BF2 macOS port: whether a store to an overlapping component of target's variable may execute
++ * before target: any such store earlier in program order, or anywhere in a loop around target
++ * (a later store in the loop body reaches the next iteration). With target NULL (or not in the
++ * block): whether the block holds any such store. *found is set once target is reached. */
++static bool flatten_may_be_written_before(struct hlsl_ctx *ctx, const struct hlsl_block *block,
++        const struct hlsl_ir_store *target, unsigned int target_start, uint32_t target_mask, bool *found)
++{
++    struct hlsl_ir_node *instr;
++    bool written = false;
++
++    LIST_FOR_EACH_ENTRY(instr, &block->instrs, struct hlsl_ir_node, entry)
++    {
++        if (instr == &target->node)
++        {
++            *found = true;
++            return written;
++        }
++
++        switch (instr->type)
++        {
++            case HLSL_IR_STORE:
++                if (flatten_stores_overlap(ctx, hlsl_ir_store(instr), target, target_start, target_mask))
++                    written = true;
++                break;
++
++            case HLSL_IR_IF:
++            {
++                struct hlsl_ir_if *iff = hlsl_ir_if(instr);
++
++                written |= flatten_may_be_written_before(ctx, &iff->then_block,
++                        target, target_start, target_mask, found);
++                if (*found)
++                    return written;
++                written |= flatten_may_be_written_before(ctx, &iff->else_block,
++                        target, target_start, target_mask, found);
++                if (*found)
++                    return written;
++                break;
++            }
++
++            case HLSL_IR_LOOP:
++            {
++                struct hlsl_ir_loop *loop = hlsl_ir_loop(instr);
++                bool unused = false;
++
++                written |= flatten_may_be_written_before(ctx, &loop->body,
++                        target, target_start, target_mask, found);
++                if (!*found)
++                    written |= flatten_may_be_written_before(ctx, &loop->iter,
++                            target, target_start, target_mask, found);
++                if (*found)
++                    return written
++                            || flatten_may_be_written_before(ctx, &loop->body, NULL, target_start, target_mask, &unused)
++                            || flatten_may_be_written_before(ctx, &loop->iter, NULL, target_start, target_mask, &unused);
++                break;
++            }
++
++            case HLSL_IR_SWITCH:
++            {
++                struct hlsl_ir_switch *s = hlsl_ir_switch(instr);
++                struct hlsl_ir_switch_case *c;
++
++                LIST_FOR_EACH_ENTRY(c, &s->cases, struct hlsl_ir_switch_case, entry)
++                {
++                    written |= flatten_may_be_written_before(ctx, &c->body,
++                            target, target_start, target_mask, found);
++                    if (*found)
++                        return written;
++                }
++                break;
++            }
++
++            default:
++                break;
++        }
++    }
++    return written;
++}
++
++/* BF2 macOS port: a flattened store keeps the variable's old value where the condition fails.
++ * Where that old value is undefined (no store to these components can have run before, and the
++ * variable is a local temporary, not a parameter, input, uniform or global), any value is a valid
++ * result, so the store keeps its new value unconditionally. Selecting against the undefined value
++ * instead reads a temporary register before it is written: D3D9's vs_1_1 validator rejects that,
++ * and a NaN in it propagates through the lerp-style select (cond * (a - b) + b). Seen with
++ * per-component stores of a block-local value, e.g. mul()'s result inside a loop unrolled to its
++ * array bound behind a uniform exit (if (...) break; o.t[q] = mul(...)). */
++static bool flatten_store_old_value_undefined(struct hlsl_ctx *ctx, const struct hlsl_block *root,
++        const struct hlsl_ir_store *store)
++{
++    const struct hlsl_ir_var *var = store->lhs.var, *global;
++    unsigned int start;
++    uint32_t mask;
++    bool found = false;
++
++    if (!root || var->is_uniform || var->is_param || var->is_input_semantic || var->is_output_semantic
++            || var->is_tgsm || (var->storage_modifiers & (HLSL_STORAGE_STATIC | HLSL_STORAGE_UNIFORM)))
++        return false;
++    LIST_FOR_EACH_ENTRY(global, &ctx->globals->vars, struct hlsl_ir_var, scope_entry)
++    {
++        if (global == var)
++            return false;
++    }
++    if (!flatten_store_components(ctx, store, &start, &mask) || mask > VKD3DSP_WRITEMASK_ALL)
++        return false;
++    if (flatten_may_be_written_before(ctx, root, store, start, mask, &found))
++        return false;
++    return found;
++}
++
+ static bool lower_conditional_block_stores(struct hlsl_ctx *ctx, struct hlsl_ir_node *instr,
+-        struct hlsl_ir_node *cond, bool is_then)
++        struct hlsl_ir_node *cond, bool is_then, const struct hlsl_block *root)
+ {
+     struct hlsl_ir_node *load, *new_val;
+     struct hlsl_ir_store *store;
+@@ -5198,6 +5346,9 @@
+     store = hlsl_ir_store(instr);
+     rhs_type = store->rhs.node->data_type;
+ 
++    if (flatten_store_old_value_undefined(ctx, root, store))
++        return false;
++
+     VKD3D_ASSERT(rhs_type->class <= HLSL_CLASS_VECTOR);
+     VKD3D_ASSERT(cond->data_type->e.numeric.dimx == 1);
+ 
+@@ -5303,13 +5454,15 @@
+ {
+     struct hlsl_ir_node *cond;
+     bool is_then;
++    /* BF2 macOS port: the function body, for flatten_store_old_value_undefined(). */
++    const struct hlsl_block *root;
+ };
+ 
+ static bool lower_conditional_block_instrs(struct hlsl_ctx *ctx, struct hlsl_ir_node *instr, void *context)
+ {
+     struct flatten_conditional_block_ctx *flatten_ctx = context;
+ 
+-    return lower_conditional_block_stores(ctx, instr, flatten_ctx->cond, flatten_ctx->is_then)
++    return lower_conditional_block_stores(ctx, instr, flatten_ctx->cond, flatten_ctx->is_then, flatten_ctx->root)
+             || lower_conditional_block_discard_nz(ctx, instr, flatten_ctx->cond, flatten_ctx->is_then)
+             || lower_conditional_block_discard_neg(ctx, instr, flatten_ctx->cond, flatten_ctx->is_then);
+ }
+@@ -5343,6 +5496,7 @@
+     }
+ 
+     flatten_ctx.cond = iff->condition.node;
++    flatten_ctx.root = context;
+ 
+     flatten_ctx.is_then = true;
+     hlsl_transform_ir(ctx, lower_conditional_block_instrs, &iff->then_block, &flatten_ctx);
+@@ -10306,7 +10460,7 @@
+     do
+     {
+         progress = hlsl_run_folding_passes(ctx, body);
+-        progress |= hlsl_transform_ir(ctx, flatten_conditional_branches, body, NULL);
++        progress |= hlsl_transform_ir(ctx, flatten_conditional_branches, body, body);
+     } while (progress);
+ }
+ 
+@@ -16106,13 +16260,94 @@
+     }
+     return false;
+ }
++
++/* BF2 macOS port: whether every component a store writes held the constant 0 before `time`. */
++static bool loop_unrolling_store_overwrites_zero(struct hlsl_ctx *ctx, const struct copy_propagation_state *state,
++        const struct hlsl_ir_store *store, unsigned int time)
++{
++    unsigned int start, count, i, writemask = store->writemask;
+ 
++    if (!hlsl_component_index_range_from_deref(ctx, &store->lhs, &start, &count))
++        return false;
++    if (!hlsl_is_numeric_type(store->rhs.node->data_type) || !writemask)
++        writemask = (1u << count) - 1;
++    for (i = 0; i < count && i < 32; ++i)
++    {
++        const struct copy_propagation_value *value;
++        const struct hlsl_ir_constant *constant;
++
++        if (!(writemask & (1u << i)))
++            continue;
++        if (!(value = copy_propagation_get_value(state, store->lhs.var, start + i, time)))
++            return false;
++        if (value->node->type != HLSL_IR_CONSTANT)
++            return false;
++        constant = hlsl_ir_constant(value->node);
++        if (constant->value.u[value->component].u)
++            return false;
++    }
++    return true;
++}
++
++static bool loop_unrolling_block_stores_var(const struct hlsl_block *block, const struct hlsl_ir_var *var)
++{
++    struct hlsl_ir_node *instr;
++
++    LIST_FOR_EACH_ENTRY(instr, &block->instrs, struct hlsl_ir_node, entry)
++    {
++        if (instr->type == HLSL_IR_STORE && hlsl_ir_store(instr)->lhs.var == var)
++            return true;
++    }
++    return false;
++}
++
++/* Collects (if `remove`: removes) the stores of the loop body to non-synthetic variables in a
++ * block (the loop's iteration statement, e.g. ++q, is not part of it); returns false when one of
++ * them does not overwrite a constant 0 held before `time`. */
++static bool loop_unrolling_zero_stores(struct hlsl_ctx *ctx, const struct copy_propagation_state *state,
++        const struct hlsl_ir_loop *loop, struct hlsl_block *block, unsigned int time, bool remove, unsigned int *count)
++{
++    struct hlsl_ir_node *instr, *next;
++
++    LIST_FOR_EACH_ENTRY_SAFE(instr, next, &block->instrs, struct hlsl_ir_node, entry)
++    {
++        if (instr->type == HLSL_IR_STORE)
++        {
++            struct hlsl_ir_store *store = hlsl_ir_store(instr);
++
++            if (store->lhs.var->is_synthetic || loop_unrolling_block_stores_var(&loop->iter, store->lhs.var))
++                continue;
++            if (!remove && !loop_unrolling_store_overwrites_zero(ctx, state, store, time))
++                return false;
++            ++*count;
++            if (remove)
++            {
++                list_remove(&instr->entry);
++                hlsl_free_instr(instr);
++            }
++        }
++        else if (instr->type == HLSL_IR_IF)
++        {
++            struct hlsl_ir_if *iff = hlsl_ir_if(instr);
++
++            if (!loop_unrolling_zero_stores(ctx, state, loop, &iff->then_block, time, remove, count)
++                    || !loop_unrolling_zero_stores(ctx, state, loop, &iff->else_block, time, remove, count))
++                return false;
++        }
++        else if (instr->type == HLSL_IR_LOOP || instr->type == HLSL_IR_SWITCH)
++        {
++            return false;
++        }
++    }
++    return true;
++}
++
+ static bool loop_unrolling_unroll_loop(struct hlsl_ctx *ctx, struct hlsl_block *block,
+         struct hlsl_ir_loop *loop, unsigned int unroll_limit, bool identify_limiter)
+ {
+     struct hlsl_block draft, tmp_dst, loop_body;
+     struct hlsl_ir_var *broken, *continued;
+-    unsigned int max_iterations, i, index;
++    unsigned int max_iterations, i, index, first_index;
+     struct copy_propagation_state state;
+     struct hlsl_ir_if *target_if;
+ 
+@@ -16170,8 +16405,28 @@
+             goto fail;
+         hlsl_block_add_block(&target_if->then_block, &tmp_dst);
+ 
++        first_index = index;
+         loop_unrolling_simplify(ctx, &target_if->then_block, &state, &index);
+ 
++        /* BF2 macOS port: d3dcompiler (D3DX9_25) drops the last iteration of a loop it bounded by
++         * array indexing when every store in that iteration overwrites a constant 0, e.g. the
++         * zero-initialized Out.ShadowTexCoord[q] of xpack RaShaderSTM_Shadows.hlsl: such a
++         * loop over a 4-element array writes three elements and the fourth stays 0, while a loop
++         * whose last store overwrites a non-constant value (an input-initialized local array, an
++         * accumulator) runs the full bound. Measured with D3DXCompileShader on the
++         * Code/Tests/sm1_jump_lowering probe cases. */
++        if (unroll_limit && unroll_limit == loop->index_bound && i + 1 == unroll_limit)
++        {
++            unsigned int stores = 0;
++
++            if (loop_unrolling_zero_stores(ctx, &state, loop, &target_if->then_block, first_index, false, &stores) && stores)
++            {
++                stores = 0;
++                loop_unrolling_zero_stores(ctx, &state, loop, &target_if->then_block, first_index, true, &stores);
++                loop_unrolling_simplify(ctx, &target_if->then_block, &state, &index);
++            }
++        }
++
+         /* BF2 macOS port: an iteration whose exit depends on a uniform (the loop is not known
+          * to have ended yet) and that would index an array, vector or matrix out of bounds
+          * records that iteration count and gives up; unroll_loops retries with it as an explicit
+@@ -16283,10 +16538,10 @@
+         /* BF2 macOS port: d3dcompiler stops unrolling a loop whose exit depends on a uniform
+          * where the next iteration would index out of bounds (the array bound is the loop
+          * bound): retry with that iteration count as an explicit limit. */
+-        /* SM3 only: below it the guarded iterations need flattened conditional jumps, which the
+-         * SM1/2 lowering does not implement (the effect layer compiles such vertex shaders as
+-         * vs_3_0, BuildReport::higherVertexProfile). */
+-        if (!unroll_limit && loop->index_bound && hlsl_version_ge(ctx, 3, 0)
++        /* All profiles: the unrolled iterations keep their exits as flag stores and guarded
++         * blocks without jumps, which SM1/2 flattening lowers to selects (D3DX9_25's vs_1_1
++         * output for the same loop has no flow control either). */
++        if (!unroll_limit && loop->index_bound
+                 && loop_unrolling_unroll_loop(ctx, program, loop, loop->index_bound, false))
+             return true;
+         loop->unroll_type = HLSL_LOOP_FORCE_LOOP;

@@ -1,0 +1,10 @@
+# [TEMP] exploration: captures of the loaded-map screen and what Escape opens.
+timeout 300
+wait-log ingameMap.tga
+wait-ms 5000
+capture loaded
+key escape
+wait-ms 4000
+capture after-escape
+wait-ms 4000
+capture after-escape-2

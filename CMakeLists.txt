@@ -10,6 +10,17 @@ endif()
 project(BF2Rebuilt LANGUAGES C CXX)
 # [CHOSEN, not recovered] Header-selection preparation for the G2w forwarding backend.
 option(BF2_GFX_SEAM "Compile the renderer against the D3D9/D3DX subset headers" OFF)
+# [CHOSEN, not recovered] Release packaging (owner decision 2026-11-14): CI's release configure steps
+# turn this ON so the plugin kit's frontier trap (Code/RendDX9Abi/Frontier.cpp) logs and continues
+# when its env var is unset. OFF - dev builds and every gate - keeps the armed (abort) default. An
+# explicit env value (continue / abort) wins in both. Reaches the .cmd image builds as the env var
+# BF2_FRONTIER_DEFAULT_CONTINUE=ON|OFF (always passed, so a stray shell variable cannot flip it).
+option(BF2_FRONTIER_DEFAULT_CONTINUE "Frontier trap defaults to continue (release packages)" OFF)
+if(BF2_FRONTIER_DEFAULT_CONTINUE)
+    set(BF2_FRONTIER_DEFAULT_ENV "${CMAKE_COMMAND}" -E env BF2_FRONTIER_DEFAULT_CONTINUE=ON)
+else()
+    set(BF2_FRONTIER_DEFAULT_ENV "${CMAKE_COMMAND}" -E env BF2_FRONTIER_DEFAULT_CONTINUE=OFF)
+endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     # [CHOSEN, not recovered] The macOS client's Cocoa host is Objective-C++ (docs/macos-s2-4.md).
     enable_language(OBJCXX)
@@ -210,6 +221,7 @@ list(REMOVE_ITEM bf2_engine_sources "${BF2_ROOT}/VoipServer/BF2VoipServerShell.c
 # carries the mirror list). Client-only REGIONS of shared TUs are not a manifest matter: they sit
 # under #if !DEDICATED, and bf2_set_image() below is what selects them per target.
 set(bf2_client_only_sources
+    "${BF2_ROOT}/Game/PunkBuster/PbClient.cpp" # BF2.exe 0x435900..0x436434; the ELF has only the server half
     "${BF2_ROOT}/Game/GameLogic/PlayerVOHelp.cpp" # BF2.exe client tutorial owner; placement inferred
     "${BF2_ROOT}/Math/Mat4Inverse.cpp" # client PE inverse; explicitly reused by x86 bf2_aidll below
     "${BF2_ROOT}/Game/Main/BF2Window.cpp"    # the game window (2026-09-02); its body is #if !DEDICATED as well
@@ -239,13 +251,18 @@ set(bf2_client_only_sources
     "${BF2_ROOT}/Menu/HudConsoleBindings.cpp"
     "${BF2_ROOT}/Menu/ProfileConsoleBindings.cpp"
     "${BF2_ROOT}/Menu/ClientUiFrontiers.cpp"
-    "${BF2_ROOT}/Game/Main/BF2ClientFrontiers.cpp"
     "${BF2_ROOT}/Game/LocalProfileManager.cpp"
     "${BF2_ROOT}/Game/LocalProfileManagerInit.cpp"
     "${BF2_ROOT}/Game/LocalProfileManagerOperations.cpp"
     "${BF2_ROOT}/Game/LocalProfileManagerSelection.cpp"
     "${BF2_ROOT}/Game/LocalProfileManagerDiscovery.cpp"
     "${BF2_ROOT}/Game/LocalProfileManagerFields.cpp"
+    "${BF2_ROOT}/Game/DistributedLightRenderer/DistributedLightRenderer.cpp"
+    "${BF2_ROOT}/Game/VoipClient/BF2VoipClient.cpp"     # BF2.exe 0x4510F0..0x45235C
+    "${BF2_ROOT}/Game/VoipClient/VoipClient.cpp"        # BF2.exe 0x736C30..0x737D4E
+    "${BF2_ROOT}/Game/VoipClient/VoipMixer.cpp"         # BF2.exe 0x7356B0..0x736BA0
+    "${BF2_ROOT}/Game/VoipClient/VoipMixerCoreAudio.cpp" # [PLATFORM] macOS backend; empty elsewhere
+    "${BF2_ROOT}/Game/VoipClient/VoipFakeDevice.cpp"    # [CHOSEN] BF2_VOIP_CAPTURE=fake test device
     "${BF2_ROOT}/Game/LocalProfileManagerSuffix.cpp"
     "${BF2_ROOT}/Game/ProfileManager.cpp" # native online-profile lifetime/status owner
     "${BF2_ROOT}/Game/PasswordCodec.cpp" # inferred path; the profile password's CryptProtectData wrapper
@@ -278,6 +295,7 @@ set(bf2_client_only_sources
     "${BF2_ROOT}/Menu/Bf2ButtonNode.cpp"
     "${BF2_ROOT}/Menu/Bf2NewListBoxNode.cpp"
     "${BF2_ROOT}/Menu/Bf2EditNode.cpp"
+    "${BF2_ROOT}/Menu/Bf2TileNode.cpp"
     "${BF2_ROOT}/Menu/Bf2MiniMenuMapNode.cpp"
     "${BF2_ROOT}/Menu/Bf2TransformListNode.cpp"
     "${BF2_ROOT}/External/BFMeme/SliderNode.cpp"
@@ -321,6 +339,7 @@ set(bf2_client_only_sources
     "${BF2_ROOT}/External/BFMeme/Event.cpp"
     "${BF2_ROOT}/External/BFMeme/Action.cpp"
     "${BF2_ROOT}/External/BFMeme/Function.cpp"
+    "${BF2_ROOT}/External/BFMeme/Tree.cpp"
     "${BF2_ROOT}/External/BFMeme/TypeDescriptor.cpp"
     "${BF2_ROOT}/External/BFMeme/NamedObjectRegistry.cpp"
     "${BF2_ROOT}/External/BFMeme/Data.cpp"
@@ -850,6 +869,45 @@ source_group(TREE "${BF2_EXTERNAL_ROOT}/GameSpy"
     FILES ${bf2_gamespy_cdkeyc_sources}
 )
 
+# =================================================================================================
+# bf2_gamespy_voice_objects - GameSpy Voice 2 and its Speex 1.0.5 codec, statically linked in BF2.exe
+# (the client voice client, Game/VoipClient). Stock upstream C, LINKED not reversed: the Voice2 core,
+# the platform's hardware layer (DirectSound on Windows, as retail; the SDK's CoreAudio layer on macOS)
+# and the custom-device file the test device builds on. Speex: only the libspeex files the narrowband
+# and wideband codecs need - no SLOW_TRIG, no tools (External/speex-1.0.5/LOCAL_CHANGES.md).
+# Client images only.
+# =================================================================================================
+set(bf2_gamespy_voice_sources
+    "${BF2_EXTERNAL_ROOT}/GameSpy/Voice2/gvMain.c"
+    "${BF2_EXTERNAL_ROOT}/GameSpy/Voice2/gvSource.c"
+    "${BF2_EXTERNAL_ROOT}/GameSpy/Voice2/gvFrame.c"
+    "${BF2_EXTERNAL_ROOT}/GameSpy/Voice2/gvCodec.c"
+    "${BF2_EXTERNAL_ROOT}/GameSpy/Voice2/gvSpeex.c"
+    "${BF2_EXTERNAL_ROOT}/GameSpy/Voice2/gvDevice.c"
+    "${BF2_EXTERNAL_ROOT}/GameSpy/Voice2/gvUtil.c"
+    "${BF2_EXTERNAL_ROOT}/GameSpy/Voice2/gvCustomDevice.c"
+)
+if(WIN32)
+    list(APPEND bf2_gamespy_voice_sources "${BF2_EXTERNAL_ROOT}/GameSpy/Voice2/gvDirectSound.c")
+elseif(APPLE)
+    list(APPEND bf2_gamespy_voice_sources "${BF2_EXTERNAL_ROOT}/GameSpy/Voice2/gvOSXAudio.c")
+endif()
+foreach(speex_unit bits cb_search exc_10_16_table exc_10_32_table exc_20_32_table exc_5_256_table
+        exc_5_64_table exc_8_128_table filters gain_table gain_table_lbr hexc_10_32_table hexc_table
+        high_lsp_tables lpc lsp lsp_tables_nb ltp misc modes nb_celp quant_lsp sb_celp speex_callbacks
+        vbr vq)
+    list(APPEND bf2_gamespy_voice_sources "${BF2_EXTERNAL_ROOT}/speex-1.0.5/libspeex/${speex_unit}.c")
+endforeach()
+add_library(bf2_gamespy_voice_objects OBJECT ${bf2_gamespy_voice_sources})
+bf2_configure_c_target(bf2_gamespy_voice_objects)
+target_include_directories(bf2_gamespy_voice_objects PRIVATE
+    "${BF2_EXTERNAL_ROOT}/speex-1.0.5/include"
+    "${BF2_EXTERNAL_ROOT}/speex-1.0.5/include/speex")    # gvSpeex.c includes <speex.h>
+source_group(TREE "${BF2_EXTERNAL_ROOT}"
+    PREFIX "External"
+    FILES ${bf2_gamespy_voice_sources}
+)
+
 # Client ProfileManager uses the stock presence SDK. Source set follows the
 # upstream gp/gptestc project, excluding its sample and already shared common TUs.
 set(bf2_gamespy_gp_sources
@@ -1170,7 +1228,7 @@ add_library(bf2_aidll SHARED EXCLUDE_FROM_ALL ${bf2_aidll_sources})
 if(BF2_BUILD_POSIX)
     # [CHOSEN, not recovered] Native POSIX AI image (Linux libaidll.so, macOS libaidll.dylib; a
     # native-port design, not retail); same host toolchain and STL ABI as bf2. Never substitute the
-    # retail 32-bit libaidll.so (docs/macos-s2-6-aidll.md).
+    # retail 32-bit libaidll.so.
     bf2_configure_cpp_target(bf2_aidll)
     bf2_set_image(bf2_aidll 1)
     bf2_set_platform_compat(bf2_aidll)
@@ -1450,6 +1508,7 @@ add_executable(bf2_client EXCLUDE_FROM_ALL
     $<TARGET_OBJECTS:bf2_gamespy_sb_objects>
     $<TARGET_OBJECTS:bf2_gamespy_gp_objects>
     $<TARGET_OBJECTS:bf2_gamespy_cdkeyc_objects>
+    $<TARGET_OBJECTS:bf2_gamespy_voice_objects>
 )
 set_target_properties(bf2_client PROPERTIES
     LINKER_LANGUAGE CXX
@@ -1573,7 +1632,7 @@ endif() # NOT BF2_BUILD_X64 (Novint)
 # Each script takes the architecture as its flavour argument: `native` builds the x86 DLL into
 # Code/Build/bin_<name>_native, `x64` the native x64 DLL into Code/Build/bin_<name>_x64. The x64
 # RendDX9.dll has no Bink import: it links the FFmpeg-based Bink stand-in (renddx9.cmd x64,
-# docs/macos-c-bink.md); the x86 DLL imports binkw32.dll.
+# Code/BF2/External/ffmpeg-bink/README.md); the x86 DLL imports binkw32.dll.
 if(BF2_BUILD_X64)
     set(BF2_PLUGIN_FLAVOUR x64)
 else()
@@ -1602,13 +1661,13 @@ if(TRUE)
     )
     set_property(TARGET bf2_textureatlas_native PROPERTY FOLDER "BF2")
     # [CHOSEN, not recovered] G2w: BF2_GFX_SEAM=ON makes renddx9.cmd compile the renderer against the subset
-    # headers plus the generated forwarding backend (Platform/Gfx/D3D9Forward, docs/macos-c-g2w-forward.md).
+    # headers plus the generated forwarding backend (Platform/Gfx/D3D9Forward).
     set(BF2_RENDDX9_SEAM_ENV)
     if(BF2_GFX_SEAM)
         set(BF2_RENDDX9_SEAM_ENV "${CMAKE_COMMAND}" -E env BF2_GFX_SEAM=ON)
     endif()
     add_custom_target(bf2_renddx9_native
-        COMMAND ${BF2_RENDDX9_SEAM_ENV} cmd.exe /d /c "${BF2_RENDDX9_SCRIPT}" ${BF2_PLUGIN_FLAVOUR}
+        COMMAND ${BF2_FRONTIER_DEFAULT_ENV} ${BF2_RENDDX9_SEAM_ENV} cmd.exe /d /c "${BF2_RENDDX9_SCRIPT}" ${BF2_PLUGIN_FLAVOUR}
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/Code/Build"
         COMMENT "Building the ${BF2_PLUGIN_FLAVOUR} RendDX9.dll (Code/Build/renddx9.cmd ${BF2_PLUGIN_FLAVOUR})"
         VERBATIM
@@ -1618,7 +1677,7 @@ if(TRUE)
         add_dependencies(bf2_renddx9_native bf2_textureatlas_native)
     endif()
     add_custom_target(bf2_swiffplayer_native
-        COMMAND cmd.exe /d /c "${BF2_SWIFFPLAYER_SCRIPT}" ${BF2_PLUGIN_FLAVOUR}
+        COMMAND ${BF2_FRONTIER_DEFAULT_ENV} cmd.exe /d /c "${BF2_SWIFFPLAYER_SCRIPT}" ${BF2_PLUGIN_FLAVOUR}
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/Code/Build"
         COMMENT "Building the ${BF2_PLUGIN_FLAVOUR} SwiffPlayer.dll (Code/Build/swiffplayer.cmd ${BF2_PLUGIN_FLAVOUR})"
         VERBATIM
@@ -1634,7 +1693,7 @@ if(TRUE)
     # ordering rule as the two above: after SwiffPlayer, never concurrently.
     file(TO_NATIVE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/Code/Build/bf2audio.cmd" BF2_BF2AUDIO_SCRIPT)
     add_custom_target(bf2_bf2audio_native
-        COMMAND cmd.exe /d /c "${BF2_BF2AUDIO_SCRIPT}" ${BF2_PLUGIN_FLAVOUR}
+        COMMAND ${BF2_FRONTIER_DEFAULT_ENV} cmd.exe /d /c "${BF2_BF2AUDIO_SCRIPT}" ${BF2_PLUGIN_FLAVOUR}
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/Code/Build"
         COMMENT "Building the ${BF2_PLUGIN_FLAVOUR} BF2Audio.dll (Code/Build/bf2audio.cmd ${BF2_PLUGIN_FLAVOUR})"
         VERBATIM
@@ -1770,7 +1829,7 @@ if(BF2_BUILD_MACOS)
         "${CMAKE_CURRENT_SOURCE_DIR}/Code/RendDX9Abi/PluginEntry.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/Code/RendDX9Abi/NativeConsoleObjects.cpp"
         # [CHOSEN, not recovered] The binkw32 entry points on the vendored FFmpeg Bink decoders
-        # (bf2_ffmpeg_bink below; docs/macos-c-bink.md) and their AudioQueue sound output.
+        # (bf2_ffmpeg_bink below; Code/BF2/External/ffmpeg-bink/README.md) and their AudioQueue sound output.
         "${CMAKE_CURRENT_SOURCE_DIR}/Code/RendDX9Abi/BinkFFmpeg.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/Code/RendDX9Abi/BinkAudioCoreAudio.cpp"
     )
@@ -1938,6 +1997,9 @@ if(BF2_BUILD_MACOS)
         "${CMAKE_CURRENT_SOURCE_DIR}/Code/RendDX9Abi/Frontier.cpp"
     )
     bf2_configure_static_plugin(bf2_plugin_kit_static "")
+    if(BF2_FRONTIER_DEFAULT_CONTINUE)
+        target_compile_definitions(bf2_plugin_kit_static PRIVATE BF2_FRONTIER_DEFAULT_CONTINUE=1)
+    endif()
 
     add_library(bf2_renddx9_static STATIC EXCLUDE_FROM_ALL ${BF2_RENDDX9_STATIC_SOURCES})
     bf2_configure_static_plugin(bf2_renddx9_static BF2_IMAGE_RENDDX9)
@@ -1968,6 +2030,7 @@ if(BF2_BUILD_MACOS)
         "${BF2_ROOT}/Platform/Gfx/Metal/D3DXTextures.cpp"
         "${BF2_ROOT}/Platform/Gfx/Metal/D3DXMesh.cpp"
         "${BF2_ROOT}/Platform/Gfx/Metal/Device.cpp"
+        "${BF2_ROOT}/Platform/Gfx/Metal/FFVertex.cpp"
         "${BF2_ROOT}/Platform/Gfx/Metal/MetalBridge.mm"
         # zeux/meshoptimizer v1.3 (MIT, External/meshoptimizer/LICENSE.md): the stripifier behind
         # the native D3DXConvertMeshSubsetToSingleStrip in D3DXMesh.cpp.
@@ -2024,7 +2087,7 @@ if(BF2_BUILD_MACOS)
         -Wno-pointer-sign)
     set_property(TARGET bf2_ffmpeg_bink PROPERTY FOLDER "BF2")
     # [CHOSEN, not recovered] CPU check of the Bink port against reference frames/samples that
-    # the local ffmpeg CLI produces from the read-only game content (docs/macos-c-bink.md).
+    # the local ffmpeg CLI produces from the read-only game content (Code/BF2/External/ffmpeg-bink/README.md).
     add_executable(bf2_bink_decode_test EXCLUDE_FROM_ALL
         "${CMAKE_CURRENT_SOURCE_DIR}/Code/Tests/macos_bink_decode.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/Code/RendDX9Abi/BinkFFmpeg.cpp"
@@ -2032,7 +2095,7 @@ if(BF2_BUILD_MACOS)
     target_compile_features(bf2_bink_decode_test PRIVATE cxx_std_17)
     target_link_libraries(bf2_bink_decode_test PRIVATE bf2_ffmpeg_bink "-framework AudioToolbox")
     # [TEMP] [CHOSEN, not recovered] The black-box Bink harness, port side: the same source the
-    # retail build runs against binkw32.dll (Code/Tests/movies, docs/tracks/bink/README.md).
+    # retail build runs against binkw32.dll (Code/Tests/movies, Code/BF2/External/ffmpeg-bink/README.md).
     add_executable(bf2_bink_harness EXCLUDE_FROM_ALL
         "${CMAKE_CURRENT_SOURCE_DIR}/Code/Tests/movies/bink_harness.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/Code/RendDX9Abi/BinkFFmpeg.cpp"
@@ -2041,7 +2104,7 @@ if(BF2_BUILD_MACOS)
     target_link_libraries(bf2_bink_harness PRIVATE bf2_ffmpeg_bink "-framework AudioToolbox")
 
     add_library(bf2_bf2audio_static STATIC EXCLUDE_FROM_ALL ${BF2_BF2AUDIO_STATIC_SOURCES})
-    bf2_configure_static_plugin(bf2_bf2audio_static "BF2_IMAGE_BF2AUDIO;BF2AUDIO_WITH_VORBIS=1")
+    bf2_configure_static_plugin(bf2_bf2audio_static "BF2_IMAGE_BF2AUDIO")
     target_include_directories(bf2_bf2audio_static PRIVATE
         "${BF2_EXTERNAL_ROOT}/libogg-1.3.6/include"
         "${BF2_EXTERNAL_ROOT}/libvorbis-1.3.7/include")
@@ -2064,6 +2127,7 @@ if(BF2_BUILD_MACOS)
         $<TARGET_OBJECTS:bf2_gamespy_sb_objects>
         $<TARGET_OBJECTS:bf2_gamespy_gp_objects>
         $<TARGET_OBJECTS:bf2_gamespy_cdkeyc_objects>
+        $<TARGET_OBJECTS:bf2_gamespy_voice_objects>
     )
     bf2_configure_static_plugin(bf2_client "")
     # bin_macos already holds the server `bf2`; APFS is case-insensitive, so the client cannot be
@@ -2080,7 +2144,7 @@ if(BF2_BUILD_MACOS)
         target_link_libraries(bf2_client PRIVATE dice_py)
     endif()
     # [CHOSEN, not recovered] The renderer uses the G2 subset and G3 Metal device;
-    # unimplemented operations stop (docs/macos-g3-metal-device.md). OFF keeps the
+    # unimplemented operations stop. OFF keeps the
     # renderer-free client: StaticPlugins.cpp has no RendDX9 entry and BF2Render::init takes
     # its shipped failure return. ON links the image for coordinator device-creation checks.
     option(BF2_MACOS_LINK_RENDDX9 "Link the RendDX9 static library into the macOS client" OFF)
@@ -2121,6 +2185,8 @@ if(BF2_BUILD_MACOS)
     # default output device through CoreAudio; OpenAL.framework itself is loaded at run time with
     # dlopen, as the Win32 image loads OpenAL32.dll. MacSystem.cpp's alert uses CoreFoundation.
     target_link_libraries(bf2_client PRIVATE "-framework CoreAudio" "-framework CoreFoundation")
+    # The SDK's CoreAudio voice layer (gvOSXAudio.c) converts sample rates with AudioConverter.
+    target_link_libraries(bf2_client PRIVATE "-framework AudioToolbox")
 
     # [CHOSEN, not recovered] Keep all static-image views in native ABI agreement.
     # This also runs for renderer-OFF builds. The script caches successful probes
@@ -2246,27 +2312,414 @@ if(BF2_BUILD_MACOS AND TARGET bf2_swiffplayer_static)
     # [TEMP] [CHOSEN, not recovered] Content-free offline popup VM regression.
     add_executable(bf2_swiff_offline_connect_popup_check EXCLUDE_FROM_ALL
         Code/Tests/swiff_offline_connect_popup.cpp
-        Code/Tests/gameswf_xml/cocoa_host_unavailable.cpp
-        # The kit's frontier log opens in the client data directory (Frontier.cpp, logOpen).
-        Code/BF2/Platform/macOS/ClientPaths.cpp)
+        Code/Tests/gameswf_xml/cocoa_host_unavailable.cpp)
     bf2_configure_static_plugin(bf2_swiff_offline_connect_popup_check BF2_IMAGE_SWIFFPLAYER)
     target_include_directories(bf2_swiff_offline_connect_popup_check PRIVATE
         "${BF2_EXTERNAL_ROOT}" "${BF2_EXTERNAL_ROOT}/gameswf")
     target_link_libraries(bf2_swiff_offline_connect_popup_check PRIVATE
         bf2_swiffplayer_static bf2_plugin_kit_static)
 
+    # [TEMP] [CHOSEN, not recovered] The __proto__ probe SWFs (tools/swf/proto_probe.py) in the
+    # native gameswf must show retail 1.50's squares (docs/tracks/game/swf-proto-retail-probe.md).
+    add_executable(bf2_swf_proto_probe_check EXCLUDE_FROM_ALL
+        Code/Tests/swf_proto_probe_runtime.cpp
+        Code/Tests/gameswf_xml/cocoa_host_unavailable.cpp)
+    bf2_configure_static_plugin(bf2_swf_proto_probe_check BF2_IMAGE_SWIFFPLAYER)
+    target_include_directories(bf2_swf_proto_probe_check PRIVATE
+        "${BF2_EXTERNAL_ROOT}" "${BF2_EXTERNAL_ROOT}/gameswf")
+    target_link_libraries(bf2_swf_proto_probe_check PRIVATE bf2_swiffplayer_static bf2_plugin_kit_static)
+    if(BUILD_TESTING)
+        find_package(Python3 COMPONENTS Interpreter QUIET)
+        if(Python3_Interpreter_FOUND)
+            add_test(NAME bf2_swf_proto_probe_generate
+                COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_CURRENT_SOURCE_DIR}/tools/swf/proto_probe.py"
+                    swf --out "${CMAKE_CURRENT_BINARY_DIR}/swf-proto-probe")
+            add_test(NAME bf2_swf_proto_probe_check
+                COMMAND bf2_swf_proto_probe_check "${CMAKE_CURRENT_BINARY_DIR}/swf-proto-probe")
+            set_tests_properties(bf2_swf_proto_probe_check PROPERTIES DEPENDS bf2_swf_proto_probe_generate)
+        endif()
+    endif()
+
     # [TEMP] [CHOSEN, not recovered] Production gameswf XML/string/file fixture.
     add_executable(bf2_gameswf_xml_check EXCLUDE_FROM_ALL
         Code/Tests/gameswf_xml/xml_check.cpp
-        Code/Tests/gameswf_xml/cocoa_host_unavailable.cpp
-        # The kit's frontier log opens in the client data directory (Frontier.cpp, logOpen).
-        Code/BF2/Platform/macOS/ClientPaths.cpp)
+        Code/Tests/gameswf_xml/cocoa_host_unavailable.cpp)
     bf2_configure_static_plugin(bf2_gameswf_xml_check BF2_IMAGE_SWIFFPLAYER)
     target_include_directories(bf2_gameswf_xml_check PRIVATE "${BF2_EXTERNAL_ROOT}")
     target_link_libraries(bf2_gameswf_xml_check PRIVATE bf2_swiffplayer_static bf2_plugin_kit_static)
     if(BUILD_TESTING)
         add_test(NAME bf2_gameswf_xml_check COMMAND bf2_gameswf_xml_check
             "${CMAKE_CURRENT_BINARY_DIR}/gameswf-xml-fixture.xml")
+    endif()
+endif()
+
+# [TEMP] Behaviour fixture for the recovered slider bodies (Code/Tests/slider_node_behaviour.cpp, game
+# frontier closure; Code/Tests/slider_node_behaviour.cmd is its Windows twin). The BFMeme families it
+# never calls stay unresolved, as /FORCE:UNRESOLVED leaves them in the Windows fixtures.
+if(APPLE)
+    add_executable(bf2_slider_node_check EXCLUDE_FROM_ALL
+        Code/Tests/slider_node_behaviour.cpp
+        "${BF2_ROOT}/External/BFMeme/SliderNode.cpp"
+        "${BF2_ROOT}/Menu/BfFixedSliderNode.cpp"
+        "${BF2_ROOT}/External/BFMeme/Node.cpp"
+        "${BF2_ROOT}/External/BFMeme/NodeState.cpp"
+        "${BF2_ROOT}/External/BFMeme/Object.cpp"
+        "${BF2_ROOT}/External/BFMeme/TypeDescriptor.cpp"
+        "${BF2_ROOT}/External/BFMeme/System.cpp"
+        "${BF2_ROOT}/External/BFMeme/Data.cpp"
+        "${BF2_ROOT}/External/BFMeme/NamedObjectRegistry.cpp"
+        "${BF2_ROOT}/External/BFMeme/Stream.cpp")
+    bf2_configure_cpp_target(bf2_slider_node_check)
+    bf2_set_platform_compat(bf2_slider_node_check)
+    bf2_set_image(bf2_slider_node_check 0)
+    target_link_options(bf2_slider_node_check PRIVATE "-Wl,-undefined,dynamic_lookup")
+    if(BUILD_TESTING)
+        add_test(NAME bf2_slider_node_check COMMAND bf2_slider_node_check)
+    endif()
+endif()
+
+# [TEMP] Cumulative fixture for game frontier-closure sites no normal session reaches
+# (Code/Tests/game_frontier_check.cpp; docs/tracks/game/frontier-closure.md). Built on request; the
+# families it never calls stay unresolved, as /FORCE:UNRESOLVED leaves them in the Windows fixtures.
+if(APPLE)
+    add_executable(bf2_game_frontier_check EXCLUDE_FROM_ALL
+        Code/Tests/game_frontier_check.cpp
+        Code/Tests/game_frontier_x87_narrow.cpp
+        "${BF2_ROOT}/Game/LocalProfileManager.cpp"
+        "${BF2_ROOT}/Game/LocalProfileManagerDiscovery.cpp"
+        "${BF2_ROOT}/Game/LocalProfileManagerFields.cpp"
+        "${BF2_ROOT}/Game/LocalProfileManagerInit.cpp"
+        "${BF2_ROOT}/Game/LocalProfileManagerOperations.cpp"
+        "${BF2_ROOT}/Game/LocalProfileManagerSelection.cpp"
+        "${BF2_ROOT}/Game/LocalProfileManagerSuffix.cpp"
+        "${BF2_ROOT}/Physics/MaterialManager.cpp"
+        "${BF2_ROOT}/External/BFMeme/Node.cpp"
+        "${BF2_ROOT}/External/BFMeme/NodeState.cpp"
+        "${BF2_ROOT}/External/BFMeme/Object.cpp"
+        "${BF2_ROOT}/External/BFMeme/TypeDescriptor.cpp"
+        "${BF2_ROOT}/External/BFMeme/System.cpp"
+        "${BF2_ROOT}/External/BFMeme/NamedObjectRegistry.cpp"
+        "${BF2_ROOT}/External/BFMeme/Data.cpp"
+        "${BF2_ROOT}/Menu/BfEditNode.cpp"
+        "${BF2_ROOT}/Menu/Bf2EditNode.cpp"
+        "${BF2_ROOT}/Menu/BfNewListBoxNode.cpp"
+        "${BF2_ROOT}/Menu/BfListBoxData.cpp"
+        "${BF2_ROOT}/External/BFMeme/Action.cpp"
+        "${BF2_ROOT}/External/BFMeme/Tree.cpp"
+        "${BF2_ROOT}/External/BFMeme/Stream.cpp"
+        "${BF2_ROOT}/Menu/ProfileConsoleBindings.cpp"
+        "${BF2_ROOT}/Core/ConsoleObjectBase.cpp"
+        "${BF2_ROOT}/Game/DistributedLightRenderer/DistributedLightRenderer.cpp"
+        "${BF2_ROOT}/Game/Common/GameEvent.cpp"
+        "${BF2_ROOT}/Core/StringUtil.cpp"
+        "${BF2_ROOT}/AI/AIInterface/BFKnowledge/BFGame.cpp")
+    bf2_configure_cpp_target(bf2_game_frontier_check)
+    bf2_set_platform_compat(bf2_game_frontier_check)
+    bf2_set_image(bf2_game_frontier_check 0)
+    set_source_files_properties(Code/Tests/game_frontier_x87_narrow.cpp PROPERTIES
+        COMPILE_OPTIONS "-Wno-builtin-macro-redefined;-U__LDBL_MANT_DIG__;-D__LDBL_MANT_DIG__=53")
+    target_link_options(bf2_game_frontier_check PRIVATE "-Wl,-undefined,dynamic_lookup")
+    if(BUILD_TESTING)
+        add_test(NAME bf2_game_frontier_check COMMAND bf2_game_frontier_check)
+    endif()
+endif()
+
+# [CHOSEN, not recovered] The frontier trap's default (Code/Tests/frontier_default_check.cpp): the kit's
+# Frontier.cpp built as a dev image (default abort) and as a release image
+# (BF2_FRONTIER_DEFAULT_CONTINUE=1, default continue); explicit env values win in both.
+if(APPLE)
+    foreach(bf2_frontier_mode IN ITEMS abort continue)
+        set(bf2_frontier_target bf2_frontier_default_${bf2_frontier_mode}_check)
+        add_executable(${bf2_frontier_target} EXCLUDE_FROM_ALL
+            "${CMAKE_CURRENT_SOURCE_DIR}/Code/Tests/frontier_default_check.cpp"
+            "${CMAKE_CURRENT_SOURCE_DIR}/Code/RendDX9Abi/Frontier.cpp")
+        if(bf2_frontier_mode STREQUAL "continue")
+            target_compile_definitions(${bf2_frontier_target} PRIVATE
+                BF2_FRONTIER_DEFAULT_CONTINUE=1 BF2_FRONTIER_CHECK_EXPECT_CONTINUE=1)
+        else()
+            target_compile_definitions(${bf2_frontier_target} PRIVATE BF2_FRONTIER_CHECK_EXPECT_CONTINUE=0)
+        endif()
+        if(BUILD_TESTING)
+            add_test(NAME ${bf2_frontier_target} COMMAND ${bf2_frontier_target})
+        endif()
+    endforeach()
+endif()
+
+# [TEMP] The voice client (Code/Tests/voip_client_runtime.cpp): VoipClient over loopback UDP and
+# BF2VoipClient on fake game objects, with the synthetic capture device (no microphone, no permission
+# prompt). The mixer (Code/Tests/voip_mixer_runtime.cpp) runs on its scripted WINMM table.
+if(APPLE)
+    add_executable(bf2_voip_client_check EXCLUDE_FROM_ALL
+        Code/Tests/voip_client_runtime.cpp
+        "${BF2_ROOT}/Game/VoipClient/VoipClient.cpp"
+        "${BF2_ROOT}/Game/VoipClient/BF2VoipClient.cpp"
+        "${BF2_ROOT}/Game/VoipClient/VoipMixer.cpp"
+        "${BF2_ROOT}/Game/VoipClient/VoipFakeDevice.cpp"
+        $<TARGET_OBJECTS:bf2_gamespy_voice_objects>
+        $<TARGET_OBJECTS:bf2_gamespy_objects>)
+    bf2_configure_cpp_target(bf2_voip_client_check)
+    bf2_set_platform_compat(bf2_voip_client_check)
+    bf2_set_image(bf2_voip_client_check 0)
+    target_compile_definitions(bf2_voip_client_check PRIVATE BF2_PLATFORM_POSIX _MACOSX
+        BF2_VOIPMIXER_NO_PLATFORM_BACKEND=1)
+    target_link_options(bf2_voip_client_check PRIVATE "-Wl,-undefined,dynamic_lookup")
+    target_link_libraries(bf2_voip_client_check PRIVATE "-framework CoreAudio" "-framework AudioToolbox"
+        "-framework CoreFoundation" Threads::Threads)
+    if(BUILD_TESTING)
+        add_test(NAME bf2_voip_client_check COMMAND bf2_voip_client_check)
+    endif()
+
+    # The retail x86 layout asserts of the voice client, compiled for the MSVC x86 ABI from the Mac
+    # (clang's i686-pc-windows-msvc target, stub STL headers); the real check is the Windows x86 build.
+    if(BUILD_TESTING AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        add_test(NAME bf2_voip_msvc_x86_layout
+            COMMAND "${CMAKE_CXX_COMPILER}" -target i686-pc-windows-msvc -fsyntax-only -std=c++14 -Wno-invalid-offsetof -Wno-unused-command-line-argument
+                -nostdinc -nostdinc++ -I "${CMAKE_CURRENT_SOURCE_DIR}/Code/Tests/msvc_x86_layout/include"
+                -D_M_IX86=600 "${CMAKE_CURRENT_SOURCE_DIR}/Code/Tests/msvc_x86_layout/msvc_x86_layout.cpp")
+    endif()
+
+    add_executable(bf2_voip_mixer_check EXCLUDE_FROM_ALL
+        Code/Tests/voip_mixer_runtime.cpp
+        "${BF2_ROOT}/Game/VoipClient/VoipMixer.cpp")
+    bf2_configure_cpp_target(bf2_voip_mixer_check)
+    bf2_set_platform_compat(bf2_voip_mixer_check)
+    bf2_set_image(bf2_voip_mixer_check 0)
+    target_compile_definitions(bf2_voip_mixer_check PRIVATE BF2_VOIPMIXER_NO_PLATFORM_BACKEND=1)
+    if(BUILD_TESTING)
+        add_test(NAME bf2_voip_mixer_check COMMAND bf2_voip_mixer_check)
+    endif()
+endif()
+
+# [TEMP] Falcon frame update (Code/Tests/falcon_update_runtime.cpp): the actual FalconDevice and
+# HapticSettings against a fake NovintHFX SDK, fake Win32 clock and fake control map/settings
+# (BF2_NOVINT_FAKE_SDK, Code/Tests/novint_fake/windows.h). Built on request. The Windows twin
+# falcon_device_runtime.cmd links the stock DLL with no device.
+if(APPLE)
+    add_executable(bf2_falcon_update_check EXCLUDE_FROM_ALL
+        Code/Tests/falcon_update_runtime.cpp
+        "${BF2_ROOT}/IO/Input/FalconDevice.cpp"
+        "${BF2_ROOT}/Game/HapticSettings.cpp"
+        "${BF2_ROOT}/Game/Objects/IObjectTemplate.cpp"
+        "${BF2_ROOT}/Scene/Object/ObjectTypes/Game/IPlayerControlObject.cpp"
+        "${BF2_ROOT}/Core/ClassManager.cpp"
+        "${BF2_ROOT}/Core/EventManager.cpp"
+        "${BF2_ROOT}/Core/Debug.cpp"
+        "${BF2_ROOT}/Core/StringUtil.cpp")
+    bf2_configure_cpp_target(bf2_falcon_update_check)
+    bf2_set_platform_compat(bf2_falcon_update_check)
+    bf2_set_image(bf2_falcon_update_check 0)
+    target_compile_definitions(bf2_falcon_update_check PRIVATE BF2_NOVINT_FAKE_SDK=1)
+    target_include_directories(bf2_falcon_update_check BEFORE PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/Code/Tests/novint_fake")
+    if(BUILD_TESTING)
+        add_test(NAME bf2_falcon_update_check COMMAND bf2_falcon_update_check)
+    endif()
+    # NovintHFX.h for the MSVC x86 ABI: the header's layout asserts and the vtable it implies.
+    if(BUILD_TESTING AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        add_test(NAME bf2_novint_msvc_x86_layout
+            COMMAND "${CMAKE_CXX_COMPILER}" -target i686-pc-windows-msvc -fsyntax-only -std=c++14 -Wno-invalid-offsetof -Wno-unused-command-line-argument
+                -nostdinc -nostdinc++ -I "${CMAKE_CURRENT_SOURCE_DIR}/Code/Tests/msvc_x86_layout/include"
+                -D_M_IX86=600 "${CMAKE_CURRENT_SOURCE_DIR}/Code/Tests/msvc_x86_layout/novint_x86_layout.cpp")
+    endif()
+endif()
+
+# [TEMP] The PunkBuster glue objects at the 32-bit x86 ABI (Code/Tests/msvc_x86_layout/punkbuster_x86_layout.cpp).
+if(BUILD_TESTING AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    foreach(pb_abi IN ITEMS msvc elf)
+        if(pb_abi STREQUAL "msvc")
+            set(pb_triple i686-pc-windows-msvc)
+            set(pb_define -D_M_IX86=600)
+        else()
+            set(pb_triple i386-pc-linux-gnu)
+            set(pb_define -D__i386__=1)
+        endif()
+        add_test(NAME bf2_punkbuster_${pb_abi}_x86_layout
+            COMMAND "${CMAKE_CXX_COMPILER}" -target ${pb_triple} -fsyntax-only -std=c++14 -Wno-invalid-offsetof -Wno-unused-command-line-argument -Wno-macro-redefined
+                -nostdinc -nostdinc++ -I "${CMAKE_CURRENT_SOURCE_DIR}/Code/Tests/msvc_x86_layout/include"
+                ${pb_define} "${CMAKE_CURRENT_SOURCE_DIR}/Code/Tests/msvc_x86_layout/punkbuster_x86_layout.cpp")
+    endforeach()
+endif()
+
+# [TEMP] PunkBuster client glue and command hook (Code/Tests/punkbuster_client_runtime.cpp) against a
+# fake pbcl.dll through the glue's library seam, fake PB_* functions and a fake server trap. Built on
+# request; files only under a fresh temporary directory.
+if(APPLE)
+    add_executable(bf2_punkbuster_client_check EXCLUDE_FROM_ALL
+        Code/Tests/punkbuster_client_runtime.cpp
+        "${BF2_ROOT}/Game/PunkBuster/PbClient.cpp"
+        "${BF2_ROOT}/Game/PunkBuster/PbCommandHook.cpp")
+    bf2_configure_cpp_target(bf2_punkbuster_client_check)
+    bf2_set_platform_compat(bf2_punkbuster_client_check)
+    bf2_set_image(bf2_punkbuster_client_check 0)
+    if(BUILD_TESTING)
+        add_test(NAME bf2_punkbuster_client_check COMMAND bf2_punkbuster_client_check)
+    endif()
+endif()
+
+# [TEMP] The BF2-side PunkBuster functions (Code/Tests/punkbuster_game_runtime.cpp) against fake games,
+# console, players, glue entry points and helpers, in the client and the dedicated image. Built on request.
+if(APPLE)
+    add_executable(bf2_punkbuster_game_check EXCLUDE_FROM_ALL
+        Code/Tests/punkbuster_game_runtime.cpp
+        "${BF2_ROOT}/Game/PunkBuster/PbGame.cpp"
+        "${BF2_ROOT}/Game/Objects/IPlayer.cpp")
+    bf2_configure_cpp_target(bf2_punkbuster_game_check)
+    bf2_set_platform_compat(bf2_punkbuster_game_check)
+    bf2_set_image(bf2_punkbuster_game_check 0)
+    target_include_directories(bf2_punkbuster_game_check PRIVATE ${BF2_PYTHON_INCLUDE_DIRS})
+    if(BUILD_TESTING)
+        add_test(NAME bf2_punkbuster_game_check COMMAND bf2_punkbuster_game_check)
+    endif()
+    add_executable(bf2_punkbuster_game_dedicated_check EXCLUDE_FROM_ALL
+        Code/Tests/punkbuster_game_runtime.cpp
+        "${BF2_ROOT}/Game/PunkBuster/PbGame.cpp"
+        "${BF2_ROOT}/Game/Objects/IPlayer.cpp")
+    bf2_configure_cpp_target(bf2_punkbuster_game_dedicated_check)
+    bf2_set_platform_compat(bf2_punkbuster_game_dedicated_check)
+    bf2_set_image(bf2_punkbuster_game_dedicated_check 1)
+    target_include_directories(bf2_punkbuster_game_dedicated_check PRIVATE ${BF2_PYTHON_INCLUDE_DIRS})
+    if(BUILD_TESTING)
+        add_test(NAME bf2_punkbuster_game_dedicated_check COMMAND bf2_punkbuster_game_dedicated_check)
+    endif()
+endif()
+
+# [TEMP] The PunkBuster server glue (Code/Tests/punkbuster_server_runtime.cpp) against a fake pbsv,
+# fake PB_* functions and a scratch pb folder, in both images (the capture buffer's home differs).
+# Built on request.
+if(APPLE OR UNIX)
+    foreach(pbsv_image IN ITEMS dedicated client)
+        if(pbsv_image STREQUAL "dedicated")
+            set(pbsv_target bf2_punkbuster_server_check)
+            set(pbsv_define 1)
+        else()
+            set(pbsv_target bf2_punkbuster_server_client_check)
+            set(pbsv_define 0)
+        endif()
+        add_executable(${pbsv_target} EXCLUDE_FROM_ALL
+            Code/Tests/punkbuster_server_runtime.cpp
+            "${BF2_ROOT}/Game/PunkBuster/PbServer.cpp")
+        bf2_configure_cpp_target(${pbsv_target})
+        bf2_set_platform_compat(${pbsv_target})
+        bf2_set_image(${pbsv_target} ${pbsv_define})
+        if(BUILD_TESTING)
+            add_test(NAME ${pbsv_target} COMMAND ${pbsv_target})
+        endif()
+    endforeach()
+endif()
+
+# [TEMP] Camera::handleUpdate and its shake/recoil helpers (Code/Tests/camera_shake_runtime.cpp): the real
+# Camera.cpp against generated fakes; every other engine symbol it references becomes an aborting stub
+# generated from the objects by tools/macos/link_stubs.py. Built on request.
+if(APPLE)
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    add_library(bf2_camera_shake_objects OBJECT EXCLUDE_FROM_ALL
+        Code/Tests/camera_shake_runtime.cpp
+        "${BF2_ROOT}/Game/Objects/Base/Camera.cpp"
+        "${BF2_ROOT}/Game/Objects/IPlayer.cpp"
+        "${BF2_ROOT}/Scene/Object/ObjectPredicator.cpp")
+    bf2_configure_cpp_target(bf2_camera_shake_objects)
+    bf2_set_platform_compat(bf2_camera_shake_objects)
+    bf2_set_image(bf2_camera_shake_objects 0)
+    target_include_directories(bf2_camera_shake_objects PRIVATE ${BF2_PYTHON_INCLUDE_DIRS})
+    set(bf2_camera_shake_stubs "${CMAKE_CURRENT_BINARY_DIR}/camera_shake_link_stubs.cpp")
+    add_custom_command(OUTPUT "${bf2_camera_shake_stubs}"
+        COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_CURRENT_SOURCE_DIR}/tools/macos/link_stubs.py"
+                "${bf2_camera_shake_stubs}" $<TARGET_OBJECTS:bf2_camera_shake_objects>
+        DEPENDS bf2_camera_shake_objects $<TARGET_OBJECTS:bf2_camera_shake_objects>
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/macos/link_stubs.py"
+        COMMAND_EXPAND_LISTS
+        COMMENT "Generating the camera shake check's link stubs")
+    add_executable(bf2_camera_shake_check EXCLUDE_FROM_ALL
+        $<TARGET_OBJECTS:bf2_camera_shake_objects> "${bf2_camera_shake_stubs}")
+    bf2_configure_cpp_target(bf2_camera_shake_check)
+    bf2_set_platform_compat(bf2_camera_shake_check)
+    bf2_set_image(bf2_camera_shake_check 0)
+    if(BUILD_TESTING)
+        add_test(NAME bf2_camera_shake_check COMMAND bf2_camera_shake_check)
+    endif()
+endif()
+
+# [TEMP] The Soldier's Novint control-box profile switch (Code/Tests/soldier_haptic_profile_runtime.cpp,
+# ledger N2 17a) against a generated fake HapticSettings and fake player-control templates. Built on request.
+if(APPLE OR UNIX)
+    add_executable(bf2_soldier_haptic_profile_check EXCLUDE_FROM_ALL
+        Code/Tests/soldier_haptic_profile_runtime.cpp
+        "${BF2_ROOT}/Game/Objects/Game/SoldierHapticProfile.cpp"
+        "${BF2_ROOT}/Game/Objects/IPlayer.cpp"
+        "${BF2_ROOT}/Math/Mat4.cpp"
+        "${BF2_ROOT}/Math/Vec3.cpp")
+    bf2_configure_cpp_target(bf2_soldier_haptic_profile_check)
+    bf2_set_platform_compat(bf2_soldier_haptic_profile_check)
+    bf2_set_image(bf2_soldier_haptic_profile_check 0)
+    if(BUILD_TESTING)
+        add_test(NAME bf2_soldier_haptic_profile_check COMMAND bf2_soldier_haptic_profile_check)
+    endif()
+endif()
+
+# [TEMP] dice::hfe::Mutex recursion and exclusion (Code/Tests/mutex_runtime.cpp). Built on request.
+if(APPLE OR UNIX)
+    add_executable(bf2_mutex_check EXCLUDE_FROM_ALL
+        Code/Tests/mutex_runtime.cpp
+        "${BF2_ROOT}/Core/Mutex.cpp")
+    bf2_configure_cpp_target(bf2_mutex_check)
+    bf2_set_platform_compat(bf2_mutex_check)
+    find_package(Threads REQUIRED)
+    target_link_libraries(bf2_mutex_check PRIVATE Threads::Threads)
+    if(BUILD_TESTING)
+        add_test(NAME bf2_mutex_check COMMAND bf2_mutex_check)
+    endif()
+endif()
+
+# [TEMP] CBF2VoipServer::Shutdown under one dice::hfe::Mutex (Code/Tests/voip_server_shutdown_runtime.cpp):
+# the relock through ReleaseAllInstances must not hang. Built on request; UDP port 55197 only.
+if(APPLE)
+    add_executable(bf2_voip_server_shutdown_check EXCLUDE_FROM_ALL
+        Code/Tests/voip_server_shutdown_runtime.cpp
+        "${BF2_ROOT}/IO/Network/SocketManager.cpp"
+        "${BF2_ROOT}/IO/Network/NetworkLayer/Socket/UDPSocket.cpp"
+        "${BF2_ROOT}/VoipServer/VoipServer.cpp"
+        "${BF2_ROOT}/VoipServer/VoipServerInstance.cpp"
+        "${BF2_ROOT}/VoipServer/VoipDebug.cpp"
+        "${BF2_ROOT}/VoipServer/VoipRouter.cpp"
+        "${BF2_ROOT}/VoipServer/VoipClients.cpp"
+        "${BF2_ROOT}/VoipServer/VoipOutgoingChannels.cpp"
+        "${BF2_ROOT}/Core/Mutex.cpp"
+        "${BF2_ROOT}/Core/Timer.cpp"
+        "${BF2_ROOT}/Core/SystemInfo.cpp"
+        "${BF2_ROOT}/Core/StringUtil.cpp")
+    bf2_configure_cpp_target(bf2_voip_server_shutdown_check)
+    bf2_set_platform_compat(bf2_voip_server_shutdown_check)
+    bf2_set_image(bf2_voip_server_shutdown_check 1)
+    target_compile_definitions(bf2_voip_server_shutdown_check PRIVATE BF2_PLATFORM_POSIX _MACOSX)
+    # The challenge hash's MD5 (GameSpy md5c.c) is C; it builds without the C++ compatibility header.
+    add_library(bf2_voip_server_shutdown_md5 OBJECT EXCLUDE_FROM_ALL "${BF2_ROOT}/External/GameSpy/md5c.c")
+    target_sources(bf2_voip_server_shutdown_check PRIVATE $<TARGET_OBJECTS:bf2_voip_server_shutdown_md5>)
+    if(BUILD_TESTING)
+        add_test(NAME bf2_voip_server_shutdown_check COMMAND bf2_voip_server_shutdown_check)
+    endif()
+endif()
+
+# [TEMP] Voice-server debug logs (Code/Tests/voip_debug_runtime.cpp, Windows twin
+# voip_debug_runtime.cmd): HandlePacketDebugRoutingData, the routing dump and the voice trace, read
+# back from the files they write. Built on request; the dedicated image (DEDICATED=1) as in the twin.
+if(APPLE)
+    add_executable(bf2_voip_debug_check EXCLUDE_FROM_ALL
+        Code/Tests/voip_debug_runtime.cpp
+        "${BF2_ROOT}/VoipServer/VoipServerInstance.cpp"
+        "${BF2_ROOT}/VoipServer/VoipDebug.cpp"
+        "${BF2_ROOT}/VoipServer/VoipRouter.cpp"
+        "${BF2_ROOT}/VoipServer/VoipClients.cpp"
+        "${BF2_ROOT}/VoipServer/VoipOutgoingChannels.cpp"
+        "${BF2_ROOT}/Core/Timer.cpp"
+        "${BF2_ROOT}/Core/SystemInfo.cpp"
+        "${BF2_ROOT}/Core/StringUtil.cpp")
+    bf2_configure_cpp_target(bf2_voip_debug_check)
+    bf2_set_platform_compat(bf2_voip_debug_check)
+    bf2_set_image(bf2_voip_debug_check 1)
+    target_compile_definitions(bf2_voip_debug_check PRIVATE BF2_PLATFORM_POSIX _MACOSX)
+    target_link_options(bf2_voip_debug_check PRIVATE "-Wl,-undefined,dynamic_lookup")
+    if(BUILD_TESTING)
+        add_test(NAME bf2_voip_debug_check COMMAND bf2_voip_debug_check)
     endif()
 endif()
 

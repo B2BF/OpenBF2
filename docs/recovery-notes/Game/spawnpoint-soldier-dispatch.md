@@ -73,7 +73,7 @@ before/after disassembly differs only in the occupancy call displacement:
 `+0x310` becomes `+0x300`. The native soldier virtual-table relocations
 identify those targets as `enter` and `getOccupingPlayer`, respectively.
 Evidence and `validation.json` are under
-`/home/user/bf2-linux-bundle-nullcall/spawn-occupancy`.
+`bf2-linux-bundle-nullcall/spawn-occupancy`.
 
 The focused `Code/Tests/spawnpoint_soldier_dispatch_runtime` fixture passes
 **33/33 checks** with GCC x86-64 and MSVC x86, both optimized and strictly
@@ -104,7 +104,7 @@ Remove-Item Env:BF2_BUILD_OUT
 
 The runner accepts `--baseline <saved-SpawnPoint.cpp>` for the expected failing
 comparison. Linux results are under
-`/home/user/bf2-spawnpoint-soldier-fixture-20261003/{before,after-final}`;
+`bf2-spawnpoint-soldier-fixture-20261003/{before,after-final}`;
 Windows results are under
 `out/spawnpoint-soldier-dispatch-20261003/windows-after`.
 
@@ -126,7 +126,7 @@ The pre-fix production TU is preserved locally at
 `out/spawnpoint-soldier-dispatch-20261003/SpawnPoint.before.cpp`, SHA-256
 `61cdaae5d5b8ab784629a3a611381da09e3811cf32e679c74315e81043be56f6`.
 The corresponding optimized Linux object is preserved at
-`/home/user/bf2-linux-bundle-nullcall/spawn-occupancy/SpawnPoint.before.o`.
+`bf2-linux-bundle-nullcall/spawn-occupancy/SpawnPoint.before.o`.
 
 Only `Code/BF2/Game/Objects/SpawnPoint.cpp` changes production behavior.
 The accompanying changes add the focused `.cpp`, `.h`, `.py` and `.cmd`

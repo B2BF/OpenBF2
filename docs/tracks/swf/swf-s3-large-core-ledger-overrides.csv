@@ -1,0 +1,19 @@
+address,symbol,file,status,reason
+0x100712C0,array<one-byte>::reserve,Code/BF2/External/base/container.h,done,verified;capacity-before-allocation;zero-free-null;old-capacity-forwarded;[INFERRED] element type
+0x10072E90,hash<string-smart-resource>::entry::clear,Code/BF2/External/base/container.h,done,verified;key-before-value-destruction-before-empty-sentinel;[INFERRED] template arguments
+0x10072F30,tu_string::operator+=(const char*),Code/BF2/External/base/container.h,done,verified;length-snapshot-resize-copy-terminator
+0x100731D0,smart_ptr::set_ref,Code/BF2/External/base/smart_ptr.h,done,verified;identity-release-store-retain;0x1007BDA9 discards incidental result;[INFERRED] pointee
+0x10073940,gameswf::bitmap_character::bitmap_character,Code/BF2/External/gameswf/gameswf_impl.h,done,verified;bitmap-retained-after-definition-init;existing-S3-separate-ID-adapter
+0x100743C0,array<16-byte-record>::operator=,Code/BF2/External/base/container.h,done,verified;resize-before-trivial-element-copy;[INFERRED] element type
+0x100750F0,array<gameswf::as_value>::array(const array&),Code/BF2/External/base/container.h,done,verified;zero-pointer-size-capacity-then-assignment-via-0x100748B0
+0x10076BA0,hash<integer-string>::set,Code/BF2/External/base/container.h,done,verified;find-replace-otherwise-add;native-hash-width-policy-retained
+0x10077C20,string_hash<word>::set,Code/BF2/External/base/container.h,done,verified;find-overwrite-word-otherwise-add;[INFERRED] signedness
+0x10079760,array<gameswf::import_info>::remove,Code/BF2/External/base/container.h,done,verified;singleton-clear-otherwise-record-destruct-memmove-tail-decrement
+0x1007A0B0,stringi_hash<smart_ptr<resource>>::set,Code/BF2/External/base/container.h,done,verified;find-held-resource-assignment-otherwise-add;native-hash-width-policy-retained
+0x1007A630,string_hash<word>::destroy_table,Code/BF2/External/base/container.h,done,verified;ascending-occupied-entry-clear-then-free;[INFERRED] value type
+0x1007B4C0,gameswf::place_object_2::~place_object_2,Code/BF2/External/gameswf/gameswf_impl.cpp,done,verified;name-free-null-before-handler-destruction-and-array-clear;deleting-veneer-0x1007B480
+0x1007CE20,gameswf::movie_def_impl::~movie_def_impl,Code/BF2/External/gameswf/gameswf_impl.cpp,done,live-init-action-bound-restored;existing-member-release-order-verified;native-execute-tag-buffer-ownership-bridge-retained
+0x10083260,hash<int-array<execute_tag*>>::destroy_table,Code/BF2/External/base/container.h,done,verified;occupied-value-array-release-before-empty-sentinel;ascending-table-free;native-hash-width-policy-retained
+0x100846F0,string_hash_functor<tu_string>::operator(),Code/BF2/External/base/container.h,done,verified;strlen-before-reverse-unsigned-byte-bernstein-hash;32-bit-accumulator
+0x100A7DC0,array<gameswf::display_object_info>::remove,Code/BF2/External/base/container.h,done,verified;singleton-clear-otherwise-character-release-memmove-decrement
+0x100A8010,array<gameswf::display_object_info>::insert,Code/BF2/External/base/container.h,done,verified;resize-memmove-tail-placement-copy-construction;caller-0x100A817C

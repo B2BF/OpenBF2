@@ -15,6 +15,7 @@ local changes small and documented alongside the affected dependency.
 | gameswf and base | `gameswf/` and `base/`; Thatcher Ulrich's tu-testbed snapshot of 27 February 2006 | SwiffPlayer menu playback |
 | Expat 1.95.0 | `expat/`; official `libexpat` tag `R_1_95_0`, unchanged MIT sources ([provenance and hashes](expat/README.md)); [CHOSEN, not recovered] substitute for DICE's modified parser | SwiffPlayer XML |
 | libogg 1.3.6 and libvorbis 1.3.7 | `libogg-1.3.6/` and `libvorbis-1.3.7/`; Xiph.Org sources | BF2Audio Ogg/Vorbis decoding |
+| Speex 1.0.5 | `speex-1.0.5/`; official Xiph.Org release tarball, unmodified, BSD ([COPYING](speex-1.0.5/COPYING), [provenance, retail table match and build notes](speex-1.0.5/LOCAL_CHANGES.md)) | GameSpy Voice2 codec for the VoIP client (`gvSpeex.c`) |
 | Dear ImGui | `imgui/`; `v1.92.9b-docking`, commit `b48d1af` | Editor UI |
 | ImGuizmo | `ImGuizmo/`; tag `1.10`, commit `b796ac3` | Editor transform gizmo |
 | FFmpeg Bink decoders | `ffmpeg-bink/`; seven unmodified files of FFmpeg 7.1.1 plus an OpenBF2 shim ([README](ffmpeg-bink/README.md)), LGPL-2.1+ | Bink movie playback on macOS and Windows x64 (`RendDX9Abi/BinkFFmpeg.cpp`); Windows x86 uses RAD's `binkw32.dll` |
@@ -28,8 +29,9 @@ covered by the claim that an upstream library is unmodified.
 The individual sources and license files govern their respective components.
 Keep the [Python license](python-embedded/py-src-2.3.4/LICENSE),
 [FFmpeg LGPL notice](ffmpeg-bink/COPYING.LGPLv2.1),
-[Dear ImGui license](imgui/LICENSE.txt), [ImGuizmo license](ImGuizmo/LICENSE) and
-[meshoptimizer license](meshoptimizer/LICENSE.md)
+[Dear ImGui license](imgui/LICENSE.txt), [ImGuizmo license](ImGuizmo/LICENSE),
+[meshoptimizer license](meshoptimizer/LICENSE.md) and
+[Speex license](speex-1.0.5/COPYING)
 with their distributions. Other dependencies carry notices in their source
 files and accompanying upstream documentation.
 
@@ -74,8 +76,7 @@ of the vendored library when changing the wrapper.
 ### Audio codecs
 
 [bf2audio.cmd](../../Build/bf2audio.cmd) compiles the selected Ogg/Vorbis C files
-into BF2Audio. Setting `BF2AUDIO_NO_VORBIS` omits the decoder; Ogg playback then
-reports the unavailable path and remains silent. The
+into BF2Audio; the decoder is required and the build stops if its sources are missing. The
 [audio comparison harness](../../Build/bf2audio_diff.cmd) treats decoder PCM
 hash differences separately from the other checks.
 

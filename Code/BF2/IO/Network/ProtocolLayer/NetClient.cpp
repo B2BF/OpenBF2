@@ -1,5 +1,6 @@
 // Client protocol connection. Integer obfuscation is omitted; PunkBuster activation retains a named [FRONTIER] stop.
 #include "NetClient.h"
+#include "../../../Game/PunkBuster/PbGlue.h"
 #if !DEDICATED
 
 #include "SWConnection.h"
@@ -522,12 +523,12 @@ int NetClient::handleConnectAccept()
     m_bitStreamIn->readBits(&pb, 1);
     if (pb == 1)
     {
-        // [TEMP] [CHOSEN, not recovered] PunkBuster client integration is unavailable.
-        // [RETIRE-WHEN: netclient-punkbuster] Replace with validated SDK initialization and callbacks.
-        std::fprintf(stderr, "[FRONTIER] dice::hfe::io::NetClient::handleConnectAccept: the server runs PunkBuster and the "
-                             "PunkBuster client SDK glue (BF2.exe 436060 / 436220) is unrecovered; join a server without it\n");
-        std::fflush(stderr);
-        std::abort();
+        // The server runs PunkBuster: bring the client glue up and announce the connection
+        // (0x6BD467 / 0x6BD470). Without pbcl.dll the glue shows its not-installed notice.
+#if !DEDICATED
+        PbClientInitialize(0);
+        PbClientConnect();
+#endif
     }
     if (m_bitStreamIn->hasError())
     {

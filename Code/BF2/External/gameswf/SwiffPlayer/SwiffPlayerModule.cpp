@@ -164,7 +164,7 @@ IModule* dllmodules[] =
 // [CHOSEN, not recovered] The statically linked image's "reload" (Code/StaticPlugins/StaticPlugins.h):
 // deinitDll released the module and nulled its slot; a fresh SwiffPlayer.dll mapping would run the
 // table's initializer again, so the slot gets a new module before the next initDll. The other image
-// statics (gameswf globals, the key-state bytes) are not reset; see docs/macos-c-menu-interact.md.
+// statics (gameswf globals, the key-state bytes) are not reset.
 extern "C" void bf2_swiffplayer_reloadImage()
 {
     if (!dllmodules[0])

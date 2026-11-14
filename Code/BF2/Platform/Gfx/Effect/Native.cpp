@@ -35,7 +35,7 @@ const TableEntry kTable[] = {
 
 // Profile ladder [CHOSEN]: the requested profile first, then promotions that the Metal target
 // does not distinguish. vkd3d has no ps_1_x texture code generation and runs out of vs_1_1
-// temporaries on skinned meshes (docs/macos-c-native-fx.md, GPU equivalence).
+// temporaries on skinned meshes (GPU equivalence).
 std::vector<std::string> ladder(const std::string& profile) {
     std::vector<std::string> out{profile};
     if (profile == "vs_1_1") out.insert(out.end(), {"vs_2_0", "vs_3_0"});
@@ -52,17 +52,124 @@ std::string firstError(const std::string& log) {
     return log.substr(0, log.find('\n'));
 }
 
+// ---- Shader-level memo ----------------------------------------------------------------------
+// [CHOSEN, not recovered] Every Ra permutation compiles its whole effect text, so equal shaders
+// reach the compiler as distinct inputs (Devils_Perch: 7,314 compiled jobs, 941 distinct
+// bytecodes). For a request D3DX accepts, a shader job compiles trimSource(): the text reduced to
+// what the entry point reaches (its functions, the global declarations they name; structs,
+// typedefs, prototypes and register-reserved globals always stay) with whitespace runs collapsed. The output is a function
+// of that text, so equal trimmed texts share one compile (memo below). Unknown requests keep the
+// full-text compile for D3DX-like diagnostics. tools/macos/nativefx `memo-guard` checks offline
+// that full and trimmed texts give the same bytecode and outcome.
+std::vector<std::pair<size_t, size_t>> identifiers(const std::string& t, size_t b, size_t e) {
+    std::vector<std::pair<size_t, size_t>> out;
+    auto alpha = [](char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'; };
+    auto alnum = [&](char c) { return alpha(c) || (c >= '0' && c <= '9'); };
+    for (size_t i = b; i < e;) {
+        char c = t[i];
+        if (alpha(c)) { size_t j = i; while (j < e && alnum(t[j])) ++j; out.push_back({i, j - i}); i = j; }
+        else if (c >= '0' && c <= '9') { while (i < e && (alnum(t[i]) || t[i] == '.')) ++i; }
+        else ++i;
+    }
+    return out;
+}
+} // namespace
+
+bool trimSource(const std::string& text, const std::string& entry, std::string& out) {
+    src::Effect fx; src::Error perr;
+    if (!src::parse(text, fx, perr)) return false;
+    std::map<std::string, std::vector<size_t>> functions, globals;
+    for (size_t i = 0; i < fx.functions.size(); ++i) if (fx.functions[i].hasBody) functions[fx.functions[i].name].push_back(i);
+    for (size_t i = 0; i < fx.globals.size(); ++i) globals[fx.globals[i].name].push_back(i);
+    if (!functions.count(entry)) return false;
+    std::vector<char> keepFunction(fx.functions.size(), 0), keepGlobal(fx.globals.size(), 0);
+    std::vector<std::pair<size_t, size_t>> work;
+    auto useName = [&](const std::string& n) {
+        auto f = functions.find(n);
+        if (f != functions.end()) for (size_t i : f->second) if (!keepFunction[i]) {
+            keepFunction[i] = 1; work.push_back({fx.functions[i].begin, fx.functions[i].end});
+        }
+        auto g = globals.find(n);
+        if (g != globals.end()) for (size_t i : g->second) if (!keepGlobal[i]) {
+            // One statement can declare several globals: keep (and scan) it whole.
+            for (size_t k = 0; k < fx.globals.size(); ++k)
+                if (fx.globals[k].begin == fx.globals[i].begin && fx.globals[k].end == fx.globals[i].end) keepGlobal[k] = 1;
+            work.push_back({fx.globals[i].begin, fx.globals[i].end});
+        }
+    };
+    for (const auto& st : fx.structs) work.push_back({st.begin, st.end}); // kept: their names reach globals
+    // A register reservation binds its register whether or not this shader reads the global; the
+    // allocation of every other uniform depends on it, so such declarations always stay.
+    for (const auto& g : fx.globals)
+        for (const auto& id : identifiers(text, g.begin, std::min(g.end, text.size())))
+            if (text.compare(id.first, id.second, "register") == 0) { useName(g.name); break; }
+    useName(entry);
+    while (!work.empty()) {
+        auto r = work.back(); work.pop_back();
+        for (const auto& id : identifiers(text, r.first, std::min(r.second, text.size()))) useName(text.substr(id.first, id.second));
+    }
+    std::string t = text;
+    auto blank = [&](size_t b, size_t e) { for (size_t i = b; i < e && i < t.size(); ++i) if (t[i] != '\n') t[i] = ' '; };
+    for (size_t i = 0; i < fx.functions.size(); ++i) if (fx.functions[i].hasBody && !keepFunction[i]) blank(fx.functions[i].begin, fx.functions[i].end);
+    for (size_t i = 0; i < fx.globals.size(); ++i) if (!keepGlobal[i]) blank(fx.globals[i].begin, fx.globals[i].end);
+    out.clear(); out.reserve(t.size() / 2);
+    bool space = false;
+    for (char c : t) {
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v') { space = !out.empty(); continue; }
+        if (space) { out.push_back(' '); space = false; }
+        out.push_back(c);
+    }
+    return true;
+}
+
+namespace {
+struct MemoResult { bool ok = false; Bytes code; std::string error; };
+std::mutex gMemoMutex;
+std::map<std::string, std::shared_future<MemoResult>> gMemo; // trimmed-text key -> outcome
+std::atomic<unsigned> gMemoHits{0}, gMemoMisses{0};
+
+bool compileFull(const ShaderJob& job, const std::string& source, Bytes& bytecode, std::string& error);
+
 struct Backend final : ShaderBackend {
+    bool memo = false; // the request is D3DX-accepted: compile the trimmed text, share outcomes
     bool compile(const ShaderJob& job, const std::string& text, Bytes& bytecode, std::string& error) override {
         if (!job.asmText.empty() || job.function.empty()) {
             if (!assemble(job.asmText, bytecode, error)) return false;
             Shader probe; probe.bytecode = bytecode; probe.entry = "ShaderFunction";
             return reflect(probe, {}, error);
         }
+        std::string trimmed;
+        if (!memo || !trimSource(text + job.wrapper, job.entry, trimmed)) return compileFull(job, text + job.wrapper, bytecode, error);
+        Writer w;
+        w(std::string("BF2FX-shader-memo"), uint32_t(1), job.profile, job.entry, job.function, sha256(Bytes(trimmed.begin(), trimmed.end())));
+        const std::string key = sha256(w.bytes);
+        std::promise<MemoResult> mine;
+        std::shared_future<MemoResult> f;
+        bool owner = false;
+        {
+            std::lock_guard<std::mutex> lock(gMemoMutex);
+            auto it = gMemo.find(key);
+            if (it != gMemo.end()) f = it->second;
+            else { f = mine.get_future().share(); gMemo[key] = f; owner = true; }
+        }
+        if (owner) {
+            ++gMemoMisses;
+            MemoResult r; r.ok = compileFull(job, trimmed, r.code, r.error);
+            mine.set_value(r);
+        } else ++gMemoHits;
+        const MemoResult& r = f.get();
+        bytecode = r.code; error = r.error;
+        return r.ok;
+    }
+    bool reflect(Shader& shader, const std::vector<SamplerSlot>& samplers, std::string& error) override {
+        return native::reflect(shader, samplers, error);
+    }
+};
+bool compileFull(const ShaderJob& job, const std::string& source, Bytes& bytecode, std::string& error) {
         std::string first;
         for (const auto& profile : ladder(job.profile)) {
             std::string log, e;
-            if (compileShader(text + job.wrapper, job.entry, profile, bytecode, log) < 0) e = firstError(log);
+            if (compileShader(source, job.entry, profile, bytecode, log) < 0) e = firstError(log);
             else {
                 Shader probe; probe.bytecode = bytecode; probe.entry = "ShaderFunction";
                 if (native::reflect(probe, {}, e)) return true;
@@ -72,13 +179,10 @@ struct Backend final : ShaderBackend {
         }
         error = first;
         return false;
-    }
-    bool reflect(Shader& shader, const std::vector<SamplerSlot>& samplers, std::string& error) override {
-        return native::reflect(shader, samplers, error);
-    }
-};
+}
 // Compiles every shader job of an effect in parallel first; the builder then reads the results.
 struct Parallel final : ShaderBackend {
+    bool memo = false; // passed to every Backend (see Backend::memo)
     struct Result { bool ok = false; Bytes code; std::string error; };
     std::map<std::string, Result> done;
     static std::string id(const ShaderJob& job) { return std::to_string(job.stage) + "|" + job.key; }
@@ -104,7 +208,7 @@ struct Parallel final : ShaderBackend {
         const std::string texts[2] = {compilerText(fx, text, PixelShader), compilerText(fx, text, VertexShader)};
         std::atomic<size_t> next{0};
         auto work = [&] {
-            Backend backend;
+            Backend backend; backend.memo = memo;
             for (size_t i; (i = next++) < jobs.size();) {
                 auto& r = done[id(jobs[i])]; // Pre-inserted: no rehash while workers run.
                 r.ok = backend.compile(jobs[i], texts[jobs[i].stage == VertexShader ? 1 : 0], r.code, r.error);
@@ -118,7 +222,7 @@ struct Parallel final : ShaderBackend {
     }
     bool compile(const ShaderJob& job, const std::string& text, Bytes& bytecode, std::string& error) override {
         auto it = done.find(id(job));
-        if (it == done.end()) { Backend b; return b.compile(job, text, bytecode, error); }
+        if (it == done.end()) { Backend b; b.memo = memo; return b.compile(job, text, bytecode, error); }
         bytecode = it->second.code; error = it->second.error;
         return it->second.ok;
     }
@@ -265,8 +369,16 @@ Entry compile(const Request& r, const std::string* pre) {
         return e;
     }
     Parallel backend;
+    backend.memo = known(r) == Known::Accepted;
     backend.prepare(text);
     BuildReport report;
+    // [TEMP] Test hook (not a user setting): BF2_FX_TEST_HIGHER_VERTEX_PROFILE=1 treats every
+    // request as D3DX-accepted for this fallback, so the harness can cover it with its own sources;
+    // =0 turns the fallback off (route A/B). Unset: the table decides.
+    const char* testEnv = std::getenv("BF2_FX_TEST_HIGHER_VERTEX_PROFILE");
+    const bool testHigher = testEnv && *testEnv == '1';
+    report.higherVertexProfile = testHigher || known(r) == Known::Accepted;
+    if (testEnv && *testEnv == '0') report.higherVertexProfile = false;
     if (build(text, backend, e.description, error, &report)) return e;
     e.fx2.clear(); // Only an effect hands CompileEffect a buffer.
     if (error == "There were no techniques") {
@@ -302,6 +414,10 @@ std::shared_future<Entry> submit(const std::string& key, const Request& r, std::
 }
 Entry wait(const std::string& key, const std::shared_future<Entry>& f) { return Queue::get().wait(key, f); }
 size_t pending() { return Queue::get().pending(); }
+void memoCounts(unsigned& hits, unsigned& misses) { hits = gMemoHits; misses = gMemoMisses; }
+bool compileJob(const ShaderJob& job, const std::string& source, Bytes& bytecode, std::string& error) {
+    return compileFull(job, source, bytecode, error);
+}
 
 } // namespace native
 } // namespace bf2fx

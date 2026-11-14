@@ -1,0 +1,764 @@
+aidll_r_addr,aidll_r_size,file_tu,assert_lines,elf150_addr,elf150_symbol,tree_file,how,status
+0x1000ABC0,136,AI/AIDLL/DLL/BF2AI.cpp,75,,,,,unmapped
+0x1000AC90,128,AI/AIDLL/DLL/BF2AI.cpp,80,,,,,unmapped
+0x1000AF70,121,AI/AIDLL/DLL/BF2AI.cpp,229,,,,,unmapped
+0x1000D880,964,AI/AIDLL/DLL/BF2AI.cpp,141,,,,,unmapped
+0x1000DDE0,825,AI/AIDLL/DLL/BF2AI.cpp,220,,,,,unmapped
+0x10010090,27,,,0x40FD60,dice::hfe::ConsoleObjectBaseImpl::getObjectDeltaAsString() const,Code/BF2/Core/ConsoleObjectBase.cpp,string,match
+0x10052360,788,,,0x489210,"dice::hfe::internal_debugCallback(dice::hfe::DebugType, std::string const&, std::string const&, int, std::string const&, std::string const&, std::string const&, void*)",Code/BF2/Core/Debug.cpp,string,match
+0x100529F0,1215,Core/DllModule.cpp,,0x489D20,initDll,Code/BF2/Core/DllModule.cpp,string,match
+0x10055340,1214,,,0x2EB580,dice::hfe::ai::CommonSingletonServer::updateStaticMethodsInternal(),Main/CommonSingletonServer.cpp,string,match
+0x10055820,144,,,0x2EAD50,dice::hfe::ai::AISingletonServer::updateStaticMethodsInternal(),Main/AISingletonServer.cpp,consts,match
+0x100558B0,68,,,0x2EACB0,dice::hfe::ai::AISingletonServer::updateStaticMethods(),Main/AISingletonServer.cpp,string,match
+0x10055900,138,Main/IAIMain.cpp,17,,,,,unmapped
+0x10057F40,398,Main/BotBehaviourManager.cpp,108,0x3D4190,"dice::hfe::ai::(anonymous namespace)::BBCreateFunctionAvoid::operator()(int, std::string&, int, dice::hfe::ai::UrgeCurve*, float*)",Main/BotBehaviourManager.cpp,string,match
+0x100582D0,468,Main/BotBehaviourManager.cpp,146,0x3D4690,"dice::hfe::ai::(anonymous namespace)::BBCreateFunctionMoveTo::operator()(int, std::string&, int, dice::hfe::ai::UrgeCurve*, float*)",Main/BotBehaviourManager.cpp,string,match
+0x10058730,401,Main/BotBehaviourManager.cpp,202,0x3D4F80,"dice::hfe::ai::(anonymous namespace)::BBCreateFunctionIdle::operator()(int, std::string&, int, dice::hfe::ai::UrgeCurve*, float*)",Main/BotBehaviourManager.cpp,string,match
+0x10058AD0,265,Main/BotBehaviourManager.cpp,229,,,,,unmapped
+0x10058CE0,334,Main/BotBehaviourManager.cpp,259,0x3D5720,"dice::hfe::ai::(anonymous namespace)::BBCreateFunctionChangeLandingCraft::operator()(int, std::string&, int, dice::hfe::ai::UrgeCurve*, float*)",Main/BotBehaviourManager.cpp,string,match
+0x10058F30,265,Main/BotBehaviourManager.cpp,285,0x3D5AF0,"dice::hfe::ai::(anonymous namespace)::BBCreateFunctionChangeTeleport::operator()(int, std::string&, int, dice::hfe::ai::UrgeCurve*, float*)",Main/BotBehaviourManager.cpp,string,match
+0x10059140,265,Main/BotBehaviourManager.cpp,311,0x3D5D90,"dice::hfe::ai::(anonymous namespace)::BBCreateFunctionMedicAssist::operator()(int, std::string&, int, dice::hfe::ai::UrgeCurve*, float*)",Main/BotBehaviourManager.cpp,string,match
+0x10059350,334,Main/BotBehaviourManager.cpp,341,,,,,unmapped
+0x10059620,336,Main/BotBehaviourManager.cpp,371,,,,,unmapped
+0x100597F0,265,Main/BotBehaviourManager.cpp,397,0x3D67E0,"dice::hfe::ai::(anonymous namespace)::BBCreateFunctionFireDriver::operator()(int, std::string&, int, dice::hfe::ai::UrgeCurve*, float*)",Main/BotBehaviourManager.cpp,string,match
+0x10059A00,334,Main/BotBehaviourManager.cpp,427,0x3D6A80,"dice::hfe::ai::(anonymous namespace)::BBCreateFunctionFire3d::operator()(int, std::string&, int, dice::hfe::ai::UrgeCurve*, float*)",Main/BotBehaviourManager.cpp,string,match
+0x10059CD0,265,Main/BotBehaviourManager.cpp,454,,,,,unmapped
+0x10059E60,265,Main/BotBehaviourManager.cpp,479,0x3D70F0,"dice::hfe::ai::(anonymous namespace)::BBCreateFunctionTakeCover::operator()(int, std::string&, int, dice::hfe::ai::UrgeCurve*, float*)",Main/BotBehaviourManager.cpp,string,match
+0x1005A070,265,Main/BotBehaviourManager.cpp,504,0x3D7390,"dice::hfe::ai::(anonymous namespace)::BBCreateFunctionTakeCoverInfantry::operator()(int, std::string&, int, dice::hfe::ai::UrgeCurve*, float*)",Main/BotBehaviourManager.cpp,string,match
+0x1005A280,265,Main/BotBehaviourManager.cpp,559,0x3D7630,"dice::hfe::ai::(anonymous namespace)::BBCreateFunctionSuicide::operator()(int, std::string&, int, dice::hfe::ai::UrgeCurve*, float*)",Main/BotBehaviourManager.cpp,string,match
+0x1005A490,265,Main/BotBehaviourManager.cpp,586,0x3D78D0,"dice::hfe::ai::(anonymous namespace)::BBCreateFunctionCallForMedic::operator()(int, std::string&, int, dice::hfe::ai::UrgeCurve*, float*)",Main/BotBehaviourManager.cpp,string,match
+0x1005A6A0,265,Main/BotBehaviourManager.cpp,613,0x3D7B70,"dice::hfe::ai::(anonymous namespace)::BBCreateFunctionRevive::operator()(int, std::string&, int, dice::hfe::ai::UrgeCurve*, float*)",Main/BotBehaviourManager.cpp,string,match
+0x1005A8B0,265,Main/BotBehaviourManager.cpp,639,0x3D7E10,"dice::hfe::ai::(anonymous namespace)::BBCreateFunctionTakeCover3d::operator()(int, std::string&, int, dice::hfe::ai::UrgeCurve*, float*)",Main/BotBehaviourManager.cpp,string,match
+0x1005AAC0,265,Main/BotBehaviourManager.cpp,665,0x3D80B0,"dice::hfe::ai::(anonymous namespace)::BBCreateFunctionC4::operator()(int, std::string&, int, dice::hfe::ai::UrgeCurve*, float*)",Main/BotBehaviourManager.cpp,string,match
+0x1005ACD0,265,Main/BotBehaviourManager.cpp,691,0x3D8350,"dice::hfe::ai::(anonymous namespace)::BBCreateFunctionBridgeRepair::operator()(int, std::string&, int, dice::hfe::ai::UrgeCurve*, float*)",Main/BotBehaviourManager.cpp,string,match
+0x1005AEE0,265,Main/BotBehaviourManager.cpp,717,0x3D85F0,"dice::hfe::ai::(anonymous namespace)::BBCreateFunctionDefuseMines::operator()(int, std::string&, int, dice::hfe::ai::UrgeCurve*, float*)",Main/BotBehaviourManager.cpp,string,match
+0x1005B0F0,265,Main/BotBehaviourManager.cpp,743,0x3D8890,"dice::hfe::ai::(anonymous namespace)::BBCreateFunctionRunOverSoldier::operator()(int, std::string&, int, dice::hfe::ai::UrgeCurve*, float*)",Main/BotBehaviourManager.cpp,string,match
+0x1005B300,265,Main/BotBehaviourManager.cpp,770,0x3D8B30,"dice::hfe::ai::(anonymous namespace)::BBCreateFunctionRandom::operator()(int, std::string&, int, dice::hfe::ai::UrgeCurve*, float*)",Main/BotBehaviourManager.cpp,string,match
+0x1005B510,265,Main/BotBehaviourManager.cpp,797,0x3D8DD0,"dice::hfe::ai::(anonymous namespace)::BBCreateFunctionTriggerable::operator()(int, std::string&, int, dice::hfe::ai::UrgeCurve*, float*)",Main/BotBehaviourManager.cpp,string,match
+0x1005BE60,113,Main/BotBehaviourManager.cpp,,0x3D2740,dice::hfe::ai::BotBehaviourManager::getBehaviourId(std::string),Main/BotBehaviourManager.cpp,calls,match
+0x1005C8F0,210,Main/BotBehaviourManager.cpp,881,,,,,unmapped
+0x1005E210,543,Main/BotBehaviourManager.cpp,916,0x3D2820,"dice::hfe::ai::BotBehaviourManager::create(std::string, std::string, std::string, int, std::string, float*, std::string&)",Main/BotBehaviourManager.cpp,string,match
+0x1005E430,76,Main/BotBehaviourManager.cpp,,0x3D2B30,"dice::hfe::ai::BotBehaviourManager::createUCConstant(std::string&, float)",Main/BotBehaviourManager.cpp,string,match
+0x1005E480,80,Main/BotBehaviourManager.cpp,,0x3D2CA0,"dice::hfe::ai::BotBehaviourManager::createUCLinear(std::string&, float, float)",Main/BotBehaviourManager.cpp,string,match
+0x1005E4D0,88,Main/BotBehaviourManager.cpp,,0x3D2E20,"dice::hfe::ai::BotBehaviourManager::createUCXInverse(std::string&, float, float, float, float)",Main/BotBehaviourManager.cpp,string,match
+0x1005E750,249,Main/BotBehaviourManager.cpp,,,,,,unmapped
+0x1005EAC0,2193,Main/BotBehaviourManager.cpp,816,,,,,unmapped
+0x1005F7D0,203,Main/AIConsole.cpp,523,,,,,unmapped
+0x1005F8A0,184,Main/AIConsole.cpp,,,,,,unmapped
+0x1005F960,173,Main/AIConsole.cpp,563,,,,,unmapped
+0x1005FA30,143,Main/AIConsole.cpp,1044,,,,,unmapped
+0x1005FAC0,333,Main/AIConsole.cpp,1083 1090 1095,,,,,unmapped
+0x1005FC10,262,Main/AIConsole.cpp,1108 1114,,,,,unmapped
+0x1005FD40,130,Main/AIConsole.cpp,,0x393B50,"dice::hfe::ai::AIConsole::createLODManager(float, float)",Main/AIConsole.cpp,string,match
+0x1005FEC0,114,Main/AIConsole.cpp,1622,,,,,unmapped
+0x100615F0,342,Main/AIConsole.cpp,286 290,,,,,unmapped
+0x10061750,370,Main/AIConsole.cpp,412 419 425 430,,,,,unmapped
+0x10062680,409,Main/AIConsole.cpp,,0x390100,dice::hfe::ai::AIConsole::killBotName(std::string const&),Main/AIConsole.cpp,string,match
+0x10062820,409,Main/AIConsole.cpp,,0x390760,dice::hfe::ai::AIConsole::killBotId(int),Main/AIConsole.cpp,string,match
+0x100629C0,504,Main/AIConsole.cpp,,,,,,unmapped
+0x10062BC0,304,Main/AIConsole.cpp,731,,,,,unmapped
+0x10062CF0,281,Main/AIConsole.cpp,,,,,,unmapped
+0x10062E09,204,Main/AIConsole.cpp,,,,,,unmapped
+0x10062EE0,618,Main/AIConsole.cpp,,0x3934C0,dice::hfe::ai::AIConsole::showAISettings(),Main/AIConsole.cpp,string,match
+0x10063150,172,Main/AIConsole.cpp,1558,,,,,unmapped
+0x10063200,172,Main/AIConsole.cpp,1570,,,,,unmapped
+0x100632B0,172,Main/AIConsole.cpp,1582,,,,,unmapped
+0x10063E70,340,Main/AIConsole.cpp,,,,,,unmapped
+0x10063FD0,349,Main/AIConsole.cpp,,,,,,unmapped
+0x10064130,362,Main/AIConsole.cpp,,,,,,unmapped
+0x10064B70,831,Main/AIConsole.cpp,,,,,,unmapped
+0x10064EB0,245,Main/AIConsole.cpp,789,,,,,unmapped
+0x10064FB0,242,Main/AIConsole.cpp,1674,,,,,unmapped
+0x100650B0,294,Main/AIConsole.cpp,1690,,,,,unmapped
+0x100660A0,576,Main/AIConsole.cpp,767,,,,,unmapped
+0x100662F0,350,Main/AIConsole.cpp,871,,,,,unmapped
+0x10066450,453,Main/AIConsole.cpp,898 913,,,,,unmapped
+0x10066620,132,Main/AIConsole.cpp,934,,,,,unmapped
+0x10066790,132,Main/AIConsole.cpp,966,,,,,unmapped
+0x10067300,1162,Main/AIConsole.cpp,304 310 324 333 340 346 351,0x38FCF0,"dice::hfe::ai::AIConsole::addBot(std::string, int, std::string, std::string)",Main/AIConsole.cpp,string,match
+0x10067790,539,Main/AIConsole.cpp,363 367 373 380,,,,,unmapped
+0x100679B0,292,Main/AIConsole.cpp,748,,,,,unmapped
+0x10067AE0,541,Main/AIConsole.cpp,,,,,,unmapped
+0x10067D00,2933,Main/AIConsole.cpp,,0x394070,"dice::hfe::ai::AIConsole::saveAll(std::string const&, std::string const&)",Main/AIConsole.cpp,string,match
+0x10068CD0,495,Main/AIConsole.cpp,1707 1714,,,,,unmapped
+0x10068EC0,184,Main/AIConsole.cpp,1735,,,,,unmapped
+0x100691D0,505,Main/AIConsole.cpp,656 663,,,,,unmapped
+0x100693D0,509,Main/AIConsole.cpp,681 688,,,,,unmapped
+0x100695D0,509,Main/AIConsole.cpp,706 713,,,,,unmapped
+0x100697D0,748,Main/AIConsole.cpp,,0x392BA0,dice::hfe::ai::AIConsole::freeCameraFire(),Main/AIConsole.cpp,string,match
+0x10069E60,3285,Main/AIConsole.cpp,155,,,,,unmapped
+0x1006D180,43,,,0x1A5D50,dice::hfe::ai::SquadCoordinator::getSquadLeader(),AIBot/SquadCoordinator.cpp,calls,match
+0x10079AD0,463,Main/CommunicationHub.cpp,81 89,,,,,unmapped
+0x10079E30,619,Main/CommunicationHub.cpp,212,,,,,unmapped
+0x1007C7E0,306,AIStrategicEntity/UserOrders/UserOrderManager.cpp,61,,,,,unmapped
+0x1007C920,316,AIStrategicEntity/UserOrders/UserOrderManager.cpp,75,,,,,unmapped
+0x1007D0E0,148,AIPathFinding/AerialHeightMap/AerialHeightMap.cpp,22,,,,,unmapped
+0x1007D8E0,43,,,0x1B5630,dice::hfe::ai::SquadMember::getPlayer(),AIBot/SquadMember.cpp,calls,match
+0x1007D910,134,AIUtils/WeaponInfoManager.cpp,71,,,,,unmapped
+0x1007DB10,111,Main/AILODManager.cpp,71,,,,,unmapped
+0x10080180,339,Main/AILODManager.cpp,241,,,,,unmapped
+0x10081FA0,356,Main/AILandingZoneManager.cpp,152,,,,,unmapped
+0x100829E0,82,,,0x3E4DE0,"std::list<dice::hfe::ai::BotPlacement, std::allocator<dice::hfe::ai::BotPlacement>>::erase(std::_List_iterator<dice::hfe::ai::BotPlacement, dice::hfe::ai::BotPlacement&, dice::hfe::ai::BotPlacement*>)",Main/BotPlacementManager.cpp,calls,match
+0x10082DA0,1212,,,0x3E30E0,dice::hfe::ai::BotPlacementManager::spawnBot(int),Main/BotPlacementManager.cpp,string,match
+0x100833F0,4,,,0x344B00,dice::hfe::ai::AIStrategicObjectManager::getStrategicObjectsOfCategory(int) const,AIStrategicEntity/AIStrategicObjectManager.cpp,calls,match
+0x10083490,4,,,0x345610,dice::hfe::ai::AIStrategicObjectManager::getNumberOfCategories(),AIStrategicEntity/AIStrategicObjectManager.cpp,calls,match
+0x10084890,19,,,0x344AE0,dice::hfe::ai::AIStrategicObjectManager::getNumberOfStrategicObjects() const,AIStrategicEntity/AIStrategicObjectManager.cpp,calls,match
+0x100848B0,33,,,0x48CB00,dice::hfe::io::File::~File(),Code/BF2/IO/File/File.cpp,calls,match
+0x10086290,244,AIStrategicEntity/AIStrategicObjectManager.cpp,217,,,,,unmapped
+0x100863F0,291,AIStrategicEntity/AIStrategicObjectManager.cpp,258,,,,,unmapped
+0x10086520,184,AIStrategicEntity/AIStrategicObjectManager.cpp,293,0x344AD0,dice::hfe::ai::AIStrategicObjectManager::getStrategicObjects() const,AIStrategicEntity/AIStrategicObjectManager.cpp,calls,match
+0x100867B0,203,AIStrategicEntity/AIStrategicObjectManager.cpp,1050,,,,,unmapped
+0x10086910,713,AIStrategicEntity/AIStrategicObjectManager.cpp,,0x349610,"dice::hfe::ai::AIStrategicObjectManager::streamWaypoints(std::basic_ostringstream<char, std::char_traits<char>, std::allocator<char>>&, std::string const&) const",AIStrategicEntity/AIStrategicObjectManager.cpp,string,match
+0x10086E40,373,AIStrategicEntity/AIStrategicObjectManager.cpp,1581 1593 1599,,,,,unmapped
+0x10086FC0,367,AIStrategicEntity/AIStrategicObjectManager.cpp,1607 1618 1624,,,,,unmapped
+0x10087130,477,AIStrategicEntity/AIStrategicObjectManager.cpp,1660,,,,,unmapped
+0x10087310,541,AIStrategicEntity/AIStrategicObjectManager.cpp,1724 1729,,,,,unmapped
+0x100884A0,456,AIStrategicEntity/AIStrategicObjectManager.cpp,337 356,,,,,unmapped
+0x10088AD0,619,AIStrategicEntity/AIStrategicObjectManager.cpp,934 938 950 954,,,,,unmapped
+0x10088D40,580,AIStrategicEntity/AIStrategicObjectManager.cpp,980 984 992 996,,,,,unmapped
+0x10088F90,451,AIStrategicEntity/AIStrategicObjectManager.cpp,1005,,,,,unmapped
+0x100892D0,160,AIStrategicEntity/AIStrategicObjectManager.cpp,1062,,,,,unmapped
+0x10089430,585,AIStrategicEntity/AIStrategicObjectManager.cpp,1191 1198,,,,,unmapped
+0x10089680,284,AIStrategicEntity/AIStrategicObjectManager.cpp,1298,,,,,unmapped
+0x100898C0,361,AIStrategicEntity/AIStrategicObjectManager.cpp,1371 1378,,,,,unmapped
+0x1008B0B0,454,AIStrategicEntity/AIStrategicObjectManager.cpp,1253 1260,,,,,unmapped
+0x1008B6F0,485,AIStrategicEntity/AIStrategicObjectManager.cpp,594,,,,,unmapped
+0x1008B8E0,377,AIStrategicEntity/AIStrategicObjectManager.cpp,644,,,,,unmapped
+0x1008C210,366,AIStrategicEntity/AIStrategicObjectManager.cpp,1711,,,,,unmapped
+0x1008CD10,632,AIStrategicEntity/AIStrategicObjectManager.cpp,1144,0x348020,"dice::hfe::ai::AIStrategicObjectManager::addWayPoint(dice::hfe::Vec3 const&, std::string const&, std::string const&, std::string const&)",AIStrategicEntity/AIStrategicObjectManager.cpp,string,match
+0x1008D890,151,Main/StrategyManager.cpp,585,,,,,unmapped
+0x10090300,348,Main/StrategyManager.cpp,134,,,,,unmapped
+0x10090460,249,Main/StrategyManager.cpp,154,,,,,unmapped
+0x10090560,169,Main/StrategyManager.cpp,,0x3E8BE0,dice::hfe::ai::StrategyManager::addRequiredPrecedingStrategy(std::string),Main/StrategyManager.cpp,string,match
+0x10090640,169,Main/StrategyManager.cpp,,0x3E8D80,dice::hfe::ai::StrategyManager::addProhibitedPrecedingStrategy(std::string),Main/StrategyManager.cpp,string,match
+0x10090780,348,Main/StrategyManager.cpp,289,,,,,unmapped
+0x100908E0,249,Main/StrategyManager.cpp,309,,,,,unmapped
+0x100909E0,238,Main/StrategyManager.cpp,493,,,,,unmapped
+0x10090AD0,249,Main/StrategyManager.cpp,513,,,,,unmapped
+0x10090BD0,184,Main/StrategyManager.cpp,,0x3EA650,"dice::hfe::ai::StrategyManager::forceStrategy(std::string, int)",Main/StrategyManager.cpp,string,match
+0x10091610,165,Main/StrategyManager.cpp,,0x3E8A50,dice::hfe::ai::StrategyManager::setPrerequisite(std::string),Main/StrategyManager.cpp,string,match
+0x100917F0,386,Main/StrategyManager.cpp,372,,,,,unmapped
+0x10091980,378,Main/StrategyManager.cpp,398,,,,,unmapped
+0x10091B00,386,Main/StrategyManager.cpp,426,,,,,unmapped
+0x10091C90,436,Main/StrategyManager.cpp,452,,,,,unmapped
+0x10091E50,697,Main/StrategyManager.cpp,,0x3EA7D0,dice::hfe::ai::StrategyManager::reset(),Main/StrategyManager.cpp,string,match
+0x10092770,333,Main/StrategyManager.cpp,106,,,,,unmapped
+0x100928C0,312,Main/StrategyManager.cpp,263,,,,,unmapped
+0x10092E70,128,AIKnowledge/InformationFactory.cpp,47,,,,,unmapped
+0x10092F30,165,AIKnowledge/InformationFactory.cpp,278,,,,,unmapped
+0x100937A0,866,AIKnowledge/InformationFactory.cpp,126,,,,,unmapped
+0x10093BB0,200,AIKnowledge/InformationFactory.cpp,220,,,,,unmapped
+0x10093CC0,181,AIKnowledge/InformationFactory.cpp,260,,,,,unmapped
+0x10093D80,237,AIKnowledge/InformationFactory.cpp,71,,,,,unmapped
+0x10093E70,248,AIKnowledge/InformationFactory.cpp,100,,,,,unmapped
+0x100943A0,48,,,0x329A10,dice::hfe::ai::SAI::chooseStrategy(),AIStrategic/SAI.cpp,calls,match
+0x10098720,427,Main/AIPathfinding.cpp,547 554,,,,,unmapped
+0x1009D4D0,49,Main/AIPathfinding.cpp,,0x3A7280,dice::hfe::ai::AIPathfinding::getMapNameFromId(int) const,Main/AIPathfinding.cpp,string,match
+0x1009DB00,396,Main/AIPathfinding.cpp,2235,,,,,unmapped
+0x100A33F0,6606,Main/AIPathfinding.cpp,2396 2397,0x3A8860,"dice::hfe::ai::AIPathfinding::createGTSFiles(std::list<dice::hfe::ai::IAIObjectEnvironment::MeshAndBoundingBox, std::allocator<dice::hfe::ai::IAIObjectEnvironment::MeshAndBoundingBox>>&, std::list<dice::hfe::ai::IAIObjectEnvironment::WaterMesh, std::allocator<dice::hfe::ai::IAIObjectEnvironment::WaterMesh>>&, std::map<dice::hfe::ai::IAIObject const*, dice::hfe::ai::IAIObjectEnvironment::DestroyableAddOnMesh, std::less<dice::hfe::ai::IAIObject const*>, std::allocator<std::pair<dice::hfe::ai::IAIObject const* const, dice::hfe::ai::IAIObjectEnvironment::DestroyableAddOnMesh>>>&, std::list<dice::hfe::ai::IAIObjectEnvironment::MeshAndBoundingBox, std::allocator<dice::hfe::ai::IAIObjectEnvironment::MeshAndBoundingBox>>&, dice::hfe::ai::IAITerrain*, unsigned char) const",Main/AIPathfinding.cpp,string,match
+0x100A5870,648,Main/AIPathfinding.cpp,1523,,,,,unmapped
+0x100A6970,999,Main/AIPathfinding.cpp,,0x3A42F0,dice::hfe::ai::AIPathfinding::searchPointSelected(bool),Main/AIPathfinding.cpp,consts,match
+0x100A70E0,1098,Main/AIPathfinding.cpp,1350 1428 1430 1432,,,,,unmapped
+0x100A7DF0,960,Main/AIPathfinding.cpp,2601 2608 2616,,,,,unmapped
+0x100A82A0,950,Main/AIPathfinding.cpp,2646 2653 2661,,,,,unmapped
+0x100AA090,35,,,0x3B3610,dice::hfe::ai::AIRandom::generateNumbers() const,Main/AIRandom.cpp,calls,match
+0x100ABA80,705,,,0x3581B0,"dice::hfe::ai::CoverPositionManager::getClosestAttackCoverPosition(dice::hfe::Vec2 const&, dice::hfe::Vec2 const&, float, float, dice::hfe::Vec2&)",AIStrategicEntity/CoverPosition/CoverPositionManager.cpp,consts,match
+0x100B30E0,176,,,0x19F880,"std::_Rb_tree<unsigned int, unsigned int, std::_Identity<unsigned int>, std::less<unsigned int>, std::allocator<unsigned int>>::insert_unique(unsigned int const&)",AIBot/BotSenses.cpp,calls,match
+0x100B3B60,245,AIKnowledge/AIMineManager.cpp,388,,,,,unmapped
+0x100B3C60,245,AIKnowledge/AIMineManager.cpp,412,,,,,unmapped
+0x100B5250,590,,,0x2DFF00,"dice::hfe::ai::AIMineManager::minePlaced(dice::hfe::ai::IAIMineManager::MineType, unsigned int, dice::hfe::Mat4 const&, float)",AIKnowledge/AIMineManager.cpp,consts,match
+0x100B8E30,116,Main/AIEventCourier.cpp,460,,,,,unmapped
+0x100B8EB0,116,Main/AIEventCourier.cpp,466,,,,,unmapped
+0x100B8F90,164,Main/AIEventCourier.cpp,511,,,,,unmapped
+0x100B9060,164,Main/AIEventCourier.cpp,535,,,,,unmapped
+0x100B9560,542,Main/AICollisionHandler.cpp,109,,,,,unmapped
+0x100B9780,491,,,0x382D00,"dice::hfe::ai::AICollisionHandler::checkIfGrenade(dice::hfe::ai::Bot*, dice::hfe::ai::IAIObject*, dice::hfe::Vec3 const&)",Main/AICollisionHandler.cpp,string,match
+0x100BA300,116,Main/AISettings.cpp,686,,,,,unmapped
+0x100BA3F0,133,Main/AISettings.cpp,764,,,,,unmapped
+0x100BD5C0,211,Main/AISettings.cpp,157,0x3BF320,dice::hfe::ai::AISettings::getVehicle(int) const,Main/AISettings.cpp,string,match
+0x100BD790,166,Main/AISettings.cpp,788,,,,,unmapped
+0x100BD840,203,Main/AISettings.cpp,818,,,,,unmapped
+0x100BD950,194,Main/AISettings.cpp,839,,,,,unmapped
+0x100BE8A0,188,Main/AISettings.cpp,177,,,,,unmapped
+0x100BE960,354,Main/AISettings.cpp,186 189,,,,,unmapped
+0x100BEAD0,327,Main/AISettings.cpp,209 212,,,,,unmapped
+0x100BEC50,201,Main/AISettings.cpp,597,0x3C07D0,"dice::hfe::ai::AISettings::addVehicleToVehicleGroup(std::string const&, std::string const&)",Main/AISettings.cpp,string,match
+0x100BED20,166,Main/AISettings.cpp,621,,,,,unmapped
+0x100BFD90,262,Main/AISettings.cpp,725,,,,,unmapped
+0x100BFEA0,182,Main/AISettings.cpp,741,,,,,unmapped
+0x100C0DF0,196,Main/AISettings.cpp,301,,,,,unmapped
+0x100C0EC0,200,Main/AISettings.cpp,309,,,,,unmapped
+0x100C0F90,200,Main/AISettings.cpp,317,,,,,unmapped
+0x100C1060,200,Main/AISettings.cpp,324,,,,,unmapped
+0x100C12A0,462,Main/AISettings.cpp,146,,,,,unmapped
+0x100C2690,363,Main/AISettings.cpp,345,,,,,unmapped
+0x100C2800,326,Main/AISettings.cpp,371,,,,,unmapped
+0x100C2980,665,Main/AISettings.cpp,268 270 271 272,,,,,unmapped
+0x100C2C20,432,Main/AISettings.cpp,280 281 282,,,,,unmapped
+0x100C2DD0,519,Main/AISettings.cpp,291 292 293,,,,,unmapped
+0x100CCC50,936,,,0x377240,dice::hfe::ai::DPManager::testStatics(dice::hfe::Mat4&),DrawPrimitives/DPManager.cpp,string,match
+0x100CD7F0,82,,,0x2EE9D0,dice::hfe::ai::IPIMobile::getLastValidPosition(int) const,AIKnowledge/IPIMobile.cpp,calls,match
+0x100CDD00,1101,AIKnowledge/BFInformationCourier.cpp,236 271,,,,,unmapped
+0x100CE290,138,Main/IAIPathfindingSetup.cpp,14,,,,,unmapped
+0x100CE370,138,Main/IBotManager.cpp,15,,,,,unmapped
+0x100CE480,160,Main/AIMain.cpp,234,,,,,unmapped
+0x100CE520,198,Main/AIMain.cpp,249,,,,,unmapped
+0x100CE7A0,544,Main/AIMain.cpp,846 851,,,,,unmapped
+0x100CE9F0,161,Main/AIMain.cpp,910,0x39EB10,dice::hfe::ai::AIMain::setSAIEnable(bool),Main/AIMain.cpp,string,match
+0x100CED10,643,Main/AIMain.cpp,1207 1209 1220,,,,,unmapped
+0x100D04F0,296,Main/AIMain.cpp,728,,,,,unmapped
+0x100D2D30,716,AIPathFinding/Material/Material.cpp,66,0x322220,"dice::hfe::ai::operator>>(std::istream&, unsigned char&)",AIPathFinding/Material/Material.cpp,string,match
+0x100D3010,730,Main/AIStreamOperators.cpp,191,,,,,unmapped
+0x100D3360,1133,Main/AIStreamOperators.cpp,415,,,,,unmapped
+0x100D38D0,1038,Main/AIStreamOperators.cpp,661,,,,,unmapped
+0x100D3D90,323,Main/AIStreamOperators.cpp,893,0x3C59D0,"dice::hfe::ai::operator<<(std::ostream&, dice::hfe::ai::CombatStrengthType)",Main/AIStreamOperators.cpp,consts,match
+0x100D3EF0,244,Main/AIStreamOperators.cpp,965,,,,,unmapped
+0x100D3FF0,300,Main/AIStreamOperators.cpp,1037,,,,,unmapped
+0x100D4140,244,Main/AIStreamOperators.cpp,1106,,,,,unmapped
+0x100D4240,244,Main/AIStreamOperators.cpp,1162,,,,,unmapped
+0x100D4340,717,Main/AIStreamOperators.cpp,1324,0x3C89A0,"dice::hfe::ai::operator<<(std::ostream&, dice::hfe::ai::LandingZoneDirection)",Main/AIStreamOperators.cpp,calls,match
+0x100D4680,369,Main/AIStreamOperators.cpp,1497,,,,,unmapped
+0x100D4820,1174,Main/AIStreamOperators.cpp,1803,0x3C6B20,"dice::hfe::ai::operator<<(std::ostream&, dice::hfe::ai::StrategyCondition::Conditional)",Main/AIStreamOperators.cpp,string,match
+0x100D4D70,461,Main/AIStreamOperators.cpp,2092,,,,,unmapped
+0x100D4F80,250,Main/AIStreamOperators.cpp,2194,,,,,unmapped
+0x100D5090,1496,Main/AIStreamOperators.cpp,2530,0x3C7AE0,"dice::hfe::ai::operator<<(std::ostream&, dice::hfe::ai::BAPConditionType)",Main/AIStreamOperators.cpp,string,match
+0x100D5760,1174,Main/AIStreamOperators.cpp,2769,0x3C7D90,"dice::hfe::ai::operator<<(std::ostream&, dice::hfe::ai::BAPStatementType)",Main/AIStreamOperators.cpp,string,match
+0x100D5CB0,273,Main/AIStreamOperators.cpp,3005,,,,,unmapped
+0x100D5DE0,261,Main/AIStreamOperators.cpp,3183,,,,,unmapped
+0x100D5F00,261,Main/AIStreamOperators.cpp,3241,,,,,unmapped
+0x100D6020,518,Main/AIStreamOperators.cpp,3362,0x3C90A0,"dice::hfe::ai::operator<<(std::ostream&, dice::hfe::ai::MTStatus)",Main/AIStreamOperators.cpp,string,match
+0x100D6760,1326,Main/AIStreamOperators.cpp,260,,,,,unmapped
+0x100D6C90,2082,Main/AIStreamOperators.cpp,526,,,,,unmapped
+0x100D74C0,1914,Main/AIStreamOperators.cpp,758,,,,,unmapped
+0x100D7C40,816,Main/AIStreamOperators.cpp,937,0x3C5A60,"dice::hfe::ai::operator>>(std::istream&, dice::hfe::ai::CombatStrengthType&)",Main/AIStreamOperators.cpp,string,match
+0x100D7F70,318,Main/AIStreamOperators.cpp,994,,,,,unmapped
+0x100D80B0,444,Main/AIStreamOperators.cpp,1078,,,,,unmapped
+0x100D8270,318,Main/AIStreamOperators.cpp,1134,,,,,unmapped
+0x100D83B0,318,Main/AIStreamOperators.cpp,1190,,,,,unmapped
+0x100D84F0,1200,Main/AIStreamOperators.cpp,1437,,,,,unmapped
+0x100D89A0,804,Main/AIStreamOperators.cpp,1550,,,,,unmapped
+0x100D8CD0,2066,Main/AIStreamOperators.cpp,2012,0x3C6D30,"dice::hfe::ai::operator>>(std::istream&, dice::hfe::ai::StrategyCondition::Conditional&)",Main/AIStreamOperators.cpp,string,match
+0x100D94F0,1362,Main/AIStreamOperators.cpp,2160,,,,,unmapped
+0x100D9A50,502,Main/AIStreamOperators.cpp,2226,,,,,unmapped
+0x100D9C50,3184,Main/AIStreamOperators.cpp,2967,0x3C7FA0,"dice::hfe::ai::operator>>(std::istream&, dice::hfe::ai::BAPStatementType&)",Main/AIStreamOperators.cpp,string,match
+0x100DA8C0,636,Main/AIStreamOperators.cpp,3041,,,,,unmapped
+0x100DB450,138,Main/IBotManagerModifier.cpp,15,,,,,unmapped
+0x100DB6C0,156,AIStrategic/Strategy.cpp,161,,,,,unmapped
+0x100DB870,181,AIStrategic/Strategy.cpp,266,,,,,unmapped
+0x100DB930,178,AIStrategic/Strategy.cpp,277,,,,,unmapped
+0x100DB9F0,178,AIStrategic/Strategy.cpp,301,,,,,unmapped
+0x100DC020,324,AIStrategic/Strategy.cpp,292 293,,,,,unmapped
+0x100DC380,211,AIStrategic/Strategy.cpp,331,,,,,unmapped
+0x100DC9C0,605,AIStrategic/Strategy.cpp,119 131 142 152,,,,,unmapped
+0x100DD260,412,AIStrategic/StrategyCondition.cpp,184,,,,,unmapped
+0x100DD420,359,AIStrategic/StrategyCondition.cpp,265,,,,,unmapped
+0x100DD630,243,AIStrategic/StrategyCondition.cpp,102,,,,,unmapped
+0x100DDBC0,7,,,0x342E20,dice::hfe::ai::AIStrategicObject::getAllowedVehicleGroups() const,AIStrategicEntity/AIStrategicObject.cpp,calls,match
+0x100DF130,271,,,0x338CE0,dice::hfe::ai::AIStrategicArea::calculateAttackValue(int),AIStrategicEntity/AIStrategicArea.cpp,consts,match
+0x100E0690,564,AIStrategicEntity/AIStrategicArea.cpp,1424,,,,,unmapped
+0x100E26D0,778,AIStrategicEntity/AIStrategicArea.cpp,1761 1819,,,,,unmapped
+0x100E3E80,307,AIStrategicEntity/AIStrategicArea.cpp,2785,,,,,unmapped
+0x100E45C0,6055,AIStrategicEntity/AIStrategicArea.cpp,2307 2346 2352 2363 2477 2484 2493 2635 2639 2647,,,,,unmapped
+0x100E61D0,253,AIStrategicEntity/AIStrategicArea.cpp,1985,0x33B580,dice::hfe::ai::AIStrategicArea::attachLandingZone(std::string const&),AIStrategicEntity/AIStrategicArea.cpp,string,match
+0x100E62D0,244,AIStrategicEntity/AIStrategicArea.cpp,2206,,,,,unmapped
+0x100E8270,28,,,0x341F40,dice::hfe::ai::AIStrategicObject::getSide(),AIStrategicEntity/AIStrategicObject.cpp,calls,match
+0x100E8500,7,,,0x3476A0,dice::hfe::ai::AIStrategicObjectManager::getStrategicAreas() const,AIStrategicEntity/AIStrategicObjectManager.cpp,calls,match
+0x100E8580,7,,,0x393E10,"dice::hfe::ai::(anonymous namespace)::checkLayerStrList(std::string const&, int)",AIStrategicEntity/AIStrategicObjectManager.cpp,calls,match
+0x100E8A80,616,AIStrategicEntity/AIStrategicObject.cpp,238 239 246 247,,,,,unmapped
+0x100E91A0,157,AIStrategicEntity/AIStrategicObject.cpp,178,,,,,unmapped
+0x100E9240,157,AIStrategicEntity/AIStrategicObject.cpp,189,,,,,unmapped
+0x100E9930,4,,,0x334EB0,dice::hfe::ai::AILandingZone::getBeachDirection() const,AIStrategicEntity/AILandingZone.cpp,calls,match
+0x100E9990,3,,,0x33BD30,dice::hfe::ai::AIStrategicArea::isLandingZoneUser(int),AIStrategicEntity/AIStrategicArea.cpp,calls,match
+0x100E99A0,4,,,0x33B780,dice::hfe::ai::AIStrategicArea::getLandingZones(),AIStrategicEntity/AIStrategicArea.cpp,calls,match
+0x100ECDD0,291,AIBotBehaviour/BBFireUnarmed.cpp,538,,,,,unmapped
+0x100ECF10,2557,AIBotBehaviour/BBFireUnarmed.cpp,118 122 125,,,,,unmapped
+0x100EDD20,3309,AIBotBehaviour/BBAvoid.cpp,151 164 352,,,,,unmapped
+0x100EF2C0,2250,AIBotBehaviourPattern/BBPAvoidCollisionInfantery.cpp,96,,,,,unmapped
+0x100F0CD0,1868,AIBotBehaviourPattern/BBPAvoidCollision2d.cpp,129 132 135,,,,,unmapped
+0x100F1C60,3365,AIBotBehaviourPattern/BBPGotoWaypointsInfantery.cpp,92 136 203 271 337 400 469 514 552,,,,,unmapped
+0x100F2C80,1646,AIBotBehaviourPattern/BBPGotoWaypoints3d.cpp,94,,,,,unmapped
+0x100F35E0,3857,AIBotBehaviourPattern/BBPGotoWaypointsBoat.cpp,125 186 224 267 322 331 442,,,,,unmapped
+0x100F4580,4372,AIBotBehaviourPattern/BBPGotoWaypoints2d.cpp,114 158 229 294 354 422 475 484 524 556,,,,,unmapped
+0x100F5AC0,1010,AIBotBehaviour/BBIdle.cpp,284,,,,,unmapped
+0x100F5EC0,1530,AIBotBehaviour/BBIdle.cpp,129 215,,,,,unmapped
+0x100F6850,1403,AIBotBehaviourPattern/BBPIdleInfantery.cpp,,,,,,unmapped
+0x100F7090,1772,,,0x28E120,dice::hfe::ai::BBPIdle3d::createPlan(dice::hfe::ai::Bot*),AIBotBehaviourPattern/BBPIdle3d.cpp,consts,match
+0x100F78B0,1291,AIBotBehaviourPattern/BBPIdle2d.cpp,108,,,,,unmapped
+0x100F7DC0,302,,,0x202E20,"dice::hfe::ai::BBChange::modifyForDriver(dice::hfe::ai::Information*, bool)",AIBotBehaviour/BBChange.cpp,consts,match
+0x100F8D50,508,,,0x202F00,"dice::hfe::ai::BBChange::runwayClear(dice::hfe::ai::Information*, dice::hfe::ai::Information*, int) const",AIBotBehaviour/BBChange.cpp,consts,match
+0x100F8F50,7972,,,0x200770,"dice::hfe::ai::BBChange::calculateUrgency(dice::hfe::ai::Bot*, bool, float)",AIBotBehaviour/BBChange.cpp,consts,match
+0x100FB800,7990,AIBotBehaviourPattern/BBPChange.cpp,258 263 267 268 289 309 311 326 328 531 604 751 816,,,,,unmapped
+0x100FD9E0,2947,AIBotBehaviour/BBChangeLandingCraft.cpp,236 270 271 542,,,,,unmapped
+0x100FE690,1402,AIBotBehaviourPattern/BBPChangeLandingCraft.cpp,107 114 116,,,,,unmapped
+0x100FED60,2098,AIBotBehaviour/BBChangeTeleport.cpp,131 161 162,,,,,unmapped
+0x100FF740,1470,AIBotBehaviourPattern/BBPChangeTeleport.cpp,,,,,,unmapped
+0x101003E0,141,,,0x36D370,dice::hfe::ai::WeaponInfoManager::getInformation(unsigned int),AIUtils/WeaponInfoManager.cpp,calls,match
+0x10100480,2985,AIBotBehaviour/BBMedicAssist.cpp,814,0x218020,"dice::hfe::ai::BBMedicAssist::calculateGiveAmmoUrgency(dice::hfe::ai::Bot*, float)",AIBotBehaviour/BBMedicAssist.cpp,consts,match
+0x10101040,3084,AIBotBehaviour/BBMedicAssist.cpp,236,,,,,unmapped
+0x10102880,5277,AIBotBehaviourPattern/BBPMedicAssist.cpp,196 310,,,,,unmapped
+0x10103DA0,41,,,0x20BAB0,dice::hfe::ai::CustomCurve::modifiedSoftStepFunc(float),AIUtils/CustomCurve.h,consts,match
+0x10104790,3428,AIBotBehaviour/BBFire.cpp,1047 1088,0x20A350,"dice::hfe::ai::BBFire::chooseWeapon(dice::hfe::ai::Bot*, unsigned int, float)",AIBotBehaviour/BBFire.cpp,consts,match
+0x10105D20,5995,AIBotBehaviour/BBFire.cpp,172 206 224 225 320 388,,,,,unmapped
+0x1010A650,4832,AIBotBehaviourPattern/BBPFireInfantery.cpp,1656 1685,,,,,unmapped
+0x1010B930,16580,AIBotBehaviourPattern/BBPFireInfantery.cpp,,0x2650F0,"dice::hfe::ai::BBPFireInfantery::createPlanInternal(dice::hfe::ai::Bot*, bool)",AIBotBehaviourPattern/BBPFireInfantery.cpp,consts,match
+0x1010FA00,5858,AIBotBehaviourPattern/BBPFireInfantery.cpp,530,,,,,unmapped
+0x101115E0,238,AIBotBehaviourPattern/BBPFire2d.cpp,141,0x2454A0,"dice::hfe::ai::BBPFire2d::init(dice::hfe::ai::Bot*, unsigned int, dice::hfe::Vec3 const&, int)",AIBotBehaviourPattern/BBPFire2d.cpp,string,match
+0x101117C0,6113,AIBotBehaviourPattern/BBPFire2d.cpp,160 174 226 758 957,,,,,unmapped
+0x101140B0,7790,AIBotBehaviour/BBFireLargeBore.cpp,259 720,,,,,unmapped
+0x10116340,796,AIBotBehaviour/BBFireArtilleryDriver.cpp,72 76 80,,,,,unmapped
+0x10116950,238,AIBotBehaviourPattern/BBPFire2dDriver.cpp,147,0x24BF50,"dice::hfe::ai::BBPFire2dDriver::init(dice::hfe::ai::Bot*, unsigned int, dice::hfe::Vec3 const&, int)",AIBotBehaviourPattern/BBPFire2dDriver.cpp,string,match
+0x10116A40,5214,AIBotBehaviourPattern/BBPFire2dDriver.cpp,171 222 797,,,,,unmapped
+0x1011AD60,235,AIBotBehaviourPattern/BBPHeliFire3d.cpp,125,0x287680,"dice::hfe::ai::BBPHeliFire3d::init(dice::hfe::ai::Bot*, unsigned int, dice::hfe::Vec3 const&, int)",AIBotBehaviourPattern/BBPHeliFire3d.cpp,string,match
+0x1011AE50,1486,AIBotBehaviourPattern/BBPHeliFire3d.cpp,675,,,,,unmapped
+0x1011BC10,1250,AIBotBehaviourPattern/BBPHeliFire3d.cpp,161 246,,,,,unmapped
+0x1011C380,2096,AIBotBehaviourPattern/BBPFire3d.cpp,807,,,,,unmapped
+0x1011E0C0,1577,AIBotBehaviourPattern/BBPFire3d.cpp,163 222,,,,,unmapped
+0x1011ED20,3629,AIBotBehaviour/BBTakeCover.cpp,117 120 447,0x21E190,"dice::hfe::ai::BBTakeCover::calculateUrgency(dice::hfe::ai::Bot*, bool, float)",AIBotBehaviour/BBTakeCover.cpp,consts,match
+0x10120800,2716,AIBotBehaviourPattern/BBPTakeCover.cpp,134 139 152 209 216 223 231 239 246 402,,,,,unmapped
+0x10121550,448,AIBotBehaviour/BBTakeCoverInfantry.cpp,184,0x220D80,dice::hfe::ai::(anonymous namespace)::closestQuadFromDirection(dice::hfe::Vec3),AIBotBehaviour/BBTakeCoverInfantry.cpp,consts,match
+0x10121B30,577,AIBotBehaviour/BBTakeCoverInfantry.cpp,253 259 306,,,,,unmapped
+0x10121DA0,2305,AIBotBehaviour/BBTakeCoverInfantry.cpp,992 994 996 1087,0x223920,"dice::hfe::ai::BBTakeCoverInfantry::getCoverObject(dice::hfe::ai::Bot*, dice::hfe::Vec3 const&, dice::hfe::ai::Information*, bool, unsigned int&, dice::hfe::Vec3&, float&, float&, bool)",AIBotBehaviour/BBTakeCoverInfantry.cpp,string,match
+0x101226B0,5268,AIBotBehaviour/BBTakeCoverInfantry.cpp,397,,,,,unmapped
+0x10123F90,4905,AIBotBehaviourPattern/BBPTakeCoverInfantry.cpp,144 149 162 221 228 235 249 256,,,,,unmapped
+0x10125510,663,AIBotBehaviourPattern/BBPSuicide.cpp,74 108,,,,,unmapped
+0x10125E00,455,AIBotBehaviourPattern/BBPCallForMedic.cpp,70,,,,,unmapped
+0x10126240,2338,AIBotBehaviour/BBRevive.cpp,123,,,,,unmapped
+0x10126D90,2484,AIBotBehaviourPattern/BBPRevive.cpp,119 193,,,,,unmapped
+0x10127AA0,969,AIBotBehaviourPattern/BBPTakeCover3d.cpp,,,,,,unmapped
+0x10127F80,1116,AIBotBehaviour/BBC4.cpp,97 108 109,,,,,unmapped
+0x101285E0,2118,AIBotBehaviourPattern/BBPC4.cpp,,,,,,unmapped
+0x10128E80,842,AIBotBehaviour/BBBridgeRepair.cpp,102 104,,,,,unmapped
+0x10129380,2110,AIBotBehaviour/BBBridgeRepair.cpp,222 270 273,0x1FE2E0,"dice::hfe::ai::BBBridgeRepair::calculateUrgency(dice::hfe::ai::Bot*, bool, float)",AIBotBehaviour/BBBridgeRepair.cpp,consts,match
+0x10129F10,2868,AIBotBehaviourPattern/BBPBridgeRepair.cpp,249 330 341,,,,,unmapped
+0x1012AC80,1957,AIBotBehaviour/BBDefuseMines.cpp,118 161,0x2068C0,"dice::hfe::ai::BBDefuseMines::calculateUrgency(dice::hfe::ai::Bot*, bool, float)",AIBotBehaviour/BBDefuseMines.cpp,consts,match
+0x1012B710,2413,AIBotBehaviourPattern/BBPDefuseMines.cpp,139 205,,,,,unmapped
+0x1012C1D0,1197,AIBotBehaviour/BBRunOverSoldier.cpp,78,,,,,unmapped
+0x1012C7D0,709,AIBotBehaviourPattern/BBPRunOverSoldier.cpp,98,,,,,unmapped
+0x1012CFB0,1353,AIBotBehaviourPattern/BBPRandom.cpp,100 160,,,,,unmapped
+0x1012F970,297,AIBot/SquadManager.cpp,1257,,,,,unmapped
+0x1012FAA0,442,AIBot/SquadManager.cpp,1277,,,,,unmapped
+0x1012FC60,289,AIBot/SquadManager.cpp,1315 1316,,,,,unmapped
+0x1012FD90,433,AIBot/SquadManager.cpp,1324 1328,,,,,unmapped
+0x1012FF50,418,AIBot/SquadManager.cpp,1363 1366,,,,,unmapped
+0x10130B60,418,AIBot/SquadManager.cpp,422,,,,,unmapped
+0x10130DB0,468,AIBot/SquadManager.cpp,1179,,,,,unmapped
+0x101319A0,1589,AIBot/SquadManager.cpp,519 545 568 577 582,0x1AEE70,"dice::hfe::ai::SquadManager::addSquadMember(int, int)",AIBot/SquadManager.cpp,string,match
+0x101320A0,195,AIBot/SquadManager.cpp,642,,,,,unmapped
+0x10132510,363,AIBot/SquadManager.cpp,865,,,,,unmapped
+0x101327E0,319,AIBot/SquadManager.cpp,943,,,,,unmapped
+0x10132920,315,AIBot/SquadManager.cpp,978,,,,,unmapped
+0x10132A60,353,AIBot/SquadManager.cpp,1007 1013,,,,,unmapped
+0x10132BD0,207,AIBot/SquadManager.cpp,1037,,,,,unmapped
+0x10132E90,285,AIBot/SquadManager.cpp,1153,,,,,unmapped
+0x10133C10,260,AIBot/SquadManager.cpp,258,,,,,unmapped
+0x101343E0,992,AIBot/WPMoveTo.cpp,100 102,,,,,unmapped
+0x10134870,505,AIBot/WPMoveTo.cpp,39,,,,,unmapped
+0x10134A80,448,AIBot/WPMoveTo.cpp,64,,,,,unmapped
+0x10134F60,443,,,0x1B6690,"dice::hfe::ai::WPAltitudeMoveTo::getUrgency(dice::hfe::Vec3 const&, dice::hfe::ai::Bot*)",AIBot/WPAltitudeMoveTo.cpp,string,match
+0x10135360,193,AIBot/WPPatrol.cpp,79,,,,,unmapped
+0x101356B0,431,AIBot/WPPatrol.cpp,62 63,,,,,unmapped
+0x10135B10,170,AIPathFinding/NavMesh/MapProperties.cpp,29,,,,,unmapped
+0x101368F0,383,AIBot/SensingAgentSoldierPattern.cpp,63 71,,,,,unmapped
+0x10136CD0,846,AIBot/SensingAgentMouseFreeLookPattern.cpp,43 65 72,,,,,unmapped
+0x10137020,754,AIBot/SensingAgentMouseFreeLookPattern.cpp,121 128,,,,,unmapped
+0x10137390,477,AIBot/SensingAgentTurretPattern.cpp,59 66,,,,,unmapped
+0x10137570,485,AIBot/SensingAgentTurretPattern.cpp,104 111,,,,,unmapped
+0x10137BD0,254,AIPlanInterpreter/EntryHeliResetControls.cpp,56,,,,,unmapped
+0x10137EF0,2121,AIPlanInterpreter/EntryHeliAimAt.cpp,71 74 94 99 102,,,,,unmapped
+0x10139050,1391,AIPlanInterpreter/EntryMoveToObjectMediumSoldier.cpp,51 55 64,,,,,unmapped
+0x10139DD0,1681,AIPlanInterpreter/EntryMoveToObjectMedium.cpp,62 66 75,,,,,unmapped
+0x1013A4D0,1617,AIPlanInterpreter/EntryMoveToMediumSoldier.cpp,96 113 162,,,,,unmapped
+0x1013ABD0,2186,AIPlanInterpreter/EntryMoveToMediumBoat.cpp,109 125 134 182,,,,,unmapped
+0x1013B500,2041,AIPlanInterpreter/EntryMoveToMedium.cpp,107 121 126 135,,,,,unmapped
+0x1013BD70,415,AIPlanInterpreter/EntrySoldierPose.cpp,38,,,,,unmapped
+0x1013C160,717,AIPlanInterpreter/EntryMouseTurretLookAt.cpp,89 117,,,,,unmapped
+0x1013C550,1358,AIPlanInterpreter/EntryMouseTurretAimAt.cpp,93 124 126,,,,,unmapped
+0x1013CB00,1509,AIPlanInterpreter/EntryKeyTurretAimAt.cpp,89 91 100 168,,,,,unmapped
+0x1013D2A0,1292,AIPlanInterpreter/EntryTriggerContinously.cpp,172,,,,,unmapped
+0x1013D880,1527,AIPlanInterpreter/EntryTrigger.cpp,80,,,,,unmapped
+0x1013E090,1106,AIPlanInterpreter/EntryInfanteryMoveToObject.cpp,100 129,,,,,unmapped
+0x1013E550,1119,AIPlanInterpreter/EntryInfanteryMoveTo.cpp,83 99,,,,,unmapped
+0x1013F0B0,732,AIPlanInterpreter/EntryBoatMoveToObject.cpp,98,,,,,unmapped
+0x1013F400,670,AIPlanInterpreter/EntryBoatMoveTo.cpp,92,,,,,unmapped
+0x1013F700,280,AIPlanInterpreter/EntryPlaneResetControls.cpp,59,,,,,unmapped
+0x1013F8B0,2114,AIPlanInterpreter/EntryPlaneAimAt.cpp,70 73 94 97 100,0x2BFC70,"dice::hfe::ai::EntryPlaneAimAt::execute(dice::hfe::ai::BotScript*, dice::hfe::ai::Bot*, bool&, bool&)",AIPlanInterpreter/EntryPlaneAimAt.cpp,consts,match
+0x10140690,3545,AIPlanInterpreter/EntryPlaneMoveToDirection.cpp,210,,,,,unmapped
+0x10141900,1535,AIPlanInterpreter/EntryCarMoveToObject.cpp,62 65 68 72,,,,,unmapped
+0x10141F10,115,AIPlanInterpreter/EntryCarMoveToDirection.cpp,41,,,,,unmapped
+0x10142040,1490,AIPlanInterpreter/EntryCarMoveTo.cpp,85 107,,,,,unmapped
+0x101426D0,964,AIPlanInterpreter/EntryTankTurnTo.cpp,104,,,,,unmapped
+0x10142E80,1499,AIPlanInterpreter/EntryTankMoveToDirection.cpp,104,0x2C4800,"dice::hfe::ai::EntryTankMoveToDirection::execute(dice::hfe::ai::BotScript*, dice::hfe::ai::Bot*, bool&, bool&)",AIPlanInterpreter/EntryTankMoveToDirection.cpp,consts,match
+0x101434C0,1262,AIPlanInterpreter/EntryTankMoveToObject.cpp,92,,,,,unmapped
+0x10143A10,1368,AIPlanInterpreter/EntryTankMoveTo.cpp,96,,,,,unmapped
+0x10144290,399,AIBot/WPMoveToBeachLanding.cpp,180 186,,,,,unmapped
+0x10144450,584,AIBot/WPMoveToBeachLanding.cpp,100 102,,,,,unmapped
+0x10145610,462,AIBot/BotNavigation.cpp,1584,0x194F10,"dice::hfe::ai::BotNavigation::getTraceData(int, unsigned int&, unsigned int&, dice::hfe::Vec3&)",AIBot/BotNavigation.cpp,string,match
+0x10145830,240,AIBot/BotNavigation.cpp,1627,,,,,unmapped
+0x10145DD0,1129,AIBot/BotNavigation.cpp,659 682,0x191BF0,dice::hfe::ai::BotNavigation::checkProgress(),AIBot/BotNavigation.cpp,consts,match
+0x10146930,890,AIBot/BotNavigation.cpp,995 1013 1047,,,,,unmapped
+0x10146CC0,1262,AIBot/BotNavigation.cpp,1233,,,,,unmapped
+0x101471C0,636,AIBot/BotNavigation.cpp,1347,,,,,unmapped
+0x10147490,722,AIBot/BotNavigation.cpp,1372,,,,,unmapped
+0x101490E0,510,AIBot/BotNavigation.cpp,328,,,,,unmapped
+0x10149620,1188,AIBot/BotNavigation.cpp,753,,,,,unmapped
+0x10149B20,1432,AIBot/BotNavigation.cpp,1120 1172 1194,,,,,unmapped
+0x1014A1A0,1118,AIBot/BotNavigation.cpp,136 196 225,0x1902B0,"dice::hfe::ai::BotNavigation::initPathfinding(unsigned int, unsigned int, dice::hfe::Vec3 const&, float, float)",AIBot/BotNavigation.cpp,string,match
+0x1014AAA0,423,AIBot/BotNavigation.cpp,1065,,,,,unmapped
+0x1014AD10,696,AIBot/BotNavigation.cpp,441,,,,,unmapped
+0x1014B2E0,168,AIBot/BotMain.cpp,389,,,,,unmapped
+0x1014BA20,116,AIBot/BotMain.cpp,1764,0x18B890,dice::hfe::ai::BotMain::validateDataStructures(),AIBot/BotMain.cpp,string,match
+0x1014C060,229,AIBot/BotMain.cpp,2599,,,,,unmapped
+0x1014C250,235,AIBot/BotMain.cpp,2968,,,,,unmapped
+0x1014D180,210,AIBot/BotMain.cpp,376,,,,,unmapped
+0x1014DF00,926,AIBot/BotMain.cpp,1994 1998 2056,0x18BCC0,dice::hfe::ai::BotMain::updateBotVehicle(bool*),AIBot/BotMain.cpp,consts,match
+0x1014E2A0,1529,AIBot/BotMain.cpp,2686 2723 2760,,,,,unmapped
+0x1014ED50,234,AIBot/BotMain.cpp,988,,,,,unmapped
+0x1014F4D0,1067,AIBot/BotMain.cpp,548 596,,,,,unmapped
+0x1014F900,177,AIBot/BotMain.cpp,1160,,,,,unmapped
+0x1014FB50,2063,AIBot/BotMain.cpp,749 849,0x1893D0,dice::hfe::ai::BotMain::decisionMaking(double const&),AIBot/BotMain.cpp,string,match
+0x101505D0,217,AIBot/BotMain.cpp,,0x18D7D0,dice::hfe::ai::BotMain::rearm(dice::hfe::ai::Information*),AIBot/BotMain.cpp,consts,match
+0x10151A60,733,AIBot/BotMain.cpp,2177,,,,,unmapped
+0x101521D0,68,,,0x32C4D0,"dice::hfe::ai::SAI::clearStates(float*, float*)",AIStrategic/SAI.cpp,calls,match
+0x101532F0,121,,,0x2D9230,dice::hfe::ai::Information::getFirstSecondaryObjectIterator() const,AIKnowledge/Information.cpp,calls,match
+0x10154BB0,410,AIStrategic/SAI.cpp,1626,0x3297F0,dice::hfe::ai::SAI::updateStrategicObjects(),AIStrategic/SAI.cpp,calls,match
+0x10155B20,402,AIStrategic/SAI.cpp,735,,,,,unmapped
+0x10155D30,67,AIStrategic/SAI.cpp,,0x32D910,dice::hfe::ai::SAI::updateBotPositions(),AIStrategic/SAI.cpp,calls,match
+0x10155E10,222,AIStrategic/SAI.cpp,3626,,,,,unmapped
+0x10155FB0,547,AIStrategic/SAI.cpp,3669 3728,,,,,unmapped
+0x10157020,190,AIStrategic/SAI.cpp,1481,,,,,unmapped
+0x10157250,1078,AIStrategic/SAI.cpp,3936 3937 3943 3951 3959 3965,,,,,unmapped
+0x10157690,1041,AIStrategic/SAI.cpp,4049 4051 4053 4057 4063 4077,,,,,unmapped
+0x10157AB0,287,AIStrategic/SAI.cpp,4300 4301,,,,,unmapped
+0x10158790,430,AIStrategic/SAI.cpp,2480,0x32B770,"dice::hfe::ai::SAI::categoryDistributeWithNoAreas(std::vector<dice::hfe::ai::AIStrategicObject*, std::allocator<dice::hfe::ai::AIStrategicObject*>> const&)",AIStrategic/SAI.cpp,calls,match
+0x10158980,1863,AIStrategic/SAI.cpp,3413 3474,0x32C480,dice::hfe::ai::SAI::distributeArtillery(),AIStrategic/SAI.cpp,calls,match
+0x10159110,1326,AIStrategic/SAI.cpp,,0x32EB30,dice::hfe::ai::SAI::updateStrengths(),AIStrategic/SAI.cpp,calls,match
+0x101596A0,1166,AIStrategic/SAI.cpp,3897 3898 3899 3904 3916 3920,,,,,unmapped
+0x10159C00,893,AIStrategic/SAI.cpp,4118 4119 4120 4131 4138 4143 4148,,,,,unmapped
+0x10159F80,930,AIStrategic/SAI.cpp,4169 4170 4171 4172 4178 4196 4197,,,,,unmapped
+0x1015A330,613,AIStrategic/SAI.cpp,4216 4223 4228 4246,,,,,unmapped
+0x1015A5A0,490,AIStrategic/SAI.cpp,4260 4273 4283,,,,,unmapped
+0x1015A790,181,AIStrategic/SAI.cpp,4317,,,,,unmapped
+0x1015AE10,381,AIStrategic/SAI.cpp,1190,,,,,unmapped
+0x1015AF90,799,AIStrategic/SAI.cpp,1264 1277 1290,,,,,unmapped
+0x1015B2B0,1542,AIStrategic/SAI.cpp,1394 1411 1416 1420 1425 1449 1457 1460,,,,,unmapped
+0x1015B8C0,459,AIStrategic/SAI.cpp,1612,,,,,unmapped
+0x1015BA90,1358,AIStrategic/SAI.cpp,1722 1726 1799 1802,0x3299A0,dice::hfe::ai::SAI::modifyStrategicObjectsTemperatures(),AIStrategic/SAI.cpp,calls,match
+0x1015BFE0,1954,AIStrategic/SAI.cpp,1853 1889 1910 1929,0x32B9B0,dice::hfe::ai::SAI::distributeAttack(),AIStrategic/SAI.cpp,calls,match
+0x1015C790,1225,AIStrategic/SAI.cpp,,0x32AE70,dice::hfe::ai::SAI::distributeDefence(),AIStrategic/SAI.cpp,calls,match
+0x1015CCB0,86,AIStrategic/SAI.cpp,,0x32B6E0,dice::hfe::ai::SAI::distributeWithNoAreas(),AIStrategic/SAI.cpp,calls,match
+0x1015CD10,242,AIStrategic/SAI.cpp,3251,,,,,unmapped
+0x1015CE10,299,AIStrategic/SAI.cpp,3314,,,,,unmapped
+0x1015CF40,357,AIStrategic/SAI.cpp,3359 3365,,,,,unmapped
+0x1015D0B0,474,AIStrategic/SAI.cpp,3983 3990 4008,,,,,unmapped
+0x1015D290,318,AIStrategic/SAI.cpp,4106 4110,,,,,unmapped
+0x1015D3D0,162,AIStrategic/SAI.cpp,4161,,,,,unmapped
+0x1015D750,258,AIStrategic/SAI.cpp,1340,,,,,unmapped
+0x1015D860,263,AIStrategic/SAI.cpp,1375,,,,,unmapped
+0x1015DA10,1724,AIStrategic/SAI.cpp,2962,0x32C520,"dice::hfe::ai::SAI::updateStates(float*, float*)",AIStrategic/SAI.cpp,calls,match
+0x1015E100,1759,AIStrategic/SAI.cpp,3109 3114 3117 3121 3123,0x32CEF0,dice::hfe::ai::SAI::prepareUpdate(),AIStrategic/SAI.cpp,calls,match
+0x1015EB20,232,AIStrategic/SAI.cpp,406,,,,,unmapped
+0x1015EC10,214,AIStrategic/SAI.cpp,1302,,,,,unmapped
+0x1015ECF0,1247,AIStrategic/SAI.cpp,2313,,,,,unmapped
+0x1015F910,104,AIStrategic/SAI.cpp,,0x32A690,dice::hfe::ai::SAI::distributeResources(),AIStrategic/SAI.cpp,calls,match
+0x1015F980,104,AIStrategic/SAI.cpp,,0x329E60,dice::hfe::ai::SAI::updateDistribution(),AIStrategic/SAI.cpp,calls,match
+0x1015FA40,1826,AIStrategic/SAI.cpp,1044,0x327E90,dice::hfe::ai::SAI::update(double),AIStrategic/SAI.cpp,string,match
+0x10160AB0,1737,AIStrategic/SAI.cpp,,,,,,unmapped
+0x10161680,621,AIUtils/boxTools.cpp,455,,,,,unmapped
+0x10161AF0,150,AIKnowledge/Information.cpp,158,,,,,unmapped
+0x10161B90,137,AIKnowledge/Information.cpp,168,,,,,unmapped
+0x10161E70,135,AIKnowledge/Information.cpp,363,,,,,unmapped
+0x10161FB0,226,AIKnowledge/Information.cpp,355,,,,,unmapped
+0x10163250,1970,,,0x1CAE60,dice::hfe::ai::PrettyPrinter::prettyPrintScriptNode(dice::hfe::ai::PrettyPrinter::Node*),AIPlanInterpreter/PrettyPrinter.cpp,string,match
+0x101640F0,246,AIBot/CommunicationAgent.cpp,378,,,,,unmapped
+0x10165630,442,AIBot/CommunicationAgent.cpp,531,,,,,unmapped
+0x10166140,139,AIBot/CommunicationAgent.cpp,254,,,,,unmapped
+0x101674E0,431,AIBot/CommunicationAgent.cpp,192,,,,,unmapped
+0x10167E10,163,aibot/CommunicationAgent.h,131,,,,,unmapped
+0x1016A360,393,AIStrategic/StrategyPrerequisite.cpp,153,,,,,unmapped
+0x1016A820,225,AIStrategic/SCConstant.cpp,72,,,,,unmapped
+0x1016A990,368,AIStrategic/SCHomogeneous.cpp,79 89,,,,,unmapped
+0x1016AB90,367,AIStrategic/SCHeterogeneous.cpp,79 89,,,,,unmapped
+0x1016AE90,21,,,0x2D9190,"dice::hfe::ai::Information::getSecondaryObject(int&, int)",AIKnowledge/Information.cpp,calls,match
+0x1016CB30,158,AIKnowledge/WeaponInfoKnown.cpp,82,,,,,unmapped
+0x1016CD60,405,AIKnowledge/WeaponInfoKnown.cpp,59,,,,,unmapped
+0x1016E8D0,121,,,0x312060,unsigned int* dice::hfe::ai::checkPointer<unsigned int>(unsigned int*),AIUtils/checkPointer.h,calls,match
+0x1016EEC0,204,,,0x3121A0,dice::hfe::Vec3* dice::hfe::ai::checkPointer<dice::hfe::Vec3>(dice::hfe::Vec3*),AIUtils/checkPointer.h,calls,match
+0x10170350,105,,,0x3114A0,"std::list<dice::hfe::ai::QuadTreeManager::DebugMesh*, std::allocator<dice::hfe::ai::QuadTreeManager::DebugMesh*>>::insert(std::_List_iterator<dice::hfe::ai::QuadTreeManager::DebugMesh*, dice::hfe::ai::QuadTreeManager::DebugMesh*&, dice::hfe::ai::QuadTreeManager::DebugMesh**>, dice::hfe::ai::QuadTreeManager::DebugMesh* const&)",AIPathFinding/NavMesh/QuadTreeManager.cpp,calls,match
+0x10170D30,344,AIPathFinding/NavMesh/QuadTreeManager.cpp,561,,,,,unmapped
+0x101710E0,144,AIPathFinding/NavMesh/QuadTreeManager.cpp,748,,,,,unmapped
+0x10171170,145,AIPathFinding/NavMesh/QuadTreeManager.cpp,755,,,,,unmapped
+0x101730D0,1118,AIPathFinding/NavMesh/QuadTreeManager.cpp,938,0x30F630,dice::hfe::ai::QuadTreeManager::loadGTSDebugMeshes(std::string const&),AIPathFinding/NavMesh/QuadTreeManager.cpp,string,match
+0x10173620,1421,AIPathFinding/NavMesh/QuadTreeManager.cpp,1133,,,,,unmapped
+0x10173C10,995,AIPathFinding/NavMesh/QuadTreeManager.cpp,149 165,,,,,unmapped
+0x10174000,1220,AIPathFinding/NavMesh/QuadTreeManager.cpp,229 235,,,,,unmapped
+0x10175A40,1271,AIPathFinding/Cluster/ClusterGraph.cpp,1596 1603 1605 1614 1616 1619 1621,0x31C080,"dice::hfe::ai::ClusterGraph::printClusterInfo(unsigned short, dice::hfe::ai::QuadTree*, bool) const",AIPathFinding/Cluster/ClusterGraph.cpp,string,match
+0x101780F0,373,AIPathFinding/Cluster/ClusterGraph.cpp,1576 1578,0x31BE50,"dice::hfe::ai::ClusterGraph::validateClusterGraphConnectivity(dice::hfe::ai::QuadTree*, bool)",AIPathFinding/Cluster/ClusterGraph.cpp,string,match
+0x10179F30,397,AIPathFinding/Cluster/ClusterGraph.cpp,108,,,,,unmapped
+0x1017A0D0,584,AIPathFinding/Cluster/ClusterGraph.cpp,147 152,,,,,unmapped
+0x1017A9D0,111,AIPathFinding/Cluster/ClusterGraph.cpp,,0x31E630,"std::_Rb_tree<unsigned int, std::pair<unsigned int const, std::map<unsigned short, unsigned int, std::less<unsigned short>, std::allocator<std::pair<unsigned short const, unsigned int>>>>, std::_Select1st<std::pair<unsigned int const, std::map<unsigned short, unsigned int, std::less<unsigned short>, std::allocator<std::pair<unsigned short const, unsigned int>>>>>, std::less<unsigned int>, std::allocator<std::pair<unsigned int const, std::map<unsigned short, unsigned int, std::less<unsigned short>, std::allocator<std::pair<unsigned short const, unsigned int>>>>>>::find(unsigned int const&) const",AIPathFinding/Cluster/ClusterGraph.cpp,calls,match
+0x1017AF20,109,AIPathFinding/Cluster/ClusterGraph.cpp,,0x31E9A0,"std::list<dice::hfe::ai::ClusterGraph::ClusterPortalBuildInfo, std::allocator<dice::hfe::ai::ClusterGraph::ClusterPortalBuildInfo>>::insert(std::_List_iterator<dice::hfe::ai::ClusterGraph::ClusterPortalBuildInfo, dice::hfe::ai::ClusterGraph::ClusterPortalBuildInfo&, dice::hfe::ai::ClusterGraph::ClusterPortalBuildInfo*>, dice::hfe::ai::ClusterGraph::ClusterPortalBuildInfo const&)",AIPathFinding/Cluster/ClusterGraph.cpp,calls,match
+0x1017B1D0,109,AIPathFinding/Cluster/ClusterGraph.cpp,,0x31E780,"std::_Rb_tree<std::pair<unsigned int, unsigned int>, std::pair<unsigned int, unsigned int>, std::_Identity<std::pair<unsigned int, unsigned int>>, std::less<std::pair<unsigned int, unsigned int>>, std::allocator<std::pair<unsigned int, unsigned int>>>::find(std::pair<unsigned int, unsigned int> const&)",AIPathFinding/Cluster/ClusterGraph.cpp,calls,match
+0x1017B6A0,138,AIPathFinding/Cluster/ClusterGraph.cpp,,0x31E420,"std::_List_base<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int>>>::__clear()",AIPathFinding/Cluster/ClusterGraph.cpp,calls,match
+0x1017BDF0,98,AIPathFinding/Cluster/ClusterGraph.cpp,,0x31E6A0,"std::_Rb_tree<unsigned short, std::pair<unsigned short const, unsigned int>, std::_Select1st<std::pair<unsigned short const, unsigned int>>, std::less<unsigned short>, std::allocator<std::pair<unsigned short const, unsigned int>>>::find(unsigned short const&) const",AIPathFinding/Cluster/ClusterGraph.cpp,calls,match
+0x1017BEF0,102,AIPathFinding/Cluster/ClusterGraph.cpp,,0x31E470,"std::list<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int>>>::insert(std::_List_iterator<std::pair<unsigned int, unsigned int>, std::pair<unsigned int, unsigned int>&, std::pair<unsigned int, unsigned int>*>, std::pair<unsigned int, unsigned int> const&)",AIPathFinding/Cluster/ClusterGraph.cpp,calls,match
+0x1017DC60,186,AIPathFinding/Cluster/ClusterGraph.cpp,,0x31E5E0,"std::_List_base<dice::hfe::ai::ClusterGraph::ClusterPortalBuildInfo, std::allocator<dice::hfe::ai::ClusterGraph::ClusterPortalBuildInfo>>::__clear()",AIPathFinding/Cluster/ClusterGraph.cpp,calls,match
+0x1017E0A0,176,AIPathFinding/Cluster/ClusterGraph.cpp,,0x31E840,"std::_Rb_tree<std::pair<unsigned int, unsigned int>, std::pair<unsigned int, unsigned int>, std::_Identity<std::pair<unsigned int, unsigned int>>, std::less<std::pair<unsigned int, unsigned int>>, std::allocator<std::pair<unsigned int, unsigned int>>>::insert_unique(std::pair<unsigned int, unsigned int> const&)",AIPathFinding/Cluster/ClusterGraph.cpp,calls,match
+0x1017E2F0,331,AIPathFinding/Cluster/ClusterGraph.cpp,253,,,,,unmapped
+0x1017E960,559,AIPathFinding/Cluster/ClusterGraph.cpp,1794,,,,,unmapped
+0x1017FE10,1133,AIPathFinding/Cluster/ClusterGraph.cpp,1294 1322 1336,0x31AC20,"dice::hfe::ai::ClusterGraph::fixClusterGraphConnectivity(std::list<dice::hfe::ai::OptPolygon*, std::allocator<dice::hfe::ai::OptPolygon*>>&, bool)",AIPathFinding/Cluster/ClusterGraph.cpp,string,match
+0x10181950,3137,AIPathFinding/Cluster/ClusterGraph.cpp,738 742 746 750 753 756 782 785,0x316EC0,"dice::hfe::ai::ClusterGraph::buildPortalsFromClusterEdges(unsigned short, dice::hfe::ai::QuadTree*, std::map<unsigned int, std::map<unsigned short, unsigned int, std::less<unsigned short>, std::allocator<std::pair<unsigned short const, unsigned int>>>, std::less<unsigned int>, std::allocator<std::pair<unsigned int const, std::map<unsigned short, unsigned int, std::less<unsigned short>, std::allocator<std::pair<unsigned short const, unsigned int>>>>>> const&, std::map<unsigned short, std::list<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int>>>, std::less<unsigned short>, std::allocator<std::pair<unsigned short const, std::list<std::pair<unsigned int, unsigned int>, std::allocator<std::pair<unsigned int, unsigned int>>>>>> const&, std::map<unsigned short, std::list<dice::hfe::ai::ClusterGraph::ClusterPortalBuildInfo, std::allocator<dice::hfe::ai::ClusterGraph::ClusterPortalBuildInfo>>, std::less<unsigned short>, std::allocator<std::pair<unsigned short const, std::list<dice::hfe::ai::ClusterGraph::ClusterPortalBuildInfo, std::allocator<dice::hfe::ai::ClusterGraph::ClusterPortalBuildInfo>>>>>&)",AIPathFinding/Cluster/ClusterGraph.cpp,string,match
+0x10183040,1769,AIPathFinding/Cluster/ClusterGraph.cpp,508 510 537 539,,,,,unmapped
+0x101839A0,1356,AIPathFinding/Cluster/ClusterGraph.cpp,1711,,,,,unmapped
+0x10185BA0,256,AIPathFinding/NavMesh/QuadTree.cpp,1121,,,,,unmapped
+0x10186FC0,291,AIPathFinding/NavMesh/QuadTree.cpp,1265,,,,,unmapped
+0x101871C0,911,AIPathFinding/NavMesh/QuadTree.cpp,1659 1662 1663 1664,,,,,unmapped
+0x10187DE0,1160,AIPathFinding/NavMesh/QuadTree.cpp,,0x307830,"dice::hfe::ai::QuadTree::getLineIntersectionOnEdgeInPolygon(dice::hfe::Vec3&, unsigned int, unsigned char&, unsigned int, dice::hfe::Vec3 const&, dice::hfe::Vec3 const&, float*, float*) const",AIPathFinding/NavMesh/QuadTree.cpp,consts,match
+0x10189110,338,AIPathFinding/NavMesh/QuadTree.cpp,1490,,,,,unmapped
+0x10189270,402,AIPathFinding/NavMesh/QuadTree.cpp,1525 1526,,,,,unmapped
+0x10189450,385,AIPathFinding/NavMesh/QuadTree.cpp,1569 1570,,,,,unmapped
+0x1018B4D0,749,AIPathFinding/NavMesh/QuadTree.cpp,132 137,0x3016C0,dice::hfe::ai::QuadTree::readFromFile(dice::hfe::io::File&),AIPathFinding/NavMesh/QuadTree.cpp,string,match
+0x1018C4A0,782,AIPathFinding/NavMesh/QuadTree.cpp,594,,,,,unmapped
+0x1018C7B0,794,AIPathFinding/NavMesh/QuadTree.cpp,646,,,,,unmapped
+0x1018CAD0,803,AIPathFinding/NavMesh/QuadTree.cpp,704,,,,,unmapped
+0x1018CF30,533,AIPathFinding/NavMesh/QuadTree.cpp,521 528,,,,,unmapped
+0x1018D150,980,AIPathFinding/NavMesh/QuadTree.cpp,384 460,,,,,unmapped
+0x1018EC60,161,AIPathFinding/Cluster/ClusterNodeManager.cpp,38,,,,,unmapped
+0x1018F780,229,AIPathFinding/Cluster/ClusterNodeManager.cpp,170,,,,,unmapped
+0x1018F870,612,AIPathFinding/Cluster/ClusterNodeManager.cpp,233,,,,,unmapped
+0x1018FDD0,436,AIPathFinding/Cluster/ClusterNodeManager.cpp,112 113,,,,,unmapped
+0x10194910,1308,AIStrategicEntity/CoverPosition/CoverPosition.cpp,393 424,0x3536C0,"dice::hfe::ai::CoverPosition::updateAttacks(dice::hfe::ai::CoverPosition*, bool)",AIStrategicEntity/CoverPosition/CoverPosition.cpp,string,match
+0x101962B0,4,,,0x1B5650,dice::hfe::ai::SquadMember::isBot(),AIBot/SquadMember.cpp,calls,match
+0x101962F0,9,,,0x1A5D70,dice::hfe::ai::SquadCoordinator::getSquadLeaderIndex(),AIBot/SquadCoordinator.h,calls,match
+0x101965B0,253,AIBot/SquadMember.cpp,164,,,,,unmapped
+0x101966B0,308,AIBot/SquadMember.cpp,184,,,,,unmapped
+0x101967F0,415,AIBot/SquadMember.cpp,786 788 790,,,,,unmapped
+0x10196EB0,244,AIBot/SquadMember.cpp,,0x1B3450,dice::hfe::ai::SquadMember::getAssistFiringSquadMember(dice::hfe::Vec3&),AIBot/SquadMember.cpp,consts,match
+0x101972F0,725,AIBot/SquadMember.cpp,,0x1B3E20,dice::hfe::ai::SquadMember::moveWithoutFormation(),AIBot/SquadMember.cpp,calls,match
+0x10197770,334,AIBot/SquadMember.cpp,523 525,,,,,unmapped
+0x101978C0,1984,AIBot/SquadMember.cpp,1173,,,,,unmapped
+0x10198080,955,AIBot/SquadMember.cpp,815 824 826 830,0x1B2840,"dice::hfe::ai::SquadMember::avoidArtillery(dice::hfe::Vec3, double, int)",AIBot/SquadMember.cpp,calls,match
+0x10198440,618,AIBot/SquadMember.cpp,902 906 908,0x1B3AA0,dice::hfe::ai::SquadMember::setHavePath(bool),AIBot/SquadMember.cpp,calls,match
+0x101986B0,1260,,,0x1B1ED0,dice::hfe::ai::SquadMember::update(double),AIBot/SquadMember.cpp,consts,match
+0x10198D50,11,,,0x1A7160,dice::hfe::ai::SquadCoordinator::acceptMission(dice::hfe::ai::SquadMember*),AIBot/SquadCoordinator.cpp,calls,match
+0x10198ED0,11,,,0x2DD110,dice::hfe::ai::WeaponInfo::getWeaponActivate() const,AIKnowledge/WeaponInfo.cpp,calls,match
+0x10199210,159,Main/AIRadio.cpp,60,,,,,unmapped
+0x10199310,143,Main/AIRadio.cpp,138,,,,,unmapped
+0x10199760,449,AIPlanInterpreter/BAPInterpreter.cpp,154,0x2A99D0,"dice::hfe::ai::BAPInterpreter::execute(dice::hfe::ai::BotScript*, dice::hfe::ai::Bot*, bool&, bool&)",AIPlanInterpreter/BAPInterpreter.cpp,string,match
+0x1019D090,513,AIUtils/DebugRendering/DPDynamicCircle.cpp,97,,,,,unmapped
+0x1019D8F0,699,AIUtils/DebugRendering/DPDynamicLine.cpp,160,,,,,unmapped
+0x1019DD40,383,AIUtils/DebugRendering/DPDynamic3dText.cpp,141,,,,,unmapped
+0x1019DF50,480,AIUtils/DebugRendering/DPAIObjectCircle.cpp,73,,,,,unmapped
+0x1019E270,714,AIUtils/DebugRendering/DPAIObjectLine.cpp,124,,,,,unmapped
+0x1019E630,351,AIUtils/DebugRendering/DPAIObject3dText.cpp,97,,,,,unmapped
+0x1019EE70,21,,,0x49C850,dice::hfe::Vec3::getZero(),Code/BF2/Math/Vec3.cpp,calls,match
+0x1019F590,188,Main/BotManager.cpp,437,,,,,unmapped
+0x1019F650,205,Main/BotManager.cpp,453,,,,,unmapped
+0x101A1450,500,Main/BotManager.cpp,2212 2217,,,,,unmapped
+0x101A1680,697,Main/BotManager.cpp,,0x3E0CA0,dice::hfe::ai::BotManager::writeBotPlans(),Main/BotManager.cpp,string,match
+0x101A21B0,136,Main/BotManager.cpp,641,,,,,unmapped
+0x101A2730,177,Main/BotManager.cpp,2013,,,,,unmapped
+0x101A27F0,137,Main/BotManager.cpp,2022,,,,,unmapped
+0x101A2880,137,Main/BotManager.cpp,2031,,,,,unmapped
+0x101A2910,137,Main/BotManager.cpp,2040,,,,,unmapped
+0x101A29A0,137,Main/BotManager.cpp,2049,,,,,unmapped
+0x101A2A30,137,Main/BotManager.cpp,2058,,,,,unmapped
+0x101A2AC0,137,Main/BotManager.cpp,2067,,,,,unmapped
+0x101A2B50,137,Main/BotManager.cpp,2076,,,,,unmapped
+0x101A2BE0,137,Main/BotManager.cpp,2085,,,,,unmapped
+0x101A2C70,137,Main/BotManager.cpp,2094,,,,,unmapped
+0x101A2D00,137,Main/BotManager.cpp,2103,,,,,unmapped
+0x101A2D90,137,Main/BotManager.cpp,2112,,,,,unmapped
+0x101A3C20,166,Main/BotManager.cpp,650,,,,,unmapped
+0x101A4290,631,Main/BotManager.cpp,1026 1066,,,,,unmapped
+0x101A4510,490,Main/BotManager.cpp,1088 1099,,,,,unmapped
+0x101A4DD0,1429,Main/BotManager.cpp,,,,,,unmapped
+0x101A5380,1147,Main/BotManager.cpp,,,,,,unmapped
+0x101A5810,479,Main/BotManager.cpp,981,,,,,unmapped
+0x101A5A00,1889,Main/BotManager.cpp,1315 1319 1404 1408,,,,,unmapped
+0x101A6170,1695,Main/BotManager.cpp,1665 1670 1689 1694 1734,,,,,unmapped
+0x101A6810,1045,Main/BotManager.cpp,1805 1809 1839,,,,,unmapped
+0x101A79B0,1101,Main/BotManager.cpp,1179,0x3DD580,dice::hfe::ai::BotManager::action(double const&),Main/BotManager.cpp,string,match
+0x101A83C0,221,AIKnowledge/BFInformationEnvironment.cpp,45,,,,,unmapped
+0x101AA8E0,298,AIUtils/SCurve.cpp,141,,,,,unmapped
+0x101ACDA0,1553,AIStrategicMap/BotSpawner.cpp,,,,,,unmapped
+0x101AD3C0,2593,AIStrategicMap/BotSpawner.cpp,682 900 947,,,,,unmapped
+0x101AE920,380,AIBotBehaviour/BotBehaviour.cpp,107,,,,,unmapped
+0x101AF350,1542,AIBotActionPlan/BAPAMergeSoldierInputs.cpp,112,,,,,unmapped
+0x101B0170,319,AIBotActionPlan/BAPCombinerParallel.cpp,123,,,,,unmapped
+0x101B0CA0,151,AIBotActionPlan/BAPICTurnLock.cpp,24,,,,,unmapped
+0x101B0DB0,290,,,0x1E6A20,dice::hfe::ai::BAPCombinerSerial::streamSelf(std::ostream&) const,AIBotActionPlan/BAPCombinerSerial.cpp,string,match
+0x101B0EE0,303,AIBotActionPlan/BAPCombinerSerial.cpp,92,,,,,unmapped
+0x101B16F0,252,AIBotActionPlan/BAPAMoveTo.cpp,86,,,,,unmapped
+0x101B2E40,21,,,0x2ED530,dice::hfe::ai::IPIControlInfo::getProportionalConstant(),AIKnowledge/IPIControlInfo.cpp,calls,match
+0x101B2E60,21,,,0x2ED560,dice::hfe::ai::IPIControlInfo::getDerivativeConstant(),AIKnowledge/IPIControlInfo.cpp,calls,match
+0x101B2E80,21,,,0x2ED590,dice::hfe::ai::IPIControlInfo::getAngleSpeedConstant(),AIKnowledge/IPIControlInfo.cpp,calls,match
+0x101B32C0,24,,,0x2EDC60,dice::hfe::ai::IPIControlInfo::getMaxRollAngle(),AIKnowledge/IPIControlInfo.cpp,calls,match
+0x101B4F00,208,AIBot/SquadFormation.cpp,166,,,,,unmapped
+0x101B50A0,373,AIBot/SquadFormation.cpp,,0x1AA190,dice::hfe::ai::SquadFormation::updateTrailingPositions(),AIBot/SquadFormation.cpp,consts,match
+0x101B5250,238,AIBot/SquadFormation.cpp,563,,,,,unmapped
+0x101B5350,488,AIBot/SquadFormation.cpp,,0x1AAFC0,dice::hfe::ai::SquadFormation::updateWaitForSquadMembers(double),AIBot/SquadFormation.cpp,consts,match
+0x101B5540,453,AIBot/SquadFormation.cpp,709 711,,,,,unmapped
+0x101B5710,445,AIBot/SquadFormation.cpp,742 744,,,,,unmapped
+0x101B5980,141,AIBot/SquadFormation.cpp,810,,,,,unmapped
+0x101B5DD0,261,AIBot/SquadFormation.cpp,1154,,,,,unmapped
+0x101B6180,243,AIBot/SquadFormation.cpp,936,,,,,unmapped
+0x101B6350,355,AIBot/SquadFormation.cpp,1497,,,,,unmapped
+0x101B6800,1260,AIBot/SquadFormation.cpp,1425 1437 1470 1472,,,,,unmapped
+0x101B7000,169,AIBot/SquadFormation.cpp,180,,,,,unmapped
+0x101B7100,868,AIBot/SquadFormation.cpp,434,,,,,unmapped
+0x101B7560,985,AIBot/SquadFormation.cpp,1175,,,,,unmapped
+0x101B7E20,654,AIBot/SquadFormation.cpp,312 313,,,,,unmapped
+0x101B8230,7,,,0x2DCEC0,dice::hfe::ai::WeaponInfo::getWeaponType() const,AIKnowledge/WeaponInfo.cpp,calls,match
+0x101B8380,4,,,0x1A68C0,dice::hfe::ai::SquadCoordinator::getSquadPosition(dice::hfe::Vec3&),AIBot/SquadCoordinator.cpp,calls,match
+0x101B83A0,4,,,0x1B1A70,dice::hfe::ai::SquadMember::updateMemberPos(),AIBot/SquadMember.cpp,calls,match
+0x101B8910,248,AIBot/SquadCoordinator.cpp,1028 1029,,,,,unmapped
+0x101B8B00,273,AIBot/SquadCoordinator.cpp,1343 1347,,,,,unmapped
+0x101B8C20,291,AIBot/SquadCoordinator.cpp,1705,,,,,unmapped
+0x101B8D50,283,AIBot/SquadCoordinator.cpp,1732,,,,,unmapped
+0x101B9160,881,AIBot/SquadCoordinator.cpp,1365 1367 1377 1379,,,,,unmapped
+0x101B9E60,536,AIBot/SquadCoordinator.cpp,,0x1A56A0,dice::hfe::ai::SquadCoordinator::chooseSquadManeuver(),AIBot/SquadCoordinator.cpp,consts,match
+0x101BA1F0,256,AIBot/SquadCoordinator.cpp,1020 1021,,,,,unmapped
+0x101BA460,47,AIBot/SquadCoordinator.cpp,,0x1A6570,dice::hfe::ai::SquadCoordinator::anyFiring(),AIBot/SquadCoordinator.cpp,calls,match
+0x101BA490,332,AIBot/SquadCoordinator.cpp,,0x1A65B0,dice::hfe::ai::SquadCoordinator::isFiring(int),AIBot/SquadCoordinator.cpp,calls,match
+0x101BA5E0,117,AIBot/SquadCoordinator.cpp,,0x1A6610,"dice::hfe::ai::SquadCoordinator::getClosestFiringMember(dice::hfe::ai::SquadMember*, float&)",AIBot/SquadCoordinator.cpp,calls,match
+0x101BA6C0,448,AIBot/SquadCoordinator.cpp,1448,,,,,unmapped
+0x101BA880,1689,AIBot/SquadCoordinator.cpp,1542,,,,,unmapped
+0x101BAF70,445,AIBot/SquadCoordinator.cpp,1855,,,,,unmapped
+0x101BB130,208,AIBot/SquadCoordinator.cpp,1892,,,,,unmapped
+0x101BB350,1077,AIBot/SquadCoordinator.cpp,2245,0x1A8730,"dice::hfe::ai::SquadCoordinator::requestResponseModifier(dice::hfe::ai::SquadMember*, unsigned int, dice::hfe::ai::SquadMember::RequestAction)",AIBot/SquadCoordinator.cpp,consts,match
+0x101BBD80,440,AIBot/SquadCoordinator.cpp,389 421,,,,,unmapped
+0x101BC1E0,345,AIBot/SquadCoordinator.cpp,1919,,,,,unmapped
+0x101BC340,396,AIBot/SquadCoordinator.cpp,1943,,,,,unmapped
+0x101BC670,902,AIBot/SquadCoordinator.cpp,1080 1139,,,,,unmapped
+0x101BCC70,1219,AIBot/SquadCoordinator.cpp,814,0x1A4E90,dice::hfe::ai::SquadCoordinator::squadManeuverAlternateFire(),AIBot/SquadCoordinator.cpp,consts,match
+0x101BD2F0,259,AIBot/SquadCoordinator.cpp,465,,,,,unmapped
+0x101BE380,1749,AIBotActionPlan/BAPAMoveToObjectFinding.cpp,145,,,,,unmapped
+0x101BEC20,2124,AIBotActionPlan/BAPAMoveToObjectFinding.cpp,330 333 462,,,,,unmapped
+0x101BF990,401,AIBotActionPlan/BAPAMoveToFinding.cpp,75,,,,,unmapped
+0x101C0560,163,,,0x1DE680,dice::hfe::ai::BAPAResetControls::streamSelf(std::ostream&) const,AIBotActionPlan/BAPAResetControls.cpp,string,match
+0x101C0800,317,AIBotActionPlan/BAPFlowCWhile.cpp,86,,,,,unmapped
+0x101C0AD0,321,AIBotActionPlan/BAPATriggerContinously.cpp,57 66,,,,,unmapped
+0x101C0CC0,374,,,0x1E1DD0,dice::hfe::ai::BAPATriggerContinously::streamSelf(std::ostream&) const,AIBotActionPlan/BAPATriggerContinously.cpp,string,match
+0x101C0FF0,317,AIBot/WPBeachLanding.cpp,111 117,,,,,unmapped
+0x101C1350,562,AIBotBehaviourPattern/BBPIdle.cpp,83 85,,,,,unmapped
+0x101C1590,587,AIBotBehaviourPattern/BBPIdle.cpp,138 140,,,,,unmapped
+0x101C1D50,264,AIBotActionPlan/BAPFlowCIf.cpp,107,,,,,unmapped
+0x101C1F00,510,,,0x1E3B60,dice::hfe::ai::BAPFlowCIf::streamSelf(std::ostream&) const,AIBotActionPlan/BAPFlowCIf.cpp,string,match
+0x101C2160,207,,,0x1E3A10,"dice::hfe::ai::BAPFlowCIf::debug(dice::hfe::ai::BotScriptDebugger::DebugLevel, std::string&)",AIBotActionPlan/BAPFlowCIf.cpp,string,match
+0x101C2820,134,,,0x1E1360,"dice::hfe::ai::BAPATrigger::debug(dice::hfe::ai::BotScriptDebugger::DebugLevel, std::string&)",AIBotActionPlan/BAPATrigger.cpp,string,match
+0x101C2C60,609,,,0x2265E0,"dice::hfe::ai::closeAndShouldAvoidVehicles(dice::hfe::ai::Information*, int, dice::hfe::ai::Bot*)",AIBotBehaviour/VehicleUrgencyCalculator.cpp,consts,match
+0x101C2F40,1911,AIBotBehaviour/VehicleUrgencyCalculator.cpp,375 388 389 410 411,,,,,unmapped
+0x101C3710,810,AIBotBehaviour/VehicleUrgencyCalculator.cpp,580 582 591,,,,,unmapped
+0x101C3AF0,5902,AIBotBehaviour/VehicleUrgencyCalculator.cpp,662 734 750 751 752 766 767 1081,,,,,unmapped
+0x101C5280,851,AIBotBehaviour/VehicleUrgencyCalculator.cpp,217 220 311,,,,,unmapped
+0x101C57F0,153,AIBotActionPlan/BAPAUpdateVehicle.cpp,57,,,,,unmapped
+0x101C5960,448,AIBotActionPlan/BAPConObjectBehind.cpp,72,,,,,unmapped
+0x101C5BC0,259,,,0x1ED650,dice::hfe::ai::BAPConObjectDistance::streamSelf(std::ostream&) const,AIBotActionPlan/BAPConObjectDistance.cpp,string,match
+0x101C5D00,645,AIBotActionPlan/BAPConObjectDistance.cpp,97,,,,,unmapped
+0x101C6E40,198,AIBotActionPlan/BAPConObjectHealth.cpp,60,,,,,unmapped
+0x101C6F90,372,AIBotActionPlan/BAPConTotalAmmo.cpp,65,,,,,unmapped
+0x101C7570,330,AIBot/SensingAgent.cpp,770,,,,,unmapped
+0x101C8B20,1077,AIBot/SensingAgent.cpp,1066,,,,,unmapped
+0x101C9750,448,AIBot/SensingAgent.cpp,,0x1BC1A0,"dice::hfe::ai::SensingAgent::updateQuadTimeUrgencies(dice::hfe::Vec2&, bool)",AIBot/SensingAgent.cpp,consts,match
+0x101CA8D0,624,AIBot/SensingAgent.cpp,361,,,,,unmapped
+0x101CAC70,894,AIBot/SensingAgent.cpp,65,,,,,unmapped
+0x101CB170,538,,,0x36DA40,"dice::hfe::ai::CustomCurve::testBounds(float, float, float) const",AIUtils/CustomCurve.cpp,string,match
+0x101CB390,174,,,0x36DD60,dice::hfe::ai::CustomCurve::accuracyTest(float) const,AIUtils/CustomCurve.cpp,string,match
+0x101CB440,129,,,0x36DE60,"dice::hfe::ai::CustomCurve::getStatistics(float, float, float, int) const",AIUtils/CustomCurve.cpp,string,match
+0x101CBFF0,1326,,,0x1E8050,dice::hfe::ai::BAPConOkToThrowGrenade::evaluate(dice::hfe::ai::Bot*),AIBotActionPlan/BAPConOkToThrowGrenade.cpp,consts,match
+0x101CCB00,1226,AIBotActionPlan/BAPCConPrecision.cpp,205,,,,,unmapped
+0x101CD160,641,AIBotActionPlan/BAPAAimAtObject.cpp,93,,,,,unmapped
+0x101CD550,1366,AIBotActionPlan/BAPAAimAtObject.cpp,155 177,,,,,unmapped
+0x101CDD20,628,AIBotActionPlan/BAPAAimAtPoint.cpp,110,,,,,unmapped
+0x101CE300,149,AIBotActionPlan/BAPConWeaponHasLockOnTarget.cpp,23,,,,,unmapped
+0x101CE920,362,AIBotActionPlan/BAPFlowCEnd.cpp,115,,,,,unmapped
+0x101CF9D0,357,AIBotActionPlan/BAPConPointDistance.cpp,85,,,,,unmapped
+0x101CFCD0,502,AIBotActionPlan/BAPAChangeWeapon.cpp,31 33 35,,,,,unmapped
+0x101CFF10,572,AIBotActionPlan/BAPAChangeWeapon.cpp,50 60,,,,,unmapped
+0x101D0220,21,,,0x1D2AC0,"dice::hfe::ai::BAPAIdle::debug(dice::hfe::ai::BotScriptDebugger::DebugLevel, std::string&)",AIBotActionPlan/BAPAIdle.cpp,string,match
+0x101D0720,2229,,,0x1F8F40,"dice::hfe::ai::BAPWrapperAiming::execute(dice::hfe::ai::Bot*, bool&, bool&)",AIBotActionPlan/BAPWrapperAiming.cpp,consts,match
+0x101D10C0,918,AIBotActionPlan/BAPConObjectValidAiming.cpp,132 152,,,,,unmapped
+0x101D2960,480,,,0x1A0E30,dice::hfe::ai::(anonymous namespace)::SideFilter::predicate(dice::hfe::ai::IAIObject*),AIBot/BotSenses.cpp,consts,match
+0x101D2B40,235,,,0x197650,"dice::hfe::ai::(anonymous namespace)::soldierHack_getSoldierCentre(dice::hfe::Vec3&, dice::hfe::Vec3&, dice::hfe::ai::Information*)",AIBot/BotSenses.cpp,string,match
+0x101D8760,4237,,,0x198420,dice::hfe::ai::BotSenses::see(double const&),AIBot/BotSenses.cpp,string,match
+0x101D9810,4656,,,0x19A0F0,dice::hfe::ai::BotSenses::updateSeeing(double const&),AIBot/BotSenses.cpp,consts,match
+0x101DACD0,170,AIBotActionPlan/BAPANotifyBot.cpp,45,0x1DD800,"dice::hfe::ai::BAPANotifyBot::execute(dice::hfe::ai::Bot*, bool&, bool&)",AIBotActionPlan/BAPANotifyBot.cpp,string,match
+0x101DAD80,177,AIBotActionPlan/BAPWrapperWeapon.cpp,28,,,,,unmapped
+0x101DAE40,178,AIBotActionPlan/BAPWrapperWeapon.cpp,50,,,,,unmapped
+0x101DAF80,190,AIBotActionPlan/BAPWrapperWeapon.cpp,68,0x1FB470,"dice::hfe::ai::BAPWrapperWeapon::execute(dice::hfe::ai::Bot*, bool&, bool&)",AIBotActionPlan/BAPWrapperWeapon.cpp,string,match
+0x101DB080,402,AIBotActionPlan/BAPATurnTowardsObject.cpp,61,,,,,unmapped
+0x101DB680,601,,,0x1EB170,dice::hfe::ai::BAPCConBombPrecision3d::evaluate(dice::hfe::ai::Bot*),AIBotActionPlan/BAPCConBombPrecision3d.cpp,consts,match
+0x101DBE30,1188,AIBotActionPlan/BAPAAimAtObject3d.cpp,104 107,,,,,unmapped
+0x101DCAC0,115,AIBotActionPlan/BAPConEndOfPath.cpp,17,,,,,unmapped
+0x101DCE30,503,AIBotActionPlan/BAPConLineOfFire.cpp,34 58,0x1E7B80,dice::hfe::ai::BAPConLineOfFire::evaluate(dice::hfe::ai::Bot*),AIBotActionPlan/BAPConLineOfFire.cpp,string,match
+0x101DD0A0,169,AIBotActionPlan/BAPConObjectManDown.cpp,57,,,,,unmapped
+0x101DDC40,114,AIBot/BotSquad.cpp,416,,,,,unmapped
+0x101DDCC0,114,AIBot/BotSquad.cpp,442,,,,,unmapped
+0x101DDD40,114,AIBot/BotSquad.cpp,468,,,,,unmapped
+0x101DDDC0,114,AIBot/BotSquad.cpp,494,,,,,unmapped
+0x101DDE40,114,AIBot/BotSquad.cpp,503,,,,,unmapped
+0x101DDEC0,254,AIBot/BotSquad.cpp,152,,,,,unmapped
+0x101DDFC0,254,AIBot/BotSquad.cpp,236,,,,,unmapped
+0x101DE0C0,254,AIBot/BotSquad.cpp,319,,,,,unmapped
+0x101DE1C0,827,,,0x2CA4B0,"dice::hfe::ai::avoidRight(dice::hfe::ai::Bot*, float&)",AIPlanInterpreter/HeliControl.cpp,consts,match
+0x101DE500,600,,,0x2C8D00,"dice::hfe::ai::HeliControl::gotoHeight(dice::hfe::ai::Bot*, float, dice::hfe::Vec3 const&)",AIPlanInterpreter/HeliControl.cpp,consts,match
+0x101DE950,544,,,0x2CAC20,"dice::hfe::ai::HeliControl::turnTowardsDirection(dice::hfe::ai::Bot*, dice::hfe::Vec3 const&, dice::hfe::Vec3 const&)",AIPlanInterpreter/HeliControl.cpp,consts,match
+0x101DED30,168,,,0x2C9450,"dice::hfe::ai::HeliControl::limitSpeedTo(dice::hfe::ai::Bot*, float, float, float, dice::hfe::Vec3 const&)",AIPlanInterpreter/HeliControl.cpp,calls,match
+0x101DEFA0,1089,,,0x2C9F30,"dice::hfe::ai::HeliControl::avoidCrash(dice::hfe::ai::Bot*, dice::hfe::Vec3 const&, float&)",AIPlanInterpreter/HeliControl.cpp,consts,match
+0x101DF3F0,180,,,0x2C8A80,"dice::hfe::ai::HeliControl::quickyMoveForward(dice::hfe::ai::Bot*, float, dice::hfe::Vec3 const&)",AIPlanInterpreter/HeliControl.cpp,consts,match
+0x101DF5C0,1236,,,0x2C9760,"dice::hfe::ai::HeliControl::moveToPoint(dice::hfe::ai::Bot*, dice::hfe::Vec3 const&, float, dice::hfe::Vec3 const&)",AIPlanInterpreter/HeliControl.cpp,consts,match
+0x101E0250,837,AIPlanInterpreter/InfanteryControl.cpp,224 243 263 283 288,,,,,unmapped
+0x101E05A0,2518,,,0x2CBD70,"dice::hfe::ai::updateInfantryMoveToPosWithObstacles(dice::hfe::ai::Bot*, dice::hfe::Vec2 const&, dice::hfe::Vec3 const&, unsigned int, dice::hfe::Vec2&, unsigned int&, float&, dice::hfe::Vec2&, float&, bool&, dice::hfe::ai::Information*, bool)",AIPlanInterpreter/InfanteryControl.cpp,consts,match
+0x101E12D0,340,,,0x2D0E30,"dice::hfe::ai::TankControl::turnTowardsDirection(float, float, bool, dice::hfe::ai::Information*, dice::hfe::ai::IPIMobile*, dice::hfe::ai::IPIControlInfo*, dice::hfe::io::PlayerInput*, bool*)",AIPlanInterpreter/TankControl.cpp,consts,match
+0x101E16E0,9488,AIPlanInterpreter/TankControl.cpp,398 1174,,,,,unmapped
+0x101E3C90,1308,AIPlanInterpreter/BoatControl.cpp,72 228,0x2AA090,"dice::hfe::ai::BoatControl::speedControl(dice::hfe::ai::Bot*, dice::hfe::ai::Information*, dice::hfe::Vec2 const&, float, float, dice::hfe::ai::BAPAMoveTo*, float, dice::hfe::io::PlayerInput*, float)",AIPlanInterpreter/BoatControl.cpp,consts,match
+0x101E4220,1035,AIPlanInterpreter/BoatControl.cpp,872 875,,,,,unmapped
+0x101E4630,2067,AIPlanInterpreter/MouseControl.cpp,196 219,0x2CCEE0,"dice::hfe::ai::mouseControlLookAtDirection(dice::hfe::ai::Bot*, dice::hfe::Vec3 const&, dice::hfe::Mat4 const&, float&, float, float&, float, float, dice::hfe::ai::IPIControlInfo*, dice::hfe::io::PlayerInput*, float, float, float)",AIPlanInterpreter/MouseControl.cpp,consts,match
+0x101E50F0,938,AIPlanInterpreter/ControlFunctions.cpp,528 590 644 706,,,,,unmapped
+0x101E5910,791,AIPlanInterpreter/ControlFunctions.cpp,224,,,,,unmapped
+0x101E5DC0,884,AIPlanInterpreter/ControlFunctions.cpp,371 385 425,,,,,unmapped
+0x101E65E0,372,AIPlanInterpreter/ControlFunctions.cpp,1064 1065,,,,,unmapped
+0x101E6860,522,AIPlanInterpreter/ControlFunctions.cpp,799 806,,,,,unmapped
+0x101E6B20,522,AIPlanInterpreter/ControlFunctions.cpp,835 842,,,,,unmapped
+0x101E6D80,2567,,,0x2CE6D0,"dice::hfe::ai::PlaneControl::towardsDirection(dice::hfe::Vec3 const&, float, dice::hfe::io::PlayerInput*, dice::hfe::Mat4 const&, float, float, bool, dice::hfe::Vec3 const&, dice::hfe::Vec3 const&, dice::hfe::Vec3 const&, dice::hfe::ai::IPIMobile*, dice::hfe::ai::IPIControlInfo*, float, float, bool)",AIPlanInterpreter/PlaneControl.cpp,consts,match
+0x101E7790,1857,,,0x2CF9F0,"dice::hfe::ai::PlaneControl::roll(float, float, dice::hfe::io::PlayerInput*, dice::hfe::Mat4 const&, float, bool, dice::hfe::Vec3 const&, dice::hfe::Vec3 const&, dice::hfe::Vec3 const&, dice::hfe::Vec3 const&, dice::hfe::Vec3 const&, dice::hfe::Vec3 const&, dice::hfe::ai::IPIControlInfo*, float, bool, bool&)",AIPlanInterpreter/PlaneControl.cpp,consts,match
+0x101E8160,1044,,,0x2CDB00,"dice::hfe::ai::PlaneControl::towardsPoint(dice::hfe::ai::Bot*, dice::hfe::ai::Information*, dice::hfe::Vec3, float, dice::hfe::Vec3 const&, dice::hfe::Vec3 const&, dice::hfe::Vec3 const&, float, dice::hfe::io::PlayerInput*)",AIPlanInterpreter/PlaneControl.cpp,consts,match
+0x101E87E0,820,,,0x2AAF40,"dice::hfe::ai::CarControl::controlTowardsDirection(dice::hfe::ai::Information*, dice::hfe::ai::IPIControlInfo*, dice::hfe::ai::IPIMobile*, dice::hfe::ai::IPIPhysical*, dice::hfe::io::PlayerInput*, float, float, float, float, float)",AIPlanInterpreter/CarControl.cpp,consts,match
+0x101E8DD0,9409,AIPlanInterpreter/CarControl.cpp,316 1088,,,,,unmapped
+0x101ECEF0,153,AIKnowledge/IPIArmament.cpp,153,,,,,unmapped
+0x101ED030,210,AIKnowledge/IPIArmament.cpp,161,,,,,unmapped
+0x101ED570,189,AIPathFinding/NavMesh/GTSDataOptimiser.cpp,103,,,,,unmapped
+0x101EEC50,350,AIPathFinding/NavMesh/GTSDataOptimiser.cpp,138,0x2F3210,"dice::hfe::ai::OptPolygon::changeNeighbour(dice::hfe::DoubleVec3 const&, dice::hfe::ai::OptPolygon*, dice::hfe::ai::OptPolygon*)",AIPathFinding/NavMesh/GTSDataOptimiser.cpp,string,match
+0x101EEDB0,275,AIPathFinding/NavMesh/GTSDataOptimiser.cpp,231,,,,,unmapped
+0x101EF130,303,AIPathFinding/NavMesh/GTSDataOptimiser.cpp,2429,,,,,unmapped
+0x101F0A40,524,AIPathFinding/NavMesh/GTSDataOptimiser.cpp,178,,,,,unmapped
+0x101F1C40,648,AIPathFinding/NavMesh/GTSDataOptimiser.cpp,2455 2458 2462,0x2FC320,"dice::hfe::ai::GTSDataOptimiser::validateNeighbourRelations(std::set<dice::hfe::ai::OptPolygon*, std::less<dice::hfe::ai::OptPolygon*>, std::allocator<dice::hfe::ai::OptPolygon*>> const&)",AIPathFinding/NavMesh/GTSDataOptimiser.cpp,string,match
+0x101F4EF0,1972,AIPathFinding/NavMesh/GTSDataOptimiser.cpp,,0x2F4000,dice::hfe::ai::GTSDataOptimiser::removeTooThinTriangles(),AIPathFinding/NavMesh/GTSDataOptimiser.cpp,consts,match
+0x101F6AA0,916,AIPathFinding/NavMesh/GTSDataOptimiser.cpp,623,0x2F5340,"dice::hfe::ai::GTSDataOptimiser::setPolygonIndices(std::vector<dice::hfe::ai::DestroyableMapPart*, std::allocator<dice::hfe::ai::DestroyableMapPart*>> const&)",AIPathFinding/NavMesh/GTSDataOptimiser.cpp,string,match
+0x101F74E0,3487,AIPathFinding/NavMesh/GTSDataOptimiser.cpp,908 922 955 981 1059 1153,0x2F6380,"dice::hfe::ai::GTSDataOptimiser::twoToOneMerge(std::set<dice::hfe::ai::OptPolygon*, std::less<dice::hfe::ai::OptPolygon*>, std::allocator<dice::hfe::ai::OptPolygon*>>&)",AIPathFinding/NavMesh/GTSDataOptimiser.cpp,string,match
+0x101F8340,253,AIPathFinding/NavMesh/GTSDataOptimiser.cpp,272,,,,,unmapped
+0x101F9110,15,,,0x1F82D0,"dice::hfe::ai::operator<<(std::ostream&, dice::hfe::ai::BAPStatement const&)",AIBotActionPlan/BAPStatement.cpp,calls,match
+0x101F9180,219,AIBot/UrgencyMerger.cpp,121,,,,,unmapped
+0x101FAC00,370,AIKnowledge/AIInformationGrid.cpp,761,,,,,unmapped
+0x101FB660,215,AIKnowledge/AIInformationGrid.cpp,146,0x2D5640,dice::hfe::ai::AIInformationGrid::removeInfo(unsigned int),AIKnowledge/AIInformationGrid.cpp,string,match
+0x101FBCD0,693,AIKnowledge/AIInformationGrid.cpp,662,,,,,unmapped
+0x101FC630,642,AIKnowledge/AIInformationGrid.cpp,312,,,,,unmapped
+0x101FC8C0,1524,AIKnowledge/AIInformationGrid.cpp,403,,,,,unmapped
+0x101FCEC0,658,AIKnowledge/AIInformationGrid.cpp,489,,,,,unmapped
+0x101FD280,492,AIKnowledge/AIInformationGrid.cpp,561,,,,,unmapped
+0x101FDBA0,163,AIBotActionPlan/BAPInfoWrapper.cpp,58,,,,,unmapped
+0x101FDC90,229,,,0x1F5600,dice::hfe::ai::BAPInfoWrapper::streamSelf(std::ostream&) const,AIBotActionPlan/BAPInfoWrapper.cpp,string,match
+0x101FE960,1760,,,0x1C7C40,"dice::hfe::ai::Aimer::getFiringDirection(double, float, bool, dice::hfe::Vec3&, dice::hfe::Vec3&, double*)",AIBotActionPlan/Aimer.cpp,consts,match
+0x101FF640,1473,,,0x1C8F50,"dice::hfe::Polynom::findRoots(std::vector<float, std::allocator<float>>&) const",Code/BF2/Math/Polynom.h,string,match
+0x10200670,1835,,,0x2AF500,"dice::hfe::ai::CommonControls::checkCollisions(dice::hfe::ai::Bot*, dice::hfe::ai::Information*, dice::hfe::ai::IPIPhysical*, dice::hfe::Vec2 const&, float&, float&, bool&, dice::hfe::Vec2 const&, dice::hfe::Vec2 const&, float, bool&, unsigned int&, unsigned int&, bool&, float&, float&, float, bool&, dice::hfe::ai::AvoidSide, bool)",AIPlanInterpreter/CommonControls.cpp,consts,match
+0x10200DA0,1569,,,0x2AFF80,"dice::hfe::ai::CommonControls::checkSlowDown(dice::hfe::ai::Bot*, dice::hfe::ai::Information*, dice::hfe::Vec3 const&, float, dice::hfe::Vec3 const&, bool&)",AIPlanInterpreter/CommonControls.cpp,consts,match
+0x10203490,185,,,0x48BA40,"dice::hfe::makeNarrow(std::basic_string<wchar_t, std::char_traits<wchar_t>, std::allocator<wchar_t>> const&)",Code/BF2/Core/StringUtil.cpp,string,match
+0x10203670,9,,,0x3448F0,dice::hfe::ai::AIStrategicObjectManager::getInstance(),AIStrategicEntity/AIStrategicObjectManager.cpp,calls,match
+0x10203680,12,,,0x48CA30,dice::hfe::io::File::File(),Code/BF2/IO/File/File.cpp,calls,match
+0x102036A0,22,,,0x48CBD0,dice::hfe::io::File::close(),Code/BF2/IO/File/File.cpp,calls,match
+0x102036C0,119,,,0x3122E0,unsigned char* dice::hfe::ai::checkPointer<unsigned char>(unsigned char*),AIUtils/checkPointer.h,calls,match
+0x10203990,66,,,0x48CCF0,"dice::hfe::io::File::write(std::basic_ostringstream<char, std::char_traits<char>, std::allocator<char>>&)",Code/BF2/IO/File/File.cpp,calls,match
+0x10203E50,83,,,0x2FE820,"std::basic_string<char, std::char_traits<char>, std::allocator<char>> std::operator+<char, std::char_traits<char>, std::allocator<char>>(std::basic_string<char, std::char_traits<char>, std::allocator<char>> const&, std::basic_string<char, std::char_traits<char>, std::allocator<char>> const&)",AIPathFinding/NavMesh/MeshImporterExporter.cpp,calls,match
+0x10204030,55,,,0x3139A0,dice::hfe::ai::AerialHeightMap::getGroundHeight(dice::hfe::Vec3 const&),AIPathFinding/AerialHeightMap/AerialHeightMap.cpp,calls,match
+0x10206EE0,162,,,0x499220,dice::hfe::Mat4::setInverse(dice::hfe::Mat4 const&),Code/BF2/Math/Mat4.cpp,calls,match
+0x102085B0,393,,,0x49A380,"dice::hfe::getRotationZXY(dice::hfe::Mat4 const&, float&, float&, float&)",Code/BF2/Math/Mat4.cpp,calls,match

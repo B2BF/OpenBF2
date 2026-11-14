@@ -21,7 +21,7 @@ if not exist "%BF2_BUILD_OUT%" mkdir "%BF2_BUILD_OUT%"
 set TASK_FLAGS=/nologo %BF2_TEST_OPT% /EHsc /std:c++14 /permissive /MD /Z7 /Gy /DDEDICATED=0 /DBF2_PLUGIN_ABI_NATIVE=1 /D_ITERATOR_DEBUG_LEVEL=0 %TASK_DISCOVERY_FLAGS% /I"%TASK_ROOT%\External\zlib-1.2.3" /I"%TASK_ROOT%\External\zlib-1.2.3\contrib\minizip"
 type nul >"%BF2_BUILD_OUT%\compile.log"
 type nul >"%BF2_BUILD_OUT%\objects.rsp"
-for %%F in (Game\LocalProfileManager Game\LocalProfileManagerInit Game\LocalProfileManagerOperations Game\LocalProfileManagerSelection Game\LocalProfileManagerDiscovery Game\LocalProfileManagerFields Game\LocalProfileManagerSuffix Game\PasswordCodec Game\MapList Game\Main\BF2ClientFrontiers Core\ClassManager Core\EventManager Core\Debug Core\StringUtil Core\SettingsRepostitory %TASK_EXTERNAL_TUS%) do (
+for %%F in (Game\LocalProfileManager Game\LocalProfileManagerInit Game\LocalProfileManagerOperations Game\LocalProfileManagerSelection Game\LocalProfileManagerDiscovery Game\LocalProfileManagerFields Game\LocalProfileManagerSuffix Game\PasswordCodec Game\MapList Core\ClassManager Core\EventManager Core\Debug Core\StringUtil Core\SettingsRepostitory %TASK_EXTERNAL_TUS%) do (
   cl %TASK_FLAGS% /FI"%TASK_ROOT%\Core\BuildConfig.h" /c "%TASK_ROOT%\%%F.cpp" /Fo"%BF2_BUILD_OUT%\%%~nF.obj" >>"%BF2_BUILD_OUT%\compile.log" 2>&1
   if errorlevel 1 (type "%BF2_BUILD_OUT%\compile.log" & exit /b 1)
   echo "%BF2_BUILD_OUT%\%%~nF.obj" >>"%BF2_BUILD_OUT%\objects.rsp"
@@ -33,4 +33,7 @@ if errorlevel 1 (type "%BF2_BUILD_OUT%\link.log" & exit /b 1)
 "%BF2_BUILD_OUT%\local_profile_lifetime_runtime.exe" >"%BF2_BUILD_OUT%\runtime.log" 2>&1
 set "TASK_RESULT=%errorlevel%"
 type "%BF2_BUILD_OUT%\runtime.log"
+rem A run without its result line proves nothing (a crash can also leave errorlevel 0 here): fail it.
+findstr /R /C:"^local profile lifetime [0-9]*/[0-9]* checks passed" "%BF2_BUILD_OUT%\runtime.log" >nul
+if errorlevel 1 (echo FAIL: no "local profile lifetime N/N checks passed" line in runtime.log & exit /b 1)
 exit /b %TASK_RESULT%

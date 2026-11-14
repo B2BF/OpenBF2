@@ -14,6 +14,12 @@
 #include "../../../../Core/System.h"
 #include "../../../IGame.h"
 #include "../../../../IO/Stream/IStream.h"
+#if !DEDICATED
+#include "../../../../IO/Input/FalconHaptics.h"            // soldierRecoilPunch (ledger N2)
+#include "../../../../Scene/Object/PlayerManager.h"
+#include "../../../../Scene/Object/ObjectTypes/Game/IPlayerControlObject.h"
+#include "../../Game/SoldierHapticProfile.h"              // HapticWeaponAccess
+#endif
 
 namespace dice {
 namespace hfe {
@@ -195,7 +201,7 @@ float SoldierBasedRecoilComp::getRecoil(float recoil)
 
 // .  The ancestor walk starts at the weapon's parent (not the weapon),
 // and the freshly calculated sample precedes both the ring advance and its tick write.
-void SoldierBasedRecoilComp::postFire(WeaponFireEvent&)
+void SoldierBasedRecoilComp::postFire(WeaponFireEvent& event)
 {
     IObject* soldierObject = 0;
     for (IObject* object = m_initObject->getParent(); object && !soldierObject;
@@ -214,6 +220,27 @@ void SoldierBasedRecoilComp::postFire(WeaponFireEvent&)
         m_recoilTicks[m_currentRecoilIndex] =
             static_cast<unsigned int>(WorldPref::getTickCount());
     }
+#if !DEDICATED
+    // BF2.exe 0x609318..0x609690 (ledger N2 17b): the local occupant's Novint "RecoilPunch". Retail
+    // reads the soldier's occupant before testing for a device, and does not check the soldier.
+    // [CHOSEN, not recovered] Both reads happen only with a device, and a missing soldier is skipped;
+    // retail reaches the soldier's control interface by its fixed base offset, this queries it.
+    if (io::hapticDeviceConnected() && soldierObject)
+    {
+        IPlayerControlObject* const pco = static_cast<IPlayerControlObject*>(
+            soldierObject->queryInterface(IID_IPlayerControlObject));
+        IPlayer* const occupant = pco->getOccupingPlayer();                       // +0x10
+        if (occupant && occupant == playerManager->getLocalHumanPlayer())
+        {
+            const std::vector<float>& graph = getRecoilVector();
+            const RandomDistribution& up = getRandomRecoilForceUp();
+            io::soldierRecoilPunch(HapticWeaponAccess::weaponType(pco->getActiveWeapon(0)),   // +0x74 PE
+                                   getHasRandomRecoilForce(), static_cast<unsigned int>(graph.size()),
+                                   graph.empty() ? 0 : &graph.back(), up.value, up.variation,
+                                   getRecoilForceModifier(), event.fireStrength);
+        }
+    }
+#endif
 }
 
 void SoldierBasedRecoilComp::setZoom(int zoom)

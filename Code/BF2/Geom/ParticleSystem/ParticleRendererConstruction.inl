@@ -155,7 +155,7 @@ static void psmCtorTrigPair(unsigned int index, short& sine, short& cosine)
     sine = sineValue;
     cosine = cosineValue;
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     const float step = 0.0015339808305725455284f; // 1021EF18, float(2*pi/4096)
     const float amplitude = 32767.0f;
     unsigned short originalControl;

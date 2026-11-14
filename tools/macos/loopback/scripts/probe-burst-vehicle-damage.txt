@@ -1,0 +1,85 @@
+# [TEMP] probe-burst-vehicle: probe-burst, then play-vehicle (one run for both diagnoses).
+# the [LOOK] per-call pitch (BF2_LOOK_TRACE=1) for the sustained-fire view climb.
+include join-and-spawn
+wait-ms 3000
+log probe: burst 2s (1)
+button-down 0
+wait-ms 2000
+button-up 0
+wait-ms 3000
+log probe: burst 2s (2)
+button-down 0
+wait-ms 2000
+button-up 0
+wait-ms 3000
+log play: vehicle start
+wait-ms 2000
+log play: walk to the nearest vehicle
+walk-to tmpl:jeep_faav,usjep_hmmwv,jep_paratrooper,jep_nanjing,ustnk_m1a2,tnk_type98,usaav_m6,aav_type95,usapc_lav25,apc_wz551 4 60000
+face tmpl:jeep_faav,usjep_hmmwv,jep_paratrooper,jep_nanjing,ustnk_m1a2,tnk_type98,usaav_m6,aav_type95,usapc_lav25,apc_wz551 5 3000
+capture at-vehicle
+log play: closer (entry radius)
+walk-to tmpl:jeep_faav,usjep_hmmwv,jep_paratrooper,jep_nanjing,ustnk_m1a2,tnk_type98,usaav_m6,aav_type95,usapc_lav25,apc_wz551 1.5 6000
+log play: enter (E)
+key e
+wait-ms 2500
+capture entered
+log play: drive
+key-down w
+wait-ms 3000
+key-down d
+wait-ms 1500
+key-up d
+wait-ms 1500
+key-up w
+key-down s
+wait-ms 1500
+key-up s
+wait-ms 1500
+capture driven
+log play: vehicle fire
+button-down 0
+wait-ms 1000
+button-up 0
+wait-ms 1000
+log play: seats
+key f2
+wait-ms 2000
+capture seat-2
+key f3
+wait-ms 2000
+key f4
+wait-ms 2000
+key f5
+wait-ms 1500
+key f6
+wait-ms 1500
+key f1
+wait-ms 2000
+capture seat-1
+log play: exit (E)
+key e
+wait-ms 2500
+capture exited
+log play: vehicle done
+# Damage with bots: a grenade at the own feet (projectile/explosion damage through
+# GameLogicDamage::serverGiveDamage), death, then respawn from the spawn screen.
+log play: grenade at own feet
+key 4
+wait-ms 2000
+move-rel 0 400
+wait-ms 500
+button-down 0
+wait-ms 1200
+button-up 0
+wait-ms 6000
+capture grenade-dead
+log play: respawn
+key enter
+wait-ms 2500
+hud-click 432 282
+wait-ms 1000
+hud-click 728 546
+wait-ms 15000
+capture respawned
+log play: probe done

@@ -1,0 +1,79 @@
+# [TEMP] The ten hudBuilder console rows recovered in frontier batch 7, typed after spawning against the
+# live IngameHud on success paths only (builder error diagnostics are fatal debug assertions, as in
+# retail): tile, picture alpha mask, text outline, variable move effect, button, compass, search, delete.
+# Needs --client-env BF2_CLIENT_CONSOLE_FULL_ACCESS=1.
+include join-and-spawn
+wait-ms 1000
+key grave
+wait-ms 1000
+type hudBuilder.createTileNode IngameHud Batch7Tile 20 400 200 12
+key enter
+wait-ms 250
+capture b01
+type hudBuilder.setTileNodeOptions 10 8 1
+key enter
+wait-ms 250
+capture b02
+type hudBuilder.createPictureNode IngameHud Batch7Pic 20 420 64 64
+key enter
+wait-ms 250
+capture b03
+type hudBuilder.setPictureNodeTexture Ingame/Bars/helptextBg.tga
+key enter
+wait-ms 250
+capture b04
+type hudBuilder.setPictureNodeAlphaMask Ingame/Bars/helptextBg.tga
+key enter
+wait-ms 250
+capture b05
+type hudBuilder.createTextNode IngameHud Batch7Text 20 500 200 20
+key enter
+wait-ms 250
+capture b06
+type hudBuilder.setTextNodeStyle Fonts/helpMessageFontLocalBold_8.dif 2
+key enter
+wait-ms 250
+capture b07
+type hudBuilder.setTextNodeOutLine Fonts/helpMessageFontLocalBold_8.dif
+key enter
+wait-ms 250
+capture b08
+type hudBuilder.setNodeShowVariable IngameHelpShow
+key enter
+wait-ms 250
+capture b09
+type hudBuilder.addNodeVariableMoveShowEffect TimePreCPIsTaken MapZoom
+key enter
+wait-ms 250
+capture b10
+type hudBuilder.createButtonNode IngameHud Batch7Button 300 400 50 20
+key enter
+wait-ms 250
+capture b11
+type hudBuilder.setButtonNodeMouseOverColor 1 1 0 1
+key enter
+wait-ms 250
+capture b12
+type hudBuilder.setButtonNodeFunction NoSuchFunction 0
+key enter
+wait-ms 250
+capture b13
+type hudBuilder.createCompassNode IngameHud Batch7Compass 3 340 100 128 32 1 0
+key enter
+wait-ms 250
+capture b14
+type hudBuilder.setCompassNodeVariableTexture 0 PrimaryAmmoIconPathString
+key enter
+wait-ms 250
+capture b15
+type hudBuilder.searchNodes IngameHud Batch7Text
+key enter
+wait-ms 250
+capture b16
+type hudBuilder.deleteNode
+key enter
+wait-ms 250
+capture b17
+key grave
+wait-ms 1500
+capture after

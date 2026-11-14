@@ -79,7 +79,7 @@ bool chooseSoftValue(float current, float target, float delta, float speed, floa
     if (changed) value = rounded;
     return changed;
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     float rounded;
     bool changed = false;
     // [CHOSEN, not recovered] Preserve x87 ordered movement and retained candidate comparison.

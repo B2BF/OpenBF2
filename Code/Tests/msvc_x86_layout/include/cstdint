@@ -1,0 +1,11 @@
+// [TEMP] Minimal stand-in for the MSVC x86 <cstdint> used only by msvc_x86_layout.cpp (layout check).
+#pragma once
+typedef signed char int8_t; typedef unsigned char uint8_t;
+typedef short int16_t; typedef unsigned short uint16_t;
+typedef int int32_t; typedef unsigned int uint32_t;
+typedef long long int64_t; typedef unsigned long long uint64_t;
+typedef int intptr_t; typedef unsigned int uintptr_t;
+namespace std {
+using ::int8_t; using ::uint8_t; using ::int16_t; using ::uint16_t; using ::int32_t; using ::uint32_t;
+using ::int64_t; using ::uint64_t; using ::intptr_t; using ::uintptr_t;
+}

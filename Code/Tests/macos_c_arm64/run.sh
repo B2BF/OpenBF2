@@ -206,14 +206,14 @@ checks() {
     step gfx_forward 0 60 "$b" ./macos_gfx_forward
     step metal_cpu 0 60 "$b" ./macos_metal_device --cpu
     step metal_gpu 0 120 "$b" /usr/bin/env MTL_DEBUG_LAYER=1 ./macos_metal_device
-    # Each frontier mode must print its diagnostic and abort (SIGABRT = 134), never succeed.
-    for m in frontier state-frontier format-frontier; do
-        step "metal_$m" 134 60 "$b" ./macos_metal_device "--$m"
-    done
+    # --frontier was the fixed-function vertex abort; since 0.3.0 piece 1 it checks the D3D9 answer.
+    step metal_frontier 0 60 "$b" ./macos_metal_device --frontier
+    # The remaining frontier mode must print its diagnostic and abort (SIGABRT = 134), never succeed.
+    step metal_state-frontier 134 60 "$b" ./macos_metal_device --state-frontier
     sleep 10   # ReportCrash lags a few seconds
     /usr/bin/find "$HOME/Library/Logs/DiagnosticReports" -newer "$marker" \
         \( -name 'bf2*.ips' -o -name 'macos_*.ips' -o -name 'dice_py*.ips' \) -exec cp {} "$out/crash/" \; 2>/dev/null
-    say "checks: $failures failed; crash reports: $(ls "$out/crash" | wc -l | tr -d ' ') (the three metal frontier aborts are expected)"
+    say "checks: $failures failed; crash reports: $(ls "$out/crash" | wc -l | tr -d ' ') (the metal state-frontier abort is expected)"
     for f in "$out"/crash/bf2*.ips "$out"/crash/dice_py*.ips; do
         [ -f "$f" ] || continue
         say "   $(basename "$f"):"; crash_stack "$f" >> "$summary"

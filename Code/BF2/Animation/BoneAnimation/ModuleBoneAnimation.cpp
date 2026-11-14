@@ -456,14 +456,7 @@ namespace {
 inline anim::RagDollTemplate* ragDollTemplate() { return anim::g_ragDollTemplate; }
 
 void rdReset()                        { ragDollTemplate()->m_resetRequested = true; }      // cc96: +0x02 = 1
-// Constraint serialization remains a named stop. [TEMP] [CHOSEN, not recovered]
-// [RETIRE-WHEN: ragdoll-write-constraints]
-void rdSave()
-{
-    std::fprintf(stderr, "[FRONTIER] dice::anim::RagDollTemplate::writeConstraints reached\n");
-    std::fflush(stderr);
-    std::abort();
-}
+void rdSave()                         { ragDollTemplate()->writeConstraints(); }           // cc97: ELF 0x8822215
 void rdActive(bool v)                 { ragDollTemplate()->m_active = v; }                 // cc98:  +0x01
 void rdDrawConstraints(bool v)        { ragDollTemplate()->m_drawConstraints = v; }        // cc99:  +0x00
 void rdGravity(float v)               { ragDollTemplate()->m_gravity = v; }                // cc100: +0x04

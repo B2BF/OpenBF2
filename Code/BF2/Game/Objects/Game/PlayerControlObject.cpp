@@ -64,6 +64,10 @@
 #include "../../../AI/AIInterface/AIInstance.h"     // g_aiInstance - the ECAI notify gate
 #include "../../../AI/AIInterface/BFKnowledge/IAIObject.h"   // init()'s lock bracket, the revive's init()
 #include "RotationalBundle.h"                       // restore the exiting soldier camera's rotation
+#if !DEDICATED
+#include "../../../IO/Input/FalconHaptics.h"            // hapticDeviceConnected (ledger N2)
+#include "SoldierHapticProfile.h"                   // updateVehicleCraftPhysics
+#endif
 
 namespace dice {
 namespace hfe {
@@ -1389,6 +1393,19 @@ void PlayerControlObject::handleUpdate(float deltaTime, unsigned int flags)
             }
             if (m_ambientSoundFromTemplate || m_ambientDamagedSoundFromTemplate)
                 updateAmbientSound();
+#if !DEDICATED
+            // BF2.exe 0x5FAC8C..0x5FBCDB (ledger N2 17b): the local occupant's Novint "CraftPhysics"
+            // forces from the vehicle's acceleration (SoldierHapticProfile.cpp).
+            if (io::hapticDeviceConnected())
+            {
+                IPhysicsNode* const rootPhysics = static_cast<IPhysicsNode*>(
+                    object_detail::LayoutAccess::physicsNode(getRootParent(this)));
+                if (rootPhysics)
+                    // Retail reads the template's category field (+0x350); nothing overrides its getter.
+                    updateVehicleCraftPhysics(rootPhysics, occupant->getVehicle(), getActiveCamera(), deltaTime,
+                                              static_cast<const PlayerControlObjectTemplate*>(m_template)->getVehicleCategory());
+            }
+#endif
         }
         if (m_groundContactSound)
         {

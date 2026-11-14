@@ -1,6 +1,7 @@
 // Path: attested (assert), BF2.exe 0x89E910.
 // [INFERRED] member/helper names. Bodies read from the client PE; no HUD ELF body.
 #include "HudInformationLayer.h"
+#include "IGameClient.h"
 #if !DEDICATED
 #include "../Core/Debug.h"
 #include "../Core/ClassManager.h"
@@ -49,12 +50,6 @@
 namespace dice { namespace hfe {
 namespace world { extern IBase* scoreManager; }
 namespace {
-[[noreturn]] void hudInformationUpdateFrontier(const char* qualified, const char* detail)
-{
-    std::fprintf(stderr, "[FRONTIER] %s reached: %s\n", qualified, detail);
-    std::fflush(stderr);
-    std::abort();
-}
 //  / 0x9A60B4. Identity matters independently of string contents.
 const char emptyString[] = "";
 const wchar_t emptyWideString[] = L"";
@@ -802,11 +797,28 @@ void HudInformationLayer::update(float dt)
         updateWideString(&m_state.TimeToSpawnString, L"");
         updateWideString(&m_state.DemoPausePlayString, hudManager->getLocalizedString(game->getSimulationRate()
             ? "HUD_HUD_DEMO_PAUSE" : "HUD_HUD_DEMO_PLAY").c_str());
-        // [TEMP] [CHOSEN, not recovered] The complete client secondary interface
-        // remains undeclared. Stop before+58, not an invented vtable carrier.
-        // [RETIRE-WHEN: hud-information-demo-client]
-        hudInformationUpdateFrontier("dice::hfe::HudInformationLayer::update",
-            "PE467641: game queryInterface(120002) virtual +58, then +54 demo player ID");
+        // PE 467641: the spectator camera's mode picks the camera button's label (it names the
+        // other mode) and whether the followed player's name shows; the name comes from the
+        // player manager (+0x20) and IPlayer PE +0x20 (getName, one destructor slot).
+        IGameClient* const demoClient = static_cast<IGameClient*>(client);
+        if (demoClient->demoIsFreeFlying()) {                                   // +0x58
+            m_state.DemoPlayerNameShow = false;
+            updateWideString(&m_state.DemoCameraString,
+                hudManager->getLocalizedString("HUD_HUD_DEMO_PLAYER_CAM").c_str());
+        } else {
+            m_state.DemoPlayerNameShow = true;
+            updateWideString(&m_state.DemoCameraString,
+                hudManager->getLocalizedString("HUD_HUD_DEMO_FREE_CAM").c_str());
+        }
+        const char* name = "";
+        if (demoClient->demoGetCurrentPlayerId() != -1) {                       // +0x54, asked twice
+            world::IPlayer* const followed =
+                world::playerManager->getPlayerFromId(demoClient->demoGetCurrentPlayerId());
+            if (followed)
+                name = followed->getName().c_str();
+        }
+        updateString(&m_state.DemoPlayerNameString, name);
+        return;
     } else {
         m_state.DemoPlayerNameShow = false;
         m_state.DemoShow = false;

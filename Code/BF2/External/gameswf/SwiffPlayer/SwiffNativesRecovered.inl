@@ -1,5 +1,5 @@
 // ===================================================================================================
-// c-swiff-natives: the retail natives the port had not registered (docs/macos-c-swiff-natives.md).
+// c-swiff-natives: the retail natives the port had not registered.
 // SwiffPlayer.dll 1.50 (base 0x10000000); every body below was read instruction by instruction with
 // objdump. Calling convention of the shipped callbacks: ecx = the result as_value, [ebp+8] = the
 // argument vector, [ebp+0x10] = first_arg; argument n is element first_arg - n (fn.arg(n) here); the
@@ -818,52 +818,98 @@ void as_multiplay_getMapName(const gameswf::fn_call& fn)
 
 // ---- dice.bf2.Sound (the VoIP rows) -----------------------------------------------------------
 
-// byte_100F8B4C: "VoIP initialised". Only voipInitialize's client arm (0x1006913F) raises it, after
-// the Bf2VoipClient has answered, so it stays false while the port has no client.
+// byte_100F8B4C: "VoIP initialised". Only voipInitialize's client arm (0x1006913F) raises it.
 static bool s_voipInitialized = false;
+// flt_100EC92C (s_voipThreshold, SwiffPlayer.cpp): the menu's capture threshold, kept while a voice
+// test overrides the client's.
+// dword_100F8B50: the profile name voipInitialize last pushed the AudioSettings voice values for.
+static std::string s_voipInitializedProfile;
 
-// Every VoIP row reads the player (dword_100F2F20) and its +0x8C getBf2VoipClient. BF2.exe's
-// BF2VoipClient is not reconstructed (BF2ClientSeams.h, RW-94), so the port's player answers null and
-// the rows take their shipped null-client exits, recovered below. The client arms stop here.
-// [TEMP] [FRONTIER] [CHOSEN, not recovered] [RETIRE-WHEN: voip-client-hud-seam] Replace each stop
-// with the recovered arm once BF2VoipClient and its vtable are reconstructed.
-static void* voipPlayerClient(SwiffPlayer* player)
+// Every VoIP row reads the player (dword_100F2F20) and its +0x8C getBf2VoipClient, the BF2.exe voice
+// client SwiffPlayer reached through getSingleton("Bf2VoipClient") (Game/VoipClient/BF2VoipClient.h;
+// virtual slots only, plus VoipClient's header-inline setLocalLoopback, as the DLL links its copy).
+static BF2VoipClient* voipPlayerClient(SwiffPlayer* player)
 {
-    return player ? player->getBf2VoipClient() : 0;                                         // player +0x8C
+    return player ? static_cast<BF2VoipClient*>(player->getBf2VoipClient()) : 0;            // player +0x8C
 }
-static void voipClientArmFrontier(const char* row, const char* range)
+static IAudioSettings* voipAudioSettings()
 {
-    ::renddx9abi::logf("[FRONTIER] dice::hfe::ui::as_sound_%s: the Bf2VoipClient arm (%s) is not "
-                       "reconstructed (RW-94)", row, range);
-    ::fprintf(stderr, "[FRONTIER] dice::hfe::ui::as_sound_%s: the Bf2VoipClient arm (%s) is not "
-                      "reconstructed (RW-94)\n", row, range);
-    ::fflush(stderr);
-    ::abort();
+    return static_cast<IAudioSettings*>(classManager->getSingleton(renddx9abi::HostString("AudioSettings")));
 }
 
-// sub_10069010 "voipInitialize": no player or no client answers Boolean false (0x1006925B).
+// sub_10069010 "voipInitialize": needs the client and the LocalProfileManager. A client that is neither
+// in a session nor testing starts the local test (quality 3, mixer); failing that answers false. Then
+// the player's VoIP tick is armed and the row is initialised; the first call for a profile pushes the
+// AudioSettings voice values (playback, capture, boost, threshold) into the client. True.
 void as_sound_voipInitialize(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_sound_voipInitialize");
     SwiffPlayer* player = g_swiffPlayerInstance;
-    if (!player || !voipPlayerClient(player))
+    BF2VoipClient* client = voipPlayerClient(player);
+    if (!client)
+    {
+        fn.result->set_bool(false);                                                         // 0x1006925B
+        return;
+    }
+    IBase* lpm = classManager->getSingleton(renddx9abi::HostString("LocalProfileManager"));
+    if (!lpm)
+    {
+        fn.result->set_bool(false);                                                         // 0x1006906A
+        return;
+    }
+    const std::string profile = static_cast<ILocalProfileManager*>(lpm)->getName();       // +0x7C
+    if (client->isActive() || client->isTesting())                                          // +0x38 +0x34
+    {
+        player->setVoipUpdateFlag(1);                                                       // +0x90
+        s_voipInitialized = true;
+        if (profile == s_voipInitializedProfile)
+        {
+            fn.result->set_bool(true);
+            return;
+        }
+    }
+    else if (!client->startTest(3, true))                                                   // +0x30
     {
         fn.result->set_bool(false);
         return;
     }
-    voipClientArmFrontier("voipInitialize", "1006903D..10069259");
+    IAudioSettings* as = voipAudioSettings();
+    if (!as)
+    {
+        fn.result->set_bool(false);
+        return;
+    }
+    s_voipInitializedProfile = profile;
+    client->setPlaybackVolume(as->getVoipPlaybackVolume());                                // +0x1C, as +0x40
+    client->setCaptureVolume(as->getVoipCaptureVolume());                                  // +0x20, as +0x48
+    client->mixerSetBoost(as->getVoipBoostEnabled());                                      // +0xCC, as +0x58
+    s_voipThreshold = as->getVoipCaptureThreshold();                                       // as +0x50
+    client->setCaptureThreshold(s_voipThreshold);                                          // +0x14
+    player->setVoipUpdateFlag(1);
+    s_voipInitialized = true;
+    fn.result->set_bool(true);
 }
 
-// sub_100692B0 "voipSetEnable": the player read, AudioSettings by name; no player, no AudioSettings,
-// VoIP not initialised or no client returns without an AS result.
+// sub_100692B0 "voipSetEnable": stores the AudioSettings flag and enables or disables the client's user
+// switch (+0x98 takes "disabled"). True. No player, AudioSettings, initialisation or client: no result.
 void as_sound_voipSetEnable(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_sound_voipSetEnable");
     SwiffPlayer* player = g_swiffPlayerInstance;
-    IBase* as = classManager->getSingleton(renddx9abi::HostString("AudioSettings"));
+    IAudioSettings* as = voipAudioSettings();
     if (!player || !as || !s_voipInitialized || !voipPlayerClient(player))
         return;
-    voipClientArmFrontier("voipSetEnable", "10069318..100693A7");
+    if (fn.arg(0).to_bool())
+    {
+        as->setVoipEnabled(true);                                                           // +0x3C
+        voipPlayerClient(player)->setUserDisabled(false);                                   // +0x98
+    }
+    else
+    {
+        as->setVoipEnabled(false);
+        voipPlayerClient(player)->setUserDisabled(true);
+    }
+    fn.result->set_bool(true);
 }
 
 // sub_100693C0 "voipGetEnable": VoIP not initialised answers false; otherwise AudioSettings by name,
@@ -885,53 +931,198 @@ void as_sound_voipGetEnable(const gameswf::fn_call& fn)
     fn.result->set_bool(audioSettingsOf(as)->getVoipEnabled());                             // +0x38
 }
 
-// The rows whose first test is player, then client, and whose null exits leave the AS result
-// untouched: voipStartTest 100694E0, voipSetTransmitVolume 10069750, voipGetTransmitVolume 10069840,
-// voipSetRecieveVolume 100698C0, voipGetRecieveVolume 100699B0, voipSetThresholdVolume 10069A30,
-// voipGetThresholdVolume 10069B30, voipSetBoost 10069BA0, voipGetBoost 10069CA0, voipIsBoostEnabled
-// 10069D80, voipSetUsePushToTalk 10069E10, voipGetUsePushToTalk 10069F50.
-#define VOIP_CLIENT_ROW(row, range)                                                        \
-    void as_sound_##row(const gameswf::fn_call& fn)                                       \
+// The rows that read the player, the client and AudioSettings: an absent AudioSettings answers false;
+// the remaining null exits leave the result untouched.
+#define VOIP_ROW_PROLOGUE(row)                                                             \
+    SWF_AS_TRACE("as_sound_" #row);                                                       \
+    SwiffPlayer* player = g_swiffPlayerInstance;                                          \
+    BF2VoipClient* client = voipPlayerClient(player);                                     \
+    if (!client)                                                                          \
+        return;                                                                           \
+    IAudioSettings* as = voipAudioSettings();                                             \
+    if (!as)                                                                              \
     {                                                                                     \
-        SWF_AS_TRACE("as_sound_" #row);                                                   \
-        SwiffPlayer* player = g_swiffPlayerInstance;                                      \
-        if (!player || !voipPlayerClient(player))                                         \
-            return;                                                                       \
-        voipClientArmFrontier(#row, range);                                               \
+        fn.result->set_bool(false);                                                       \
+        return;                                                                           \
     }
-VOIP_CLIENT_ROW(voipStartTest,          "1006950A..1006960B")
-VOIP_CLIENT_ROW(voipSetTransmitVolume,  "1006977A..10069831")
-VOIP_CLIENT_ROW(voipGetTransmitVolume,  "10069862..100698B1")
-VOIP_CLIENT_ROW(voipSetRecieveVolume,   "100698EA..100699A1")
-VOIP_CLIENT_ROW(voipGetRecieveVolume,   "100699D2..10069A21")
-VOIP_CLIENT_ROW(voipSetThresholdVolume, "10069A5A..10069B20")
-VOIP_CLIENT_ROW(voipGetThresholdVolume, "10069B4F..10069B93")
-VOIP_CLIENT_ROW(voipSetBoost,           "10069BCA..10069C88")
-VOIP_CLIENT_ROW(voipGetBoost,           "10069CCA..10069D73")
-VOIP_CLIENT_ROW(voipIsBoostEnabled,     "10069DA2..10069E05")
-VOIP_CLIENT_ROW(voipSetUsePushToTalk,   "10069E3A..10069F3E")
-VOIP_CLIENT_ROW(voipGetUsePushToTalk,   "10069F72..10069FD5")
-#undef VOIP_CLIENT_ROW
 
-// sub_10069FE0 "voipSendingVoice" / sub_1006A0F0 "voipGetSendingVoiceVolume": the result is first
-// set to Boolean false / the number 0; then no player or no client returns.
+// sub_100694E0 "voipStartTest": only with a session or test running. Marks the test (byte_100F8B4D),
+// mutes sound groups 0..3 through the host (+0x18C), loops capture back to playback and opens the gate
+// (threshold 0). No result; a client with neither answers false.
+void as_sound_voipStartTest(const gameswf::fn_call& fn)
+{
+    VOIP_ROW_PROLOGUE(voipStartTest)
+    (void) as;
+    if (!client->isTesting() && !client->isActive())
+    {
+        fn.result->set_bool(false);
+        return;
+    }
+    s_voipTestRunning = true;
+    player->getSwiffHost()->slot18C(1);                                                     // +0x5C, +0x18C
+    client->setLocalLoopback(true);                                                         // 0x100BC8B0
+    client->setCaptureThreshold(0.0f);                                                      // +0x14
+}
+
+// sub_10069750 / sub_100698C0 "voipSetTransmitVolume" / "voipSetRecieveVolume": once initialised, the
+// number goes to the client and to AudioSettings (capture +0x20/+0x4C, playback +0x1C/+0x44).
+void as_sound_voipSetTransmitVolume(const gameswf::fn_call& fn)
+{
+    VOIP_ROW_PROLOGUE(voipSetTransmitVolume)
+    if (!s_voipInitialized)
+        return;
+    const float volume = static_cast<float>(fn.arg(0).to_number());
+    client->setCaptureVolume(volume);
+    as->setVoipCaptureVolume(volume);
+}
+void as_sound_voipSetRecieveVolume(const gameswf::fn_call& fn)
+{
+    VOIP_ROW_PROLOGUE(voipSetRecieveVolume)
+    if (!s_voipInitialized)
+        return;
+    const float volume = static_cast<float>(fn.arg(0).to_number());
+    client->setPlaybackVolume(volume);
+    as->setVoipPlaybackVolume(volume);
+}
+
+// sub_10069A30 "voipSetThresholdVolume": the menu value is always kept; outside a voice test it also
+// reaches the client and AudioSettings (+0x14, +0x54).
+void as_sound_voipSetThresholdVolume(const gameswf::fn_call& fn)
+{
+    VOIP_ROW_PROLOGUE(voipSetThresholdVolume)
+    if (!s_voipInitialized)
+        return;
+    const float threshold = static_cast<float>(fn.arg(0).to_number());
+    s_voipThreshold = threshold;
+    if (s_voipTestRunning)
+        return;
+    client->setCaptureThreshold(threshold);
+    as->setVoipCaptureThreshold(threshold);
+}
+
+// sub_10069BA0 "voipSetBoost": AudioSettings follows only when the mixer accepted the boost (+0xCC).
+void as_sound_voipSetBoost(const gameswf::fn_call& fn)
+{
+    VOIP_ROW_PROLOGUE(voipSetBoost)
+    if (!s_voipInitialized)
+        return;
+    const bool boost = fn.arg(0).to_bool();
+    if (client->mixerSetBoost(boost))
+        as->setVoipBoostEnabled(boost);                                                     // +0x5C
+}
+
+// sub_10069E10 "voipSetUsePushToTalk": not initialised answers false; otherwise the client and
+// AudioSettings take the flag (+0xAC, +0x64), with no result.
+void as_sound_voipSetUsePushToTalk(const gameswf::fn_call& fn)
+{
+    VOIP_ROW_PROLOGUE(voipSetUsePushToTalk)
+    if (!s_voipInitialized)
+    {
+        fn.result->set_bool(false);
+        return;
+    }
+    const bool enabled = fn.arg(0).to_bool();
+    client->setPushToTalkEnabled(enabled);
+    as->setVoipUsePushToTalk(enabled);
+}
+#undef VOIP_ROW_PROLOGUE
+
+// The getters: player and client first, null exits leave the result untouched.
+// sub_10069840 / sub_100699B0: once initialised, the client's capture / playback volume (+0x24/+0x28).
+void as_sound_voipGetTransmitVolume(const gameswf::fn_call& fn)
+{
+    SWF_AS_TRACE("as_sound_voipGetTransmitVolume");
+    BF2VoipClient* client = voipPlayerClient(g_swiffPlayerInstance);
+    if (client && s_voipInitialized)
+        fn.result->set_double(client->getCaptureVolume());
+}
+void as_sound_voipGetRecieveVolume(const gameswf::fn_call& fn)
+{
+    SWF_AS_TRACE("as_sound_voipGetRecieveVolume");
+    BF2VoipClient* client = voipPlayerClient(g_swiffPlayerInstance);
+    if (client && s_voipInitialized)
+        fn.result->set_double(client->getPlaybackVolume());
+}
+// sub_10069B30: the kept menu threshold, as a number.
+void as_sound_voipGetThresholdVolume(const gameswf::fn_call& fn)
+{
+    SWF_AS_TRACE("as_sound_voipGetThresholdVolume");
+    BF2VoipClient* client = voipPlayerClient(g_swiffPlayerInstance);
+    if (client && s_voipInitialized)
+        fn.result->set_double(s_voipThreshold);
+}
+// sub_10069CA0: not initialised answers false; otherwise the mixer's boost (+0xD4).
+void as_sound_voipGetBoost(const gameswf::fn_call& fn)
+{
+    SWF_AS_TRACE("as_sound_voipGetBoost");
+    BF2VoipClient* client = voipPlayerClient(g_swiffPlayerInstance);
+    if (!client)
+        return;
+    if (!s_voipInitialized)
+    {
+        fn.result->set_bool(false);
+        return;
+    }
+    bool boost = false;
+    client->mixerGetBoost(&boost);
+    fn.result->set_bool(boost);
+}
+// sub_10069D80 / sub_10069F50: the mixer's boost support (+0xC8) / the push-to-talk flag (+0xA8),
+// false while not initialised.
+void as_sound_voipIsBoostEnabled(const gameswf::fn_call& fn)
+{
+    SWF_AS_TRACE("as_sound_voipIsBoostEnabled");
+    BF2VoipClient* client = voipPlayerClient(g_swiffPlayerInstance);
+    if (client)
+        fn.result->set_bool(s_voipInitialized ? client->mixerHasBoost() : false);
+}
+void as_sound_voipGetUsePushToTalk(const gameswf::fn_call& fn)
+{
+    SWF_AS_TRACE("as_sound_voipGetUsePushToTalk");
+    BF2VoipClient* client = voipPlayerClient(g_swiffPlayerInstance);
+    if (client)
+        fn.result->set_bool(s_voipInitialized ? client->getPushToTalkEnabled() : false);
+}
+
+// sub_10069FE0 "voipSendingVoice": Boolean false first. Once initialised: the capture level against the
+// menu threshold. At or above it the answer is true and loopback plays back; below it false and the
+// loopback stays silent (client +0x95, written directly).
 void as_sound_voipSendingVoice(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_sound_voipSendingVoice");
     fn.result->set_bool(false);
-    SwiffPlayer* player = g_swiffPlayerInstance;
-    if (!player || !voipPlayerClient(player))
+    BF2VoipClient* client = voipPlayerClient(g_swiffPlayerInstance);
+    if (!client)
         return;
-    voipClientArmFrontier("voipSendingVoice", "1006A047..1006A0DC");
+    bool sending = false;
+    if (s_voipInitialized)
+    {
+        double level = 0.0;
+        client->getCaptureLevel(&level);                                                    // +0x3C
+        if (static_cast<double>(s_voipThreshold) <= level)
+        {
+            client->m_loopbackSilent = false;
+            sending = true;
+        }
+        else
+        {
+            client->m_loopbackSilent = true;
+        }
+    }
+    fn.result->set_bool(sending);
 }
+
+// sub_1006A0F0 "voipGetSendingVoiceVolume": the number 0 first; once initialised, the capture level
+// while the client reports capturing, else 0.
 void as_sound_voipGetSendingVoiceVolume(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_sound_voipGetSendingVoiceVolume");
     fn.result->set_double(0.0);
-    SwiffPlayer* player = g_swiffPlayerInstance;
-    if (!player || !voipPlayerClient(player))
+    BF2VoipClient* client = voipPlayerClient(g_swiffPlayerInstance);
+    if (!client || !s_voipInitialized)
         return;
-    voipClientArmFrontier("voipGetSendingVoiceVolume", "1006A155..1006A1F2");
+    double level = 0.0;
+    fn.result->set_double(client->getCaptureLevel(&level) ? level : 0.0);
 }
 
 // ---- dice.bf2.Mod ------------------------------------------------------------------------------
@@ -1608,8 +1799,7 @@ static void registerRecoveredNatives(SwiffAsNamespace** ns, const char* const* n
 // ---- dice.bf2.HapticSettings (the Falcon force-feedback page) ------------------------------------
 // 265 rows, registered by the HapticSettings registrar (0x10044590). The rows fall into 31 code
 // shapes; each shape was read once in full and the per-row constants (vtable slots, components)
-// extracted from every row by comparing the rows of a shape constant by constant
-// (docs/macos-c-swiff-natives.md).
+// extracted from every row by comparing the rows of a shape constant by constant.
 // IHapticSettings' slot order (Game/HapticSettings.h, 505 slots, +0x10 first) matches every
 // "+XX" annotation there; the slot each row calls is named in its body.
 

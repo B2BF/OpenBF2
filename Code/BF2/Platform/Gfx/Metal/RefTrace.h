@@ -1,5 +1,5 @@
 // [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: rend-deinit-reftrace] Device reference trace for
-// the macOS Metal backend (docs/macos-r-deinit.md). With BF2_METAL_REFTRACE=1 every native object
+// the macOS Metal backend. With BF2_METAL_REFTRACE=1 every native object
 // that holds IDirect3DDevice9 references (resources, shaders, declarations, queries, effects,
 // meshes, render-to-surface helpers) records its kind and creation stack, and every direct device
 // AddRef/Release outside those objects records its caller stack. report() prints, before the

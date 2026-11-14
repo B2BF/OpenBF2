@@ -1,5 +1,5 @@
 // [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: menu-interact-runtime]
-// Native (macOS/POSIX) fixture for the c-menu-interact recoveries (docs/macos-c-menu-interact.md):
+// Native (macOS/POSIX) fixture for the c-menu-interact recoveries:
 //   1. StringTokenizer (BF2.exe 0x59E1B0/0x59E1F0) on the "WxH@RHz" strings the video page sends,
 //      the token split SwiffHost::parseResolution (0x489210) performs.
 //   2. ProfileManager::createProfile / deleteProfile / requestNickSuggestions (0x4A6EB0 / 0x4A54B0 /

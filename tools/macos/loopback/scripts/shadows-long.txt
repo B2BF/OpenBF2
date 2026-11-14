@@ -1,0 +1,157 @@
+# [TEMP] join-and-spawn: from the loaded-map screen to a spawned soldier (docs/macos-c-input-script.md).
+# NOTE: the two 'key enter' after JOIN GAME below are the obsolete R-game-2 workaround (Bf2MenuMapNode
+# +0x68D is zeroed now); they are harmless but no longer needed.
+# Coordinates are 800x600: the harness runs +szx 800 +szy 600, which is also the HUD's own layout
+# space (Menu_client.zip HUD/HudSetup/SpawnInterface/*.con).
+timeout 300
+log waiting for the level load
+wait-log ingameMap.tga
+wait-ms 5000
+capture loaded
+# "MAP LOADED, SELECT THE JOIN GAME BUTTON OR PRESS ESCAPE TO ENTER THE GAME" (Swiff menu, window path)
+# Click JOIN GAME rather than pressing Escape: Escape went to the main menu in 2 of 5 runs (ai-bot, 2026-11-01).
+click 745 583
+# The spawn screen (HUD mode 1) opens, but on first entry its map is often hidden: HUD mode 1
+# does not set MapShow (HudInformationAdapter), only leaving a mode through the default arm does.
+# Enter (c_GIEnter) closes and reopens the spawn screen, as a player would, which shows it.
+wait-ms 4000
+capture spawn-screen-first
+key enter
+wait-ms 1500
+key enter
+wait-ms 3000
+capture spawn-screen
+# Kit 0, Special Forces (SelectKit0 10 73 246 69: "spawnManager.setPlayerKit 0"); in-game HUD pointer path.
+hud-click 130 107
+wait-ms 1000
+# Spawn point: in spawn mode a press on the map picks the nearest spawn group
+# (Bf2MenuMapNode::pickSpawnGroup; within the icon pick radius). The US spawn at Construction Site.
+hud-click 432 282
+wait-ms 1000
+capture selected
+# DoneButton 666 539 124 17, mouse area 0 -5 124 22: "hudManager.setDone 1"
+hud-click 728 546
+wait-ms 10000
+capture spawned-1
+# [TEMP] c-shadows: long session, walk/turn with a capture every ~10 s
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-01
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-02
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-03
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-04
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-05
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-06
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-07
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-08
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-09
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-10
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-11
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-12
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-13
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-14
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-15
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-16
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-17
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-18
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-19
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-20
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-21
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-22
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-23
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-24
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-25
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-26
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-27
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-28
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-29
+key w 2000
+move-rel 150 0
+wait-ms 8000
+capture t-30
+log shadows-long done

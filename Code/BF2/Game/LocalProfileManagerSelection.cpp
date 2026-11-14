@@ -18,8 +18,6 @@
 #include "../Core/SettingsRepostitory.h"
 #include "../IO/File/FileManager.h"
 #include "../IO/Input/Input.h"
-#include <cstdio>
-#include <cstdlib>
 #include <cstring>
 #include <sstream>
 #include <vector>
@@ -38,22 +36,16 @@ void resetSwiffServerLists(ui::ISwiffHost* host)
 }
 }
 
-// [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: local-profile-approved-opaque-slots]
-// Explicit owner exception for precisely these two abort-only table positions.
-// void() is a chosen source placeholder, not a claim about the original unused
-// one-word/two-word arguments. Neither body can return across the unknown ABI.
-void LocalProfileManager::frontierPrimary30()
+// PE+30 4A7690.
+bool LocalProfileManager::hasCurrentProfile(int)
 {
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::LocalProfileManager::frontierPrimary30: approved abort-only PE+0x30 placeholder; retail argument type remains unknown\n");
-    std::fflush(stderr);
-    std::abort();
+    return m_currentProfile != 0;
 }
 
-void LocalProfileManager::frontierPrimary34()
+// PE+34 4553F0 (folded with every other `return true` of this shape).
+bool LocalProfileManager::slot34(int, int)
 {
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::LocalProfileManager::frontierPrimary34: approved abort-only PE+0x34 placeholder; retail argument types remain unknown\n");
-    std::fflush(stderr);
-    std::abort();
+    return true;
 }
 
 bool LocalProfileManager::hasProfile(const std::string& profileName)

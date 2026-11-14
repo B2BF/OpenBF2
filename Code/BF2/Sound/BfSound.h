@@ -281,8 +281,8 @@ private:
     void  updateWind(bool active);
     void  updateGroups();
     void  loadGameSounds();                                         // the CEPostLoad arm
-    void  drawStats();                                              // [FRONTIER] - see .cpp
-    void  drawSoundSources();                                       // [FRONTIER] - see .cpp
+    void  drawStats();                                              // BF2.exe 0x7E08D0 - DebugTextWriterFixed, see .cpp
+    void  drawSoundSources();                                       // BF2.exe 0x7E0E80, see .cpp
 
     int                         m_refCount;             // +0x14 ctor 1
     std::map<std::string, int>  m_soundIds;             // +0x18 name -> index; menu ids carry 0x1000000

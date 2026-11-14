@@ -1,0 +1,15 @@
+# [TEMP] HUD pointer calibration: home the in-game HUD pointer, then move by known counts.
+timeout 300
+wait-log ingameMap.tga
+wait-ms 5000
+key escape
+wait-ms 3000
+move-rel -3000 -3000
+wait-ms 500
+capture home
+move-rel 100 50
+wait-ms 500
+capture plus-100-50
+move-rel 100 50
+wait-ms 500
+capture plus-200-100

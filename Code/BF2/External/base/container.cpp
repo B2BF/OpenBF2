@@ -179,7 +179,7 @@ void tu_string::encode_utf8_from_wchar(tu_string* result, const uint16* wstr)
 	// unqualified call then found the member itself (unbounded self-recursion, which -O2
 	// folded into a garbage result), so every tu_stringi comparison failed and no
 	// stringi_hash lookup ever matched: _global.Object/Array/ASSetPropFlags and all
-	// menu namespaces were "absent" to ActionScript (docs/macos-c-asan-heap.md).
+	// menu namespaces were "absent" to ActionScript.
 	return ::strcasecmp(a, b);
 #endif
 }

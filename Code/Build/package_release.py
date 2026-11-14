@@ -66,7 +66,7 @@ def leading_notice(path):
     return match.group().rstrip() + "\n"
 
 
-def installation(platform, role, name, executable):
+def installation(platform, role, name, executable, macos_signing="adhoc"):
     """[CHOSEN, not recovered] Owner-requested install policy."""
     server = role.startswith("server")
     options = "+loadMod bf2" if role.startswith("editor") else "+modPath mods/bf2"
@@ -106,7 +106,7 @@ def installation(platform, role, name, executable):
                  case_note=("   Use a case-insensitive volume for Windows/Wine content; the engine\n"
                             "   lowercases game paths. Do not rename individual files or folders.\n")
                  if macos else "   Use Linux server content with lowercase game paths.\n")
-        if macos:
+        if macos and macos_signing == "adhoc":
             text += "   xattr -dr com.apple.quarantine .\n"
         text += "   chmod +x {}\n".format(executable)
         command = "./{} {}".format(executable, options)
@@ -141,6 +141,7 @@ def installation(platform, role, name, executable):
 
 def package(args):
     """Validate all inputs before writing any of this platform's ZIP files."""
+    macos_signing = getattr(args, "macos_signing", "adhoc")
     source = args.source_dir.resolve()
     external = source / "Code/BF2/External"
     common = {
@@ -205,6 +206,7 @@ def package(args):
             "source": source_url,
             "link_contract": "diagnostic /FORCE" if diagnostic else "strict",
             "windows_signing": "not configured",
+            **({"macos_signing": macos_signing} if args.platform.startswith("macos-") else {}),
             "runtime_files": {entry: sha256(files[entry]) for entry in names},
         }
         if args.platform.startswith("windows-"):
@@ -215,7 +217,9 @@ def package(args):
                 "These Windows binaries are not code-signed.\n"
             )
         elif args.platform.startswith("macos-"):
-            requirements = "macOS binaries are ad-hoc signed, not notarized.\n"
+            requirements = ("macOS binaries are signed with a Developer ID (hardened runtime) and\n"
+                            "this archive is notarized.\n" if macos_signing == "developer-id"
+                            else "macOS binaries are ad-hoc signed, not notarized.\n")
         else:
             requirements = (
                 "Linux is built on Ubuntu 22.04 with dynamic glibc/ncurses dependencies.\n"
@@ -232,7 +236,7 @@ def package(args):
             "Build and fixture success do not establish loading, joining or gameplay.\n"
             "Automated server tests must explicitly use an unused port other than 16567.\n"
         ).format(name=name, revision=args.revision, source=source_url, requirements=requirements)
-        readme += "\n" + installation(args.platform, role, name, names[0])
+        readme += "\n" + installation(args.platform, role, name, names[0], macos_signing)
         if args.platform == "windows-x86":
             readme += (
                 "\nThe executable links strictly. The bundled voice-server DLL retains\n"
@@ -283,6 +287,10 @@ def main():
     parser.add_argument("--omit", action="append", default=[], metavar="ROLE",
                         help="Skip one package role of this platform (repeatable); every other "
                              "role stays required")
+    parser.add_argument("--macos-signing", choices=("adhoc", "developer-id"), default="adhoc",
+                        help="macOS: how the binaries in --build-dir were signed (release CI signs "
+                             "them with a Developer ID before packaging); changes only the README "
+                             "and build-info.json")
     args = parser.parse_args()
     if args.native_sources is None:
         args.native_sources = args.source_dir / "out/third_party"

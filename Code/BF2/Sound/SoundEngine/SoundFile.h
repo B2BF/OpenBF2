@@ -10,11 +10,7 @@
 
 #include <string>
 
-#if defined(BF2AUDIO_WITH_VORBIS)
 #include <vorbis/vorbisfile.h>
-#else
-struct OggVorbis_File;
-#endif
 
 namespace dice {
 namespace hfe {
@@ -55,9 +51,7 @@ public:
     // image; here whatever upstream's OggVorbis_File measures plus twelve.
     struct MemoryFile
     {
-#if defined(BF2AUDIO_WITH_VORBIS)
         OggVorbis_File vf;
-#endif
         char* data;
         int   size;
         int   position;

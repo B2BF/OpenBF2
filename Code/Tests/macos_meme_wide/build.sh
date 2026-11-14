@@ -1,5 +1,5 @@
 #!/bin/sh
-# [TEMP] [CHOSEN, not recovered] Engine-free BFMeme wide-text check (docs/macos-c-asan-heap.md):
+# [TEMP] [CHOSEN, not recovered] Engine-free BFMeme wide-text check:
 # a plain build, measured with malloc_size, and the same sources under AddressSanitizer.
 set -eu
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)

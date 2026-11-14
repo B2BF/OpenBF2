@@ -9,7 +9,7 @@
 # (Code/BF2/IO/Input/Mac*) with a control-map fixture. [RETIRE-WHEN: macos-client-window]
 # Remove once the bf2_client target opens its window through the host on macOS.
 cmake_minimum_required(VERSION 3.21)
-# GCMouse (MacRawMouse.mm) needs macOS 11, the port's minimum (docs/macos-c-raw-mouse.md).
+# GCMouse (MacRawMouse.mm) needs macOS 11, the port's minimum.
 set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS version")
 project(macos_host_test LANGUAGES C CXX OBJCXX)
 

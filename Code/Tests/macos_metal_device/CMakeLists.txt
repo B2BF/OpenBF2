@@ -6,11 +6,17 @@ if(NOT APPLE)
 endif()
 set(BF2_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../BF2")
 # [CHOSEN, not recovered] Exercise the production native compiler; no oracle/cache reader.
+# BF2_FX_NATIVE_DEPS defaults to the worktree's out/build/nativefx (tools/macos/nativefx/build.sh).
+# It must be built from the current tools/macos/vkd3d-patches: closureHigherProfileChecks fails
+# with E5017 against an older deps build (the Effect CMakeLists warns at configure time).
 add_subdirectory("${BF2_ROOT}/Platform/Gfx/Effect" "${CMAKE_CURRENT_BINARY_DIR}/effect")
 add_executable(macos_metal_device
     main.cpp window.mm
     "${BF2_ROOT}/Platform/Gfx/Metal/Device.cpp"
+    "${BF2_ROOT}/Platform/Gfx/Metal/FFVertex.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../ff_reference/ff_cases.cpp"
     "${BF2_ROOT}/Platform/Gfx/Metal/Effect.cpp"
+    "${BF2_ROOT}/Platform/macOS/Warmup.cpp"
     "${BF2_ROOT}/Platform/Gfx/Metal/D3DXMath.cpp"
     "${BF2_ROOT}/Platform/Gfx/Metal/D3DXGeometry.cpp"
     "${BF2_ROOT}/Platform/Gfx/Metal/D3DXPixels.cpp"

@@ -1,5 +1,5 @@
 // [TEMP] [CHOSEN, not recovered] Offline fixture for the recovered DemoLibrary HTTP side on the
-// production HTTPRequest base (docs/macos-c-demolib-re.md). The GameSpy ghttp entry points are a
+// production HTTPRequest base. The GameSpy ghttp entry points are a
 // link-time seam modelled on http_request_offline.cpp: no sockets, DNS or file writes. The class
 // and file managers are observers derived from the real classes.
 #include "../../BF2/Game/DemoRecorder/DemoLibrary.h"

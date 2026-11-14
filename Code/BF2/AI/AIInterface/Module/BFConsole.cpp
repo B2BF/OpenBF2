@@ -869,7 +869,7 @@ void BFConsole::aiMainInit()
     AITemplateManager::m_instance->createWreckTemplates();
 }
 
-// bf2 0x88816E0 (1135 B; recovered on the client track, docs/macos-c-singleplayer.md). The
+// bf2 0x88816E0 (1135 B; recovered on the client track). The
 // collision handler drops every tracked projectile (+0x08); the three template managers are
 // deleted (nonvirtual destructors) and the kit manager through its deleting destructor (+0x10);
 // all four are built again (their constructors install the singletons), each allocation checked

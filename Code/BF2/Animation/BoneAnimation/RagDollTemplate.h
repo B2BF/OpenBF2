@@ -87,8 +87,8 @@ public:
     void  addCapsuleCollision(int a, int b);
     void  addJointConstraint(int a, int b);
     void  removeConstraint(int a, int b);
-    // writes the constraint set back out as .con text (the console
-    // `ragDoll.writeConstraints` tool). Editor tooling; declaration only. [FRONTIER]
+    // Writes the distance constraints to ragDollConstraints.inc as ragDoll.addConstraint lines
+    // (the console `ragDoll.save` tool, ELF 0x8341110).
     void  writeConstraints();
     void  skeleton(const std::string& name);
     void  setParticleCollisionCriteria(float minImpact, float debounce);

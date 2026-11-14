@@ -67,7 +67,7 @@ float decreaseFade(float current, float delta, float duration)
     return unrounded < 0.0 ? 0.0f : static_cast<float>(unrounded);
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     float result;
     const float zero = 0.0f;
     // [CHOSEN, not recovered] Preserve x87 fade decrease.
@@ -101,7 +101,7 @@ float increaseFade(float current, float delta, float duration)
     return unrounded > 1.0 ? 1.0f : static_cast<float>(unrounded);
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     float result;
     const float one = 1.0f;
     // [CHOSEN, not recovered] Preserve x87 fade increase.

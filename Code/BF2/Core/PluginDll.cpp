@@ -165,7 +165,7 @@ bool FreeLibraryBf(void* handle, const char* diagnosticName)
     // pointer dangles (the second singleplayer game faulted with pc=0 at GameServer::loadPath's
     // aiSingleton->init()). The Win32 body (BF2.exe 0x446CE0) calls deinitDll first; AIModule::close
     // then unregisters "AI" and the module's console lists, and the reload registers fresh ones.
-    // Request R4, docs/ai-reconstruct/HANDOFF-client-track.md.
+    // Request R4 of the AI track's client hand-off.
     bool dlopened = handle != 0;
 #if defined(BF2_STATIC_PLUGINS)
     dlopened = dlopened && !bf2staticplugins::isStaticHandle(handle);

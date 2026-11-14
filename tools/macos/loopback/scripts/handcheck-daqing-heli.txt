@@ -1,0 +1,207 @@
+# [TEMP] rend-handcheck: vehicle TV view
+# NOTE: the two 'key enter' after JOIN GAME below are the obsolete R-game-2 workaround (Bf2MenuMapNode
+# +0x68D is zeroed now); they are harmless but no longer needed.
+# [TEMP] join-and-spawn: from the loaded-map screen to a spawned soldier (docs/macos-c-input-script.md).
+# Coordinates are 800x600: the harness runs +szx 800 +szy 600, which is also the HUD's own layout
+# space (Menu_client.zip HUD/HudSetup/SpawnInterface/*.con).
+timeout 300
+log waiting for the level load
+wait-log ingameMap.tga
+wait-ms 5000
+capture loaded
+# "MAP LOADED, SELECT THE JOIN GAME BUTTON OR PRESS ESCAPE TO ENTER THE GAME" (Swiff menu, window path)
+# Click JOIN GAME rather than pressing Escape: Escape went to the main menu in 2 of 5 runs (ai-bot, 2026-11-01).
+click 745 583
+# The spawn screen (HUD mode 1) opens, but on first entry its map is often hidden: HUD mode 1
+# does not set MapShow (HudInformationAdapter), only leaving a mode through the default arm does.
+# Enter (c_GIEnter) closes and reopens the spawn screen, as a player would, which shows it.
+wait-ms 4000
+capture spawn-screen-first
+key enter
+wait-ms 1500
+key enter
+wait-ms 3000
+capture spawn-screen
+# Kit 0, Special Forces (SelectKit0 10 73 246 69: "spawnManager.setPlayerKit 0"); in-game HUD pointer path.
+hud-click 130 107
+wait-ms 1000
+# Spawn point: in spawn mode a press on the map picks the nearest spawn group
+# (Bf2MenuMapNode::pickSpawnGroup; within the icon pick radius). [hc] the US main base (combat-area centred map).
+hud-click 478 386
+wait-ms 1000
+capture selected
+# DoneButton 666 539 124 17, mouse area 0 -5 124 22: "hudManager.setDone 1"
+hud-click 728 546
+wait-ms 10000
+capture spawned-1
+log hc: heli start
+wait-ms 1500
+log hc: nametags in the open
+aim friend 1.5 5000
+wait-ms 600
+capture tag-stand
+key z
+wait-ms 2500
+aim friend 1.5 5000
+wait-ms 600
+capture tag-prone
+move-rel 0 -100
+wait-ms 800
+capture tag-prone-up
+move-rel 0 100
+key z
+wait-ms 2500
+walk-to tmpl:ahe_ah1z 2.5 40000
+face tmpl:ahe_ah1z 5 2000
+capture at-heli-0
+key e 150
+wait-ms 500
+wait-log-else 4 retry0 vehicle=ahe_ah1z
+wait-log-else 0.1 inheli ZZZ-never-ZZZ
+label retry0
+log hc: not in the heli yet, unstick 0
+key-down d
+wait-ms 1500
+key-up d
+walk-to tmpl:ahe_ah1z 2.5 8000
+key-down a
+wait-ms 3000
+key-up a
+walk-to tmpl:ahe_ah1z 2.5 8000
+face tmpl:ahe_ah1z 5 2000
+key-down w
+wait-ms 300
+key space 150
+wait-ms 700
+key space 150
+wait-ms 700
+key-up w
+walk-to tmpl:ahe_ah1z 2.5 8000
+face tmpl:ahe_ah1z 5 2000
+capture at-heli-1
+key e 150
+wait-ms 500
+wait-log-else 4 retry1 vehicle=ahe_ah1z
+wait-log-else 0.1 inheli ZZZ-never-ZZZ
+label retry1
+log hc: not in the heli yet, unstick 1
+key-down d
+wait-ms 1500
+key-up d
+walk-to tmpl:ahe_ah1z 2.5 8000
+key-down a
+wait-ms 3000
+key-up a
+walk-to tmpl:ahe_ah1z 2.5 8000
+face tmpl:ahe_ah1z 5 2000
+key-down w
+wait-ms 300
+key space 150
+wait-ms 700
+key space 150
+wait-ms 700
+key-up w
+walk-to tmpl:ahe_ah1z 2.5 8000
+face tmpl:ahe_ah1z 5 2000
+capture at-heli-2
+key e 150
+wait-ms 500
+wait-log-else 4 retry2 vehicle=ahe_ah1z
+wait-log-else 0.1 inheli ZZZ-never-ZZZ
+label retry2
+log hc: not in the heli yet, unstick 2
+key-down d
+wait-ms 1500
+key-up d
+walk-to tmpl:ahe_ah1z 2.5 8000
+key-down a
+wait-ms 3000
+key-up a
+walk-to tmpl:ahe_ah1z 2.5 8000
+face tmpl:ahe_ah1z 5 2000
+key-down w
+wait-ms 300
+key space 150
+wait-ms 700
+key space 150
+wait-ms 700
+key-up w
+walk-to tmpl:ahe_ah1z 2.5 8000
+face tmpl:ahe_ah1z 5 2000
+capture at-heli-3
+key e 150
+wait-ms 500
+wait-log-else 4 retry3 vehicle=ahe_ah1z
+wait-log-else 0.1 inheli ZZZ-never-ZZZ
+label retry3
+log hc: not in the heli yet, unstick 3
+key-down d
+wait-ms 1500
+key-up d
+walk-to tmpl:ahe_ah1z 2.5 8000
+key-down a
+wait-ms 3000
+key-up a
+walk-to tmpl:ahe_ah1z 2.5 8000
+face tmpl:ahe_ah1z 5 2000
+key-down w
+wait-ms 300
+key space 150
+wait-ms 700
+key space 150
+wait-ms 700
+key-up w
+walk-to tmpl:ahe_ah1z 2.5 8000
+face tmpl:ahe_ah1z 5 2000
+key e 150
+label inheli
+wait-ms 3000
+capture heli-seat-a
+log hc: gunner seat (F2)
+key f2 150
+wait-ms 3000
+capture heli-gunner-w1
+log hc: TV missile (right mouse = specialToggleWeaponInput PIAltFire)
+button-down 1
+wait-ms 150
+button-up 1
+wait-ms 2500
+capture heli-tv-1
+wait-ms 600
+capture heli-tv-2
+move-rel 150 40
+wait-ms 1500
+capture heli-tv-3
+wait-ms 400
+capture heli-tv-4
+log hc: back to the gun (right mouse)
+button-down 1
+wait-ms 150
+button-up 1
+wait-ms 2500
+capture heli-gun-colour
+log hc: TV again (right mouse)
+button-down 1
+wait-ms 150
+button-up 1
+wait-ms 2500
+capture heli-tv-5
+log hc: fire TV missile
+button-down 0
+wait-ms 200
+button-up 0
+wait-ms 500
+capture heli-tvfire-1
+wait-ms 500
+capture heli-tvfire-2
+wait-ms 800
+capture heli-tvfire-3
+wait-ms 3000
+capture heli-tvfire-4
+log hc: exit (E)
+key e 150
+wait-ms 3000
+capture heli-exited
+wait-ms 1500
+capture heli-exited-2
+log hc: heli done

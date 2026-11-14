@@ -61,7 +61,7 @@
     HRESULT STDMETHODCALLTYPE GetIndices(IDirect3DIndexBuffer9** out) override { return state.indices.get(out); }
     HRESULT STDMETHODCALLTYPE SetVertexDeclaration(IDirect3DVertexDeclaration9* p) override {
         mainThread("IDirect3DDevice9::SetVertexDeclaration"); auto* d=dynamic_cast<Declaration*>(p);
-        if(p && (!d || d->owner!=this)) return D3DERR_INVALIDCALL; state.declaration.set(p); return D3D_OK;
+        if(p && (!d || d->owner!=this)) return D3DERR_INVALIDCALL; state.declaration.set(p); fvf=0; return D3D_OK; // GetFVF: 0 after a declaration
     }
     HRESULT STDMETHODCALLTYPE GetVertexDeclaration(IDirect3DVertexDeclaration9** out) override { return state.declaration.get(out); }
     HRESULT STDMETHODCALLTYPE SetVertexShader(IDirect3DVertexShader9* p) override {
@@ -113,7 +113,4 @@
         state.scissor=*r; return D3D_OK;
     }
     HRESULT STDMETHODCALLTYPE GetScissorRect(RECT* r) override { if(!r) return D3DERR_INVALIDCALL; *r=state.scissor; return D3D_OK; }
-    [[noreturn]] void drawStop(const char* name) {
-        bf2metal::StateMapping mapped={}; if(const char* why=state.map(mapped)) frontier(why); frontier(name);
-    }
     // G4 draws: DeviceDraw.inc.

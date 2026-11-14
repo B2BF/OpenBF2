@@ -1,7 +1,7 @@
 // [INFERRED] path. Full client PE410742/4C2510/4C25D0/4C2590/479830/4C3030/4C2A60/4C1D90/4C1FF0/
 // /4C1B90/689430/4C1BA0/4C1BB0/4C1BC0/4B3AB0/4B1C80/4C1C00/4C1DB0 read. The HTTP side
 // (4C1B70/4C1B80/4C1BD0 and the callbacks 4C1EC0/4C2D70/4B3A90) is recovered on the HTTPRequest
-// base (Game/Persistence/HTTPRequest.cpp); 4C2DF0 (download) remains a stop - docs/macos-c-demolib-re.md.
+// base (Game/Persistence/HTTPRequest.cpp); 4C2DF0 (download) remains a stop.
 #include "DemoLibrary.h"
 #if !DEDICATED
 #include "DemoHeader.h"
@@ -14,6 +14,11 @@
 #include "../../IO/Stream/ZStream.h"
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#if !defined(_WIN32)
+#include <strings.h>                  // strcasecmp - the _stricmp of 4C26E0
+#endif
+#include <vector>
 #include <list>
 #include <new>
 
@@ -114,17 +119,77 @@ bool DemoLibrary::refreshEntries()
     return true;
 }
 
-// [TEMP] [RETIRE-WHEN: demo-library-download-name] 4C2DF0 is read (cancel a busy transfer,
-// store name/url/description, progress 0, require a current profile, create and delete
-// <home>\\profiles\\Default\\demos\\dummy.txt, build <dir><4C26E0()>.bf2demo, getFile(url, path, true),
-// on refusal "Unable to download demo file"), but its target-name helper 4C26E0 (a scan of the
-// demos directory for the first free formatted name) is not recovered. Reached only from a user
-// demo-download action, never per frame.
-bool DemoLibrary::download(const std::string&, const std::string&, const std::string&)
+// nextFreeDemoName - 4C26E0, 689 B: "demo<N>" for the smallest N no .bf2demo in the profile demo
+// folder is named after (compared case-insensitively, _stricmp). No current profile: "".
+std::string DemoLibrary::nextFreeDemoName()
 {
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::DemoLibrary::download: PE4C2DF0's target-name helper PE4C26E0 is unrecovered\n");
-    std::fflush(stderr);
-    std::abort();
+    IBase* manager = classManager->getSingleton(std::string("LocalProfileManager"));
+    if (!manager || !static_cast<ILocalProfileManager*>(manager)->getCurrentProfile())  // +44
+        return std::string("");
+    const std::string directory("@HOME@/Profiles/Default/demos/");
+    std::string candidate;
+    std::vector<std::string> taken;
+    std::list<io::FileInfo> files;
+    io::fileManager->findFiles(directory, false, files);                                  // +34
+    for (std::list<io::FileInfo>::iterator it = files.begin(); it != files.end(); ++it) {
+        io::FileInfo info = *it;
+        if (info.isDirectory)
+            continue;
+        if (extractFileExt(info.name) == "bf2demo")
+            taken.push_back(extractFileNameWithoutExt(info.name));
+    }
+    for (int index = 0;; ++index) {
+        candidate = formatString("demo%d", index);
+        std::vector<std::string>::size_type i = 0;
+#if defined(_WIN32)
+        while (i < taken.size() && ::_stricmp(taken[i].c_str(), candidate.c_str()) != 0)
+#else
+        while (i < taken.size() && ::strcasecmp(taken[i].c_str(), candidate.c_str()) != 0)
+#endif
+            ++i;
+        if (i == taken.size())
+            break;
+    }
+    return candidate;
+}
+
+// download - 4C2DF0, 571 B: a busy transfer is cancelled first; the name, url and description
+// are kept for the menu, the progress reset. With a current profile, the demo folder is touched
+// into existence (dummy.txt written, then deleted) and the file goes to <home>/profiles/Default/
+// demos/<nextFreeDemoName()>.bf2demo through the base's asynchronous getFile. A refused request
+// reports "Unable to download demo file". The completion callback rescans the library.
+bool DemoLibrary::download(const std::string& name, const std::string& url, const std::string& description)
+{
+    if (HTTPRequest::isUpdating())                                                        // 59C400
+        HTTPRequest::cancel();                                                            // 59C440
+    m_downloadFailed = false;
+    m_downloadName = name;
+    m_downloadUrl = url;
+    m_downloadDescription = description;
+    m_downloadProgress = 0.0f;
+    IBase* manager = classManager->getSingleton(std::string("LocalProfileManager"));
+    if (!manager || !static_cast<ILocalProfileManager*>(manager)->getCurrentProfile())  // +44
+        return false;
+    // fileManager +0x54 (the base file system) +0x48: the @HOME@ substitution.
+    std::string folder(io::fileManager->getBaseSystem()->getHomeSubstitution());
+#if defined(_WIN32)
+    folder += "\\profiles\\Default\\demos\\";
+#else
+    // [PLATFORM] The GameSpy HTTP SDK opens the target with fopen, so the POSIX client spells the
+    // folder with '/' and in the lower case UnixFileSystem::fixUnixPath gives every path after the
+    // home prefix (the library scans the same folder through it).
+    folder += "/profiles/default/demos/";
+#endif
+    const std::string dummy(folder + "dummy.txt");
+    io::fileManager->writeFile(dummy, 0, 0, true);                                        // +30
+    io::fileManager->deleteFile(dummy);                                                   // +20
+    const std::string target(folder + nextFreeDemoName() + ".bf2demo");
+    m_downloadPath = target;                                                              // +30
+    if (!HTTPRequest::getFile(url, target, true)) {                                       // 59C5B0
+        reportError(std::string("Unable to download demo file"));
+        return false;
+    }
+    return true;
 }
 
 unsigned int DemoLibrary::getNumEntries()

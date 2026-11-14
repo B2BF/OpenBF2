@@ -1,0 +1,121 @@
+# [TEMP] The 17 profile console rows recovered in frontier batch 8, typed after spawning: a player
+# profile, a character, a second mod setting, every get/set row, the kit index rows, then activation
+# (first character, the BF2 setting) and applySettings, which renames the local player to Batch8Name
+# and sets its kit. Getter results print in the console (captures p01..p26).
+# Needs --client-env BF2_CLIENT_CONSOLE_FULL_ACCESS=1 and --client-seconds 240.
+include join-and-spawn
+wait-ms 1000
+key grave
+wait-ms 1000
+type profile.createPlayerProfile Batch8
+key enter
+wait-ms 250
+capture p01
+type profile.activePlayerProfile
+key enter
+wait-ms 250
+capture p02
+type profile.rank 5
+key enter
+wait-ms 250
+capture p03
+type profile.rank
+key enter
+wait-ms 250
+capture p04
+type profile.addCharacterProfile Hero
+key enter
+wait-ms 250
+capture p05
+type profile.activeCharacterProfile
+key enter
+wait-ms 250
+capture p06
+type profile.addModSetting xpack
+key enter
+wait-ms 250
+capture p07
+type profile.activeMod
+key enter
+wait-ms 250
+capture p08
+type profile.activeMod BF2
+key enter
+wait-ms 250
+capture p09
+type profile.playerName Batch8Name
+key enter
+wait-ms 250
+capture p10
+type profile.playerName
+key enter
+wait-ms 250
+capture p11
+type profile.visualUnlockLevel 2
+key enter
+wait-ms 250
+capture p12
+type profile.visualUnlockLevel
+key enter
+wait-ms 250
+capture p13
+type profile.defaultKit 3
+key enter
+wait-ms 250
+capture p14
+type profile.defaultKit
+key enter
+wait-ms 250
+capture p15
+type profile.tagIcon Batch8Icon
+key enter
+wait-ms 250
+capture p16
+type profile.tagIcon
+key enter
+wait-ms 250
+capture p17
+type profile.tagText B8
+key enter
+wait-ms 250
+capture p18
+type profile.tagText
+key enter
+wait-ms 250
+capture p19
+type profile.setIndexForKit MEC 4 1
+key enter
+wait-ms 250
+capture p20
+type profile.getIndexForKit MEC 1
+key enter
+wait-ms 250
+capture p21
+type profile.activeCharacterProfile Hero
+key enter
+wait-ms 250
+capture p22
+type profile.activePlayerProfile Batch8
+key enter
+wait-ms 250
+capture p23
+type profile.activatePlayerProfile Batch8
+key enter
+wait-ms 250
+capture p24
+type profile.activateCharacterProfile Hero
+key enter
+wait-ms 250
+capture p25
+type profile.applySettings
+key enter
+wait-ms 250
+capture p26
+key grave
+wait-ms 1500
+key-down tab
+wait-ms 1500
+capture scoreboard
+key-up tab
+wait-ms 800
+capture after

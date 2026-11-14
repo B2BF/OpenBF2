@@ -2,6 +2,7 @@
 #pragma once
 #include "Cache.h"
 #include <array>
+#include <stdexcept>
 
 namespace bf2fx {
 // A parameter, one of its elements, or one member of a struct parameter/element (D3DX9_25
@@ -34,11 +35,17 @@ public:
                          const std::shared_ptr<void>& texture) = 0;
     virtual bool validate(const Pass& pass,const Description& effect) = 0;
 };
-// Unsupported executable IR logs its qualified frontier, flushes, then aborts.
-// Ordinary caller errors (bad handles, sizes or technique indices) return false.
+// [CHOSEN, not recovered] Effect data outside the executable subset (malformed or unsupported
+// IR; no shipped effect selects any) is refused: refuse()
+// logs once (Unsupported.h) and throws Refused. The public entry points catch it and fail like
+// an ordinary caller error (bad handles, sizes or technique indices return false); a refused
+// construction leaves valid() false and D3DXCreateEffect fails. evaluate, mapConstants and
+// packConstants may throw Refused to direct callers.
+struct Refused : std::runtime_error { using std::runtime_error::runtime_error; };
 class Runtime {
 public:
     explicit Runtime(Description description);
+    bool valid() const { return valid_; }
     const Description& description() const { return data_; }
     // Native deferred builds: the shader records arrive after construction (same objects).
     void setShaders(std::vector<Shader> shaders) { data_.shaders = std::move(shaders); }
@@ -76,6 +83,7 @@ public:
     // Packs MojoShader's dense MSL buffer(0) float4/int4/bool arrays, in reflection order.
     Bytes packConstants(const Shader&,const Registers&) const;
 private:
+    bool valid_ = true;
     Description data_;
     std::vector<Words> values_;
     std::vector<std::vector<std::shared_ptr<void>>> textures_;
@@ -88,5 +96,5 @@ private:
     const Shader* resolveShader(uint32_t object,uint32_t depth=0) const;
     void applySampler(const Value&,uint32_t stage,uint32_t slot,Callbacks&) const;
 };
-[[noreturn]] void frontier(const std::string& method,const std::string& detail);
+[[noreturn]] void refuse(const std::string& method,const std::string& detail);
 } // namespace bf2fx

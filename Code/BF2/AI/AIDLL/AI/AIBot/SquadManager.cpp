@@ -511,7 +511,7 @@ void SquadManager::unAssignSquads(int side)
 // ELF 0x1AE100: both sides unassigned, queued commander messages and player positions cleared,
 // the artillery flags of both side blocks and the update cursors reset, then every coordinator
 // of side 0 and then side 1 resets.
-// ELF 0x1ADD70 (D1, 467 B; recovered on the client track, docs/macos-c-singleplayer.md). Each
+// ELF 0x1ADD70 (D1, 467 B; recovered on the client track). Each
 // side's coordinators are deleted (nonvirtual SquadCoordinator D1 + operator delete) and the
 // vector emptied, then the commander messages and valid positions are cleared and the singleton
 // pointer zeroed unconditionally. The members go afterwards in reverse declaration order.

@@ -1,0 +1,41 @@
+# [TEMP] rend-doors: antialiasing changed at run time from the in-game OPTIONS > VIDEO page.
+# Menu coordinates from the c-options AA run (m2): OPTIONS 600 15, VIDEO 469 47, the AA list 560 367, an entry 420 430, ACCEPT 553 550,
+# the confirmation OK 500 315.
+include join-and-spawn
+log doors: before the change
+aim -185.27/157/-146.11 1.5 6000
+wait-ms 1500
+capture aa-before
+key escape
+wait-ms 3000
+capture menu
+move 600 15
+wait-ms 300
+click 600 15
+wait-ms 3000
+capture options
+click 469 47
+wait-ms 2500
+capture video
+click 560 367
+wait-ms 1500
+capture aa-list
+click 420 430
+wait-ms 1000
+capture aa-selected
+click 553 550
+wait-ms 6000
+capture aa-applied
+click 500 315
+wait-ms 2000
+capture aa-ok
+key escape
+wait-ms 3000
+capture back-in-game
+aim -185.27/157/-146.11 1.5 6000
+wait-ms 1500
+capture aa-after
+move-rel 300 0
+wait-ms 1500
+capture aa-after-turn
+log doors: done

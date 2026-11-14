@@ -1,0 +1,16 @@
+# [TEMP] tabout: join and spawn, then hold while tools/macos/loopback/focus-cycle.sh deactivates and
+# reactivates the client from outside at the TABOUT-READY marker (full-screen tab-out). Needs BF2_INPUT_SCRIPT_REAL_FOCUS=1, e.g.
+#   tools/macos/loopback/focus-cycle.sh out/loopback <shots-dir> 5 TABOUT-READY &
+#   loopback.py --build <tag> --fullscreen --spawn-time 1 --client-seconds 240 --input-script tabout \
+#     --client-env BF2_INPUT_SCRIPT_REAL_FOCUS=1 --client-env BF2_HOST_TRACE=1
+# back-1/back-2 are the first presented frames after the return: HUD, minimap and crosshair shown.
+include join-and-spawn
+log TABOUT-READY
+wait-ms 30000
+capture back-1
+move-rel 200 0
+wait-ms 3000
+capture back-2
+log TABOUT-DONE
+wait-ms 5000
+quit

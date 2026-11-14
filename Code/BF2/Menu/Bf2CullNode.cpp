@@ -71,7 +71,7 @@ void decreaseCullFade(float& current, float delta, float duration)
     if (unrounded < 0.0) current = 0.0f;
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     const float zero = 0.0f;
     // [CHOSEN, not recovered] Preserve x87 retained decrease comparison after store.
     bf2x87::fadeInPlace(current, delta, duration, false);
@@ -103,7 +103,7 @@ void increaseCullFade(float& current, float delta, float duration)
     if (unrounded > 1.0) current = 1.0f;
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     const float one = 1.0f;
     // [CHOSEN, not recovered] Preserve x87 retained increase comparison after store.
     bf2x87::fadeInPlace(current, delta, duration, true);

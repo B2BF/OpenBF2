@@ -1,0 +1,52 @@
+# [TEMP] play-vehicle: walk to the nearest US/China ground vehicle, enter it (E), drive, switch
+# seats (F1-F6), exit (E). Keys: mods/bf2/Settings/Controls.con
+# (LandPlayerInputControlMap: throttle W/S, yaw A/D, fire IDButton_0, seats F1-F8, use E).
+include join-and-spawn
+log play: vehicle start
+wait-ms 2000
+log play: walk to the nearest vehicle
+walk-to tmpl:jeep_faav,usjep_hmmwv,jep_paratrooper,jep_nanjing,ustnk_m1a2,tnk_type98,usaav_m6,aav_type95,usapc_lav25,apc_wz551 4 60000
+face tmpl:jeep_faav,usjep_hmmwv,jep_paratrooper,jep_nanjing,ustnk_m1a2,tnk_type98,usaav_m6,aav_type95,usapc_lav25,apc_wz551 5 3000
+capture at-vehicle
+log play: enter (E)
+key e
+wait-ms 2500
+capture entered
+log play: drive
+key-down w
+wait-ms 3000
+key-down d
+wait-ms 1500
+key-up d
+wait-ms 1500
+key-up w
+key-down s
+wait-ms 1500
+key-up s
+wait-ms 1500
+capture driven
+log play: vehicle fire
+button-down 0
+wait-ms 1000
+button-up 0
+wait-ms 1000
+log play: seats
+key f2
+wait-ms 2000
+capture seat-2
+key f3
+wait-ms 2000
+key f4
+wait-ms 2000
+key f5
+wait-ms 1500
+key f6
+wait-ms 1500
+key f1
+wait-ms 2000
+capture seat-1
+log play: exit (E)
+key e
+wait-ms 2500
+capture exited
+log play: vehicle done

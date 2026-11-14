@@ -9,6 +9,7 @@
 #include "../CameraTemplate.h"
 #include "../../../Math/Quat.h"
 #include <list>
+#include <vector>
 #include "../../../Scene/Object/ObjectTypes/Game/IPlayerControlObject.h"   // getPcoId walks for one
 
 namespace dice {
@@ -62,6 +63,13 @@ public:
     virtual void handleMessage(TemplateMessage message, IPlayer* player, bool flag);
     // , non-virtual; BF2.exe inlines it at both handleMessage sites.
     void setRecordingValid(bool valid);
+
+    // ELF 0x81DBA90 (496 B) / BF2.exe 0x5A3EA0: the local occupant's recoil and shake, the frame
+    // clock, the periodic close-vehicle scan and the free-camera view switch, then RotationalBundle.
+    virtual void handleUpdate(float deltaTime, unsigned int flags);
+    void updateCameraRecoil(float deltaTime);   // ELF 0x81DC1D0 / BF2.exe 0x5A1A10
+    void updateCameraShake(float deltaTime);    // ELF 0x81DC270 / BF2.exe 0x5A1A90
+    void updateCloseVehicleShake();             // ELF 0x81DC550 / BF2.exe 0x5A3830
 
     // Camera::Frame is exactly a recorded world position followed by its camera-clock timestamp.
     // The 16-byte payload is proved independently by the ELF list-node allocation and by both
@@ -137,7 +145,7 @@ public:
     // as the forward axis and its fourth as the translation.
     /* +0x20C */ Mat4 m_externCameraTrans;
     /* +0x24C */ int  m_previousViewMode;            // ctor 1  [CHOSEN] name
-    /* +0x250 */ int  m_dword250;                    // ctor 8      [UNRESOLVED]
+    /* +0x250 */ int  m_savedViewMode;               // ctor 8 = none; handleUpdate's free-camera switch [INFERRED] name
     /* +0x254 */ unsigned int m_traceObjectId;       // ctor 0
     /* +0x258 */ int  m_dword258;                    // ctor -1     [UNRESOLVED]
     /* +0x25C */ float m_float25C;                   // ctor 1.0f   [UNRESOLVED]
@@ -152,12 +160,18 @@ public:
     // [UNRESOLVED] presentation working state between the accepted-explosion timestamp and the
     // recovered recoil block. Its bounds are direct: ELF +0x2B4..+0x2F3, PE +0x2D8..+0x31F.
     // The PE has eight extra bytes here after its differently aligned/client-side prefix.
-    unsigned char m_cameraPresentationPrefix[0x14];
+    unsigned char m_cameraPresentationPrefix[0x10];
+    /* ELF +0x2C4 / PE +0x2E8 */ float m_speedShakeTime;   // updateCameraShake's clock [INFERRED] name
     /* ELF +0x2C8 / PE +0x2EC */ float m_speedShakeRoll;
+    /* ELF +0x2CC / PE +0x2F0 */ int   m_unresolved2CC;    // [UNRESOLVED]
+    // updateCloseVehicleShake's grid-query result (ELF +0x2D0..+0x2DB begin/end/capacity).
+    /* ELF +0x2D0 */ std::vector<IObject*> m_closeVehicles;  // [INFERRED] name
 #if defined(_MSC_VER) && defined(_M_IX86)
-    unsigned char m_cameraPresentationSuffix[0x30];
+    unsigned char m_cameraPresentationSuffix[0x30 - 4 - sizeof(std::vector<IObject*>)];
+#elif defined(__i386__)
+    unsigned char m_cameraPresentationSuffix[0x28 - 4 - sizeof(std::vector<IObject*>)];
 #else
-    unsigned char m_cameraPresentationSuffix[0x28];
+    unsigned char m_cameraPresentationSuffix[0x18];
 #endif
     // The recoil/shake block. Its shipped absolute offsets differ between ELF and PE because
     // Camera's client-side preceding layout differs. addRecoilImpulse touches the first three and
@@ -167,9 +181,10 @@ public:
     /* ELF +0x2FC / PE +0x328 */ float m_recoilImpulseSize;
     /* ELF +0x300 / PE +0x32C */ float m_explosionShakeTimeRemaining;
     /* ELF +0x304 / PE +0x330 */ float m_explosionShakeMagnitude;
-    /* ELF +0x308 / PE +0x334 */ unsigned char m_cameraRecoilState[8]; // [UNRESOLVED]
+    /* ELF +0x308 / PE +0x334 */ float m_closeVehicleShakePhaseX;  // updateCameraShake [INFERRED] name
+    /* ELF +0x30C / PE +0x338 */ float m_closeVehicleShakePhaseY;  // [INFERRED] name
     /* ELF +0x310 / PE +0x33C */ float m_cameraRecoilX;
-    /* ELF +0x314 / PE +0x340 */ float m_recoilState314; // [UNRESOLVED] role, ctor zero
+    /* ELF +0x314 / PE +0x340 */ float m_closeVehicleCheckTime;  // handleUpdate's scan clock [INFERRED] name
     /* ELF +0x318 / PE +0x344 */ float m_soldierShakeX;
     /* ELF +0x31C / PE +0x348 */ float m_soldierShakeY;
     /* ELF +0x320 / PE +0x34C */ float m_cameraRecoilY;

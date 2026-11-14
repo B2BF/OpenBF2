@@ -2,7 +2,7 @@
 // BinkPort.h). Retail binkw32 plays movie sound through DirectSound once Video::initSound has
 // called BinkSetSoundSystem(BinkOpenDirectSound, 0); the port uses DirectSound too, so x64 sound
 // goes through the same system API as the x86 image. The buffer copies what the black-box
-// harness saw binkw32 create (docs/tracks/bink/README.md): one looping secondary buffer per
+// harness saw binkw32 create (Code/BF2/External/ffmpeg-bink/README.md): one looping secondary buffer per
 // movie, 16-bit PCM at the file's rate and channel count, flags GETCURRENTPOSITION2 | GLOBALFOCUS
 // | CTRLVOLUME | CTRLPAN | CTRLFREQUENCY (0x180E0), 0.6 s rounded up to 1 KiB. Port code, not a
 // recovery: the feeding thread is chosen. It keeps only about 80 ms written ahead of the play

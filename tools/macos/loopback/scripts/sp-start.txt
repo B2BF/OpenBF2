@@ -1,0 +1,53 @@
+# [TEMP] [CHOSEN, not recovered] Fresh loopback profile: --no-server logs in LoopBot.
+# SINGLEPLAYER -> Karkand, VETERAN -> START -> JOIN GAME -> Assault, Gasstation -> DONE.
+# Requires 800x600. Use full AI; --ai-spawn-only is only a separate diagnostic.
+timeout 300
+wait-log mods/bf2/Movies/menu.bik
+wait-ms 5000
+capture main
+move 333 15
+wait-ms 300
+click 333 15
+wait-ms 3000
+capture sp-page
+move 64 421
+wait-ms 300
+click 64 421
+wait-ms 1500
+move 147 204
+wait-ms 300
+click 147 204
+wait-ms 1500
+capture sp-chosen
+move 730 585
+wait-ms 300
+click 730 585
+wait-ms 3000
+capture loading
+wait-log ingameMap.tga
+wait-ms 5000
+capture loaded
+click 745 583
+wait-ms 4000
+key enter
+wait-ms 1500
+key enter
+wait-ms 3000
+capture spawn-screen
+hud-click 130 240
+wait-ms 1000
+hud-click 594 467
+wait-ms 1000
+capture kit
+hud-click 728 546
+wait-log [PLAY] alive=1
+wait-ms 3000
+capture spawned
+key-down tab
+wait-ms 1500
+capture scoreboard
+key-up tab
+wait-ms 60000
+capture hold-60
+log sp-start reached spawn and held 60 seconds
+end

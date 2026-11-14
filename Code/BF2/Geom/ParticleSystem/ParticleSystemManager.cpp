@@ -600,7 +600,7 @@ void psmRecomputeDerivedSettings(ParticleSystemManager* self)
             it->second->refreshDerivedState();
     }
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     for (unsigned int i = 0; i < 3; ++i)
     {
         const float lodScale = self->m_lodScales[i];

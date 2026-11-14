@@ -12,7 +12,7 @@ namespace dice { namespace hfe { namespace macos {
 // An unavailable home or directory creation failure reports to stderr and aborts.
 const std::string& clientDataDirectory();
 
-// Opens and exclusively locks Client.lock in the client data directory, without waiting.
+// Opens and exclusively locks Client.lock in the working directory (the game folder), without waiting.
 // Returns an owned close-on-exec descriptor, or -1 when another instance holds the lock.
 // Other failures report to stderr and abort. Close the descriptor to release; never unlink it.
 int acquireClientInstanceLock();

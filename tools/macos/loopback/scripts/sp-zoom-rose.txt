@@ -1,0 +1,126 @@
+# [TEMP] sp-zoom-rose: zoom HUD and commo rose in the client-hosted game (owner SP test 2026-11-06).
+# Based on sp-instant-play: Welcome -> PLAY SINGLEPLAYER (instant battle) -> JOIN GAME -> Assault kit,
+# Beach spawn (gulf_of_oman, US) -> DONE -> scoreboard -> ~3 min in the round. Client-hosted
+# (docs/macos-c-input-script.md). 800x600. Run with BF2_AI_SPAWN_ONLY=1.
+timeout 300
+# The runner passes +restart 1 (no intros): the menu is up once menu.bik plays.
+wait-log mods/bf2/Movies/menu.bik
+wait-ms 3000
+capture welcome
+move 380 214
+wait-ms 300
+click 380 214
+wait-ms 2000
+capture loading
+wait-log ingameMap.tga
+wait-ms 5000
+capture loaded
+click 745 583
+wait-ms 4000
+key enter
+wait-ms 1500
+key enter
+wait-ms 3000
+capture spawn-screen
+# Assault kit (row 3 of the kit list), then the Beach spawn point, then DONE.
+hud-click 130 240
+wait-ms 1000
+hud-click 517 422
+wait-ms 1000
+capture selected
+hud-click 728 546
+wait-ms 20000
+capture spawned
+log zoom: right button down
+button-down 1
+wait-ms 120
+button-up 1
+wait-ms 500
+capture Z-0500
+wait-ms 1000
+capture Z-1500
+wait-ms 1500
+capture Z-3000
+button-down 1
+wait-ms 120
+button-up 1
+wait-ms 3000
+capture Z-out
+log rose A: Q held, pointer up 200 counts onto GO GO GO, release Q
+key-down q
+wait-ms 1000
+move-rel 0 -20
+wait-ms 100
+move-rel 0 -20
+wait-ms 300
+move-rel 0 -20
+wait-ms 100
+move-rel 0 -20
+wait-ms 300
+move-rel 0 -20
+wait-ms 100
+move-rel 0 -20
+wait-ms 300
+move-rel 0 -20
+wait-ms 100
+move-rel 0 -20
+wait-ms 300
+move-rel 0 -20
+wait-ms 100
+move-rel 0 -20
+wait-ms 300
+wait-ms 500
+capture A-hover
+key-up q
+wait-ms 400
+capture A-released
+wait-ms 2500
+capture A-after
+wait-ms 3000
+log rose B: Q held, pointer up 200 counts, left click, release Q
+key-down q
+wait-ms 1000
+move-rel 0 -20
+wait-ms 100
+move-rel 0 -20
+wait-ms 300
+move-rel 0 -20
+wait-ms 100
+move-rel 0 -20
+wait-ms 300
+move-rel 0 -20
+wait-ms 100
+move-rel 0 -20
+wait-ms 300
+move-rel 0 -20
+wait-ms 100
+move-rel 0 -20
+wait-ms 300
+move-rel 0 -20
+wait-ms 100
+move-rel 0 -20
+wait-ms 300
+wait-ms 500
+capture B-hover
+button-down 0
+wait-ms 120
+button-up 0
+wait-ms 400
+capture B-clicked
+key-up q
+wait-ms 2000
+capture B-after
+log rose C: Q held, left click on the centre (SPOTTED)
+key-down q
+wait-ms 1000
+capture C-hover
+button-down 0
+wait-ms 120
+button-up 0
+wait-ms 400
+capture C-clicked
+key-up q
+wait-ms 2000
+capture C-after
+log sp-zoom-rose done
+quit

@@ -6,6 +6,9 @@
 #ifdef BF2_IMAGE_RENDDX9
 #if !defined(_MSC_VER)
 // [CHOSEN, not recovered] Compiler-typed native table entries.
+#if defined(__APPLE__) && !DEDICATED
+#include "../Platform/macOS/Warmup.h"   // [CHOSEN] +warmupLevel (port addition)
+#endif
 #include "../../RendDX9Abi/NativeVtable.h"
 #include "../RendDX9/RendDX9Base.h"
 #endif
@@ -1685,6 +1688,9 @@ void buildShadowCandidateSet(void* self, Mat4& lightBasis, ShadowSweepClassifier
         // [TEMP] One-shot diagnostic in the style of LightManager::update's recovery line: the
         // size of the first candidate set the shadow-caster predicate produced, so a live run can
         // prove the shadow pass reached the predicate and show what it kept.
+#if defined(__APPLE__) && !DEDICATED
+        bf2warmup::worldFrame();                    // [CHOSEN] +warmupLevel progress (notification only)
+#endif
         static bool s_candidatesReported = false;
         if (!s_candidatesReported)
         {

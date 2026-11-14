@@ -1,0 +1,28 @@
+# [TEMP] demo-record: the demo gate's recording phase (demo_cycle.py; docs/tracks/game/demo.md).
+# The joined player spawns, then moves and fires (play-combat's moves), so the recorded round has
+# motion next to a player the playback camera can follow. The bots move on their own (no
+# --ai-spawn-only in phase 1).
+include join-and-spawn
+log demo-record: combat start
+wait-ms 2000
+log demo-record: aim and fire at the nearest friend
+aim friend 1.5 5000
+capture rec-aim-friend
+button-down 0
+wait-ms 2500
+button-up 0
+wait-ms 1000
+log demo-record: walk towards the nearest enemy
+walk-to enemy 40 30000
+capture rec-walked
+aim enemy 1.0 5000
+button-down 0
+wait-ms 3000
+button-up 0
+wait-ms 1000
+log demo-record: walk on
+key-down w
+wait-ms 8000
+key-up w
+capture rec-done
+log demo-record: done

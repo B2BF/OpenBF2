@@ -2,7 +2,7 @@
 // one AudioQueue per playing movie, pulling the decoded samples. It stands in for the DirectSound
 // mixer binkw32 opens after BinkSetSoundSystem(BinkOpenDirectSound); AudioQueue is the plain
 // system output that needs no device selection and runs its callback on its own thread. Port
-// code, not a recovery (docs/macos-c-bink.md).
+// code, not a recovery (Code/BF2/External/ffmpeg-bink/README.md).
 
 #include "BinkPort.h"
 

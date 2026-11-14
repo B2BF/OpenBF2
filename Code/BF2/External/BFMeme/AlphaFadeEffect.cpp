@@ -66,7 +66,7 @@ void multiplyAlpha(float* alpha, const float* factor)
     *alpha = static_cast<float>(static_cast<double>(first) * second);
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     // [CHOSEN, not recovered] Preserve x87 load, two-NaN payload selection and float store.
     *alpha = bf2x87::multiply(*factor, *alpha);
 #endif

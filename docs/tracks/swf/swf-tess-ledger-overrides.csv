@@ -1,0 +1,18 @@
+address,symbol,file,status,reason
+0x100A9C10,FUN_100A9C10,,unattributed,"unattributed, no recorded reference;swf-tess:exported-PE32-listing;unreferenced-out-of-line-float-absolute-value;no-defensible-source-instance"
+0x100A9C20,FUN_100A9C20,,unattributed,"unattributed, no recorded reference;swf-tess:exported-PE32-listing;unreferenced-four-word-zero-constructor;point-pair-versus-rectangle-type-unproved"
+0x100A9C40,gameswf::tesselate::compare_segment_y,Code/BF2/External/gameswf/gameswf_tesselate.cpp,done,swf-tess:exported-PE32-listing;begin-y-then-register-precision-height;unordered-returns-one
+0x100A9CA0,gameswf::tesselate::compare_segment_x,Code/BF2/External/gameswf/gameswf_tesselate.cpp,done,swf-tess:exported-PE32-listing;begin-x-then-end-x;unordered-returns-one
+0x100A9D40,array<gameswf::tesselate::fill_segment>::back,Code/BF2/External/base/container.h,done,swf-tess:exported-PE32-listing;existing-buffer-plus-size-minus-one-times-28-instance
+0x100A9DE0,FUN_100A9DE0,,unattributed,"unattributed, no recorded reference;swf-tess:exported-PE32-listing;unreferenced-out-of-line-swap;concrete-pair-type-unproved"
+0x100A9E00,FUN_100A9E00,,unattributed,"unattributed, no recorded reference;swf-tess:exported-PE32-listing;unreferenced-out-of-line-swap;concrete-value-type-unproved"
+0x100A9E10,gameswf::tesselate::fill_segment::flip,Code/BF2/External/gameswf/gameswf_tesselate.cpp,done,swf-tess:exported-PE32-listing;exchange-points-and-fill-sides;retain-line-style
+0x100A9F80,gameswf::tesselate::fill_segment::fill_segment,Code/BF2/External/gameswf/gameswf_tesselate.cpp,done,swf-tess:exported-PE32-listing;copy-two-points-and-three-styles;flip-only-for-begin-y-greater-than-end-y
+0x100A9FF0,gameswf::tesselate::begin_shape,Code/BF2/External/gameswf/gameswf_tesselate.cpp,done,swf-tess:exported-PE32-listing;clear-arrays-reset-styles-and-flags;nonpositive-or-unordered-tolerance-defaults-to-one;no-entry-assertions
+0x100AA060,gameswf::tesselate::end_path,Code/BF2/External/gameswf/gameswf_tesselate.cpp,done,swf-tess:exported-PE32-listing;line-style-nonnegative-and-at-least-two-points;accepter-slot-one;resize-path-zero
+0x100AA0B0,array<gameswf::tesselate::fill_segment>::push_back,Code/BF2/External/base/container.h,done,swf-tess:exported-PE32-listing;existing-resize-then-seven-word-assignment-instance
+0x100AA0F0,gameswf::tesselate::peel_off_and_emit,Code/BF2/External/gameswf/gameswf_tesselate.cpp,done,swf-tess:exported-PE32-listing;EDX-start-ECX-end;dy-and-intersection-float-stores;register-quotient;slab-wide-fill-sense
+0x100AA2D0,gameswf::tesselate::begin_path,Code/BF2/External/gameswf/gameswf_tesselate.cpp,done,swf-tess:exported-PE32-listing;replace-styles-pen-and-path;accumulate-has-fill-and-has-line-flags
+0x100AA360,gameswf::tesselate::add_line_segment,Code/BF2/External/gameswf/gameswf_tesselate.cpp,done,swf-tess:exported-PE32-listing;construct-and-append-fill-edge;update-pen;append-path-point
+0x100AA410,gameswf::tesselate::curve,Code/BF2/External/gameswf/gameswf_tesselate.cpp,done,swf-tess:exported-PE32-listing;register-midpoint-and-distance;float-curve-midpoint-and-controls;first-half-recursion-second-half-loop;strict-error-test
+0x100AA540,gameswf::tesselate::add_curve_segment,Code/BF2/External/gameswf/gameswf_tesselate.cpp,done,swf-tess:exported-PE32-listing;forward-current-pen-control-and-anchor-to-curve

@@ -1,12 +1,14 @@
 // [CHOSEN, not recovered] Owner-requested macOS port: native ID3DXEffect, ID3DXEffectCompiler
 // and D3DXCreateEffect* over native compilation, the FxNative cache and the s2 CPU runtime.
-// See docs/macos-c-native-fx2.md. Semantics follow the public D3DX9 API reference; nothing
+// Semantics follow the public D3DX9 API reference; nothing
 // here is recovered from the retail image and no D3DX/Wine implementation was copied.
 #if defined(__APPLE__) && defined(BF2_IMAGE_RENDDX9)
+#include "../../macOS/Warmup.h"   // [CHOSEN] +warmupLevel progress (port addition)
 #include "../D3DX9Subset.h"
 #include "../Effect/Runtime.h"
 #include "EffectShaders.h"
 #include "RefTrace.h" // [TEMP] [RETIRE-WHEN: rend-deinit-reftrace]
+#include "../Unsupported.h"
 #if !defined(BF2_FX_NATIVE)
 #error "The macOS effect facade requires the native compiler (BF2_FX_NATIVE)"
 #endif
@@ -37,15 +39,13 @@ constexpr DWORD D3DXFX_DONOTSAVESHADERSTATE = 2;
 constexpr DWORD D3DXFX_DONOTSAVESAMPLERSTATE = 4;
 constexpr HRESULT kCompileFailure = E_FAIL; // D3DX's result for a failed compile.
 
-// [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: macos-g4-effect-coverage]
-// Each stop names a facade operation BF2 has not been observed to use. Implement it with
-// a real fixture before removing its stop.
-[[noreturn]] void stop(const char* method, const std::string& detail = std::string())
+// [CHOSEN, not recovered] Inputs retail BF2 cannot select:
+// each takes the fallback its call site names, logged once (Unsupported.h), and the
+// call answers hr.
+HRESULT refuse(const char* method, const std::string& detail = std::string(), HRESULT hr = D3DERR_INVALIDCALL)
 {
-    std::fprintf(stderr, "[FRONTIER] %s reached%s%s\n", method, detail.empty() ? "" : ": ",
-                 detail.c_str());
-    std::fflush(stderr);
-    std::abort();
+    bf2gfx::unsupported(std::string(method) + (detail.empty() ? "" : ": ") + detail);
+    return hr;
 }
 
 bool sameGuid(REFIID a, const GUID& b) { return !std::memcmp(&a, &b, sizeof(GUID)); }
@@ -142,7 +142,7 @@ struct Deferred {
     std::shared_future<bf2fx::Entry> future;
     explicit operator bool() const { return future.valid(); }
 };
-// ---- Native compilation (docs/macos-c-native-fx2.md) -----------------------------------------
+// ---- Native compilation -----------------------------------------
 // [CHOSEN, not recovered] The native compiler is the only effect route. Its toolchain
 // identity keys the per-user cache; unsupported effects retain native refusal/frontier handling.
 std::string nativeRoot()
@@ -157,8 +157,11 @@ void nativeReport(const char* what)
 {
     if (!std::getenv("BF2_FX_NATIVE_TRACE")) return;
     const auto& s = nativeStats();
-    std::fprintf(stderr, "BF2FX native: %s (hits %u, refused by table %u, by rule %u, deferred %u, compiled now %u, unknown %u, queue %zu)\n",
-                 what, s.hits, s.refusedTable, s.refusedRule, s.deferred, s.synchronous, s.unknown, bf2fx::native::pending());
+    unsigned memoHits = 0, memoMisses = 0;
+    bf2fx::native::memoCounts(memoHits, memoMisses);
+    std::fprintf(stderr, "BF2FX native: %s (hits %u, refused by table %u, by rule %u, deferred %u, compiled now %u, unknown %u, queue %zu, shader memo %u/%u)\n",
+                 what, s.hits, s.refusedTable, s.refusedRule, s.deferred, s.synchronous, s.unknown, bf2fx::native::pending(),
+                 memoHits, memoHits + memoMisses);
 }
 // Keys whose skeleton was handed out while their full build is queued.
 std::mutex gPendingMutex;
@@ -168,14 +171,26 @@ HRESULT nativeEntry(const char* api, LPCVOID source, UINT size, const std::vecto
                     ID3DXInclude* include, DWORD flags, bf2fx::Entry& entry, ID3DXBuffer** errors, Deferred& deferred)
 {
     namespace nt = bf2fx::native;
+    // [CHOSEN, not recovered] Host failures (E17) do not end the run: without a cache directory
+    // (no BF2_FX_NATIVE_CACHE or HOME) every effect is compiled in memory and nothing is cached;
+    // an unreadable cache entry is rebuilt; a failed publish keeps the built entry for this run.
     const std::string root = nativeRoot();
-    if (root.empty()) stop(api, "no native effect cache directory (set BF2_FX_NATIVE_CACHE or HOME)");
+    if (root.empty()) refuse(api, "no native effect cache directory (set BF2_FX_NATIVE_CACHE or HOME); compiling uncached");
     bf2fx::Request request;
     if (!nt::untag(source, size, request)) { // A CompileEffect result (Ra, .cfx) carries its request.
         IncludeAdapter adapter(include);
         const auto result = bf2fx::capture(source, size, defines, flags, nt::identityHash(), nt::identity(), &adapter, request);
-        if (!result) stop(api, "request capture failed: " + result.detail);
+        if (!result) { // D3DX reports a source it cannot read as a failed compile with a message.
+            refuse(api, "request capture failed: " + result.detail);
+            if (errors) *errors = textBlob(api + std::string(": ") + result.detail + "\n");
+            return kCompileFailure;
+        }
     }
+    auto publish = [&](const bf2fx::Entry& e) {
+        if (root.empty()) return;
+        const auto published = bf2fx::publish(root, request, e);
+        if (!published) refuse(api, "native cache publish (entry kept for this run): " + published.detail);
+    };
     const bool compiler = std::strcmp(api, "D3DXCreateEffectCompiler") == 0;
     const std::string key = bf2fx::cacheKey(request);
     {
@@ -191,9 +206,11 @@ HRESULT nativeEntry(const char* api, LPCVOID source, UINT size, const std::vecto
         entry = e;
         return failAsD3dx(entry, compiler, errors);
     };
-    bf2fx::Result result = bf2fx::load(root, request, entry);
-    if (result || result.error == bf2fx::Error::Refused) { ++nativeStats().hits; nativeReport("cache hit"); return finish(entry); }
-    if (result.error != bf2fx::Error::Miss) stop(api, "native cache " + root + ": " + result.detail);
+    if (!root.empty()) {
+        bf2fx::Result result = bf2fx::load(root, request, entry);
+        if (result || result.error == bf2fx::Error::Refused) { ++nativeStats().hits; nativeReport("cache hit"); return finish(entry); }
+        if (result.error != bf2fx::Error::Miss) refuse(api, "native cache " + root + " (rebuilding the entry): " + result.detail);
+    }
 
     const auto known = nt::known(request);
     if (known == nt::Known::Unknown) ++nativeStats().unknown;
@@ -203,8 +220,7 @@ HRESULT nativeEntry(const char* api, LPCVOID source, UINT size, const std::vecto
         refused.log = known == nt::Known::Refused ? "BF2FX native: D3DX refuses this request (refusal table)\n"
                                                   : "BF2FX native: refused below ps_2_0 (Rule R, source unknown to the refusal table)\n";
         ++(known == nt::Known::Refused ? nativeStats().refusedTable : nativeStats().refusedRule);
-        const auto published = bf2fx::publish(root, request, refused);
-        if (!published) stop(api, "native cache publish: " + published.detail);
+        publish(refused);
         return finish(refused);
     }
     std::string text, log;
@@ -219,6 +235,7 @@ HRESULT nativeEntry(const char* api, LPCVOID source, UINT size, const std::vecto
             std::shared_future<bf2fx::Entry> future;
             {
                 std::lock_guard<std::mutex> lock(gPendingMutex);
+                bf2warmup::effectStarted();                   // [CHOSEN] +warmupLevel progress
                 future = nt::submit(key, request, std::move(text), [root, request, key](const bf2fx::Entry& e) {
                     // [CHOSEN, not recovered] D3DX accepts this request, so a failed native build is a
                     // toolchain fault, not a D3DX refusal. Publishing it turned this run's working
@@ -227,12 +244,15 @@ HRESULT nativeEntry(const char* api, LPCVOID source, UINT size, const std::vecto
                     if (e.kind != bf2fx::EffectEntry) {
                         std::fprintf(stderr, "BF2FX native: build of accepted request %s failed, not cached: %s",
                                      key.c_str(), e.log.c_str());
-                    } else {
+                    } else if (!root.empty()) {
                         const auto r = bf2fx::publish(root, request, e);
                         if (!r) std::fprintf(stderr, "BF2FX native: publish %s: %s\n", key.c_str(), r.detail.c_str());
                     }
-                    std::lock_guard<std::mutex> lock(gPendingMutex);
-                    gPending.erase(key);
+                    {
+                        std::lock_guard<std::mutex> lock(gPendingMutex);
+                        gPending.erase(key);
+                    }
+                    bf2warmup::effectFinished(e.kind == bf2fx::EffectEntry);   // after publish
                 });
                 gPending[key] = {shared, future};
             }
@@ -242,10 +262,11 @@ HRESULT nativeEntry(const char* api, LPCVOID source, UINT size, const std::vecto
         }
     }
     // Unknown source (or a skeleton that does not build): compile now, D3DX-like errors.
+    bf2warmup::effectStarted();
     bf2fx::Entry built = nt::compile(request, text.empty() ? nullptr : &text);
     ++nativeStats().synchronous;
-    const auto published = bf2fx::publish(root, request, built);
-    if (!published) stop(api, "native cache publish: " + published.detail);
+    publish(built);
+    bf2warmup::effectFinished(true);   // a synchronous build is the D3DX-like outcome either way
     if (built.kind == bf2fx::RefusedEntry) std::fprintf(stderr, "%s: %s", api, built.log.c_str());
     nativeReport("compiled");
     return finish(built);
@@ -270,7 +291,8 @@ std::int32_t toInt(double v) { return !std::isfinite(v) || v < INT32_MIN || v >=
 // D3D state DWORD from an FX2 value: float-typed states take float bits, others integers.
 DWORD stateWord(const bf2fx::Value& v, bool floatState)
 {
-    if (v.words.empty()) stop("ID3DXEffect::BeginPass", "state value without data: " + v.type.name);
+    // [CHOSEN, not recovered] A state value without data (no shipped pass has one, E16) sets 0.
+    if (v.words.empty()) { refuse("ID3DXEffect::BeginPass", "state value without data (0 used): " + v.type.name); return 0; }
     const double n = number(v.words[0], v.type.type);
     return floatState ? floatBits(float(n)) : DWORD(toInt(n));
 }
@@ -447,28 +469,37 @@ public:
     }
     // Registers this effect's shared parameters with the pool. A parameter new to the pool brings
     // this effect's initial value; one the pool already holds keeps the pool's current value.
-    void joinPool(std::shared_ptr<PoolStore> store) {
+    // [CHOSEN, not recovered] No ID3DXEffectPool exists in 1.50 (E11), so the cases below have no
+    // retail input: a shared string/sampler/shader parameter stays private to this effect, and a
+    // declaration that conflicts with the pool's fails D3DXCreateEffect (D3DX refuses it too;
+    // its exact HRESULT is not reproduced, E_FAIL is answered).
+    HRESULT joinPool(std::shared_ptr<PoolStore> store) {
         pool = std::move(store);
         const auto& d = runtime.description();
         for (std::uint32_t i = 0; i < d.parameters.size(); ++i) {
             if (!(d.parameters[i].flags & kParameterShared)) continue;
             const auto& t = d.parameters[i].value.type;
             const bool numeric = (t.type >= bf2fx::Bool && t.type <= bf2fx::Float) || t.cls == 5;
-            if (!numeric && !textureType(t)) stop("D3DXCreateEffect", "shared parameter of a non-numeric, non-texture type: " + t.name);
+            if (!numeric && !textureType(t)) {
+                refuse("D3DXCreateEffect", "shared parameter of a non-numeric, non-texture type kept private: " + t.name);
+                continue;
+            }
             auto it = pool->parameters.find(t.name);
             if (it == pool->parameters.end()) {
                 PoolStore::Shared s; s.type = t;
-                if (!readShared(i, s)) stop("D3DXCreateEffect", "shared parameter value unreadable: " + t.name);
+                if (!readShared(i, s)) {
+                    refuse("D3DXCreateEffect", "shared parameter value unreadable, kept private: " + t.name);
+                    continue;
+                }
                 pool->parameters[t.name] = std::move(s); ++pool->version;
             } else if (!sameType(it->second.type, t)) {
-                // [CHOSEN, not recovered] D3DX refuses the conflicting declaration; its exact
-                // HRESULT is not reproduced here and no BF2 effect pair declares one.
-                stop("D3DXCreateEffect", "shared parameter declared with a different type in the pool: " + t.name);
+                return refuse("D3DXCreateEffect", "shared parameter declared with a different type in the pool: " + t.name, E_FAIL);
             }
             sharedParameters.push_back(i);
         }
         poolSeen = 0;
         pullShared();
+        return D3D_OK;
     }
     // Brings this effect's shared parameters up to the pool's current values.
     void pullShared() {
@@ -519,14 +550,27 @@ public:
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID id, void** out) override {
         if (!out) return D3DERR_INVALIDCALL;
         *out = nullptr;
-        if (!sameGuid(id, kIidUnknown)) stop("ID3DXBaseEffect::QueryInterface", "interface other than IUnknown");
+        // [CHOSEN, not recovered] No image holds an effect IID (E3): only IUnknown is answered,
+        // every other interface gets the COM refusal.
+        if (!sameGuid(id, kIidUnknown)) return refuse("ID3DXBaseEffect::QueryInterface", "interface other than IUnknown", E_NOINTERFACE);
         *out = static_cast<I*>(this); AddRef(); return S_OK;
     }
     ULONG STDMETHODCALLTYPE AddRef() override { return ++refs; }
     ULONG STDMETHODCALLTYPE Release() override { const ULONG n = --refs; if (!n) delete this; return n; }
 
     // Descriptions
-    HRESULT STDMETHODCALLTYPE GetDesc(D3DXEFFECT_DESC*) override { stop("ID3DXBaseEffect::GetDesc"); }
+    // D3DX semantics. The native build exposes no HLSL function objects (GetFunction*), so
+    // Functions is 0; Creator is the compiler string D3DX would report, which FX2 does not keep.
+    HRESULT STDMETHODCALLTYPE GetDesc(D3DXEFFECT_DESC* out) override {
+        if (!out) return D3DERR_INVALIDCALL;
+        const auto& d = runtime.description();
+        *out = {};
+        out->Creator = nullptr;
+        out->Parameters = UINT(d.parameters.size());
+        out->Techniques = UINT(d.techniques.size());
+        out->Functions = 0;
+        return D3D_OK;
+    }
     HRESULT STDMETHODCALLTYPE GetParameterDesc(D3DXHANDLE h, D3DXPARAMETER_DESC* out) override {
         if (!out) return D3DERR_INVALIDCALL;
         if (const auto* v = annotation(h)) {
@@ -575,7 +619,8 @@ public:
                         reinterpret_cast<const DWORD*>(shader.bytecode.data());
         return D3D_OK;
     }
-    HRESULT STDMETHODCALLTYPE GetFunctionDesc(D3DXHANDLE, D3DXFUNCTION_DESC*) override { stop("ID3DXBaseEffect::GetFunctionDesc"); }
+    // [CHOSEN, not recovered] No function objects (GetDesc reports 0; no BF2 caller, E5).
+    HRESULT STDMETHODCALLTYPE GetFunctionDesc(D3DXHANDLE, D3DXFUNCTION_DESC*) override { return refuse("ID3DXBaseEffect::GetFunctionDesc"); }
 
     // Handle lookup
     D3DXHANDLE STDMETHODCALLTYPE GetParameter(D3DXHANDLE parent, UINT index) override {
@@ -588,7 +633,9 @@ public:
         return parameterHandle(runtime.getParameterByName(name));
     }
     D3DXHANDLE STDMETHODCALLTYPE GetParameterBySemantic(D3DXHANDLE parent, LPCSTR semantic) override {
-        if (parent) stop("ID3DXBaseEffect::GetParameterBySemantic", "struct members");
+        // [CHOSEN, not recovered] Struct members carry no semantic in FX2 here; the only retail
+        // call passes no parent (E15).
+        if (parent) { refuse("ID3DXBaseEffect::GetParameterBySemantic", "struct members (no handle)"); return nullptr; }
         if (!semantic) return nullptr;
         const auto& params = runtime.description().parameters;
         for (std::uint32_t i = 0; i < params.size(); ++i) {
@@ -625,8 +672,8 @@ public:
         for (std::size_t p = 0; p < passes.size(); ++p) if (passes[p].name == name) return handle(techniqueBase[std::size_t(t)] + 1 + std::uint32_t(p));
         return nullptr;
     }
-    D3DXHANDLE STDMETHODCALLTYPE GetFunction(UINT) override { stop("ID3DXBaseEffect::GetFunction"); }
-    D3DXHANDLE STDMETHODCALLTYPE GetFunctionByName(LPCSTR) override { stop("ID3DXBaseEffect::GetFunctionByName"); }
+    D3DXHANDLE STDMETHODCALLTYPE GetFunction(UINT) override { refuse("ID3DXBaseEffect::GetFunction"); return nullptr; }
+    D3DXHANDLE STDMETHODCALLTYPE GetFunctionByName(LPCSTR) override { refuse("ID3DXBaseEffect::GetFunctionByName"); return nullptr; }
     D3DXHANDLE STDMETHODCALLTYPE GetAnnotation(D3DXHANDLE h, UINT index) override {
         auto it = annotations.find(owner(h));
         return it == annotations.end() || index >= it->second.count ? nullptr : handle(it->second.first + index);
@@ -644,13 +691,34 @@ public:
         if (const auto* v = annotation(h)) return readValue(*v, type, out, n) ? D3D_OK : D3DERR_INVALIDCALL;
         return get(parameter(h)) ? D3D_OK : D3DERR_INVALIDCALL;
     }
-    void annotationWrite(D3DXHANDLE h, const char* method) const { if (annotation(h)) stop(method, "annotation write"); }
+    // [CHOSEN, not recovered] Annotations are immutable here: a write is refused with
+    // D3DERR_INVALIDCALL. Neither the tree nor retail writes one (E14).
+    bool annotationWrite(D3DXHANDLE h, const char* method) const {
+        if (!annotation(h)) return false;
+        refuse(method, "annotation write"); return true;
+    }
+    // A vector/matrix read of a numeric annotation: rows x columns per element, D3DX's padded
+    // 4-wide vector and 4x4 matrix layout.
+    bool readAnnotationArray(const bf2fx::Value& v, float* out, std::size_t n, std::size_t stride, bool matrix, bool transpose) const {
+        const auto& t = v.type;
+        if (!out || !numericType(t) || t.rows > 4 || t.columns > 4 || (matrix ? t.cls < 2 : t.rows != 1) || n > std::max(1u, t.elements))
+            return false;
+        const std::size_t each = std::size_t(t.rows) * t.columns;
+        std::vector<float> packed(n * each);
+        if (!readValue(v, bf2fx::Float, packed.data(), packed.size())) return false;
+        std::fill(out, out + n * stride, 0.0f);
+        for (std::size_t e = 0, i = 0; e < n; ++e)
+            for (std::uint32_t r = 0; r < t.rows; ++r)
+                for (std::uint32_t c = 0; c < t.columns; ++c)
+                    out[e * stride + (matrix ? (transpose ? c * 4 + r : r * 4 + c) : c)] = packed[i++];
+        return true;
+    }
     HRESULT result(bool ok, bool write) {
         if (ok && write) { touch(); pushShared(); }
         return ok ? D3D_OK : D3DERR_INVALIDCALL;
     }
     HRESULT STDMETHODCALLTYPE SetValue(D3DXHANDLE h, LPCVOID data, UINT bytes) override {
-        annotationWrite(h, "ID3DXBaseEffect::SetValue");
+        if (annotationWrite(h, "ID3DXBaseEffect::SetValue")) return D3DERR_INVALIDCALL;
         const auto p = parameter(h); bf2fx::ParameterDesc d;
         if (p && runtime.getParameterDesc(p, d) && d.type.type >= bf2fx::Texture && d.type.type < bf2fx::Sampler) {
             // A texture value is the interface pointer itself.
@@ -667,42 +735,41 @@ public:
         }
         return result(runtime.getValue(parameter(h), data, bytes), false);
     }
-    HRESULT STDMETHODCALLTYPE SetBool(D3DXHANDLE h, BOOL v) override { annotationWrite(h, "ID3DXBaseEffect::SetBool"); return result(runtime.setBool(parameter(h), v != 0), true); }
+    HRESULT STDMETHODCALLTYPE SetBool(D3DXHANDLE h, BOOL v) override { if (annotationWrite(h, "ID3DXBaseEffect::SetBool")) return D3DERR_INVALIDCALL; return result(runtime.setBool(parameter(h), v != 0), true); }
     HRESULT STDMETHODCALLTYPE GetBool(D3DXHANDLE h, BOOL* out) override {
         if (!out) return D3DERR_INVALIDCALL;
         return read(h, bf2fx::Bool, out, 1, [&](bf2fx::Handle p) { bool b; if (!runtime.getBool(p, b)) return false; *out = b ? TRUE : FALSE; return true; });
     }
     HRESULT STDMETHODCALLTYPE SetBoolArray(D3DXHANDLE h, const BOOL* v, UINT n) override {
-        annotationWrite(h, "ID3DXBaseEffect::SetBoolArray"); return result(runtime.setBoolArray(parameter(h), v, n), true);
+        if (annotationWrite(h, "ID3DXBaseEffect::SetBoolArray")) return D3DERR_INVALIDCALL; return result(runtime.setBoolArray(parameter(h), v, n), true);
     }
     HRESULT STDMETHODCALLTYPE GetBoolArray(D3DXHANDLE h, BOOL* out, UINT n) override {
         return read(h, bf2fx::Bool, out, n, [&](bf2fx::Handle p) { return runtime.getBoolArray(p, out, n); });
     }
-    HRESULT STDMETHODCALLTYPE SetInt(D3DXHANDLE h, INT v) override { annotationWrite(h, "ID3DXBaseEffect::SetInt"); return result(runtime.setInt(parameter(h), v), true); }
+    HRESULT STDMETHODCALLTYPE SetInt(D3DXHANDLE h, INT v) override { if (annotationWrite(h, "ID3DXBaseEffect::SetInt")) return D3DERR_INVALIDCALL; return result(runtime.setInt(parameter(h), v), true); }
     HRESULT STDMETHODCALLTYPE GetInt(D3DXHANDLE h, INT* out) override {
         if (!out) return D3DERR_INVALIDCALL;
         return read(h, bf2fx::Int, out, 1, [&](bf2fx::Handle p) { std::int32_t i; if (!runtime.getInt(p, i)) return false; *out = i; return true; });
     }
     HRESULT STDMETHODCALLTYPE SetIntArray(D3DXHANDLE h, const INT* v, UINT n) override {
-        annotationWrite(h, "ID3DXBaseEffect::SetIntArray"); return result(runtime.setIntArray(parameter(h), v, n), true);
+        if (annotationWrite(h, "ID3DXBaseEffect::SetIntArray")) return D3DERR_INVALIDCALL; return result(runtime.setIntArray(parameter(h), v, n), true);
     }
     HRESULT STDMETHODCALLTYPE GetIntArray(D3DXHANDLE h, INT* out, UINT n) override {
         return read(h, bf2fx::Int, out, n, [&](bf2fx::Handle p) { return runtime.getIntArray(p, out, n); });
     }
-    HRESULT STDMETHODCALLTYPE SetFloat(D3DXHANDLE h, FLOAT v) override { annotationWrite(h, "ID3DXBaseEffect::SetFloat"); return result(runtime.setFloat(parameter(h), v), true); }
+    HRESULT STDMETHODCALLTYPE SetFloat(D3DXHANDLE h, FLOAT v) override { if (annotationWrite(h, "ID3DXBaseEffect::SetFloat")) return D3DERR_INVALIDCALL; return result(runtime.setFloat(parameter(h), v), true); }
     HRESULT STDMETHODCALLTYPE GetFloat(D3DXHANDLE h, FLOAT* out) override {
         if (!out) return D3DERR_INVALIDCALL;
         return read(h, bf2fx::Float, out, 1, [&](bf2fx::Handle p) { return runtime.getFloat(p, *out); });
     }
     HRESULT STDMETHODCALLTYPE SetFloatArray(D3DXHANDLE h, const FLOAT* v, UINT n) override {
-        annotationWrite(h, "ID3DXBaseEffect::SetFloatArray"); return result(runtime.setFloatArray(parameter(h), v, n), true);
+        if (annotationWrite(h, "ID3DXBaseEffect::SetFloatArray")) return D3DERR_INVALIDCALL; return result(runtime.setFloatArray(parameter(h), v, n), true);
     }
     HRESULT STDMETHODCALLTYPE GetFloatArray(D3DXHANDLE h, FLOAT* out, UINT n) override {
         return read(h, bf2fx::Float, out, n, [&](bf2fx::Handle p) { return runtime.getFloatArray(p, out, n); });
     }
     HRESULT STDMETHODCALLTYPE SetVector(D3DXHANDLE h, const D3DXVECTOR4* v) override {
-        annotationWrite(h, "ID3DXBaseEffect::SetVector");
-        if (!v) return D3DERR_INVALIDCALL;
+        if (annotationWrite(h, "ID3DXBaseEffect::SetVector") || !v) return D3DERR_INVALIDCALL;
         return result(runtime.setVector(parameter(h), {v->x, v->y, v->z, v->w}), true);
     }
     HRESULT STDMETHODCALLTYPE GetVector(D3DXHANDLE h, D3DXVECTOR4* out) override {
@@ -717,19 +784,19 @@ public:
         *out = {f[0], f[1], f[2], f[3]}; return D3D_OK;
     }
     HRESULT STDMETHODCALLTYPE SetVectorArray(D3DXHANDLE h, const D3DXVECTOR4* v, UINT n) override {
-        annotationWrite(h, "ID3DXBaseEffect::SetVectorArray");
+        if (annotationWrite(h, "ID3DXBaseEffect::SetVectorArray")) return D3DERR_INVALIDCALL;
         return result(runtime.setVectorArray(parameter(h), v ? &v->x : nullptr, n), true);
     }
     HRESULT STDMETHODCALLTYPE GetVectorArray(D3DXHANDLE h, D3DXVECTOR4* out, UINT n) override {
-        if (annotation(h)) stop("ID3DXBaseEffect::GetVectorArray", "annotation");
+        if (const auto* v = annotation(h)) return readAnnotationArray(*v, out ? &out->x : nullptr, n, 4, false, false) ? D3D_OK : D3DERR_INVALIDCALL;
         return result(runtime.getVectorArray(parameter(h), out ? &out->x : nullptr, n), false);
     }
     HRESULT matrices(D3DXHANDLE h, const D3DXMATRIX* m, UINT n, bool transpose, const char* method) {
-        annotationWrite(h, method);
+        if (annotationWrite(h, method)) return D3DERR_INVALIDCALL;
         return result(runtime.setMatrixArray(parameter(h), m ? &m->_11 : nullptr, n, transpose), true);
     }
-    HRESULT getMatrices(D3DXHANDLE h, D3DXMATRIX* m, UINT n, bool transpose, const char* method) {
-        if (annotation(h)) stop(method, "annotation");
+    HRESULT getMatrices(D3DXHANDLE h, D3DXMATRIX* m, UINT n, bool transpose, const char*) {
+        if (const auto* v = annotation(h)) return readAnnotationArray(*v, m ? &m->_11 : nullptr, n, 16, true, transpose) ? D3D_OK : D3DERR_INVALIDCALL;
         return result(runtime.getMatrixArray(parameter(h), m ? &m->_11 : nullptr, n, transpose), false);
     }
     HRESULT pointerMatrices(D3DXHANDLE h, const D3DXMATRIX** m, UINT n, bool transpose, const char* method) {
@@ -757,7 +824,8 @@ public:
     HRESULT STDMETHODCALLTYPE GetMatrixTransposeArray(D3DXHANDLE h, D3DXMATRIX* m, UINT n) override { return getMatrices(h, m, n, true, "ID3DXBaseEffect::GetMatrixTransposeArray"); }
     HRESULT STDMETHODCALLTYPE SetMatrixTransposePointerArray(D3DXHANDLE h, const D3DXMATRIX** m, UINT n) override { return pointerMatrices(h, m, n, true, "ID3DXBaseEffect::SetMatrixTransposePointerArray"); }
     HRESULT STDMETHODCALLTYPE GetMatrixTransposePointerArray(D3DXHANDLE h, D3DXMATRIX** m, UINT n) override { return getPointerMatrices(h, m, n, true, "ID3DXBaseEffect::GetMatrixTransposePointerArray"); }
-    HRESULT STDMETHODCALLTYPE SetString(D3DXHANDLE, LPCSTR) override { stop("ID3DXBaseEffect::SetString"); }
+    // [CHOSEN, not recovered] String parameters are immutable FX2 objects here (no BF2 caller, E5).
+    HRESULT STDMETHODCALLTYPE SetString(D3DXHANDLE, LPCSTR) override { return refuse("ID3DXBaseEffect::SetString"); }
     HRESULT STDMETHODCALLTYPE GetString(D3DXHANDLE h, LPCSTR* out) override {
         if (!out) return D3DERR_INVALIDCALL;
         // A string-array element (parameter or annotation) names its FX2 string object.
@@ -779,7 +847,7 @@ public:
         *out = v->text.c_str(); return D3D_OK;
     }
     HRESULT STDMETHODCALLTYPE SetTexture(D3DXHANDLE h, IDirect3DBaseTexture9* t) override {
-        annotationWrite(h, "ID3DXBaseEffect::SetTexture");
+        if (annotationWrite(h, "ID3DXBaseEffect::SetTexture")) return D3DERR_INVALIDCALL;
         std::shared_ptr<void> owner;
         if (t) { t->AddRef(); owner = std::shared_ptr<void>(t, [](void* p) { static_cast<IDirect3DBaseTexture9*>(p)->Release(); }); }
         return result(runtime.setTexture(parameter(h), std::move(owner)), true);
@@ -790,8 +858,14 @@ public:
         if (!runtime.getTexture(parameter(h), owner)) return D3DERR_INVALIDCALL;
         *out = static_cast<IDirect3DBaseTexture9*>(owner.get()); if (*out) (*out)->AddRef(); return D3D_OK;
     }
-    HRESULT STDMETHODCALLTYPE GetPixelShader(D3DXHANDLE, IDirect3DPixelShader9**) override { stop("ID3DXBaseEffect::GetPixelShader"); }
-    HRESULT STDMETHODCALLTYPE GetVertexShader(D3DXHANDLE, IDirect3DVertexShader9**) override { stop("ID3DXBaseEffect::GetVertexShader"); }
+    // [CHOSEN, not recovered] Shader-typed parameters are not exposed as device shaders (no BF2
+    // caller, E5): the call is refused and the out pointer cleared.
+    HRESULT STDMETHODCALLTYPE GetPixelShader(D3DXHANDLE, IDirect3DPixelShader9** out) override {
+        if (out) *out = nullptr; return refuse("ID3DXBaseEffect::GetPixelShader");
+    }
+    HRESULT STDMETHODCALLTYPE GetVertexShader(D3DXHANDLE, IDirect3DVertexShader9** out) override {
+        if (out) *out = nullptr; return refuse("ID3DXBaseEffect::GetVertexShader");
+    }
     HRESULT STDMETHODCALLTYPE SetArrayRange(D3DXHANDLE h, UINT start, UINT end) override {
         // [CHOSEN, not recovered] D3DX uses the range to limit constant uploads. Every element is
         // uploaded here; a shader cannot read an element it did not declare. Validation only.
@@ -877,6 +951,10 @@ public:
         }
     };
     std::unique_ptr<SavedState> recording, saved;
+    // [CHOSEN, not recovered] A native build that failed for a request D3DX accepts (a toolchain
+    // fault, E17) leaves the effect without shaders: its techniques fail validation and BeginPass
+    // answers D3DERR_INVALIDCALL, so the engine draws nothing with it instead of the run ending.
+    bool broken = false;
     ID3DXEffectPool* poolObject = nullptr; // the pool passed to D3DXCreateEffect, referenced
     Effect(IDirect3DDevice9* d, bf2fx::Entry& entry, DWORD f, Deferred pending = {})
         : EffectBase(entry, f), device(d), deferred(std::move(pending)) {
@@ -891,13 +969,15 @@ public:
         if (!deferred) return;
         bf2fx::Entry full = bf2fx::native::wait(deferred.key, deferred.future);
         deferred = {};
-        if (full.kind != bf2fx::EffectEntry)
-            stop("D3DXCreateEffect", "native build failed for a request D3DX accepts: " + full.log);
-        if (full.description.shaders.size() != runtime.description().shaders.size())
-            stop("D3DXCreateEffect", "native build and its skeleton differ in shader objects");
+        if (full.kind != bf2fx::EffectEntry) {
+            broken = true; refuse("D3DXCreateEffect", "native build failed for a request D3DX accepts: " + full.log); return;
+        }
+        if (full.description.shaders.size() != runtime.description().shaders.size()) {
+            broken = true; refuse("D3DXCreateEffect", "native build and its skeleton differ in shader objects"); return;
+        }
         runtime.setShaders(full.description.shaders);
         shaderOwner = std::make_shared<const bf2fx::Description>(std::move(full.description));
-        if (FAILED(createShaders())) stop("D3DXCreateEffect", "device shader creation failed for a native build");
+        if (FAILED(createShaders())) { broken = true; refuse("D3DXCreateEffect", "device shader creation failed for a native build"); }
     }
     ~Effect() override {
         saved.reset();
@@ -918,7 +998,11 @@ public:
                 IDirect3DVertexShader9* vs = nullptr; hr = device->CreateVertexShader(code, &vs); shaders[s.object] = vs;
             } else if (s.stage == bf2fx::PixelShader) {
                 IDirect3DPixelShader9* ps = nullptr; hr = device->CreatePixelShader(code, &ps); shaders[s.object] = ps;
-            } else stop("D3DXCreateEffect", "shader object of unknown stage");
+            } else {
+                // [CHOSEN, not recovered] FX2 has only vertex and pixel shader objects; another
+                // stage is malformed data and fails creation as D3DX does for a bad effect.
+                hr = refuse("D3DXCreateEffect", "shader object of unknown stage", E_FAIL);
+            }
             if (FAILED(hr)) return hr;
         }
         return D3D_OK;
@@ -958,14 +1042,16 @@ public:
     }
     IDirect3DBaseTexture9* textureOf(const bf2fx::Value& v) {
         // A texture state names its parameter by reference or by FX2 object index.
+        // [CHOSEN, not recovered] A reference that names no texture parameter (no shipped pass
+        // has one, E16) binds no texture.
         std::string name = v.type.name;
-        if (v.type.type < bf2fx::Texture || v.type.type >= bf2fx::Sampler) stop("ID3DXEffect::BeginPass", "Texture state without a texture value");
+        if (v.type.type < bf2fx::Texture || v.type.type >= bf2fx::Sampler) { refuse("ID3DXEffect::BeginPass", "Texture state without a texture value (none bound)"); return nullptr; }
         bf2fx::Handle h = runtime.getParameterByName(name);
         if (!h && !v.words.empty() && v.words[0] < runtime.description().objects.size())
             h = runtime.getParameterByName(runtime.description().objects[v.words[0]]);
-        if (!h) { if (!v.words.empty() && v.words[0]) stop("ID3DXEffect::BeginPass", "unknown texture object"); return nullptr; }
+        if (!h) { if (!v.words.empty() && v.words[0]) refuse("ID3DXEffect::BeginPass", "unknown texture object (none bound)"); return nullptr; }
         std::shared_ptr<void> owner;
-        if (!runtime.getTexture(h, owner)) stop("ID3DXEffect::BeginPass", "texture reference of wrong type");
+        if (!runtime.getTexture(h, owner)) { refuse("ID3DXEffect::BeginPass", "texture reference of wrong type (none bound)"); return nullptr; }
         return static_cast<IDirect3DBaseTexture9*>(owner.get());
     }
     void applyState(std::uint32_t id, std::uint32_t index, const bf2fx::Value& v) {
@@ -986,11 +1072,13 @@ public:
             const bool padded = kind != 1 && kind < 4 && !v.words.empty() && v.words.size() < 4;
             const bool partial = kind != 1 && kind < 4 && v.words.size() > 4 && v.words.size() % 4;
             if ((v.words.size() < rows * 4 && !padded) || partial) {
+                // [CHOSEN, not recovered] Any other partial register (no shipped pass has one,
+                // E16) is zero-padded like the scalar case above.
                 char shape[160];
-                std::snprintf(shape, sizeof(shape), "shader-constant state shape (state %u[%u], %zu words, type %u rows %u cols %u elements %u)",
+                std::snprintf(shape, sizeof(shape), "shader-constant state shape, zero-padded (state %u[%u], %zu words, type %u rows %u cols %u elements %u)",
                               id, index, v.words.size(), unsigned(v.type.type), unsigned(v.type.rows), unsigned(v.type.columns),
                               unsigned(v.type.elements));
-                stop("ID3DXEffect::BeginPass", shape);
+                refuse("ID3DXEffect::BeginPass", shape);
             }
             if (kind == 0 || kind >= 3) {
                 std::vector<float> f(rows * 4, 0.0f);
@@ -1009,16 +1097,21 @@ public:
         }
         if (id == 164) { texture(index, textureOf(v)); return; }
         if (id >= 165 && id <= 177) { const unsigned s = id - 164; samplerState(index, s, stateWord(v, s == 8)); return; }
+        // [CHOSEN, not recovered] Transform, material, light, NPatch and FVF pass states drive
+        // fixed-function vertex processing, which no shipped effect uses (E16: no pass sets
+        // one). The state is ignored.
         char name[64]; std::snprintf(name, sizeof(name), "FX2 state %u[%u]", id, index);
-        stop("ID3DXEffect::BeginPass", std::string(name) + " (transform/material/light/NPatch/FVF)");
+        refuse("ID3DXEffect::BeginPass", std::string(name) + " (transform/material/light/NPatch/FVF) ignored");
     }
     void applyShader(std::uint32_t stage, const bf2fx::Shader* s) {
         if (recording) { (stage == bf2fx::VertexShader ? recording->vertexShader : recording->pixelShader) = true; return; }
         IUnknown* object = nullptr;
         if (s) {
             auto it = shaders.find(s->object);
-            if (it == shaders.end()) stop("ID3DXEffect::BeginPass", "shader object was not created");
-            object = it->second;
+            // [CHOSEN, not recovered] Unreachable: createShaders makes every object a pass can
+            // name, else creation fails. Binds no shader.
+            if (it == shaders.end()) refuse("ID3DXEffect::BeginPass", "shader object was not created (none bound)");
+            else object = it->second;
         }
         if (stage == bf2fx::VertexShader) {
             auto* vs = static_cast<IDirect3DVertexShader9*>(object);
@@ -1072,18 +1165,19 @@ public:
         for (std::size_t i = 0; i < s.stateIds.size(); ++i) {
             const auto id = s.stateIds[i];
             if (id == 4) continue;
-            if (id < 5 || id > 17) stop("ID3DXEffect::BeginPass", "unknown sampler state " + std::to_string(id));
+            // [CHOSEN, not recovered] FX2 sampler states are 4..17; another id is ignored.
+            if (id < 5 || id > 17) { refuse("ID3DXEffect::BeginPass", "unknown sampler state ignored " + std::to_string(id)); continue; }
             if (commit && !(original && i < original->states.size() && !original->states[i].expression.empty())) continue;
             samplerState(index, id - 4, stateWord(s.states[i], id - 4 == 8));
         }
     }
     bool validTechnique(int t) {
         Validator v;
-        return t >= 0 && runtime.findNextValidTechnique(t - 1, v) == t;
+        return t >= 0 && !broken && runtime.findNextValidTechnique(t - 1, v) == t;
     }
     HRESULT apply(bool commit) {
         pullShared();
-        if (current < 0 || active < 0) return D3DERR_INVALIDCALL;
+        if (current < 0 || active < 0 || broken) return D3DERR_INVALIDCALL;
         Applier a(*this, runtime.description().techniques[std::size_t(current)].passes[std::size_t(active)], commit);
         if (!runtime.applyPass(std::uint32_t(current), std::uint32_t(active), a)) return D3DERR_INVALIDCALL;
         applied = generation;
@@ -1092,10 +1186,10 @@ public:
 
     HRESULT STDMETHODCALLTYPE GetPool(ID3DXEffectPool** out) override {
         if (!out) return D3DERR_INVALIDCALL;
-        // [CHOSEN, not recovered] D3DX's answer for an effect created without a pool is not
-        // reproduced; no BF2 code calls GetPool.
-        if (!poolObject) stop("ID3DXEffect::GetPool", "effect created without a pool");
-        *out = poolObject; poolObject->AddRef(); return D3D_OK;
+        // D3DX semantics: an effect created without a pool answers S_OK and a null pool.
+        *out = poolObject;
+        if (poolObject) poolObject->AddRef();
+        return D3D_OK;
     }
     HRESULT STDMETHODCALLTYPE SetTechnique(D3DXHANDLE h) override {
         const int t = technique(h); if (t < 0) return D3DERR_INVALIDCALL; current = t; return D3D_OK;
@@ -1110,7 +1204,7 @@ public:
         const int from = previous ? technique(previous) : -1;
         if (previous && from < 0) return D3DERR_INVALIDCALL;
         Validator v;
-        const int t = runtime.findNextValidTechnique(from, v);
+        const int t = broken ? -1 : runtime.findNextValidTechnique(from, v);
         *next = t < 0 ? nullptr : handle(techniqueBase[std::size_t(t)]);
         return t < 0 ? S_FALSE : D3D_OK;
     }
@@ -1168,9 +1262,12 @@ public:
         return out;
     }
     // Records the state every pass of the current technique sets, then reads its current value
-    // from the device. A state the device holds no value for stops: inventing a default would
-    // restore a value the device never had.
-    void save() {
+    // from the device. D3DXFX_DONOTSAVESHADERSTATE leaves the shaders and shader constants out,
+    // D3DXFX_DONOTSAVESAMPLERSTATE the sampler states (D3DX semantics).
+    // [CHOSEN, not recovered] A state the device holds no value for is left out of the saved set
+    // (not restored) rather than restoring an invented default; every state a shipped pass sets
+    // is in the device's state cache (`Effect::save`).
+    void save(DWORD f) {
         ensureShaders(); // Shader constant tables come from the shader records.
         recording.reset(new SavedState);
         const auto& technique = runtime.description().techniques[std::size_t(current)];
@@ -1179,37 +1276,42 @@ public:
             runtime.applyPass(std::uint32_t(current), p, recorder); // A failing pass also fails its BeginPass.
         }
         saved = std::move(recording);
-        auto missing = [](const std::string& what) {
-            stop("ID3DXEffect::Begin", "state saving: the device holds no value for " + what);
-        };
         SavedState& s = *saved;
-        for (auto& r : s.render)
-            if (FAILED(device->GetRenderState(D3DRENDERSTATETYPE(r.first), &r.second))) missing("render state " + std::to_string(r.first));
-        for (auto& r : s.stage)
-            if (FAILED(device->GetTextureStageState(r.first.first, D3DTEXTURESTAGESTATETYPE(r.first.second), &r.second)))
-                missing("texture stage state " + std::to_string(r.first.second) + " of stage " + std::to_string(r.first.first));
-        for (auto& r : s.sampler)
-            if (FAILED(device->GetSamplerState(r.first.first, D3DSAMPLERSTATETYPE(r.first.second), &r.second)))
-                missing("sampler state " + std::to_string(r.first.second) + " of sampler " + std::to_string(r.first.first));
-        for (auto& t : s.textures)
-            if (FAILED(device->GetTexture(t.first, &t.second))) missing("the texture of sampler " + std::to_string(t.first));
-        if (s.vertexShader && FAILED(device->GetVertexShader(&s.vs))) missing("the vertex shader");
-        if (s.pixelShader && FAILED(device->GetPixelShader(&s.ps))) missing("the pixel shader");
-        for (auto& c : s.floats)
-            if (FAILED(c.first.first ? device->GetVertexShaderConstantF(c.first.second, c.second.data(), 1)
-                                     : device->GetPixelShaderConstantF(c.first.second, c.second.data(), 1)))
-                missing("float shader constant " + std::to_string(c.first.second));
-        for (auto& c : s.ints)
-            if (FAILED(c.first.first ? device->GetVertexShaderConstantI(c.first.second, c.second.data(), 1)
-                                     : device->GetPixelShaderConstantI(c.first.second, c.second.data(), 1)))
-                missing("integer shader constant " + std::to_string(c.first.second));
-        for (auto& c : s.bools)
-            if (FAILED(c.first.first ? device->GetVertexShaderConstantB(c.first.second, &c.second, 1)
-                                     : device->GetPixelShaderConstantB(c.first.second, &c.second, 1)))
-                missing("boolean shader constant " + std::to_string(c.first.second));
+        if (f & D3DXFX_DONOTSAVESHADERSTATE) {
+            s.vertexShader = s.pixelShader = false;
+            s.floats.clear(); s.ints.clear(); s.bools.clear();
+        }
+        if (f & D3DXFX_DONOTSAVESAMPLERSTATE) s.sampler.clear();
+        auto missing = [](const std::string& what) {
+            refuse("ID3DXEffect::Begin", "state saving: the device holds no value for " + what + " (not restored)");
+        };
+        auto keep = [&](auto& map, auto get, auto name) {
+            for (auto it = map.begin(); it != map.end();) {
+                if (FAILED(get(*it))) { missing(name(*it)); it = map.erase(it); } else ++it;
+            }
+        };
+        keep(s.render, [&](auto& r) { return device->GetRenderState(D3DRENDERSTATETYPE(r.first), &r.second); },
+             [](auto& r) { return "render state " + std::to_string(r.first); });
+        keep(s.stage, [&](auto& r) { return device->GetTextureStageState(r.first.first, D3DTEXTURESTAGESTATETYPE(r.first.second), &r.second); },
+             [](auto& r) { return "texture stage state " + std::to_string(r.first.second) + " of stage " + std::to_string(r.first.first); });
+        keep(s.sampler, [&](auto& r) { return device->GetSamplerState(r.first.first, D3DSAMPLERSTATETYPE(r.first.second), &r.second); },
+             [](auto& r) { return "sampler state " + std::to_string(r.first.second) + " of sampler " + std::to_string(r.first.first); });
+        keep(s.textures, [&](auto& t) { t.second = nullptr; return device->GetTexture(t.first, &t.second); },
+             [](auto& t) { return "the texture of sampler " + std::to_string(t.first); });
+        if (s.vertexShader && FAILED(device->GetVertexShader(&s.vs))) { missing("the vertex shader"); s.vertexShader = false; s.vs = nullptr; }
+        if (s.pixelShader && FAILED(device->GetPixelShader(&s.ps))) { missing("the pixel shader"); s.pixelShader = false; s.ps = nullptr; }
+        keep(s.floats, [&](auto& c) { return c.first.first ? device->GetVertexShaderConstantF(c.first.second, c.second.data(), 1)
+                                                          : device->GetPixelShaderConstantF(c.first.second, c.second.data(), 1); },
+             [](auto& c) { return "float shader constant " + std::to_string(c.first.second); });
+        keep(s.ints, [&](auto& c) { return c.first.first ? device->GetVertexShaderConstantI(c.first.second, c.second.data(), 1)
+                                                        : device->GetPixelShaderConstantI(c.first.second, c.second.data(), 1); },
+             [](auto& c) { return "integer shader constant " + std::to_string(c.first.second); });
+        keep(s.bools, [&](auto& c) { return c.first.first ? device->GetVertexShaderConstantB(c.first.second, &c.second, 1)
+                                                         : device->GetPixelShaderConstantB(c.first.second, &c.second, 1); },
+             [](auto& c) { return "boolean shader constant " + std::to_string(c.first.second); });
     }
-    // Reapplies the state Begin saved, directly on the device (no state manager is installed:
-    // Begin refuses to save under one).
+    // Reapplies the state Begin saved, directly on the device, as D3DX's state block does (also
+    // when a state manager is installed: the saved values were read from the device).
     void restore() {
         std::unique_ptr<SavedState> s = std::move(saved);
         for (const auto& r : s->render) device->SetRenderState(D3DRENDERSTATETYPE(r.first), r.second);
@@ -1235,11 +1337,8 @@ public:
             // End restores it. BF2 passes 0 only from RendDX9 Effect::begin while
             // shadermanager.byPassDiceStates is set; those effects carry no state manager. Every
             // other Begin in RendDX9.dll passes 7. Partial saving and saving under a state manager
-            // have no call site.
-            if (f & (D3DXFX_DONOTSAVESHADERSTATE | D3DXFX_DONOTSAVESAMPLERSTATE))
-                stop("ID3DXEffect::Begin", "partial state saving (D3DXFX_DONOTSAVESHADERSTATE or D3DXFX_DONOTSAVESAMPLERSTATE alone)");
-            if (manager) stop("ID3DXEffect::Begin", "state saving with a state manager installed");
-            save();
+            // have no call site; they follow the same D3DX rules (save()).
+            save(f);
         }
         begun = true; active = -1;
         if (passes) *passes = UINT(runtime.description().techniques[std::size_t(current)].passes.size());
@@ -1307,15 +1406,22 @@ public:
     std::uint32_t kind, compileResult; std::string log;
     Compiler(bf2fx::Entry& entry, DWORD f)
         : EffectBase(entry, f), kind(entry.kind), compileResult(entry.compileResult), log(entry.log) {}
-    HRESULT STDMETHODCALLTYPE SetLiteral(D3DXHANDLE, BOOL) override { stop("ID3DXEffectCompiler::SetLiteral"); }
-    HRESULT STDMETHODCALLTYPE GetLiteral(D3DXHANDLE, BOOL*) override { stop("ID3DXEffectCompiler::GetLiteral"); }
+    // [CHOSEN, not recovered] Literal parameters are not modelled: the native request already
+    // fixed the compiled values. No BF2 code calls either method (the retail compiler sites use
+    // only CompileEffect).
+    HRESULT STDMETHODCALLTYPE SetLiteral(D3DXHANDLE, BOOL) override { return refuse("ID3DXEffectCompiler::SetLiteral"); }
+    HRESULT STDMETHODCALLTYPE GetLiteral(D3DXHANDLE, BOOL* out) override {
+        if (out) *out = FALSE; return refuse("ID3DXEffectCompiler::GetLiteral");
+    }
     HRESULT STDMETHODCALLTYPE CompileEffect(DWORD f, ID3DXBuffer** effect, ID3DXBuffer** errors) override {
         if (errors) *errors = nullptr;
         if (!effect) return D3DERR_INVALIDCALL;
         *effect = nullptr;
         // The native compiler uses the creation flags; another flag set is another key.
-        if (f != flags) stop("ID3DXEffectCompiler::CompileEffect", "flags differ from D3DXCreateEffectCompiler");
-        if (generation != 1) stop("ID3DXEffectCompiler::CompileEffect", "parameter values changed before compilation");
+        // [CHOSEN, not recovered] Both cases have no BF2 call (CompileEffect follows creation with
+        // the same flags and no parameter writes): the creation-time result is returned.
+        if (f != flags) refuse("ID3DXEffectCompiler::CompileEffect", "flags differ from D3DXCreateEffectCompiler (creation flags used)");
+        if (generation != 1) refuse("ID3DXEffectCompiler::CompileEffect", "parameter values changed before compilation (initial values used)");
         if (kind != bf2fx::EffectEntry) { // D3DX parsed this source but refused to compile it.
             if (errors && !log.empty()) *errors = textBlob(log);
             return HRESULT(compileResult);
@@ -1335,16 +1441,19 @@ extern "C" HRESULT WINAPI D3DXCreateEffect(IDirect3DDevice9* pDevice, LPCVOID pS
     if (!pDevice || !pSrcData || !SrcDataLen || !ppEffect) return D3DERR_INVALIDCALL;
     *ppEffect = nullptr;
     auto* pool = pPool ? dynamic_cast<Pool*>(pPool) : nullptr;
-    if (pPool && !pool) stop("D3DXCreateEffect", "a pool D3DXCreateEffectPool did not create");
+    if (pPool && !pool) return refuse("D3DXCreateEffect", "a pool D3DXCreateEffectPool did not create");
     bf2fx::Entry entry;
     Deferred deferred;
     const HRESULT hr = loadEntry("D3DXCreateEffect", pSrcData, SrcDataLen, pDefines, pInclude, Flags, entry, ppCompilationErrors, deferred);
     if (FAILED(hr)) return hr;
     auto* effect = new (std::nothrow) Effect(pDevice, entry, Flags, deferred);
     if (!effect) return E_OUTOFMEMORY;
+    // Effect data the runtime refused at construction (Runtime.h) fails creation like a bad effect.
+    if (!effect->runtime.valid()) { effect->Release(); return E_FAIL; }
     if (pool) {
         effect->poolObject = pool; pool->AddRef();
-        effect->joinPool(pool->store);
+        const HRESULT joined = effect->joinPool(pool->store);
+        if (FAILED(joined)) { effect->Release(); return joined; }
     }
     if (!effect->deferred) {
         const HRESULT created = effect->createShaders();
@@ -1374,6 +1483,7 @@ extern "C" HRESULT WINAPI D3DXCreateEffectCompiler(LPCSTR pSrcData, UINT SrcData
     if (FAILED(hr)) return hr;
     auto* compiler = new (std::nothrow) Compiler(entry, Flags);
     if (!compiler) return E_OUTOFMEMORY;
+    if (!compiler->runtime.valid()) { compiler->Release(); return E_FAIL; }
     *ppCompiler = compiler;
     return D3D_OK;
 }

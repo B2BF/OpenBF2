@@ -1,0 +1,597 @@
+address,symbol,file,status,reason
+0x1006DB40,memory-name registration,Code/BF2/External/base/tu_config.h,chosen,issue-7:named-retail-heap-retired;existing-integrator-routing
+0x1006DB60,tu_malloc wrapper,Code/BF2/External/base/tu_config.h,chosen,issue-7:shared-native-CRT;verified-retail-import
+0x1006DB80,operator new[] wrapper,Code/BF2/External/base/tu_config.h,chosen,issue-7:shared-native-CRT;verified-retail-import
+0x1006DBA0,operator delete wrapper,Code/BF2/External/base/tu_config.h,chosen,issue-7:shared-native-CRT;verified-retail-import
+0x1006DBB0,operator delete[] wrapper,Code/BF2/External/base/tu_config.h,chosen,issue-7:shared-native-CRT;4-fresh-instructions-versus-23-inventory
+0x1006DC10,tu_file::write_bytes,Code/BF2/External/base/tu_file.h,done,verified:callback-arguments;native-calling-convention
+0x1006DC30,tu_file::get_eof,Code/BF2/External/base/tu_file.h,done,verified:callback-arguments
+0x1006DC40,tu_file::get_error,Code/BF2/External/base/tu_file.h,done,verified:error-word
+0x1006DC50,tu_file::read8,Code/BF2/External/base/tu_file.h,done,verified:one-byte-result;callback-count-discarded
+0x1006DC70,tu_file::write8,Code/BF2/External/base/tu_file.h,done,verified:one-byte-callback
+0x1006DC90,imax,Code/BF2/External/base/utility.h,done,verified:signed-comparison
+0x1006DCA0,imin,Code/BF2/External/base/utility.h,done,verified:signed-comparison
+0x1006DCB0,std_read_func,Code/BF2/External/base/tu_file.cpp,done,verified:CRT-operation-and-retail-error-mapping
+0x1006DCD0,std_write_func,Code/BF2/External/base/tu_file.cpp,done,verified:CRT-operation-and-retail-error-mapping
+0x1006DCF0,std_seek_func,Code/BF2/External/base/tu_file.cpp,done,verified:CRT-operation-and-retail-error-mapping
+0x1006DD20,std_seek_to_end_func,Code/BF2/External/base/tu_file.cpp,done,verified:CRT-operation-and-retail-error-mapping
+0x1006DD40,std_tell_func,Code/BF2/External/base/tu_file.cpp,done,verified:CRT-operation-and-retail-error-mapping
+0x1006DD50,std_get_eof_func,Code/BF2/External/base/tu_file.cpp,done,verified:CRT-operation-and-retail-error-mapping
+0x1006DD60,std_close_func,Code/BF2/External/base/tu_file.cpp,done,verified:CRT-operation-and-retail-error-mapping
+0x1006DD80,filebuf::filebuf(),Code/BF2/External/base/tu_file.cpp,done,recovered:private-memory-record-and-retail-operation;issue-7-allocation-hook
+0x1006DDB0,filebuf::~filebuf,Code/BF2/External/base/tu_file.cpp,done,recovered:private-memory-record-and-retail-operation;issue-7-allocation-hook
+0x1006DDD0,filebuf::resize,Code/BF2/External/base/tu_file.cpp,done,recovered:private-memory-record-and-retail-operation;issue-7-allocation-hook
+0x1006DE20,filebuf::get_cursor,Code/BF2/External/base/tu_file.cpp,done,recovered:private-memory-record-and-retail-operation;issue-7-allocation-hook
+0x1006DE30,mem_read_func,Code/BF2/External/base/tu_file.cpp,done,verified:callback-control-and-error-order;private-memory-record
+0x1006DE80,mem_write_func,Code/BF2/External/base/tu_file.cpp,done,recovered:private-memory-record-and-retail-operation;issue-7-allocation-hook
+0x1006DEE0,mem_seek_func,Code/BF2/External/base/tu_file.cpp,done,verified:callback-control-and-error-order;private-memory-record
+0x1006DF10,mem_seek_to_end_func,Code/BF2/External/base/tu_file.cpp,done,verified:callback-control-and-error-order;private-memory-record
+0x1006DF20,mem_tell_func,Code/BF2/External/base/tu_file.cpp,done,verified:callback-control-and-error-order;private-memory-record
+0x1006DF30,mem_get_eof_func,Code/BF2/External/base/tu_file.cpp,done,verified:callback-control-and-error-order;private-memory-record
+0x1006DF40,filebuf deleting destructor,Code/BF2/External/base/tu_file.cpp,done,verified:callback-control-and-error-order;private-memory-record
+0x1006DF80,tu_file::tu_file(callbacks),Code/BF2/External/base/tu_file.cpp,done,verified:callback-control-and-error-order;private-memory-record
+0x1006DFC0,tu_file::tu_file(FILE*;bool),Code/BF2/External/base/tu_file.cpp,done,verified:callback-control-and-error-order;private-memory-record
+0x1006E010,tu_file::tu_file(filename;mode),Code/BF2/External/base/tu_file.cpp,done,verified:callback-control-and-error-order;private-memory-record
+0x1006E090,tu_file::close,Code/BF2/External/base/tu_file.cpp,done,verified:callback-control-and-error-order;private-memory-record
+0x1006E0C0,tu_file::copy_from,Code/BF2/External/base/tu_file.cpp,done,verified:callback-control-and-error-order;private-memory-record
+0x1006E110,tu_file::copy_bytes,Code/BF2/External/base/tu_file.cpp,done,verified:callback-control-and-error-order;private-memory-record
+0x1006E190,tu_file::write_string,Code/BF2/External/base/tu_file.cpp,done,recovered:private-memory-record-and-retail-operation;issue-7-allocation-hook
+0x1006E1D0,tu_file::read_string,Code/BF2/External/base/tu_file.cpp,done,verified:callback-control-and-error-order;private-memory-record
+0x1006E280,mem_close_func,Code/BF2/External/base/tu_file.cpp,done,recovered:null-delete-and-private-record-destruction
+0x1006E2B0,tu_file::tu_file(memory),Code/BF2/External/base/tu_file.cpp,done,recovered:construct-private-memory-record
+0x1006E310,tu_file::tu_file(memory-view),Code/BF2/External/base/tu_file.cpp,done,recovered:borrow-memory-and-refuse-growth
+0x1006E380,tu_file::~tu_file,Code/BF2/External/base/tu_file.cpp,done,verified:close-and-partial-callback-reset
+0x1006E3B0,tu_string::resize,Code/BF2/External/base/container.cpp,done,recovered:raw-capacity;unchecked-length;local-heap-transitions
+0x1006E480,tu_string::stricmp,Code/BF2/External/base/container.cpp,done,verified:CRT-compare;existing-POSIX-spelling-seam
+0x1006E490,tu_string::utf8_char_count,Code/BF2/External/base/container.cpp,done,verified:byte-limit-and-terminal-decode
+0x1006E4D0,tu_string::utf8_char_at,Code/BF2/External/base/container.cpp,done,recovered:decode-once;repeat-while-positive-decrement
+0x1006E510,tu_string::tu_string(bytes;length),Code/BF2/External/base/container.h,done,verified:resize-copy-terminate
+0x1006E580,tu_string::operator[],Code/BF2/External/base/container.h,done,verified:local-or-heap-reference
+0x1006E5A0,tu_string::encode_utf8_from_wchar(uint16),Code/BF2/External/base/container.cpp,done,recovered:two-pass-unit-encoding;constructor-uses-helper
+0x1006E620,tu_string::utf8_substring,Code/BF2/External/base/container.cpp,done,verified:decode-boundaries-and-terminal-clamp
+0x1006E6A0,utf8::decode_next_unicode_character,Code/BF2/External/base/utf8.cpp,done,verified:1-through-6-byte-decoding;invalid-and-truncated-pointer-effects
+0x1006E980,utf8::encode_unicode_character,Code/BF2/External/base/utf8.cpp,done,verified:1-through-6-byte-encoding;above-7fffffff-no-write
+0x1006EA70,tu_file::get_position,Code/BF2/External/base/tu_file.h,done,verified:tell-callback
+0x1006EA80,tu_file::read32,Code/BF2/External/base/tu_file.h,done,verified:four-byte-callback-and-return
+0x1006EAA0,tu_file::read_float32,Code/BF2/External/base/tu_file.h,done,verified:four-byte-callback-and-bit-pattern-return
+0x1006EAC0,tu_util::fmax,Code/BF2/External/base/utility.h,done,verified:unordered-and-equal-first-operand
+0x1006EAE0,tu_util::fmin,Code/BF2/External/base/utility.h,done,verified:unordered-and-equal-second-operand
+0x1006EB00,fclamp,Code/BF2/External/base/utility.h,done,verified:min-then-max-operand-order
+0x1006EB30,sdbm_hash,Code/BF2/External/base/utility.h,done,verified:reverse-byte-sdbm;S1-bernstein-attribution-corrected
+0x1006EBC0,tu_string::resize forwarding veneer,Code/BF2/External/base/container.cpp,done,verified:tail-jump-to-1006E3B0
+0x1006EC50,weak_proxy::weak_proxy,Code/BF2/External/base/smart_ptr.h,done,verified:reference-count-and-alive-state
+0x1006EC60,weak_proxy::notify_object_died,Code/BF2/External/base/smart_ptr.h,done,verified:reference-count-and-alive-state
+0x1006EC70,weak_proxy::add_ref,Code/BF2/External/base/smart_ptr.h,done,verified:reference-count-and-alive-state
+0x1006EC80,weak_proxy::drop_ref,Code/BF2/External/base/smart_ptr.h,done,verified:reference-count-and-alive-state
+0x1006FC50,smart_ptr<T>::smart_ptr,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1006FC80,smart_ptr<T>::~smart_ptr,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1006FCD0,smart_ptr<T>::smart_ptr,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1006FD00,smart_ptr<T>::~smart_ptr,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1006FD30,smart_ptr<T>::~smart_ptr,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1006FD60,array<T sz=16>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1006FD70,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1006FD80,smart_ptr<T>::smart_ptr,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1006FDC0,smart_ptr<T>::~smart_ptr,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1006FE10,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1006FE20,array<T sz=8>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1006FE30,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1006FF00,smart_ptr<T>::~smart_ptr,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1006FF70,smart_ptr<T>::~smart_ptr,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1006FFA0,smart_ptr<T>::~smart_ptr,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1006FFE0,smart_ptr<T>::~smart_ptr,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10070010,smart_ptr<T>::smart_ptr,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10070040,smart_ptr<T>::~smart_ptr,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100700A0,smart_ptr<T>::~smart_ptr,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10070120,smart_ptr<T>::smart_ptr,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10070160,smart_ptr<T>::~smart_ptr,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100701D0,smart_ptr<T>::smart_ptr,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10070210,smart_ptr<T>::~smart_ptr,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10070280,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10070290,array<T sz=4>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100702A0,array<T sz=4>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100702B0,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100702C0,smart_ptr<T>::smart_ptr,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100702F0,smart_ptr<T>::~smart_ptr,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10070330,array<T sz=48>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;allocate-copy-free-native-hook
+0x100703E0,array<T sz=4>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;allocate-copy-free-native-hook
+0x10070480,array<T sz=4>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;allocate-copy-free-native-hook
+0x100704E0,array<T sz=5>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100704F0,smart_ptr<T>::set_ref,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10070540,array<T sz=16>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10070550,array<T sz=16>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;allocate-copy-free-native-hook
+0x100705B0,hash<K;V>::check_expand,Code/BF2/External/base/container.h,done,recovered:expand-argument-is-twice-entry-count
+0x100706C0,array<T sz=12>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;allocate-copy-free-native-hook
+0x10070730,hash<K;V>::check_expand,Code/BF2/External/base/container.h,done,recovered:expand-argument-is-twice-entry-count
+0x100707D0,hash<K;V>::entry::is_empty,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100707E0,hash<K;V>::entry<storage>::is_empty,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100707F0,smart_ptr<T>::set_ref,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10070880,hash<K;V>::check_expand,Code/BF2/External/base/container.h,done,recovered:expand-argument-is-twice-entry-count
+0x100708F0,hash<K;V>::check_expand,Code/BF2/External/base/container.h,done,recovered:expand-argument-is-twice-entry-count
+0x10070960,array<T sz=4>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10070970,smart_ptr<T>::set_ref,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100709C0,array<T sz=4>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;allocate-copy-free-native-hook
+0x10070A40,hash<K;V>::entry<storage>::is_empty,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10070AD0,hash<K;V>::entry<storage>::is_empty,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10070AE0,hash<K;V>::entry<storage>::is_empty,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10070AF0,hash<K;V>::entry<storage>::is_empty,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10070B00,hash<K;V>::entry<storage>::is_empty,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10070B10,hash<K;V>::entry<storage>::is_empty,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10070B40,hash<K;V>::entry<storage>::is_empty,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10070B50,smart_ptr<T>::scalar_deleting_destructor,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10070B90,smart_ptr<T>::scalar_deleting_destructor,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10070BD0,smart_ptr<T>::scalar_deleting_destructor,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10070C10,smart_ptr<T>::scalar_deleting_destructor,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10070C50,array<T sz=32>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10070C60,hash<K;V>::check_expand,Code/BF2/External/base/container.h,done,recovered:expand-argument-is-twice-entry-count
+0x10070C90,array<T sz=4>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;allocate-copy-free-native-hook
+0x10070D10,hash<K;V>::check_expand,Code/BF2/External/base/container.h,done,recovered:expand-argument-is-twice-entry-count
+0x10070D50,array<T sz=5>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;allocate-copy-free-native-hook
+0x10070DB0,array<T sz=36>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;allocate-copy-free-native-hook
+0x10070E20,array<T sz=4>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;allocate-copy-free-native-hook
+0x10070E80,array<T sz=4>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;allocate-copy-free-native-hook
+0x10070EE0,array<T sz=4>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;allocate-copy-free-native-hook
+0x10070F50,hash<K;V>::const_iterator::is_end,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10070F90,hash<K;V>::check_expand,Code/BF2/External/base/container.h,done,recovered:expand-argument-is-twice-entry-count
+0x10070FC0,array<T sz=4>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;allocate-copy-free-native-hook
+0x10071080,smart_ptr<T>::set_ref,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100710D0,hash<K;V>::const_iterator<storage>::is_end,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10071110,hash<K;V>::entry<storage>::is_empty,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10071120,hash<K;V>::entry<storage>::is_empty,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10071140,hash<K;V>::entry<storage>::is_empty,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10071150,hash<K;V>::entry<storage>::is_empty,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10071180,smart_ptr<T>::scalar_deleting_destructor,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100711C0,smart_ptr<T>::scalar_deleting_destructor,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10071200,smart_ptr<T>::scalar_deleting_destructor,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10071240,smart_ptr<T>::scalar_deleting_destructor,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10071280,smart_ptr<T>::scalar_deleting_destructor,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10071310,array<T sz=4>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;allocate-copy-free-native-hook
+0x10071370,array<T sz=8>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;allocate-copy-free-native-hook
+0x10071C60,array<T sz=4>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10071CD0,array<T sz=4>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10071D40,smart_ptr<T>::set_ref,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10071D90,array<T sz=16>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10071E30,hash<K;V sz=16>::add,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10071FA0,hash<K;V sz=16>::const_iterator::operator++,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10071FF0,smart_ptr<T>::set_ref,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10072090,array<T sz=4>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10072200,hash<K;V sz=28>::find_index,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10072290,array<T sz=4>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10072350,hash<K;V sz=48>::find_index,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100723F0,array<T sz=5>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100724E0,hash<K;V>::~hash,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10072530,hash<K;V sz=16>::find_index,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100725B0,array<T sz=36>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100726A0,array<T sz=4>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10072750,array<T sz=4>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10072800,array<T sz=4>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10072890,hash<K;V>::const_iterator::operator==,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100728F0,hash<K;V sz=60>::find_index,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10072970,hash<K;V sz=16>::find_index,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100729F0,array<T sz=4>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10072B20,hash<K;V>::const_iterator<storage>::operator==,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10072C00,hash<K;V>::entry::clear,Code/BF2/External/base/container.h,done,verified:entry-destruction-order-and-empty-marker
+0x10072C60,array<T>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10072CF0,array<T sz=4>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10072D60,hash<K;V>::entry<storage>::clear,Code/BF2/External/base/container.h,done,verified:entry-destruction-order-and-empty-marker
+0x10072D90,hash<K;V>::entry<storage>::clear,Code/BF2/External/base/container.h,done,verified:entry-destruction-order-and-empty-marker
+0x10072DC0,hash<K;V>::entry::clear,Code/BF2/External/base/container.h,done,verified:entry-destruction-order-and-empty-marker
+0x10072E10,hash<K;V>::entry<storage>::clear,Code/BF2/External/base/container.h,done,verified:entry-destruction-order-and-empty-marker
+0x10072E40,hash<K;V>::entry<storage>::clear,Code/BF2/External/base/container.h,done,verified:entry-destruction-order-and-empty-marker
+0x10072E70,hash<K;V>::entry<storage>::clear,Code/BF2/External/base/container.h,done,verified:entry-destruction-order-and-empty-marker
+0x100741F0,array<T sz=48>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10074430,hash<K;V sz=16>::get,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10074470,hash<K;V>::begin,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100744D0,hash<K;V>::const_iterator::operator!=,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100744F0,hash<K;V>::begin,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10074550,hash<K;V sz=16>::add,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100746A0,hash<K;V>::~hash,Code/BF2/External/base/container.h,done,recovered:destructor-destroys-entries-and-frees-without-reset;S1-clear-label-corrected
+0x10074760,array<T sz=4>::push_back,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100747C0,array<T sz=4>::push_back,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100747F0,hash<K;V>::const_iterator<storage>::operator!=,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10074900,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10074910,hash<K;V>::~hash,Code/BF2/External/base/container.h,done,recovered:destructor-destroys-entries-and-frees-without-reset;S1-clear-label-corrected
+0x100749D0,hash<K;V>::~hash,Code/BF2/External/base/container.h,done,recovered:destructor-destroys-entries-and-frees-without-reset;S1-clear-label-corrected
+0x10074AC0,hash<K;V>::~hash,Code/BF2/External/base/container.h,done,recovered:destructor-destroys-entries-and-frees-without-reset;S1-clear-label-corrected
+0x10074B40,hash<K;V>::~hash,Code/BF2/External/base/container.h,done,recovered:destructor-destroys-entries-and-frees-without-reset;S1-clear-label-corrected
+0x10074BC0,hash<K;V>::~hash,Code/BF2/External/base/container.h,done,recovered:destructor-destroys-entries-and-frees-without-reset;S1-clear-label-corrected
+0x10074C40,hash<K;V>::~hash,Code/BF2/External/base/container.h,done,recovered:destructor-destroys-entries-and-frees-without-reset;S1-clear-label-corrected
+0x10074CC0,hash<K;V>::~hash,Code/BF2/External/base/container.h,done,recovered:destructor-destroys-entries-and-frees-without-reset;S1-clear-label-corrected
+0x10074D30,hash<K;V>::~hash,Code/BF2/External/base/container.h,done,recovered:destructor-destroys-entries-and-frees-without-reset;S1-clear-label-corrected
+0x10074DC0,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10074DD0,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10074DE0,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10074ED0,array<T sz=8>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10075280,array<T sz=4>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100752E0,array<T sz=4>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x100753F0,smart_ptr<T>::set_ref,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10075C50,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10075D10,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10075D20,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10075D30,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10075D50,hash<K;V>::~hash,Code/BF2/External/base/container.h,done,recovered:destructor-destroys-entries-and-frees-without-reset;S1-clear-label-corrected
+0x10075E80,hash<K;V sz=28>::add,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10075FE0,hash<K;V sz=28>::find_index,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100760C0,hash<K;V sz=28>::find_index,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10076BF0,array<T sz=12>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10076CF0,hash<K;V sz=28>::add,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10076E90,hash<K;V sz=28>::get,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10076F20,hash<K;V sz=28>::add,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100770F0,hash<K;V sz=48>::add,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10077230,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100778A0,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10077C10,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10078210,smart_ptr<T>::set_ref,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10078300,hash<K;V sz=16>::add,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10078430,hash<K;V>::check_expand,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10078460,smart_ptr<T>::set_ref,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10078560,hash<K;V sz=16>::find_index,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10078640,hash<K;V sz=16>::add,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10078770,hash<K;V>::check_expand,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100787A0,smart_ptr<T>::set_ref,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100788A0,hash<K;V sz=16>::find_index,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10078990,hash<K;V sz=16>::find_index,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10078A80,hash<K;V sz=16>::add,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10078BB0,hash<K;V>::check_expand,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10078C80,smart_ptr<T>::set_ref,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10078CD0,hash<K;V sz=16>::find_index,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10078DB0,hash<K;V sz=16>::add,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10078EE0,hash<K;V>::check_expand,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10079710,smart_ptr<T>::set_ref,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10079820,array<T sz=4>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10079880,array<T sz=4>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x10079A90,hash<K;V>::const_iterator<storage sz=16>::operator++,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10079AE0,hash<K;V>::const_iterator<storage>::operator==,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10079B40,hash<K;V>::begin,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10079DF0,smart_ptr<T>::set_ref,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10079E40,hash<K;V sz=28>::find_index,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1007A100,hash<K;V sz=28>::add,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1007A2B0,hash<K;V>::check_expand,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1007A5D0,hash<K;V>::const_iterator<storage>::operator==,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1007A680,hash<K;V>::entry<storage>::clear,Code/BF2/External/base/container.h,done,verified:entry-destruction-order-and-empty-marker
+0x1007A6A0,hash<K;V sz=28>::find_index,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1007A780,hash<K;V sz=28>::add,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1007A920,hash<K;V>::check_expand,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1007CC00,hash<K;V sz=60>::add,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10081550,array<T sz=4>::remove,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10081F00,array<T sz=4>::remove,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10081FF0,array<T sz=8>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10082050,array<T sz=8>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x10082B20,smart_ptr<T>::smart_ptr,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10082B50,smart_ptr<T>::~smart_ptr,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10082BD0,hash<K;V>::const_iterator<storage sz=16>::operator++,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10082C20,hash<K;V sz=24>::find_index,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10082CA0,hash<K;V sz=16>::add,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10082DE0,hash<K;V>::check_expand,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10082E10,hash<K;V>::~hash,Code/BF2/External/base/container.h,done,recovered:destructor-destroys-entries-and-frees-without-reset;S1-clear-label-corrected
+0x10082E60,hash<K;V sz=16>::find_index,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10082EE0,hash<K;V>::const_iterator<storage>::operator==,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10082F40,hash<K;V>::const_iterator<storage>::operator==,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10082FA0,hash<K;V>::begin,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10083020,hash<K;V>::begin,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100831D0,array<T sz=4>::remove,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10083540,hash<K;V sz=24>::add,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10083690,hash<K;V>::check_expand,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100839D0,smart_ptr<T>::set_ref,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100846C0,hash<K;V>::check_expand,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10084910,hash<K;V>::entry<storage>::clear,Code/BF2/External/base/container.h,done,verified:entry-destruction-order-and-empty-marker
+0x10084930,hash<K;V>::~hash,Code/BF2/External/base/container.h,done,recovered:destructor-destroys-entries-and-frees-without-reset;S1-clear-label-corrected
+0x10084E80,array<T sz=4>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10084E90,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10084EA0,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10084EB0,array<T sz=80>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10084ED0,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10084EE0,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10084EF0,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10084F00,array<T sz=8>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10084F10,array<T sz=8>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10084F20,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10084F40,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10084F50,array<T sz=40>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10084F70,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10084F90,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10084FA0,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10084FB0,array<T sz=4>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10084FC0,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10085050,array<T sz=4>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10085060,array<T sz=80>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x100850D0,array<T sz=8>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x10085140,array<T sz=40>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x100851B0,array<T sz=4>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x10085210,array<T sz=5>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10085220,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10085280,array<T sz=12>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x100854D0,array<T sz=80>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10085580,array<T sz=8>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100855F0,array<T sz=4>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10085660,smart_ptr<T>::operator=,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10085790,array<T>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10085870,array<T sz=12>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10085D60,array<T sz=4>::push_back,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10085D90,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10085DB0,array<T sz=8>::push_back,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10085DE0,array<T>::pop_back,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10085E50,array<T sz=4>::push_back,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100866A0,array<T sz=40>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10086790,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10086A60,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008A700,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008A720,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008A730,array<T sz=4>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008A740,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008A750,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008A760,array<T sz=16>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008A770,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008A790,array<T sz=48>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008A7B0,array<T sz=48>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008A7D0,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008A7E0,array<T sz=4>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008A7F0,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008A810,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008A820,array<T sz=8>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008A830,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008A840,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008A850,array<T sz=8>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008A860,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008A8F0,hash<K;V>::check_expand,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008A980,array<T sz=8>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008A990,hash<K;V>::entry<storage>::is_empty,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008A9F0,array<T sz=16>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x1008AA50,hash<K;V>::const_iterator<storage>::is_end,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008AA90,hash<K;V>::const_iterator<storage>::is_end,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008AAD0,array<T sz=8>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x1008AE50,hash<K;V>::const_iterator<storage>::operator==,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008AEB0,array<T sz=8>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008AFA0,hash<K;V>::entry<storage>::clear,Code/BF2/External/base/container.h,done,verified:entry-destruction-order-and-empty-marker
+0x1008BC40,array<T sz=4>::push_back,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008BC90,hash<K;V>::const_iterator<storage>::operator!=,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008BCB0,hash<K;V>::begin,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008BD10,array<T sz=4>::push_back,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008BD40,hash<K;V>::const_iterator<storage>::operator!=,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008BD70,array<T sz=8>::push_back,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008BE10,array<T sz=16>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008BEF0,hash<K;V>::clear_or_destruct,Code/BF2/External/base/container.h,done,verified:clear-destroys-entries-frees-and-resets-table-word
+0x1008BF60,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008D2D0,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008D4A0,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008D4B0,hash<K;V sz=28>::find_index,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008DDD0,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008DDE0,hash<K;V sz=28>::add,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1008DF80,hash<K;V sz=28>::get,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100964B0,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100964C0,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100964D0,array<T>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100964E0,array<T>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100964F0,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10096500,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10096510,array<T sz=12>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10096530,array<T sz=12>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10096550,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10096560,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10096570,array<T sz=16>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10096580,array<T sz=16>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10096590,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100965A0,array<T sz=80>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100965C0,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100965D0,array<T sz=12>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100965F0,array<T sz=12>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10096610,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10096620,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10096630,array<T sz=36>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10096650,array<T sz=36>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10096670,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10096690,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100966A0,array<T sz=4>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100966B0,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100966C0,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100966D0,array<T sz=12>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100966F0,array<T sz=12>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10096710,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10096730,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10096740,array<T sz=8>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10096750,array<T sz=8>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10096760,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10096780,array<T sz=148>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100967A0,array<T sz=16>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100967B0,array<T>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x10096810,array<T sz=12>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x10096880,array<T sz=16>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x100968E0,array<T sz=4>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x10096940,array<T sz=12>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x100969B0,array<T sz=8>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x10096A20,hash<K;V>::check_expand,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10096B00,hash<K;V>::entry<storage>::is_empty,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10096B10,array<T sz=36>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x10096B80,hash<K;V>::const_iterator<storage>::is_end,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10097140,array<T>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100971D0,array<T sz=4>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10097240,array<T sz=8>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10097310,hash<K;V sz=16>::add,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10097480,hash<K;V>::const_iterator<storage sz=16>::operator++,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100975B0,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100975C0,hash<K;V>::clear_or_destruct,Code/BF2/External/base/container.h,done,verified:clear-destroys-entries-frees-and-resets-table-word
+0x10097610,hash<K;V sz=16>::find_index,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10097690,hash<K;V>::const_iterator<storage>::operator==,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100979E0,array<T sz=4>::push_back,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10097A10,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10097A20,array<T sz=8>::push_back,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10097B00,hash<K;V sz=16>::get,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10097B40,hash<K;V>::const_iterator<storage>::operator!=,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10097BC0,hash<K;V>::begin,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10097EB0,array<T sz=12>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10098050,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10098290,array<T sz=12>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10098390,array<T sz=16>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100984B0,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100984C0,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100984D0,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100984E0,array<T sz=36>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10098690,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100987F0,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10098800,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100988B0,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10099100,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10099730,hash<K;V>::check_expand,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10099860,hash<K;V sz=32>::find_index,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100999C0,hash<K;V sz=32>::add,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10099B40,hash<K;V sz=32>::get,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x1009D570,array<T>::pop_back,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A01C0,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A01D0,array<T sz=4>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A01E0,array<T sz=4>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A01F0,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A0200,array<T sz=40>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A0220,array<T sz=40>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A0240,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A0260,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A0270,array<T sz=4>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A0280,array<T sz=4>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A0290,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A02C0,array<T sz=4>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x100A0320,array<T sz=40>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x100A0390,hash<K;V>::check_expand,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A0400,array<T sz=4>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x100A0460,hash<K;V>::check_expand,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A0500,smart_ptr<T>::set_ref,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A05B0,hash<K;V>::entry<storage>::is_empty,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A0640,hash<K;V>::entry<storage>::is_empty,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A0830,hash<K;V sz=16>::add,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A0980,array<T sz=4>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A0A50,hash<K;V sz=16>::add,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A0BB0,smart_ptr<T>::set_ref,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A0C40,hash<K;V>::~hash,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A0C90,hash<K;V sz=16>::find_index,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A0D00,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A0D10,hash<K;V>::~hash,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A0D60,hash<K;V sz=16>::find_index,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A1030,array<T sz=4>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A1100,hash<K;V sz=16>::get,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A1140,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A1160,hash<K;V sz=16>::get,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A11A0,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A14C0,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A1C90,array<T sz=4>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A1CA0,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A1CB0,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A1CC0,array<T sz=8>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A1CD0,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A1CE0,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A1CF0,array<T sz=72>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A1D10,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A1D20,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A1D30,array<T sz=16>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A1D40,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A1D60,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A1D70,array<T sz=4>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A1DF0,array<T sz=8>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x100A1E60,array<T sz=16>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x100A1EC0,array<T sz=4>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x100A1F20,array<T sz=72>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x100A2080,array<T sz=8>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A20F0,array<T sz=4>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A21A0,smart_ptr<T>::operator=,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A2230,array<T sz=72>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A22C0,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A24A0,array<T sz=4>::push_back,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A24E0,array<button_record sz=72>::insert,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A2550,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A2570,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A2620,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A2870,array<T sz=16>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A2950,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A2C40,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A4160,smart_ptr<T>::set_ref,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A4A00,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A4A10,array<T sz=4>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A4A20,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A4A30,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A4A40,array<T sz=48>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A4A60,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A4A70,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A4A80,array<T sz=16>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A4A90,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A4AA0,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A4AB0,array<T sz=8>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A4AC0,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A4AE0,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A4AF0,array<T sz=24>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A4B10,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A4B20,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A4B40,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A4B50,array<T sz=4>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A4B60,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A4BA0,array<T sz=16>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x100A4C00,array<T sz=8>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x100A4C70,hash<K;V>::check_expand,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A4DB0,hash<K;V>::entry<storage>::is_empty,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A4DC0,array<T sz=4>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x100A4E20,array<T sz=48>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x100A4E90,array<T sz=24>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x100A5480,array<T sz=16>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A5520,array<T sz=8>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A5590,hash<K;V sz=16>::add,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A56F0,array<T>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A5780,array<T sz=4>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A58D0,hash<K;V>::~hash,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A5920,hash<K;V sz=16>::find_index,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A59A0,array<T sz=24>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A5B20,smart_ptr<T>::operator=,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A6310,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A6380,array<T sz=8>::push_back,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A63B0,array<T sz=8>::remove,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A6410,hash<K;V sz=16>::get,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A64A0,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A6B70,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A6BD0,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A7750,array<T sz=8>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A7760,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A7770,array<T sz=4>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A7780,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A7790,array<T sz=4>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x100A77F0,array<T sz=8>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A7BD0,smart_ptr<T>::set_ref,Code/BF2/External/base/smart_ptr.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A7C10,array<T sz=4>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A7E30,array<T sz=4>::push_back,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A9D00,array<T>::array,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A9D10,array<T sz=28>::operator[],Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A9D30,array<T>::size,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A9D60,array<T sz=28>::reserve,Code/BF2/External/base/container.h,done,recovered:raw-capacity-no-zero-fill;native-allocator-hook
+0x100A9E40,array<T sz=28>::resize,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100A9F70,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x100AA0A0,array<T>::clear,Code/BF2/External/base/container.h,done,verified:template-body;native-sizeof;type-arguments-inferred
+0x10084550,hash<K;V sz=28>::add,Code/BF2/External/base/container.h,done,recovered:first-NUL-string-hash;verified-chain-operation;fresh-100846F0-and-10019870
+0x10084750,hash<K;V sz=28>::find_index,Code/BF2/External/base/container.h,done,recovered:first-NUL-string-hash;verified-chain-operation;fresh-100846F0-and-10019870
+0x100A4CE0,array<T sz=1>::reserve,Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x10084F30,array<glyph_entry>::back,Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x10084F80,array<text_glyph_record>::back,Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x10084FD0,smart_ptr<object>::smart_ptr(pointer),Code/BF2/External/base/smart_ptr.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x10085000,smart_ptr<object>::~smart_ptr,Code/BF2/External/base/smart_ptr.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x10085020,smart_ptr<object>::operator->,Code/BF2/External/base/smart_ptr.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x10085030,smart_ptr<object>::get_ptr,Code/BF2/External/base/smart_ptr.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x10085230,array<byte>::reserve,Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x100856F0,array<glyph_entry>::clear,Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x10085740,array<glyph_entry>::operator=,Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x10085820,array<pointer>::clear,Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x100858F0,tu_string::operator==(const char*),Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x10085DA0,array<glyph_entry>::clear veneer,Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x10085DF0,array<byte>::clear,Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x10085E40,array<pointer>::clear veneer,Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x10085EB0,array<packed five-byte entry>::operator=,Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x10085F00,array<12-byte entry>::clear,Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x10086530,array<12-byte entry>::clear veneer,Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x10086540,array<byte>::clear veneer,Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x10086A70,array<text_glyph_record>::push_back,Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x10088CA0,tu_string::operator+=(const tu_string&),Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x10088D10,tu_string::operator+(const char*),Code/BF2/External/base/container.h,done,Copy appended temporary to result before destruction; verified with fresh copy/append helpers and allocation-count probe.
+0x10089360,"tu_string::assign(const char*,length)",Code/BF2/External/base/container.h,done,Added exact-length assignment body with inferred name; resize then byte copy then terminator.
+0x1009D530,array<int>::back,Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x1009D580,array<byte>::push_back,Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x100A0BF0,smart_ptr<object> deleting destructor,Code/BF2/External/base/smart_ptr.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x100A10F0,"hash<Uint16,int> destructor veneer",Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x100A1150,"hash<kerning_pair,float> destructor veneer",Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x100A62B0,array<smart_ptr<font> >::push_back,Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x100A6320,array<smart_ptr<font> >::clear veneer,Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x100A6330,array<recti>::push_back,Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x100A6370,array<recti>::clear veneer,Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x100A6400,hash destructor forwarding veneer,Code/BF2/External/base/container.h,done,Request array attribution corrected: tail jump to hash destructor 0x100A58D0; which leaves table word unchanged.
+0x100A6450,array<glyph_info>::push_back,Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.
+0x100A64B0,array<glyph_info>::clear veneer,Code/BF2/External/base/container.h,done,Fresh instructions and existing base template body agree; type arguments remain inferred; native sizeof and issue #7 hashes retained.

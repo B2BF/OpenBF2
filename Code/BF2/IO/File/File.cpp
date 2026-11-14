@@ -145,7 +145,7 @@ bool File::read(std::wstring& out, wchar_t delimiter)
     out = buffer;
 #else
     // [CHOSEN, not recovered] The native engine reads retail UTF-16LE game text.
-    // The AI DLL retains the ELF's native-wchar_t reader. See docs/macos-s2-10-threads.md.
+    // The AI DLL retains the ELF's native-wchar_t reader.
     // Preserve delimiter consumption, NUL truncation, EOF success and the original buffer bound.
     char16_t buffer[4096];
     unsigned int count = 0;

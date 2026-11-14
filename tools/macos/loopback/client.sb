@@ -1,0 +1,16 @@
+(version 1)
+; [TEMP] [CHOSEN, not recovered] c-loopback: client policy for the loopback join.
+; coord/offline.sb, tightened: the only outbound peer is the local server's game port
+; 127.0.0.1:16890 and its browser query port 29911 (no LAN broadcast or DNS).
+; The loading menu queries serverInfo through the browser, separately from the game socket.
+; The client's own socket binds an
+; ephemeral port (UDPSocket::create, port 0), so binds stay allowed except 16567.
+(allow default)
+(deny network-outbound)
+(allow network-outbound (remote ip "localhost:16890"))
+(allow network-outbound (remote ip "localhost:29911"))
+(deny network-outbound (remote unix-socket (path-literal "/private/var/run/mDNSResponder")))
+(deny file-write* (subpath (param "OWNER_HOME")))
+(allow file-write* (subpath (param "RUN_OUT")))
+(deny file-write* (subpath (param "GAME_ROOT")))
+(deny network-bind (local ip "*:16567"))

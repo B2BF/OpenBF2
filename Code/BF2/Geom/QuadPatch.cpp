@@ -2641,11 +2641,10 @@ void TerrainCuller::filterOccluded()
         const int maxFrames = *reinterpret_cast<const int*>(
             static_cast<const unsigned char*>(dx9rend::g_rendererBase) + 0x3EC);
 #else
-        // [CHOSEN, not recovered] Named access for the native renderer layout.
-        // [RETIRE-WHEN: terrain-occlusion-age-limit] The current accessor stops on unmapped
-        // +0x3EC. Its owner must expose occlusionTerrainMaxFrames, initialize it to 1
-        // (PE 0x1000BA72), retain the setter's upper-only clamp to 10 (0x10053523), and
-        // validate zero/nonzero samples, signed ages and erase/reload before retiring this note.
+        // [CHOSEN, not recovered] Named access for the native renderer layout: +0x3EC is
+        // RendDX9Base::occlusionTerrainMaxFrames (Renderer::tailField), initialized to 1
+        // (PE 0x1000BA72), set by renderer.occlusionTerrainMaxFrames with the upper-only clamp
+        // to 10 (0x10053523).
         const int maxFrames = dx9rend::rendererTailInt(0x3EC);
 #endif
         if (age > maxFrames || samples != 0)

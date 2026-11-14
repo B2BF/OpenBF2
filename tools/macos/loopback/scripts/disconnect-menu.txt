@@ -1,0 +1,2443 @@
+# [TEMP] disconnect-menu (c-swf-disconnect): spawn, lose the server (loopback.py --server-send
+# 5:quit --server-send-after "join-and-spawn done"), then move the pointer and click in the menu
+# that the client returns to. Coordinates are 800x600.
+include join-and-spawn
+timeout 240
+log waiting for the menu after the server loss
+wait-log menu_loggedin.bik
+wait-ms 4000
+capture menu-after-loss
+move 100 100
+wait-ms 150
+move 250 100
+wait-ms 150
+move 400 100
+wait-ms 150
+move 550 100
+wait-ms 150
+move 700 100
+wait-ms 150
+move 100 200
+wait-ms 150
+move 250 200
+wait-ms 150
+move 400 200
+wait-ms 150
+move 550 200
+wait-ms 150
+move 700 200
+wait-ms 150
+move 100 300
+wait-ms 150
+move 250 300
+wait-ms 150
+move 400 300
+wait-ms 150
+move 550 300
+wait-ms 150
+move 700 300
+wait-ms 150
+move 100 400
+wait-ms 150
+move 250 400
+wait-ms 150
+move 400 400
+wait-ms 150
+move 550 400
+wait-ms 150
+move 700 400
+wait-ms 150
+move 100 500
+wait-ms 150
+move 250 500
+wait-ms 150
+move 400 500
+wait-ms 150
+move 550 500
+wait-ms 150
+move 700 500
+wait-ms 150
+capture menu-swept
+# The GAME MESSAGE dialog's OK button (449,306 103x19 in the capture).
+move 500 315
+wait-ms 1000
+click 500 315
+wait-ms 2000
+capture menu-ok
+# Multiplayer, then a fine hover sweep over the page while it browses and after.
+click 200 15
+move 790 30
+wait-frames 2
+move 750 30
+wait-frames 2
+move 710 30
+wait-frames 2
+move 670 30
+wait-frames 2
+move 630 30
+wait-frames 2
+move 590 30
+wait-frames 2
+move 550 30
+wait-frames 2
+move 510 30
+wait-frames 2
+move 470 30
+wait-frames 2
+move 430 30
+wait-frames 2
+move 390 30
+wait-frames 2
+move 350 30
+wait-frames 2
+move 310 30
+wait-frames 2
+move 270 30
+wait-frames 2
+move 230 30
+wait-frames 2
+move 190 30
+wait-frames 2
+move 150 30
+wait-frames 2
+move 110 30
+wait-frames 2
+move 70 30
+wait-frames 2
+move 30 30
+wait-frames 2
+move 10 60
+wait-frames 2
+move 50 60
+wait-frames 2
+move 90 60
+wait-frames 2
+move 130 60
+wait-frames 2
+move 170 60
+wait-frames 2
+move 210 60
+wait-frames 2
+move 250 60
+wait-frames 2
+move 290 60
+wait-frames 2
+move 330 60
+wait-frames 2
+move 370 60
+wait-frames 2
+move 410 60
+wait-frames 2
+move 450 60
+wait-frames 2
+move 490 60
+wait-frames 2
+move 530 60
+wait-frames 2
+move 570 60
+wait-frames 2
+move 610 60
+wait-frames 2
+move 650 60
+wait-frames 2
+move 690 60
+wait-frames 2
+move 730 60
+wait-frames 2
+move 770 60
+wait-frames 2
+move 790 90
+wait-frames 2
+move 750 90
+wait-frames 2
+move 710 90
+wait-frames 2
+move 670 90
+wait-frames 2
+move 630 90
+wait-frames 2
+move 590 90
+wait-frames 2
+move 550 90
+wait-frames 2
+move 510 90
+wait-frames 2
+move 470 90
+wait-frames 2
+move 430 90
+wait-frames 2
+move 390 90
+wait-frames 2
+move 350 90
+wait-frames 2
+move 310 90
+wait-frames 2
+move 270 90
+wait-frames 2
+move 230 90
+wait-frames 2
+move 190 90
+wait-frames 2
+move 150 90
+wait-frames 2
+move 110 90
+wait-frames 2
+move 70 90
+wait-frames 2
+move 30 90
+wait-frames 2
+move 10 120
+wait-frames 2
+move 50 120
+wait-frames 2
+move 90 120
+wait-frames 2
+move 130 120
+wait-frames 2
+move 170 120
+wait-frames 2
+move 210 120
+wait-frames 2
+move 250 120
+wait-frames 2
+move 290 120
+wait-frames 2
+move 330 120
+wait-frames 2
+move 370 120
+wait-frames 2
+move 410 120
+wait-frames 2
+move 450 120
+wait-frames 2
+move 490 120
+wait-frames 2
+move 530 120
+wait-frames 2
+move 570 120
+wait-frames 2
+move 610 120
+wait-frames 2
+move 650 120
+wait-frames 2
+move 690 120
+wait-frames 2
+move 730 120
+wait-frames 2
+move 770 120
+wait-frames 2
+move 790 150
+wait-frames 2
+move 750 150
+wait-frames 2
+move 710 150
+wait-frames 2
+move 670 150
+wait-frames 2
+move 630 150
+wait-frames 2
+move 590 150
+wait-frames 2
+move 550 150
+wait-frames 2
+move 510 150
+wait-frames 2
+move 470 150
+wait-frames 2
+move 430 150
+wait-frames 2
+move 390 150
+wait-frames 2
+move 350 150
+wait-frames 2
+move 310 150
+wait-frames 2
+move 270 150
+wait-frames 2
+move 230 150
+wait-frames 2
+move 190 150
+wait-frames 2
+move 150 150
+wait-frames 2
+move 110 150
+wait-frames 2
+move 70 150
+wait-frames 2
+move 30 150
+wait-frames 2
+move 10 180
+wait-frames 2
+move 50 180
+wait-frames 2
+move 90 180
+wait-frames 2
+move 130 180
+wait-frames 2
+move 170 180
+wait-frames 2
+move 210 180
+wait-frames 2
+move 250 180
+wait-frames 2
+move 290 180
+wait-frames 2
+move 330 180
+wait-frames 2
+move 370 180
+wait-frames 2
+move 410 180
+wait-frames 2
+move 450 180
+wait-frames 2
+move 490 180
+wait-frames 2
+move 530 180
+wait-frames 2
+move 570 180
+wait-frames 2
+move 610 180
+wait-frames 2
+move 650 180
+wait-frames 2
+move 690 180
+wait-frames 2
+move 730 180
+wait-frames 2
+move 770 180
+wait-frames 2
+move 790 210
+wait-frames 2
+move 750 210
+wait-frames 2
+move 710 210
+wait-frames 2
+move 670 210
+wait-frames 2
+move 630 210
+wait-frames 2
+move 590 210
+wait-frames 2
+move 550 210
+wait-frames 2
+move 510 210
+wait-frames 2
+move 470 210
+wait-frames 2
+move 430 210
+wait-frames 2
+move 390 210
+wait-frames 2
+move 350 210
+wait-frames 2
+move 310 210
+wait-frames 2
+move 270 210
+wait-frames 2
+move 230 210
+wait-frames 2
+move 190 210
+wait-frames 2
+move 150 210
+wait-frames 2
+move 110 210
+wait-frames 2
+move 70 210
+wait-frames 2
+move 30 210
+wait-frames 2
+move 10 240
+wait-frames 2
+move 50 240
+wait-frames 2
+move 90 240
+wait-frames 2
+move 130 240
+wait-frames 2
+move 170 240
+wait-frames 2
+move 210 240
+wait-frames 2
+move 250 240
+wait-frames 2
+move 290 240
+wait-frames 2
+move 330 240
+wait-frames 2
+move 370 240
+wait-frames 2
+move 410 240
+wait-frames 2
+move 450 240
+wait-frames 2
+move 490 240
+wait-frames 2
+move 530 240
+wait-frames 2
+move 570 240
+wait-frames 2
+move 610 240
+wait-frames 2
+move 650 240
+wait-frames 2
+move 690 240
+wait-frames 2
+move 730 240
+wait-frames 2
+move 770 240
+wait-frames 2
+move 790 270
+wait-frames 2
+move 750 270
+wait-frames 2
+move 710 270
+wait-frames 2
+move 670 270
+wait-frames 2
+move 630 270
+wait-frames 2
+move 590 270
+wait-frames 2
+move 550 270
+wait-frames 2
+move 510 270
+wait-frames 2
+move 470 270
+wait-frames 2
+move 430 270
+wait-frames 2
+move 390 270
+wait-frames 2
+move 350 270
+wait-frames 2
+move 310 270
+wait-frames 2
+move 270 270
+wait-frames 2
+move 230 270
+wait-frames 2
+move 190 270
+wait-frames 2
+move 150 270
+wait-frames 2
+move 110 270
+wait-frames 2
+move 70 270
+wait-frames 2
+move 30 270
+wait-frames 2
+move 10 300
+wait-frames 2
+move 50 300
+wait-frames 2
+move 90 300
+wait-frames 2
+move 130 300
+wait-frames 2
+move 170 300
+wait-frames 2
+move 210 300
+wait-frames 2
+move 250 300
+wait-frames 2
+move 290 300
+wait-frames 2
+move 330 300
+wait-frames 2
+move 370 300
+wait-frames 2
+move 410 300
+wait-frames 2
+move 450 300
+wait-frames 2
+move 490 300
+wait-frames 2
+move 530 300
+wait-frames 2
+move 570 300
+wait-frames 2
+move 610 300
+wait-frames 2
+move 650 300
+wait-frames 2
+move 690 300
+wait-frames 2
+move 730 300
+wait-frames 2
+move 770 300
+wait-frames 2
+move 790 330
+wait-frames 2
+move 750 330
+wait-frames 2
+move 710 330
+wait-frames 2
+move 670 330
+wait-frames 2
+move 630 330
+wait-frames 2
+move 590 330
+wait-frames 2
+move 550 330
+wait-frames 2
+move 510 330
+wait-frames 2
+move 470 330
+wait-frames 2
+move 430 330
+wait-frames 2
+move 390 330
+wait-frames 2
+move 350 330
+wait-frames 2
+move 310 330
+wait-frames 2
+move 270 330
+wait-frames 2
+move 230 330
+wait-frames 2
+move 190 330
+wait-frames 2
+move 150 330
+wait-frames 2
+move 110 330
+wait-frames 2
+move 70 330
+wait-frames 2
+move 30 330
+wait-frames 2
+move 10 360
+wait-frames 2
+move 50 360
+wait-frames 2
+move 90 360
+wait-frames 2
+move 130 360
+wait-frames 2
+move 170 360
+wait-frames 2
+move 210 360
+wait-frames 2
+move 250 360
+wait-frames 2
+move 290 360
+wait-frames 2
+move 330 360
+wait-frames 2
+move 370 360
+wait-frames 2
+move 410 360
+wait-frames 2
+move 450 360
+wait-frames 2
+move 490 360
+wait-frames 2
+move 530 360
+wait-frames 2
+move 570 360
+wait-frames 2
+move 610 360
+wait-frames 2
+move 650 360
+wait-frames 2
+move 690 360
+wait-frames 2
+move 730 360
+wait-frames 2
+move 770 360
+wait-frames 2
+move 790 390
+wait-frames 2
+move 750 390
+wait-frames 2
+move 710 390
+wait-frames 2
+move 670 390
+wait-frames 2
+move 630 390
+wait-frames 2
+move 590 390
+wait-frames 2
+move 550 390
+wait-frames 2
+move 510 390
+wait-frames 2
+move 470 390
+wait-frames 2
+move 430 390
+wait-frames 2
+move 390 390
+wait-frames 2
+move 350 390
+wait-frames 2
+move 310 390
+wait-frames 2
+move 270 390
+wait-frames 2
+move 230 390
+wait-frames 2
+move 190 390
+wait-frames 2
+move 150 390
+wait-frames 2
+move 110 390
+wait-frames 2
+move 70 390
+wait-frames 2
+move 30 390
+wait-frames 2
+move 10 420
+wait-frames 2
+move 50 420
+wait-frames 2
+move 90 420
+wait-frames 2
+move 130 420
+wait-frames 2
+move 170 420
+wait-frames 2
+move 210 420
+wait-frames 2
+move 250 420
+wait-frames 2
+move 290 420
+wait-frames 2
+move 330 420
+wait-frames 2
+move 370 420
+wait-frames 2
+move 410 420
+wait-frames 2
+move 450 420
+wait-frames 2
+move 490 420
+wait-frames 2
+move 530 420
+wait-frames 2
+move 570 420
+wait-frames 2
+move 610 420
+wait-frames 2
+move 650 420
+wait-frames 2
+move 690 420
+wait-frames 2
+move 730 420
+wait-frames 2
+move 770 420
+wait-frames 2
+move 790 450
+wait-frames 2
+move 750 450
+wait-frames 2
+move 710 450
+wait-frames 2
+move 670 450
+wait-frames 2
+move 630 450
+wait-frames 2
+move 590 450
+wait-frames 2
+move 550 450
+wait-frames 2
+move 510 450
+wait-frames 2
+move 470 450
+wait-frames 2
+move 430 450
+wait-frames 2
+move 390 450
+wait-frames 2
+move 350 450
+wait-frames 2
+move 310 450
+wait-frames 2
+move 270 450
+wait-frames 2
+move 230 450
+wait-frames 2
+move 190 450
+wait-frames 2
+move 150 450
+wait-frames 2
+move 110 450
+wait-frames 2
+move 70 450
+wait-frames 2
+move 30 450
+wait-frames 2
+move 10 480
+wait-frames 2
+move 50 480
+wait-frames 2
+move 90 480
+wait-frames 2
+move 130 480
+wait-frames 2
+move 170 480
+wait-frames 2
+move 210 480
+wait-frames 2
+move 250 480
+wait-frames 2
+move 290 480
+wait-frames 2
+move 330 480
+wait-frames 2
+move 370 480
+wait-frames 2
+move 410 480
+wait-frames 2
+move 450 480
+wait-frames 2
+move 490 480
+wait-frames 2
+move 530 480
+wait-frames 2
+move 570 480
+wait-frames 2
+move 610 480
+wait-frames 2
+move 650 480
+wait-frames 2
+move 690 480
+wait-frames 2
+move 730 480
+wait-frames 2
+move 770 480
+wait-frames 2
+move 790 510
+wait-frames 2
+move 750 510
+wait-frames 2
+move 710 510
+wait-frames 2
+move 670 510
+wait-frames 2
+move 630 510
+wait-frames 2
+move 590 510
+wait-frames 2
+move 550 510
+wait-frames 2
+move 510 510
+wait-frames 2
+move 470 510
+wait-frames 2
+move 430 510
+wait-frames 2
+move 390 510
+wait-frames 2
+move 350 510
+wait-frames 2
+move 310 510
+wait-frames 2
+move 270 510
+wait-frames 2
+move 230 510
+wait-frames 2
+move 190 510
+wait-frames 2
+move 150 510
+wait-frames 2
+move 110 510
+wait-frames 2
+move 70 510
+wait-frames 2
+move 30 510
+wait-frames 2
+move 10 540
+wait-frames 2
+move 50 540
+wait-frames 2
+move 90 540
+wait-frames 2
+move 130 540
+wait-frames 2
+move 170 540
+wait-frames 2
+move 210 540
+wait-frames 2
+move 250 540
+wait-frames 2
+move 290 540
+wait-frames 2
+move 330 540
+wait-frames 2
+move 370 540
+wait-frames 2
+move 410 540
+wait-frames 2
+move 450 540
+wait-frames 2
+move 490 540
+wait-frames 2
+move 530 540
+wait-frames 2
+move 570 540
+wait-frames 2
+move 610 540
+wait-frames 2
+move 650 540
+wait-frames 2
+move 690 540
+wait-frames 2
+move 730 540
+wait-frames 2
+move 770 540
+wait-frames 2
+move 790 570
+wait-frames 2
+move 750 570
+wait-frames 2
+move 710 570
+wait-frames 2
+move 670 570
+wait-frames 2
+move 630 570
+wait-frames 2
+move 590 570
+wait-frames 2
+move 550 570
+wait-frames 2
+move 510 570
+wait-frames 2
+move 470 570
+wait-frames 2
+move 430 570
+wait-frames 2
+move 390 570
+wait-frames 2
+move 350 570
+wait-frames 2
+move 310 570
+wait-frames 2
+move 270 570
+wait-frames 2
+move 230 570
+wait-frames 2
+move 190 570
+wait-frames 2
+move 150 570
+wait-frames 2
+move 110 570
+wait-frames 2
+move 70 570
+wait-frames 2
+move 30 570
+wait-frames 2
+move 790 30
+wait-frames 2
+move 750 30
+wait-frames 2
+move 710 30
+wait-frames 2
+move 670 30
+wait-frames 2
+move 630 30
+wait-frames 2
+move 590 30
+wait-frames 2
+move 550 30
+wait-frames 2
+move 510 30
+wait-frames 2
+move 470 30
+wait-frames 2
+move 430 30
+wait-frames 2
+move 390 30
+wait-frames 2
+move 350 30
+wait-frames 2
+move 310 30
+wait-frames 2
+move 270 30
+wait-frames 2
+move 230 30
+wait-frames 2
+move 190 30
+wait-frames 2
+move 150 30
+wait-frames 2
+move 110 30
+wait-frames 2
+move 70 30
+wait-frames 2
+move 30 30
+wait-frames 2
+move 10 60
+wait-frames 2
+move 50 60
+wait-frames 2
+move 90 60
+wait-frames 2
+move 130 60
+wait-frames 2
+move 170 60
+wait-frames 2
+move 210 60
+wait-frames 2
+move 250 60
+wait-frames 2
+move 290 60
+wait-frames 2
+move 330 60
+wait-frames 2
+move 370 60
+wait-frames 2
+move 410 60
+wait-frames 2
+move 450 60
+wait-frames 2
+move 490 60
+wait-frames 2
+move 530 60
+wait-frames 2
+move 570 60
+wait-frames 2
+move 610 60
+wait-frames 2
+move 650 60
+wait-frames 2
+move 690 60
+wait-frames 2
+move 730 60
+wait-frames 2
+move 770 60
+wait-frames 2
+move 790 90
+wait-frames 2
+move 750 90
+wait-frames 2
+move 710 90
+wait-frames 2
+move 670 90
+wait-frames 2
+move 630 90
+wait-frames 2
+move 590 90
+wait-frames 2
+move 550 90
+wait-frames 2
+move 510 90
+wait-frames 2
+move 470 90
+wait-frames 2
+move 430 90
+wait-frames 2
+move 390 90
+wait-frames 2
+move 350 90
+wait-frames 2
+move 310 90
+wait-frames 2
+move 270 90
+wait-frames 2
+move 230 90
+wait-frames 2
+move 190 90
+wait-frames 2
+move 150 90
+wait-frames 2
+move 110 90
+wait-frames 2
+move 70 90
+wait-frames 2
+move 30 90
+wait-frames 2
+move 10 120
+wait-frames 2
+move 50 120
+wait-frames 2
+move 90 120
+wait-frames 2
+move 130 120
+wait-frames 2
+move 170 120
+wait-frames 2
+move 210 120
+wait-frames 2
+move 250 120
+wait-frames 2
+move 290 120
+wait-frames 2
+move 330 120
+wait-frames 2
+move 370 120
+wait-frames 2
+move 410 120
+wait-frames 2
+move 450 120
+wait-frames 2
+move 490 120
+wait-frames 2
+move 530 120
+wait-frames 2
+move 570 120
+wait-frames 2
+move 610 120
+wait-frames 2
+move 650 120
+wait-frames 2
+move 690 120
+wait-frames 2
+move 730 120
+wait-frames 2
+move 770 120
+wait-frames 2
+move 790 150
+wait-frames 2
+move 750 150
+wait-frames 2
+move 710 150
+wait-frames 2
+move 670 150
+wait-frames 2
+move 630 150
+wait-frames 2
+move 590 150
+wait-frames 2
+move 550 150
+wait-frames 2
+move 510 150
+wait-frames 2
+move 470 150
+wait-frames 2
+move 430 150
+wait-frames 2
+move 390 150
+wait-frames 2
+move 350 150
+wait-frames 2
+move 310 150
+wait-frames 2
+move 270 150
+wait-frames 2
+move 230 150
+wait-frames 2
+move 190 150
+wait-frames 2
+move 150 150
+wait-frames 2
+move 110 150
+wait-frames 2
+move 70 150
+wait-frames 2
+move 30 150
+wait-frames 2
+move 10 180
+wait-frames 2
+move 50 180
+wait-frames 2
+move 90 180
+wait-frames 2
+move 130 180
+wait-frames 2
+move 170 180
+wait-frames 2
+move 210 180
+wait-frames 2
+move 250 180
+wait-frames 2
+move 290 180
+wait-frames 2
+move 330 180
+wait-frames 2
+move 370 180
+wait-frames 2
+move 410 180
+wait-frames 2
+move 450 180
+wait-frames 2
+move 490 180
+wait-frames 2
+move 530 180
+wait-frames 2
+move 570 180
+wait-frames 2
+move 610 180
+wait-frames 2
+move 650 180
+wait-frames 2
+move 690 180
+wait-frames 2
+move 730 180
+wait-frames 2
+move 770 180
+wait-frames 2
+move 790 210
+wait-frames 2
+move 750 210
+wait-frames 2
+move 710 210
+wait-frames 2
+move 670 210
+wait-frames 2
+move 630 210
+wait-frames 2
+move 590 210
+wait-frames 2
+move 550 210
+wait-frames 2
+move 510 210
+wait-frames 2
+move 470 210
+wait-frames 2
+move 430 210
+wait-frames 2
+move 390 210
+wait-frames 2
+move 350 210
+wait-frames 2
+move 310 210
+wait-frames 2
+move 270 210
+wait-frames 2
+move 230 210
+wait-frames 2
+move 190 210
+wait-frames 2
+move 150 210
+wait-frames 2
+move 110 210
+wait-frames 2
+move 70 210
+wait-frames 2
+move 30 210
+wait-frames 2
+move 10 240
+wait-frames 2
+move 50 240
+wait-frames 2
+move 90 240
+wait-frames 2
+move 130 240
+wait-frames 2
+move 170 240
+wait-frames 2
+move 210 240
+wait-frames 2
+move 250 240
+wait-frames 2
+move 290 240
+wait-frames 2
+move 330 240
+wait-frames 2
+move 370 240
+wait-frames 2
+move 410 240
+wait-frames 2
+move 450 240
+wait-frames 2
+move 490 240
+wait-frames 2
+move 530 240
+wait-frames 2
+move 570 240
+wait-frames 2
+move 610 240
+wait-frames 2
+move 650 240
+wait-frames 2
+move 690 240
+wait-frames 2
+move 730 240
+wait-frames 2
+move 770 240
+wait-frames 2
+move 790 270
+wait-frames 2
+move 750 270
+wait-frames 2
+move 710 270
+wait-frames 2
+move 670 270
+wait-frames 2
+move 630 270
+wait-frames 2
+move 590 270
+wait-frames 2
+move 550 270
+wait-frames 2
+move 510 270
+wait-frames 2
+move 470 270
+wait-frames 2
+move 430 270
+wait-frames 2
+move 390 270
+wait-frames 2
+move 350 270
+wait-frames 2
+move 310 270
+wait-frames 2
+move 270 270
+wait-frames 2
+move 230 270
+wait-frames 2
+move 190 270
+wait-frames 2
+move 150 270
+wait-frames 2
+move 110 270
+wait-frames 2
+move 70 270
+wait-frames 2
+move 30 270
+wait-frames 2
+move 10 300
+wait-frames 2
+move 50 300
+wait-frames 2
+move 90 300
+wait-frames 2
+move 130 300
+wait-frames 2
+move 170 300
+wait-frames 2
+move 210 300
+wait-frames 2
+move 250 300
+wait-frames 2
+move 290 300
+wait-frames 2
+move 330 300
+wait-frames 2
+move 370 300
+wait-frames 2
+move 410 300
+wait-frames 2
+move 450 300
+wait-frames 2
+move 490 300
+wait-frames 2
+move 530 300
+wait-frames 2
+move 570 300
+wait-frames 2
+move 610 300
+wait-frames 2
+move 650 300
+wait-frames 2
+move 690 300
+wait-frames 2
+move 730 300
+wait-frames 2
+move 770 300
+wait-frames 2
+move 790 330
+wait-frames 2
+move 750 330
+wait-frames 2
+move 710 330
+wait-frames 2
+move 670 330
+wait-frames 2
+move 630 330
+wait-frames 2
+move 590 330
+wait-frames 2
+move 550 330
+wait-frames 2
+move 510 330
+wait-frames 2
+move 470 330
+wait-frames 2
+move 430 330
+wait-frames 2
+move 390 330
+wait-frames 2
+move 350 330
+wait-frames 2
+move 310 330
+wait-frames 2
+move 270 330
+wait-frames 2
+move 230 330
+wait-frames 2
+move 190 330
+wait-frames 2
+move 150 330
+wait-frames 2
+move 110 330
+wait-frames 2
+move 70 330
+wait-frames 2
+move 30 330
+wait-frames 2
+move 10 360
+wait-frames 2
+move 50 360
+wait-frames 2
+move 90 360
+wait-frames 2
+move 130 360
+wait-frames 2
+move 170 360
+wait-frames 2
+move 210 360
+wait-frames 2
+move 250 360
+wait-frames 2
+move 290 360
+wait-frames 2
+move 330 360
+wait-frames 2
+move 370 360
+wait-frames 2
+move 410 360
+wait-frames 2
+move 450 360
+wait-frames 2
+move 490 360
+wait-frames 2
+move 530 360
+wait-frames 2
+move 570 360
+wait-frames 2
+move 610 360
+wait-frames 2
+move 650 360
+wait-frames 2
+move 690 360
+wait-frames 2
+move 730 360
+wait-frames 2
+move 770 360
+wait-frames 2
+move 790 390
+wait-frames 2
+move 750 390
+wait-frames 2
+move 710 390
+wait-frames 2
+move 670 390
+wait-frames 2
+move 630 390
+wait-frames 2
+move 590 390
+wait-frames 2
+move 550 390
+wait-frames 2
+move 510 390
+wait-frames 2
+move 470 390
+wait-frames 2
+move 430 390
+wait-frames 2
+move 390 390
+wait-frames 2
+move 350 390
+wait-frames 2
+move 310 390
+wait-frames 2
+move 270 390
+wait-frames 2
+move 230 390
+wait-frames 2
+move 190 390
+wait-frames 2
+move 150 390
+wait-frames 2
+move 110 390
+wait-frames 2
+move 70 390
+wait-frames 2
+move 30 390
+wait-frames 2
+move 10 420
+wait-frames 2
+move 50 420
+wait-frames 2
+move 90 420
+wait-frames 2
+move 130 420
+wait-frames 2
+move 170 420
+wait-frames 2
+move 210 420
+wait-frames 2
+move 250 420
+wait-frames 2
+move 290 420
+wait-frames 2
+move 330 420
+wait-frames 2
+move 370 420
+wait-frames 2
+move 410 420
+wait-frames 2
+move 450 420
+wait-frames 2
+move 490 420
+wait-frames 2
+move 530 420
+wait-frames 2
+move 570 420
+wait-frames 2
+move 610 420
+wait-frames 2
+move 650 420
+wait-frames 2
+move 690 420
+wait-frames 2
+move 730 420
+wait-frames 2
+move 770 420
+wait-frames 2
+move 790 450
+wait-frames 2
+move 750 450
+wait-frames 2
+move 710 450
+wait-frames 2
+move 670 450
+wait-frames 2
+move 630 450
+wait-frames 2
+move 590 450
+wait-frames 2
+move 550 450
+wait-frames 2
+move 510 450
+wait-frames 2
+move 470 450
+wait-frames 2
+move 430 450
+wait-frames 2
+move 390 450
+wait-frames 2
+move 350 450
+wait-frames 2
+move 310 450
+wait-frames 2
+move 270 450
+wait-frames 2
+move 230 450
+wait-frames 2
+move 190 450
+wait-frames 2
+move 150 450
+wait-frames 2
+move 110 450
+wait-frames 2
+move 70 450
+wait-frames 2
+move 30 450
+wait-frames 2
+move 10 480
+wait-frames 2
+move 50 480
+wait-frames 2
+move 90 480
+wait-frames 2
+move 130 480
+wait-frames 2
+move 170 480
+wait-frames 2
+move 210 480
+wait-frames 2
+move 250 480
+wait-frames 2
+move 290 480
+wait-frames 2
+move 330 480
+wait-frames 2
+move 370 480
+wait-frames 2
+move 410 480
+wait-frames 2
+move 450 480
+wait-frames 2
+move 490 480
+wait-frames 2
+move 530 480
+wait-frames 2
+move 570 480
+wait-frames 2
+move 610 480
+wait-frames 2
+move 650 480
+wait-frames 2
+move 690 480
+wait-frames 2
+move 730 480
+wait-frames 2
+move 770 480
+wait-frames 2
+move 790 510
+wait-frames 2
+move 750 510
+wait-frames 2
+move 710 510
+wait-frames 2
+move 670 510
+wait-frames 2
+move 630 510
+wait-frames 2
+move 590 510
+wait-frames 2
+move 550 510
+wait-frames 2
+move 510 510
+wait-frames 2
+move 470 510
+wait-frames 2
+move 430 510
+wait-frames 2
+move 390 510
+wait-frames 2
+move 350 510
+wait-frames 2
+move 310 510
+wait-frames 2
+move 270 510
+wait-frames 2
+move 230 510
+wait-frames 2
+move 190 510
+wait-frames 2
+move 150 510
+wait-frames 2
+move 110 510
+wait-frames 2
+move 70 510
+wait-frames 2
+move 30 510
+wait-frames 2
+move 10 540
+wait-frames 2
+move 50 540
+wait-frames 2
+move 90 540
+wait-frames 2
+move 130 540
+wait-frames 2
+move 170 540
+wait-frames 2
+move 210 540
+wait-frames 2
+move 250 540
+wait-frames 2
+move 290 540
+wait-frames 2
+move 330 540
+wait-frames 2
+move 370 540
+wait-frames 2
+move 410 540
+wait-frames 2
+move 450 540
+wait-frames 2
+move 490 540
+wait-frames 2
+move 530 540
+wait-frames 2
+move 570 540
+wait-frames 2
+move 610 540
+wait-frames 2
+move 650 540
+wait-frames 2
+move 690 540
+wait-frames 2
+move 730 540
+wait-frames 2
+move 770 540
+wait-frames 2
+move 790 570
+wait-frames 2
+move 750 570
+wait-frames 2
+move 710 570
+wait-frames 2
+move 670 570
+wait-frames 2
+move 630 570
+wait-frames 2
+move 590 570
+wait-frames 2
+move 550 570
+wait-frames 2
+move 510 570
+wait-frames 2
+move 470 570
+wait-frames 2
+move 430 570
+wait-frames 2
+move 390 570
+wait-frames 2
+move 350 570
+wait-frames 2
+move 310 570
+wait-frames 2
+move 270 570
+wait-frames 2
+move 230 570
+wait-frames 2
+move 190 570
+wait-frames 2
+move 150 570
+wait-frames 2
+move 110 570
+wait-frames 2
+move 70 570
+wait-frames 2
+move 30 570
+wait-frames 2
+capture swept-mp
+click 50 94
+wait-ms 700
+click 245 94
+wait-ms 700
+click 275 94
+wait-ms 700
+click 340 94
+wait-ms 700
+click 515 94
+wait-ms 700
+click 300 200
+wait-ms 700
+click 150 400
+wait-ms 700
+click 700 200
+wait-ms 700
+click 700 400
+wait-ms 700
+click 150 376
+wait-ms 700
+capture clicked-mp
+move 10 30
+wait-frames 2
+move 50 30
+wait-frames 2
+move 90 30
+wait-frames 2
+move 130 30
+wait-frames 2
+move 170 30
+wait-frames 2
+move 210 30
+wait-frames 2
+move 250 30
+wait-frames 2
+move 290 30
+wait-frames 2
+move 330 30
+wait-frames 2
+move 370 30
+wait-frames 2
+move 410 30
+wait-frames 2
+move 450 30
+wait-frames 2
+move 490 30
+wait-frames 2
+move 530 30
+wait-frames 2
+move 570 30
+wait-frames 2
+move 610 30
+wait-frames 2
+move 650 30
+wait-frames 2
+move 690 30
+wait-frames 2
+move 730 30
+wait-frames 2
+move 770 30
+wait-frames 2
+move 10 60
+wait-frames 2
+move 50 60
+wait-frames 2
+move 90 60
+wait-frames 2
+move 130 60
+wait-frames 2
+move 170 60
+wait-frames 2
+move 210 60
+wait-frames 2
+move 250 60
+wait-frames 2
+move 290 60
+wait-frames 2
+move 330 60
+wait-frames 2
+move 370 60
+wait-frames 2
+move 410 60
+wait-frames 2
+move 450 60
+wait-frames 2
+move 490 60
+wait-frames 2
+move 530 60
+wait-frames 2
+move 570 60
+wait-frames 2
+move 610 60
+wait-frames 2
+move 650 60
+wait-frames 2
+move 690 60
+wait-frames 2
+move 730 60
+wait-frames 2
+move 770 60
+wait-frames 2
+move 10 90
+wait-frames 2
+move 50 90
+wait-frames 2
+move 90 90
+wait-frames 2
+move 130 90
+wait-frames 2
+move 170 90
+wait-frames 2
+move 210 90
+wait-frames 2
+move 250 90
+wait-frames 2
+move 290 90
+wait-frames 2
+move 330 90
+wait-frames 2
+move 370 90
+wait-frames 2
+move 410 90
+wait-frames 2
+move 450 90
+wait-frames 2
+move 490 90
+wait-frames 2
+move 530 90
+wait-frames 2
+move 570 90
+wait-frames 2
+move 610 90
+wait-frames 2
+move 650 90
+wait-frames 2
+move 690 90
+wait-frames 2
+move 730 90
+wait-frames 2
+move 770 90
+wait-frames 2
+move 10 120
+wait-frames 2
+move 50 120
+wait-frames 2
+move 90 120
+wait-frames 2
+move 130 120
+wait-frames 2
+move 170 120
+wait-frames 2
+move 210 120
+wait-frames 2
+move 250 120
+wait-frames 2
+move 290 120
+wait-frames 2
+move 330 120
+wait-frames 2
+move 370 120
+wait-frames 2
+move 410 120
+wait-frames 2
+move 450 120
+wait-frames 2
+move 490 120
+wait-frames 2
+move 530 120
+wait-frames 2
+move 570 120
+wait-frames 2
+move 610 120
+wait-frames 2
+move 650 120
+wait-frames 2
+move 690 120
+wait-frames 2
+move 730 120
+wait-frames 2
+move 770 120
+wait-frames 2
+move 10 150
+wait-frames 2
+move 50 150
+wait-frames 2
+move 90 150
+wait-frames 2
+move 130 150
+wait-frames 2
+move 170 150
+wait-frames 2
+move 210 150
+wait-frames 2
+move 250 150
+wait-frames 2
+move 290 150
+wait-frames 2
+move 330 150
+wait-frames 2
+move 370 150
+wait-frames 2
+move 410 150
+wait-frames 2
+move 450 150
+wait-frames 2
+move 490 150
+wait-frames 2
+move 530 150
+wait-frames 2
+move 570 150
+wait-frames 2
+move 610 150
+wait-frames 2
+move 650 150
+wait-frames 2
+move 690 150
+wait-frames 2
+move 730 150
+wait-frames 2
+move 770 150
+wait-frames 2
+move 10 180
+wait-frames 2
+move 50 180
+wait-frames 2
+move 90 180
+wait-frames 2
+move 130 180
+wait-frames 2
+move 170 180
+wait-frames 2
+move 210 180
+wait-frames 2
+move 250 180
+wait-frames 2
+move 290 180
+wait-frames 2
+move 330 180
+wait-frames 2
+move 370 180
+wait-frames 2
+move 410 180
+wait-frames 2
+move 450 180
+wait-frames 2
+move 490 180
+wait-frames 2
+move 530 180
+wait-frames 2
+move 570 180
+wait-frames 2
+move 610 180
+wait-frames 2
+move 650 180
+wait-frames 2
+move 690 180
+wait-frames 2
+move 730 180
+wait-frames 2
+move 770 180
+wait-frames 2
+move 10 210
+wait-frames 2
+move 50 210
+wait-frames 2
+move 90 210
+wait-frames 2
+move 130 210
+wait-frames 2
+move 170 210
+wait-frames 2
+move 210 210
+wait-frames 2
+move 250 210
+wait-frames 2
+move 290 210
+wait-frames 2
+move 330 210
+wait-frames 2
+move 370 210
+wait-frames 2
+move 410 210
+wait-frames 2
+move 450 210
+wait-frames 2
+move 490 210
+wait-frames 2
+move 530 210
+wait-frames 2
+move 570 210
+wait-frames 2
+move 610 210
+wait-frames 2
+move 650 210
+wait-frames 2
+move 690 210
+wait-frames 2
+move 730 210
+wait-frames 2
+move 770 210
+wait-frames 2
+move 10 240
+wait-frames 2
+move 50 240
+wait-frames 2
+move 90 240
+wait-frames 2
+move 130 240
+wait-frames 2
+move 170 240
+wait-frames 2
+move 210 240
+wait-frames 2
+move 250 240
+wait-frames 2
+move 290 240
+wait-frames 2
+move 330 240
+wait-frames 2
+move 370 240
+wait-frames 2
+move 410 240
+wait-frames 2
+move 450 240
+wait-frames 2
+move 490 240
+wait-frames 2
+move 530 240
+wait-frames 2
+move 570 240
+wait-frames 2
+move 610 240
+wait-frames 2
+move 650 240
+wait-frames 2
+move 690 240
+wait-frames 2
+move 730 240
+wait-frames 2
+move 770 240
+wait-frames 2
+move 10 270
+wait-frames 2
+move 50 270
+wait-frames 2
+move 90 270
+wait-frames 2
+move 130 270
+wait-frames 2
+move 170 270
+wait-frames 2
+move 210 270
+wait-frames 2
+move 250 270
+wait-frames 2
+move 290 270
+wait-frames 2
+move 330 270
+wait-frames 2
+move 370 270
+wait-frames 2
+move 410 270
+wait-frames 2
+move 450 270
+wait-frames 2
+move 490 270
+wait-frames 2
+move 530 270
+wait-frames 2
+move 570 270
+wait-frames 2
+move 610 270
+wait-frames 2
+move 650 270
+wait-frames 2
+move 690 270
+wait-frames 2
+move 730 270
+wait-frames 2
+move 770 270
+wait-frames 2
+move 10 300
+wait-frames 2
+move 50 300
+wait-frames 2
+move 90 300
+wait-frames 2
+move 130 300
+wait-frames 2
+move 170 300
+wait-frames 2
+move 210 300
+wait-frames 2
+move 250 300
+wait-frames 2
+move 290 300
+wait-frames 2
+move 330 300
+wait-frames 2
+move 370 300
+wait-frames 2
+move 410 300
+wait-frames 2
+move 450 300
+wait-frames 2
+move 490 300
+wait-frames 2
+move 530 300
+wait-frames 2
+move 570 300
+wait-frames 2
+move 610 300
+wait-frames 2
+move 650 300
+wait-frames 2
+move 690 300
+wait-frames 2
+move 730 300
+wait-frames 2
+move 770 300
+wait-frames 2
+move 10 330
+wait-frames 2
+move 50 330
+wait-frames 2
+move 90 330
+wait-frames 2
+move 130 330
+wait-frames 2
+move 170 330
+wait-frames 2
+move 210 330
+wait-frames 2
+move 250 330
+wait-frames 2
+move 290 330
+wait-frames 2
+move 330 330
+wait-frames 2
+move 370 330
+wait-frames 2
+move 410 330
+wait-frames 2
+move 450 330
+wait-frames 2
+move 490 330
+wait-frames 2
+move 530 330
+wait-frames 2
+move 570 330
+wait-frames 2
+move 610 330
+wait-frames 2
+move 650 330
+wait-frames 2
+move 690 330
+wait-frames 2
+move 730 330
+wait-frames 2
+move 770 330
+wait-frames 2
+move 10 360
+wait-frames 2
+move 50 360
+wait-frames 2
+move 90 360
+wait-frames 2
+move 130 360
+wait-frames 2
+move 170 360
+wait-frames 2
+move 210 360
+wait-frames 2
+move 250 360
+wait-frames 2
+move 290 360
+wait-frames 2
+move 330 360
+wait-frames 2
+move 370 360
+wait-frames 2
+move 410 360
+wait-frames 2
+move 450 360
+wait-frames 2
+move 490 360
+wait-frames 2
+move 530 360
+wait-frames 2
+move 570 360
+wait-frames 2
+move 610 360
+wait-frames 2
+move 650 360
+wait-frames 2
+move 690 360
+wait-frames 2
+move 730 360
+wait-frames 2
+move 770 360
+wait-frames 2
+move 10 390
+wait-frames 2
+move 50 390
+wait-frames 2
+move 90 390
+wait-frames 2
+move 130 390
+wait-frames 2
+move 170 390
+wait-frames 2
+move 210 390
+wait-frames 2
+move 250 390
+wait-frames 2
+move 290 390
+wait-frames 2
+move 330 390
+wait-frames 2
+move 370 390
+wait-frames 2
+move 410 390
+wait-frames 2
+move 450 390
+wait-frames 2
+move 490 390
+wait-frames 2
+move 530 390
+wait-frames 2
+move 570 390
+wait-frames 2
+move 610 390
+wait-frames 2
+move 650 390
+wait-frames 2
+move 690 390
+wait-frames 2
+move 730 390
+wait-frames 2
+move 770 390
+wait-frames 2
+move 10 420
+wait-frames 2
+move 50 420
+wait-frames 2
+move 90 420
+wait-frames 2
+move 130 420
+wait-frames 2
+move 170 420
+wait-frames 2
+move 210 420
+wait-frames 2
+move 250 420
+wait-frames 2
+move 290 420
+wait-frames 2
+move 330 420
+wait-frames 2
+move 370 420
+wait-frames 2
+move 410 420
+wait-frames 2
+move 450 420
+wait-frames 2
+move 490 420
+wait-frames 2
+move 530 420
+wait-frames 2
+move 570 420
+wait-frames 2
+move 610 420
+wait-frames 2
+move 650 420
+wait-frames 2
+move 690 420
+wait-frames 2
+move 730 420
+wait-frames 2
+move 770 420
+wait-frames 2
+move 10 450
+wait-frames 2
+move 50 450
+wait-frames 2
+move 90 450
+wait-frames 2
+move 130 450
+wait-frames 2
+move 170 450
+wait-frames 2
+move 210 450
+wait-frames 2
+move 250 450
+wait-frames 2
+move 290 450
+wait-frames 2
+move 330 450
+wait-frames 2
+move 370 450
+wait-frames 2
+move 410 450
+wait-frames 2
+move 450 450
+wait-frames 2
+move 490 450
+wait-frames 2
+move 530 450
+wait-frames 2
+move 570 450
+wait-frames 2
+move 610 450
+wait-frames 2
+move 650 450
+wait-frames 2
+move 690 450
+wait-frames 2
+move 730 450
+wait-frames 2
+move 770 450
+wait-frames 2
+move 10 480
+wait-frames 2
+move 50 480
+wait-frames 2
+move 90 480
+wait-frames 2
+move 130 480
+wait-frames 2
+move 170 480
+wait-frames 2
+move 210 480
+wait-frames 2
+move 250 480
+wait-frames 2
+move 290 480
+wait-frames 2
+move 330 480
+wait-frames 2
+move 370 480
+wait-frames 2
+move 410 480
+wait-frames 2
+move 450 480
+wait-frames 2
+move 490 480
+wait-frames 2
+move 530 480
+wait-frames 2
+move 570 480
+wait-frames 2
+move 610 480
+wait-frames 2
+move 650 480
+wait-frames 2
+move 690 480
+wait-frames 2
+move 730 480
+wait-frames 2
+move 770 480
+wait-frames 2
+move 10 510
+wait-frames 2
+move 50 510
+wait-frames 2
+move 90 510
+wait-frames 2
+move 130 510
+wait-frames 2
+move 170 510
+wait-frames 2
+move 210 510
+wait-frames 2
+move 250 510
+wait-frames 2
+move 290 510
+wait-frames 2
+move 330 510
+wait-frames 2
+move 370 510
+wait-frames 2
+move 410 510
+wait-frames 2
+move 450 510
+wait-frames 2
+move 490 510
+wait-frames 2
+move 530 510
+wait-frames 2
+move 570 510
+wait-frames 2
+move 610 510
+wait-frames 2
+move 650 510
+wait-frames 2
+move 690 510
+wait-frames 2
+move 730 510
+wait-frames 2
+move 770 510
+wait-frames 2
+move 10 540
+wait-frames 2
+move 50 540
+wait-frames 2
+move 90 540
+wait-frames 2
+move 130 540
+wait-frames 2
+move 170 540
+wait-frames 2
+move 210 540
+wait-frames 2
+move 250 540
+wait-frames 2
+move 290 540
+wait-frames 2
+move 330 540
+wait-frames 2
+move 370 540
+wait-frames 2
+move 410 540
+wait-frames 2
+move 450 540
+wait-frames 2
+move 490 540
+wait-frames 2
+move 530 540
+wait-frames 2
+move 570 540
+wait-frames 2
+move 610 540
+wait-frames 2
+move 650 540
+wait-frames 2
+move 690 540
+wait-frames 2
+move 730 540
+wait-frames 2
+move 770 540
+wait-frames 2
+move 10 570
+wait-frames 2
+move 50 570
+wait-frames 2
+move 90 570
+wait-frames 2
+move 130 570
+wait-frames 2
+move 170 570
+wait-frames 2
+move 210 570
+wait-frames 2
+move 250 570
+wait-frames 2
+move 290 570
+wait-frames 2
+move 330 570
+wait-frames 2
+move 370 570
+wait-frames 2
+move 410 570
+wait-frames 2
+move 450 570
+wait-frames 2
+move 490 570
+wait-frames 2
+move 530 570
+wait-frames 2
+move 570 570
+wait-frames 2
+move 610 570
+wait-frames 2
+move 650 570
+wait-frames 2
+move 690 570
+wait-frames 2
+move 730 570
+wait-frames 2
+move 770 570
+wait-frames 2
+# The footer: JOIN SERVER (668,573 127x25) and its row.
+move 10 585
+wait-frames 2
+move 40 585
+wait-frames 2
+move 70 585
+wait-frames 2
+move 100 585
+wait-frames 2
+move 130 585
+wait-frames 2
+move 160 585
+wait-frames 2
+move 190 585
+wait-frames 2
+move 220 585
+wait-frames 2
+move 250 585
+wait-frames 2
+move 280 585
+wait-frames 2
+move 310 585
+wait-frames 2
+move 340 585
+wait-frames 2
+move 370 585
+wait-frames 2
+move 400 585
+wait-frames 2
+move 430 585
+wait-frames 2
+move 460 585
+wait-frames 2
+move 490 585
+wait-frames 2
+move 520 585
+wait-frames 2
+move 550 585
+wait-frames 2
+move 580 585
+wait-frames 2
+move 610 585
+wait-frames 2
+move 640 585
+wait-frames 2
+move 670 585
+wait-frames 2
+move 700 585
+wait-frames 2
+move 730 585
+wait-frames 2
+move 760 585
+wait-frames 2
+move 790 585
+wait-frames 2
+move 730 585
+wait-ms 500
+click 730 585
+wait-ms 2000
+capture join-server
+move 600 585
+wait-ms 300
+move 730 585
+wait-ms 300
+click 730 585
+wait-ms 2000
+capture join-server-2
+click 500 315
+wait-ms 1500
+click 440 305
+wait-ms 1500
+capture menu-final
+log disconnect-menu done

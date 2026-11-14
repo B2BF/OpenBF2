@@ -1,0 +1,48 @@
+# [TEMP] [CHOSEN, not recovered] Login investigation at 800x600.
+# Run loopback.py --no-join --input-script ui-menufix-login.
+# Coordinates follow the stock movie; inspect the captures to verify each navigation.
+timeout 180
+wait-log mods/bf2/Movies/menu.bik
+wait-ms 3000
+move 400 300
+capture login-initial
+click 260 187
+wait-ms 1000
+capture prefix-before-manage
+click 280 414
+wait-ms 1000
+move 400 300
+capture manage-account
+click 248 414
+wait-ms 1000
+move 400 300
+capture prefix-after-back
+click 260 187
+wait-ms 1000
+capture prefix-after-reselect
+click 531 414
+move 400 300
+capture connecting-00
+wait-frames 6
+capture connecting-06
+wait-frames 6
+capture connecting-12
+wait-frames 6
+capture connecting-18
+wait-frames 6
+capture connecting-24
+wait-frames 6
+capture connecting-30
+wait-frames 6
+capture connecting-36
+wait-frames 12
+capture connecting-48
+wait-frames 12
+capture connecting-60
+wait-frames 12
+capture connecting-72
+wait-frames 18
+capture connecting-90
+wait-ms 3000
+capture after-login
+quit

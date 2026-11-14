@@ -117,7 +117,7 @@ AIConsole::AIConsole()
     properties->setMaxSlope(0.36651915311813354f);
 }
 
-// ELF 0x38F5C0 (D1, 1047 B; recovered on the client track, docs/macos-c-singleplayer.md).
+// ELF 0x38F5C0 (D1, 1047 B; recovered on the client track).
 // reset, then the SquadManager singleton is deleted and this singleton zeroed unconditionally.
 // The BAP entries are deleted through their virtual deleting destructor (+4) and erased one by
 // one; the modifier arrays are freed with delete[] but their nodes stay (only the cursor is

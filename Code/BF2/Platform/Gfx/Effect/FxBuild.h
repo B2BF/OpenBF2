@@ -52,6 +52,14 @@ struct BuildReport {
     bool tolerateShaderFailures = false;
     // Reflection-only builds (D3DXCreateEffectCompiler on `.mfx` metadata): no techniques.
     bool allowNoTechniques = false;
+    // [CHOSEN, not recovered] Set when D3DX accepts the request (refusal table): a vs_1_1/vs_2_x
+    // shader the native SM1/2 lowering cannot produce (E5017 not-implemented, E9015 register or
+    // encoding limits, both irrelevant on Metal) is compiled internally as vs_3_0. Observables
+    // keep the requested profile: the CTAB maps constants by name, stages link by semantic, the
+    // record's major/minor stay at the requested version (so oD0/oD1 are still clamped as below
+    // vs_3_0) and D3DX's own result for the same source is the same arithmetic.
+    bool higherVertexProfile = false;
+    uint32_t higherVertexProfileUses = 0;
     std::vector<std::string> shaderFailures;
     uint32_t shaders = 0, compiled = 0;
 };

@@ -77,7 +77,7 @@ bool hasAbilityPosition(const Vec2& position)
     return !(sum <= epsilon);
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     const float sentinel = -4000.0f;
     const float epsilon = FLT_EPSILON;
     bool valid;
@@ -116,7 +116,7 @@ void beginSupplyCooldown(double now, const float& duration, float& remaining,
     deadline = static_cast<float>(sum);
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     // [CHOSEN, not recovered] Preserve x87 sum and supply store ordering.
     bf2x87::beginCooldown(now, duration, remaining, reloading, deadline, true);
 #endif
@@ -149,7 +149,7 @@ void beginVehicleCooldown(double now, const float& duration, float& remaining,
     reloading = true;
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     // [CHOSEN, not recovered] Preserve x87 sum and vehicle store ordering.
     bf2x87::beginCooldown(now, duration, remaining, reloading, deadline, false);
 #endif

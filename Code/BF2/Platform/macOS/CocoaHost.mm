@@ -5,10 +5,14 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
+#include <vector>
+#include <unistd.h>                         // getppid: the launcher's pid (activation retries)
 
 #include "CocoaHost.h"
 #include "MacRawMouse.h"
 #include "MacInputScript.h"          // [TEMP] BF2_INPUT_SCRIPT (docs/macos-c-input-script.md)
+#include "MacCursorFile.h"
 
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
@@ -34,6 +38,24 @@ unsigned int msFromSeconds(NSTimeInterval seconds)
 } // namespace
 
 using dice::hfe::macos::CocoaHost;
+
+namespace {
+// [CHOSEN, not recovered] A cursor token (the counterpart of an HCURSOR). The two shape tokens
+// show the system arrow; a token from loadCursorFromFile carries the decoded file and the
+// NSCursors built from it for the current view scale.
+struct HostCursor
+{
+    bool custom = false;
+    dice::hfe::macos::CursorAnimation anim;
+    int totalJiffies = 0;
+    CGFloat builtScale = 0.0;           // points per frame pixel the cursors were built for
+    CGFloat builtBacking = 0.0;
+    NSArray<NSCursor*>* cursors = nil;  // one per frame; NSNull-free, empty when building failed
+};
+
+// The view's cursor rect asks the host for the cursor it shows (defined after CocoaHost::Impl).
+NSCursor* currentViewCursor();
+} // namespace
 
 @interface OpenBF2HostWindow : NSWindow
 @end
@@ -75,6 +97,13 @@ using dice::hfe::macos::CocoaHost;
     return layer;
 }
 - (BOOL)wantsUpdateLayer       { return YES; }
+// [CHOSEN, not recovered] A loaded game cursor is the view's cursor rect, so AppKit shows it when
+// the pointer enters the view and restores the arrow when it leaves (title bar, other windows).
+- (void)resetCursorRects
+{
+    if (NSCursor* cursor = currentViewCursor())
+        [self addCursorRect:self.bounds cursor:cursor];
+}
 - (BOOL)acceptsFirstResponder  { return YES; }
 - (BOOL)acceptsFirstMouse:(NSEvent*)event { (void)event; return YES; }
 // Keys are consumed by the host pump before dispatch; swallowing them here prevents the
@@ -125,6 +154,10 @@ struct CocoaHost::Impl : IInputScriptSink
     bool mouseDisassociated = false;
     bool cursorHidden     = false;  // the [NSCursor hide] balance this host owns
     HostCursorShape cursorShape = HostCursorArrow;
+    HostCursor* activeCursor = nullptr;     // the last SetCursor token (null: none or hidden)
+    double cursorAnimStart = 0.0;           // systemUptime when activeCursor was selected
+    NSCursor* rectCursor = nil;             // the cursor the view's cursor rect holds
+    NSCursor* shownCursor = nil;            // the cursor last set while the pointer was inside
 
     unsigned int modifiers = 0;
     // [CHOSEN, not recovered] Native GetAsyncKeyState(VK_RETURN) adapter.
@@ -149,6 +182,23 @@ struct CocoaHost::Impl : IInputScriptSink
     // unattended. Scripted input and the cursor rules are unchanged. [RETIRE-WHEN: client-test-automation-replaced]
     bool scriptedFocus = false;     // scripted && !BF2_INPUT_SCRIPT_REAL_FOCUS: focus is forced held
     unsigned int deactivations = 0; // deactivationCount(): active -> inactive transitions
+
+    // [CHOSEN, not recovered] Activation after a start from another application (the setup app
+    // runs the client through NSTask). Since macOS 14 activation is cooperative: a request made
+    // while another application is active may be refused, and a refused game window stays in
+    // front of the launcher without key status, so its clicks never reach the menu. The request
+    // is repeated for a few seconds, but only while the application that started this process (or
+    // nobody) is frontmost: an application the user went to meanwhile keeps the front.
+    bool   activationPending = false;
+    bool   fullscreenPending = false;
+    // [CHOSEN, not recovered] The system reports this process active (another app activated it
+    // during launch) while NSApp never received the activation; AppKit then keeps isActive NO
+    // and its windows non-key, so the engine's focus gate drops every click. When that state
+    // lasts, the host trusts the system's answer until NSApp catches up or the user leaves.
+    bool   systemActive = false; // a fullscreen start waiting for activation (createWindow)
+    CocoaHost* owner = nullptr;       // for becameActive's deferred setFullscreen
+    double activationStarted = 0.0;  // systemUptime of the first request
+    double activationLastTry = 0.0;
     float scriptX = 0.0f, scriptY = 0.0f;
     bool scriptPointerSet = false;
 
@@ -161,6 +211,144 @@ struct CocoaHost::Impl : IInputScriptSink
     std::vector<IHostEventListener*> snapshot() const { return listeners; }
 
     bool hasFocus() const { return (window != nil || testHeadless) && windowKey && appActive; }
+
+    static double uptime() { return [[NSProcessInfo processInfo] systemUptime]; }
+
+    // -[NSApplication activate] from macOS 14 on; activateIgnoringOtherApps: before (its
+    // "ignoring" flag is ignored since macOS 14 and the selector deprecated).
+    static void requestActivation()
+    {
+        if (@available(macOS 14.0, *))
+        {
+            [NSApp activate];
+        }
+        else
+        {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+            [NSApp activateIgnoringOtherApps:YES];
+#pragma clang diagnostic pop
+        }
+    }
+
+    // The first request, made when the game window is shown. Scripted runs never take the
+    // user's focus ([TEMP] scriptedFocus).
+    void beginActivation()
+    {
+        if (scriptedFocus || testHeadless)
+            return;
+        if ([NSApp isActive])
+            return;
+        NSRunningApplication* front = [[NSWorkspace sharedWorkspace] frontmostApplication];
+        std::fprintf(stderr, "[host] activation requested (frontmost: %s pid %d, launcher pid %d)\n",
+                     front.localizedName.UTF8String ?: "none", front ? front.processIdentifier : 0,
+                     static_cast<int>(getppid()));
+        activationPending = true;
+        activationStarted = activationLastTry = uptime();
+        requestActivation();
+    }
+
+    // Called on every pump and on applicationDidBecomeActive: reports the outcome once, and
+    // repeats the request every half second for ten seconds while the launcher, nobody or this
+    // process is frontmost.
+    void updateActivation()
+    {
+        if (!activationPending)
+            return;
+        const double now = uptime();
+        if ([NSApp isActive])
+        {
+            activationPending = false;
+            std::fprintf(stderr, "[host] application active after %d ms\n",
+                         static_cast<int>((now - activationStarted) * 1000.0));
+            return;
+        }
+        if (!systemActive && now - activationStarted > 1.0 &&
+            [NSRunningApplication currentApplication].active)
+        {
+            NSRunningApplication* f = [[NSWorkspace sharedWorkspace] frontmostApplication];
+            if (f && f.processIdentifier == getpid())
+            {
+                systemActive = true;
+                std::fprintf(stderr, "[host] system reports the application active; NSApp does not - using the system's state\n");
+                becameActive();
+                [delegate syncFocus];
+            }
+        }
+        if (now - activationStarted > 10.0)
+        {
+            activationPending = false;
+            std::fprintf(stderr, "[host] application not activated; click the game window or switch to it\n");
+            return;
+        }
+        if (now - activationLastTry < 0.5)
+            return;
+        activationLastTry = now;
+        // Retry while the launcher, nobody, or this process itself is frontmost. A child started
+        // by the launcher can already be reported frontmost (its window ordered front) while
+        // NSApp is still inactive; that state needs the retry most, and the window must be made
+        // key again with it.
+        NSRunningApplication* front = [[NSWorkspace sharedWorkspace] frontmostApplication];
+        const pid_t frontPid = front ? front.processIdentifier : 0;
+        if (front && frontPid != getppid() && frontPid != getpid())
+            return;
+        if (frontPid == getpid())
+        {
+            [[NSRunningApplication currentApplication] activateWithOptions:NSApplicationActivateAllWindows];
+            if (window && visible && !minimized && !window.isKeyWindow)
+            {
+                [window makeKeyAndOrderFront:nil];
+                [window makeFirstResponder:view];
+            }
+        }
+        requestActivation();
+    }
+
+    // The application became active: the game window takes key status if it lost it (a window
+    // ordered front while the application was inactive), so input reaches the engine at once.
+    void becameActive()
+    {
+        if (fullscreenPending)
+        {
+            fullscreenPending = false;
+            if (owner)
+                owner->setFullscreen(true);
+        }
+        if (window && visible && !minimized && !window.isKeyWindow)
+        {
+            [window makeKeyAndOrderFront:nil];
+            [window makeFirstResponder:view];
+        }
+        updateActivation();
+    }
+
+    // [CHOSEN, not recovered] Win32 sends WM_SETCURSOR and WM_MOUSEMOVE when a window under the
+    // pointer is activated; the menu learns the pointer position before the first click instead of
+    // after the first move. A view-relative move without motion, only when the pointer is inside.
+    void reportPointer()
+    {
+        if (!window || !view || scripted || testHeadless)
+            return;
+        const NSPoint inWindow = [window convertPointFromScreen:[NSEvent mouseLocation]];
+        const NSPoint p = [view convertPoint:inWindow fromView:nil];
+        const NSRect b = view.bounds;
+        if (b.size.width <= 0 || b.size.height <= 0 || !NSPointInRect(p, b))
+            return;
+        HostMouseMoveEvent move;
+        move.dx = move.dy = 0.0f;
+        move.x = static_cast<float>(p.x * backWidth / b.size.width);
+        move.y = static_cast<float>((b.size.height - p.y) * backHeight / b.size.height);
+        move.insideView = true;
+        move.captured = relativeMouse && hasFocus();
+        move.timeMs = CocoaHost::tickCountMs();
+        if (!mouseInView)
+        {
+            mouseInView = true;
+            applyCursor();
+        }
+        for (IHostEventListener* l : snapshot())
+            l->onMouseMove(move);
+    }
 
     void updateAsyncEnter(unsigned short keyCode, bool down, bool repeat)
     {
@@ -207,6 +395,150 @@ struct CocoaHost::Impl : IInputScriptSink
         layer.contentsScale = 1.0;
         layer.drawableSize = CGSizeMake(backWidth, backHeight);
         [CATransaction commit];
+    }
+
+    // [CHOSEN, not recovered] Builds a token's NSCursors for the current view scale. Retail shows
+    // the 32x32 cursor at one back-buffer pixel per cursor pixel (a full-screen mode change on
+    // Windows), so its size follows the game image: points per back-buffer pixel, times the frame
+    // size. Pixels are enlarged nearest-neighbour to the next whole multiple and, when the
+    // Retina target is not a whole multiple, reduced to it with high-quality filtering.
+    static NSCursor* buildCursorFrame(const CursorFrame& f, CGFloat scale, CGFloat backing)
+    {
+        const NSSize points = NSMakeSize(f.width * scale, f.height * scale);
+        const NSPoint hot = NSMakePoint(f.hotX * scale, f.hotY * scale);
+        if (!f.png.empty())
+        {
+            NSData* data = [NSData dataWithBytes:f.png.data() length:f.png.size()];
+            NSImage* image = [[NSImage alloc] initWithData:data];
+            if (!image)
+                return nil;
+            image.size = points;
+            return [[NSCursor alloc] initWithImage:image hotSpot:hot];
+        }
+        const int w = f.width, h = f.height;
+        const int pw = std::max(1, static_cast<int>(std::lround(points.width * backing)));
+        const int ph = std::max(1, static_cast<int>(std::lround(points.height * backing)));
+        const int m = std::max(1, (pw + w - 1) / w);
+        const int uw = w * m, uh = h * m;
+        // The reps own their pixel buffers (no provider referring to a temporary).
+        NSBitmapImageRep* rep = [[NSBitmapImageRep alloc]
+            initWithBitmapDataPlanes:nullptr pixelsWide:uw pixelsHigh:uh bitsPerSample:8
+                     samplesPerPixel:4 hasAlpha:YES isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace
+                        bitmapFormat:NSBitmapFormatAlphaNonpremultiplied bytesPerRow:uw * 4 bitsPerPixel:32];
+        if (!rep || !rep.bitmapData)
+            return nil;
+        std::uint8_t* up = rep.bitmapData;
+        for (int y = 0; y < uh; ++y)
+            for (int x = 0; x < uw; ++x)
+                std::memcpy(&up[(static_cast<size_t>(y) * uw + x) * 4],
+                            &f.rgba[(static_cast<size_t>(y / m) * w + x / m) * 4], 4);
+        if (uw != pw || uh != ph)
+        {
+            NSBitmapImageRep* scaled = [[NSBitmapImageRep alloc]
+                initWithBitmapDataPlanes:nullptr pixelsWide:pw pixelsHigh:ph bitsPerSample:8
+                         samplesPerPixel:4 hasAlpha:YES isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace
+                            bitmapFormat:0 bytesPerRow:pw * 4 bitsPerPixel:32];
+            NSGraphicsContext* gc = scaled ? [NSGraphicsContext graphicsContextWithBitmapImageRep:scaled] : nil;
+            if (!gc)
+                return nil;
+            std::memset(scaled.bitmapData, 0, static_cast<size_t>(pw) * ph * 4);
+            [NSGraphicsContext saveGraphicsState];
+            [NSGraphicsContext setCurrentContext:gc];
+            gc.imageInterpolation = NSImageInterpolationHigh;
+            [rep drawInRect:NSMakeRect(0, 0, pw, ph) fromRect:NSZeroRect
+                  operation:NSCompositingOperationCopy fraction:1.0 respectFlipped:NO hints:nil];
+            [gc flushGraphics];
+            [NSGraphicsContext restoreGraphicsState];
+            rep = scaled;
+        }
+        rep.size = points;
+        NSImage* nsImage = [[NSImage alloc] initWithSize:points];
+        [nsImage addRepresentation:rep];
+        return [[NSCursor alloc] initWithImage:nsImage hotSpot:hot];
+    }
+
+    // The NSCursor for the active token's current animation step, or nil for the system arrow.
+    NSCursor* customCursor()
+    {
+        HostCursor* c = activeCursor;
+        if (!c || !c->custom || !view || backHeight <= 0)
+            return nil;
+        const NSRect b = view.bounds;
+        if (b.size.height <= 0)
+            return nil;
+        const CGFloat scale = std::min<CGFloat>(4.0, std::max<CGFloat>(0.5, b.size.height / backHeight));
+        const CGFloat backing = window && window.backingScaleFactor > 0 ? window.backingScaleFactor : 1.0;
+        if (!c->cursors || std::fabs(c->builtScale - scale) > 0.001 || c->builtBacking != backing)
+        {
+            NSMutableArray<NSCursor*>* built = [NSMutableArray arrayWithCapacity:c->anim.frames.size()];
+            for (const CursorFrame& f : c->anim.frames)
+            {
+                NSCursor* cursor = buildCursorFrame(f, scale, backing);
+                if (!cursor)
+                {
+                    built = [NSMutableArray array];
+                    break;
+                }
+                [built addObject:cursor];
+            }
+            c->cursors = built;
+            c->builtScale = scale;
+            c->builtBacking = backing;
+        }
+        if (c->cursors.count == 0 || c->anim.steps.empty())
+            return nil;
+        // Windows plays an animated cursor's steps for their jiffies (1/60 s) and loops.
+        size_t step = 0;
+        if (c->anim.steps.size() > 1 && c->totalJiffies > 0)
+        {
+            const double elapsed = ([NSProcessInfo processInfo].systemUptime - cursorAnimStart) * 60.0;
+            long t = static_cast<long>(std::fmod(std::max(0.0, elapsed), static_cast<double>(c->totalJiffies)));
+            while (step + 1 < c->anim.steps.size() && t >= c->anim.jiffies[step])
+                t -= c->anim.jiffies[step++];
+        }
+        const int frame = c->anim.steps[step];
+        return frame >= 0 && static_cast<NSUInteger>(frame) < c->cursors.count ? c->cursors[frame] : nil;
+    }
+
+    bool pointerOverView() const
+    {
+        if (!window || !view || !window.visible)
+            return false;
+        const NSPoint screen = [NSEvent mouseLocation];
+        if ([NSWindow windowNumberAtPoint:screen belowWindowWithWindowNumber:0] != window.windowNumber)
+            return false;
+        const NSPoint p = [view convertPoint:[window convertPointFromScreen:screen] fromView:nil];
+        return NSPointInRect(p, view.bounds);
+    }
+
+    // [CHOSEN, not recovered] Keeps the cursor image in step with SetCursor's token: the view's
+    // cursor rect holds the current frame, and while the active application's pointer is over the
+    // view the frame is set directly so animation steps and token changes show at once. Outside
+    // the view and in other applications AppKit's own cursors apply. Visibility is applyCursor's.
+    void updateCursorImage()
+    {
+        if (testHeadless || !window || !view)
+        {
+            rectCursor = shownCursor = nil;
+            return;
+        }
+        NSCursor* cursor = customCursor();
+        if (cursor != rectCursor)
+        {
+            rectCursor = cursor;
+            [window invalidateCursorRectsForView:view];
+        }
+        if (!appActive || !windowKey || !pointerOverView())
+        {
+            shownCursor = nil;
+            return;
+        }
+        NSCursor* target = cursor ? cursor : [NSCursor arrowCursor];
+        if (target != shownCursor)
+        {
+            [target set];
+            shownCursor = target;
+        }
     }
 
     // Applies the combined cursor-visibility rule. The cursor is only ever hidden while the
@@ -282,6 +614,7 @@ struct CocoaHost::Impl : IInputScriptSink
             key = active = true;                 // [TEMP] scripted runs keep focus
         const bool activeChanged = active != appActive;
         const bool changed = key != windowKey || activeChanged;
+        const bool hadFocus = hasFocus();
         windowKey = key;
         appActive = active;
         if (!changed)
@@ -303,6 +636,8 @@ struct CocoaHost::Impl : IInputScriptSink
                 l->onAppActivationChanged(active);
             l->onFocusChanged(key, active);
         }
+        if (!hadFocus && hasFocus())
+            reportPointer();
     }
 
     void requestClose()
@@ -610,6 +945,8 @@ struct CocoaHost::Impl : IInputScriptSink
                 until = [NSDate distantPast];
             }
             [NSApp updateWindows];
+            updateActivation();
+            updateCursorImage();
         }
         drainRawMouse();
         if (scripted)
@@ -796,8 +1133,18 @@ struct CocoaHost::Impl : IInputScriptSink
 - (void)syncFocus
 {
     NSWindow* window = impl ? (NSWindow*)impl->window : nil;
-    if (impl)
-        impl->setFocusState(window != nil && window.isKeyWindow, [NSApp isActive] ? true : false);
+    if (!impl)
+        return;
+    if (impl->systemActive)
+    {
+        // Leave the fallback once AppKit has caught up, or once another application is in front.
+        NSRunningApplication* f = [[NSWorkspace sharedWorkspace] frontmostApplication];
+        if ([NSApp isActive] || !f || f.processIdentifier != getpid())
+            impl->systemActive = false;
+    }
+    const bool active = [NSApp isActive] || impl->systemActive;
+    const bool key = window != nil && (window.isKeyWindow || (impl->systemActive && window.isVisible));
+    impl->setFocusState(key, active);
 }
 - (BOOL)windowShouldClose:(NSWindow*)sender
 {
@@ -809,7 +1156,13 @@ struct CocoaHost::Impl : IInputScriptSink
 - (void)windowDidResignKey:(NSNotification*)note     { (void)note; [self syncFocus]; }
 - (void)windowDidMiniaturize:(NSNotification*)note   { (void)note; if (impl) { impl->minimized = true;  impl->notifyResize(); } }
 - (void)windowDidDeminiaturize:(NSNotification*)note { (void)note; if (impl) { impl->minimized = false; impl->notifyResize(); } }
-- (void)applicationDidBecomeActive:(NSNotification*)note { (void)note; [self syncFocus]; }
+- (void)applicationDidBecomeActive:(NSNotification*)note
+{
+    (void)note;
+    if (impl)
+        impl->becameActive();
+    [self syncFocus];
+}
 - (void)applicationDidResignActive:(NSNotification*)note { (void)note; [self syncFocus]; }
 - (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication*)sender
 {
@@ -828,13 +1181,29 @@ namespace dice {
 namespace hfe {
 namespace macos {
 
+} // namespace macos
+} // namespace hfe
+} // namespace dice
+
+namespace {
+CocoaHost::Impl* s_hostImpl = nullptr;   // the singleton's state, for the view's cursor rect
+NSCursor* currentViewCursor()
+{
+    return s_hostImpl ? s_hostImpl->rectCursor : nil;
+}
+} // namespace
+
+namespace dice {
+namespace hfe {
+namespace macos {
+
 CocoaHost& CocoaHost::instance()
 {
     static CocoaHost* host = new CocoaHost();    // lives for the process, like the Win32 class
     return *host;
 }
 
-CocoaHost::CocoaHost() : m_impl(new Impl()) {}
+CocoaHost::CocoaHost() : m_impl(new Impl()) { s_hostImpl = m_impl; m_impl->owner = this; }
 CocoaHost::~CocoaHost() { delete m_impl; }
 
 bool CocoaHost::initApplication()
@@ -845,6 +1214,19 @@ bool CocoaHost::initApplication()
     {
         [NSApplication sharedApplication];
         [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+        // [CHOSEN, not recovered] The client is a helper executable inside the launcher's bundle
+        // (Contents/MacOS/bf2_client), not the bundle's CFBundleExecutable, so the Dock would show
+        // a generic icon for it. Use the enclosing bundle's icon when there is one.
+        {
+            NSBundle* bundle = [NSBundle mainBundle];
+            NSString* iconName = [bundle objectForInfoDictionaryKey:@"CFBundleIconFile"];
+            if ([bundle.bundlePath hasSuffix:@".app"] && iconName.length > 0)
+            {
+                NSImage* icon = [bundle imageForResource:iconName];
+                if (icon)
+                    [NSApp setApplicationIconImage:icon];
+            }
+        }
         m_impl->delegate = [[OpenBF2HostDelegate alloc] init];
         m_impl->delegate->impl = m_impl;
         [NSApp setDelegate:m_impl->delegate];
@@ -926,14 +1308,23 @@ bool CocoaHost::createWindow(const HostWindowDesc& desc)
         m_impl->cursorHiddenInView = desc.hideCursor;
         m_impl->updateDrawable();
 
+        // [CHOSEN, not recovered] A fullscreen start goes fullscreen only once the application is
+        // active: presentation options and the screen-size borderless window applied while a
+        // freshly launched process is still inactive leave it frontmost without NSApp ever
+        // becoming active, and the menu ignores clicks until the user switches apps. Until then
+        // the window stays windowed; becameActive() completes the switch.
         if (desc.fullscreen)
-            setFullscreen(true);
+        {
+            if ([NSApp isActive] || m_impl->scriptedFocus)
+                setFullscreen(true);
+            else
+                m_impl->fullscreenPending = true;
+        }
 
+        m_impl->visible = true;
+        m_impl->beginActivation();               // [TEMP] not in scripted runs (scriptedFocus)
         [window makeKeyAndOrderFront:nil];
         [window makeFirstResponder:view];
-        if (!m_impl->scriptedFocus)              // [TEMP] scripted runs do not take the user's focus
-            [NSApp activateIgnoringOtherApps:YES];
-        m_impl->visible = true;
     }
     pumpEvents();                                // deliver the activation before returning
     [m_impl->delegate syncFocus];
@@ -1103,26 +1494,62 @@ void CocoaHost::setCursorHiddenInView(bool hidden)
 
 void CocoaHost::setCursorShape(HostCursorShape shape)
 {
-    // AppKit has no public busy cursor; both shapes use the arrow for now (docs/macos-s2-4.md).
-    m_impl->cursorShape = shape;
-    [[NSCursor arrowCursor] set];
+    // AppKit has no public busy cursor; both shapes show the arrow (docs/macos-s2-4.md).
+    setCursor(cursorHandle(shape));
 }
 
 void* CocoaHost::cursorHandle(HostCursorShape shape)
 {
-    static const HostCursorShape shapes[2] = { HostCursorArrow, HostCursorBusy };
-    return const_cast<HostCursorShape*>(&shapes[shape == HostCursorBusy ? 1 : 0]);
+    static HostCursor shapes[2];
+    return &shapes[shape == HostCursorBusy ? 1 : 0];
+}
+
+void* CocoaHost::loadCursorFromFile(const char* path)
+{
+    if (!path || !*path)
+        return nullptr;
+    FILE* file = std::fopen(path, "rb");
+    if (!file)
+        return nullptr;                          // LoadCursorFromFileA answers null
+    std::vector<std::uint8_t> bytes;
+    std::uint8_t chunk[16384];
+    size_t got;
+    while ((got = std::fread(chunk, 1, sizeof chunk, file)) > 0 && bytes.size() < (16u << 20))
+        bytes.insert(bytes.end(), chunk, chunk + got);
+    std::fclose(file);
+    std::unique_ptr<HostCursor> cursor(new HostCursor());
+    if (!decodeCursorFile(bytes.data(), bytes.size(), cursor->anim))
+    {
+        std::fprintf(stderr, "[host] cursor %s: not a decodable .ani/.cur, the arrow is shown\n", path);
+        return cursorHandle(HostCursorArrow);
+    }
+    cursor->custom = true;
+    for (int j : cursor->anim.jiffies)
+        cursor->totalJiffies += j;
+    static std::vector<std::unique_ptr<HostCursor>> loaded;   // tokens live for the process
+    loaded.push_back(std::move(cursor));
+    return loaded.back().get();
 }
 
 void CocoaHost::setCursor(void* handle)
 {
     if (!handle)
     {
+        m_impl->activeCursor = nullptr;
         setCursorHiddenInView(true);
+        m_impl->updateCursorImage();
         return;
     }
+    HostCursor* cursor = static_cast<HostCursor*>(handle);
+    if (cursor != m_impl->activeCursor)
+    {
+        // SetCursor with the current handle keeps an animation running; a new one starts it.
+        m_impl->activeCursor = cursor;
+        m_impl->cursorAnimStart = [NSProcessInfo processInfo].systemUptime;
+        m_impl->cursorShape = cursor == cursorHandle(HostCursorBusy) ? HostCursorBusy : HostCursorArrow;
+    }
     setCursorHiddenInView(false);
-    setCursorShape(*static_cast<const HostCursorShape*>(handle));
+    m_impl->updateCursorImage();
 }
 
 void CocoaHost::setRelativeMouseMode(bool enabled)
@@ -1278,8 +1705,9 @@ HostDisplayModeInfo CocoaHost::desktopMode() const
     CGDisplayModeRef mode = CGDisplayCopyDisplayMode(CGMainDisplayID());
     if (mode)
     {
-        info.width = static_cast<int>(CGDisplayModeGetPixelWidth(mode));
-        info.height = static_cast<int>(CGDisplayModeGetPixelHeight(mode));
+        // [PLATFORM] Points, not pixels (see the declaration).
+        info.width = static_cast<int>(CGDisplayModeGetWidth(mode));
+        info.height = static_cast<int>(CGDisplayModeGetHeight(mode));
         info.refreshHz = static_cast<int>(std::lround(CGDisplayModeGetRefreshRate(mode)));
         if (info.refreshHz == 0)
             info.refreshHz = builtInPanelRefreshHz();

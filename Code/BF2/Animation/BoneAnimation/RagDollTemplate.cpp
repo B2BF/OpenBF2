@@ -9,6 +9,7 @@
 #include "../../Game/Utility/Vars.h"  // dice::hfe::Vars::getFloat - the cvar handle pattern
 #include "RagDoll.h"                  // the instance half of the same ELF TU
 #include "Skeleton.h"                 // the owned reference skeleton: skeleton(), getBoneDistance
+#include "../../IO/File/File.h"       // io::File - writeConstraints
 
 #include <cfloat>       // FLT_EPSILON
 #include <cmath>        // sqrtf, fabsf
@@ -16,6 +17,7 @@
 #include <cstdlib>      // abort
 #include <list>
 #include <map>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <utility>
@@ -508,6 +510,33 @@ void RagDollTemplate::removeConstraint(int a, int b)
     std::list<Constraint>::iterator it = findConstraint(ia, ib);
     if (it != m_distanceConstraints.end())
         m_distanceConstraints.erase(it);
+}
+
+// The console `ragDoll.save` tool (ELF 0x8341110): one "ragDoll.addConstraint <boneA> <boneB> <length>"
+// line per distance constraint, written through io::File to ragDollConstraints.inc (mode 0,
+// access 2, as SettingsManagerBase::save opens its files). The particle indices map back to bone
+// ids; the getBoneDistance result is computed and discarded, as shipped.
+void RagDollTemplate::writeConstraints()
+{
+    // Retail writes the relative name, which lands in the game folder; the macOS client does the
+    // same (docs/macos-write-paths.md).
+    const char* const path = "ragDollConstraints.inc";
+    hfe::io::File file;
+    file.open(path, static_cast<hfe::io::IFileSystem::FileMode>(0), hfe::io::IFileSystem::FILEACCESS_2, 0);
+    hfe::io::IStream* stream = file.getStream();
+    std::ostringstream text;
+    for (std::list<Constraint>::iterator it = m_distanceConstraints.begin();
+         it != m_distanceConstraints.end(); ++it)
+    {
+        const int boneA = findBoneIndex(it->m_a);
+        const int boneB = findBoneIndex(it->m_b);
+        (void)getBoneDistance(boneA, boneB);
+        text << "ragDoll.addConstraint " << boneA << " " << boneB << " "
+             << static_cast<double>(it->m_length) << std::endl;
+    }
+    const std::string out = text.str();
+    stream->write(out.data(), static_cast<unsigned int>(out.length()));
+    file.close();
 }
 
 // Loads the reference skeleton once; a failed load deletes it again.

@@ -80,7 +80,7 @@ renames `main` only in its private copy of the original main object.
 
 Local logs are under `out/splash-fix-20261004/`; the downstream diagnostic lives
 under `out/splash-damage-20261003/`. The preserved pre-fix source/object and native
-fixture outputs are in `/home/user/bf2-projectile-detonation-20261003/`.
+fixture outputs are in `bf2-projectile-detonation-20261003/`.
 
 These tests prove the repaired center argument and its effect on the existing
 radius calculation. They do not exercise joined minigun firing, visibility/grid

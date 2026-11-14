@@ -19,6 +19,7 @@
 #include "BfEditData.h"
 #include "BfListBoxData.h"
 #include "Bf2CallFunctionAction.h"
+#include "Bf2TileNode.h"
 #include "Bf2ActionListAction.h"
 #include "Bf2TextNode.h"
 #include "Bf2Style.h"
@@ -75,6 +76,19 @@ public:
 private:
     HudInformationLayer::StringFunction m_function;         // +08
     std::string m_text;                                     // +0C
+};
+
+// PE794CD0, table9327B8 (17 slots). The plain-function sibling of HudStringFunction: a
+// dice::meme::Function whose call (82E470) runs one of the information layer's registered functions.
+// [INFERRED] name; no descriptor of its own.
+class HudFunction : public meme::Function {
+public:
+    HudFunction(HudInformationLayer::Function function, const char* name)
+        : meme::Function(name), m_function(function) {}
+    ~HudFunction() override {}
+    bool call(meme::System*) override { return m_function(); }
+private:
+    HudInformationLayer::Function m_function;               // +08
 };
 
 template<class T> T* builderCast(meme::Object* object)
@@ -199,6 +213,45 @@ bool Bf2HudBuilder::createPictureNode(std::string parent, std::string name,
     return registerNode(parent, transform, picture, 0);
 }
 
+// PE798ED0..798F87. Unlike most rows it requires the System before the cast; the colour goes to the
+// button's +104 by value.
+bool Bf2HudBuilder::setButtonNodeMouseOverColor(float r, float g, float b, float a)
+{
+    if (m_system) {
+        meme::Bf2ButtonNode* button = builderCast<meme::Bf2ButtonNode>(m_field014);
+        if (button) {
+            meme::Color color;
+            color.r = r; color.g = g; color.b = b; color.a = a;
+            return button->setMouseOverColorForHud(color);
+        }
+    }
+    Debug(DebugTypeError, builderSource, 1458, "")
+        << "Failed setting mouseover color on node: " << m_field018;
+    return false;
+}
+
+// PE799040..7991A8. A call-function action wrapping the layer's registered function goes to the
+// button's +F0. An unknown function name returns false with no diagnostic (the action is leaked);
+// no System, an empty name or a non-button reports line 1494 ("Actionon", as shipped).
+bool Bf2HudBuilder::setButtonNodeFunction(std::string function, int index)
+{
+    if (m_system && function != "") {
+        void* allocation = ::operator new(sizeof(meme::Bf2CallFunctionAction));
+        meme::Bf2CallFunctionAction* action = allocation ? new(allocation) meme::Bf2CallFunctionAction() : nullptr;
+        const HudInformationLayer::Function target =
+            static_cast<HudInformationLayer*>(g_hudInformationLayer)->getFunction(std::string(function.c_str()));
+        if (!target) return false;
+        allocation = ::operator new(sizeof(HudFunction));
+        HudFunction* wrapped = allocation ? new(allocation) HudFunction(target, function.c_str()) : nullptr;
+        action->setFunction(wrapped);
+        meme::Bf2ButtonNode* button = builderCast<meme::Bf2ButtonNode>(m_field014);
+        if (button) return button->setActionForHud(action, index);
+    }
+    Debug(DebugTypeError, builderSource, 1494, "")
+        << "Failed setting Actionon node: " << m_field018;
+    return false;
+}
+
 // PE797C30..797CF6. The selected registry object is cast to the picture class;
 // a miss reports and returns false. The argument's own text pointer is handed
 // to the node, which compares it by identity against its bound name.
@@ -208,6 +261,22 @@ bool Bf2HudBuilder::setPictureNodeTexture(std::string texture)
     if (picture) return picture->setTextureNameForHud(texture.c_str());
     Debug(DebugTypeError, builderSource, 1101, "")
         << "Failed setting texture on node: " << m_field018;
+    return false;
+}
+
+// PE797D00..797DE3. The mask texture loads through the System (menu path) and becomes the picture's
+// secondary texture (+D0); no System, no texture or no picture all report line 1118.
+bool Bf2HudBuilder::setPictureNodeAlphaMask(std::string texture)
+{
+    if (m_system) {
+        const meme::TextureHandle mask = m_system->loadTexture(texture.c_str(), true);
+        if (mask) {
+            meme::Bf2PictureNode* picture = builderCast<meme::Bf2PictureNode>(m_field014);
+            if (picture) return picture->setSecondaryTextureForHud(mask);
+        }
+    }
+    Debug(DebugTypeError, builderSource, 1118, "")
+        << "Failed setting alpha mask on node: " << m_field018;
     return false;
 }
 
@@ -418,6 +487,12 @@ bool Bf2HudBuilder::setCompassNodeTexture(int index, std::string texture)
 { return setBarNodeTexture(index, texture); }
 bool Bf2HudBuilder::setCompassNodeBorder(int top, int bottom, int left, int right)
 { return setBarNodeBorder(top, bottom, left, right); }
+// PE799AE0..799B11: a copy of the variable handed to setBarNodeVariableTexture (799660); the compass
+// row reuses the bar node's body.
+bool Bf2HudBuilder::setCompassNodeVariableTexture(int index, std::string variable)
+{
+    return setBarNodeVariableTexture(index, variable);
+}
 bool Bf2HudBuilder::setCompassNodeValueVariable(std::string variable)
 { return setBarNodeValueVariable(variable); }
 
@@ -738,6 +813,29 @@ bool Bf2HudBuilder::setTextNodeStyle(std::string font, int alignment)
     }
     Debug(DebugTypeError, builderSource, 1286, "")
         << "Failed setting Style on node: " << m_field018;
+    return false;
+}
+
+// PE798760..7988D7. The font is loaded and cached on the builder, then handed to the text node's
+// style as its shadow (outline) font (+5C). A font that will not load, or a style that is not a
+// Bf2Style, reports the font on line 1306 and then falls through to the node diagnostic on 1309.
+bool Bf2HudBuilder::setTextNodeOutLine(std::string font)
+{
+    meme::Bf2TextNode* node = builderCast<meme::Bf2TextNode>(m_field014);
+    if (node) {
+        m_field090 = m_system->loadFont(font.c_str());                  // no System guard
+        if (m_field090) {
+            meme::Bf2Style* style = builderCast<meme::Bf2Style>(node->getStyleForHud());
+            if (style) {
+                style->setShadowFont(m_field090);
+                return true;
+            }
+        }
+        Debug(DebugTypeError, builderSource, 1306, "")
+            << "Font: " << font << "not found!";
+    }
+    Debug(DebugTypeError, builderSource, 1309, "")
+        << "Failed setting outline on node: " << m_field018;
     return false;
 }
 
@@ -1166,6 +1264,41 @@ bool Bf2HudBuilder::setObjectMarkerNodeWeapon(int weapon)
     return false;
 }
 
+// PE79C110..79C2D4. Like createTransformNode, but the transform node carries a Bf2TileNode named
+// "<name>TileNode" (count 0) as child 1 and both are registered (mode 0). An existing name reports
+// line 632.
+bool Bf2HudBuilder::createTileNode(std::string parent, std::string name, int x, int y, int width, int height)
+{
+    if (findNodePredecessor(parent, name)) {
+        Debug(DebugTypeError, builderSource, 632, "")
+            << "Node: " << name << ", already exists!!";
+        return false;
+    }
+    meme::Bf2TileNode* tile = nullptr;
+    void* allocation = ::operator new(sizeof(meme::Bf2TileNode));
+    if (allocation) {
+        const std::string tileName = name + "TileNode";
+        tile = new(allocation) meme::Bf2TileNode(tileName.c_str(), 0);
+    }
+    allocation = ::operator new(sizeof(meme::Bf2TransformNode));
+    meme::Bf2TransformNode* transform = allocation
+        ? new(allocation) meme::Bf2TransformNode(name.c_str(), x, y, width, height)
+        : nullptr;
+    transform->setChild(1, tile);
+    return registerNode(parent, transform, tile, 0);
+}
+
+// PE795CC0..795D75. The selected object must be a Bf2TileNode (+C8); else line 642 names the selected
+// object by its own getName.
+bool Bf2HudBuilder::setTileNodeOptions(int count, int thickness, int horizontal)
+{
+    meme::Bf2TileNode* tile = builderCast<meme::Bf2TileNode>(m_field014);
+    if (tile) return tile->setOptions(count, thickness, horizontal);
+    Debug(DebugTypeError, builderSource, 642, "")
+        << "Failed setting tile amount on node: " << m_field014->getName();
+    return false;
+}
+
 // PE79C2E0..79C41F (320 B). `createTransformNode <parent> <name> <x> <y> <w> <h>` is the
 // plainest create row in the family: one Bf2TransformNode named after the second
 // argument, registered under the parent with no data object and mode 2 - the same
@@ -1226,6 +1359,56 @@ bool Bf2HudBuilder::addNodeMoveShowEffect(float direction, int length)
         }
     }
     Debug(DebugTypeError, builderSource, 2155, "")
+        << "Failed setting MoveShowEffect on node: " << m_field050;
+    return false;
+}
+
+// PE79B780..79BA7F. addNodeMoveShowEffect with the direction and length bound to information-layer
+// variables (float / int by name) through reference data. Unlike the constant row, the cull node must
+// already have a first child. An existing effect reports line 2197 and, like every other failure,
+// line 2223.
+bool Bf2HudBuilder::addNodeVariableMoveShowEffect(std::string direction, std::string length)
+{
+    if (m_system) {
+        meme::Object* existing = m_system->findNamedObject(
+            formatString("%sMoveEffect", m_field050.c_str()).c_str());
+        if (existing) {
+            Debug(DebugTypeError, builderSource, 2197, "")
+                << m_field050 << "already has a MoveShowEffect!";
+        } else {
+            meme::Object* object = m_system->findNamedObject(
+                formatString("%sCullNode", m_field050.c_str()).c_str());
+            if (object) {
+                HudInformationLayer* layer = static_cast<HudInformationLayer*>(g_hudInformationLayer);
+                float* directionValue = layer->getFloatByName(std::string(direction.c_str()));
+                int* lengthValue = layer->getIntByName(std::string(length.c_str()));
+                if (directionValue && lengthValue) {
+                    void* allocation = ::operator new(sizeof(meme::FloatRefData));
+                    meme::FloatRefData* directionData = allocation
+                        ? new(allocation) meme::FloatRefData(directionValue, nullptr) : nullptr;
+                    allocation = ::operator new(sizeof(meme::IntRefData));
+                    meme::IntRefData* lengthData = allocation
+                        ? new(allocation) meme::IntRefData(lengthValue, nullptr) : nullptr;
+                    allocation = ::operator new(sizeof(meme::ShowEffectNode));
+                    meme::ShowEffectNode* effectNode = nullptr;
+                    if (allocation) {
+                        void* effectAllocation = ::operator new(sizeof(meme::Bf2MoveEffect));
+                        meme::Bf2MoveEffect* effect = effectAllocation
+                            ? new(effectAllocation) meme::Bf2MoveEffect(directionData, lengthData)
+                            : nullptr;
+                        effectNode = new(allocation) meme::ShowEffectNode(effect);
+                    }
+                    meme::Node* node = builderCast<meme::Node>(object);
+                    if (node && node->getChild(0)) {
+                        effectNode->setChild(0, node->getChild(0));
+                        node->setChild(0, effectNode);
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    Debug(DebugTypeError, builderSource, 2223, "")
         << "Failed setting MoveShowEffect on node: " << m_field050;
     return false;
 }
@@ -1463,6 +1646,28 @@ meme::Node* Bf2HudBuilder::findNode(std::string name)
     meme::Object* object = m_system->findNamedObject(name.c_str());
     if (!object) return nullptr;
     return builderCast<meme::Node>(object);
+}
+
+// PE795E80..795FB5. The parent named by +50 must be a Node with a first child. The child is announced
+// ("Deleting <name>", line 2291, the error channel as shipped), must accept +24, is replaced by its own
+// first child and deleted. No System guard.
+bool Bf2HudBuilder::deleteNode()
+{
+    meme::Node* parent = nullptr;
+    {
+        const std::string name(m_field050);
+        meme::Object* object = m_system->findNamedObject(name.c_str());
+        if (!object) return false;
+        parent = builderCast<meme::Node>(object);
+        if (!parent) return false;
+    }
+    if (!parent->getChild(0)) return false;
+    meme::Node* child = parent->getChild(0);
+    Debug(DebugTypeError, builderSource, 2291, "") << "Deleting " << child->getName();
+    if (!child->slot_0x24()) return false;
+    parent->setChild(0, child->getChild(0) ? child->getChild(0) : nullptr);
+    delete child;
+    return true;
 }
 
 // PE79BEC0..79C10B. Return the predecessor of the matching named successor.

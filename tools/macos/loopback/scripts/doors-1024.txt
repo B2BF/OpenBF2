@@ -1,0 +1,35 @@
+# [TEMP] rend-doors: join and spawn at 1024x768. Run with
+# --profile-resolution --client-args "+szx 1024 +szy 768" and a Video.con at 1024x768. Menu clicks
+# are in back-buffer pixels (JOIN GAME 745,583 at 800x600 -> 954,746); the HUD pointer clicks stay
+# in the HUD's 800x600 space.
+timeout 300
+log waiting for the level load
+wait-log ingameMap.tga
+wait-ms 5000
+capture loaded
+click 954 746
+wait-ms 4000
+capture spawn-screen-first
+key enter
+wait-ms 1500
+key enter
+wait-ms 3000
+capture spawn-screen
+hud-click 130 107
+wait-ms 1000
+hud-click 432 282
+wait-ms 1000
+capture selected
+hud-click 728 546
+wait-ms 10000
+capture spawned-1
+aim -185.27/157/-146.11 1.5 6000
+wait-ms 1500
+capture wh-1
+aim friend 1.5 5000
+wait-ms 800
+capture tag-friend
+move-rel 300 0
+wait-ms 1500
+capture turned
+log doors: done

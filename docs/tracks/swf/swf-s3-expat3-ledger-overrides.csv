@@ -1,0 +1,2 @@
+address,symbol,file,status,reason
+0x100A8570,gameswf::xml_load,Code/BF2/External/gameswf/gameswf_xml.cpp,done,S3:portable;inspected-nonfinal-parse;status-0-only-for-result-1;release-before-String-onData;chosen-owner-approved-Expat-1.95.0-substitute;supersedes-XML-tag-stop

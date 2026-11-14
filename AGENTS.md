@@ -150,6 +150,42 @@ Use the repository's evidence vocabulary consistently:
   frontiers because `BF2Log` may not be initialized yet. If the signature/ABI is not known well
   enough to define a safe callable body, keep the symbol declaration-only and document the caller
   boundary instead of inventing a signature merely to add logging.
+  **Unimplemented-slot exception (owner decision 2026-11-02, libaidll reconstruction):** a
+  virtual slot that is `__cxa_pure_virtual` in every vtable of every class that has it, in
+  every inspected image, has no body anywhere. Reaching it in retail aborts with "pure virtual method
+  called". The same applies to a class member that no instruction reads or writes. Its name and
+  source-level type cannot be recovered, but its behaviour is fully determined.
+  - Such a slot or member may be declared with a `[CHOSEN, not recovered]` name, so that the
+    surrounding recovered code can be completed.
+  - The declaration must reproduce what the instructions prove:
+    - the slot position in both ELF vtables;
+    - the receiver and argument registers or stack slots each call site prepares;
+    - whether any caller reads a result (if none does, declare `void`; if a caller tests `eax`/`al`,
+      declare the narrowest integer type the test proves);
+    - for a member, the size and alignment implied by the neighbouring offsets in each image.
+  - Keep the slot pure (`= 0`); never give it a body. Every call site stays exactly as the listing
+    shows.
+  - Cite the vtable addresses and call-site addresses beside the declaration.
+
+  This covers only slots and members with no body and no access. A slot that has an override
+  anywhere, or a member that is accessed anywhere, keeps the ordinary evidence rules. The matching
+  build (`MATCHING_BUILD_PLAN.md`) re-checks every such declaration at its call sites.
+
+  **Unobservable-type exception (owner decision 2026-11-05, RendDX9 reconstruction):** a body may be
+  recovered with a `[CHOSEN, not recovered]` type or name when all of the following hold:
+  - no inspected image (retail PE, `_r`, editor, Linux ELF) has a caller that reaches it, or every
+    reachable path only ever sees empty data, so its behaviour is fully determined;
+  - the instructions of every image have been read and the body reproduces everything they prove
+    (reads, writes, offsets, call order, slot dispatch, return register);
+  - only a name or a type that no instruction can expose is missing. Examples: the element type of a
+    container that is never filled, or the name of a property pair that nothing calls.
+
+  Mark each chosen piece `[CHOSEN, not recovered]` beside it, with the evidence (addresses in every
+  image, and why the choice cannot be observed). Prefer the choice the instructions point to, such as
+  float for an `st0` return. This replaces a [FRONTIER] stop only in that situation; a body that any
+  path reaches with real data keeps the ordinary evidence rules. First applied to: LightManager +0xBC/+0xC0
+  (PE 0x1015C130/0x1015C140), GeometryTemplateManager +0x2C/+0x30 (PE 0x1015D940/0x1015D430) and
+  ObjectDrawer::flushDeferredGeometry (PE 0x100F8C00).
 - Test fixtures belong under `Code/Tests`, must be labeled as scaffolding, and may
   only model the specific condition the test needs.
 - When a production implementation lands, remove any Probe/harness override that would shadow it.
@@ -191,8 +227,9 @@ Use the repository's evidence vocabulary consistently:
   sound it would have driven; each call site keeps its own hit count and is rate-limited, never
   silenced; NO value is fabricated, because every shipped call site discards the result, so
   continuing returns nothing at all; and the surrounding body is written as far as the evidence
-  honestly reaches, so the seam covers only the sound call. The shared implementation and the full
-  rule live in `Code/BF2/Core/SoundSeamFrontier.h`; it reports to stderr only, deliberately, because
+  honestly reaches, so the seam covers only the sound call. No sound seam remains (the shared
+  helper `Core/SoundSeamFrontier.h` was removed with its last caller); a future sound seam re-adds
+  that helper with this rule. It reports to stderr only, deliberately, because
   `Debug(DebugTypeError, ...)` aborts in this tree and `BF2Log` is not guaranteed to be up on the
   HUD paths that reach these seams. The cost is real and is the point: a sound retail would start or
   stop keeps doing whatever it was doing. This exception covers sound seams ONLY - every other

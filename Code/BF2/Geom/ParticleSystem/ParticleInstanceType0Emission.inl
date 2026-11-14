@@ -165,7 +165,7 @@ void psmEmissionRotation(Mat4& matrix, float degrees, unsigned int axis)
     else if(axis==1){matrix.m[0]=cosine;matrix.m[2]=-sine;matrix.m[8]=sine;matrix.m[10]=cosine;}
     else{matrix.m[0]=cosine;matrix.m[1]=-sine;matrix.m[4]=sine;matrix.m[5]=cosine;}
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     const float radians=degrees*0.01745329238474369f;
     float sine,cosine;
     // [CHOSEN, not recovered] Preserve x87 rounded angle and float sin/cos stores.

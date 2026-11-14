@@ -1,0 +1,25 @@
+# [TEMP] join and spawn on operation_clean_sweep (coop/16): join-and-spawn with the US airfield spawn
+# on the spawn-screen map (hud-click 466 138, as handcheck-ocs-jet / doors-ocs-sky). The menu waits
+# are the original join-and-spawn ones: with the shorter Dalian waits the OCS spawn screen stayed
+# without its HUD (run-20261105-185653, -190238).
+timeout 300
+log waiting for the level load
+wait-log ingameMap.tga
+wait-ms 5000
+capture loaded
+click 745 583
+wait-ms 4000
+capture spawn-screen-first
+# (the old "press Enter twice" workaround is gone: Bf2MenuMapNode +0x68D is zeroed now, R-game-2)
+wait-ms 3000
+capture spawn-screen
+hud-click 130 107
+wait-ms 1000
+hud-click 466 138
+wait-ms 1000
+capture selected
+hud-click 728 546
+wait-log-else 12 spawned [PLAY] alive=1
+label spawned
+wait-ms 1500
+capture spawned-1

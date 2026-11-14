@@ -15,6 +15,7 @@
 #include "../../IO/TickCalculator.h"
 #include "../../Scene/Object/PlayerManager.h"  // the real PlayerManager - replaces the local shim
 #include "../../IO/File/FileManager.h"      // io::fileManager (0x8AC8C80), open(...); IFileSystem enums
+#include "../../Core/IProfilerClient.h"     // profilerClient (ELF 0x8ABBCA8 / PE 0x9A5C6C) +0x2C pauseVTune
 #include <sstream>                          // proven: __ioinit for this TU at 0x8AACC3D
 #include <list>
 #include <string>
@@ -182,12 +183,7 @@ void Demo::beginMainLoop(BF2Render* render, BF2Console* console)
         demoRecorder->byte84 = true;                        //   [UNRESOLVED meaning - NOT quit();
                                                             //   endMainLoop clears it under the same test]
     else
-    {
-        // [UNRESOLVED] 0x8141CF0..0x8141D00: vcall [vptr+0x2C](false) on the cached
-        // "Profiler"/IID_IProfilerClient singleton (0x8ABBCA8). No IProfilerClient vtable exists
-        // in the binary, so the slot cannot be named. Kept as a comment until it can:
-        //     profiler->UNRESOLVED_slot0x2C(false);
-    }
+        profilerClient->pauseVTune(false);                  // 0x8141CF0: profilerClient +0x2C(false)
 }
 
 bool Demo::endMainLoop(BF2Render* render, bool quit)        // return [CHOSEN bool]
@@ -202,10 +198,7 @@ bool Demo::endMainLoop(BF2Render* render, bool quit)        // return [CHOSEN bo
             if (demoRecorder->demoConfig.vtuneRendering)    //   config+0x38
                 demoRecorder->byte84 = false;               // the begin/end asymmetry, literal
             else
-            {
-                // [UNRESOLVED] same profiler slot as beginMainLoop (0x8142EB3..C3):
-                //     profiler->UNRESOLVED_slot0x2C(false);
-            }
+                profilerClient->pauseVTune(false);          // 0x8142EB3: the same slot, false again
         }
         if (timeDemoStats->frameCount >= 0)                 // warm-up frames not recorded
         {

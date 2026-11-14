@@ -1,0 +1,106 @@
+# [TEMP] The HUD console rows no retail script uses (frontier closure batch 7): each typed once after
+# spawning. Needs --client-env BF2_CLIENT_CONSOLE_FULL_ACCESS=1 (the rows are access 2).
+include join-and-spawn
+wait-ms 1000
+key grave
+wait-ms 1000
+type hudManager.refresh
+key enter
+wait-ms 250
+capture c01
+type hudManager.setSpottedAngle 0.9
+key enter
+wait-ms 250
+capture c02
+type hudManager.setPaint 1
+key enter
+wait-ms 250
+capture c03
+type hudManager.setUpdate 1
+key enter
+wait-ms 250
+capture c04
+type hudManager.setDisplayControlpoints 1
+key enter
+wait-ms 250
+capture c05
+type hudManager.setDisplayTickets 1
+key enter
+wait-ms 250
+capture c06
+type hudManager.setMapStatic 0
+key enter
+wait-ms 250
+capture c07
+type hudManager.setTargetTop 0
+key enter
+wait-ms 250
+capture c08
+type itemSelection.setReverseItems 0
+key enter
+wait-ms 250
+capture c09
+type hudBuilder.setModifyer 0
+key enter
+wait-ms 250
+capture c10
+type minimap.setCurrOrderList 0
+key enter
+wait-ms 250
+capture c11
+type minimap.setFullScreenZoom 1
+key enter
+wait-ms 250
+capture c12
+type minimap.setCommanderOffset 0/0
+key enter
+wait-ms 250
+capture c13
+type minimap.setSourceBlend 6
+key enter
+wait-ms 250
+capture c14
+type minimap.setDestinationBlend 6
+key enter
+wait-ms 250
+capture c15
+type minimap.setFilterColor 100 170 240 255
+key enter
+wait-ms 250
+capture c16
+type hudItems.setString ConsoleTest probe
+key enter
+wait-ms 250
+capture c17
+type hudItems.setFloat ConsoleTestFloat 1.5
+key enter
+wait-ms 250
+capture c18
+type radio.answer 0
+key enter
+wait-ms 250
+capture c19
+type chat.sayTeam batch7
+key enter
+wait-ms 250
+capture c20
+type chat.sayAll batch7
+key enter
+wait-ms 250
+capture c21
+type ingameHelp.showIngameHelp HUD_HELP_TEST 2
+key enter
+wait-ms 250
+capture c22
+type radio.sendKitMessage
+key enter
+wait-ms 250
+capture c23
+type squad.leaveSquad
+key enter
+wait-ms 250
+capture c24
+capture console
+key grave
+wait-ms 1500
+capture after

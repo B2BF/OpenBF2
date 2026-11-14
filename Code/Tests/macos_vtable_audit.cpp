@@ -65,7 +65,7 @@ int textSet(void* self, void* line, const wchar_t* value)
 { static_cast<Render*>(self)->line=line; static_cast<Render*>(self)->text=value; return 19; }
 void mouse(void* self, int x, int y, int buttons)
 { static_cast<Render*>(self)->mouseX=x; static_cast<Render*>(self)->mouseY=y; static_cast<Render*>(self)->buttons=buttons; }
-// The five evidence-derived transports (docs/macos-c-swiff-re.md): the receiver sees the
+// The five evidence-derived transports: the receiver sees the
 // caller's pointer, its out pointers and its float registers unchanged.
 struct Transport { void** table; void* image; void* line; int* pos; int* a; int* b; float f[4];
                    const std::string* name; int index; };

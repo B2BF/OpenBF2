@@ -1,4 +1,4 @@
-// [TEMP] [CHOSEN, not recovered] c-metal-review regression checks; docs/macos-c-metal-review.md.
+// [TEMP] [CHOSEN, not recovered] c-metal-review regression checks.
 // Expected values follow Windows D3D9 results recorded by Wine's d3d9 conformance tests.
 
 static int reviewLockChecks(IDirect3DDevice9* d) {

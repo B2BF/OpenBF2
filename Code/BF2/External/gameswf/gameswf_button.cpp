@@ -853,7 +853,7 @@ namespace gameswf
 			character_def* definition = m_button_records[i].m_character_def;
 			if (definition)
 			{
-				rect child = get_definition_bounds(definition);
+				rect child = definition->get_bound_copy();                    // +0x20
 				child.transform(m_button_records[i].m_button_matrix);
 				bounds.expand_to_rect(child);
 			}

@@ -24,6 +24,10 @@
 #include "../Core/StringUtil.h"                      // formatString
 #include "../Core/System.h"
 #include "../Game/Objects/ICameraObject.h"
+#include "../GeomMisc/DebugCircleDrawer.h"              // drawSoundSources
+#include "../GeomMisc/DebugLineDrawer.h"
+#include "../RendMisc/IRenderer.h"
+#include "../RendMisc/IRenderView.h"
 #include "../Game/Objects/IObject.h"
 #include "../Game/Objects/IObjectTemplate.h"
 #include "../Game/Objects/ObjectLayoutAccess.h"    // LayoutAccess::physicsNode - the +0x44 cache
@@ -881,8 +885,37 @@ void BfSound::loadGameSounds()
             m_sounds[i]->getTemplate()->setIsUsed();
 }
 
-// Draws sound statistics when enabled and the console is closed.
-// [FRONTIER] [RETIRE-WHEN: bfsound-debug-draw] Implement DebugTextWriterFixed drawing.
+namespace {
+
+// "DebugTextWriterFixed" (geom::DebugTextWriter, IID_IDebugTextWriter 80043): the slots up to the one
+// drawStats calls, in table order, as GeomMisc/DebugTextWriter.cpp implements them. Declared
+// locally as AI's DebugRenderer.cpp does ([INFERRED] interface name).
+class IDebugTextWriter : public IBase
+{
+public:
+    virtual bool setFont(const std::string& path) = 0;                            // +0x10
+    virtual bool isEnabled() const = 0;                                           // +0x14
+    virtual void setEnabled(bool enabled) = 0;                                    // +0x18
+    virtual unsigned int getColour() const = 0;                                   // +0x1C
+    virtual void setColour(unsigned int colour) = 0;                              // +0x20
+    virtual void queueWorldGroupColoured(const Vec3& position, unsigned int colour,
+                                         const std::vector<std::string>& text, int spacing,
+                                         int alignment, int bottomAligned) = 0;   // +0x24
+    virtual void queueWorldTextColoured(const Vec3& position, unsigned int colour,
+                                        const std::string& text, int alignment) = 0;   // +0x28
+    virtual void queueGroupColoured(int x, int y, unsigned int colour,
+                                    const std::vector<std::string>& text, int spacing,
+                                    int alignment, int bottomAligned) = 0;        // +0x2C
+
+protected:
+    ~IDebugTextWriter() {}
+};
+
+} // namespace
+
+// Draws sound statistics when enabled and the console is closed: the lines go to the
+// "DebugTextWriterFixed" singleton's +0x2C (queueGroupColoured) twice, a black shadow at (1,1) and
+// green at (0,0), as BF2.exe 0x7E08D0 does (0x7E0E0A..0x7E0E63). The singleton is used unchecked, as there.
 void BfSound::drawStats()
 {
     if (!m_showStats || !io::mainConsole || io::mainConsole->getConsoleActive())
@@ -923,33 +956,90 @@ void BfSound::drawStats()
     {
         lines.push_back(std::string("No stats available."));
     }
-    // classManager->getSingleton(std::string("DebugTextWriterFixed")) -> slot +0x2C twice.
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::BfSound::drawStats reached - the DebugTextWriterFixed "
-                         "draw (slot +0x2C) has no interface in this tree; %u lines were built\n",
-                 static_cast<unsigned int>(lines.size()));
-    std::fflush(stderr);
-    std::abort();
+    IDebugTextWriter* writer =
+        static_cast<IDebugTextWriter*>(classManager->getSingleton(std::string("DebugTextWriterFixed")));
+    writer->queueGroupColoured(1, 1, 0xFF000000u, lines, 0, 0, 0);
+    writer->queueGroupColoured(0, 0, 0xFF00FF00u, lines, 0, 0, 0);
 }
 
-// [FRONTIER] Draws playing sound sources once the debug-rendering path is implemented.
-// [RETIRE-WHEN: bfsound-debug-draw] Complete and validate the corresponding BfSound operation.
+namespace {
+
+// BF2.exe 0x7E1490: a row vector times the matrix, all four inputs read before any output is
+// stored (drawSoundSources passes the same vector for both).
+void transformRow(float* v, const Mat4& m)
+{
+    const float x = v[0], y = v[1], z = v[2], w = v[3];
+    v[0] = x * m.m[0] + w * m.m[12] + y * m.m[4] + z * m.m[8];
+    v[1] = x * m.m[1] + w * m.m[13] + y * m.m[5] + z * m.m[9];
+    v[2] = x * m.m[2] + w * m.m[14] + y * m.m[6] + z * m.m[10];
+    v[3] = w * m.m[15] + y * m.m[7] + z * m.m[11] + x * m.m[3];
+}
+
+} // namespace
+
+// BF2.exe 0x7E0E80. For each playing sample: its V/O/P values as text at the projected position
+// when it is inside the clip volume (black at +2, white at +1), a blue cross 0.4 long through it,
+// a blue circle at minDistance, a green one at maxDistance (twice minDistance when not positive),
+// and a red velocity line when the velocity is longer than sqrt(0.1). The four singletons are
+// looked up before the count is tested and used unchecked. The shipped BF2Audio.dll returns no
+// samples, so retail never enters the loop.
 void BfSound::drawSoundSources()
 {
     if (!m_showSoundSources)
         return;
     int count = 0;
-    engine()->queryPlayingSamples(&count);
-    IBase* circleDrawer = classManager->getSingleton(std::string("DebugCircleDrawer"));
-    IBase* lineDrawer   = classManager->getSingleton(std::string("DebugLineDrawer"));
-    IBase* textWriter   = classManager->getSingleton(std::string("DebugTextWriter"));
-    IBase* renderer     = classManager->getSingleton(std::string("Renderer"));
-    (void) circleDrawer; (void) lineDrawer; (void) textWriter; (void) renderer;
-    if (count <= 0)
-        return;
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::BfSound::drawSoundSources reached with %d samples - "
-                         "the debug drawer slots have no interface in this tree\n", count);
-    std::fflush(stderr);
-    std::abort();
+    const PlayingSampleInfo* sample = engine()->queryPlayingSamples(&count);
+    geom::IDebugCircleDrawer* circleDrawer =
+        static_cast<geom::IDebugCircleDrawer*>(classManager->getSingleton(std::string("DebugCircleDrawer")));
+    geom::IDebugLineDrawer* lineDrawer =
+        static_cast<geom::IDebugLineDrawer*>(classManager->getSingleton(std::string("DebugLineDrawer")));
+    IDebugTextWriter* textWriter =
+        static_cast<IDebugTextWriter*>(classManager->getSingleton(std::string("DebugTextWriter")));
+    dx9rend::IRenderer* renderer =
+        static_cast<dx9rend::IRenderer*>(classManager->getSingleton(std::string("Renderer")));
+    for (int i = 0; i < count; ++i, ++sample)
+    {
+        const float x = sample->position.x;
+        const float y = sample->position.y;
+        const float z = sample->position.z;
+
+        float clip[4] = { x, y, z, 1.0f };
+        transformRow(clip, *renderer->getRenderView()->getInverseViewMatrixPtr());   // +0x48 -> +0x68
+        transformRow(clip, *renderer->getRenderView()->getProjectionMatrixPtr());    // +0x48 -> +0x6C
+        const float w = clip[3];
+        if (clip[0] >= -w && clip[0] < w && clip[1] >= -w && clip[1] < w && clip[2] >= 0.0f && clip[2] < w)
+        {
+            const float* viewport = renderer->getRenderView()->getViewport();        // +0x14
+            const float inverseW = 1.0f / w;
+            const int sx = static_cast<int>((clip[0] * inverseW + 1.0f) * viewport[2] * 0.5f);
+            const int sy = static_cast<int>((1.0f - clip[1] * inverseW) * viewport[3] * 0.5f);
+            std::vector<std::string> lines;
+            char text[400];
+            std::sprintf(text, "O: %.2f", static_cast<double>(sample->obstruction));
+            lines.push_back(std::string(text));
+            std::sprintf(text, "V: %.2f", static_cast<double>(sample->volume));
+            lines.push_back(std::string(text));
+            std::sprintf(text, "P: %.2f", static_cast<double>(sample->pitch));
+            lines.push_back(std::string(text));
+            textWriter->queueGroupColoured(sx + 2, sy + 2, 0xFF000000u, lines, 0, 0, 0);
+            textWriter->queueGroupColoured(sx + 1, sy + 1, 0xFFFFFFFFu, lines, 0, 0, 0);
+        }
+
+        lineDrawer->drawD3dxLine(x - 0.2f, y, z, x + 0.2f, y, z, 0xFF0000FFu, 1.0f);
+        lineDrawer->drawD3dxLine(x, y - 0.2f, z, x, y + 0.2f, z, 0xFF0000FFu, 1.0f);
+        lineDrawer->drawD3dxLine(x, y, z - 0.2f, x, y, z + 0.2f, 0xFF0000FFu, 1.0f);
+
+        Vec3 up;
+        up.x = 0.0f; up.y = 1.0f; up.z = 0.0f;
+        circleDrawer->drawCircle(up, sample->position, sample->minDistance, 0xFF0000FFu, false, 0xFF);
+        const float outer = sample->maxDistance > 0.0f ? sample->maxDistance
+                                                       : sample->minDistance + sample->minDistance;
+        circleDrawer->drawCircle(up, sample->position, outer, 0xFF00FF00u, false, 0xFF);
+
+        const Vec3 v = sample->velocity;
+        if (v.x * v.x + v.z * v.z + v.y * v.y > 0.1f)
+            lineDrawer->drawD3dxLine(x, y, z, x + v.x, y + v.y, z + v.z, 0xFFFF0000u, 1.0f);
+    }
 }
 
 

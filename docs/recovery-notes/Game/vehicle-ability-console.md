@@ -114,9 +114,9 @@ ingestion and the unoccupied-server lifecycle, not a joined-player session.
 Local regression logs and production-run evidence are retained under
 `out/vehicle-ability-console-20261003/fixture` and
 `out/vehicle-ability-console-20261003/runtime`. The Linux build is
-`/home/user/bf2-linux-bundle-nullcall/build`; its console test outputs are
-`/home/user/bf2-auto-use-ability-fixture-20261003/{before,after}`, and the
-copied-content run is `/home/user/bf2-vehicle-ability-runtime-20261003`.
+`bf2-linux-bundle-nullcall/build`; its console test outputs are
+`bf2-auto-use-ability-fixture-20261003/{before,after}`, and the
+copied-content run is `bf2-vehicle-ability-runtime-20261003`.
 
 The pre-fix module source is saved locally at
 `out/vehicle-ability-console-20261003/ModuleWorldObjTemplGame.before.cpp`,

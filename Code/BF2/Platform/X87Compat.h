@@ -8,16 +8,21 @@
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
-#if (defined(__APPLE__) && defined(__aarch64__)) || defined(BF2_TEST_SOFT_EXTENDED)
+// The soft 80-bit Real (ExtendedFloat) replaces long double wherever long double is not the x87
+// extended format: Apple silicon, the BF2_TEST_SOFT_EXTENDED test builds, and any GCC/Clang target
+// whose long double has fewer than 64 mantissa bits (binary64 long-double ports). [CHOSEN, not
+// recovered] platform layer; retail is x87 throughout.
+#if (defined(__APPLE__) && defined(__aarch64__)) || defined(BF2_TEST_SOFT_EXTENDED) \
+    || (defined(__LDBL_MANT_DIG__) && __LDBL_MANT_DIG__ < 64)
+#define BF2X87_SOFT_EXTENDED 1
 #include "ExtendedFloat.h"
 #endif
 namespace bf2x87 {
-#if (defined(__APPLE__) && defined(__aarch64__)) || defined(BF2_TEST_SOFT_EXTENDED)
+#if defined(BF2X87_SOFT_EXTENDED)
 using Real = ExtendedFloat;
 inline bool isNaN(Real value) { return value.isNaN(); }
 inline bool isFinite(Real value) { return value.isFinite(); }
 // Presentation-only transcendentals use binary64 libm on Apple silicon.
-// See docs/macos-s2-10-numerics.md for the precision policy and tolerances.
 inline Real squareRoot(Real value) { return Real(std::sqrt(static_cast<double>(value))); }
 inline Real sinValue(Real value) { return Real(std::sin(static_cast<double>(value))); }
 inline Real cosValue(Real value) { return Real(std::cos(static_cast<double>(value))); }
@@ -35,18 +40,16 @@ inline Real atanValue(Real a, Real b) { return std::atan2(a,b); }
 // Load exactly, round after each arithmetic operation, and narrow only at stores.
 template<class T> inline Real wide(T value)
 {
-#if !defined(__APPLE__) && !defined(BF2_TEST_SOFT_EXTENDED)
-    // [RETIRE-WHEN: native-x87-extended] Non-Apple binary64 long-double ports
-    // still need validated extended arithmetic before entering the S2.1 arms.
-    if (std::numeric_limits<long double>::digits < 64) {
-        std::fprintf(stderr, "[FRONTIER] bf2x87::wide requires x87 extended precision\n");
-        std::fflush(stderr);
-        std::abort();
-    }
-#endif
     return Real(value);
 }
-#if (defined(__APPLE__) && defined(__aarch64__)) || defined(BF2_TEST_SOFT_EXTENDED)
+// MSVC is exempt: its long double is binary64, which is retail BF2.exe's own compiler semantics, and
+// the Windows arms never enter bf2x87 (inline x87 on x86, SSE2 on x64). MSVC defines no
+// __LDBL_MANT_DIG__, so it never selects the soft Real either - as before this check existed.
+#if !defined(BF2X87_SOFT_EXTENDED) && !defined(_MSC_VER)
+static_assert(std::numeric_limits<long double>::digits >= 64,
+              "bf2x87: a long double narrower than x87 extended must select BF2X87_SOFT_EXTENDED");
+#endif
+#if defined(BF2X87_SOFT_EXTENDED)
 inline Real add(Real a, Real b) { return a + b; }
 inline Real sub(Real a, Real b) { return a - b; }
 inline Real mul(Real a, Real b) { return a * b; }
@@ -79,7 +82,7 @@ template<class T> inline T integer(Real value, bool truncate = true)
 {
     static_assert(std::numeric_limits<T>::is_signed && std::numeric_limits<T>::is_integer,
                   "signed FIST destination required");
-#if (defined(__APPLE__) && defined(__aarch64__)) || defined(BF2_TEST_SOFT_EXTENDED)
+#if defined(BF2X87_SOFT_EXTENDED)
     return value.integer<T>(truncate);
 #else
     const Real rounded = truncate ? std::trunc(value) : std::rint(value);

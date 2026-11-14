@@ -1,0 +1,30 @@
+# [TEMP] camshake-speed: enter the nearest ground vehicle from 2 m and drive (speed shake; batch 21/22 evidence).
+# The numeric evidence came from a temporary camera probe that is not in the tree (ledger, batch 22).
+include join-and-spawn
+log cam: start
+wait-ms 2000
+walk-to tmpl:jeep_faav,usjep_hmmwv,jep_paratrooper,jep_nanjing,ustnk_m1a2,tnk_type98,usaav_m6,aav_type95,usapc_lav25,apc_wz551 2 60000
+face tmpl:jeep_faav,usjep_hmmwv,jep_paratrooper,jep_nanjing,ustnk_m1a2,tnk_type98,usaav_m6,aav_type95,usapc_lav25,apc_wz551 5 3000
+log cam: enter (E)
+key e
+wait-ms 3000
+capture cam-entered
+log cam: drive
+key-down w
+wait-ms 6000
+capture cam-driving
+wait-ms 2000
+key-up w
+wait-ms 1000
+log cam: fire
+button-down 0
+wait-ms 150
+capture cam-firing
+wait-ms 850
+button-up 0
+wait-ms 2000
+button-down 0
+wait-ms 1500
+button-up 0
+wait-ms 2000
+log cam: done

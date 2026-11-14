@@ -5,8 +5,8 @@
 `SwiffPlayer.dll` links a modified C++ parser whose exact source is no longer
 available: James Clark's 1.x distribution site is gone and was not archived.
 Retail differs from every published release inspected, including a 328-word
-`namingBitmap` versus 320 and older xmlrole role numbering. See
-[the identification report](../../../../docs/tracks/swf/expat-identification.md).
+`namingBitmap` versus 320 and older xmlrole role numbering. The swf track identified it
+against the published releases.
 This dependency is not recovered DICE source or an exact retail match.
 
 The known behavior difference is XML name-character classification: retail's

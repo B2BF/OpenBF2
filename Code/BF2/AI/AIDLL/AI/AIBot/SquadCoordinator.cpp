@@ -1692,7 +1692,7 @@ bool SquadCoordinator::isSameMission(BotSquad::OrderType type, const Vec3& posit
     return epsilon >= std::fabs(m_v28.z - position.z);
 }
 
-// ELF 0x1A3270 (D1, 470 B; recovered on the client track, docs/macos-c-singleplayer.md). Each
+// ELF 0x1A3270 (D1, 470 B; recovered on the client track). Each
 // member drops its request and leaves the engine squad (IBFSquad +0x10, exitSquad with the
 // 1-based squad number) before it is deleted - the member pointer is used before the null test,
 // as shipped. Then the formation goes, then every fire record (plain operator delete, the node

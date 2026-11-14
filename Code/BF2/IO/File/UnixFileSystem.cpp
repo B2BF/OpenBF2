@@ -151,21 +151,42 @@ IBase* UnixFileSystem::create(unsigned int iid, IBase* outer)
 void UnixFileSystem::fixUnixPath(std::string& path)
 {
     std::string::size_type first = 0;
+    bool keepCase = false;
 #if defined(__APPLE__) && !DEDICATED
     // [CHOSEN, not recovered] The ELF lowercases whole paths, which are relative game paths there.
     // The macOS client's @HOME@ substitution is an absolute user path (clientDataDirectory):
     // lowercasing it named a different path on case-sensitive volumes and under the runner's
     // sandbox, so a fresh home's Profile.con/Global.con writes silently failed. Keep that prefix
-    // as it is; everything after it is lowered as before (docs/macos-c-asan-heap.md).
+    // as it is; everything after it is lowered as before.
     const std::string& home = macos::clientDataDirectory();
     if (!home.empty() && path.compare(0, home.size(), home) == 0)
+    {
         first = home.size();
+        // [CHOSEN, not recovered] Paths below <clientDataDirectory>/Profiles/ keep their case, as
+        // the retail Windows client's file system does. BF2.exe validateProfileFiles (PE 0x4A8596)
+        // accepts the enumerated "Default" directory by case-sensitive equality; a lowered
+        // "default" was rejected, so every start recreated it and its save wrote an empty
+        // GlobalSettings.defaultUser over Global.con, and the login list never preselected the
+        // saved profile (no PREFIX field, no SELECT ACCOUNT). Content paths stay lowered.
+        // docs/macos-profile-prefix.md
+        static const char kProfiles[] = "/profiles/";
+        const std::string::size_type n = sizeof(kProfiles) - 1;
+        if (path.size() >= first + n)
+        {
+            keepCase = true;
+            for (std::string::size_type i = 0; i < n && keepCase; ++i)
+            {
+                const char c = path[first + i] == '\\' ? '/' : (char)tolower((unsigned char)path[first + i]);
+                keepCase = c == kProfiles[i];
+            }
+        }
+    }
 #endif
     for (std::string::size_type i = first; i < path.size(); ++i)
     {
         if (path[i] == '\\')
             path[i] = '/';
-        else
+        else if (!keepCase)
             path[i] = (char)tolower((unsigned char)path[i]);
     }
 }

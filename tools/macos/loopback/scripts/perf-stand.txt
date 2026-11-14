@@ -1,0 +1,25 @@
+# [TEMP] perf-stand: spawn, stand still 30 s, then turn slowly for 30 s (frame-time measurement with
+# BF2_FRAME_TRACE=1).
+include join-and-spawn
+log perf-stand: standing
+wait-ms 30000
+log perf-stand: looking around
+move-rel 200 0
+wait-ms 3000
+move-rel 200 0
+wait-ms 3000
+move-rel 200 0
+wait-ms 3000
+move-rel 200 0
+wait-ms 3000
+move-rel 200 0
+wait-ms 3000
+move-rel -400 0
+wait-ms 3000
+move-rel -400 0
+wait-ms 3000
+move-rel 0 -100
+wait-ms 3000
+move-rel 0 100
+wait-ms 3000
+log perf-stand done

@@ -15,6 +15,16 @@ extern "C" {
 #include "../../../External/GameSpy/common/gsAvailable.h"     // GSIStartAvailableCheckA / Think
 }
 
+#if !defined(_WIN32)
+#include <cerrno>
+#include <cstdio>
+#include <cstring>
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
+
 namespace dice {
 namespace hfe {
 
@@ -172,6 +182,78 @@ void GameSpyBackend::registerKeys()
     s_keysRegistered = true;
 }
 
+#if !defined(_WIN32)
+// [PLATFORM] LAN listing for a server bound to one address. qr2_create_socket binds the query
+// socket to sv.interfaceIP. Winsock delivers a 255.255.255.255 datagram to a socket bound to the
+// receiving interface's address, so retail Windows answers the client's LAN echo; BSD/xnu and
+// Linux deliver broadcasts only to sockets bound to INADDR_ANY, so such a POSIX server was
+// invisible to the LAN browser. A second socket bound to INADDR_ANY on the query port receives
+// those datagrams and hands them to qr2_parse_queryA, which answers through the qr2 socket: the
+// reply's source stays interfaceIP:port (the address the game port is bound to and the one
+// heartbeats advertise). Unicast to interfaceIP still reaches the more specific qr2 socket.
+// The listener also receives unicast sent to other local addresses on the query port; those are
+// answered from interfaceIP as well (a browser matches replies by source and drops them).
+namespace { int s_lanListener = -1; }   // one GameSpyBackend per process
+
+static void openLanBroadcastListener(qr2_t qr2)
+{
+    sockaddr_in bound;
+    socklen_t boundLen = sizeof(bound);
+    if (getsockname(qr2->hbsock, reinterpret_cast<sockaddr*>(&bound), &boundLen) != 0
+        || bound.sin_addr.s_addr == htonl(INADDR_ANY))
+        return;   // no interfaceIP (or loopback, which the SDK maps to INADDR_ANY): already listening
+
+    // Linux allows the wildcard bind next to the specific one only when both set SO_REUSEADDR;
+    // the existing socket's flag is checked at the time of the second bind.
+    int on = 1;
+    setsockopt(qr2->hbsock, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+
+    int s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (s < 0)
+        return;
+    setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+    sockaddr_in any;
+    std::memset(&any, 0, sizeof(any));
+    any.sin_family = AF_INET;
+    any.sin_addr.s_addr = htonl(INADDR_ANY);
+    any.sin_port = bound.sin_port;
+    if (bind(s, reinterpret_cast<sockaddr*>(&any), sizeof(any)) != 0
+        || fcntl(s, F_SETFL, fcntl(s, F_GETFL, 0) | O_NONBLOCK) != 0)
+    {
+        std::fprintf(stderr, "GameSpy: LAN broadcast listener on port %d failed (%s); "
+                     "LAN clients will not list this server\n", ntohs(bound.sin_port), std::strerror(errno));
+        close(s);
+        return;
+    }
+    s_lanListener = s;
+}
+
+static void pollLanBroadcastListener(qr2_t qr2)
+{
+    if (s_lanListener < 0)
+        return;
+    char data[256];   // qr2.c INBUF_LEN; the SDK parses a NUL-terminated copy
+    for (;;)
+    {
+        sockaddr_in from;
+        socklen_t fromLen = sizeof(from);
+        ssize_t n = recvfrom(s_lanListener, data, sizeof(data) - 1, 0,
+                             reinterpret_cast<sockaddr*>(&from), &fromLen);
+        if (n < 0)
+            break;   // EAGAIN: drained
+        data[n] = '\0';
+        qr2_parse_queryA(qr2, data, static_cast<int>(n), reinterpret_cast<sockaddr*>(&from));
+    }
+}
+
+static void closeLanBroadcastListener()
+{
+    if (s_lanListener >= 0)
+        close(s_lanListener);
+    s_lanListener = -1;
+}
+#endif
+
 // GameSpyBackend lifecycle
 GameSpyBackend::GameSpyBackend(MatchMakingServer::Server* mmServer)
     : m_isInitialized(0)
@@ -207,6 +289,9 @@ GameSpyBackend::GameSpyBackend(MatchMakingServer::Server* mmServer)
     if (gcd_init_qr2(reinterpret_cast<qr2_t>(m_qr2), gamespy::g_XPackGameID))
         return;
     m_isInitialized = 1;
+#if !defined(_WIN32)
+    openLanBroadcastListener(reinterpret_cast<qr2_t>(m_qr2));
+#endif
 }
 
 GameSpyBackend::~GameSpyBackend()
@@ -219,6 +304,9 @@ GameSpyBackend::~GameSpyBackend()
 void GameSpyBackend::shutdown()
 {
     gcd_shutdown();
+#if !defined(_WIN32)
+    closeLanBroadcastListener();
+#endif
     qr2_shutdown(reinterpret_cast<qr2_t>(m_qr2));
     m_isInitialized = 0;
 }
@@ -236,7 +324,12 @@ GameSpyCDKeyAuthenticator* GameSpyBackend::getAuthenticator()
 void GameSpyBackend::update()   //  / PE 0x616450 (SDK body inlined on PE)
 {
     if (m_isInitialized && m_qr2)
+    {
         qr2_think(reinterpret_cast<qr2_t>(m_qr2));
+#if !defined(_WIN32)
+        pollLanBroadcastListener(reinterpret_cast<qr2_t>(m_qr2));
+#endif
+    }
 }
 
 } // namespace hfe

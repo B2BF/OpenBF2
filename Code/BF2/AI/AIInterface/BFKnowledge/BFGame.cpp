@@ -7,7 +7,6 @@
 
 #include "../../../Core/Debug.h"        // the no-settings report
 
-#include "AIFrontier.h"
 #include "../../../Game/Objects/ISpawnPoint.h"   // getSpawnPointPositions
 #include "../../../Game/Objects/IObject.h"
 
@@ -96,17 +95,8 @@ int BFGame::getMaxNumberOfPlayers() const
 int BFGame::getAISettingsFromGame(int& a, bool& b, float& c) const
 {
     IBase* general = classManager->getSingleton(std::string("GeneralSettings"));
-#if DEDICATED
-    // [FRONTIER] bf2 (ia-32, dedicated) 0x83FED10 has the same menu arm as BF2.exe. It is missing
-    // here only because IGeneralSettings (Game/GeneralSettings.h) and ILocalProfileManager
-    // (Game/LocalProfileManager.h) are declared under `#if !DEDICATED` (game track). No dedicated
-    // module registers "GeneralSettings", so the stop cannot be reached.
-    if (general)
-    {
-        BF2_AI_FRONTIER("dice::hfe::ai::BFGame::getAISettingsFromGame"
-                        " - the MENU arm in a dedicated image (no GeneralSettings interface)");
-    }
-#else
+    // The same arm in both images: bf2 (ia-32, dedicated) 0x83FED10 makes the identical calls. No
+    // dedicated module registers "GeneralSettings", so the dedicated image never takes it.
     if (general)
     {
         IGeneralSettings* generalSettings = static_cast<IGeneralSettings*>(general);
@@ -130,7 +120,6 @@ int BFGame::getAISettingsFromGame(int& a, bool& b, float& c) const
         c = generalSettings->getBotSkill();                                           // +0xC0
         return 1;
     }
-#endif
 
     // no settings and no menu is A reported failure, not A silent zero - and the caller honours
     // the false by leaving the script's values alone.

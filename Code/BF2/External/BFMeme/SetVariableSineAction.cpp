@@ -123,7 +123,7 @@ bool chooseSineValue(float current, float target, float delta, float speed,
     if (changed) value = rounded;
     return changed;
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     const float angle = 1.57075f;                        // 94CB68, bytes56 0E C9 3F
     float rounded;
     bool changed = false;

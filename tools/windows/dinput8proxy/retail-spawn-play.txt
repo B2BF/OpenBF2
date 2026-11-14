@@ -1,0 +1,45 @@
+# [TEMP] dinput8 proxy script for a retail client copy (DI8PROXY_SCRIPT=<this file>): join, spawn, walk, turn, fire.
+# No wait-log: retail writes no log, so the level load is a fixed wait. Coordinates are 800x600
+# client / HUD pixels, as in tools/macos/loopback/scripts/join-and-spawn.txt.
+log waiting for the level load
+wait-ms 100000
+capture loaded
+# JOIN GAME (Swiff menu, window messages)
+click 745 583
+wait-ms 5000
+capture spawn-screen
+# the HUD pointer: calibration shot (pointer homed, then to 400,300)
+pointer 400 300
+wait-ms 1000
+capture pointer-400-300
+# kit 0, spawn point Construction Site, DONE
+hud-click 130 107
+wait-ms 1000
+hud-click 432 282
+wait-ms 1000
+capture selected
+hud-click 728 546
+wait-ms 10000
+capture spawned
+log walk
+key-down w
+wait-ms 3000
+key-up w
+capture walked
+log turn
+move-rel 300 0
+wait-ms 1500
+capture turned-right
+move-rel -600 0
+wait-ms 1500
+capture turned-left
+move-rel 0 -150
+wait-ms 1500
+capture looked-up
+log fire
+button-down 0
+wait-ms 2000
+button-up 0
+wait-ms 1000
+capture fired
+log done

@@ -464,14 +464,14 @@ void SpawnGroup::setNetUpdate(io::BitStream& stream, float /*time*/, bool ghostA
     // the squad test (0x811222D call +0x30, 0x8112230 jmp 0x811211C `and edi, 0x20`). An else
     // dropped the squad of every group whose first update also carried its position, leaving the
     // constructor's -1 ("no squad", offered to the whole team): squad-leader spawn points appeared
-    // for players outside the squad (docs/macos-c-handplay-1.md).
+    // for players outside the squad.
     if (stateMask & 0x20)
     {
         setSquad(record.squad);                                           // +0x20
     }
 #if defined(__APPLE__)
     // [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: squad-spawn-filter-validated]
-    // BF2_SPAWNGROUP_TRACE=1: each applied client spawn-group update (docs/macos-c-handplay-1.md).
+    // BF2_SPAWNGROUP_TRACE=1: each applied client spawn-group update.
     static const bool trace = std::getenv("BF2_SPAWNGROUP_TRACE") != 0;
     if (trace)
         std::fprintf(stderr, "[SPAWNGROUP] %p mask=0x%02x team=%d squad=%d active=%d points=%d aiOnly=%d\n",

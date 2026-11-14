@@ -27,15 +27,6 @@ namespace gameswf
 			render::delete_bitmap_info(this);
 	}
 
-	// [TEMP] [CHOSEN, not recovered] Unsupported upstream backends lack depth.
-	// [RETIRE-WHEN: swf-render-depth-interface] Recover their depth transport and
-	// validate submission before using a backend other than SwiffRenderHandler.
-	void render_handler::set_depth(int)
-	{
-		std::fprintf(stderr, "[FRONTIER] gameswf::render_handler::set_depth reached\n");
-		std::fflush(stderr);
-		std::abort();
-	}
 
 	// SwiffPlayer.dll 0x1009A3F0.
 	void set_render_handler(render_handler* r)

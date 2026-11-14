@@ -16,11 +16,14 @@
 #include "HudVoteMap.h"           // the two LevelsList rows (225 / 226)
 #include "HudKitSelection.h"      // the five SpawnManager rows (216..220)
 #include "HudInformationAdapter.h" // hudItems.setBool (row 161)
+#include "HudMessages.h"           // hudMessages.setReverseItems (row 30)
+#include "HudQuestionManager.h"    // hudQuestions.answer (row 215)
 #include "../Game/Main/Game.h"        // operator>>(istream&, TargetChannel&) - PE 442150
 #include "../Core/ConsoleObjectBase.h"
 #include "../Core/ConsoleObjectMacro.h"
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <initializer_list>
 #include <sstream>
 
@@ -41,7 +44,6 @@ enum class Availability {
 // [CHOSEN, not recovered] Consolidates generated classes' identical metadata
 // and availability operations. The native base is real; the additional enum
 // replaces source-generator specialization, never a retail object overlay.
-// All unsupported invocations explicitly stop before conversion or execution.
 class HudConsoleBinding : public ConsoleObjectBaseImpl {
 public:
     HudConsoleBinding(const char* name, int type, int minArgs, int maxArgs,
@@ -103,32 +105,7 @@ public:
 
     std::string getObjectDeltaAsString() const override { return "No Delta"; }
 
-    // [TEMP] [CHOSEN, not recovered] Unimplemented bindings stop before conversion or execution.
-    // [RETIRE-WHEN: hud-console-invokers] Replace after every remaining invoker is implemented and validated.
-    std::string execute(std::string*, int) override
-    {
-        std::fprintf(stderr, "[FRONTIER] dice::hfe::hud::HudConsoleBinding::execute: %s.%s\n", m_objectName, m_functionName);
-        std::fflush(stderr);
-        std::abort();
-    }
-    void executeObjectMethod() override
-    {
-        std::fprintf(stderr, "[FRONTIER] dice::hfe::hud::HudConsoleBinding::executeObjectMethod: %s.%s\n", m_objectName, m_functionName);
-        std::fflush(stderr);
-        std::abort();
-    }
-    void setArgFromString(int, const std::string&) override
-    {
-        std::fprintf(stderr, "[FRONTIER] dice::hfe::hud::HudConsoleBinding::setArgFromString: %s.%s\n", m_objectName, m_functionName);
-        std::fflush(stderr);
-        std::abort();
-    }
-    std::string getReturnValueAsString() const override
-    {
-        std::fprintf(stderr, "[FRONTIER] dice::hfe::hud::HudConsoleBinding::getReturnValueAsString: %s.%s\n", m_objectName, m_functionName);
-        std::fflush(stderr);
-        std::abort();
-    }
+    // The invokers live in the typed subclasses below: every row of the A1781C list has one.
 private:
     Availability m_availability;
 };
@@ -2030,11 +2007,229 @@ public:
     std::string getReturnValueAsString() const override { return std::string(); }
 };
 
+} // namespace
+
+// Direct field writes of the hudMap / hudMessages console rows (both classes befriend this).
+struct HudConsoleAccess {
+    static void setDisplayControlpoints(bool show) { hudManager->getMap()->m_field36c = show; }  // 75E5D0 +36C
+    static void setCurrOrderList(int list) { hudManager->getMap()->m_field35c = static_cast<std::uint32_t>(list); } // 76BC3E +35C
+    static void setSourceBlend(int blend) { hudManager->getMap()->m_fieldb44 = blend; }          // 76C03B +B44
+    static void setDestinationBlend(int blend) { hudManager->getMap()->m_fieldb48 = blend; }     // 76C124 +B48
+    static void setFullScreenZoom(int level) { hudManager->getMap()->applyZoom(level, true); }   // 76BD9E -> 776670
+    // 76BF5E: the centre of the current zoom level.
+    static void setCommanderOffset(Vec2 offset)
+    {
+        meme::Bf2MenuMapNode* map = hudManager->getMap();
+        map->m_centers[map->m_zoomLevel] = offset;
+    }
+    // 75E923: the four centre limits from one value (ds:0x8AA8C0 is -1.0f).
+    static void setTargetTop(float top)
+    {
+        meme::Bf2MenuMapNode* map = hudManager->getMap();
+        map->m_minCenterY = top;
+        const float bottom = -1.0f - top;
+        map->m_maxCenterY = bottom;
+        map->m_minCenterX = -bottom;
+        map->m_maxCenterX = -top;
+    }
+    // 76C30A: each component times ds:0x8A4A64 (1/255) into the colour at +B4C.
+    static void setFilterColor(float r, float g, float b, float a)
+    {
+        const float scale = 1.0f / 255.0f;
+        meme::Color& color = hudManager->getMap()->m_fieldb4c;
+        color.r = r * scale; color.g = g * scale; color.b = b * scale; color.a = a * scale;
+    }
+    // 75FD68: the builder map's +68 word takes the float's bits.
+    static void setModifyer(float value)
+    {
+        std::memcpy(&HudConsoleBinding::builderMap()->m_field068, &value, sizeof(value));
+    }
+    static void setReverseItems(bool reverse) { hudManager->getMessages()->m_enabled = reverse; } // 75EB14 +08
+};
+
+namespace {
+void hudSetSpottedAngle(float angle) { hudManager->setAimThreshold(angle); }          // 75DD4A +154
+void hudSetPaint(bool enabled) { hudManager->setPaint(enabled); }                      // 75E1D5 +20
+void hudSetUpdate(bool enabled) { hudManager->setUpdate(enabled); }                    // 75E2BE +24
+void hudSetDisplayTickets(bool show)                                                   // 75E6CE -> 75E703
+{
+    HudInformationAdapter* information = hudManager->getInformationAdapter();
+    information->setBool("EnemyTicketsShow", show);
+    information->setBool("FriendlyTicketsShow", show);
+}
+void hudSetMapStatic(bool isStatic) { hudManager->getInformationAdapter()->setMapStatic(isStatic); } // 75E802
+void hudSetString(std::string name, std::string value)                                 // 76C5B3 +1C
+{ hudManager->getInformationAdapter()->setString(name, value); }
+void hudSetFloat(std::string name, float value)                                        // 76C795 +28
+{ hudManager->getInformationAdapter()->setFloat(name, value); }
+void hudLeaveSquad() { hudManager->leaveSquad(); }                                     // 76D411 +2A0
+void hudSendKitMessage() { hudManager->sendKitMessage(); }                             // 76F1D4 +138
+void hudAnswer(bool affirmative) { hudManager->getQuestionManager()->reply(affirmative); } // 76F5D1 -> 7891D0
+void hudSayTeam(std::string text) { hudManager->sendSayTeamText(text); }               // 76FAB1 +E0
+void hudSayAll(std::string text) { hudManager->sendSayAllText(text); }                 // 76FBE9 +D8
+void hudShowIngameHelp(std::string text, float seconds) { hudManager->showHelp(text, seconds); } // 77010F +84
+
+// One conversion slot per instantiation, as each retail class owns its static: strings keep one token,
+// everything else is read with operator>>.
+template<class Arg, int Index>
+std::string* convertArgument(const std::string& value)
+{
+    static Arg converted;
+    std::istringstream input(value);
+    input >> converted;
+    return reinterpret_cast<std::string*>(&converted);
+}
+template<class Arg> Arg argumentValue(std::string* slot) { return *reinterpret_cast<Arg*>(slot); }
+template<> std::string argumentValue<std::string>(std::string* slot) { return *slot; }
+
+// [CHOSEN, not recovered] Shared shapes of the void console rows: arity check, the flag cleared before
+// the call, the arguments read from their slots, no singleton guard. Their result formatter is the
+// shared 41BC76 (an empty string).
+template<void (*Call)()>
+class HudVoidBinding0 final : public HudConsoleBinding {
+public:
+    using HudConsoleBinding::HudConsoleBinding;
+    std::string execute(std::string* arguments, int count) override
+    { return ConsoleObjectBaseImpl::execute(arguments, count); }
+    void executeObjectMethod() override
+    {
+        if (m_argCount != 0) return;
+        m_hasReturnValue = false;
+        Call();
+    }
+    void setArgFromString(int, const std::string&) override {} // 57DD1F
+    std::string getReturnValueAsString() const override { return std::string(); }
+};
+
+template<class A, void (*Call)(A)>
+class HudVoidBinding1 final : public HudConsoleBinding {
+public:
+    using HudConsoleBinding::HudConsoleBinding;
+    std::string execute(std::string* arguments, int count) override
+    { return ConsoleObjectBaseImpl::execute(arguments, count); }
+    void executeObjectMethod() override
+    {
+        if (m_argCount != 1) return;
+        const A a = argumentValue<A>(m_args[0]);
+        m_hasReturnValue = false;
+        Call(a);
+    }
+    void setArgFromString(int index, const std::string& value) override
+    {
+        if (index == 1) m_args[0] = convertArgument<A, 1>(value);
+    }
+    std::string getReturnValueAsString() const override { return std::string(); }
+};
+
+template<class A, class B, void (*Call)(A, B)>
+class HudVoidBinding2 final : public HudConsoleBinding {
+public:
+    using HudConsoleBinding::HudConsoleBinding;
+    std::string execute(std::string* arguments, int count) override
+    { return ConsoleObjectBaseImpl::execute(arguments, count); }
+    void executeObjectMethod() override
+    {
+        if (m_argCount != 2) return;
+        const A a = argumentValue<A>(m_args[0]);
+        const B b = argumentValue<B>(m_args[1]);
+        m_hasReturnValue = false;
+        Call(a, b);
+    }
+    void setArgFromString(int index, const std::string& value) override
+    {
+        if (index == 1) m_args[0] = convertArgument<A, 1>(value);
+        if (index == 2) m_args[1] = convertArgument<B, 2>(value);
+    }
+    std::string getReturnValueAsString() const override { return std::string(); }
+};
+
+// 76C30A's shape: four floats.
+template<void (*Call)(float, float, float, float)>
+class HudVoidBinding4f final : public HudConsoleBinding {
+public:
+    using HudConsoleBinding::HudConsoleBinding;
+    std::string execute(std::string* arguments, int count) override
+    { return ConsoleObjectBaseImpl::execute(arguments, count); }
+    void executeObjectMethod() override
+    {
+        if (m_argCount != 4) return;
+        const float r = argumentValue<float>(m_args[0]);
+        const float g = argumentValue<float>(m_args[1]);
+        const float b = argumentValue<float>(m_args[2]);
+        const float a = argumentValue<float>(m_args[3]);
+        m_hasReturnValue = false;
+        Call(r, g, b, a);
+    }
+    void setArgFromString(int index, const std::string& value) override
+    {
+        if (index == 1) m_args[0] = convertArgument<float, 1>(value);
+        if (index == 2) m_args[1] = convertArgument<float, 2>(value);
+        if (index == 3) m_args[2] = convertArgument<float, 3>(value);
+        if (index == 4) m_args[3] = convertArgument<float, 4>(value);
+    }
+    std::string getReturnValueAsString() const override { return std::string(); }
+};
+
+// 76B4FC: hudBuilder.searchNodes - the named node's predecessor (79BEC0); the result prints as a
+// pointer (7ED90A, operator<<(const void*)).
+class HudBuilderSearchNodesBinding final : public HudConsoleBinding {
+public:
+    using HudConsoleBinding::HudConsoleBinding;
+    std::string execute(std::string* arguments, int count) override
+    { return ConsoleObjectBaseImpl::execute(arguments, count); }
+    void executeObjectMethod() override
+    {
+        if (m_argCount != 2) return;
+        const std::string parent(*m_args[0]);
+        const std::string name(*m_args[1]);
+        m_hasReturnValue = true;
+        m_result = hudManager->getBuilder()->findNodePredecessor(parent, name);
+    }
+    void setArgFromString(int index, const std::string& value) override   // 76B580
+    {
+        if (index == 1) m_args[0] = convertArgument<std::string, 1>(value);
+        if (index == 2) m_args[1] = convertArgument<std::string, 2>(value);
+    }
+    std::string getReturnValueAsString() const override
+    {
+        if (!m_hasReturnValue) return std::string();
+        std::ostringstream output;
+        output << static_cast<const void*>(m_result);
+        return output.str();
+    }
+private:
+    meme::Node* m_result;
+};
+
+// 75C9B7: hudManager.refresh, the one Boolean row without arguments; the flag is set before the call.
+class HudRefreshBinding final : public HudConsoleBinding {
+public:
+    using HudConsoleBinding::HudConsoleBinding;
+    std::string execute(std::string* arguments, int count) override
+    { return ConsoleObjectBaseImpl::execute(arguments, count); }
+    void executeObjectMethod() override
+    {
+        if (m_argCount != 0) return;
+        m_hasReturnValue = true;
+        m_result = hudManager->refresh();
+    }
+    void setArgFromString(int, const std::string&) override {} // 57DD1F
+    std::string getReturnValueAsString() const override
+    {
+        if (!m_hasReturnValue) return std::string();
+        std::ostringstream output;
+        output << m_result;
+        return output.str();
+    }
+private:
+    bool m_result;
+};
+
 // Every row retains original case, spelling, access/category defaults, arity,
 // property direction, advertised return/argument types, and dynamic flag.
 // Untouched base argument storage remains statically zero-initialized.
 static SetConsoleClassDefaults defaults0("HudManager", 2, 0);
-static HudConsoleBinding binding0("refresh", 0, 0, 0, "bool", true, Availability::Manager, {}); // 75C964 table926BB0
+static HudRefreshBinding binding0("refresh", 0, 0, 0, "bool", true, Availability::Manager, {}); // 75C964 table926BB0
 static HudIntPairBinding<&BF2HudManager::setPointerSize> binding1("setPointerSize", 0, 2, 2, "bool", true, Availability::Manager, {"int", "int"}); // 75C9DF table926C40
 static HudStringBinding<&BF2HudManager::setMouseTextureEmpty> binding2("setMouseTextureEmpty", 0, 1, 1, "bool", true, Availability::Manager, {"std::string"}); // 75CB2C table926CD8
 static HudStringBinding<&BF2HudManager::setMouseTextureFull> binding3("setMouseTextureFull", 0, 1, 1, "bool", true, Availability::Manager, {"std::string"}); // 75CC74 table926D78
@@ -2050,22 +2245,22 @@ static HudIntPairBinding<&BF2HudManager::setCommMousePos> binding12("setCommMous
 static HudIntPairBinding<&BF2HudManager::setSpottedMenuSize> binding13("setSpottedMenuSize", 0, 2, 2, "bool", true, Availability::Manager, {"int", "int"}); // 75D8A5 table927380
 static HudIntPairBinding<&BF2HudManager::setSpottedMenuPos> binding14("setSpottedMenuPos", 0, 2, 2, "bool", true, Availability::Manager, {"int", "int"}); // 75D9F2 table927418
 static HudIntPairBinding<&BF2HudManager::setSpottedMousePos> binding15("setSpottedMousePos", 0, 2, 2, "bool", true, Availability::Manager, {"int", "int"}); // 75DB3F table9274B0
-static HudConsoleBinding binding16("setSpottedAngle", 0, 1, 1, "void", false, Availability::Manager, {"float"}); // 75DC8C table927548
+static HudVoidBinding1<float, &hudSetSpottedAngle> binding16("setSpottedAngle", 0, 1, 1, "void", false, Availability::Manager, {"float"}); // 75DC8C table927548
 static HudBoolVoidBinding<&BF2HudManager::toggleSayAll> binding17("enableSayAllChatBox", 0, 1, 1, "void", false, Availability::Manager, {"bool"}); // 75DD71 table9275E0; executor 75DE2F -> +B0 7B3360, converter 75DDE2 (bool A10D7C)
 static HudBoolVoidBinding<&BF2HudManager::toggleSayTeam> binding18("enableSayTeamChatBox", 0, 1, 1, "void", false, Availability::Manager, {"bool"}); // 75DE5D table927678; executor 75DF1B -> +B4 7B33F0, converter 75DECE (bool A10D7D)
 static HudBoolVoidBinding<&BF2HudManager::toggleSaySquad> binding19("enableSaySquadChatBox", 0, 1, 1, "void", false, Availability::Manager, {"bool"}); // 75DF49 table927718; executor 75E007 -> +B8 7B3480, converter 75DFBA (bool A10D7E)
 static HudIntVoidBinding<&BF2HudManager::setMaximumNrOfCPs> binding20("setMaximumNrOfCPs", 0, 1, 1, "void", false, Availability::Manager, {"int"}); // 75E035 table9277B8
-static HudConsoleBinding binding21("setPaint", 0, 1, 1, "void", false, Availability::Manager, {"bool"}); // 75E117 table927850
-static HudConsoleBinding binding22("setUpdate", 0, 1, 1, "void", false, Availability::Manager, {"bool"}); // 75E200 table9278E0
+static HudVoidBinding1<bool, &hudSetPaint> binding21("setPaint", 0, 1, 1, "void", false, Availability::Manager, {"bool"}); // 75E117 table927850
+static HudVoidBinding1<bool, &hudSetUpdate> binding22("setUpdate", 0, 1, 1, "void", false, Availability::Manager, {"bool"}); // 75E200 table9278E0
 static HudBoolVoidBinding<&BF2HudManager::setDone> binding23("setDone", 0, 1, 1, "void", false, Availability::Manager, {"bool"}); // 75E2E9 table927970; thunks 75E35A/75E3A7 -> +1BC
 static HudStringRefVoidBinding<&BF2HudManager::addTextureAtlas> binding24("addTextureAtlas", 0, 1, 1, "void", false, Availability::Manager, {"std::string"}); // 75E3D5 table927A00; executor 75E446 -> +36C 755F00, converter 75E488 (string A10D88)
-static HudConsoleBinding binding25("setDisplayControlpoints", 0, 1, 1, "void", false, Availability::Map, {"bool"}); // 75E4FD table927A98
-static HudConsoleBinding binding26("setDisplayTickets", 0, 1, 1, "void", false, Availability::Information, {"bool"}); // 75E5FB table927B38
-static HudConsoleBinding binding27("setMapStatic", 0, 1, 1, "void", false, Availability::Information, {"bool"}); // 75E744 table927BD0
-static HudConsoleBinding binding28("setTargetTop", 0, 1, 1, "void", false, Availability::Map, {"float"}); // 75E837 table927C68
+static HudVoidBinding1<bool, &HudConsoleAccess::setDisplayControlpoints> binding25("setDisplayControlpoints", 0, 1, 1, "void", false, Availability::Map, {"bool"}); // 75E4FD table927A98
+static HudVoidBinding1<bool, &hudSetDisplayTickets> binding26("setDisplayTickets", 0, 1, 1, "void", false, Availability::Information, {"bool"}); // 75E5FB table927B38
+static HudVoidBinding1<bool, &hudSetMapStatic> binding27("setMapStatic", 0, 1, 1, "void", false, Availability::Information, {"bool"}); // 75E744 table927BD0
+static HudVoidBinding1<float, &HudConsoleAccess::setTargetTop> binding28("setTargetTop", 0, 1, 1, "void", false, Availability::Map, {"float"}); // 75E837 table927C68
 static HudBoolVoidBinding<&BF2HudManager::addFavouriteServer> binding29("addFavouriteServer", 0, 1, 1, "void", false, Availability::Manager, {"bool"}); // 75E955 table927D00; executor 75EA13 -> +370 751B50, converter 75E9C6 (bool A10DB0)
 static SetConsoleClassDefaults defaults1("ItemSelection", 2, 0);
-static HudConsoleBinding binding30("setReverseItems", 0, 1, 1, "void", false, Availability::Messages, {"bool"}); // 75EA41 table927D88
+static HudVoidBinding1<bool, &HudConsoleAccess::setReverseItems> binding30("setReverseItems", 0, 1, 1, "void", false, Availability::Messages, {"bool"}); // 75EA41 table927D88
 static SetConsoleClassDefaults defaults2("HudBuilder", 2, 0);
 static HudBuilderStringPairBinding<&Bf2HudBuilder::createMapNode> binding31("createMapNode", 0, 2, 2, "bool", true, Availability::Builder, {"std::string", "std::string"}); // 75EB3C table927E20; invoker75EBC9 ->796530
 static HudBuilderCreateNodeBinding<&Bf2HudBuilder::createMiniMapNode> binding32("createMiniMapNode", 0, 6, 6, "bool", true, Availability::Builder, {"std::string", "std::string", "int", "int", "int", "int"}); // 75ED22 table927EB8
@@ -2078,7 +2273,7 @@ static HudMapVec2Binding<&meme::Bf2MenuMapNode::setCommanderPosForHud> binding38
 static HudMapBoolBinding<&meme::Bf2MenuMapNode::setZoomIconsForHud> binding39("setZoomIcons", 0, 1, 1, "bool", true, Availability::BuilderMap, {"bool"}); // 75F80D table9282C0
 static HudMapStringBinding<&meme::Bf2MenuMapNode::setControlPointFontForHud> binding40("setCPFont", 0, 1, 1, "void", false, Availability::BuilderMap, {"std::string"}); // 75F908 table928358
 static HudMapColorBinding<&meme::Bf2MenuMapNode::setControlPointFontColorForHud> binding41("setCPFontColor", 0, 4, 4, "void", false, Availability::BuilderMap, {"float", "float", "float", "float"}); // 75FA7E table9283E8
-static HudConsoleBinding binding42("setModifyer", 0, 1, 1, "void", false, Availability::BuilderMap, {"float"}); // 75FCAA table928480
+static HudVoidBinding1<float, &HudConsoleAccess::setModifyer> binding42("setModifyer", 0, 1, 1, "void", false, Availability::BuilderMap, {"float"}); // 75FCAA table928480
 static HudBuilderCreateListBinding<&Bf2HudBuilder::createListNode> binding43("createListNode", 0, 8, 8, "bool", true, Availability::Builder, {"std::string", "std::string", "int", "int", "int", "int", "int", "bool"}); // 75FD9C table928510
 static HudBuilderIntBinding<&Bf2HudBuilder::setListNodeData> binding44("setListNodeData", 0, 1, 1, "bool", true, Availability::Builder, {"int"}); // 7601BF table9285A8
 static HudBuilderIntStringBinding<&Bf2HudBuilder::setListNodeConCmd> binding45("setListNodeConCmd", 0, 2, 2, "bool", true, Availability::Builder, {"int", "std::string"}); // 7602B7 table928640
@@ -2101,8 +2296,8 @@ static HudBuilderCreateBarBinding<&Bf2HudBuilder::createTransformListNode> bindi
 static HudBuilderStringBinding<&Bf2HudBuilder::addTransformListNode> binding62("addTransformListNode", 0, 1, 1, "bool", true, Availability::Builder, {"std::string"}); // 762517 table9290A0
 static HudBuilderIntStringBinding<&Bf2HudBuilder::setTranformListNodePosVariable> binding63("setTranformListNodePosVariable", 0, 2, 2, "bool", true, Availability::Builder, {"int", "std::string"}); // 76265F table929140
 static HudBuilderIntPairBinding<&Bf2HudBuilder::setTranformListNodeOffset> binding64("setTranformListNodeOffset", 0, 2, 2, "bool", true, Availability::Builder, {"int", "int"}); // 762806 table9291E8
-static HudConsoleBinding binding65("createTileNode", 0, 6, 6, "bool", true, Availability::Builder, {"std::string", "std::string", "int", "int", "int", "int"}); // 762958 table929288
-static HudConsoleBinding binding66("setTileNodeOptions", 0, 3, 3, "bool", true, Availability::Builder, {"int", "int", "int"}); // 762CB3 table929320
+static HudBuilderCreateNodeBinding<&Bf2HudBuilder::createTileNode> binding65("createTileNode", 0, 6, 6, "bool", true, Availability::Builder, {"std::string", "std::string", "int", "int", "int", "int"}); // 762958 table929288
+static HudBuilderIntTripleBinding<&Bf2HudBuilder::setTileNodeOptions> binding66("setTileNodeOptions", 0, 3, 3, "bool", true, Availability::Builder, {"int", "int", "int"}); // 762CB3 table929320
 static HudBuilderCreateNodeBinding<&Bf2HudBuilder::createEditNode> binding67("createEditNode", 0, 6, 6, "bool", true, Availability::Builder, {"std::string", "std::string", "int", "int", "int", "int"}); // 762E61 table9293B8
 static HudBuilderIntBinding<&Bf2HudBuilder::setEditNodeData> binding68("setEditNodeData", 0, 1, 1, "bool", true, Availability::Builder, {"int"}); // 7631BC table929450
 static HudBuilderIntBinding<&Bf2HudBuilder::setEditNodeString> binding69("setEditNodeString", 0, 1, 1, "bool", true, Availability::Builder, {"int"}); // 7632B4 table9294E8
@@ -2129,7 +2324,7 @@ static HudBuilderCreateNodeBinding<&Bf2HudBuilder::createObjectSelectionNode> bi
 static HudBuilderIntPairBinding<&Bf2HudBuilder::setObjectSelectionNodePointerSize> binding90("setObjectSelectionNodePointerSize", 0, 2, 2, "bool", true, Availability::Builder, {"int", "int"}); // 7656EA table92A1E0
 static HudBuilderCreateNodeBinding<&Bf2HudBuilder::createPictureNode> binding91("createPictureNode", 0, 6, 6, "bool", true, Availability::Builder, {"std::string", "std::string", "int", "int", "int", "int"}); // 76583C table92A288
 static HudBuilderStringBinding<&Bf2HudBuilder::setPictureNodeTexture> binding92("setPictureNodeTexture", 0, 1, 1, "bool", true, Availability::Builder, {"std::string"}); // 765B97 table92A320
-static HudConsoleBinding binding93("setPictureNodeAlphaMask", 0, 1, 1, "bool", true, Availability::Builder, {"std::string"}); // 765CDF table92A3C0
+static HudBuilderStringBinding<&Bf2HudBuilder::setPictureNodeAlphaMask> binding93("setPictureNodeAlphaMask", 0, 1, 1, "bool", true, Availability::Builder, {"std::string"}); // 765CDF table92A3C0
 static HudBuilderStringBinding<&Bf2HudBuilder::setPictureNodeVariableTexture> binding94("setPictureNodeVariableTexture", 0, 1, 1, "bool", true, Availability::Builder, {"std::string"}); // 765E27 table92A460
 static HudBuilderStringBinding<&Bf2HudBuilder::setPictureNodeRotateVariable> binding95("setPictureNodeRotateVariable", 0, 1, 1, "bool", true, Availability::Builder, {"std::string"}); // 765F6F table92A508
 static HudBuilderIntBinding<&Bf2HudBuilder::setPictureNodeRotation> binding96("setPictureNodeRotation", 0, 1, 1, "bool", true, Availability::Builder, {"int"}); // 7660B7 table92A5B0
@@ -2145,7 +2340,7 @@ static HudBuilderBoolBinding<&Bf2HudBuilder::setBarNodeSnapDir> binding105("setB
 static HudBuilderStringBinding<&Bf2HudBuilder::setBarNodeValueVariable> binding106("setBarNodeValueVariable", 0, 1, 1, "bool", true, Availability::Builder, {"std::string"}); // 767227 table92ABC8
 static HudBuilderCreateCompassBinding<&Bf2HudBuilder::createCompassNode> binding107("createCompassNode", 0, 9, 9, "bool", true, Availability::Builder, {"std::string", "std::string", "int", "int", "int", "int", "int", "bool", "bool"}); // 76736F table92AC68
 static HudBuilderIntStringBinding<&Bf2HudBuilder::setCompassNodeTexture> binding108("setCompassNodeTexture", 0, 2, 2, "bool", true, Availability::Builder, {"int", "std::string"}); // 7677EE table92AD00
-static HudConsoleBinding binding109("setCompassNodeVariableTexture", 0, 2, 2, "bool", true, Availability::Builder, {"int", "std::string"}); // 767995 table92ADA0
+static HudBuilderIntStringBinding<&Bf2HudBuilder::setCompassNodeVariableTexture> binding109("setCompassNodeVariableTexture", 0, 2, 2, "bool", true, Availability::Builder, {"int", "std::string"}); // 767995 table92ADA0
 static HudBuilderIntQuadBinding<&Bf2HudBuilder::setCompassNodeBorder> binding110("setCompassNodeBorder", 0, 4, 4, "bool", true, Availability::Builder, {"int", "int", "int", "int"}); // 767B3C table92AE48
 static HudBuilderIntQuadBinding<&Bf2HudBuilder::setCompassNodeSnapOffset> binding111("setCompassNodeSnapOffset", 0, 4, 4, "bool", true, Availability::Builder, {"int", "int", "int", "int"}); // 767D46 table92AEE8
 static HudBuilderBoolStringBinding<&Bf2HudBuilder::setCompassNodeSnapTexture> binding112("setCompassNodeSnapTexture", 0, 2, 2, "bool", true, Availability::Builder, {"bool", "std::string"}); // 767F50 table92AF88
@@ -2155,22 +2350,22 @@ static HudBuilderIntPairBinding<&Bf2HudBuilder::setCompassNodeTextureSize> bindi
 static HudBuilderCreateNodeBinding<&Bf2HudBuilder::createButtonNode> binding116("createButtonNode", 0, 6, 6, "bool", true, Availability::Builder, {"std::string", "std::string", "int", "int", "int", "int"}); // 76848A table92B208
 static HudBuilderIntStringBinding<&Bf2HudBuilder::setButtonNodeTexture> binding117("setButtonNodeTexture", 0, 2, 2, "bool", true, Availability::Builder, {"int", "std::string"}); // 7687E5 table92B2A0
 static HudBuilderIntQuadBinding<&Bf2HudBuilder::setButtonNodeMouseArea> binding118("setButtonNodeMouseArea", 0, 4, 4, "bool", true, Availability::Builder, {"int", "int", "int", "int"}); // 76898C table92B340
-static HudConsoleBinding binding119("setButtonNodeMouseOverColor", 0, 4, 4, "bool", true, Availability::Builder, {"float", "float", "float", "float"}); // 768B96 table92B3E0
+static HudBuilderFloatQuadBinding<&Bf2HudBuilder::setButtonNodeMouseOverColor> binding119("setButtonNodeMouseOverColor", 0, 4, 4, "bool", true, Availability::Builder, {"float", "float", "float", "float"}); // 768B96 table92B3E0
 static HudBuilderStringIntBinding<&Bf2HudBuilder::setButtonNodeConCmd> binding120("setButtonNodeConCmd", 0, 2, 2, "bool", true, Availability::Builder, {"std::string", "int"}); // 768DAA table92B480
 static HudBuilderStringIntBinding<&Bf2HudBuilder::setButtonNodeAltConCmd> binding121("setButtonNodeAltConCmd", 0, 2, 2, "bool", true, Availability::Builder, {"std::string", "int"}); // 768F4F table92B518
-static HudConsoleBinding binding122("setButtonNodeFunction", 0, 2, 2, "bool", true, Availability::Builder, {"std::string", "int"}); // 7690F4 table92B5B8
+static HudBuilderStringIntBinding<&Bf2HudBuilder::setButtonNodeFunction> binding122("setButtonNodeFunction", 0, 2, 2, "bool", true, Availability::Builder, {"std::string", "int"}); // 7690F4 table92B5B8
 static HudBuilderBoolBinding<&Bf2HudBuilder::setButtonNodeDebug> binding123("setButtonNodeDebug", 0, 1, 1, "bool", true, Availability::Builder, {"bool"}); // 769299 table92B658
 static HudBuilderCreateNodeBinding<&Bf2HudBuilder::createTextNode> binding124("createTextNode", 0, 6, 6, "bool", true, Availability::Builder, {"std::string", "std::string", "int", "int", "int", "int"}); // 76939A table92B6F0
 static HudBuilderStringBinding<&Bf2HudBuilder::setTextNodeString> binding125("setTextNodeString", 0, 1, 1, "bool", true, Availability::Builder, {"std::string"}); // 7696F5 table92B788
 static HudBuilderStringIntBinding<&Bf2HudBuilder::setTextNodeStyle> binding126("setTextNodeStyle", 0, 2, 2, "bool", true, Availability::Builder, {"std::string", "int"}); // 76983D table92B820
-static HudConsoleBinding binding127("setTextNodeOutLine", 0, 1, 1, "bool", true, Availability::Builder, {"std::string"}); // 7699E2 table92B8B8
+static HudBuilderStringBinding<&Bf2HudBuilder::setTextNodeOutLine> binding127("setTextNodeOutLine", 0, 1, 1, "bool", true, Availability::Builder, {"std::string"}); // 7699E2 table92B8B8
 static HudBuilderFloatPairBinding<&Bf2HudBuilder::setTextNodeOutLineOffset> binding128("setTextNodeOutLineOffset", 0, 2, 2, "bool", true, Availability::Builder, {"float", "float"}); // 769B2A table92B950
 static HudBuilderStringBinding<&Bf2HudBuilder::setTextNodeStringVariable> binding129("setTextNodeStringVariable", 0, 1, 1, "bool", true, Availability::Builder, {"std::string"}); // 769C83 table92B9F0
 static HudBuilderStringBinding<&Bf2HudBuilder::setNodeShowVariable> binding130("setNodeShowVariable", 0, 1, 1, "bool", true, Availability::Builder, {"std::string"}); // 769DCB table92BA90
 static HudBuilderNoArgBinding<&Bf2HudBuilder::addNodeAlphaShowEffect> binding131("addNodeAlphaShowEffect", 0, 0, 0, "bool", true, Availability::Builder, {}); // 769F13 table92BB28
 static HudBuilderFloatIntBinding<&Bf2HudBuilder::addNodeMoveShowEffect> binding132("addNodeMoveShowEffect", 0, 2, 2, "bool", true, Availability::Builder, {"float", "int"}); // 769F98 table92BBC8
 static HudBuilderIntPairBinding<&Bf2HudBuilder::addNodeBlendEffect> binding133("addNodeBlendEffect", 0, 2, 2, "bool", true, Availability::Builder, {"int", "int"}); // 76A0F2 table92BC68
-static HudConsoleBinding binding134("addNodeVariableMoveShowEffect", 0, 2, 2, "bool", true, Availability::Builder, {"std::string", "std::string"}); // 76A244 table92BD00
+static HudBuilderStringPairBinding<&Bf2HudBuilder::addNodeVariableMoveShowEffect> binding134("addNodeVariableMoveShowEffect", 0, 2, 2, "bool", true, Availability::Builder, {"std::string", "std::string"}); // 76A244 table92BD00
 static HudBuilderStringPairIntBinding<&Bf2HudBuilder::setNodeLogicShowVariable> binding135("setNodeLogicShowVariable", 0, 3, 3, "bool", true, Availability::Builder, {"std::string", "std::string", "int"}); // 76A42A table92BDA8
 static HudBuilderStringBinding<&Bf2HudBuilder::setNodeAlphaVariable> binding136("setNodeAlphaVariable", 0, 1, 1, "bool", true, Availability::Builder, {"std::string"}); // 76A671 table92BE48
 static HudBuilderStringTripleBinding<&Bf2HudBuilder::setNodeRGBVariables> binding137("setNodeRGBVariables", 0, 3, 3, "bool", true, Availability::Builder, {"std::string", "std::string", "std::string"}); // 76A7B9 table92BEE8
@@ -2181,8 +2376,8 @@ static HudBuilderIntStringBinding<&Bf2HudBuilder::setNodePosVariable> binding141
 static HudBuilderFloatBinding<&Bf2HudBuilder::setNodeInTime> binding142("setNodeInTime", 0, 1, 1, "bool", true, Availability::Builder, {"float"}); // 76B0A2 table92C1D8
 static HudBuilderFloatBinding<&Bf2HudBuilder::setNodeOutTime> binding143("setNodeOutTime", 0, 1, 1, "bool", true, Availability::Builder, {"float"}); // 76B19D table92C270
 static HudBuilderIntPairBinding<&Bf2HudBuilder::setNodeSize> binding144("setNodeSize", 0, 2, 2, "bool", true, Availability::Builder, {"int", "int"}); // 76B298 table92C308
-static HudConsoleBinding binding145("deleteNode", 0, 0, 0, "bool", true, Availability::Builder, {}); // 76B3EA table92C398
-static HudConsoleBinding binding146("searchNodes", 0, 2, 2, "meme::Node*", true, Availability::Builder, {"std::string", "std::string"}); // 76B46F table92C438
+static HudBuilderNoArgBinding<&Bf2HudBuilder::deleteNode> binding145("deleteNode", 0, 0, 0, "bool", true, Availability::Builder, {}); // 76B3EA table92C398
+static HudBuilderSearchNodesBinding binding146("searchNodes", 0, 2, 2, "meme::Node*", true, Availability::Builder, {"std::string", "std::string"}); // 76B46F table92C438
 static HudBuilderStringPairBinding<&Bf2HudBuilder::setActiveObject> binding147("setActiveObject", 0, 2, 2, "bool", true, Availability::Builder, {"std::string", "std::string"}); // 76B655 table92C4C8
 static HudBuilderNoArgBinding<&Bf2HudBuilder::newLayer> binding148("newLayer", 0, 0, 0, "bool", true, Availability::Builder, {}); // 76B83B table92C550
 static SetConsoleClassDefaults defaults3("Minimap", 2, 0);
@@ -2190,18 +2385,18 @@ static HudMapIntVoidBinding<&meme::Bf2MenuMapNode::setPaintKitForHud> binding149
 static HudMapNoArgBinding<void, &meme::Bf2MenuMapNode::setPaintAllKitsForHud> binding150("setPaintAllKits", 0, 0, 0, "void", false, Availability::Map, {}); // 76B9A9 table92C670, executor 76B9FB -> 7778E0
 static HudMapIntVoidBinding<&meme::Bf2MenuMapNode::setPaintVehicleForHud> binding151("setPaintVehicle", 0, 1, 1, "void", false, Availability::Map, {"int"}); // 76BA20 table92C708, executor 76BADE -> 776530
 static HudMapNoArgBinding<void, &meme::Bf2MenuMapNode::setPaintAllVehiclesForHud> binding152("setPaintAllVehicles", 0, 0, 0, "void", false, Availability::Map, {}); // 76BB09 table92C7A0, executor 76BB5B -> 777930
-static HudConsoleBinding binding153("setCurrOrderList", 0, 1, 1, "void", false, Availability::Map, {"int"}); // 76BB80 table92C838
+static HudVoidBinding1<int, &HudConsoleAccess::setCurrOrderList> binding153("setCurrOrderList", 0, 1, 1, "void", false, Availability::Map, {"int"}); // 76BB80 table92C838
 static HudMapNoArgBinding<int, &meme::Bf2MenuMapNode::cycleZoom> binding154("setZoom", 0, 0, 0, "void", false, Availability::Map, {}); // 76BC69 table92C8D0, executor 76BCBB -> 7779A0 cycleZoom, not +D8
-static HudConsoleBinding binding155("setFullScreenZoom", 0, 1, 1, "void", false, Availability::Map, {"int"}); // 76BCE0 table92C960
+static HudVoidBinding1<int, &HudConsoleAccess::setFullScreenZoom> binding155("setFullScreenZoom", 0, 1, 1, "void", false, Availability::Map, {"int"}); // 76BCE0 table92C960
 static HudMapNoArgBinding<void, &meme::Bf2MenuMapNode::toggleShowKitsForHud> binding156("toggleShowKits", 0, 0, 0, "void", false, Availability::Map, {}); // 76BDCB table92C9F8, executor 76BE1D, body inlined (+38D)
-static HudConsoleBinding binding157("setCommanderOffset", 0, 1, 1, "void", false, Availability::Map, {"Vec2"}); // 76BE48 table92CA90
-static HudConsoleBinding binding158("setSourceBlend", 0, 1, 1, "void", false, Availability::Map, {"int"}); // 76BF7D table92CB28
-static HudConsoleBinding binding159("setDestinationBlend", 0, 1, 1, "void", false, Availability::Map, {"int"}); // 76C066 table92CBC0
-static HudConsoleBinding binding160("setFilterColor", 0, 4, 4, "void", false, Availability::Map, {"float", "float", "float", "float"}); // 76C14F table92CC58
+static HudVoidBinding1<Vec2, &HudConsoleAccess::setCommanderOffset> binding157("setCommanderOffset", 0, 1, 1, "void", false, Availability::Map, {"Vec2"}); // 76BE48 table92CA90
+static HudVoidBinding1<int, &HudConsoleAccess::setSourceBlend> binding158("setSourceBlend", 0, 1, 1, "void", false, Availability::Map, {"int"}); // 76BF7D table92CB28
+static HudVoidBinding1<int, &HudConsoleAccess::setDestinationBlend> binding159("setDestinationBlend", 0, 1, 1, "void", false, Availability::Map, {"int"}); // 76C066 table92CBC0
+static HudVoidBinding4f<&HudConsoleAccess::setFilterColor> binding160("setFilterColor", 0, 4, 4, "void", false, Availability::Map, {"float", "float", "float", "float"}); // 76C14F table92CC58
 static SetConsoleClassDefaults defaults4("HudItems", 2, 0);
 static HudInformationStringBoolBinding<&HudInformationAdapter::setBool> binding161("setBool", 0, 2, 2, "void", false, Availability::Information, {"std::string", "bool"}); // 76C386 table92CCF0; executor 76C417 -> +244 then adapter +0C 785D00, converter 76C47A (string A11B34, bool A11B30)
-static HudConsoleBinding binding162("setString", 0, 2, 2, "void", false, Availability::Information, {"std::string", "std::string"}); // 76C527 table92CD80
-static HudConsoleBinding binding163("setFloat", 0, 2, 2, "void", false, Availability::Information, {"std::string", "float"}); // 76C704 table92CE10
+static HudVoidBinding2<std::string, std::string, &hudSetString> binding162("setString", 0, 2, 2, "void", false, Availability::Information, {"std::string", "std::string"}); // 76C527 table92CD80
+static HudVoidBinding2<std::string, float, &hudSetFloat> binding163("setFloat", 0, 2, 2, "void", false, Availability::Information, {"std::string", "float"}); // 76C704 table92CE10
 static SetConsoleClassDefaults defaults5("SquadLeader", 2, 0);
 static HudIntBoolVoidBinding<&BF2HudManager::sendOrder, 164> binding164("sendOrder", 0, 2, 2, "void", false, Availability::Manager, {"int", "bool"}); // 76C8A9 table92CEA0, executor 76CDF1 (folded with row 170), converter 76C93A -> +33C
 static HudIntBoolVoidBinding<&BF2HudManager::sendRequest, 165> binding165("sendRequest", 0, 2, 2, "void", false, Availability::Manager, {"int", "bool"}); // 76C9C1 table92CF30, executor 76CAD9, converter 76CA52 -> +340
@@ -2223,7 +2418,7 @@ static HudNoArgSilentFalseBinding<&BF2HudManager::vehicleDrop> binding179("vehic
 static HudBoolVoidBinding<&BF2HudManager::accept> binding180("accept", 0, 1, 1, "void", false, Availability::Manager, {"bool"}); // 76D255 table92D7E0, executor 76D313 / converter 76D2C6 (bool A11BCC) -> +2E8 7B2360
 static HudNoArgBoolBinding<&BF2HudManager::zoomCommander> binding181("zoomCommander", 0, 0, 0, "bool", true, Availability::Manager, {}); // 76D341 table92D870, executor 76D394 -> +2F0 7B23B0
 static SetConsoleClassDefaults defaults7("Squad", 2, 0);
-static HudConsoleBinding binding182("leaveSquad", 0, 0, 0, "void", false, Availability::Manager, {}); // 76D3BF table92D908
+static HudVoidBinding0<&hudLeaveSquad> binding182("leaveSquad", 0, 0, 0, "void", false, Availability::Manager, {}); // 76D3BF table92D908
 static SetConsoleClassDefaults defaults8("CommanderMenu", 2, 0);
 static HudCommanderNoArgBinding<&HudCommander::singleClick> binding183("singleClick", 0, 0, 0, "void", false, Availability::Commander, {}); // 76D42F table92D990
 static HudCommanderNoArgBinding<&HudCommander::rightClick> binding184("rightClick", 0, 0, 0, "void", false, Availability::Commander, {}); // 76D4BB table92DA20
@@ -2259,13 +2454,13 @@ static SetConsoleClassDefaults defaults14("RadioVehicleInterface", 2, 0);
 static HudRadioSelectBinding<&BF2HudManager::getVehicleRadio> binding207("selectOrder", 0, 1, 1, "bool", true, Availability::VehicleRadio, {"std::string"}); // 76EDAF table92E6D0, executor 76EE37 (+230 -> HudRadio +08)
 static HudRadioStringMapBinding<&BF2HudManager::getVehicleRadio> binding208("setStringMap", 0, 3, 3, "void", false, Availability::VehicleRadio, {"std::string", "std::string", "std::string"}); // 76EF01 table92E758
 static SetConsoleClassDefaults defaults15("Radio", 2, 0);
-static HudConsoleBinding binding209("sendKitMessage", 0, 0, 0, "void", false, Availability::Manager, {}); // 76F182 table92E7E0
+static HudVoidBinding0<&hudSendKitMessage> binding209("sendKitMessage", 0, 0, 0, "void", false, Availability::Manager, {}); // 76F182 table92E7E0
 static HudBoolVehicleTypeVoidBinding<&BF2HudManager::sendSpottedMessage> binding210("sendSpottedMessage", 0, 2, 2, "void", false, Availability::Manager, {"bool", "world::VehicleType"}); // 76F1F2 table92E888, executor 76F30A, converter 76F283 -> +13C
 static HudNoArgVoidBinding<&BF2HudManager::setSpottedMenuActive> binding211("setSpottedMenuActive", 0, 0, 0, "void", false, Availability::Manager, {}); // 76F33E table92E920, executor 76F390 -> +214
 static HudNoArgVoidBinding<&BF2HudManager::callForMedic> binding212("callForMedic", 0, 0, 0, "void", false, Availability::Manager, {}); // 76F3AE table92E9C0, executor 76F400 -> +158
 static HudNoArgVoidBinding<&BF2HudManager::callForAmmo> binding213("callForAmmo", 0, 0, 0, "void", false, Availability::Manager, {}); // 76F41E table92EA58, executor 76F470 -> +160
 static HudNoArgVoidBinding<&BF2HudManager::callForRepair> binding214("callForRepair", 0, 0, 0, "void", false, Availability::Manager, {}); // 76F48E table92EAE8, executor 76F4E0 -> +164
-static HudConsoleBinding binding215("answer", 0, 1, 1, "void", false, Availability::Questions, {"bool"}); // 76F4FE table92EB80
+static HudVoidBinding1<bool, &hudAnswer> binding215("answer", 0, 1, 1, "void", false, Availability::Questions, {"bool"}); // 76F4FE table92EB80
 static SetConsoleClassDefaults defaults16("SpawnManager", 2, 0);
 static HudKitSelectionIntBinding<&HudKitSelection::selectTeam> binding216("setPlayerTeam", 0, 1, 1, "void", false, Availability::KitSelection, {"int"}); // 76F606 table92EC10; executor 76F6C4 -> +240 then 7A2180, converter 76F677 (int A11E5C)
 static HudKitSelectionIntBinding<&HudKitSelection::selectKit> binding217("setPlayerKit", 0, 1, 1, "void", false, Availability::KitSelection, {"int"}); // 76F6EF table92ECA8; executor 76F7AD -> +240 then 7A1EF0, converter 76F760 (int A11E60)
@@ -2273,8 +2468,8 @@ static HudKitSelectionNoArgBinding<&HudKitSelection::suicide> binding218("commit
 static HudKitSelectionBoolBinding<&HudKitSelection::showSpawnMenu> binding219("toggleMembers", 0, 1, 1, "void", false, Availability::KitSelection, {"bool"}); // 76F84F table92EDD8; executor 76F90D -> +240 then 7A1F90, converter 76F8C0 (bool A11E64)
 static HudKitSelectionIntBinding<&HudKitSelection::cycleUnlock> binding220("selectNextUnlock", 0, 1, 1, "void", false, Availability::KitSelection, {"int"}); // 76F942 table92EE70; executor 76FA15 -> +240 then 7A20B0, converter 76F9C8 (int A11E68)
 static SetConsoleClassDefaults defaults17("Chat", 2, 0);
-static HudConsoleBinding binding221("sayTeam", 0, 1, 1, "void", false, Availability::Manager, {"std::string"}); // 76FA40 table92EF08
-static HudConsoleBinding binding222("sayAll", 0, 1, 1, "void", false, Availability::Manager, {"std::string"}); // 76FB78 table92EF90
+static HudVoidBinding1<std::string, &hudSayTeam> binding221("sayTeam", 0, 1, 1, "void", false, Availability::Manager, {"std::string"}); // 76FA40 table92EF08
+static HudVoidBinding1<std::string, &hudSayAll> binding222("sayAll", 0, 1, 1, "void", false, Availability::Manager, {"std::string"}); // 76FB78 table92EF90
 static SetConsoleClassDefaults defaults18("Scoreboard", 2, 0);
 // The setToggleShow command calls setPage. [INFERRED] Method name.
 static HudScoreboardIntBinding<&HudScoreboard::setPage> binding223("setToggleShow", 0, 1, 1, "void", false, Availability::Scoreboard, {"int"}); // 76FCB0 table92F018, executor 76FD6E
@@ -2285,7 +2480,7 @@ static SetConsoleClassDefaults defaults19("LevelsList", 2, 0);
 static HudVoteMapIntBinding<&HudVoteMap::setVoteMapShow> binding225("setVoteMapShow", 0, 1, 1, "void", false, Availability::VoteMap, {"int"}); // 76FE97 table92F138, executor 76FF55 -> 785300
 static HudVoteMapIntBinding<&HudVoteMap::singleClick> binding226("singleClick", 0, 1, 1, "void", false, Availability::VoteMap, {"int"}); // 76FF80 table92F1D0, executor 770053 -> 785700
 static SetConsoleClassDefaults defaults20("IngameHelp", 2, 0);
-static HudConsoleBinding binding227("showIngameHelp", 0, 2, 2, "void", false, Availability::Manager, {"std::string", "float"}); // 77007E table92F258
+static HudVoidBinding2<std::string, float, &hudShowIngameHelp> binding227("showIngameHelp", 0, 2, 2, "void", false, Availability::Manager, {"std::string", "float"}); // 77007E table92F258
 }
 std::list<ConsoleObject*>& hudConsoleObjects() { return bindings; }
 } } }

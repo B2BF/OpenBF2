@@ -1,0 +1,39 @@
+# [TEMP] probe-recoil: mouse-look steps, then single shots 2 s apart, then a 1 s burst; compare the [PLAY] view pitch.
+include join-and-spawn
+wait-ms 3000
+log probe: yaw +200 (1)
+move-rel 200 0
+wait-ms 2500
+log probe: yaw +200 (2)
+move-rel 200 0
+wait-ms 2500
+log probe: yaw -400
+move-rel -400 0
+wait-ms 2500
+log probe: pitch -100 (up)
+move-rel 0 -100
+wait-ms 2500
+log probe: pitch +100 (down)
+move-rel 0 100
+wait-ms 2500
+log probe: shot 1
+button-down 0
+wait-ms 60
+button-up 0
+wait-ms 2500
+log probe: shot 2
+button-down 0
+wait-ms 60
+button-up 0
+wait-ms 2500
+log probe: shot 3
+button-down 0
+wait-ms 60
+button-up 0
+wait-ms 2500
+log probe: burst 1s
+button-down 0
+wait-ms 1000
+button-up 0
+wait-ms 3000
+log probe: done

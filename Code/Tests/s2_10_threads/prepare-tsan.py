@@ -2,14 +2,19 @@
 """[TEMP] Assemble self-contained Intel/M2 TSan checks, runtimes and APFS-cloned smoke content.
 
 Usage: prepare-tsan.py <x86_64 build> <arm64 build> <existing smoke root>
+BF2_REFERENCE_APP names the reference installation the sandbox keeps read-only.
 Never builds or runs a server and never changes the supplied content. Output is under out/m2/tsan.
 """
+import os
 from pathlib import Path
 import shutil
 import subprocess
 import sys
 
 repo = Path(__file__).resolve().parents[3]
+reference_app = os.environ.get("BF2_REFERENCE_APP")
+if not reference_app:
+    sys.exit("prepare-tsan.py: set BF2_REFERENCE_APP to the reference installation (e.g. \"$HOME/Applications/Battlefield 2.app\")")
 out = repo / "out/m2/tsan"
 out.mkdir(parents=True, exist_ok=True)
 for name in ("run-tsan.sh", "smoke.tcl"):
@@ -36,12 +41,12 @@ content = Path(sys.argv[3]).resolve()
 if not (out / "root").exists():
     subprocess.run(["cp", "-cR", str(content), str(out / "root")], check=True)
 # Same offline policy as docs/macos-port.md; reference installation stays read-only.
-(out / "offline.sb").write_text('''(version 1)
+(out / "offline.sb").write_text(f'''(version 1)
 (allow default)
 (deny network-outbound)
 (allow network-outbound (remote ip "localhost:*"))
 (deny network-outbound (remote unix-socket (path-literal "/private/var/run/mDNSResponder")))
-(deny file-write* (subpath "/Users/krauzi/Applications/Battlefield 2.app"))
+(deny file-write* (subpath "{Path(reference_app).resolve()}"))
 (deny network-bind (local ip "*:16567"))
 ''')
 (out / "README.txt").write_text("S2.10 [TEMP] TSan bundle. Run ./run-tsan.sh on Intel or M2.\n"

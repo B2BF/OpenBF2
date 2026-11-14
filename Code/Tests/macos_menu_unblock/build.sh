@@ -19,7 +19,7 @@ c++ -arch x86_64 -std=gnu++14 -fms-extensions -DDEDICATED=0 -D_MACOSX=1 \
     "$ROOT/Code/Tests/macos_menu_unblock/http_request_offline.cpp" \
     "$ROOT/Code/BF2/Game/Persistence/HTTPRequest.cpp" -o "$OUT/http_request_offline"
 "$OUT/http_request_offline"
-# DemoLibrary on the production HTTPRequest base (docs/macos-c-demolib-re.md). Unreached
+# DemoLibrary on the production HTTPRequest base. Unreached
 # FileManager/StringUtil dependencies stay unbound (dynamic_lookup); vtable data is linked.
 Z="$ROOT/Code/BF2/External/zlib-1.2.3"
 c++ -arch x86_64 -std=gnu++14 -fms-extensions -w -DDEDICATED=0 -D_MACOSX=1 -DBF2_PLATFORM_POSIX \

@@ -216,11 +216,10 @@ bool dispatchNodeEvent16(Node* node, System* system, const Rect*, const NodeStat
         }
         return false;
     }
-    // [FRONTIER] [TEMP] [CHOSEN, not recovered] The other edit and path handlers remain unrecovered.
-    // [RETIRE-WHEN: node-suffix-call-frontiers] Implement the typed virtual handlers before replacing this stop.
-    std::fprintf(stderr, "[FRONTIER] dice::meme::dispatchNodeEvent16 reached (Node virtual+A0 - NOT a false default: 5 of 74 tables override it, BfEditNode/Bf2EditNode 7AA9B0, BfEditNodeInt 7AACF0, PathNode/StackPathNode 836A80)\n");
-    std::fflush(stderr);
-    std::abort();
+    // Every other class in this tree keeps Node's own +A0, the shared `return false` at 455410. The
+    // remaining overrides belong to classes the tree does not build yet - BfEditNodeInt (7AACF0) and
+    // PathNode/StackPathNode (836A80); each brings its handler with it.
+    return false;
 }
 bool dispatchNodeEvent13(Node*, System*, const Rect*, const NodeState*)
 {

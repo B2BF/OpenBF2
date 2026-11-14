@@ -1,6 +1,6 @@
 // [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: HUD-SLIDER-FIXTURE]
 // Tests slider layout and builder bindings with real nodes and data.
-// A death test verifies that unimplemented base frame/event behavior stops visibly.
+// The frame and event bodies themselves are covered by slider_node_behaviour.cpp.
 #include <string>
 #include <vector>
 #include <cstdio>
@@ -99,7 +99,7 @@ static void sliderLayoutCases()
         CHECK(node.m_thumbSpan == 1.0f && node.m_step == 1.0f);
         CHECK(node.m_data == nullptr && node.m_child1 == nullptr);
         CHECK(node.m_state.target == 1.0f && node.m_state.current == 1.0f);
-        CHECK(node.m_field054 == 0);
+        CHECK(node.m_releaseTimer == 0.0f);
         CHECK(node.getObjectSize() == 88);
         // getChildCount is NOT overridden here: the base's shared 828A70 stands.
         CHECK(node.getChildCount() == 2);
@@ -342,13 +342,6 @@ int main(int argc, char** argv)
         harness.builder.setSliderNodeChild("NoSuchNode");
         std::fprintf(stderr, "FIXTURE_CHILD_RETURNED\n");
         return 98;
-    }
-    if (argc > 1 && !std::strcmp(argv[1], "frontier-death")) {
-        // The per-frame bodies on both base classes are named frontiers.
-        Bf2FixedSliderNode node("Frontier", 0.0f, 1.0f, 1.0f, 1.0f);
-        node.updateSelf(nullptr, nullptr, nullptr, 0.0f);
-        std::fprintf(stderr, "FIXTURE_FRONTIER_RETURNED\n");
-        return 99;
     }
     turnOffAllDebug(DebugTypeError);
     sliderLayoutCases();

@@ -1,0 +1,10 @@
+# [TEMP] [CHOSEN, not recovered] Capture the co-op MAP BRIEFING / SERVER INFO rows.
+# Run with --ai --bot-ratio 30.5 --bots 12 --bot-difficulty 70.25.
+# The movie displays integer rows 30 / 12 / 70; query fields retain the fractions.
+timeout 300
+wait-log ingameMap.tga
+wait-ms 5000
+move 400 300
+capture server-info-bots
+wait-ms 1000
+quit

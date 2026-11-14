@@ -1,0 +1,94 @@
+# [TEMP] play-combat for the Win32 client (BF2_INPUT_SCRIPT=<this file>, docs/macos-c-input-script.md):
+# tools/macos/loopback/scripts/play-combat.txt with join-and-spawn expanded. Only difference: the
+# level-load marker and its settle time. The macOS Meme texture trace ("ingameMap.tga") is not in
+# the Win32 client log; the animation sweep's "postLoad #1" line ends the level load there.
+# [TEMP] play-combat: shoot a stationary bot (they stand still with --ai-spawn-only), then die
+# (spawn screen SUICIDE button) and respawn.
+# Needs BF2_PLAY_TRACE (loopback.py sets it) for the [PLAY] lines that show who is alive.
+# >>> include join-and-spawn
+# [TEMP] join-and-spawn: from the loaded-map screen to a spawned soldier (docs/macos-c-input-script.md).
+# Coordinates are 800x600: the harness runs +szx 800 +szy 600, which is also the HUD's own layout
+# space (Menu_client.zip HUD/HudSetup/SpawnInterface/*.con).
+timeout 300
+log waiting for the level load
+wait-log postLoad #1
+wait-ms 15000
+capture loaded
+# "MAP LOADED, SELECT THE JOIN GAME BUTTON OR PRESS ESCAPE TO ENTER THE GAME" (Swiff menu, window path)
+# Click JOIN GAME rather than pressing Escape: Escape went to the main menu in 2 of 5 runs (ai-bot, 2026-11-01).
+click 745 583
+# The spawn screen opens with its map shown (Bf2MenuMapNode +0x68D is zeroed now; the old
+# "press Enter twice" workaround covered for that uninitialised field, R-game-2).
+wait-ms 4000
+capture spawn-screen-first
+capture spawn-screen
+# Kit 0, Special Forces (SelectKit0 10 73 246 69: "spawnManager.setPlayerKit 0"); in-game HUD pointer path.
+hud-click 130 107
+wait-ms 1000
+# Spawn point: in spawn mode a press on the map picks the nearest spawn group
+# (Bf2MenuMapNode::pickSpawnGroup; within the icon pick radius). The US spawn at Construction Site.
+hud-click 432 282
+wait-ms 1000
+capture selected
+# DoneButton 666 539 124 17, mouse area 0 -5 124 22: "hudManager.setDone 1"
+hud-click 728 546
+wait-ms 10000
+capture spawned-1
+# Look around a little (mouse look) and capture again.
+move-rel 300 0
+wait-ms 2000
+capture spawned-2
+log join-and-spawn done
+# <<< include join-and-spawn
+log play: combat start
+wait-ms 2000
+# The nearest friendly bot first (friendly fire is on in the stock server settings), then the
+# nearest enemy if one is close enough. aim steers the view by relative mouse motion.
+log play: aim friend
+aim friend 1.5 6000
+capture aim-friend
+log play: fire at friend
+button-down 0
+wait-ms 2500
+button-up 0
+wait-ms 500
+aim friend 1.5 3000
+button-down 0
+wait-ms 2500
+button-up 0
+wait-ms 1500
+capture after-fire-friend
+key r
+wait-ms 3500
+log play: walk towards the nearest enemy
+walk-to enemy 40 60000
+aim enemy 1.0 6000
+capture aim-enemy
+log play: fire at enemy
+button-down 0
+wait-ms 3000
+button-up 0
+wait-ms 500
+aim enemy 1.0 3000
+button-down 0
+wait-ms 3000
+button-up 0
+wait-ms 2000
+capture after-fire-enemy
+# Die: the in-game menu (Enter) shows the spawn screen with SUICIDE (542 539 124 17).
+log play: suicide
+key enter
+wait-ms 2500
+capture menu-for-suicide
+hud-click 604 546
+wait-ms 3000
+capture dead
+log play: respawn
+# The spawn screen stays up after death; spawn point and DONE as in join-and-spawn.
+wait-ms 6000
+hud-click 432 282
+wait-ms 1000
+hud-click 728 546
+wait-ms 12000
+capture respawned
+log play: combat done

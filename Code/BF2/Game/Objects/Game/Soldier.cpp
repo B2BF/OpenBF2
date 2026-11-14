@@ -46,6 +46,13 @@
 #include "../../../Core/EventManager.h"          // eventManager - enter()'s AI event
 #include "../GameLogicComp/ArmorGLComp.h"        // handleMessage reads the armor status
 #include "../../../AI/AIInterface/AIInstance.h"  // the AI singleton, ds:0x8AC37F8
+#if !DEDICATED
+#include "SoldierHapticProfile.h"                // ledger N2: the Novint control-box profile switch
+#include "../PlayerControlObjectTemplate.h"       // onEnter's unchecked +0x22C template view
+#include "../../HapticSettings.h"
+#include "../../Main/BF2ClientSeams.h"           // g_hapticSettings, ds:0x987394
+#include "../../../IO/Input/FalconHaptics.h"      // g_falconControlBoxDirty, zeroHapticForceTargets
+#endif
 #include "../../../AI/AIInterface/BFKnowledge/IAIObject.h"   // init()'s lock bracket, the revive's init()
 #include "../../GameServer/ServerSettings.h"     // serverSettings - the man-down time
 #include "../../GameLogic/ServerGameLogic.h"     // the kit handout on revive
@@ -583,6 +590,16 @@ Soldier::Soldier(const SoldierTemplate* objectTemplate)
     m_soldierSound = new SoldierSound(this);      // operator new(0x38) + its ctor
 
     initAnimation();                             // [FRONTIER]
+#if !DEDICATED
+    // BF2.exe 0x5AC764..0x5AC90B (ledger N2): the local player's Soldier puts the Novint control box
+    // on the SOLDIER profile and asks for a rebuild. A fresh Soldier has no occupant, so this compares
+    // null with the local player, as retail does.
+    if (getOccupingPlayer() == playerManager->getLocalHumanPlayer())         // +0x168 weak, +0x30
+    {
+        applyHapticProfile(static_cast<IHapticSettings*>(g_hapticSettings), HapticProfileSoldier);
+        io::g_falconControlBoxDirty = true;
+    }
+#endif
     resetInstance();                             // [FRONTIER]
 }
 
@@ -881,6 +898,16 @@ void Soldier::onExit()
     m_lookLeftRightAngle = 0.0f;                                             // +0x20C
     m_byte38D = false;                                                       // +0x38D
     updateWeaponIsActiveState();
+#if !DEDICATED
+    // BF2.exe 0x5AB5E6..0x5AB83A (ledger N2): back on foot, the local player's force effects are
+    // zeroed, the control box takes the SOLDIER profile and is rebuilt.
+    if (getOccupingPlayer() && getOccupingPlayer() == playerManager->getLocalHumanPlayer())   // +0x10 twice
+    {
+        io::zeroHapticForceTargets();
+        applyHapticProfile(static_cast<IHapticSettings*>(g_hapticSettings), HapticProfileSoldier);
+        io::g_falconControlBoxDirty = true;
+    }
+#endif
 }
 
 // Stops tinnitus for the local human occupant and posts the updated tinnitus setup event.
@@ -3861,7 +3888,15 @@ void Soldier::handlePlayerInput(IPlayer* player, const io::PlayerInput& input,
     }
 
     const float yawDelta   = getYawRecoil()   + lookX;
-    const float pitchDelta = getPitchRecoil() + lookY;
+    const float pitchRecoil = getPitchRecoil();
+    const float pitchDelta = pitchRecoil + lookY;
+#if !DEDICATED
+    // BF2.exe 0x5AE335..0x5AE72B (ledger N2 17b): the local occupant's Novint "Recoil" force from the
+    // yaw delta and the raw pitch recoil (SoldierHapticProfile.cpp).
+    if (io::hapticDeviceConnected())
+        updateSoldierRecoilForce(getOccupingPlayer(), playerManager->getLocalHumanPlayer(), yawDelta,
+                                 pitchRecoil, getWeaponFromIndex(getActiveItemIndex()));
+#endif
     m_pitchDeltaThisTick = pitchDelta;                                // +0x298
     m_yawDeltaThisTick = yawDelta;                                    // +0x294
     m_lookUpDownAngle += pitchDelta;
@@ -4080,6 +4115,13 @@ void Soldier::handlePlayerInput(IPlayer* player, const io::PlayerInput& input,
         rotation.z = 0.0f;
         // SoldierPhysicsNode consumes only Y; typed dispatch preserves each platform's vtable ABI.
         node->setRotationalSpeed(rotation);
+#if !DEDICATED
+        // BF2.exe 0x5AECE8..0x5AF3F6 (ledger N2 17b): the local occupant's Novint "CraftPhysics" forces
+        // from the soldier's acceleration (SoldierHapticProfile.cpp).
+        if (io::hapticDeviceConnected())
+            updateSoldierCraftPhysics(getOccupingPlayer(), playerManager->getLocalHumanPlayer(), player,
+                                      node->getLinearIntegrationVelocity(), dt);
+#endif
 
         // pose input, but only once the go-prone timer has expired
         bool proneReady = false;
@@ -4230,6 +4272,22 @@ void Soldier::onEnter(IObject* entering)
             if ((*mods)[i].first.compare(rootName) == 0)
                 rootPco->addVehicleMod((*mods)[i].second);                  // unguarded, +0xDC
         }
+#if !DEDICATED
+        // BF2.exe 0x5ACC99..0x5ADE14 (ledger N2): for the local player, the control box takes the
+        // profile of what was entered and is rebuilt, then the force effects are zeroed. Both
+        // templates are taken as player-control templates unchecked (+0x22C), as compiled.
+        if (getOccupingPlayer() && getOccupingPlayer() == playerManager->getLocalHumanPlayer())
+        {
+            IPlayerControlObjectTemplate* const entered = static_cast<PlayerControlObjectTemplate*>(
+                const_cast<IObjectTemplate*>(L::objectTemplate(entering)));
+            IPlayerControlObjectTemplate* const rootTemplate = static_cast<PlayerControlObjectTemplate*>(
+                const_cast<IObjectTemplate*>(L::objectTemplate(root)));
+            applyHapticProfile(static_cast<IHapticSettings*>(g_hapticSettings),
+                               hapticProfileForEntered(entered, rootTemplate));
+            io::g_falconControlBoxDirty = true;
+            io::zeroHapticForceTargets();
+        }
+#endif
     }
 
     // 5.

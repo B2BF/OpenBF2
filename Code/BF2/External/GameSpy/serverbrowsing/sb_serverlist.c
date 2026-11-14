@@ -370,6 +370,9 @@ void SBServerListInit(SBServerList *slist, const char *queryForGamename, const c
 #endif
 	
 	slist->state = sl_disconnected;
+#if !defined(_WIN32)
+	slist->lansenderror = 0;
+#endif
 	SBAllocateServerList(slist);
 	SBRefStrHash(slist); //make sure it's initialized
 	strcpy(slist->queryforgamename, queryForGamename);
@@ -692,6 +695,10 @@ SBError SBServerListGetLANList(SBServerList *slist, unsigned short startport, un
 	unsigned short i;
 	unsigned char qr2_echo_request[] = {QR2_MAGIC_1, QR2_MAGIC_2, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00};
 	int qr2requestlen = sizeof(qr2_echo_request) / sizeof(qr2_echo_request[0]);
+#if !defined(_WIN32)
+	int sendFailure = 0;
+	slist->lansenderror = 0;
+#endif
 	if (slist->state != sl_disconnected)
 		SBServerListDisconnect(slist);
 
@@ -726,12 +733,34 @@ SBError SBServerListGetLANList(SBServerList *slist, unsigned short startport, un
 		endport = (unsigned short)(startport + 500);
 	for (i = startport ; i <= endport ; i += 1)
 	{
+#if !defined(_WIN32)
+		int sent;
+#endif
 		saddr.sin_port = htons(i);
+#if !defined(_WIN32)
+		if (queryversion == QVERSION_QR2) //send a QR2 echo request
+			sent = (int)sendto(slist->slsocket, (char*)qr2_echo_request,qr2requestlen,0,(struct sockaddr *)&saddr,sizeof(saddr));
+		else //send a GOA echo request
+			sent = (int)sendto(slist->slsocket, "\\echo\\test",10,0,(struct sockaddr *)&saddr,sizeof(saddr));
+		// [CHOSEN, not recovered] the browse itself is unchanged (a failed send is not an error).
+		// A denied macOS Local Network permission (or a firewall) fails the broadcast sendto and
+		// the LAN list stays silently empty; the first failure is logged once per browse and kept
+		// in lansenderror, from which the menu's ServerBrowser raises a message.
+		if (sent < 0 && sendFailure == 0)
+			sendFailure = errno;
+#else
 		if (queryversion == QVERSION_QR2) //send a QR2 echo request
 			sendto(slist->slsocket, (char*)qr2_echo_request,qr2requestlen,0,(struct sockaddr *)&saddr,sizeof(saddr));
 		else //send a GOA echo request
 			sendto(slist->slsocket, "\\echo\\test",10,0,(struct sockaddr *)&saddr,sizeof(saddr));
+#endif
 	}
+#if !defined(_WIN32)
+	slist->lansenderror = sendFailure;
+	if (sendFailure != 0)
+		fprintf(stderr, "LAN server search: sending the broadcast failed (%s); on macOS allow Local Network "
+			"access for OpenBF2 in System Settings > Privacy & Security > Local Network\n", strerror(sendFailure));
+#endif
 	slist->state = sl_lanbrowse;
 	slist->lanstarttime = current_time();
 	return sbe_noerror;

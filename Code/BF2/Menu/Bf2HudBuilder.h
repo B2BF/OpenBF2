@@ -20,6 +20,7 @@ public:
     bool createPictureNode(std::string parent, std::string name,
                            int x, int y, int width, int height);
     bool setPictureNodeTexture(std::string texture);
+    bool setPictureNodeAlphaMask(std::string texture);                    // 797D00
     bool setPictureNodeVariableTexture(std::string variable);
     bool setPictureNodeRotateVariable(std::string variable);
     bool setPictureNodeRotation(int degrees);
@@ -42,12 +43,14 @@ public:
     bool setCompassNodeSnapOffset(int a, int b, int c, int d);
     bool setCompassNodeSnapTexture(bool primary, std::string texture);
     bool setCompassNodeValueVariable(std::string variable);
+    bool setCompassNodeVariableTexture(int index, std::string variable);  // 799AE0 -> 799660
     bool setCompassNodeOffset(int offset);
     bool setCompassNodeTextureSize(int width, int height);
     bool createTextNode(std::string parent, std::string name,
                         int x, int y, int width, int height);
     bool setTextNodeString(std::string text);
     bool setTextNodeStyle(std::string font, int alignment);
+    bool setTextNodeOutLine(std::string font);                            // 798760
     bool setTextNodeOutLineOffset(float x, float y);
     bool setTextNodeStringVariable(std::string variable);
     bool setNodeShowVariable(std::string name);
@@ -58,6 +61,7 @@ public:
     bool addNodeAlphaShowEffect();
     bool addNodeBlendEffect(int source, int destination);
     bool addNodeMoveShowEffect(float direction, int length);
+    bool addNodeVariableMoveShowEffect(std::string direction, std::string length);  // 79B780
     bool setNodeAlphaVariable(std::string variable);
     bool setNodeRGBVariables(std::string red, std::string green,
                              std::string blue);
@@ -80,6 +84,8 @@ public:
     bool setButtonNodeMouseArea(int x, int y, int width, int height);
     bool setButtonNodeConCmd(std::string command, int index);
     bool setButtonNodeAltConCmd(std::string command, int index);
+    bool setButtonNodeMouseOverColor(float r, float g, float b, float a);   // 798ED0
+    bool setButtonNodeFunction(std::string function, int index);             // 799040
     bool setButtonNodeDebug(bool enabled);
     // Family N, the thirteen list-box rows.
     bool createListNode(std::string parent, std::string name, int x, int y,
@@ -128,6 +134,9 @@ public:
                            int x, int y, int width, int height);
     bool setOccupiedNodeData(int selector);
     bool setOccupiedNodePosVariable(int index, std::string variable);
+    // 79C110: a Bf2TransformNode carrying a Bf2TileNode ("<name>TileNode") as child 1.
+    bool createTileNode(std::string parent, std::string name, int x, int y, int width, int height);
+    bool setTileNodeOptions(int count, int thickness, int horizontal);    // 795CC0
     bool createTransformNode(std::string parent, std::string name,
                             int x, int y, int width, int height);
     bool createObjectMarkerNode(std::string parent, std::string name,
@@ -142,11 +151,14 @@ public:
     bool setObjectMarkerNodeWeapon(int weapon);
     // Selects the active builder object by parent and node name.
     bool setActiveObject(std::string parent, std::string name);
+    // 795E80: deletes the current parent's first child, relinking its own first child in its place.
+    bool deleteNode();
+    // 79BEC0, also the hudBuilder.searchNodes console row (76B4FC). Name [INFERRED].
+    meme::Node* findNodePredecessor(std::string parent, std::string name);
 
 private:
     // Helper names [INFERRED]; by-value strings and typed child operations are
     // evidenced by the full client PE bodies, without a dedicated ELF counterpart.
-    meme::Node* findNodePredecessor(std::string parent, std::string name);
     meme::Node* findLastNode(std::string parent);
     meme::Node* findNode(std::string name);
     bool insertNode(std::string parent, meme::Node* node, int mode);

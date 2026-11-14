@@ -11,7 +11,14 @@
 #include "Main/BF2ClientSeams.h"
 #include <new>
 
+#include <cstdio>
+
 namespace dice { namespace hfe {
+
+namespace {
+// [CHOSEN, not recovered] Set when createDefaultProfile wrote the Default profile in this run.
+bool s_defaultProfileCreatedThisRun = false;
+}
 
 bool LocalProfileManager::hasDefaultProfile()
 {
@@ -54,6 +61,7 @@ bool LocalProfileManager::createDefaultProfile()
         delete m_currentProfile;   // deleting destructor4A8060
         m_currentProfile = nullptr;
     }
+    s_defaultProfileCreatedThisRun = true; // [CHOSEN, not recovered] see applyFirstStartVideoDefaults
     return true;
 }
 
@@ -71,6 +79,32 @@ bool LocalProfileManager::init()
     delete m_currentProfile;
     m_currentProfile = nullptr;
     return true;
+}
+
+// [CHOSEN, not recovered] Owner decision 2026-11-14. createDefaultProfile (4A80C0) runs from init
+// (4A8980) before the renderer exists, so VideoSettings::setDefaults keeps the constructor record
+// (Medium, 800x600) and a fresh install shows its login screen that way. BF2Engine::initEngine
+// calls this once BF2Render::init succeeded (PE 0x409399): only when the Default profile was created
+// in this run, setDefaults runs again with the renderer (High, desktop-fitting resolution, highest
+// antialiasing), the session applies it (a display-mode change before the first menu frame) and
+// Default/Video.con is rewritten. Existing Default profiles are never touched.
+void LocalProfileManager::applyFirstStartVideoDefaults()
+{
+    if (!s_defaultProfileCreatedThisRun)
+        return;
+    s_defaultProfileCreatedThisRun = false;
+    if (m_currentProfile || !g_videoSettings)
+        return;
+    IVideoSettings* video = static_cast<IVideoSettings*>(g_videoSettings);
+    video->setDefaults();
+    video->apply();
+    std::string path("Default/");
+    path += video->getFileName();
+    writeProfileFile(path, video->getSettingsScript()); // the applied (current) record
+    std::fprintf(stderr, "[CHOSEN, not recovered] LocalProfileManager::applyFirstStartVideoDefaults: "
+                         "first-start Default profile at scheme %d, resolution %s, antialiasing %s\n",
+                 video->getVideoOptionScheme(), video->getResolution().c_str(),
+                 video->getAntialiasing().c_str());
 }
 
 } }

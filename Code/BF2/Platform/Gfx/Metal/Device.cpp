@@ -1,16 +1,19 @@
-// [CHOSEN, not recovered] Owner-requested Metal seam; docs/macos-g3b-metal-state.md.
+// [CHOSEN, not recovered] Owner-requested Metal seam.
 // Native C++ objects implement the public subset; no retail DLL/vtable is bridged.
 #if defined(__APPLE__) && defined(BF2_IMAGE_RENDDX9)
 #include "../D3D9Subset.h"
 #include "../../macOS/CocoaHost.h"
 #include "MetalBridge.h"
 #include "DrawBridge.h"
+#include "FFVertex.h"
 #include "EffectShaders.h"
 #include "../Effect/EffectData.h"
 #include "D3DXHelpers.h"
 #include "MenuBackend.h"
 #include "RefTrace.h"
+#include "../Unsupported.h"
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <string>
 #include <cmath>
@@ -27,9 +30,6 @@
 namespace {
 using bf2metal::frontier;
 using bf2metal::mainThread;
-// [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: macos-gfx-backend]
-// Replace each stop only with its implemented and GPU-validated contract.
-#define STOP(ret, name, args, iface) ret STDMETHODCALLTYPE name args override { frontier(iface "::" #name); }
 
 bool colorFormat(D3DFORMAT f) { return f == D3DFMT_X8R8G8B8 || f == D3DFMT_A8R8G8B8; }
 bool adapterType(UINT a, D3DDEVTYPE t) { return a == 0 && t == D3DDEVTYPE_HAL; }
@@ -57,7 +57,14 @@ void caps(D3DCAPS9& c)
     c.GuardBandLeft = c.GuardBandTop = -8192;
     c.GuardBandRight = c.GuardBandBottom = 8192;
     c.StencilCaps = 0x1ff; // all eight operations, two-sided stencil
-    c.FVFCaps = 0x100000; // per-vertex point size
+    c.FVFCaps = 0x100008; // per-vertex point size, 8 texture coordinate sets
+    // Fixed-function vertex processing (FixedFunctionDraw.inc, 0.3.0 pieces 1-2): texgen, material
+    // sources, directional and positional lights, local viewer, sphere map; 8 lights; 4 blend
+    // matrices, indexed with 256 matrices.
+    c.VertexProcessingCaps = 0x13b;
+    c.MaxActiveLights = 8;
+    c.MaxVertexBlendMatrices = 4;
+    c.MaxVertexBlendMatrixIndex = 255;
     c.MaxUserClipPlanes = 6;
     c.MaxPointSize = 1;
     c.MaxPrimitiveCount = 1048575;
@@ -90,12 +97,20 @@ public:
     Device* device;
     ULONG refs = 0;
     explicit SwapChain(Device* d) : device(d) {}
-    STOP(HRESULT, QueryInterface, (REFIID,void**), "IDirect3DSwapChain9")
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID id,void** out) override {
+        if(!out) return D3DERR_INVALIDCALL; *out=nullptr;
+        static const GUID iidSwapChain={0x794950f2,0xadfc,0x458a,{0x90,0x5e,0x10,0xa1,0x0b,0x0b,0x50,0x3b}};
+        if(!sameIID(id,iidUnknown) && !sameIID(id,iidSwapChain)) return E_NOINTERFACE;
+        *out=static_cast<IDirect3DSwapChain9*>(this); AddRef(); return D3D_OK;
+    }
     ULONG STDMETHODCALLTYPE AddRef() override;
     ULONG STDMETHODCALLTYPE Release() override;
     HRESULT STDMETHODCALLTYPE Present(const RECT*,const RECT*,HWND,const RGNDATA*,DWORD) override;
     HRESULT STDMETHODCALLTYPE GetBackBuffer(UINT,D3DBACKBUFFER_TYPE,IDirect3DSurface9**) override;
-    STOP(HRESULT, GetFrontBufferData, (IDirect3DSurface9*), "IDirect3DSwapChain9")
+    // [CHOSEN, not recovered] Metal exposes no front buffer to read; no BF2 caller (E4).
+    HRESULT STDMETHODCALLTYPE GetFrontBufferData(IDirect3DSurface9*) override {
+        bf2gfx::unsupported("IDirect3DSwapChain9::GetFrontBufferData (no front buffer on Metal)"); return D3DERR_INVALIDCALL;
+    }
 };
 
 class Direct3D final : public IDirect3D9 {
@@ -125,7 +140,12 @@ public:
         return out;
     }
     ~Direct3D() { bf2metal::destroyAdapter(native); }
-    STOP(HRESULT, QueryInterface, (REFIID,void**), "IDirect3D9")
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID id,void** out) override {
+        if(!out) return D3DERR_INVALIDCALL; *out=nullptr;
+        static const GUID iidDirect3D={0x81bdcbca,0x64d4,0x426d,{0xae,0x8d,0xad,0x01,0x47,0xf4,0x27,0x5c}};
+        if(!sameIID(id,iidUnknown) && !sameIID(id,iidDirect3D)) return E_NOINTERFACE;
+        *out=static_cast<IDirect3D9*>(this); AddRef(); return D3D_OK;
+    }
     ULONG STDMETHODCALLTYPE AddRef() override { mainThread("IDirect3D9::AddRef"); return ++refs; }
     ULONG STDMETHODCALLTYPE Release() override {
         mainThread("IDirect3D9::Release"); const ULONG n = --refs; if (!n) delete this; return n;
@@ -138,7 +158,20 @@ public:
         std::snprintf(out->Driver, sizeof(out->Driver), "OpenBF2 Metal G3");
         std::snprintf(out->Description, sizeof(out->Description), "%s", bf2metal::adapterName(native));
         std::snprintf(out->DeviceName, sizeof(out->DeviceName), "Main display");
-        // No fabricated PCI identity/WHQL status: the Metal API does not expose these.
+        // [CHOSEN, not recovered] Owner decision 2026-11-12: the real GPU vendor and device IDs
+        // (MetalBridge adapterPciIds): Intel 0x8086, AMD 0x1002 with their PCI device IDs, Apple
+        // silicon 0x106B/0. RendDX9 branches on them (classifyGpu, the ATI/NVIDIA shader defines,
+        // the GPU whitelist). No WHQL status or subsystem ID is fabricated.
+        unsigned vendor = 0, device = 0;
+        bf2metal::adapterPciIds(native, vendor, device);
+        // [TEMP] Test hook (not a user setting): BF2_TEST_ADAPTER_IDENTITY="VVVV:DDDD" (hex)
+        // replaces the reported IDs, so the AMD code paths run on any Mac (as BF2_TEST_DISPLAY_MODES
+        // does for the mode list).
+        if (const char* test = std::getenv("BF2_TEST_ADAPTER_IDENTITY")) {
+            unsigned v = 0, d = 0;
+            if (std::sscanf(test, "%x:%x", &v, &d) == 2) { vendor = v & 0xffff; device = d & 0xffff; }
+        }
+        out->VendorId = vendor; out->DeviceId = device;
         return D3D_OK;
     }
     UINT STDMETHODCALLTYPE GetAdapterModeCount(UINT a, D3DFORMAT format) override {
@@ -199,9 +232,23 @@ public:
         caps(*out); return D3D_OK;
     }
     HRESULT STDMETHODCALLTYPE CreateDevice(UINT,D3DDEVTYPE,HWND,DWORD,D3DPRESENT_PARAMETERS*,IDirect3DDevice9**) override;
-    STOP(HRESULT, RegisterSoftwareDevice, (void*), "IDirect3D9")
-    STOP(HRESULT, CheckDeviceFormatConversion, (UINT,D3DDEVTYPE,D3DFORMAT,D3DFORMAT), "IDirect3D9")
-    STOP(HMONITOR, GetAdapterMonitor, (UINT), "IDirect3D9")
+    // [CHOSEN, not recovered] No software rasterizer can be plugged in (never called, E2).
+    HRESULT STDMETHODCALLTYPE RegisterSoftwareDevice(void*) override {
+        bf2gfx::unsupported("IDirect3D9::RegisterSoftwareDevice"); return D3DERR_NOTAVAILABLE;
+    }
+    // The conversions StretchRect performs (DeviceResources.inc copySurface): same format, and
+    // X8R8G8B8 <-> A8R8G8B8.
+    HRESULT STDMETHODCALLTYPE CheckDeviceFormatConversion(UINT a,D3DDEVTYPE t,D3DFORMAT source,D3DFORMAT target) override {
+        mainThread("IDirect3D9::CheckDeviceFormatConversion");
+        if(!adapterType(a,t)) return D3DERR_INVALIDCALL;
+        if(!bf2metal::formatSupported(source) || !bf2metal::formatRenderable(target)) return D3DERR_NOTAVAILABLE;
+        return source==target || (colorFormat(source) && colorFormat(target)) ? D3D_OK : D3DERR_NOTAVAILABLE;
+    }
+    // [CHOSEN, not recovered] There is no Win32 monitor handle; adapter 0 answers a fixed
+    // non-null token (never called, E2), any other adapter null as D3D9 does.
+    HMONITOR STDMETHODCALLTYPE GetAdapterMonitor(UINT a) override {
+        static int token; return a ? nullptr : static_cast<HMONITOR>(&token);
+    }
 };
 
 class Device final : public IDirect3DDevice9 {
@@ -244,7 +291,7 @@ public:
         return focusLost;
     }
     static bool applicationActive() { return dice::hfe::macos::CocoaHost::instance().isAppActive(); }
-    ~Device() { bf2metal::destroyFrame(native); parent->Release(); }
+    ~Device() { releaseFvfDeclarations(); bf2metal::destroyFrame(native); parent->Release(); }
     void describe() {
         bf2metal::dimensions(native, pp.BackBufferWidth, pp.BackBufferHeight);
         back.desc = {pp.BackBufferFormat,D3DRTYPE_SURFACE,D3DUSAGE_RENDERTARGET,D3DPOOL_DEFAULT,
@@ -353,7 +400,9 @@ public:
         const auto regions=bf2metal::clearRectangles(viewport,c->desc.Width,c->desc.Height,count,rects,
             state.raw.render[174]?&state.scissor:nullptr);
         if(regions.empty()) return D3D_OK;
-        if((flags&1) && state.raw.render[194]) frontier("IDirect3DDevice9::Clear (sRGB write)");
+        // [CHOSEN, not recovered] D3DRS_SRGBWRITEENABLE: no retail call and no shipped effect
+        // pass sets it. The clear colour is written as given.
+        if((flags&1) && state.raw.render[194]) bf2gfx::unsupported("IDirect3DDevice9::Clear with D3DRS_SRGBWRITEENABLE (colour written without sRGB conversion)");
         // XRGB targets always store opaque alpha.
         if (c->desc.Format == D3DFMT_X8R8G8B8 || c->desc.Format == D3DFMT_X8B8G8R8) color |= 0xff000000u;
         return bf2metal::clearTargets(native,c->plane->image->native,c->plane->level,c->plane->slice,
@@ -425,7 +474,8 @@ public:
     }
 #include "DeviceState.inc"
 #include "DeviceResources.inc"
-#include "DeviceFrontiers.inc"
+#include "DeviceFallbacks.inc"
+#include "FixedFunctionDraw.inc"
 #include "DeviceDraw.inc"
 };
 
@@ -469,7 +519,6 @@ HRESULT Direct3D::CreateDevice(UINT a,D3DDEVTYPE type,HWND focus,DWORD flags,
     if (!device) { bf2metal::destroyFrame(frame); return E_OUTOFMEMORY; }
     *out = device; *params = device->pp; return D3D_OK;
 }
-#undef STOP
 }
 namespace bf2d3dx {
 static HRESULT planeBytes(const std::shared_ptr<Plane>& plane,Bytes& bytes,bool upload) {

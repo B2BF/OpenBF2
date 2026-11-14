@@ -1,9 +1,12 @@
 // Falcon input device. [INFERRED] Header placement. Preserve its 27-slot interface without a destructor slot.
+// BF2_NOVINT_FAKE_SDK: the Mac fake-SDK check compiles the Windows class against fake SDK bodies.
 #ifndef IO_INPUT_FALCONDEVICE_H
 #define IO_INPUT_FALCONDEVICE_H
 #include "../../Core/BuildConfig.h"
 #if !DEDICATED
-#if !defined(_WIN32)
+#include "FalconHaptics.h"   // g_falconControlBoxDirty and the haptic-effect helpers (ledger N2)
+class IHapticEffect; // NovintHFX.h (global namespace); the haptic force effects (BF2ClientSeams.h)
+#if !defined(_WIN32) && !defined(BF2_NOVINT_FAKE_SDK)
 // [CHOSEN, not recovered] Native POSIX clients: the Novint HFX SDK is a Windows-only DLL and no
 // Falcon is ever present, so neither the SDK header nor FalconDevice exists there; the device
 // manager reports IDFFalcon as not opened (MacInputDeviceManager). Only the menu's mouse-mode
@@ -57,9 +60,8 @@ public:
     float buttonPressedSampleLatency(InputDeviceButtons) const override;
     virtual bool init();
 private:
-    // [FRONTIER] PE 0x6A52A0, ELF 0x8499C80; positive-dt frame update.
-    // Required HapticSettings/effect interfaces are not yet recovered.
-    void updateCurrentState(float); // [TEMP] diagnostic abort; falcon-state-diagnostic
+    // PE 0x6A52A0, ELF 0x8499C80 (whose sample loop is compiled out); positive-dt frame update.
+    void updateCurrentState(float);
     int m_refCount;                         // PE +04
     unsigned int m_buttons;                // +08
     InputDeviceMode m_mode;                 // +0C; ctor leaves untouched

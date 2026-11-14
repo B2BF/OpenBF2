@@ -1,0 +1,57 @@
+# [TEMP] rend-doors: a nametag over the sky and the sun. Operation Clean
+# Sweep, US airfield spawn (hud-click 466 138, as handcheck-ocs-jet). The airfield control point
+# is at -552/29.69/544 (gpm_coop/16); Sky.con sunDirection 0.0996/-0.3087/0.9459 puts the sun
+# 18 degrees up towards -z. Standing 22.5 m from the control point on the far side from the sun,
+# the control-point marker (about 9 m above the flag base) lies in the sun direction, so its tag
+# is drawn over the sun glow and the sky around it. The aim points are fixed world coordinates.
+timeout 300
+log waiting for the level load
+wait-log ingameMap.tga
+wait-ms 5000
+capture loaded
+click 745 583
+wait-ms 4000
+key enter
+wait-ms 1500
+key enter
+wait-ms 3000
+capture spawn-screen
+hud-click 130 107
+wait-ms 1000
+hud-click 466 138
+wait-ms 1000
+capture selected
+hud-click 728 546
+wait-ms 10000
+capture spawned-1
+log doors: nametag of a friend, standing and prone
+aim friend 1.5 5000
+wait-ms 600
+capture tag-friend
+key z
+wait-ms 2500
+aim friend 1.5 5000
+wait-ms 600
+capture tag-friend-prone
+key z
+wait-ms 2500
+log doors: walk to the sun side of the control point
+walk-to -549.6/29.7/566.4 1.5 45000
+wait-ms 800
+log doors: the control-point marker against the sky, then the sun behind it
+aim -552/36/544 1.5 6000
+wait-ms 800
+capture cp-sky-low
+aim -552/44/544 1.5 6000
+wait-ms 800
+capture cp-sky-high
+aim -649.2/340.1/-379.5 1.5 6000
+wait-ms 800
+capture cp-sun
+move-rel 0 40
+wait-ms 800
+capture cp-sun-down
+move-rel 0 -80
+wait-ms 800
+capture cp-sun-up
+log doors: done

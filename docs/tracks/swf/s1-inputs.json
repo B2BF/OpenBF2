@@ -1,0 +1,159 @@
+{
+  "B_vtable_candidates": 73,
+  "architecture": "i386",
+  "base_rev": "r586",
+  "base_support": "release-2004-05-12-approx",
+  "ghidra_B": 2142,
+  "ghidra_E": 79,
+  "hashes": {
+    "available-decompile-text": "b10fecdbe325f8df6ba003a59f0e6c7fb935a9e94e2d74f941fef79f48e2298f",
+    "base-support-input": "07a717a29f0d76b8a5e6e49be98d5f15864f78df462ca7f6b35bb5c4ea821db9",
+    "build_ledger.py": "bf7e8b7c389b0822f7b024bf2eba78b5f07204fbcfe2e48b8c32e8ccd8fcccd8",
+    "functions.tsv": "f56417e93b602a29464222537c280784d3f9268d4b39bf620d327fa7c0ce125a",
+    "inventory": "9da4bc0e4b0372dc9c057c209e153b3be68ebddd7f8a65a136328193af39bf34",
+    "retail": "800efc309f9c2a46d44230bc0585b0b900168eeec9a95ff9cb652bdb1f87b57d",
+    "s1-layouts.csv": "eccb614f47fb2d59605e987049af0468b10dd871455d465acbd1b2fbeff0fcd1",
+    "s1-reviews.csv": "8c21855cc113522cf8ad11f8b6b35d3109e52a202456020879f68e317a094750",
+    "s1-template-rules.csv": "34538e66816947cb4d85e6d2f98e6efdc46d4943c239f6f77f1b6fe5fa76b85f",
+    "strings.tsv": "accd63744acf2a6ee3e64232f6994505ae651966fa8b7397de7f7f6c5203285e",
+    "swf_align.py": "0b8595f8afbed4fb7b4ae9684156a6bd197af7f4fccd36c0a63ee89312229fea",
+    "swf_ledger.py": "fc150f6e5540c6de81be9a614c3d4cc4916bce09d505ccb1f5464dfa78914814",
+    "swf_sequence.py": "a173741ec8afcee6048723e47d1c3c1307f8a4e585c1fc37975e8d11a9248221",
+    "test_swf_ledger.py": "4cd23392c53e16ab30cff02c976c5743e848644223b01bac08f96f79730b74c9",
+    "vtables.tsv": "9e1233aecab8a5c4544baa6aea3203d217faf9eecc9ba4753cd5b944291ecf49"
+  },
+  "image": "SwiffPlayer.dll",
+  "missing_decomp_B": [],
+  "revision_inputs": {
+    "r577": {
+      "available": true,
+      "different_files": [
+        "gameswf.h",
+        "gameswf_action.cpp",
+        "gameswf_action.h",
+        "gameswf_button.cpp",
+        "gameswf_impl.cpp",
+        "gameswf_impl.h",
+        "gameswf_shape.cpp",
+        "gameswf_shape.h",
+        "gameswf_sound_handler_sdl.cpp",
+        "gameswf_tesselate.cpp",
+        "gameswf_test_ogl.cpp",
+        "gameswf_text.cpp",
+        "gameswf_types.cpp"
+      ],
+      "sha256": "c6ae82ac7c770e2b6ecdd871ba3672ec4d2d2c990af9e8ae1e45243f9dd8ad8c"
+    },
+    "r578": {
+      "available": false
+    },
+    "r579": {
+      "available": true,
+      "different_files": [
+        "gameswf.h",
+        "gameswf_action.cpp",
+        "gameswf_action.h",
+        "gameswf_button.cpp",
+        "gameswf_impl.cpp",
+        "gameswf_impl.h",
+        "gameswf_shape.cpp",
+        "gameswf_shape.h",
+        "gameswf_sound_handler_sdl.cpp",
+        "gameswf_tesselate.cpp",
+        "gameswf_test_ogl.cpp",
+        "gameswf_text.cpp",
+        "gameswf_types.cpp"
+      ],
+      "sha256": "b60e2c5ed4ece443b57add3d060340b2ab11ed41854a281c4bcd60b561120107"
+    },
+    "r580": {
+      "available": true,
+      "different_files": [
+        "gameswf.h",
+        "gameswf_action.cpp",
+        "gameswf_action.h",
+        "gameswf_button.cpp",
+        "gameswf_impl.cpp",
+        "gameswf_impl.h",
+        "gameswf_shape.cpp",
+        "gameswf_shape.h",
+        "gameswf_sound_handler_sdl.cpp",
+        "gameswf_tesselate.cpp",
+        "gameswf_test_ogl.cpp",
+        "gameswf_text.cpp",
+        "gameswf_types.cpp"
+      ],
+      "sha256": "ee61551519cdc8fa12ea53b7381e3b491f1f3deda2129bcf77f0c0af233637ae"
+    },
+    "r581": {
+      "available": false
+    },
+    "r582": {
+      "available": true,
+      "different_files": [
+        "gameswf.h",
+        "gameswf_action.cpp",
+        "gameswf_action.h",
+        "gameswf_button.cpp",
+        "gameswf_impl.cpp",
+        "gameswf_impl.h",
+        "gameswf_shape.cpp",
+        "gameswf_shape.h",
+        "gameswf_sound_handler_sdl.cpp",
+        "gameswf_tesselate.cpp",
+        "gameswf_test_ogl.cpp",
+        "gameswf_text.cpp",
+        "gameswf_types.cpp"
+      ],
+      "sha256": "ee61551519cdc8fa12ea53b7381e3b491f1f3deda2129bcf77f0c0af233637ae"
+    },
+    "r583": {
+      "available": true,
+      "different_files": [
+        "gameswf.h",
+        "gameswf_action.cpp",
+        "gameswf_impl.cpp",
+        "gameswf_impl.h",
+        "gameswf_shape.cpp",
+        "gameswf_sound_handler_sdl.cpp",
+        "gameswf_types.cpp"
+      ],
+      "sha256": "42a8d9490cdc781b9fd9293632b6874fc9069be96b5134139510240f3f14644d"
+    },
+    "r584": {
+      "available": true,
+      "different_files": [
+        "gameswf_action.cpp",
+        "gameswf_shape.cpp"
+      ],
+      "sha256": "ffb8abb71741259aa97416598b7957c7673a8f39684674826785c4682d8cab44"
+    },
+    "r585": {
+      "available": true,
+      "different_files": [
+        "gameswf_shape.cpp"
+      ],
+      "sha256": "78e6fb52bd1bc5138e33fc6319067578e42775ed6a4fb42ab4d66b3d4087a990"
+    },
+    "r586": {
+      "available": true,
+      "different_files": [],
+      "sha256": "7a42c531fb0bbe82916195d871da55c802e7c4247b4f675eb8d01b447f0fa70f"
+    },
+    "r588": {
+      "available": true,
+      "different_files": [
+        "gameswf.h",
+        "gameswf_font.cpp",
+        "gameswf_impl.cpp",
+        "gameswf_shape.cpp",
+        "gameswf_sound_handler_sdl.cpp",
+        "gameswf_styles.cpp",
+        "gameswf_text.cpp",
+        "gameswf_types.cpp"
+      ],
+      "sha256": "345cc02a9640c3445d4529647d185801e2cad8124b08f48b6ced8e2c4cd6f003"
+    }
+  },
+  "sources": 1358
+}

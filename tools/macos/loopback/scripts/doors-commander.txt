@@ -1,0 +1,36 @@
+# [TEMP] rend-doors: the commander screen. Needs
+# --client-env BF2_CLIENT_CONSOLE_FULL_ACCESS=1: the typed console runs at access 1, and the
+# squad-list apply cell (HudSquad::singleClickNew column 10) has no fixed screen coordinate. The
+# server proposes the applicant after SquadManager m_firstCommanderSelectDelay (15 s); the HUD then
+# asks "PRESS 'PAGE UP' TO ACCEPT" (the typed Commander.accept 1 did not take).
+include join-and-spawn
+log doors: commander apply
+console Commander.commanderApply
+wait-ms 4000
+capture cmd-applied
+wait-ms 20000
+capture cmd-later
+log doors: accept the commander proposal ("PRESS 'PAGE UP' TO ACCEPT")
+key pageup
+wait-ms 4000
+capture cmd-accepted
+log doors: commander screen (c_GILeader, Caps Lock)
+key capital
+wait-ms 3000
+capture cmd-screen-1
+wait-ms 3000
+capture cmd-screen-2
+log doors: satellite button (CommanderTools 137,20 + Satellite 4,2 + button 0,1 86x23)
+hud-click 184 34
+wait-ms 2000
+capture cmd-satellite-armed
+hud-click 520 300
+wait-ms 4000
+capture cmd-satellite
+wheel 3
+wait-ms 2000
+capture cmd-wheel
+key capital
+wait-ms 3000
+capture cmd-closed
+log doors: done

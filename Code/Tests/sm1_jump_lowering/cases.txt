@@ -1,0 +1,432 @@
+# [CHOSEN, not recovered] Synthetic shaders for the SM1/2 jump lowering (vkd3d patch 0014): loops
+# unrolled to an array bound behind a uniform exit, and flattened conditional blocks with
+# block-local values. "=== NAME PROFILE ENTRY" starts a case; the HLSL follows. The shadow_bound_*
+# cases vary the uniform's initializer against the array bound (which one bounds D3DX's unroll).
+=== loop_break_mul_vs11 vs_1_1 vs
+int Count = 2;
+float4x4 M[6];
+struct VO { float4 p : POSITION; float4 c : COLOR0; float4 t[6] : TEXCOORD0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = p; o.c = float4(2, 0.25, 0, 1);
+    for (int k = 0; k < 6; ++k) o.t[k] = 0;
+    for (int q = 0; q < Count; ++q) { if (p.x > 2.0) break; o.t[q] = mul(float4(1, 1, 1, 1), M[q]); }
+    return o;
+}
+=== loop_break_mul_vs20 vs_2_0 vs
+int Count = 2;
+float4x4 M[6];
+struct VO { float4 p : POSITION; float4 c : COLOR0; float4 t[6] : TEXCOORD0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = p; o.c = float4(2, 0.25, 0, 1);
+    for (int k = 0; k < 6; ++k) o.t[k] = 0;
+    for (int q = 0; q < Count; ++q) { if (p.x > 2.0) break; o.t[q] = mul(float4(1, 1, 1, 1), M[q]); }
+    return o;
+}
+=== shadow_texcoords_vs11 vs_1_1 vs
+int ShadowCount = 3;
+float4x4 WorldViewProj;
+float4x4 ShadowMat[4];
+struct VO { float4 p : POSITION; float4 s[4] : TEXCOORD0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = mul(p, WorldViewProj);
+    for (int i = 0; i < 4; ++i) o.s[i] = 0;
+    for (int q = 0; q < ShadowCount; ++q) o.s[q] = mul(p, ShadowMat[q]);
+    return o;
+}
+=== shadow_texcoords_vs20 vs_2_0 vs
+int ShadowCount = 3;
+float4x4 WorldViewProj;
+float4x4 ShadowMat[4];
+struct VO { float4 p : POSITION; float4 s[4] : TEXCOORD0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = mul(p, WorldViewProj);
+    for (int i = 0; i < 4; ++i) o.s[i] = 0;
+    for (int q = 0; q < ShadowCount; ++q) o.s[q] = mul(p, ShadowMat[q]);
+    return o;
+}
+=== loop_continue_vs11 vs_1_1 vs
+int Count = 3;
+float4 K[4];
+struct VO { float4 p : POSITION; float4 c : COLOR0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = p;
+    float4 acc = 0;
+    for (int q = 0; q < Count; ++q) { if (p.y > K[q].w) continue; acc += K[q]; }
+    o.c = acc;
+    return o;
+}
+=== block_local_if_vs11 vs_1_1 vs
+float4x4 M;
+struct VO { float4 p : POSITION; float4 c : COLOR0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = p; o.c = 0;
+    if (p.x > 0) { float4 t; t.x = dot(p, M[0]); t.y = dot(p, M[1]); t.zw = p.zw; o.c = t; }
+    return o;
+}
+=== block_local_if_ps20 ps_2_0 ps
+float4x4 M;
+float4 ps(float4 t0 : TEXCOORD0) : COLOR {
+    float4 c = 0;
+    if (t0.x > 0.5) { float4 t; t.x = dot(t0, M[0]); t.y = dot(t0, M[1]); t.zw = t0.zw; c = t; }
+    return c;
+}
+=== if_else_locals_vs11 vs_1_1 vs
+float4 A, B;
+struct VO { float4 p : POSITION; float4 c : COLOR0; float4 d : COLOR1; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = p; o.c = 1; o.d = 0;
+    if (p.x > p.y) { float4 u; u.xy = A.xy * p.x; u.zw = A.zw; o.c = u; }
+    else { float4 v; v.x = B.x; v.yzw = B.yzw * p.y; o.d = v; }
+    return o;
+}
+=== if_else_locals_ps20 ps_2_0 ps
+float4 A, B;
+float4 ps(float4 t0 : TEXCOORD0) : COLOR {
+    float4 c = 1;
+    if (t0.x > t0.y) { float4 u; u.xy = A.xy * t0.x; u.zw = A.zw; c = u; }
+    else { float4 v; v.x = B.x; v.yzw = B.yzw * t0.y; c *= v; }
+    return c;
+}
+=== partial_init_vs11 vs_1_1 vs
+float4 A;
+struct VO { float4 p : POSITION; float4 c : COLOR0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = p;
+    float4 t; t.xz = A.xz;
+    if (p.z > 0) { t.y = p.y; t.w = A.w * p.w; t.x = p.x; }
+    else { t.yw = A.yw; }
+    o.c = t;
+    return o;
+}
+=== nested_if_vs11 vs_1_1 vs
+float4 A;
+struct VO { float4 p : POSITION; float4 c : COLOR0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = p; o.c = A;
+    if (p.x > 0) {
+        float4 t; t.xy = p.xy; t.zw = A.zw;
+        if (p.y > 0) { float4 u; u.x = t.y; u.y = t.x; u.zw = t.zw; t = u; }
+        o.c = t;
+    }
+    return o;
+}
+=== written_in_if_only_vs11 vs_1_1 vs
+float4 A;
+struct VO { float4 p : POSITION; float4 c : COLOR0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = p;
+    float4 t;
+    if (p.x > 0) t = A * p.x;
+    else t = A;
+    o.c = t;
+    return o;
+}
+=== loop_break_ps20 ps_2_0 ps
+int Count = 2;
+float4 K[4];
+float4 ps(float4 t0 : TEXCOORD0) : COLOR {
+    float4 c = 0;
+    for (int q = 0; q < Count; ++q) { if (t0.x > K[q].w) break; float4 v; v.xy = K[q].xy * t0.xy; v.zw = K[q].zw; c += v; }
+    return c;
+}
+=== shadow_bound_init2_vs11 vs_1_1 vs
+int ShadowCount = 2;
+float4x4 WorldViewProj;
+float4x4 ShadowMat[4];
+struct VO { float4 p : POSITION; float4 s[4] : TEXCOORD0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = mul(p, WorldViewProj);
+    for (int i = 0; i < 4; ++i) o.s[i] = 0;
+    for (int q = 0; q < ShadowCount; ++q) o.s[q] = mul(p, ShadowMat[q]);
+    return o;
+}
+=== shadow_bound_noinit_vs11 vs_1_1 vs
+int ShadowCount;
+float4x4 WorldViewProj;
+float4x4 ShadowMat[4];
+struct VO { float4 p : POSITION; float4 s[4] : TEXCOORD0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = mul(p, WorldViewProj);
+    for (int i = 0; i < 4; ++i) o.s[i] = 0;
+    for (int q = 0; q < ShadowCount; ++q) o.s[q] = mul(p, ShadowMat[q]);
+    return o;
+}
+=== shadow_bound_init6_vs11 vs_1_1 vs
+int ShadowCount = 6;
+float4x4 WorldViewProj;
+float4x4 ShadowMat[4];
+struct VO { float4 p : POSITION; float4 s[4] : TEXCOORD0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = mul(p, WorldViewProj);
+    for (int i = 0; i < 4; ++i) o.s[i] = 0;
+    for (int q = 0; q < ShadowCount; ++q) o.s[q] = mul(p, ShadowMat[q]);
+    return o;
+}
+=== shadow_bound_init2_vs20 vs_2_0 vs
+int ShadowCount = 2;
+float4x4 WorldViewProj;
+float4x4 ShadowMat[4];
+struct VO { float4 p : POSITION; float4 s[4] : TEXCOORD0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = mul(p, WorldViewProj);
+    for (int i = 0; i < 4; ++i) o.s[i] = 0;
+    for (int q = 0; q < ShadowCount; ++q) o.s[q] = mul(p, ShadowMat[q]);
+    return o;
+}
+=== shadow_bound_t6_m6_vs11 vs_1_1 vs
+int ShadowCount = 3;
+float4x4 WorldViewProj;
+float4x4 ShadowMat[6];
+struct VO { float4 p : POSITION; float4 s[6] : TEXCOORD0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = mul(p, WorldViewProj);
+    for (int i = 0; i < 6; ++i) o.s[i] = 0;
+    for (int q = 0; q < ShadowCount; ++q) o.s[q] = mul(p, ShadowMat[q]);
+    return o;
+}
+=== shadow_bound_t6_m4_vs11 vs_1_1 vs
+int ShadowCount = 3;
+float4x4 WorldViewProj;
+float4x4 ShadowMat[4];
+struct VO { float4 p : POSITION; float4 s[6] : TEXCOORD0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = mul(p, WorldViewProj);
+    for (int i = 0; i < 6; ++i) o.s[i] = 0;
+    for (int q = 0; q < ShadowCount; ++q) o.s[q] = mul(p, ShadowMat[q]);
+    return o;
+}
+=== shadow_bound_t4_m6_vs11 vs_1_1 vs
+int ShadowCount = 3;
+float4x4 WorldViewProj;
+float4x4 ShadowMat[6];
+struct VO { float4 p : POSITION; float4 s[4] : TEXCOORD0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = mul(p, WorldViewProj);
+    for (int i = 0; i < 4; ++i) o.s[i] = 0;
+    for (int q = 0; q < ShadowCount; ++q) o.s[q] = mul(p, ShadowMat[q]);
+    return o;
+}
+=== shadow_bound_t2_m2_vs11 vs_1_1 vs
+int ShadowCount = 3;
+float4x4 WorldViewProj;
+float4x4 ShadowMat[2];
+struct VO { float4 p : POSITION; float4 s[2] : TEXCOORD0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = mul(p, WorldViewProj);
+    for (int i = 0; i < 2; ++i) o.s[i] = 0;
+    for (int q = 0; q < ShadowCount; ++q) o.s[q] = mul(p, ShadowMat[q]);
+    return o;
+}
+=== bound_read_only_vs11 vs_1_1 vs
+int Count = 2;
+float4 K[4];
+struct VO { float4 p : POSITION; float4 c : COLOR0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = p;
+    float4 acc = 0;
+    for (int q = 0; q < Count; ++q) acc += K[q] * p.x;
+    o.c = acc;
+    return o;
+}
+=== probe_write_only_vs11 vs_1_1 vs
+int Count = 3;
+float4x4 M[4];
+float4 K[4];
+float4 K6[6];
+struct VO { float4 p : POSITION; float4 c : COLOR0; float4 s[4] : TEXCOORD0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = p; o.c = 0;
+    for (int i = 0; i < 4; ++i) o.s[i] = 0;
+    for (int q = 0; q < Count; ++q) o.s[q] = p * (q + 1);
+    return o;
+}
+=== probe_read_matrix_vs11 vs_1_1 vs
+int Count = 3;
+float4x4 M[4];
+float4 K[4];
+float4 K6[6];
+struct VO { float4 p : POSITION; float4 c : COLOR0; float4 s[4] : TEXCOORD0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = p; o.c = 0;
+    for (int i = 0; i < 4; ++i) o.s[i] = 0;
+    for (int q = 0; q < Count; ++q) o.c += mul(p, M[q]);
+    return o;
+}
+=== probe_write_read_vec_vs11 vs_1_1 vs
+int Count = 3;
+float4x4 M[4];
+float4 K[4];
+float4 K6[6];
+struct VO { float4 p : POSITION; float4 c : COLOR0; float4 s[4] : TEXCOORD0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = p; o.c = 0;
+    for (int i = 0; i < 4; ++i) o.s[i] = 0;
+    for (int q = 0; q < Count; ++q) o.s[q] = K[q] * p.x;
+    return o;
+}
+=== probe_write4_read6_vs11 vs_1_1 vs
+int Count = 3;
+float4x4 M[4];
+float4 K[4];
+float4 K6[6];
+struct VO { float4 p : POSITION; float4 c : COLOR0; float4 s[4] : TEXCOORD0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = p; o.c = 0;
+    for (int i = 0; i < 4; ++i) o.s[i] = 0;
+    for (int q = 0; q < Count; ++q) o.s[q] = K6[q] * p.x;
+    return o;
+}
+=== probe_local_array_vs11 vs_1_1 vs
+int Count = 3;
+float4x4 M[4];
+float4 K[4];
+float4 K6[6];
+struct VO { float4 p : POSITION; float4 c : COLOR0; float4 s[4] : TEXCOORD0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = p; o.c = 0;
+    for (int i = 0; i < 4; ++i) o.s[i] = 0;
+    float4 t[4] = { p, p, p, p };
+    for (int q = 0; q < Count; ++q) t[q] = K[q] * p.x;
+    o.c = t[0] + t[1] + t[2] + t[3];
+    return o;
+}
+=== probe_read_vec_vs20 vs_2_0 vs
+int Count = 3;
+float4x4 M[4];
+float4 K[4];
+float4 K6[6];
+struct VO { float4 p : POSITION; float4 c : COLOR0; float4 s[4] : TEXCOORD0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = p; o.c = 0;
+    for (int i = 0; i < 4; ++i) o.s[i] = 0;
+    for (int q = 0; q < Count; ++q) o.c += K[q] * p.x;
+    return o;
+}
+=== probe_write_only_vs20 vs_2_0 vs
+int Count = 3;
+float4x4 M[4];
+float4 K[4];
+float4 K6[6];
+struct VO { float4 p : POSITION; float4 c : COLOR0; float4 s[4] : TEXCOORD0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = p; o.c = 0;
+    for (int i = 0; i < 4; ++i) o.s[i] = 0;
+    for (int q = 0; q < Count; ++q) o.s[q] = p * (q + 1);
+    return o;
+}
+=== probe_read_matrix_vs20 vs_2_0 vs
+int Count = 3;
+float4x4 M[4];
+float4 K[4];
+float4 K6[6];
+struct VO { float4 p : POSITION; float4 c : COLOR0; float4 s[4] : TEXCOORD0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = p; o.c = 0;
+    for (int i = 0; i < 4; ++i) o.s[i] = 0;
+    for (int q = 0; q < Count; ++q) o.c += mul(p, M[q]);
+    return o;
+}
+=== probe_read_vec6_vs11 vs_1_1 vs
+int Count = 3;
+float4x4 M[4];
+float4 K[4];
+float4 K6[6];
+struct VO { float4 p : POSITION; float4 c : COLOR0; float4 s[4] : TEXCOORD0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = p; o.c = 0;
+    for (int i = 0; i < 4; ++i) o.s[i] = 0;
+    for (int q = 0; q < Count; ++q) o.c += K6[q] * p.x;
+    return o;
+}
+=== probe_local_struct_vs11 vs_1_1 vs
+int Count = 3;
+struct L { float4 a; float4 s[4]; };
+struct VO { float4 p : POSITION; float4 c : COLOR0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = p;
+    L l; l.a = 0;
+    for (int i = 0; i < 4; ++i) l.s[i] = 0;
+    for (int q = 0; q < Count; ++q) l.s[q] = p * (q + 1);
+    o.c = l.s[0] + l.s[1] * 10 + l.s[2] * 100 + l.s[3] * 1000;
+    return o;
+}
+=== probe_out_param_vs11 vs_1_1 vs
+int Count = 3;
+float4 vs(float4 p : POSITION, out float4 t[4] : TEXCOORD0) : POSITION {
+    for (int i = 0; i < 4; ++i) t[i] = 0;
+    for (int q = 0; q < Count; ++q) t[q] = p * (q + 1);
+    return p;
+}
+=== probe_local_then_copy_vs11 vs_1_1 vs
+int Count = 3;
+struct VO { float4 p : POSITION; float4 s[4] : TEXCOORD0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = p;
+    float4 t[4] = { 0.0.xxxx, 0.0.xxxx, 0.0.xxxx, 0.0.xxxx };
+    for (int q = 0; q < Count; ++q) t[q] = p * (q + 1);
+    o.s = t;
+    return o;
+}
+=== probe_struct_two_writes_vs11 vs_1_1 vs
+int Count = 3;
+struct VO { float4 p : POSITION; float4 s[4] : TEXCOORD0; float4 m[2] : TEXCOORD4; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = p;
+    for (int i = 0; i < 4; ++i) o.s[i] = 0;
+    o.m[0] = 0; o.m[1] = 0;
+    for (int q = 0; q < Count; ++q) o.s[q] = p * (q + 1);
+    return o;
+}
+=== probe_f_local_k_zero_vs11 vs_1_1 vs
+int Count = 3;
+float4 K[4];
+struct VO { float4 p : POSITION; float4 c : COLOR0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = p;
+    float4 t[4] = { 0.0.xxxx, 0.0.xxxx, 0.0.xxxx, 0.0.xxxx };
+    for (int q = 0; q < Count; ++q) t[q] = K[q] * p.x;
+    o.c = t[0] + t[1] * 10 + t[2] * 100 + t[3] * 1000;
+    return o;
+}
+=== probe_f_local_q_zero_vs11 vs_1_1 vs
+int Count = 3;
+float4 K[4];
+struct VO { float4 p : POSITION; float4 c : COLOR0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = p;
+    float4 t[4] = { 0.0.xxxx, 0.0.xxxx, 0.0.xxxx, 0.0.xxxx };
+    for (int q = 0; q < Count; ++q) t[q] = p * (q + 1);
+    o.c = t[0] + t[1] * 10 + t[2] * 100 + t[3] * 1000;
+    return o;
+}
+=== probe_f_local_q_pinit_vs11 vs_1_1 vs
+int Count = 3;
+float4 K[4];
+struct VO { float4 p : POSITION; float4 c : COLOR0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = p;
+    float4 t[4] = { p, p, p, p };
+    for (int q = 0; q < Count; ++q) t[q] = p * (q + 1);
+    o.c = t[0] + t[1] * 10 + t[2] * 100 + t[3] * 1000;
+    return o;
+}
+=== probe_f_out_k_pinit_vs11 vs_1_1 vs
+int Count = 3;
+float4 K[4];
+struct VO { float4 p : POSITION; float4 s[4] : TEXCOORD0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = p;
+    for (int i = 0; i < 4; ++i) o.s[i] = p;
+    for (int q = 0; q < Count; ++q) o.s[q] = K[q] * p.x;
+    return o;
+}
+=== probe_f_out_q_pinit_vs11 vs_1_1 vs
+int Count = 3;
+float4 K[4];
+struct VO { float4 p : POSITION; float4 s[4] : TEXCOORD0; };
+VO vs(float4 p : POSITION) {
+    VO o; o.p = p;
+    for (int i = 0; i < 4; ++i) o.s[i] = p;
+    for (int q = 0; q < Count; ++q) o.s[q] = p * (q + 1);
+    return o;
+}

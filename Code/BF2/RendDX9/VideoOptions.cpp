@@ -753,7 +753,7 @@ void buildResolutionList(VideoOptions* vo)
     RendDX9Base* b = baseOfVo(vo);
     vo->resList.clear();
     vo->modeCache.clear();
-    // [CHOSEN, not recovered] memory-safety exception (rules.md): retail calls the base's slot +0x3C
+    // [CHOSEN, not recovered] memory-safety exception (docs/macos-port.md): retail calls the base's slot +0x3C
     // through dword_1023B970 without a test (PE 0x10010763..0x10010773), and that slot enumerates
     // through the IDirect3D9 object; a missing base or Direct3D object faults there. Both stay
     // tested and leave the two lists empty.

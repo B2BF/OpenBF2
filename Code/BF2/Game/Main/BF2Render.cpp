@@ -51,10 +51,7 @@ namespace hfe {
 extern ClassManager*        classManager;
 extern SettingsRepostitory* settings;
 extern BF2Engine*           bf2Engine;      // Shared engine owner.
-                                            // [UNRESOLVED] Profiler/thread registry published by the client runtime.
-                                            // [CHOSEN] Local placement; initialization queries it conditionally, while the
-                                            // original VTune render bracket requires a published instance.
-IBase* profilerSingleton = 0;
+extern IProfilerClient*     profilerClient; // ds:0x9A5C6C, published by Core Module::init (PE 0x68CC5F)
 
 // Frame telemetry is owned by LatencyCompensation and written only by rendering.
 // Its product supplies the clamped render-ahead latency.
@@ -64,21 +61,12 @@ IBase*     g_geometryTemplateManager = 0; // ds:0x9A5578
 
 namespace {
 
-// Pauses or resumes VTune around repeated demo-frame rendering.
-// [CHOSEN, not recovered] The null check stops at a named frontier until the
-// profiler publisher is recovered. [RETIRE-WHEN: client-frame-arm]
-void profilerSetSuspended(IBase* profiler, bool suspended)
+// Pauses or resumes VTune around repeated demo-frame rendering: ds:0x9A5C6C (profilerClient, set
+// from the "Profiler" singleton by Core Module::init, PE 0x68CC5F) +0x2C, dereferenced unguarded as
+// in BF2.exe 0x45342B / 0x4534DC.
+void profilerSetSuspended(bool suspended)
 {
-    if (!profiler)
-    {
-        std::fprintf(stderr, "[FRONTIER] dice::hfe::BF2Render::render: the ds:0x9A5C6C profiler "
-                             "singleton is unpublished (its owner at PE 0x68CC60 is unrecovered), "
-                             "so its +0x2C(%d) VTune bracket cannot be dispatched\n",
-                     suspended ? 1 : 0);
-        std::fflush(stderr);
-        std::abort();
-    }
-    static_cast<IProfilerClient*>(profiler)->pauseVTune(suspended);
+    profilerClient->pauseVTune(suspended);
 }
 
 // Releases collision debug geometry before the renderer module is unloaded.
@@ -281,6 +269,10 @@ void BF2Render::shutdown()
 // Configures the frame's camera and view distance, then drives renderer output.
 // A renderer module must be loaded. Active paths require player manager, render view,
 // video options and profiler services; those dependencies are not null-checked.
+// [TEMP] [CHOSEN, not recovered] the last playback camera matrix, for BF2_PLAY_TRACE's demo arm.
+Mat4 g_demoTraceCameraMatrix;
+bool g_demoTraceCameraValid = false;
+
 bool BF2Render::render(double frameTime, DemoRecorder* recorder)
 {
     // : the module handle decides, not the renderer pointer.
@@ -293,11 +285,12 @@ bool BF2Render::render(double frameTime, DemoRecorder* recorder)
 
     if (recorder && recorder->isOpenForPlayback())
     {
-        // [UNRESOLVED] This aggregate starts uninitialized, unlike the original identity
-        // Mat4 constructor. getCameraTransformation must fill it; partial writes expose
-        // that existing layout/initialization difference.
-        Mat4 transform;
-        recorder->getCameraTransformation(transform, 0);
+        // BF2.exe 0x4532BB: the identity Mat4 constructor (0x440B20), then
+        // DemoRecorder::getPlaybackMatrixAndFOV (0x54BC20) with no FOV out-parameter.
+        Mat4 transform = Mat4::getIdentity();
+        recorder->getPlaybackMatrixAndFOV(&transform, 0);
+        g_demoTraceCameraMatrix = transform;     // [TEMP] BF2_PLAY_TRACE's demo arm (BF2Engine.cpp)
+        g_demoTraceCameraValid = true;
         const float fov    = recorder->demoConfig.getFOV();
         const float aspect = recorder->demoConfig.getAspect();
         m_renderer->getRenderView()->setFov(fov);                  // +0x1C
@@ -338,7 +331,7 @@ bool BF2Render::render(double frameTime, DemoRecorder* recorder)
     int passes = 1;
     if (recorder && recorder->byte84)
     {
-        profilerSetSuspended(profilerSingleton, false);
+        profilerSetSuspended(false);
         passes = config ? config->vtuneRepeatCount : 1;
     }
 
@@ -364,7 +357,7 @@ bool BF2Render::render(double frameTime, DemoRecorder* recorder)
     }
 
     if (recorder && recorder->byte84)
-        profilerSetSuspended(profilerSingleton, true);
+        profilerSetSuspended(true);
 
     return result;
 }

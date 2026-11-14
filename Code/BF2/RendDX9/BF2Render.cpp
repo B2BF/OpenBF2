@@ -444,6 +444,8 @@ public:
     virtual bool present(unsigned int mode);                    // +0xD0
     virtual IRenderView* getRenderView2();                      // +0xD4
     virtual void shutdown();                                    // +0xD8
+    virtual bool getDesktopMode(unsigned int& width, unsigned int& height,
+                                unsigned int& refreshHz);       // +0xDC [CHOSEN] port addition
 
     // Renderer-owned accumulation/Hemi scratch texture at +0x774. These nonvirtual owner methods
     // back the narrow cross-TU HemiMapManager seams without exposing or indexing a vtable.
@@ -4113,7 +4115,7 @@ void setRotationYDegrees(Mat4& matrix, float degrees)
     matrix.m[8] = sine;
     matrix.m[10] = cosine;
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     const float radians = 0.01745329238474369f * degrees;
     float sine;
     float cosine;
@@ -4165,7 +4167,7 @@ void setRotationXDegrees(Mat4& matrix, float degrees)
     matrix.m[9] = -sine;
     matrix.m[10] = cosine;
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     const float radians = 0.01745329238474369f * degrees;
     float sine;
     float cosine;
@@ -6425,6 +6427,20 @@ void Renderer::handleLevelPreLoad(const char* levelName)
 // PE 0x100287B0, slot +0xD8; the destructor (0x1002DA60) runs it too. Unregisters the ECCore
 // handler, releases the console font and overlay, drops the five frame fences (the pointers are
 // not cleared), leaves both listener lists, then shuts the D3D subsystems down.
+// +0xDC [CHOSEN, not recovered] Port addition (IRenderer.h): the adapter's desktop mode as the
+// renderer's own GetAdapterDisplayMode calls see it (createD3DDeviceAndSwapChains, PE 0x1000A9C0).
+bool Renderer::getDesktopMode(unsigned int& width, unsigned int& height, unsigned int& refreshHz)
+{
+    RendDX9Base* b = reinterpret_cast<RendDX9Base*>(this);
+    D3DDISPLAYMODE mode = {};
+    if (!b->d3d9 || FAILED(b->d3d9->GetAdapterDisplayMode(b->adapter, &mode)) || !mode.Width || !mode.Height)
+        return false;
+    width = mode.Width;
+    height = mode.Height;
+    refreshHz = mode.RefreshRate;
+    return true;
+}
+
 void Renderer::shutdown()
 {
     ::dice::hfe::eventManager->unregisterEventHandler(

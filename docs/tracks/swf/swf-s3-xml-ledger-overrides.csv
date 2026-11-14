@@ -1,0 +1,22 @@
+address,symbol,file,status,reason
+0x1008B200,gameswf::xmlnode_new,Code/BF2/External/gameswf/gameswf_xml.cpp,done,S3:portable;XML factory;ignores arguments;[INFERRED]:native-name-and-placement
+0x1008B240,gameswf::xml_new,Code/BF2/External/gameswf/gameswf_xml.cpp,done,S3:portable;XML document factory;ignores arguments;[INFERRED]:native-name-and-placement
+0x100A8350,gameswf::xml_node::clear_children,Code/BF2/External/gameswf/gameswf_xml.cpp,done,S3:portable;head-clear;chosen-native-reference-ownership
+0x100A8360,gameswf::xml_node::insert_sibling,Code/BF2/External/gameswf/gameswf_xml.cpp,done,S3:portable;sibling-splice;chosen-native-reference-ownership
+0x100A83A0,gameswf::xml_has_child_nodes,Code/BF2/External/gameswf/gameswf_xml.cpp,done,S3:portable;read-before-result-release;no-arity-check
+0x100A8400,gameswf::xml_document::clear_children,Code/BF2/External/gameswf/gameswf_xml.cpp,done,S3:portable;head-clear-and-current-reset
+0x100A8420,gameswf::xml_node::insert_sibling,Code/BF2/External/gameswf/gameswf_xml.cpp,done,S3:portable;XML-override-identical;native-inherited-body
+0x100A8460,gameswf::xml_document::end_element,Code/BF2/External/gameswf/gameswf_xml.cpp,done,S3:portable;discard-name;current-parent
+0x100A8470,gameswf::xml_append_child,Code/BF2/External/gameswf/gameswf_xml.cpp,done,S3:portable;no-detach-guard-or-result;native-link-bridge
+0x100A84C0,gameswf::xml_create_element,Code/BF2/External/gameswf/gameswf_xml.cpp,done,S3:portable;allocate-before-argument-conversion;native-allocation-bridge
+0x100A8530,gameswf::xml_document::set_member,Code/BF2/External/gameswf/gameswf_xml.cpp,done,S3:portable;case-sensitive-ignoreWhite;Boolean-conversion
+0x100A8570,gameswf::xml_load,Code/BF2/External/gameswf/gameswf_xml.cpp,done,S3:portable;expat3-owner-approved-parser-substitute;nonfinal-parse-status-and-String-onData;supersedes-exact-source-stop
+0x100A87F0,gameswf::xml_ondata,Code/BF2/External/gameswf/gameswf_xml.cpp,done,S3:portable;onLoad-definedness-argument;native-dispatch-bridge;caller-result-untouched
+0x100A8920,gameswf::xml_node::get_member,Code/BF2/External/gameswf/gameswf_xml.cpp,done,S3:portable;linked-numeric-children;fresh-Array;sibling-typos;native-String-Array-ownership-bridges
+0x100A8BE0,gameswf::xml_document::get_member,Code/BF2/External/gameswf/gameswf_xml.cpp,done,S3:portable;current-based-loaded;signed-status;native-double-release-ownership-bridge
+0x100A8D50,gameswf::xml_node::enumerate,Code/BF2/External/gameswf/gameswf_xml.cpp,done,S3:portable;child-indices-only;native-environment-push-bridge
+0x100A8EB0,gameswf::xml_node::xml_node,Code/BF2/External/gameswf/gameswf_xml.cpp,done,S3:portable-order;native-heap-String-and-attributes;strong-child-links;[INFERRED]:native-name-and-placement
+0x100A9120,gameswf::release_xml_script_references,Code/BF2/External/gameswf/gameswf_xml.cpp,chosen,S3:issue-7-native-registry-edge-clear-adapter;retail-mark-traversal-not-implemented;coordinator-action-hook-pending
+0x100A9160,gameswf::xml_document::xml_document,Code/BF2/External/gameswf/gameswf_xml.cpp,done,S3:portable;load-then-onData;current-self;false-ignoreWhite;status-minus-one
+0x100A92F0,gameswf::xml_document::character_data,Code/BF2/External/gameswf/gameswf_xml.cpp,done,S3:portable;fragment-nodes;CR-LF-tab-and-ignoreWhite-filters;native-String-assignment-bridge
+0x100A93E0,gameswf::xml_document::start_element,Code/BF2/External/gameswf/gameswf_xml.cpp,done,S3:portable;create-link-before-attributes;native-attribute-object-bridge

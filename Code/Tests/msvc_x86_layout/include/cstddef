@@ -1,0 +1,6 @@
+// [TEMP] Minimal stand-in for the MSVC x86 <cstddef> used only by msvc_x86_layout.cpp (layout check).
+#pragma once
+typedef unsigned int size_t;
+typedef int ptrdiff_t;
+namespace std { using ::size_t; using ::ptrdiff_t; }
+#define offsetof(type, member) __builtin_offsetof(type, member)

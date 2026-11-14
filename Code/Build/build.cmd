@@ -205,6 +205,14 @@ for /r "%ROOT%" %%F in (*.cpp) do (
             if /i "%%~fF"=="%ROOT%\Menu\MenuTeamManagerData.cpp" set "ENGINE_OBJECT=0"
             if /i "%%~fF"=="%ROOT%\Menu\MenuTeamManagerConsole.cpp" set "ENGINE_OBJECT=0"
             if /i "%%~fF"=="%ROOT%\Menu\SwiffHostConsole.cpp" set "ENGINE_OBJECT=0"
+            rem 2026-11-13: the PunkBuster client glue exists only in BF2.exe (0x435900..0x436434); the
+            rem ELF dedicated server has only the server half (PbServer.cpp). Every caller is #if !DEDICATED.
+            if /i "%%~fF"=="%ROOT%\Game\PunkBuster\PbClient.cpp" set "ENGINE_OBJECT=0"
+            rem 2026-11-13: the voice client (Game\VoipClient: GameSpy Voice 2 capture/playback and the
+            rem waveIn mixer) exists only in BF2.exe; CMake lists the directory in bf2_client_only_sources.
+            rem Linking it here left 30 of the 86 unresolved externals (gv*, GVI*, mixer*).
+            echo %%F | find /i "\Game\VoipClient\" >nul
+            if not errorlevel 1 set "ENGINE_OBJECT=0"
             if "!ENGINE_OBJECT!"=="1" echo "%OUT%\!OBJN!_%%~nF.obj">>"%ENGINE_RSP%"
         )
     )
@@ -315,7 +323,13 @@ rem /NODEFAULTLIB:python23.lib - PC\pyconfig.h emits `#pragma comment(lib,"pytho
 rem every TU that does not define Py_BUILD_CORE, so once dice_py became a real DLL (2026-08-18)
 rem THIS DIAGNOSTIC LINK started dying on LNK1104 before it counted a single gap. The report is a
 rem measurement tool - it has to survive.
-link /nologo /NODEFAULTLIB:python23.lib /out:"%OUT%\bf2.exe" /subsystem:console @"%ENGINE_RSP%" Ws2_32.lib user32.lib > "%OUT%\link.log" 2>&1
+rem
+rem 2026-11-13: advapi32, shell32 and dbghelp join Ws2_32/user32, as on CMake's bf2_w32ded link
+rem (SHGetFolderPathW, SHFileOperationW, ShellExecuteExA, MiniDumpWriteDump). What remains at batch 20
+rem is not an engine gap: the CPython imports above (deliberately unlinked) and CBF2VoipServer's six
+rem members, which bf2_w32ded.exe imports from the BF2VoipServer_w32ded.dll side image (CMake links
+rem bf2_voipserver's import library; this script does not build that image).
+link /nologo /NODEFAULTLIB:python23.lib /out:"%OUT%\bf2.exe" /subsystem:console @"%ENGINE_RSP%" Ws2_32.lib user32.lib advapi32.lib shell32.lib dbghelp.lib > "%OUT%\link.log" 2>&1
 find /c "unresolved external symbol" < "%OUT%\link.log" > "%OUT%\count.txt"
 set /p NRAW=<"%OUT%\count.txt"
 set "NFINAL=0"
@@ -338,7 +352,7 @@ rem therefore stay visible. A response file avoids cmd.exe's command-line length
         if errorlevel 1 echo "%%~fF"
     )
 )
-link /nologo /NODEFAULTLIB:python23.lib /out:"%OUT%\bf2_factory_free.exe" /subsystem:console @"%OUT%\factory_free.rsp" Ws2_32.lib user32.lib > "%OUT%\link_factory_free.log" 2>&1
+link /nologo /NODEFAULTLIB:python23.lib /out:"%OUT%\bf2_factory_free.exe" /subsystem:console @"%OUT%\factory_free.rsp" Ws2_32.lib user32.lib advapi32.lib shell32.lib dbghelp.lib > "%OUT%\link_factory_free.log" 2>&1
 find /c "unresolved external symbol" < "%OUT%\link_factory_free.log" > "%OUT%\count_factory_free.txt"
 set /p NFRAW=<"%OUT%\count_factory_free.txt"
 set "NFFINAL=0"

@@ -1460,12 +1460,10 @@ namespace gameswf
 #if defined(_WIN32)
 		return static_cast<unsigned short>(GetAsyncKeyState(code)) == 0x8001;
 #else
-		// [TEMP] [CHOSEN, not recovered] Hosts must install their native adapter.
-		// [RETIRE-WHEN: swf-posix-async-input] Supply/validate the remaining
-		// POSIX client's asynchronous key source before retiring this stop.
-		std::fprintf(stderr, "[FRONTIER] gameswf::is_key_down native asynchronous input unavailable\n");
-		std::fflush(stderr);
-		std::abort();
+		// [CHOSEN, not recovered] Outside Windows the key state comes only from the host adapter,
+		// which SwiffPlayer installs when it initializes (the macOS client is the one POSIX client
+		// that builds SwiffPlayer). With no adapter installed (a bare test harness) Enter reads up.
+		return false;
 #endif
 	}
 
@@ -2097,15 +2095,12 @@ namespace gameswf
 		{
 			// [CHOSEN, not recovered] S3 bridge: adjust the native object interface.
 			as_object* proto = link->cast_to_as_object();
-			if (!proto)
-			{
-				// [TEMP] [CHOSEN, not recovered] Native movies have no as_object base.
-				// [RETIRE-WHEN: swf-s3-object-prototype] Recover the common accessor
-				// owner with sprite dispatch and validate a movie-valued __proto__ link.
-				std::fprintf(stderr, "[FRONTIER] gameswf::as_object::get_property non-object prototype reached\n");
-				std::fflush(stderr);
-				std::abort();
-			}
+			// A movie clip on the chain ends the walk "not found". Retail reads the accessor table
+			// and link at the script-object offsets of the clip's secondary interface, where a
+			// movie keeps unrelated empty state; retail 1.50 finds no getter there and does not
+			// fault (docs/tracks/game/swf-proto-retail-probe.md, v2 test 2 red, tests 1/5 likewise).
+			// get_member still finds the clip's ordinary members afterwards (test 1 green).
+			if (!proto) return false;
 			if (proto->get_property(name, val, receiver)) return true;
 			link = proto->m_prototype;
 		}
@@ -2126,15 +2121,9 @@ namespace gameswf
 		for (as_object_interface* link = m_prototype; link; )
 		{
 			as_object* proto = link->cast_to_as_object();
-			if (!proto)
-			{
-				// [TEMP] [CHOSEN, not recovered]
-				// [RETIRE-WHEN: swf-s3-object-prototype] Recover the common accessor
-				// owner with sprite dispatch and validate a movie-valued __proto__ link.
-				std::fprintf(stderr, "[FRONTIER] gameswf::as_object::set_property non-object prototype reached\n");
-				std::fflush(stderr);
-				std::abort();
-			}
+			// A movie clip on the chain ends the walk "not found", as in get_property: no setter
+			// runs (probe v2 test 3 red) and set_member stores an own member (test 6 green).
+			if (!proto) return false;
 			if (proto->set_property(name, val, receiver)) return true;
 			link = proto->m_prototype;
 		}
@@ -2153,6 +2142,10 @@ namespace gameswf
 		}
 		// [CHOSEN, not recovered] S3 bridge: adjust the native object interface.
 		as_object*	obj = fn.this_ptr->cast_to_as_object();
+		// [CHOSEN, not recovered] A movie-clip receiver accepts the call and keeps nothing.
+		// Retail writes the pair into the accessor table at the clip's secondary-interface offset,
+		// where no lookup ever finds it: no fault, the getter is never found (probe v2 test 5).
+		if (obj == NULL) return;
 		// 0x1009A126 / 0x1009A136 capture the borrowed functions before
 		// converting the name. Do not create retaining as_value temporaries.
 		const as_object::property_accessors accessors = {

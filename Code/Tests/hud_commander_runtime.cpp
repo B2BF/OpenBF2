@@ -399,6 +399,44 @@ int main() {
               "an unselected row's highlight is the never-written zero colour");
         check(commander->m_selectedSquads.to_ulong() == 2 && voHelpCalls == 0,
               "painting leaves squad 1 selected; no VO help without talking or requests");
+        // Voice on for the leader: column 33's frame follows the voice client's leader channel (+0xA0,
+        // read with no null test at BF2.exe 0x79410A; the client image always constructs one). The
+        // fake answers that slot only: the 41st virtual, as in BF2VoipClient's MSVC vtable.
+        {
+#define FAKE_VOIP_SLOT(n) virtual void slot##n() {}
+            struct FakeVoip {
+                FAKE_VOIP_SLOT(00) FAKE_VOIP_SLOT(01) FAKE_VOIP_SLOT(02) FAKE_VOIP_SLOT(03) FAKE_VOIP_SLOT(04)
+                FAKE_VOIP_SLOT(05) FAKE_VOIP_SLOT(06) FAKE_VOIP_SLOT(07) FAKE_VOIP_SLOT(08) FAKE_VOIP_SLOT(09)
+                FAKE_VOIP_SLOT(10) FAKE_VOIP_SLOT(11) FAKE_VOIP_SLOT(12) FAKE_VOIP_SLOT(13) FAKE_VOIP_SLOT(14)
+                FAKE_VOIP_SLOT(15) FAKE_VOIP_SLOT(16) FAKE_VOIP_SLOT(17) FAKE_VOIP_SLOT(18) FAKE_VOIP_SLOT(19)
+                FAKE_VOIP_SLOT(20) FAKE_VOIP_SLOT(21) FAKE_VOIP_SLOT(22) FAKE_VOIP_SLOT(23) FAKE_VOIP_SLOT(24)
+                FAKE_VOIP_SLOT(25) FAKE_VOIP_SLOT(26) FAKE_VOIP_SLOT(27) FAKE_VOIP_SLOT(28) FAKE_VOIP_SLOT(29)
+                FAKE_VOIP_SLOT(30) FAKE_VOIP_SLOT(31) FAKE_VOIP_SLOT(32) FAKE_VOIP_SLOT(33) FAKE_VOIP_SLOT(34)
+                FAKE_VOIP_SLOT(35) FAKE_VOIP_SLOT(36) FAKE_VOIP_SLOT(37) FAKE_VOIP_SLOT(38) FAKE_VOIP_SLOT(39)
+                virtual bool getUsingLeaderChannel() { ++reads; return leaderChannel; }
+                bool leaderChannel = false;
+                int reads = 0;
+            };
+#undef FAKE_VOIP_SLOT
+            FakeVoip voip;
+            bf2VoipClient = reinterpret_cast<BF2VoipClient*>(&voip);
+            // The fixture's player manager answers the same squad list for every squad, so the
+            // voice-enabled leader heads all nine rows and each row reads the client once (retail
+            // 0x79410A runs per row, after that row's leader test).
+            lead.voip = true;
+            commander->update(true);
+            check(voip.reads == 9 && image(33, 0, commander->m_textures[3], commanderFrameColors[1])
+                  && image(34, 0, commander->m_textures[7], commanderIconColors[1])
+                  && image(33, 1, commander->m_textures[3], commanderFrameColors[0]),
+                  "voice-enabled leader, default channel: palette frames (selected and not) and the active icon");
+            voip.leaderChannel = true;
+            commander->update(true);
+            check(voip.reads == 18 && image(33, 0, commander->m_textures[3], Color{1, 1, 0, 1})
+                  && image(33, 8, commander->m_textures[3], Color{1, 1, 0, 1}),
+                  "voice-enabled leader on the leader channel: the yellow frame in every row");
+            lead.voip = false;
+            bf2VoipClient = nullptr;
+        }
         players.local = nullptr; squadManager = nullptr;
         players.byId.clear(); players.squadByRank.clear(); players.squadByScore.clear(); players.squadPlayers.clear();
     }

@@ -1,0 +1,24 @@
+# [TEMP] ragDoll.drawConstraints and ragDoll.save: spawn, enable constraint drawing, write
+# ragDollConstraints.inc (into the game folder, as retail: the run's client-root/
+# ragdollconstraints.inc), then suicide so
+# the player's own ragdoll shows its red constraint segments in the spawn screen's map view.
+# Both console methods are access-restricted: run with
+# --client-env BF2_CLIENT_CONSOLE_FULL_ACCESS=1 (and --ai-spawn-only, as play-combat).
+include join-and-spawn
+wait-ms 1000
+key grave
+wait-ms 1000
+type ragDoll.drawConstraints 1
+key enter
+wait-ms 300
+type ragDoll.save
+key enter
+wait-ms 500
+capture console
+key grave
+wait-ms 1000
+key enter
+wait-ms 2500
+hud-click 604 546
+wait-ms 3000
+capture dead

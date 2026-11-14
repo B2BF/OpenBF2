@@ -122,7 +122,7 @@ float roundedPairProduct(float left, float right)
     // fld; fmul; fstp dword - one rounding of the exact product to float.
     return static_cast<float>(static_cast<double>(left) * static_cast<double>(right));
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     float value;
     // [CHOSEN, not recovered] Preserve x87 product float store.
     value = bf2x87::store(bf2x87::mul(bf2x87::wide(left), bf2x87::wide(right)));
@@ -135,7 +135,7 @@ double pairProduct(float left, float right)
     // fld; fmul; fstp qword - the exact product, no float rounding.
     return static_cast<double>(left) * static_cast<double>(right);
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     double value;
     // [CHOSEN, not recovered] Preserve x87 product double store.
     value = bf2x87::storeDouble(bf2x87::mul(bf2x87::wide(left), bf2x87::wide(right)));
@@ -153,7 +153,7 @@ void cofactor(float& output, double a0, double b0, double a1, double b1,
     const double second = a3 * b3 + a4 * b4 + a5 * b5;
     output = static_cast<float>(static_cast<double>(output) - second);
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     // [CHOSEN, not recovered] Preserve x87 staged cofactor float stores.
     bf2x87::cofactor(output, a0, b0, a1, b1, a2, b2, a3, b3, a4, b4, a5, b5);
 #endif
@@ -172,7 +172,7 @@ void divideByDeterminant(const float* input, float* output)
     for (int i = 0; i < 16; ++i)
         output[i] = static_cast<float>(reciprocal * static_cast<double>(output[i]));
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     const float one = 1.0f;
     // Retain the reciprocal on the x87 stack throughout all16 scaled stores.
     // No zero/NaN/infinity test exists in either shipped image.

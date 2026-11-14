@@ -5,6 +5,7 @@
 #import <AppKit/AppKit.h>
 #import <QuartzCore/CAMetalLayer.h>
 #import <Metal/Metal.h>
+#include <IOKit/IOKitLib.h>
 #include <cstdio>
 #include <cstdlib>
 #include <new>
@@ -76,12 +77,57 @@ Adapter* createAdapter()
 }
 void destroyAdapter(Adapter* a) { mainThread("IDirect3D9::Release"); delete a; }
 const char* adapterName(Adapter* a) { mainThread("IDirect3D9::GetAdapterIdentifier"); return a->device.name.UTF8String; }
+// A 32-bit little-endian IORegistry data property ("vendor-id", "device-id" of a PCI device).
+static bool registryWord(io_registry_entry_t e, CFStringRef key, unsigned& out)
+{
+    CFTypeRef v = IORegistryEntryCreateCFProperty(e, key, kCFAllocatorDefault, 0);
+    if (!v) return false;
+    bool ok = false;
+    if (CFGetTypeID(v) == CFDataGetTypeID() && CFDataGetLength(static_cast<CFDataRef>(v)) >= 2) {
+        unsigned char b[4] = {};
+        CFDataGetBytes(static_cast<CFDataRef>(v), CFRangeMake(0, std::min<CFIndex>(4, CFDataGetLength(static_cast<CFDataRef>(v)))), b);
+        out = unsigned(b[0]) | unsigned(b[1]) << 8 | unsigned(b[2]) << 16 | unsigned(b[3]) << 24;
+        ok = true;
+    }
+    CFRelease(v);
+    return ok;
+}
+// [CHOSEN, not recovered] Owner decision 2026-11-12: the adapter reports the real GPU vendor and
+// device. Intel and AMD GPUs are PCI devices: the MTLDevice's IORegistry entry or one of its
+// ancestors carries "vendor-id"/"device-id". Apple silicon GPUs (AGX) have no PCI identity: they
+// report Apple's PCI vendor ID 0x106B and device 0.
+void adapterPciIds(Adapter* a, unsigned& vendor, unsigned& device)
+{
+    mainThread("IDirect3D9::GetAdapterIdentifier");
+    vendor = 0x106B; device = 0;
+    io_registry_entry_t e = IOServiceGetMatchingService(MACH_PORT_NULL, IORegistryEntryIDMatching(a->device.registryID));
+    for (int depth = 0; e && depth < 8; ++depth) {
+        unsigned v = 0, d = 0;
+        if (registryWord(e, CFSTR("vendor-id"), v) && v && v != 0xffff) {
+            vendor = v & 0xffff;
+            if (registryWord(e, CFSTR("device-id"), d)) device = d & 0xffff;
+            IOObjectRelease(e);
+            return;
+        }
+        io_registry_entry_t parent = 0;
+        const kern_return_t k = IORegistryEntryGetParentEntry(e, kIOServicePlane, &parent);
+        IOObjectRelease(e);
+        e = k == KERN_SUCCESS ? parent : 0;
+    }
+    if (e) IOObjectRelease(e);
+}
 bool supportsSamples(Adapter* a, unsigned samples)
 {
     mainThread("IDirect3D9::CheckDeviceMultiSampleType");
     return samples >= 2 && samples <= 16 && [a->device supportsTextureSampleCount:samples];
 }
 bool supportsBC(Adapter* a) { mainThread("IDirect3D9::CheckDeviceFormat"); return a->device.supportsBCTextureCompression; }
+unsigned availableTextureMemory(Frame* f)
+{
+    mainThread("IDirect3DDevice9::GetAvailableTextureMem");
+    const unsigned long long bytes = f->device.recommendedMaxWorkingSetSize;
+    return bytes > 0xffff0000ull ? 0xffff0000u : unsigned(bytes & ~0xfffffull); // D3D9 rounds to 1 MB
+}
 
 static void endDraws(Frame* f);
 // [CHOSEN, not recovered] Binds a pass's colour attachment; the multisampled back buffer is

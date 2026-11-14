@@ -1,0 +1,656 @@
+[CHOSEN, not recovered] vkd3d-shader 2.1 patch for the BF2 macOS port (LGPL-2.1+, as vkd3d).
+SM1/2 bytecode legalisation for rules D3D9's shader validator (D3DX assembler and
+CreateVertexShader/CreatePixelShader, checked with d3dx9_25) enforces and MojoShader does not:
+X5326 no read of an unwritten temp component (a whole-vector copy of a partly written temp),
+X5346/X5393 one distinct c# per vs_1_x/vs_2_x instruction, X5202 the ps_2_0/ps_2_b swizzle set,
+X5406 oC#/oDepth written by mov only in ps_2_x. A pass after temp allocation (which picks the
+final swizzles) copies the extra constants to scratch temps, re-encodes or assembles swizzled
+operands in a scratch temp, routes output writes through a scratch temp, and drops destination
+components computed only from unwritten temps (or writes the unwritten components from c0 first;
+that part also runs for SM3). Scratch temps are allocated temps that are dead at the instruction
+(straight-line liveness), else added above the allocation.
+
+--- a/libs/vkd3d-shader/d3dbc.c	2026-11-13 15:22:16
++++ b/libs/vkd3d-shader/d3dbc.c	2026-11-13 15:22:16
+@@ -2540,9 +2540,630 @@
+     for (ins = vsir_program_iterator_head(&it); ins; ins = vsir_program_iterator_next(&it))
+     {
+         d3dbc_write_vsir_instruction(compiler, ins);
++    }
++}
++
++/* BF2 macOS port: legalisation of allocated SM1/2 programs for rules D3D9's shader validator
++ * (D3DX assembler, CreateVertexShader/CreatePixelShader) enforces:
++ *  - X5326: no read of a temp component before any write;
++ *  - X5346/X5393: vs_1_x/vs_2_x instructions read at most one distinct c# (sincos excepted);
++ *  - X5202: ps_2_0/ps_2_b source swizzles are .xyzw, .x, .y, .z, .w, .yzxw, .zxyw or .wzyx;
++ *  - X5406: ps_2_x writes oC#/oDepth with mov only.
++ * Runs after temp allocation (which packs values into components and so picks swizzles) and
++ * adds temps above the allocated ones. */
++struct d3dbc_legalise
++{
++    struct vsir_program *program;
++    /* Temps added above the allocated ones when no allocated temp is free (scratch_used of them). */
++    unsigned int scratch_base, scratch_used;
++    /* Per original instruction position, the live components of each allocated temp on entry
++     * (NULL with flow control: then only added temps are used). */
++    uint8_t *live;
++    unsigned int live_regs, live_count;
++    /* Current instruction: its position before this pass's insertions, and the scratch temps
++     * picked for it. */
++    const struct vkd3d_shader_instruction *cur;
++    unsigned int position, picks[8], pick_count, fresh_count;
++    bool after;
++};
++
++static unsigned int d3dbc_legalise_positions(const struct vkd3d_shader_instruction *ins, unsigned int j, bool *per_component)
++{
++    *per_component = false;
++    switch (ins->opcode)
++    {
++        case VSIR_OP_DP3: case VSIR_OP_NRM: case VSIR_OP_CRS:
++            return 0x7;
++        case VSIR_OP_DP4:
++            return 0xf;
++        case VSIR_OP_DP2ADD:
++            return j < 2 ? 0x3 : 0x1;
++        case VSIR_OP_RCP: case VSIR_OP_RSQ: case VSIR_OP_EXP: case VSIR_OP_LOG:
++        case VSIR_OP_EXPP: case VSIR_OP_LOGP: case VSIR_OP_POW:
++            return 0x1;
++        case VSIR_OP_SINCOS:
++            return j ? 0xf : 0x1;
++        case VSIR_OP_LIT:
++            return 0xb;
++        case VSIR_OP_DST:
++            return j ? 0xa : 0x6;
++        case VSIR_OP_TEX: case VSIR_OP_TEXLD: case VSIR_OP_TEXLDD: case VSIR_OP_TEXLDL:
++        case VSIR_OP_TEXKILL: case VSIR_OP_TEXCRD:
++            return 0xf;
++        default:
++            if (!ins->dst_count)
++                return 0xf;
++            *per_component = true;
++            return ins->dst[0].write_mask & VKD3DSP_WRITEMASK_ALL;
++    }
++}
++
++static unsigned int d3dbc_legalise_read_mask(const struct vsir_src_operand *src, unsigned int positions)
++{
++    unsigned int i, mask = 0;
++
++    for (i = 0; i < 4; ++i)
++    {
++        if (positions & (1u << i))
++            mask |= 1u << vsir_swizzle_get_component(src->swizzle, i);
++    }
++    return mask;
++}
++
++static bool d3dbc_legalise_skip(const struct vkd3d_shader_instruction *ins)
++{
++    switch (ins->opcode)
++    {
++        case VSIR_OP_DCL: case VSIR_OP_DCL_TEMPS: case VSIR_OP_DCL_SAMPLER: case VSIR_OP_DCL_INPUT:
++        case VSIR_OP_DCL_INPUT_PS: case VSIR_OP_DCL_OUTPUT: case VSIR_OP_DCL_CONSTANT_BUFFER:
++        case VSIR_OP_DEF: case VSIR_OP_DEFI: case VSIR_OP_DEFB: case VSIR_OP_NOP:
++            return true;
++        default:
++            return false;
++    }
++}
++
++static void d3dbc_legalise_temp_src(struct vsir_src_operand *src, unsigned int idx, uint32_t swizzle)
++{
++    vsir_src_operand_init(src, VSIR_REGISTER_TEMP, VSIR_DATA_F32, 1);
++    src->reg.idx[0].offset = idx;
++    src->reg.dimension = VSIR_DIMENSION_VEC4;
++    src->swizzle = swizzle;
++}
++
++static void d3dbc_legalise_temp_dst(struct vsir_dst_operand *dst, unsigned int idx, uint32_t write_mask)
++{
++    vsir_dst_operand_init(dst, VSIR_REGISTER_TEMP, VSIR_DATA_F32, 1);
++    dst->reg.idx[0].offset = idx;
++    dst->reg.dimension = VSIR_DIMENSION_VEC4;
++    dst->write_mask = write_mask;
++}
++
++/* Replaces the operand's register by a temp, keeping swizzle and modifiers. */
++static void d3dbc_legalise_retarget_src(struct vsir_src_operand *src, unsigned int idx, uint32_t swizzle)
++{
++    enum vkd3d_shader_src_modifier modifiers = src->modifiers;
++
++    d3dbc_legalise_temp_src(src, idx, swizzle);
++    src->modifiers = modifiers;
++}
++
++struct d3dbc_legalise_mov
++{
++    unsigned int dst_idx;
++    uint32_t write_mask;
++    struct vsir_src_operand src;
++};
++
++/* Inserts the movs in front of the iterator's instruction; the iterator keeps pointing at it. */
++static enum vkd3d_result d3dbc_legalise_insert_movs(struct d3dbc_legalise *l, struct vsir_program_iterator *it,
++        const struct d3dbc_legalise_mov *movs, unsigned int count)
++{
++    struct vsir_program_iterator ins_it;
++    struct vkd3d_shader_instruction *ins;
++    struct vkd3d_shader_location loc;
++    unsigned int i;
++
++    if (!count)
++        return VKD3D_OK;
++    loc = vsir_program_iterator_current(it)->location;
++    if (!vsir_program_iterator_insert_before(it, &ins_it, count))
++        return VKD3D_ERROR_OUT_OF_MEMORY;
++    for (i = 0, ins = vsir_program_iterator_current(&ins_it); i < count; ++i, ins = vsir_program_iterator_next(&ins_it))
++    {
++        if (!vsir_instruction_init_with_params(l->program, ins, &loc, VSIR_OP_MOV, 1, 1))
++            return VKD3D_ERROR_OUT_OF_MEMORY;
++        d3dbc_legalise_temp_dst(&ins->dst[0], movs[i].dst_idx, movs[i].write_mask);
++        ins->src[0] = movs[i].src;
++        ins->src[0].modifiers = VKD3DSPSM_NONE;
++    }
++    return VKD3D_OK;
++}
++
++static bool d3dbc_legalise_uses_temp(const struct vkd3d_shader_instruction *ins, unsigned int idx)
++{
++    unsigned int j;
++
++    for (j = 0; j < ins->dst_count; ++j)
++    {
++        if (ins->dst[j].reg.type == VSIR_REGISTER_TEMP && ins->dst[j].reg.idx[0].offset == idx)
++            return true;
++    }
++    for (j = 0; j < ins->src_count; ++j)
++    {
++        if (ins->src[j].reg.type == VSIR_REGISTER_TEMP && ins->src[j].reg.idx[0].offset == idx)
++            return true;
++    }
++    return false;
++}
++
++/* Starts scratch selection for an instruction; `after`: the scratch is written by the instruction
++ * and read after it (output writes), else written before it and read by it. */
++static void d3dbc_legalise_begin(struct d3dbc_legalise *l, const struct vkd3d_shader_instruction *ins,
++        unsigned int position, bool after)
++{
++    l->cur = ins;
++    l->position = position;
++    l->after = after;
++    l->pick_count = 0;
++    l->fresh_count = 0;
++}
++
++/* Scratch temp k of the current instruction: an allocated temp that is dead there (not live on
++ * entry, or on exit for `after`, and not an operand), else one added above the allocation. */
++static unsigned int d3dbc_legalise_scratch(struct d3dbc_legalise *l, unsigned int k)
++{
++    unsigned int r, j, idx;
++
++    if (k < l->pick_count)
++        return l->picks[k];
++    idx = ~0u;
++    if (l->live && l->position + 1 <= l->live_count)
++    {
++        const uint8_t *live = &l->live[(l->position + (l->after ? 1 : 0)) * l->live_regs];
++
++        for (r = 0; r < l->live_regs && idx == ~0u; ++r)
++        {
++            bool taken = live[r] || d3dbc_legalise_uses_temp(l->cur, r);
++
++            for (j = 0; j < l->pick_count && !taken; ++j)
++                taken = l->picks[j] == r;
++            if (!taken)
++                idx = r;
++        }
+     }
++    if (idx == ~0u)
++    {
++        idx = l->scratch_base + l->fresh_count++;
++        if (l->fresh_count > l->scratch_used)
++            l->scratch_used = l->fresh_count;
++    }
++    if (l->pick_count < ARRAY_SIZE(l->picks))
++        l->picks[l->pick_count++] = idx;
++    return idx;
+ }
+ 
++static bool d3dbc_legalise_has_flow_control(struct vsir_program *program)
++{
++    struct vsir_program_iterator it = vsir_program_iterator(&program->instructions);
++    struct vkd3d_shader_instruction *ins;
++
++    for (ins = vsir_program_iterator_head(&it); ins; ins = vsir_program_iterator_next(&it))
++    {
++        switch (ins->opcode)
++        {
++            case VSIR_OP_REP: case VSIR_OP_ENDREP: case VSIR_OP_LOOP: case VSIR_OP_ENDLOOP:
++            case VSIR_OP_IF: case VSIR_OP_IFC: case VSIR_OP_ELSE: case VSIR_OP_ENDIF:
++            case VSIR_OP_BREAK: case VSIR_OP_BREAKC: case VSIR_OP_BREAKP:
++            case VSIR_OP_CALL: case VSIR_OP_CALLNZ: case VSIR_OP_RET: case VSIR_OP_LABEL:
++                return true;
++            default:
++                break;
++        }
++    }
++    return false;
++}
++
++/* Backward liveness of the allocated temps, per component, over straight-line code. */
++static enum vkd3d_result d3dbc_legalise_compute_liveness(struct d3dbc_legalise *l)
++{
++    struct vsir_program *program = l->program;
++    unsigned int count = program->instructions.count, regs = l->scratch_base, i, j;
++    bool per_component;
++    uint8_t *live;
++
++    vkd3d_free(l->live);
++    l->live = NULL;
++    if (!regs || d3dbc_legalise_has_flow_control(program))
++        return VKD3D_OK;
++    if (!(live = vkd3d_calloc((size_t)(count + 1) * regs, 1)))
++        return VKD3D_ERROR_OUT_OF_MEMORY;
++    for (i = count; i-- > 0;)
++    {
++        const struct vkd3d_shader_instruction *ins = &program->instructions.elements[i];
++        uint8_t *in = &live[i * regs];
++
++        memcpy(in, &live[(i + 1) * regs], regs);
++        if (d3dbc_legalise_skip(ins))
++            continue;
++        for (j = 0; j < ins->dst_count; ++j)
++        {
++            const struct vsir_dst_operand *dst = &ins->dst[j];
++
++            if (dst->reg.type == VSIR_REGISTER_TEMP && dst->reg.idx[0].offset < regs && !dst->reg.idx[0].rel_addr)
++                in[dst->reg.idx[0].offset] &= ~dst->write_mask;
++        }
++        for (j = 0; j < ins->src_count; ++j)
++        {
++            const struct vsir_src_operand *src = &ins->src[j];
++
++            if (src->reg.type == VSIR_REGISTER_TEMP && src->reg.idx[0].offset < regs)
++                in[src->reg.idx[0].offset] |= d3dbc_legalise_read_mask(src, d3dbc_legalise_positions(ins, j, &per_component));
++        }
++        /* texkill reads its destination operand. */
++        if (ins->opcode == VSIR_OP_TEXKILL && ins->dst_count && ins->dst[0].reg.type == VSIR_REGISTER_TEMP
++                && ins->dst[0].reg.idx[0].offset < regs)
++            in[ins->dst[0].reg.idx[0].offset] |= VKD3DSP_WRITEMASK_ALL;
++    }
++    l->live = live;
++    l->live_regs = regs;
++    l->live_count = count;
++    return VKD3D_OK;
++}
++
++static bool d3dbc_legalise_has_loops(struct vsir_program *program)
++{
++    struct vsir_program_iterator it = vsir_program_iterator(&program->instructions);
++    struct vkd3d_shader_instruction *ins;
++
++    for (ins = vsir_program_iterator_head(&it); ins; ins = vsir_program_iterator_next(&it))
++    {
++        if (ins->opcode == VSIR_OP_REP || ins->opcode == VSIR_OP_LOOP || ins->opcode == VSIR_OP_CALL
++                || ins->opcode == VSIR_OP_CALLNZ)
++            return true;
++    }
++    return false;
++}
++
++/* X5326. A component read before any write holds an undefined value. For a per-component
++ * instruction writing a temp, the destination components computed from such reads are undefined
++ * too: they are dropped from the write mask (the register keeps whatever it held, which is as
++ * undefined), and the next reads see them as unwritten. Elsewhere the unwritten components get a
++ * mov from c0 first (any defined value is a valid choice for an undefined one). Straight-line
++ * order is exact without loops and calls; with them (vs_2_x rep/loop) nothing is changed. */
++static enum vkd3d_result d3dbc_legalise_uninitialized_reads(struct d3dbc_legalise *l)
++{
++    struct vsir_program_iterator it = vsir_program_iterator(&l->program->instructions);
++    struct vkd3d_shader_instruction *ins;
++    uint8_t *written;
++    unsigned int count = l->program->temp_count;
++    enum vkd3d_result ret = VKD3D_OK;
++
++    if (!count || d3dbc_legalise_has_loops(l->program))
++        return VKD3D_OK;
++    if (!(written = vkd3d_calloc(count, 1)))
++        return VKD3D_ERROR_OUT_OF_MEMORY;
++
++    for (ins = vsir_program_iterator_head(&it); ins; ins = vsir_program_iterator_next(&it))
++    {
++        struct d3dbc_legalise_mov movs[4];
++        unsigned int j, mov_count = 0, drop = 0;
++        bool per_component;
++
++        if (d3dbc_legalise_skip(ins))
++            continue;
++        for (j = 0; j < ins->src_count; ++j)
++        {
++            const struct vsir_src_operand *src = &ins->src[j];
++            unsigned int positions = d3dbc_legalise_positions(ins, j, &per_component), missing, p, idx;
++
++            if (src->reg.type != VSIR_REGISTER_TEMP || (idx = src->reg.idx[0].offset) >= count)
++                continue;
++            missing = d3dbc_legalise_read_mask(src, positions) & ~written[idx];
++            if (!missing)
++                continue;
++            if (per_component && ins->dst[0].reg.type == VSIR_REGISTER_TEMP)
++            {
++                for (p = 0; p < 4; ++p)
++                {
++                    if ((positions & (1u << p)) && (missing & (1u << vsir_swizzle_get_component(src->swizzle, p))))
++                        drop |= 1u << p;
++                }
++            }
++            else if (mov_count < ARRAY_SIZE(movs))
++            {
++                movs[mov_count].dst_idx = idx;
++                movs[mov_count].write_mask = missing;
++                vsir_src_operand_init(&movs[mov_count].src, VSIR_REGISTER_CONST, VSIR_DATA_F32, 1);
++                movs[mov_count].src.reg.idx[0].offset = 0;
++                movs[mov_count].src.reg.dimension = VSIR_DIMENSION_VEC4;
++                movs[mov_count].src.swizzle = VKD3D_SHADER_SWIZZLE(X, X, X, X);
++                written[idx] |= missing;
++                ++mov_count;
++            }
++        }
++        if (drop)
++        {
++            ins->dst[0].write_mask &= ~drop;
++            if (!(ins->dst[0].write_mask & VKD3DSP_WRITEMASK_ALL))
++            {
++                vsir_instruction_init(ins, &ins->location, VSIR_OP_NOP);
++                continue;
++            }
++        }
++        if (mov_count)
++        {
++            if ((ret = d3dbc_legalise_insert_movs(l, &it, movs, mov_count)) < 0)
++                break;
++            ins = vsir_program_iterator_current(&it);
++        }
++        for (j = 0; j < ins->dst_count; ++j)
++        {
++            if (ins->dst[j].reg.type == VSIR_REGISTER_TEMP && ins->dst[j].reg.idx[0].offset < count)
++                written[ins->dst[j].reg.idx[0].offset] |= ins->dst[j].write_mask & VKD3DSP_WRITEMASK_ALL;
++        }
++    }
++    vkd3d_free(written);
++    return ret;
++}
++
++static bool d3dbc_legalise_same_reg(const struct vsir_operand *a, const struct vsir_operand *b)
++{
++    return a->type == b->type && a->idx_count && b->idx_count && a->idx[0].offset == b->idx[0].offset
++            && !a->idx[0].rel_addr && !b->idx[0].rel_addr;
++}
++
++/* X5346/X5393: the first c# an instruction reads stays; every other distinct one is copied
++ * into a scratch temp first. */
++static enum vkd3d_result d3dbc_legalise_constants(struct d3dbc_legalise *l)
++{
++    struct vsir_program_iterator it = vsir_program_iterator(&l->program->instructions);
++    struct vkd3d_shader_instruction *ins;
++    unsigned int inserted = 0;
++    enum vkd3d_result ret;
++
++    if ((ret = d3dbc_legalise_compute_liveness(l)) < 0)
++        return ret;
++    for (ins = vsir_program_iterator_head(&it); ins; ins = vsir_program_iterator_next(&it))
++    {
++        struct d3dbc_legalise_mov movs[4];
++        const struct vsir_operand *kept = NULL;
++        unsigned int j, k, mov_count = 0;
++
++        if (d3dbc_legalise_skip(ins) || ins->opcode == VSIR_OP_SINCOS)
++            continue;
++        d3dbc_legalise_begin(l, ins, it.idx - inserted, false);
++        for (j = 0; j < ins->src_count; ++j)
++        {
++            struct vsir_src_operand *src = &ins->src[j];
++            bool shared = false;
++
++            if (src->reg.type != VSIR_REGISTER_CONST)
++                continue;
++            if (!kept || d3dbc_legalise_same_reg(kept, &src->reg))
++            {
++                kept = kept ? kept : &ins->src[j].reg;
++                continue;
++            }
++            for (k = 0; k < mov_count; ++k)
++            {
++                if (d3dbc_legalise_same_reg(&movs[k].src.reg, &src->reg))
++                {
++                    d3dbc_legalise_retarget_src(src, movs[k].dst_idx, src->swizzle);
++                    shared = true;
++                    break;
++                }
++            }
++            if (shared || mov_count == ARRAY_SIZE(movs))
++                continue;
++            movs[mov_count].dst_idx = d3dbc_legalise_scratch(l, mov_count);
++            movs[mov_count].write_mask = VKD3DSP_WRITEMASK_ALL;
++            movs[mov_count].src = *src;
++            movs[mov_count].src.swizzle = VKD3D_SHADER_NO_SWIZZLE;
++            d3dbc_legalise_retarget_src(src, movs[mov_count].dst_idx, src->swizzle);
++            ++mov_count;
++        }
++        if ((ret = d3dbc_legalise_insert_movs(l, &it, movs, mov_count)) < 0)
++            return ret;
++        inserted += mov_count;
++    }
++    return VKD3D_OK;
++}
++
++static const uint32_t d3dbc_ps20_swizzles[] =
++{
++    VKD3D_SHADER_SWIZZLE(X, Y, Z, W), VKD3D_SHADER_SWIZZLE(X, X, X, X), VKD3D_SHADER_SWIZZLE(Y, Y, Y, Y),
++    VKD3D_SHADER_SWIZZLE(Z, Z, Z, Z), VKD3D_SHADER_SWIZZLE(W, W, W, W), VKD3D_SHADER_SWIZZLE(Y, Z, X, W),
++    VKD3D_SHADER_SWIZZLE(Z, X, Y, W), VKD3D_SHADER_SWIZZLE(W, Z, Y, X),
++};
++
++static bool d3dbc_ps20_swizzle_allowed(uint32_t swizzle)
++{
++    unsigned int i;
++
++    for (i = 0; i < ARRAY_SIZE(d3dbc_ps20_swizzles); ++i)
++    {
++        if (swizzle == d3dbc_ps20_swizzles[i])
++            return true;
++    }
++    return false;
++}
++
++/* X5202: an encodable swizzle that selects the same components at the positions the instruction
++ * uses replaces the operand's; failing that, the operand is assembled in a scratch temp with one
++ * unswizzled mov for the positions that keep their component and one replicate mov per other
++ * component, and read from there unswizzled. */
++static enum vkd3d_result d3dbc_legalise_ps20_swizzles(struct d3dbc_legalise *l)
++{
++    struct vsir_program_iterator it = vsir_program_iterator(&l->program->instructions);
++    struct vkd3d_shader_instruction *ins;
++    unsigned int inserted = 0;
++    enum vkd3d_result ret;
++
++    if ((ret = d3dbc_legalise_compute_liveness(l)) < 0)
++        return ret;
++    for (ins = vsir_program_iterator_head(&it); ins; ins = vsir_program_iterator_next(&it))
++    {
++        struct d3dbc_legalise_mov movs[12];
++        unsigned int j, mov_count = 0, scratch = 0;
++        bool per_component;
++
++        if (d3dbc_legalise_skip(ins))
++            continue;
++        /* Sampling instructions: the coordinate is written unswizzled (d3dbc_write_instruction). */
++        if (ins->opcode == VSIR_OP_TEX || ins->opcode == VSIR_OP_TEXLD || ins->opcode == VSIR_OP_TEXLDD
++                || ins->opcode == VSIR_OP_TEXLDL || ins->opcode == VSIR_OP_TEXKILL)
++            continue;
++        d3dbc_legalise_begin(l, ins, it.idx - inserted, false);
++        for (j = 0; j < ins->src_count; ++j)
++        {
++            struct vsir_src_operand *src = &ins->src[j];
++            unsigned int positions = d3dbc_legalise_positions(ins, j, &per_component), i, p, c, same = 0;
++            uint32_t replace = 0;
++            bool found = false;
++
++            if (src->reg.type == VSIR_REGISTER_IMMCONST || src->reg.type == VSIR_REGISTER_SAMPLER
++                    || src->reg.dimension != VSIR_DIMENSION_VEC4 || d3dbc_ps20_swizzle_allowed(src->swizzle))
++                continue;
++            for (i = 0; i < ARRAY_SIZE(d3dbc_ps20_swizzles) && !found; ++i)
++            {
++                found = true;
++                for (p = 0; p < 4; ++p)
++                {
++                    if ((positions & (1u << p)) && vsir_swizzle_get_component(src->swizzle, p)
++                            != vsir_swizzle_get_component(d3dbc_ps20_swizzles[i], p))
++                        found = false;
++                }
++                if (found)
++                    replace = d3dbc_ps20_swizzles[i];
++            }
++            if (found)
++            {
++                src->swizzle = replace;
++                continue;
++            }
++            if (mov_count + 5 > ARRAY_SIZE(movs))
++                continue;
++            for (p = 0; p < 4; ++p)
++            {
++                if ((positions & (1u << p)) && vsir_swizzle_get_component(src->swizzle, p) == p)
++                    same |= 1u << p;
++            }
++            if (same)
++            {
++                movs[mov_count].dst_idx = d3dbc_legalise_scratch(l, scratch);
++                movs[mov_count].write_mask = same;
++                movs[mov_count].src = *src;
++                movs[mov_count].src.swizzle = VKD3D_SHADER_NO_SWIZZLE;
++                ++mov_count;
++            }
++            for (c = 0; c < 4; ++c)
++            {
++                unsigned int group = 0;
++
++                for (p = 0; p < 4; ++p)
++                {
++                    if ((positions & ~same & (1u << p)) && vsir_swizzle_get_component(src->swizzle, p) == c)
++                        group |= 1u << p;
++                }
++                if (!group)
++                    continue;
++                movs[mov_count].dst_idx = d3dbc_legalise_scratch(l, scratch);
++                movs[mov_count].write_mask = group;
++                movs[mov_count].src = *src;
++                movs[mov_count].src.swizzle = vkd3d_shader_create_swizzle(c, c, c, c);
++                ++mov_count;
++            }
++            d3dbc_legalise_retarget_src(src, d3dbc_legalise_scratch(l, scratch), VKD3D_SHADER_NO_SWIZZLE);
++            ++scratch;
++        }
++        if ((ret = d3dbc_legalise_insert_movs(l, &it, movs, mov_count)) < 0)
++            return ret;
++        inserted += mov_count;
++    }
++    return VKD3D_OK;
++}
++
++/* X5406: a non-mov instruction writing oC#/oDepth writes a scratch temp instead, followed by a
++ * mov of the written components. */
++static enum vkd3d_result d3dbc_legalise_ps2_output_writes(struct d3dbc_legalise *l)
++{
++    struct vsir_program_iterator it = vsir_program_iterator(&l->program->instructions);
++    struct vkd3d_shader_instruction *ins;
++    unsigned int inserted = 0;
++    enum vkd3d_result ret;
++
++    if ((ret = d3dbc_legalise_compute_liveness(l)) < 0)
++        return ret;
++    for (ins = vsir_program_iterator_head(&it); ins; ins = vsir_program_iterator_next(&it))
++    {
++        struct vsir_dst_operand out;
++        struct vkd3d_shader_location loc;
++        unsigned int idx;
++
++        if (d3dbc_legalise_skip(ins) || ins->opcode == VSIR_OP_MOV || ins->dst_count != 1
++                || (ins->dst[0].reg.type != VSIR_REGISTER_COLOROUT && ins->dst[0].reg.type != VSIR_REGISTER_DEPTHOUT))
++            continue;
++        out = ins->dst[0];
++        loc = ins->location;
++        d3dbc_legalise_begin(l, ins, it.idx - inserted, true);
++        idx = d3dbc_legalise_scratch(l, 0);
++        d3dbc_legalise_temp_dst(&ins->dst[0], idx, out.write_mask);
++        ins->dst[0].modifiers = out.modifiers;
++        ins->dst[0].shift = out.shift;
++        if (!vsir_program_iterator_insert_after(&it, 1))
++            return VKD3D_ERROR_OUT_OF_MEMORY;
++        ins = vsir_program_iterator_next(&it);
++        ++inserted;
++        if (!vsir_instruction_init_with_params(l->program, ins, &loc, VSIR_OP_MOV, 1, 1))
++            return VKD3D_ERROR_OUT_OF_MEMORY;
++        ins->dst[0] = out;
++        ins->dst[0].modifiers = 0;
++        ins->dst[0].shift = 0;
++        d3dbc_legalise_temp_src(&ins->src[0], idx, VKD3D_SHADER_NO_SWIZZLE);
++    }
++    return VKD3D_OK;
++}
++
++static enum vkd3d_result d3dbc_legalise_program(struct vsir_program *program,
++        const struct vkd3d_shader_compile_info *compile_info)
++{
++    const struct vkd3d_shader_version *version = &program->shader_version;
++    const struct vkd3d_shader_hlsl_source_info *hlsl_info;
++    struct d3dbc_legalise l = {.program = program};
++    enum vkd3d_result ret;
++    bool ps_2_b;
++
++    if (version->major > 3)
++        return VKD3D_OK;
++    hlsl_info = vkd3d_find_struct(compile_info->next, HLSL_SOURCE_INFO);
++    ps_2_b = hlsl_info && hlsl_info->profile && !ascii_strcasecmp(hlsl_info->profile, "ps_2_b");
++
++    /* X5326 holds for every version; the encoding rules below are SM1/2 ones. */
++    if ((ret = d3dbc_legalise_uninitialized_reads(&l)) < 0)
++        return ret;
++    if (version->major > 2)
++        return VKD3D_OK;
++    l.scratch_base = program->temp_count;
++    if (version->type == VKD3D_SHADER_TYPE_VERTEX)
++    {
++        if ((ret = d3dbc_legalise_constants(&l)) < 0)
++            goto done;
++    }
++    else if (version->major == 2)
++    {
++        if ((version->minor == 0 || ps_2_b) && (ret = d3dbc_legalise_ps20_swizzles(&l)) < 0)
++            goto done;
++        if ((ret = d3dbc_legalise_ps2_output_writes(&l)) < 0)
++            goto done;
++    }
++    ret = VKD3D_OK;
++done:
++    vkd3d_free(l.live);
++    program->temp_count = l.scratch_base + l.scratch_used;
++    return ret;
++}
++
+ int d3dbc_compile(struct vsir_program *program, uint64_t config_flags,
+         const struct vkd3d_shader_compile_info *compile_info, const struct vkd3d_shader_code *ctab,
+         struct vkd3d_shader_code *out, struct vkd3d_shader_message_context *message_context)
+@@ -2558,6 +3179,10 @@
+     if ((result = vsir_program_allocate_temp_registers(program, config_flags, compile_info, message_context)) < 0)
+         return result;
+ 
++    /* BF2 macOS port: D3D9 validator rules (d3dbc_legalise_program). */
++    if ((result = d3dbc_legalise_program(program, compile_info)) < 0)
++        return result;
++
+     compiler.program = program;
+     compiler.message_context = message_context;
+     switch (version->type)

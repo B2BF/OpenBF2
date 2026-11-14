@@ -1,5 +1,5 @@
-// [TEMP] [CHOSEN, not recovered] Engine-free check of BFMeme wide text on 32-bit wchar_t hosts
-// (docs/macos-c-asan-heap.md). Allocation sizes are measured with malloc_size, so the check
+// [TEMP] [CHOSEN, not recovered] Engine-free check of BFMeme wide text on 32-bit wchar_t hosts.
+// Allocation sizes are measured with malloc_size, so the check
 // fails without a sanitizer too; build.sh also runs it under AddressSanitizer.
 #include "../../BF2/External/BFMeme/Data.h"
 #include "../../BF2/External/BFMeme/IStream.h"

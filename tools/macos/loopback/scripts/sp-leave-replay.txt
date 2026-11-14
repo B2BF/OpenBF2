@@ -1,0 +1,84 @@
+# [TEMP] sp-leave-replay: instant battle (fresh home) -> spawn -> Escape -> DISCONNECT -> YES ->
+# SINGLEPLAYER -> Strike At Karkand, VETERAN -> START SINGLEPLAYER -> JOIN GAME -> Assault,
+# Gasstation -> DONE -> scoreboard -> 60 s. Second game in the same session (flows 2 and 3 of
+# docs/macos-c-input-script.md). 800x600. Run with BF2_AI_SPAWN_ONLY=1.
+timeout 300
+# The runner passes +restart 1 (no intros): the menu is up once menu.bik plays.
+wait-log mods/bf2/Movies/menu.bik
+wait-ms 3000
+move 380 214
+wait-ms 300
+click 380 214
+wait-log ingameMap.tga
+wait-ms 5000
+click 745 583
+wait-ms 4000
+key enter
+wait-ms 1500
+key enter
+wait-ms 3000
+hud-click 130 240
+wait-ms 1000
+hud-click 517 422
+wait-ms 1000
+hud-click 728 546
+wait-ms 20000
+capture g1-spawned
+wait-ms 30000
+key escape
+wait-ms 3000
+capture esc-menu
+move 730 585
+wait-ms 300
+click 730 585
+wait-ms 2000
+capture disc-confirm
+move 440 305
+wait-ms 300
+click 440 305
+wait-ms 8000
+capture after-disconnect
+move 333 15
+wait-ms 300
+click 333 15
+wait-ms 3000
+capture sp-page
+move 64 421
+wait-ms 300
+click 64 421
+wait-ms 1500
+move 147 204
+wait-ms 300
+click 147 204
+wait-ms 1500
+capture sp-chosen
+move 730 585
+wait-ms 300
+click 730 585
+wait-ms 3000
+capture loading-2
+wait-log Strike_at_Karkand/Hud/Minimap/ingameMap.tga
+wait-ms 5000
+capture loaded-2
+click 745 583
+wait-ms 4000
+key enter
+wait-ms 1500
+key enter
+wait-ms 3000
+capture spawn-screen-2
+hud-click 130 240
+wait-ms 1000
+hud-click 594 467
+wait-ms 1000
+capture selected-2
+hud-click 728 546
+wait-ms 20000
+capture g2-spawned
+key-down tab
+wait-ms 1500
+capture g2-scoreboard
+key-up tab
+wait-ms 60000
+capture g2-hold-60
+end

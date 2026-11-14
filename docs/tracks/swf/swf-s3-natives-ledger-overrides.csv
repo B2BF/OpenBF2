@@ -1,0 +1,8 @@
+address,symbol,file,status,reason
+0x1009A710,gameswf::render::set_depth,Code/BF2/External/gameswf/gameswf_render.cpp,done,S3:portable;PE:handler-null-guard-and-typed-depth-virtual;native-forwarder-10005CE0-to-ISwiffRender-40;unsupported-backend-remains-diagnostic-abort
+0x10071930,gameswf::named_bitmap_info::named_bitmap_info,Code/BF2/External/gameswf/gameswf.h,done,S3:portable;[INFERRED]:name-and-source-placement;PE:zero-texture-and-dimensions;owned-empty-std-string;native-reference-base-and-STL-widths
+0x10073B10,gameswf::named_bitmap_info::deleting_destructor,Code/BF2/External/gameswf/gameswf.h,done,S3:portable;PE:named-lifetime-before-conditional-free;compiler-deleting-wrapper-with-native-base-adjustment
+0x10073B40,gameswf::named_bitmap_info::~named_bitmap_info,Code/BF2/External/gameswf/gameswf.h,done,S3:portable;PE:string-before-bitmap-base-notification-before-weak-reference-base;native-compiler-destruction
+0x100963A0,gameswf::bitmap_info::~bitmap_info,Code/BF2/External/gameswf/gameswf_render.cpp,done,S3:portable;PE:notify-current-render-handler-before-reference-base-teardown;no-double-notification-in-fallback
+0x1008A230,gameswf::is_key_down,Code/BF2/External/gameswf/gameswf_action.cpp,done,S3:portable;[INFERRED]:helper-name;PE:range-0-to-223;Enter-only;GetAsyncKeyState-short-equals-8001;chosen-Cocoa-source-separated-from-predicate
+0x1008CEE0,gameswf::key_is_down,Code/BF2/External/gameswf/gameswf_action.cpp,done,S3:portable;PE:arity-preserves-output;FISTP-dword-truncate;Enter-asynchronous-predicate;does-not-read-Key-receiver

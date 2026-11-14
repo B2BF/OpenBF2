@@ -240,6 +240,15 @@ SBError ServerBrowserLANUpdate(ServerBrowser sb, SBBool async, unsigned short st
 	return err;
 }
 
+#if !defined(_WIN32)
+// [CHOSEN, not recovered] errno of the first failed broadcast send of the last
+// ServerBrowserLANUpdate, 0 when all went out (sb_serverlist.c SBServerListGetLANList).
+int ServerBrowserLANSendError(ServerBrowser sb)
+{
+	return sb->list.lansenderror;
+}
+#endif
+
 static SBError WaitForTriggerUpdate(ServerBrowser sb, SBBool viaMaster)
 {
 	SBError err = sbe_noerror;

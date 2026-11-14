@@ -1,0 +1,8 @@
+; [TEMP] [CHOSEN, not recovered] dinput8.dll proxy exports (dinput8proxy.cpp).
+LIBRARY dinput8
+EXPORTS
+    DirectInput8Create
+    DllCanUnloadNow = ProxyDllCanUnloadNow PRIVATE
+    DllGetClassObject = ProxyDllGetClassObject PRIVATE
+    DllRegisterServer = ProxyDllRegisterServer PRIVATE
+    DllUnregisterServer = ProxyDllUnregisterServer PRIVATE

@@ -1,0 +1,1 @@
+infantry-range: dalian_plant (coop, 4 bots, --ai-spawn-only), player -80/154.3/136 facing north-east, enemy bot 25 m ahead (-67.5/154/157.65), friend 6 m left (-85.2/154.3/133); aim at the enemy's chest and fire (hit/kill in playtest_pose.log [bot]/[kill] and [PLAY] t1 alive count), look at the friend, walk a fixed open-ground path, suicide and respawn at the same pose.

@@ -15,6 +15,9 @@
 
 #include "VoipResult.h"
 
+// CDebugRoutingState::OutputFullState (ELF 0x84F2BF0) walks both tables directly.
+namespace BF2VoipServer { class CDebugRoutingState; }
+
 namespace VOIP {
 
 // Session ids addressed by a channel. Attested: the COutgoingChannels map value is
@@ -75,6 +78,7 @@ public:
     VRESULT SelectOutgoingMultiChannelSet(unsigned short sessionId, const std::vector<unsigned char>& channels);
 
 private:
+    friend class BF2VoipServer::CDebugRoutingState;
     std::map<unsigned short, ClientData> m_clients;   // +0x08 (vptr at +0x00)
 };
 
@@ -101,6 +105,7 @@ public:
     VRESULT RemoveSessionIdFromArray(SessionIdArray* array, unsigned short sessionId);
 
 private:
+    friend class BF2VoipServer::CDebugRoutingState;
     std::map<unsigned char, SessionIdArray> m_channels;   // +0x08 (vptr at +0x00)
 };
 

@@ -1,0 +1,28 @@
+# [TEMP] sound.showStats: BfSound::drawStats (ECSound 6000) queues the stats block on
+# DebugTextWriterFixed, a black shadow at (1,1) and green at (0,0). Spawn as join-and-spawn does,
+# open the console, enable, close it (drawStats skips while the console is active), capture.
+# sound.showStats is access-restricted (retail answers "Unauthorised method!"): run with
+# --client-env BF2_CLIENT_CONSOLE_FULL_ACCESS=1.
+timeout 300
+wait-log ingameMap.tga
+wait-ms 3000
+click 745 583
+wait-ms 3000
+hud-click 130 107
+wait-ms 500
+hud-click 432 282
+wait-ms 500
+hud-click 728 546
+wait-log-else 12 spawned [PLAY] alive=1
+label spawned
+wait-ms 1500
+capture before
+key grave
+wait-ms 1000
+type sound.showStats 1
+key enter
+wait-ms 500
+capture console
+key grave
+wait-ms 2000
+capture sound-stats

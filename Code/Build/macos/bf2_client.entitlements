@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  [CHOSEN, not recovered] Hardened-runtime entitlements for bf2_client (Developer ID release
+  signing, docs/ci-releases.md). Voice chat captures the microphone, which the hardened runtime
+  refuses without audio-input. Nothing else is needed: the client does not generate code at run
+  time (no allow-jit, no allow-unsigned-executable-memory), reads no DYLD_* variables, and every
+  library it loads (libdice_py.dylib, libaidll.dylib) is signed by the same team, so library
+  validation stays on. The libraries and the dedicated server get no entitlements.
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+</dict>
+</plist>

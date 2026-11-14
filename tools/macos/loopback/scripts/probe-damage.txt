@@ -1,0 +1,27 @@
+# [TEMP] probe-damage: a grenade dropped straight down at the own feet in a bots game (damage
+# through GameLogicDamage::serverGiveDamage with an attacker, weapon and victim player), death,
+# then respawn from the spawn screen.
+include join-and-spawn
+wait-ms 2000
+log play: grenade at own feet
+key 4
+wait-ms 2000
+move-rel 0 900
+wait-ms 500
+button-down 0
+wait-ms 400
+button-up 0
+wait-ms 1500
+capture grenade-thrown
+wait-ms 5000
+capture grenade-dead
+log play: respawn
+key enter
+wait-ms 2500
+capture spawn-screen-dead
+hud-click 453 271
+wait-ms 1000
+hud-click 728 546
+wait-ms 15000
+capture respawned
+log play: probe done

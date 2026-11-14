@@ -89,8 +89,8 @@ struct ProfileOwner : ILocalProfileManager {
     bool createProfile(const std::string&,const std::string&) override { std::abort(); }
     bool deleteProfile(int) override { std::abort(); }
     bool createOnlineAccount(const std::string&,const std::string&,const std::string&,const std::string&) override { std::abort(); }
-    void frontierPrimary30() override { std::abort(); }
-    void frontierPrimary34() override { std::abort(); }
+    bool hasCurrentProfile(int) override { std::abort(); }
+    bool slot34(int, int) override { std::abort(); }
     bool hasProfile(const std::string&) override { std::abort(); }
     bool loadCurrentProfile() override { std::abort(); }
     bool saveCurrentProfile() override { std::abort(); }

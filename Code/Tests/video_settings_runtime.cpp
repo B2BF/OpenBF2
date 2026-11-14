@@ -73,7 +73,9 @@ struct OptionsObserver : IVideoOptions {
 static OptionsObserver* rendererOptions=nullptr;
 static unsigned slot74Calls=0;
 static IVideoOptions* __fastcall rendererSlot74(IBase*,void*) { ++slot74Calls; return rendererOptions; }
-static void* rendererTable[32];
+// [CHOSEN] +0xDC getDesktopMode: a 1280x1024@85 desktop, so only entries up to that size fit.
+static bool __fastcall rendererSlotDC(IBase*,void*,unsigned& w,unsigned& h,unsigned& hz) { w=1280; h=1024; hz=85; return true; }
+static void* rendererTable[64];
 struct FakeRenderer { void** table; };
 static FakeRenderer fakeRenderer{rendererTable};
 // BF2Render's x86 layout (BF2ClientSeams.h asserts 0x20): vptr, engine, window, dll, renderer, ...
@@ -117,6 +119,7 @@ int main()
     check(sizeof(void*)==4,"x86 fixture");
     SettingsRepostitory repository; settings=&repository;
     rendererTable[0x74/4]=reinterpret_cast<void*>(&rendererSlot74);
+    rendererTable[0xDC/4]=reinterpret_cast<void*>(&rendererSlotDC);
     IGame* const loadedGame=reinterpret_cast<IGame*>(&repository);   // any non-null value: only tested against null
 
     // lifetime and identity
@@ -185,22 +188,31 @@ int main()
     check(isDefault(current) && pending.antialiasing=="4Samples","a failed apply changes neither record");
     api->revertChanges();
 
-    // setDefaults with a renderer: ranges, detected scheme, preset, read-back
+    // setDefaults with a renderer: ranges, detect ([CHOSEN] answers High whatever the renderer
+    // detected), the preset with the highest antialiasing, read-back, then the resolution list, the
+    // largest entry fitting the renderer's desktop mode, the antialiasing again and a read-back.
     OptionsObserver observer; rendererOptions=&observer; callLog.clear(); slot74Calls=0;
+    observer.detected=0;
     api->setDefaults();
-    check(joined()==rangeReads()+"detectQualityLevel;applyQualityPreset 2;"+readback(),"setDefaults: interleaved range reads, detect, preset with the detected scheme, read-back");
-    check(slot74Calls==4,"setDefaults, detect, preset and read-back each fetch the options");
+    const std::string maxAa="getDynamicOptionList 0;setDynamicOption 0=4Samples;";
+    const std::string head=rangeReads()+"detectQualityLevel;applyQualityPreset 2;"+maxAa+readback()+"getDynamicOptionList 1;";
+    const std::string log=joined();
+    const std::string tail=log.compare(0,head.size(),head)==0 ? log.substr(head.size()) : std::string("<mismatch>");
+    const bool picked=tail=="setDynamicOption 1=1024x768@85Hz;"+maxAa+readback();
+    check(picked,"setDefaults: range reads, detect, High preset, read-back, resolution list, desktop pick");
+    check(slot74Calls==6u,"setDefaults, detect, preset, read-back, list and pick read-back each fetch the options");
     check(rangesAre(api,observer.minimum,observer.level),"the range getters expose rows +08/+0C per index");
-    check(pending.terrainQuality==2 && pending.textureFilteringQuality==2 && pending.resolution=="1024x768@85Hz" && pending.antialiasing=="2Samples"
-        && pending.viewDistanceScale==0.75f && pending.videoOptionScheme==2,"pending mirrors the renderer after the preset");
-    check(observer.presetApplied==2,"the preset argument is the pending (detected) scheme, not the caller's 1");
+    check(pending.terrainQuality==2 && pending.textureFilteringQuality==2 && pending.antialiasing=="4Samples"
+        && pending.resolution=="1024x768@85Hz" && pending.viewDistanceScale==0.75f && pending.videoOptionScheme==2,
+        "pending mirrors the renderer after the preset");
+    check(observer.presetApplied==2,"[CHOSEN] detect answers High (2) over the renderer's 0; the caller's 1 is not read");
     check(api->hasChanges(),"the renderer's values differ from current");
 
     // apply with a renderer
     static const int twos[8]={2,2,2,2,2,2,2,2};
     callLog.clear(); slot74Calls=0;
     check(api->apply(),"apply with options succeeds");
-    check(joined()==pushes(twos,"1024x768@85Hz","2Samples")+"apply;"+readback(),"apply: rows 0..7, resolution, antialiasing, scale, renderer apply, read-back");
+    check(joined()==pushes(twos,"1024x768@85Hz","4Samples")+"apply;"+readback(),"apply: rows 0..7, resolution, antialiasing, scale, renderer apply, read-back");
     check(slot74Calls==2,"apply fetches the options once and readOptions fetches them again");
     check(!current.differsFrom(pending) && !api->hasChanges() && observer.applies==1,"current takes pending after the read-back");
     check(current.resolution=="1024x768@85Hz" && api->getSettingsScript().find("VideoSettings.setResolution 1024x768@85Hz\n")!=std::string::npos,"the script now shows the applied record");

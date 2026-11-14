@@ -269,7 +269,7 @@ bool BF2AI::clear()
         delete updater;
 
     // ELF D1 call at 0x3EDEAC: the debug renderer, nonvirtual D1 + operator delete.
-    // Recovered on the client track (docs/macos-c-singleplayer.md); init never builds it, so
+    // Recovered on the client track; init never builds it, so
     // this only runs once a debug command has made one.
     if (AIRenderUtil::m_instance)
         delete AIRenderUtil::m_instance;
@@ -314,7 +314,7 @@ bool BF2AI::clear()
         delete UserOrderManager::m_instance;
 
     // ELF D1 call at 0x3EDFFB: the console (its destructor resets it and deletes the SquadManager).
-    // Recovered on the client track (docs/macos-c-singleplayer.md).
+    // Recovered on the client track.
     if (AIConsole::m_instance)
         delete AIConsole::m_instance;
 

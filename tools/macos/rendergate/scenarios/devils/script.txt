@@ -1,0 +1,108 @@
+# [CHOSEN, not recovered] render gate: Devils_Perch (xpack night), see ../../run.sh.
+# Join, wait out the pre-round countdown, pick kit 0 and click spawn dots until alive (the pose module
+# then moves the soldier to the scenario's fixed spot). wait-log-else jumps on timeout only; the
+# 1 s wait for a line that never appears is an unconditional jump past the remaining tries.
+timeout 1500
+log rendergate: waiting for the level load
+wait-log ingameMap.tga
+wait-ms 3000
+click 745 583
+wait-ms 15000
+hud-click 130 107
+wait-ms 500
+hud-click 563 222
+wait-ms 500
+hud-click 728 546
+wait-log-else 8 t1 [PLAY] alive=1
+log rendergate: spawned (try 0)
+wait-log-else 1 spawned rendergate-no-such-line
+label t1
+hud-click 566 163
+wait-ms 500
+hud-click 728 546
+wait-log-else 8 t2 [PLAY] alive=1
+log rendergate: spawned (try 1)
+wait-log-else 1 spawned rendergate-no-such-line
+label t2
+hud-click 390 116
+wait-ms 500
+hud-click 728 546
+wait-log-else 8 t3 [PLAY] alive=1
+log rendergate: spawned (try 2)
+wait-log-else 1 spawned rendergate-no-such-line
+label t3
+hud-click 466 247
+wait-ms 500
+hud-click 728 546
+wait-log-else 8 t4 [PLAY] alive=1
+log rendergate: spawned (try 3)
+wait-log-else 1 spawned rendergate-no-such-line
+label t4
+hud-click 327 200
+wait-ms 500
+hud-click 728 546
+wait-log-else 8 t5 [PLAY] alive=1
+log rendergate: spawned (try 4)
+wait-log-else 1 spawned rendergate-no-such-line
+label t5
+hud-click 598 199
+wait-ms 500
+hud-click 728 546
+wait-log-else 8 t6 [PLAY] alive=1
+log rendergate: spawned (try 5)
+wait-log-else 1 spawned rendergate-no-such-line
+label t6
+label spawned
+# Weapon raise (and any first idle animation), then the fixed views (world-point aims around the
+# pose) with the HUD off: the tutorial hints, minimap and chat change with time, the 3D weapon stays.
+wait-ms 20000
+console renderer.drawHud 0
+wait-ms 500
+log rendergate: views
+aim -383.6/17.7/-195.1 0.3 3000
+wait-ms 1500
+capture view-spawn
+wait-log view-spawn.png
+aim -343.6/17.7/-155.1 0.3 3000
+wait-ms 1500
+capture view-right
+wait-log view-right.png
+aim -383.6/47.7/-165.1 0.3 3000
+wait-ms 1500
+capture view-up
+wait-log view-up.png
+aim -383.6/5.7/-165.1 0.3 3000
+wait-ms 1500
+capture view-down
+wait-log view-down.png
+aim -383.6/17.7/-195.1 0.3 3000
+key-down w
+wait-ms 2500
+key-up w
+wait-ms 1000
+console renderer.drawHud 1
+wait-ms 300
+key j
+wait-ms 300
+type goto walkend
+key enter
+wait-log-else 5 at-walkend pos=-383.6/
+label at-walkend
+console renderer.drawHud 0
+wait-ms 2500
+aim -383.6/17.7/-235.1 0.3 3000
+wait-ms 1500
+capture view-walk
+wait-log view-walk.png
+aim -423.6/17.7/-235.1 0.3 3000
+wait-ms 2500
+capture view-weapon
+wait-log view-weapon.png
+log rendergate: done
+wait-ms 1000
+key grave
+wait-ms 1000
+type quit
+wait-ms 500
+key enter
+wait-ms 60000

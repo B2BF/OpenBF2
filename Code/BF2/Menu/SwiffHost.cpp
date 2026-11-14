@@ -18,6 +18,7 @@
 #endif
 #endif
 #include "SwiffHost.h"
+#include "../Sound/BfSound.h"                  // g_bfSound (ds:0xA23DC0)
 #include "IMenuTeamManager.h"
 #include "ISwiffPlayer.h"
 #include "ISwiffRender.h"
@@ -89,12 +90,6 @@ typedef unsigned long InetAddrWord;
 typedef std::uint32_t InetAddrWord;
 #endif
 InetAddrWord s_lastInetAddr = 0;           // dword_9A6B28 isPrivateAddress's inet_addr result
-#define SWIFF_HOST_FRONTIER(method, evidence)                                                        \
-    do {                                                                                             \
-        std::fprintf(stderr, "[FRONTIER] dice::hfe::SwiffHost::" method " reached (" evidence ")\n"); \
-        std::fflush(stderr);                                                                         \
-        std::abort();                                                                                \
-    } while (0)
 
 // Registers the BF2-specific GameSpy query keys once.
 void registerBf2QueryKeys()
@@ -459,17 +454,16 @@ void* SwiffHost::getCursor(int which)
         return m_cursors[which];
     std::string arrow = io::fileManager->fileExistsEx(std::string("menu/external/flashmenu/cursor/cursor_arrow.ani"), true);
 #if defined(__APPLE__)
-    // [CHOSEN, not recovered] AppKit cannot load .ani cursors; each handle is the host's token for
-    // the nearest system shape (the keybinding cursor shows the arrow), and null, as
-    // LoadCursorFromFileA answers, when the file cannot be read. docs/macos-s2-4.md, "Open items".
-    m_cursors[0] = (!arrow.empty() && ::access(arrow.c_str(), R_OK) == 0)
-                       ? macos::CocoaHost::cursorHandle(macos::HostCursorArrow) : 0;
+    // [CHOSEN, not recovered] AppKit cannot load .ani cursors; the host decodes each file itself
+    // (Platform/macOS/MacCursorFile.h) and answers a token with its frames, animation and hotspot.
+    // Null, as LoadCursorFromFileA answers, when the file cannot be read; the arrow's token when
+    // it cannot be decoded. LoadImageA's IMAGE_CURSOR/LR_LOADFROMFILE load of the keybinding
+    // cursor reads the same format, so it shares the loader.
+    m_cursors[0] = macos::CocoaHost::loadCursorFromFile(arrow.c_str());
     std::string busy = io::fileManager->fileExistsEx(std::string("menu/external/flashmenu/cursor/cursor_busy.ani"), true);
-    m_cursors[1] = (!busy.empty() && ::access(busy.c_str(), R_OK) == 0)
-                       ? macos::CocoaHost::cursorHandle(macos::HostCursorBusy) : 0;
+    m_cursors[1] = macos::CocoaHost::loadCursorFromFile(busy.c_str());
     std::string keybinding = io::fileManager->fileExistsEx(std::string("menu/external/flashmenu/cursor/cursor_keybinding.ani"), true);
-    m_cursors[2] = (!keybinding.empty() && ::access(keybinding.c_str(), R_OK) == 0)
-                       ? macos::CocoaHost::cursorHandle(macos::HostCursorArrow) : 0;
+    m_cursors[2] = macos::CocoaHost::loadCursorFromFile(keybinding.c_str());
 #else
     m_cursors[0] = LoadCursorFromFileA(arrow.c_str());
     std::string busy = io::fileManager->fileExistsEx(std::string("menu/external/flashmenu/cursor/cursor_busy.ani"), true);
@@ -1078,9 +1072,13 @@ bool SwiffHost::playSound(const std::string& name)
     pushEvent(event);
     return true;
 }
-void SwiffHost::slot18C(int)
+// PE 0x488920: mute state 1 on the sound owner (ds:0xA23DC0 is g_bfSound; +0xB4 setMuteState),
+// null-tested. Its caller is the VoIP microphone test (voipStopTest). The flag is the int's low
+// byte, as the callee reads it. [INFERRED] name kept as the slot.
+void SwiffHost::slot18C(int a)
 {
-    SWIFF_HOST_FRONTIER("slot18C", "PE 0x488920: ds:0xA23DC0 +0xB4(1, a) - the object is unidentified");
+    if (g_bfSound)
+        g_bfSound->setMuteState(static_cast<MuteState>(1), static_cast<unsigned char>(a) != 0);
 }
 bool SwiffHost::getModCount(int* out)
 {

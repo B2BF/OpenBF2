@@ -1,0 +1,18 @@
+# [TEMP] rend-doors: the green warehouse's gable doors from a spawn point that sees them.
+include doors-wh-spawn
+aim -185.27/157/-120 1.5 6000
+wait-ms 1500
+capture wh-1
+button-down 1
+wait-ms 120
+button-up 1
+wait-ms 2500
+capture wh-zoom
+aim -185.27/156/-117 1.5 6000
+wait-ms 1500
+capture wh-zoom-doors
+button-down 1
+wait-ms 120
+button-up 1
+wait-ms 1500
+log doors: done

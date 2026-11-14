@@ -6,41 +6,35 @@
 #include "DemoRecorder.h"
 
 #include "DemoHeader.h"
+#include "DemoSpectatorCamera.h"
 #include "../GameServer/ServerSettings.h"     // ds:0x8AAB7A0 - the header's server name
 #include "../IGame.h"                         // game->getCurrentMapName() - the header's map name
 #include "../../Core/Debug.h"                 // init()'s two fatal diagnostics, lines 123 and 133
 #include "../../Core/SystemInfo.h"            // systemInfo()->getDateTimeString() - vptr +0x0C
+#include "../../Core/System.h"                // WorldPref::resetTickCount / getTickCount - the playback clock
+#include "../../IO/Console/Console.h"         // io::mainConsole->run - the demo camera .con files
 #include "../../IO/BitStream.h"               // m_highWaterBits / getBuffer - the packet payload
 #include "../../IO/File/FileManager.h"        // io::fileManager->open - vptr +0x18
 #include "../../IO/Stream/IStream.h"          // write +0x14, release +0x08
 #include "../../IO/Stream/ZStream.h"          // the deflate wrapper every .bf2demo is written through
 
-#include <cstdio>                             // fprintf / fflush - the [FRONTIER] stops
-#include <cstdlib>                            // abort
 
 namespace dice {
 namespace hfe {
 
 namespace {
 
+// openCompressedDemoFile - ELF 0x814F780, 184 B.
 // Opens a compressed demo stream. The compression wrapper retains its own reference,
-// so the initial file-stream reference is released before returning it. The playback
-// branch remains a separate frontier.
+// so the initial file-stream reference is released before returning it. Reading opens with
+// mode 2 / access 0 whatever secondFlag says; writing picks mode 0 or 1 from it, access 2.
 io::IStream* openCompressedDemoFile(const std::string& path, bool forWrite, bool secondFlag)
 {
-    if (!forWrite)
-    {
-        std::fprintf(stderr, "[FRONTIER] dice::hfe::(anon)::openCompressedDemoFile playback branch "
-                             "reached (ELF 0x814F810)\n");
-        std::fflush(stderr);
-        std::abort();
-    }
-
-    io::IStream* const file = io::fileManager->open(
-        path,
-        static_cast<io::FileMode>(secondFlag ? 0 : 1),
-        static_cast<io::FileAccess>(2),
-        0);
+    io::IStream* const file = forWrite
+        ? io::fileManager->open(path, static_cast<io::FileMode>(secondFlag ? 0 : 1),
+                                static_cast<io::FileAccess>(2), 0)
+        : io::fileManager->open(path, static_cast<io::FileMode>(2),
+                                static_cast<io::FileAccess>(0), 0);
     if (!file)
         return 0;
 
@@ -100,14 +94,14 @@ void DemoRecorder::init(const DemoConfig& config)
     demoHeader = new DemoHeader();                       // operator new(0x14)
 
     visualUpdateB       = 0.0f;
-    byte5C              = false;
-    byte5D              = false;
-    dword60             = 0;
-    dword64             = 0;
+    tickResynced        = false;
+    frameHeaderRead     = false;
+    frameTick           = 0;
+    frameSize           = 0;
     bufferCapacity      = 0x40000;
     bufferData          = 0;
     demoSpectatorCamera = 0;
-    byte74              = false;
+    endOfStream         = false;
     renderType          = 0;
     byte84              = false;
 
@@ -133,8 +127,17 @@ void DemoRecorder::init(const DemoConfig& config)
     renderMode = inited;
 }
 
-// Opens recording streams. Camera mode 1 also needs the spectator rig and camera
-// track. [FRONTIER] That client-only rig remains unrecovered.
+namespace {
+// The eight empty arguments and the ignored result of io::Console::run, as every .con runner passes.
+void runDemoCameraConfig(const char* file)
+{
+    io::mainConsole->run(file, "", "", "", "", "", "", "", "", io::Console::ignoredString_);   // vptr +0x28
+}
+} // namespace
+
+// initRecord - ELF 0x814FDF0, 847 B.
+// Opens the packet stream; camera mode 1 also records the spectator camera to cameraFile and
+// runs Settings/demo-recordcam.con.
 bool DemoRecorder::initRecord()
 {
     if (!openRecordStream(demoConfig.demoFile))
@@ -142,33 +145,72 @@ bool DemoRecorder::initRecord()
 
     if (demoConfig.cameraMode == 1)
     {
-        std::fprintf(stderr, "[FRONTIER] dice::hfe::DemoRecorder::initRecord camera arm reached "
-                             "(DemoSpectatorCamera is unrecovered; ELF 0x814FE2C)\n");
-        std::fflush(stderr);
-        std::abort();
+        demoSpectatorCamera = new DemoSpectatorCamera(this);         // operator new(0xA4)
+        if (!recordCameraToStream(demoConfig.cameraFile))
+            return false;
+        runDemoCameraConfig("Settings/demo-recordcam.con");
     }
     return true;
 }
 
+// initPlayback - ELF 0x8150140, 1429 B.
+// Always builds the spectator camera, then opens the packet stream. Camera mode 0 plays the
+// demo with the free/follow camera; 1 records that camera to cameraFile while playing
+// (demo-recordcam.con); 2 plays a recorded camera track (demo-playcam.con). Line 192 reports
+// any other mode, as a DEBUGTYPE_6 abort.
 bool DemoRecorder::initPlayback()
 {
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::DemoRecorder::initPlayback reached\n");
-    std::fflush(stderr);
-    std::abort();
+    demoSpectatorCamera = new DemoSpectatorCamera(this);             // operator new(0xA4)
+    if (!openPlaybackStream(demoConfig.demoFile))
+        return false;
+
+    switch (demoConfig.cameraMode)
+    {
+    case 0:
+        return true;
+    case 1:
+        if (!recordCameraToStream(demoConfig.cameraFile))
+            return false;
+        runDemoCameraConfig("Settings/demo-recordcam.con");
+        return true;
+    case 2:
+        if (!playCameraFromStream(demoConfig.cameraFile))
+            return false;
+        runDemoCameraConfig("Settings/demo-playcam.con");
+        return true;
+    default:
+        Debug(DEBUGTYPE_6, "Game/DemoRecorder/DemoRecorder.cpp", 192, "")
+            << "Invalid camera mode: " << static_cast<int>(demoConfig.cameraMode);
+        return false;
+    }
 }
 
+// initRender - ELF 0x81506E0, 849 B / PE 0x54BE60. Movie render (demo mode 2): the demo plays
+// through a recorded camera track; renderType 1 waits for the initial-state packet
+// (handleSpecialPacket arms 2) and startRenderMovie turns it into 3, rendering to file.
 bool DemoRecorder::initRender()
 {
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::DemoRecorder::initRender reached\n");
-    std::fflush(stderr);
-    std::abort();
+    demoSpectatorCamera = new DemoSpectatorCamera(this);             // operator new(0xA4)
+    renderType = 1;
+    if (!openPlaybackStream(demoConfig.demoFile))
+        return false;
+    if (!playCameraFromStream(demoConfig.cameraFile))
+        return false;
+    runDemoCameraConfig("Settings/demo-playcam.con");
+    return true;
 }
 
+// initRenderSound - ELF 0x8150A40, 833 B / PE 0x54C000. Sound render (demo mode 3): as initRender
+// without the movie state; as shipped it runs the record-camera config.
 bool DemoRecorder::initRenderSound()
 {
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::DemoRecorder::initRenderSound reached\n");
-    std::fflush(stderr);
-    std::abort();
+    demoSpectatorCamera = new DemoSpectatorCamera(this);             // operator new(0xA4)
+    if (!openPlaybackStream(demoConfig.demoFile))
+        return false;
+    if (!playCameraFromStream(demoConfig.cameraFile))
+        return false;
+    runDemoCameraConfig("Settings/demo-recordcam.con");
+    return true;
 }
 
 // openRecordStream - ELF 0x8151160, 271 B / PE 0x4CAE10, 249 B.
@@ -192,6 +234,185 @@ bool DemoRecorder::openRecordStream(const std::string& path)
 
     demoHeader->writeTo(zStreamFile);
     return true;
+}
+
+// openPlaybackStream - ELF 0x8151270, 189 B.
+// Refuses to reopen. The 0x40000-byte read buffer is allocated once and kept across restarts.
+// A file whose header does not read closes again. The camera is told it plays a demo (not a
+// camera track) with no camera stream yet. No null test on the camera: initPlayback made it.
+bool DemoRecorder::openPlaybackStream(const std::string& path)
+{
+    if (zStreamFile)
+        return false;
+    if (!bufferData)
+    {
+        bufferData = new unsigned char[bufferCapacity];
+        if (!bufferData)
+            return false;
+    }
+    zStreamFile = openCompressedDemoFile(path, false, false);
+    if (!zStreamFile)
+        return false;
+
+    isOpenForRecordFlag = false;
+    if (!demoHeader->readFrom(zStreamFile))
+    {
+        close();
+        return false;
+    }
+    demoSpectatorCamera->setPlaybackMode(false);
+    demoSpectatorCamera->setPlaybackStream(0);
+    return true;
+}
+
+// recordCameraToStream - ELF 0x8151330, 360 B.
+// The camera track is written through the same compressed-file wrapper, refusing an existing
+// file (the open's secondFlag); line 355 reports the failure.
+bool DemoRecorder::recordCameraToStream(const std::string& path)
+{
+    cameraStreamFile = openCompressedDemoFile(path, true, false);
+    if (!cameraStreamFile)
+    {
+        Debug(DEBUGTYPE_6, "Game/DemoRecorder/DemoRecorder.cpp", 355, "")
+            << "Failed to open camera file " << path << " for writing. It probably exist already.";
+        return false;
+    }
+    byte56           = true;
+    cameraSuppressed = false;
+    demoSpectatorCamera->setPlaybackStream(0);
+    demoSpectatorCamera->setRecordStream(cameraStreamFile);
+    return true;
+}
+
+// playCameraFromStream - ELF 0x81514A0, 106 B.
+bool DemoRecorder::playCameraFromStream(const std::string& path)
+{
+    cameraStreamFile = openCompressedDemoFile(path, false, false);
+    if (!cameraStreamFile)
+        return false;
+    byte56           = false;
+    cameraSuppressed = true;
+    demoSpectatorCamera->setPlaybackMode(true);
+    demoSpectatorCamera->setPlaybackStream(cameraStreamFile);
+    return true;
+}
+
+// readData - ELF 0x81515C0, 132 B / PE 0x54C3B0.
+// One packet for the given tick. When the packet stream runs dry and the config ties the camera
+// to it (DemoConfig +0x2C, syncCameraAndDemo), the camera track is dropped as well.
+bool DemoRecorder::readData(int tick, io::BitStream* stream)
+{
+    const bool read = internalReadData(tick, stream);
+    if (!read && cameraStreamFile && demoConfig.syncCameraAndDemo)
+    {
+        cameraStreamFile->release();                              // vptr +0x08
+        cameraStreamFile = 0;
+        if (demoSpectatorCamera)
+        {
+            demoSpectatorCamera->setRecordStream(0);
+            demoSpectatorCamera->setPlaybackStream(0);
+        }
+    }
+    return read;
+}
+
+// internalReadData - ELF 0x8151650, 301 B.
+// Frames are (tick, size, payload); tick -2 frames are special packets and are handled inline.
+// The first data frame, or one more than 100 ticks ahead of the caller, resets the world tick to
+// the frame's; a frame still in the future hands back an empty packet. A short payload read ends
+// the stream. A tick of -1 is never compared and plays at once.
+bool DemoRecorder::internalReadData(int tick, io::BitStream* stream)
+{
+    if (!zStreamFile || endOfStream)
+        return false;
+
+    if (!frameHeaderRead)
+    {
+        for (;;)
+        {
+            if (!readNextFrameHeader())
+            {
+                endOfStream = true;
+                return false;
+            }
+            if (frameTick != -2)
+                break;
+            handleSpecialPacket(static_cast<DemoRecorderSpecialPacket>(frameSize));
+        }
+    }
+
+    if (frameTick != -1)
+    {
+        if (!tickResynced || frameTick - tick > 100)
+        {
+            WorldPref::resetTickCount(static_cast<unsigned int>(frameTick));
+            tick         = WorldPref::getTickCount();
+            tickResynced = true;
+        }
+        if (frameTick > tick)
+        {
+            stream->setBuffer(bufferData, 0);
+            stream->resetPositions();
+            stream->setReadMode();
+            return true;
+        }
+    }
+
+    const unsigned int got = zStreamFile->read(bufferData, frameSize);   // vptr +0x10
+    if (got != frameSize)
+    {
+        endOfStream = true;
+        return false;
+    }
+    stream->setBuffer(bufferData, got);
+    stream->resetPositions();
+    stream->setReadMode();
+    frameHeaderRead = false;
+    return true;
+}
+
+// readNextFrameHeader - ELF 0x81519A0, 140 B.
+// A frame larger than the read buffer is refused (and left unread); otherwise the header counts
+// as read while the stream still has bytes.
+bool DemoRecorder::readNextFrameHeader()
+{
+    if (!zStreamFile->getAvailableBytes())                            // vptr +0x1C
+        return false;
+    zStreamFile->read(&frameTick, 4);
+    zStreamFile->read(&frameSize, 4);
+    if (frameSize > bufferCapacity)
+    {
+        frameHeaderRead = false;
+        return false;
+    }
+    frameHeaderRead = zStreamFile->getAvailableBytes() != 0;
+    return frameHeaderRead;
+}
+
+// handleSpecialPacket - ELF 0x8151A30, 335 B.
+// The initial-state marker arms a pending movie render (1 -> 2); line 563 reports anything else.
+void DemoRecorder::handleSpecialPacket(DemoRecorderSpecialPacket packet)
+{
+    if (packet == DemoRecorderSpecialPacket_InitialState)
+    {
+        if (renderType == 1)
+            renderType = 2;
+        return;
+    }
+    Debug(DEBUGTYPE_6, "Game/DemoRecorder/DemoRecorder.cpp", 563, "")
+        << "Invalid special packet " << static_cast<int>(packet);
+}
+
+// restartPlayback - ELF 0x8151D70, 64 B.
+// Reopens from the start through init(). As shipped, init() allocates a fresh DemoHeader and a
+// fresh camera without freeing the old ones; preserved.
+void DemoRecorder::restartPlayback()
+{
+    if (!isOpenForPlayback())
+        return;
+    close();
+    init(demoConfig);
+    playbackPlaying = true;
 }
 
 // Writes nonempty packets; writeFakePacketData also permits empty packets.
@@ -266,16 +487,13 @@ void DemoRecorder::close()
         cameraStreamFile->release();
         cameraStreamFile = 0;
     }
-    byte74 = false;
-    byte5C = false;
+    endOfStream  = false;
+    tickResynced = false;
 
     if (demoSpectatorCamera)
     {
-        // Unreachable on a dedicated server - the pointer is only ever set by initRecord's camera
-        // arm. setPlaybackStream(0) / setRecordStream(0) belong to the unrecovered camera class.
-        std::fprintf(stderr, "[FRONTIER] dice::hfe::DemoRecorder::close camera arm reached\n");
-        std::fflush(stderr);
-        std::abort();
+        demoSpectatorCamera->setPlaybackStream(0);
+        demoSpectatorCamera->setRecordStream(0);
     }
 }
 
@@ -295,9 +513,12 @@ void DemoRecorder::stopCameraRecording()
 }
 
 
+// ~DemoRecorder - ELF 0x8150EF0, 342 B: close, then the camera, the read buffer and the header.
 DemoRecorder::~DemoRecorder()
 {
     close();
+    delete demoSpectatorCamera;
+    delete[] bufferData;
     delete demoHeader;
 }
 
@@ -329,51 +550,82 @@ bool DemoRecorder::startRenderMovie()
     return true;
 }
 
-// THE DemoSpectatorCamera forwarders - client playback. Each stops by name rather than invent a
-// call into an unrecovered 0xA4-byte class. None is reachable from a recording dedicated server.
+// The DemoSpectatorCamera forwarders - ELF 0x8151B90..0x8151E80, BF2.exe 0x54BBE0..0x54BD01.
+// Each answers false / -1 without a camera, except demoVisualUpdate, which (as shipped) calls
+// the camera unless a camera track plays.
 
 bool DemoRecorder::quit() const
 {
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::DemoRecorder::quit reached\n");
-    std::fflush(stderr);
-    std::abort();
+    return demoSpectatorCamera ? demoSpectatorCamera->getEOF() : false;
 }
 
-void DemoRecorder::updateTicks(int)
+void DemoRecorder::updateTicks(int ticks)
 {
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::DemoRecorder::updateTicks reached\n");
-    std::fflush(stderr);
-    std::abort();
+    if (demoSpectatorCamera)
+        demoSpectatorCamera->updateTicks(ticks);
 }
 
-void DemoRecorder::handlePlayerInput(float)
+// handlePlayerInput - ELF 0x8151C40: drains the queued inputs in order.
+void DemoRecorder::handlePlayerInput(float deltaTime)
 {
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::DemoRecorder::handlePlayerInput reached\n");
-    std::fflush(stderr);
-    std::abort();
+    while (!playerInputs.empty())
+    {
+        internalHandlePlayerInput(playerInputs.front(), deltaTime);
+        playerInputs.pop_front();
+    }
 }
 
-void DemoRecorder::addPlayerInput(const io::PlayerInput&)
+void DemoRecorder::internalHandlePlayerInput(const io::PlayerInput& input, float deltaTime)
 {
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::DemoRecorder::addPlayerInput reached\n");
-    std::fflush(stderr);
-    std::abort();
+    if (demoSpectatorCamera && !byte54)
+        demoSpectatorCamera->handlePlayerInput(input, deltaTime);
 }
 
-void DemoRecorder::demoVisualUpdate(float, float)
+// addPlayerInput - ELF 0x8151BF0: inputs are only queued while a demo plays.
+void DemoRecorder::addPlayerInput(const io::PlayerInput& input)
 {
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::DemoRecorder::demoVisualUpdate reached\n");
-    std::fflush(stderr);
-    std::abort();
+    if (isOpenForPlayback())
+        playerInputs.push_back(input);
 }
 
-// Returns without a spectator camera. Otherwise stops at the unresolved camera
-// transform call, which takes output, flag, and visual update time.
-void DemoRecorder::getCameraTransformation(Mat4&, int)
+// demoVisualUpdate - ELF 0x8151BB0 / PE 0x54BBE0. b is kept for getPlaybackMatrixAndFOV.
+void DemoRecorder::demoVisualUpdate(float a, float b)
 {
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::DemoRecorder::getCameraTransformation reached\n");
-    std::fflush(stderr);
-    std::abort();
+    if (!cameraSuppressed)
+        demoSpectatorCamera->demoVisualUpdate(a);
+    visualUpdateB = b;
+}
+
+// getPlaybackMatrixAndFOV - ELF 0x8151D00 / PE 0x54BC20.
+void DemoRecorder::getPlaybackMatrixAndFOV(Mat4* matrix, float* fov)
+{
+    if (demoSpectatorCamera)
+        demoSpectatorCamera->getPlaybackMatrixAndFOV(matrix, fov, visualUpdateB);
+}
+
+bool DemoRecorder::nextCamera()               // PE 0x54BC70
+{
+    return demoSpectatorCamera ? demoSpectatorCamera->nextCamera() : false;
+}
+
+bool DemoRecorder::nextPlayer()               // PE 0x54BC90
+{
+    return demoSpectatorCamera ? demoSpectatorCamera->nextPlayer() : false;
+}
+
+bool DemoRecorder::previousPlayer()           // PE 0x54BCB0
+{
+    return demoSpectatorCamera ? demoSpectatorCamera->previousPlayer() : false;
+}
+
+int DemoRecorder::getCurrentDemoPlayerId()    // PE 0x54BCD0
+{
+    return demoSpectatorCamera ? demoSpectatorCamera->getCurrentDemoPlayerId() : -1;
+}
+
+bool DemoRecorder::getIsFreeFlying()          // PE 0x54BCF0
+{
+    return demoSpectatorCamera ? demoSpectatorCamera->getIsFreeFlying() : false;
 }
 
 } // namespace hfe

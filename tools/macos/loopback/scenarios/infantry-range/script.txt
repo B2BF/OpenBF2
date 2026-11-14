@@ -1,0 +1,76 @@
+# [TEMP] infantry-range: shoot the placed enemy bot, walk a fixed path, die, respawn at the same pose.
+# Server half: pose.cfg (player -80/154.3/136 facing north-east, enemy 25 m ahead at -67.5/154/157.65,
+# friend 6 m to the left at -85.2/154.3/133). Aim points are fixed world points (the bots stand still
+# with --ai-spawn-only); the enemy's chest is 0.2 m below its root position. Hits and the kill are in
+# <run>/playtest_pose.log ([bot] health, [kill]). Waits: wait-log on the capture file and on
+# BF2_PLAY_TRACE alive changes; a client without the trace falls through after the fixed timeout.
+include join-and-spawn
+log scenario: infantry-range start
+aim -67.5/153.8/157.65 0.5 4000
+capture aim-enemy
+wait-log aim-enemy.png
+log scenario: fire at the enemy: short bursts, re-aimed after each (recoil climbs in long bursts)
+aim -67.5/153.8/157.65 0.5 2000
+button-down 0
+wait-ms 350
+button-up 0
+wait-ms 300
+aim -67.5/153.8/157.65 0.5 2000
+button-down 0
+wait-ms 350
+button-up 0
+wait-ms 300
+aim -67.5/153.8/157.65 0.5 2000
+button-down 0
+wait-ms 350
+button-up 0
+wait-ms 300
+aim -67.5/153.8/157.65 0.5 2000
+button-down 0
+wait-ms 350
+button-up 0
+wait-ms 300
+aim -67.5/153.8/157.65 0.5 2000
+button-down 0
+wait-ms 350
+button-up 0
+wait-ms 300
+aim -67.5/153.8/157.65 0.5 2000
+button-down 0
+wait-ms 350
+button-up 0
+wait-ms 300
+wait-ms 500
+capture after-fire
+wait-log after-fire.png
+log scenario: look at the friend
+aim -85.2/154.0/133 1.0 3000
+capture friend
+wait-log friend.png
+log scenario: walk the fixed path (open grass on the plateau)
+walk-to -92/154.3/130 1.5 10000
+walk-to -104/154.3/128 1.5 10000
+walk-to -80/154.3/136 1.5 15000
+capture path-end
+wait-log path-end.png
+log scenario: suicide (spawn screen SUICIDE button)
+key enter
+wait-ms 1500
+hud-click 604 546
+wait-log-else 6 dead [PLAY] alive=0
+label dead
+capture dead
+wait-log dead.png
+log scenario: respawn (spawn point and DONE as in join-and-spawn)
+wait-ms 1000
+hud-click 432 282
+wait-ms 500
+hud-click 728 546
+wait-log-else 12 respawned [PLAY] alive=1
+label respawned
+wait-ms 1000
+aim -67.5/153.8/157.65 0.5 4000
+capture respawned-view
+wait-log respawned-view.png
+log scenario: infantry-range done
+quit

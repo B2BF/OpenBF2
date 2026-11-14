@@ -1,7 +1,7 @@
 // [CHOSEN, not recovered] bf2_bink_decode_test: CPU check of the macOS Bink port (RendDX9Abi/
 // BinkFFmpeg.cpp over Code/BF2/External/ffmpeg-bink) against references the local ffmpeg CLI
 // decodes from the read-only game content. No GPU, game engine or network. References and frames
-// stay outside the repository (docs/macos-c-bink.md has the commands).
+// stay outside the repository (Code/BF2/External/ffmpeg-bink/README.md has the commands).
 //
 //   video <movie.bik> <frame (1-based)> <ref.yuv420p> [<ref.bgra>]
 //       Plays frames 1..N through BinkWait-free BinkDoFrame/BinkNextFrame, then compares frame N's
@@ -9,7 +9,7 @@
 //       Grey movies (header flag 0x20000, the two menu movies): ffmpeg's bgra converts their
 //       zero chroma planes to green, so the BGRx is checked against the neutral-grey expectation
 //       instead (R = G = B, within 1 of BT.601 limited-range luma of the reference Y plane);
-//       retail binkw32 shows these movies grey (docs/tracks/bink/README.md).
+//       retail binkw32 shows these movies grey (Code/BF2/External/ffmpeg-bink/README.md).
 //   loop <movie.bik>
 //       Plays the movie twice through the FrameNum wrap and checks frame 1 decodes identically.
 //   audio <movie.bik> <ref.f32le interleaved>

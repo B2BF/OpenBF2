@@ -1,0 +1,12 @@
+(version 1)
+; [TEMP] [CHOSEN, not recovered] Client-hosted singleplayer: milestone-1 offline
+; policy. The listen server may answer loopback peers on their ephemeral ports.
+; loopback.py reserves 16890/29911 and configures only its APFS content clone.
+(allow default)
+(deny network-outbound)
+(allow network-outbound (remote ip "localhost:*"))
+(deny network-outbound (remote unix-socket (path-literal "/private/var/run/mDNSResponder")))
+(deny file-write* (subpath (param "OWNER_HOME")))
+(allow file-write* (subpath (param "RUN_OUT")))
+(deny file-write* (subpath (param "GAME_ROOT")))
+(deny network-bind (local ip "*:16567"))

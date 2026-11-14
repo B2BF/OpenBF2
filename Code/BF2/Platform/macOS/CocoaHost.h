@@ -225,6 +225,11 @@ public:
     // counterpart of a loaded HCURSOR), and setCursor follows SetCursor: a null handle hides the
     // cursor image over the view, a token shows its shape.
     static void* cursorHandle(HostCursorShape shape);
+    // LoadCursorFromFileA: a stable token for the .ani/.cur/.ico at path, shown with its own image,
+    // animation and hotspot while the pointer is over the view. Null, as LoadCursorFromFileA
+    // answers, when the file cannot be read; the arrow's token when its contents cannot be decoded.
+    // Tokens live for the rest of the process. [CHOSEN, not recovered]
+    static void* loadCursorFromFile(const char* path);
     void setCursor(void* handle);
     // Relative mouse mode, the counterpart of an acquired exclusive DirectInput mouse:
     // the cursor is hidden, disassociated from the mouse (it stays put; deltas keep arriving)
@@ -254,6 +259,9 @@ public:
     bool getClipboardText(std::string& text) const;
 
     // Display modes of the main display (duplicates removed) and the current desktop mode.
+    // [PLATFORM] desktopMode reports the desktop's logical size in points (e.g. 1440x900 on a
+    // 2880x1800 Retina panel), the size a Windows user would call the desktop resolution;
+    // displayModes lists pixel sizes, which include the same sizes as low-resolution modes.
     std::vector<HostDisplayModeInfo> displayModes() const;
     HostDisplayModeInfo desktopMode() const;
 

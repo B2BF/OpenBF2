@@ -1,0 +1,56 @@
+# [TEMP] camshake-explosion: a short grenade throw near the player, captures every 100 ms across the
+# explosion window (explosion shake; batch 22 evidence).
+# The numeric evidence came from a temporary camera probe that is not in the tree (ledger, batch 22).
+include join-and-spawn
+log cam: grenade
+key 4
+wait-ms 1500
+move-rel 0 120
+wait-ms 400
+capture pre-throw
+button-down 0
+wait-ms 250
+button-up 0
+wait-ms 1400
+capture blast-00
+wait-ms 100
+capture blast-01
+wait-ms 100
+capture blast-02
+wait-ms 100
+capture blast-03
+wait-ms 100
+capture blast-04
+wait-ms 100
+capture blast-05
+wait-ms 100
+capture blast-06
+wait-ms 100
+capture blast-07
+wait-ms 100
+capture blast-08
+wait-ms 100
+capture blast-09
+wait-ms 100
+capture blast-10
+wait-ms 100
+capture blast-11
+wait-ms 100
+capture blast-12
+wait-ms 100
+capture blast-13
+wait-ms 100
+capture blast-14
+wait-ms 100
+capture blast-15
+wait-ms 100
+capture blast-16
+wait-ms 100
+capture blast-17
+wait-ms 100
+capture blast-18
+wait-ms 100
+capture blast-19
+wait-ms 100
+wait-ms 3000
+log cam: done

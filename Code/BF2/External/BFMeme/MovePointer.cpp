@@ -31,7 +31,7 @@ float moveOffset(float value, float start, float origin)
     return static_cast<float>(static_cast<double>(value) - start + origin);
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     float result;
     // [CHOSEN, not recovered] Preserve x87 extended subtract/add.
     result = bf2x87::offset(value, start, origin);
@@ -55,7 +55,7 @@ float outlineThickness(float dimension) // 82B6D9..82B6EF and three repeated arm
     return static_cast<float>(1.0 - dimension + dimension);
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     float result;
     // [CHOSEN, not recovered] Preserve x87 extended cancellation.
     result = bf2x87::offset(1.0f, dimension, dimension);

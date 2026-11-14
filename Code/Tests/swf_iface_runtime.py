@@ -289,20 +289,12 @@ def main():
     print((output / "runtime.log").read_text(), end="")
     if args.font_raster or args.text_layout or args.bitmap_cache:
         return
-    stopped = subprocess.run([str(executable), "--unknown-bounds"], cwd=root,
-                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    (output / "unknown-bounds.log").write_text(stopped.stdout)
-    if stopped.returncode != -6 or "[FRONTIER] gameswf::get_definition_bounds" not in stopped.stdout:
-        raise SystemExit("Unmapped definition did not diagnose and abort")
-    print("unmapped definition: qualified diagnostic and SIGABRT", flush=True)
-    for case, name in (("unsupported-depth", "gameswf::render_handler::set_depth"),
-                       ("missing-async-input", "gameswf::is_key_down")):
-        stopped = subprocess.run([str(executable), "--" + case], cwd=root,
-                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        (output / (case + ".log")).write_text(stopped.stdout)
-        if stopped.returncode != -6 or "[FRONTIER] " + name not in stopped.stdout:
-            raise SystemExit(case + " did not diagnose and abort")
-        print(case + ": qualified diagnostic and SIGABRT", flush=True)
+    unadapted = subprocess.run([str(executable), "--missing-async-input"], cwd=root,
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    (output / "missing-async-input.log").write_text(unadapted.stdout)
+    if unadapted.returncode != 0 or "[FRONTIER]" in unadapted.stdout:
+        raise SystemExit("missing-async-input did not read Enter as up")
+    print("missing-async-input: Enter reads up without a host adapter", flush=True)
     for case in ("enumerate-null", "enumerate-function", "text-tab-invalid", "new-method-c-function"):
         fault_environment = None
         if args.sanitize:

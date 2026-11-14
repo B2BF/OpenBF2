@@ -9,6 +9,9 @@
 #include "../Game/Objects/IObjectTemplate.h"
 #include <cstdio>
 #include <cstdlib>
+#if defined(_MSC_VER)
+#include <intrin.h>                 // __debugbreak, retail's int 3 for an id >= 10000
+#endif
 #include <sstream>
 
 namespace dice {
@@ -99,9 +102,12 @@ void MaterialManager::removeMaterial(unsigned int id)
 {
     if (!(id < 10000u))
     {
-        std::fprintf(stderr, "[FRONTIER] dice::hfe::world::MaterialManager::removeMaterial - id %u >= 10000 (the shipped int3)\n", id);
-        std::fflush(stderr);
+        // Retail's own guard, not a frontier: BF2.exe `int 3`, the bf2 ELF `call abort`.
+#if defined(_MSC_VER)
+        __debugbreak();
+#else
         std::abort();
+#endif
     }
     std::map<unsigned int, Material*>::iterator it = m_materials.find(id);
     if (it != m_materials.end())
@@ -309,9 +315,12 @@ void MaterialManager::setAttMaterial(unsigned int id)
 {
     if (!(id < 10000u))
     {
-        std::fprintf(stderr, "[FRONTIER] dice::hfe::world::MaterialManager::setAttMaterial - id %u >= 10000 (the shipped int3)\n", id);
-        std::fflush(stderr);
+        // Retail's own guard, not a frontier: BF2.exe `int 3`, the bf2 ELF `call abort`.
+#if defined(_MSC_VER)
+        __debugbreak();
+#else
         std::abort();
+#endif
     }
     if (m_materials.find(id) == m_materials.end())
     {
@@ -323,15 +332,18 @@ void MaterialManager::setAttMaterial(unsigned int id)
     m_attMaterial = id;
 }
 
-// Material-pair selection and lazy cell creation. Invalid IDs retain the fatal [FRONTIER] diagnostic wrapper.
+// Material-pair selection and lazy cell creation. Invalid IDs hit retail's own trap.
 // Preserve defending-before-attacking stores, the post-allocation bucket lookup and virtual overload dispatch.
 void MaterialManager::setDefMaterial(unsigned int id)
 {
     if (!(id < 10000u))
     {
-        std::fprintf(stderr, "[FRONTIER] dice::hfe::world::MaterialManager::setDefMaterial - id %u >= 10000 (the shipped int3)\n", id);
-        std::fflush(stderr);
+        // Retail's own guard, not a frontier: BF2.exe `int 3`, the bf2 ELF `call abort`.
+#if defined(_MSC_VER)
+        __debugbreak();
+#else
         std::abort();
+#endif
     }
     m_defMaterial = id;
 }

@@ -12,7 +12,6 @@
 
 #include "gameswf.h"
 #include "gameswf_action.h"
-#include "gameswf_bounds.h"
 #include "gameswf_types.h"
 #include "gameswf_log.h"
 #include "../../Platform/X87Compat.h"
@@ -41,8 +40,7 @@ namespace gameswf
 	{
 		// SwiffPlayer.dll 0x1009E860 constructs only the inherited resource;
 		// 0x1009E8D0 / 0x1009F200 and deleting wrapper 0x1009F1D0 destroy it.
-		// [CHOSEN, not recovered] S3 bridge: native inheritance supplies these
-		// implicit operations without reproducing the x86 virtual-base layout.
+		// resource carries the shared virtual ref_counted base, as retail (game-frontier C1).
 		// SwiffPlayer.dll 0x1009E8C0; resource table 0x100E2B88 +0x08.
 		virtual sound_sample*	cast_to_sound_sample() { return this; }
 	};
@@ -749,7 +747,7 @@ namespace gameswf
 		virtual void	hold_definition(character_def* def) { m_def = def; }
 
 		// SwiffPlayer.dll 0x1007F240 forwards to the definition rectangle provider.
-		rect get_bound_copy() const override { return get_definition_bounds(m_def.get_ptr()); }
+		rect get_bound_copy() const override { return m_def->get_bound_copy(); }   // the definition's +0x20
 
 		virtual void	display()
 		{
@@ -805,7 +803,7 @@ namespace gameswf
 
 #if 1
 	// Bitmap character
-	struct bitmap_character : public bitmap_character_def, public definition_bounds_provider
+	struct bitmap_character : public bitmap_character_def
 	{
 		// SwiffPlayer.dll 0x100755A0 / 0x10075570: release the bitmap member,
 		// then the definition/ref-counted bases; the latter entry also deletes.

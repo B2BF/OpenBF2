@@ -11,7 +11,7 @@
 
 namespace dice { namespace meme { namespace native_dispatch {
 
-/// Itanium virtual-member encoding; unsupported member kinds stop visibly. x86-64 marks a virtual
+/// Itanium virtual-member encoding; a non-virtual member is a programming error and asserts. x86-64 marks a virtual
 /// member by ptr = vtable byte offset + 1; the ARM variant of the C++ ABI (Apple arm64) keeps
 /// ptr = vtable byte offset and marks it in adj = 2 * this-adjustment + 1.
 struct VirtualMember
@@ -39,7 +39,10 @@ struct VirtualMember
 #endif
         if (!supported)
         {
-            std::fprintf(stderr, "[FRONTIER] dice::meme::native_dispatch::VirtualMember::decode unsupported virtual member encoding\n");
+            // An invariant of this platform layer, not missing retail code: every caller passes a
+            // virtual member, so only a programming error (null or non-virtual member) lands here.
+            // bf2_meme_dispatch_check's death mode pins it.
+            std::fprintf(stderr, "[ASSERT] dice::meme::native_dispatch::VirtualMember::decode: not a virtual member\n");
             std::fflush(stderr);
             std::abort();
         }

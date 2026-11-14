@@ -1,6 +1,7 @@
 // [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: PROFILE-CONSOLE-FIXTURE]
 // Real module, native owner/list, real console registry and every metadata slot.
-// Allocation observation and opaque non-dereferenced map values are fixture-only.
+// Allocation observation and opaque non-dereferenced map values are fixture-only. Since frontier
+// batch 8 the rows execute; their behaviour is checked on macOS (bf2_game_frontier_check).
 #include <windows.h>
 #include <crtdbg.h>
 #include <cstdio>
@@ -15,6 +16,8 @@
 
 namespace dice { namespace hfe { namespace hud { class BF2HudManager; }
 hud::BF2HudManager* hudManager = nullptr; // HUD provider linked, not invoked
+class IGameLogic; IGameLogic* gameLogic = nullptr;                            // applySettings, not invoked
+namespace world { class PlayerManager; PlayerManager* playerManager = nullptr; }
 } }
 using namespace dice::hfe;
 using namespace dice::hfe::hud;
@@ -72,46 +75,11 @@ static const Expected expected[] = {
     {"setIndexForKit",0,3,3,"void"}, {"getIndexForKit",0,2,2,"void"}, {"applySettings",0,0,0,"void"}
 };
 
-static void death(const char* mode, const char* expectedOutput)
-{
-    char executable[MAX_PATH]; GetModuleFileNameA(nullptr, executable, MAX_PATH);
-    std::string command = std::string("\"") + executable + "\" " + mode;
-    SECURITY_ATTRIBUTES security{sizeof(security), nullptr, TRUE};
-    HANDLE reader = nullptr, writer = nullptr;
-    if (!CreatePipe(&reader, &writer, &security, 0)) { check(false,"pipe"); return; }
-    SetHandleInformation(reader, HANDLE_FLAG_INHERIT, 0);
-    STARTUPINFOA startup{}; startup.cb = sizeof(startup); startup.dwFlags = STARTF_USESTDHANDLES;
-    startup.hStdOutput = startup.hStdError = writer; startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
-    PROCESS_INFORMATION process{};
-    bool started = CreateProcessA(nullptr, &command[0], nullptr, nullptr, TRUE, CREATE_NO_WINDOW,
-        nullptr, nullptr, &startup, &process) != FALSE;
-    CloseHandle(writer); check(started,"start diagnostic child");
-    if (!started) { CloseHandle(reader); return; }
-    DWORD wait = WaitForSingleObject(process.hProcess, 10000);
-    check(wait == WAIT_OBJECT_0,"child stops promptly");
-    if (wait != WAIT_OBJECT_0) TerminateProcess(process.hProcess,99);
-    DWORD exitCode; GetExitCodeProcess(process.hProcess,&exitCode);
-    std::string output; char buffer[512]; DWORD count;
-    while (ReadFile(reader,buffer,sizeof(buffer),&count,nullptr) && count) output.append(buffer,count);
-    CloseHandle(reader); CloseHandle(process.hThread); CloseHandle(process.hProcess);
-    check(exitCode != 0 && exitCode != STILL_ACTIVE,"execution cannot return success");
-    check(output.find(expectedOutput) == 0,"qualified diagnostic is first flushed output");
-    check(output.find("unexpected return") == std::string::npos,"diagnostic cannot return");
-}
-
-int main(int argc, char** argv)
+int main()
 {
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
     std::vector<ConsoleObject*> bindings(profileConsoleBindingList().begin(), profileConsoleBindingList().end());
-    if (argc == 2) {
-        auto* binding = static_cast<ConsoleObjectBaseImpl*>(bindings[0]);
-        if (!std::strcmp(argv[1],"execute")) binding->execute(nullptr,0);
-        if (!std::strcmp(argv[1],"invoke")) binding->executeObjectMethod();
-        if (!std::strcmp(argv[1],"convert")) binding->setArgFromString(1,std::string("invalid"));
-        if (!std::strcmp(argv[1],"format")) binding->getReturnValueAsString();
-        std::puts("unexpected return"); return 0;
-    }
     check(sizeof(void*) == 4,"x86 pointers");
     check(sizeof(ProfileConsoleOwner) == sizeof(std::string)+2*sizeof(void*)+sizeof(std::map<std::string,PlayerProfile*>),"native owner shape");
     check(sizeof(PlayerProfile) == sizeof(std::string)+16+sizeof(std::map<std::string,CharacterProfile*>),"native player storage shape");
@@ -178,11 +146,10 @@ int main(int argc, char** argv)
     check(module.close() && !profileConsoleOwner && mainConsoleObjects->getConsoleObjects().size()==17,"retail unregister removes only one list copy and published owner");
     check(module.close() && mainConsoleObjects->getConsoleObjects().empty(),"second close removes remaining list copies with null owner");
     delete second; // fixture cleans the deliberately unowned retail repeat-init allocation
-    for (const auto& mode : {std::make_pair("execute","execute"),std::make_pair("invoke","executeObjectMethod"),
-        std::make_pair("convert","setArgFromString"),std::make_pair("format","getReturnValueAsString")}) {
-        std::string diagnostic=std::string("[FRONTIER] dice::hfe::hud::ProfileConsoleBinding::")+mode.second+": profile.createPlayerProfile";
-        death(mode.first,diagnostic.c_str());
-    }
+    // The invokers replaced the four diagnostic stops (frontier batch 8); their behaviour is covered by
+    // bf2_game_frontier_check profileConsole and the loopback script profile-console.
+    std::string none;
+    check(static_cast<ConsoleObjectBaseImpl*>(bindings[0])->execute(&none,0).empty(),"wrong arity returns no result");
     std::printf("Profile console: %u/%u checks passed; native owner %zu, player storage %zu\n",checks-failures,checks,sizeof(ProfileConsoleOwner),sizeof(PlayerProfile));
     return failures?1:0;
 }

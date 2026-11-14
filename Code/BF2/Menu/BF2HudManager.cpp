@@ -104,7 +104,7 @@ bool commanderWaitRemaining(double last, double cooldown, double now, double& re
     if (denied) remaining = value;
     return denied;
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     const double minutesPerSecond = 1.0 / 60.0;
     double value;
     bool denied;
@@ -137,7 +137,7 @@ int commanderWaitInteger(double remaining)
     return _mm_cvttsd_si32(_mm_set_sd(rounded));
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     const double rounded = std::ceil(remaining);
     unsigned short original, truncating;
     int result;

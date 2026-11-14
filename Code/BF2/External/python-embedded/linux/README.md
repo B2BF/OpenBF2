@@ -90,5 +90,4 @@ with the interpreter.
 [CHOSEN, not recovered] The owner-requested macOS N1 fix bounds
 `Modules/socketmodule.c:socket_inet_ntop`'s POSIX buffer initialization to
 `sizeof(ip)`, removing the one-byte stack overwrite from `sizeof(ip) + 1`.
-The Windows branch stays unchanged. Preserve this correction on source updates;
-see [N1 validation](../../../../../docs/macos-n1-posix-net.md).
+The Windows branch stays unchanged. Preserve this correction on source updates.

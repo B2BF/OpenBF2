@@ -30,7 +30,7 @@ float centeredInputOrigin(float origin, float dimension)
     return static_cast<float>(origin - static_cast<double>(dimension) * half);
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     const float half = 0.5f;
     float result;
     // [CHOSEN, not recovered] Preserve x87 extended centering before float store.
@@ -85,7 +85,7 @@ void moveInputPointer(float* position, float x, float y, int sensitivity,
 #endif
     }
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     const float half = 0.5f;
     if (absolute) {
         // [CHOSEN, not recovered] Preserve x87 absolute scaled float stores.
@@ -138,7 +138,7 @@ void clampInputCoordinate(float& value, float origin, float extent)
     }
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     // Keep the unrounded upper-bound sum and the shipped unordered comparisons.
     // [CHOSEN, not recovered] Preserve x87 ordered clamps with retained upper sum.
     bf2x87::clampCoordinate(value, origin, extent);

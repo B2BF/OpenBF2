@@ -1378,7 +1378,7 @@ void SquadFormation::reassignSlots()
     }
 }
 
-// ELF 0x1A9E10 (D1, 240 B; recovered on the client track, docs/macos-c-singleplayer.md). Clears
+// ELF 0x1A9E10 (D1, 240 B; recovered on the client track). Clears
 // the coordinator back-pointer, deletes the first m_numberOfSlots slots (the bound is the
 // member count fixed at construction, not the vector's size), then empties both vectors.
 SquadFormation::~SquadFormation()

@@ -105,6 +105,7 @@ struct bitmap_observer : gameswf::render_handler
 	rect coordinates;
 	int calls = 0;
 	bitmap_info* create_bitmap_info_empty() override { std::abort(); }
+	void set_depth(int) override {}
 	bitmap_info* create_bitmap_info_alpha(int, int, unsigned char*) override { std::abort(); }
 	bitmap_info* create_bitmap_info_rgb(image::rgb*) override { std::abort(); }
 	bitmap_info* create_bitmap_info_rgba(image::rgba*) override { std::abort(); }

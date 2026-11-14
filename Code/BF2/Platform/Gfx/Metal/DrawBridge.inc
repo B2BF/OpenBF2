@@ -1,6 +1,6 @@
 // [CHOSEN, not recovered] G4 Metal draw encoding: programs, pipeline/depth/sampler caches and
 // one render pass kept open across consecutive draws to the same attachments.
-// Included by MetalBridge.mm after ResourceBridge.inc. See docs/macos-c-g4-effect.md.
+// Included by MetalBridge.mm after ResourceBridge.inc.
 
 struct Program {
     ProgramDesc desc;
@@ -68,7 +68,7 @@ static bool compileProgram(Frame* f, Program* p)
         // (Hi_Terrain: ZFillLightmap writes depth, LowDiffuse/FullDetail test LESSEQUAL with
         // ZWRITE off). Metal's fast-math compiler may contract the position math differently per
         // shader, so the colour pass failed the depth test and the cleared target showed
-        // through (black terrain, docs/macos-c-shadows.md). Vertex positions are [[invariant]]
+        // through (black terrain). Vertex positions are [[invariant]]
         // (Shaders.inc patchMsl), which needs preserveInvariance.
         static MTLCompileOptions* const options = [] {
             MTLCompileOptions* o = [MTLCompileOptions new];

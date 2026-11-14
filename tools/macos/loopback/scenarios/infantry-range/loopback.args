@@ -1,0 +1,1 @@
+--map dalian_plant --ai --ai-spawn-only --bots 4 --spawn-time 1 --client-seconds 200

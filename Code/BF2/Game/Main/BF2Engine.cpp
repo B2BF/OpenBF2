@@ -3,6 +3,7 @@
 // Coordinates startup, the frame loop and shutdown. Preserve the explicit retail Debug line numbers.
 
 #include "BF2Engine.h"
+#include "../PunkBuster/PbGlue.h"
 #include "PerformanceLogging.h"             // +0x74, deleted in shutdownGame and shutdownEngine (every image)
 #include "BF2EngineSetup.h"
 #include "BF2Log.h"                         // [INFERRED] path; Game/Main/BF2Log.cpp is attested
@@ -26,7 +27,10 @@
 #include "../IGame.h"                       // [INFERRED] path
 #include "../ControlSettings.h"             // IControlSettings::setMappingInput - the (10,12) handler
 #include "../GlobalSettings.h"              // IGlobalSettings::getNamePrefix - the clan tag applyProfileNameSettings reads
-#include "../IGameServer.h"                 // recovered secondary interface; startServer is +0x1C
+#include "../IGameServer.h"
+#if defined(__APPLE__) && !DEDICATED
+#include "../../Platform/macOS/Warmup.h"   // [CHOSEN] +warmupLevel (port addition)
+#endif                 // recovered secondary interface; startServer is +0x1C
 #include "../IGameClient.h"
 #include "../IGameLogic.h"                  // [INFERRED] path
 #include "../../Core/Thread.h"              // [INFERRED] path; Thread::Priority is nested
@@ -57,6 +61,9 @@
 #include "../Objects/IPlayer.h"              // per-player handleFrameUpdate loop
 #include "../Objects/IObjectTemplate.h"     // [TEMP] BF2_PLAY_TRACE: the vehicle template name
 #include "../Objects/ICameraObject.h"       // mainLoop's held camera: getCamera / setInterpolatedMode
+#if !DEDICATED
+#include "../VoipClient/BF2VoipClient.h"     // the "Bf2VoipClient" singleton (ds:0x9A4DA0)
+#endif
 
 #include <list>
 #include <string>
@@ -69,7 +76,7 @@
 
 #include "../DemoRecorder/DemoConfig.h"     // playDemo's config-from-name branch
 #include "BF2.h"                            // handleEvent case 16 -> BF2::handleInGameWinMessages
-#include "BF2FrameInterpolator.h"           // +0x1C client-only object; ctor real, three methods remain [FRONTIER]
+#include "BF2FrameInterpolator.h"           // +0x1C client-only object
 #if !DEDICATED
 #include "../../RendMisc/IRenderView.h"
 #include "../../RendMisc/IRenderer.h"
@@ -93,7 +100,7 @@
 #include "../LocalProfileManager.h"        // native client startup interface
 #include "../ProfileManager.h"             // renderMenu case 14 clears the pending transition
 #include "../../Menu/BF2HudManager.h"       // constructor and established virtual prefix; publication gated
-#if !DEDICATED && (defined(_MSC_VER) || defined(BF2_STATIC_PLUGINS))
+#if !DEDICATED
 #include "../../Geom/GeometryTemplateManager.h"   // shutdown: the client arm's template clear (+0x28)
 #endif
 #include <cstdio>
@@ -266,6 +273,10 @@ namespace memory { void nextVisualFrame(); }
 namespace memory { void nextVisualFrame() { } }   // placeholder - see above
 
 namespace io { extern IBase* inputManager; extern IBase* inputDeviceManager; }   // Core/Globals.cpp defines both as IBase*
+#if !DEDICATED
+extern Mat4 g_demoTraceCameraMatrix;    // BF2Render.cpp, [TEMP]
+extern bool g_demoTraceCameraValid;
+#endif
 
 namespace {
 #if !DEDICATED
@@ -281,7 +292,7 @@ void musicTraceSite(const char* site)
 #if defined(__APPLE__)
 // [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: macos-singleplayer-hosting-validated]
 // BF2_HOST_TRACE=1: one read-only stderr line per startMission/startGame exit, naming the step
-// (docs/macos-c-singleplayer.md: the client-hosted instant battle that sometimes never loads).
+// (the client-hosted instant battle that sometimes never loads).
 void hostTrace(const char* step, int value)
 {
     static int armed = -1;
@@ -297,7 +308,7 @@ void hostTrace(const char* step, int value)
 // BF2_PLAY_TRACE=1: once a second, one read-only stderr line about the local player (alive,
 // vehicle template and seat root, position, view direction), the players alive per team, and
 // the sound engine (initialized, provider, playing samples, allocated/max voices). Judging
-// scripted playthroughs from the log (docs/macos-c-ingame-play.md). Nothing is written.
+// scripted playthroughs from the log. Nothing is written.
 void playTraceTick()
 {
     static int armed = -1;
@@ -333,6 +344,54 @@ void playTraceTick()
     {
         std::fprintf(stderr, "[PLAY] no local player; players t1 %d/%d t2 %d/%d; %s\n",
                      alive[1], total[1], alive[2], total[2], sound);
+        // [TEMP] demo playback (no local player): the spectator camera's mode and the followed
+        // player's position, for the demo gate's movement judge (tools/macos/loopback/demo_cycle.py).
+        if (game && game->isPlayingDemo())
+        {
+            if (IGameClient* client = static_cast<IGameClient*>(game->queryInterface(IID_IGameClient)))
+            {
+                const int followed = client->demoGetCurrentPlayerId();
+                const bool freeFlying = client->demoIsFreeFlying();
+                float fpos[3] = { 0, 0, 0 };
+                int followedAlive = -1;
+                std::string followedName = "-";
+                if (world::IPlayer* target = followed >= 0 ? world::playerManager->getPlayerFromId(followed) : 0)
+                {
+                    followedAlive = target->getIsAlive() ? 1 : 0;
+                    followedName = target->getName();
+                    if (world::IObject* vehicle = target->getVehicle())
+                    {
+                        world::IObject* root = world::getRootParent(vehicle);
+                        const Vec3& p = (root ? root : vehicle)->getAbsolutePosition();
+                        fpos[0] = p.x; fpos[1] = p.y; fpos[2] = p.z;
+                    }
+                }
+                // The matrix BF2Render last handed to the render view: its translation row and the
+                // position of its orthonormal inverse (whichever is the eye, the other is not).
+                float cam[3] = { 0, 0, 0 }, camInv[3] = { 0, 0, 0 };
+#if !DEDICATED
+                if (g_demoTraceCameraValid)
+                {
+                    const float* m = g_demoTraceCameraMatrix.m;
+                    cam[0] = m[12]; cam[1] = m[13]; cam[2] = m[14];
+                    for (int k = 0; k < 3; ++k)
+                        camInv[k] = -(m[12] * m[k * 4 + 0] + m[13] * m[k * 4 + 1] + m[14] * m[k * 4 + 2]);
+                }
+#endif
+                // The string the HUD's followed-name text node draws (HudElementsDemoPlayerName.con).
+                const char* hudName = "-";
+#if !DEDICATED
+                if (g_hudInformationLayer)
+                    if (const char** slot = static_cast<HudInformationLayer*>(g_hudInformationLayer)
+                                                ->getStringByName("DemoPlayerNameString"))
+                        hudName = *slot ? *slot : "(null)";
+#endif
+                std::fprintf(stderr, "[PLAY] demo free=%d follow=%d followAlive=%d followPos=%.2f/%.2f/%.2f "
+                                     "cam=%.2f/%.2f/%.2f camInv=%.2f/%.2f/%.2f hudName=%s| followName=%s\n",
+                             freeFlying ? 1 : 0, followed, followedAlive, fpos[0], fpos[1], fpos[2],
+                             cam[0], cam[1], cam[2], camInv[0], camInv[1], camInv[2], hudName, followedName.c_str());
+            }
+        }
         std::fflush(stderr);
         return;
     }
@@ -360,7 +419,7 @@ void playTraceTick()
 
 // [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: macos-client-perf-understood]
 // BF2_FRAME_TRACE=1: once a second (wall clock), one stderr line with the frame count, the mean and
-// worst frame time, and the mean wall time of each mainLoop section (docs/macos-c-handplay-1.md).
+// worst frame time, and the mean wall time of each mainLoop section.
 // Measurement only: off by default, nothing in the loop changes.
 namespace frametrace {
 enum Section { Pre, Update, Script, Objects, Render, Tail, Count };
@@ -534,7 +593,7 @@ void updateMenuPause(int& state, bool menuUp)
     if (menuUp && (!gameLogic || gameLogic->getGameStatus() != 2))  // +0x158
         wantPause = true;
     else
-        wantPause = playingDemo && client && static_cast<IGameClient*>(client)->isDemoPlaying();   // +0x68
+        wantPause = playingDemo && client && static_cast<IGameClient*>(client)->isDemoAtEnd();     // +0x68
     if (wantPause == (state >= 0))
         return;                                                     // nothing to change
     if (!wantPause)
@@ -738,10 +797,13 @@ bool BF2Engine::init(const std::string& commandLine)
             SingletonRegInfo sri = { std::string("HudManager"), reinterpret_cast<IBase**>(&hudManager), 0, 0, 4 };
             classManager->registerSingleton(sri);                             // vptr+0x44
         }
-        // [CHOSEN, not recovered] VoIP construction is omitted.
-        // There should be BF2VoipClient construction (PE 0x4519B0) and registration
-        // of "Bf2VoipClient" here. Keep the singleton absent until voice is wanted.
-        // [RETIRE-WHEN: client-voip-optional] See debt RW-94.
+        // BF2.exe 0x40C351: operator new(0xC8) + ctor 0x4519B0 (a failed allocation stores null), then
+        // the "Bf2VoipClient" singleton row with the HudManager row's flags (0x40C376..0x40C3AD).
+        bf2VoipClient = new BF2VoipClient();
+        {
+            SingletonRegInfo sri = { std::string("Bf2VoipClient"), reinterpret_cast<IBase**>(&bf2VoipClient), 0, 0, 4 };
+            classManager->registerSingleton(sri);                             // vptr+0x44
+        }
     }
 #endif
 
@@ -828,8 +890,9 @@ bool BF2Engine::init(const std::string& commandLine)
     io::mainConsole->runFullAccess("Init.con", "", "", "", "", "", "", "", "",
                                    io::Console::ignoredString_);   // +0x2C
 
-    // [CHOSEN, not recovered] PunkBuster initialization and its console-command hook
-    // are omitted. Commands therefore run without the SDK's pre-dispatch filter.
+    // 0x40C9EB..0x40C9FD: the PunkBuster server glue, then the PB_ console pre-dispatch hook.
+    PbServerInitialize();
+    io::mainConsole->setHandleCommandHook(HandleCommandHookPB);
 
     debugDraw = new DebugDraw;                      // operator new(1), 0x813195D-0x8131962
 
@@ -859,17 +922,7 @@ namespace {
 // interface that the renderer-linked client builds carry.
 void shutdownGeometryTemplates(IBase* manager)
 {
-#if defined(_MSC_VER) || defined(BF2_STATIC_PLUGINS)
     static_cast<geom::IGeometryTemplateManager*>(manager)->clear();
-#else
-    // [FRONTIER] [TEMP] [CHOSEN, not recovered] Client builds without the typed renderer interface
-    // (neither MSVC nor the statically linked plugins) have no reviewed dispatch for this slot.
-    // [RETIRE-WHEN: posix-client-geometry-interface] Such a client carries the typed manager header.
-    (void)manager;
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::BF2Engine::shutdown GeometryTemplateManager::clear reached\n");
-    std::fflush(stderr);
-    std::abort();
-#endif
 }
 } // namespace
 #endif
@@ -964,9 +1017,9 @@ bool BF2Engine::shutdown()
         hudManager = 0;
     }
 
-    // [CHOSEN, not recovered] BF2.exe 0x408EC0 then calls Bf2VoipClient +0x68 when the voice client
-    // exists. This tree never constructs one (see initEngine), so the call is omitted.
-    // [RETIRE-WHEN: client-voip-optional] Restore the call with the voice client's class.
+    // BF2.exe 0x408EC0: the voice client's shutdown (+0x68); the object itself is never deleted.
+    if (bf2VoipClient)
+        bf2VoipClient->shutdown();
 #endif
 
     shutdownSettingsRepostitory();      // mirrors init()'s initSettingsRepostitory()
@@ -1005,14 +1058,27 @@ void BF2Engine::initDefaultSettings()
     settings->boolSet("GSLoadObfuscated", true);           // +0x54
                                                            //   (`mov [ebp+var_445], 1` at 0x812F97D)
 
-    sm->registerUserVar("GSFullScreen",                 false, io::VariableSet(0));  // bool
+    // GSFullScreen defaults to true: retail starts fullscreen unless +fullscreen 0 is given (parsed
+    // after this, in parseParameters). Client PE 0x4079A2 `mov byte [ebp-1], 1` feeds the typed helper
+    // 0x4074E0 (registerUserVar, then vptr+0x58 exists / vptr+0x54 boolSet when missing, then the
+    // default map); server ELF 0x812F9CC `movb $0x1, -0x446(%ebp)`, boolSet at 0x81301DD when the
+    // value is missing, then recorded in the +0x54 default map and the +0x48 set. Registered unsaved,
+    // so no profile file carries it.
+    if (sm->registerUserVar("GSFullScreen",             false, io::VariableSet(0)))  // bool
+    {
+        const bool fullScreenDefault = true;
+        if (!settings->boolExists("GSFullScreen"))
+            settings->boolSet("GSFullScreen", fullScreenDefault);
+        sm->m_boolDefaults.insert(std::make_pair(std::string("GSFullScreen"), fullScreenDefault));
+        sm->m_boolUnknown.insert("GSFullScreen");
+    }
     sm->registerUserVar("GSExtrapolateFrame",           true,  io::VariableSet(0));  // bool
     sm->registerUserVar("GSShowNetGraph",               true,  io::VariableSet(0));  // bool
     sm->registerUserVar("GSClPunkBuster",              true,  io::VariableSet(0));  // bool
 
-    // [UNRESOLVED] The thirteen registered variables' conditional default assignments
+    // [UNRESOLVED] The other twelve registered variables' conditional default assignments
     // are incomplete: matching the typed Exists/Set pairs to variables is unresolved,
-    // including the eight Boolean default values. Registration failure must remain visible.
+    // including seven Boolean default values. Registration failure must remain visible.
 }
 
 // Parses plus-prefixed command-line options and applies their settings. Option ids
@@ -1103,6 +1169,11 @@ bool BF2Engine::parseParameters(const std::string& commandLine)
         parser.add( 44, "maxPlayers",             "Sets max players.");
         parser.add( 59, "ranked",                 "Allows gamespy snapshot sending");
         parser.add( 73, "dropDynamicSpawns",      "Don't re-add dynamic spawn groups as round (re)starts.");
+#if defined(__APPLE__) && !DEDICATED
+        // [CHOSEN, not recovered] macOS port addition (not retail): fills the native effect cache.
+        // Ids up to 73 are retail; 35 stays recovered-but-unregistered.
+        parser.add( 74, "warmupLevel",            "Host the level locally, build its shaders, then quit (setup)");
+#endif
 
         // Only registered parser IDs reach these sparse switch cases.
         std::list<std::pair<int, std::string> > keyList;        // var_C8
@@ -1179,6 +1250,10 @@ bool BF2Engine::parseParameters(const std::string& commandLine)
                     break;
 
                 case 20:    // +fullscreen
+#if defined(__APPLE__) && !DEDICATED
+                    if (bf2warmup::active())                        // [CHOSEN] +warmupLevel runs windowed (case 74)
+                        break;
+#endif
                     settings->boolSet("GSFullScreen", atoi(value.c_str()) != 0);
                     break;
 
@@ -1186,6 +1261,19 @@ bool BF2Engine::parseParameters(const std::string& commandLine)
                             // server because region 1 writes opt-nosound = "1" unconditionally.
                     Vars::set("opt-nosound", value);
                     break;
+
+#if !DEDICATED
+                case 35:    // BF2.exe 0x40AE6B: the lightmap-rendering-node switch. Recovered but
+                            // unreachable in retail: no option is registered with id 35 (the client
+                            // registers 34 options, none of them 35), so the parser never yields it.
+                    if (value == "1")
+                    {
+                        // Retail first calls memory::set_max_alloc_size(0x18CBA80); omitted under the
+                        // shared CRT heap policy (https://github.com/B2BF/OpenBF2/issues/7, as BFTerrain).
+                        setLightmapRenderingNode(true);
+                    }
+                    break;
+#endif
 
                 case 39:    // +demo - three effects, and the third is easy to miss
                     settings->stringSet("GSDemo", value);
@@ -1217,7 +1305,7 @@ bool BF2Engine::parseParameters(const std::string& commandLine)
 
                 case 57:    // +help
 #if !DEDICATED
-                    // [CHOSEN, not recovered] Owner request 2026-11-09 (docs/macos-feat-helparg.md).
+                    // [CHOSEN, not recovered] Owner request 2026-11-09.
                     // Session-only: never change GeneralSettings or serialize this override.
                     if (value == "0" || value == "1")
                     {
@@ -1269,6 +1357,26 @@ bool BF2Engine::parseParameters(const std::string& commandLine)
                 case 73:    // +dropDynamicSpawns - a flag
                     settings->boolSet("dropDynamicSpawns", true);
                     break;
+
+#if defined(__APPLE__) && !DEDICATED
+                case 74:    // +warmupLevel <level> - [CHOSEN, not recovered] port addition (Warmup.h):
+                            // a server start of <level> like +loadLevel, then quit once every effect
+                            // build has finished. The menu is skipped (startGame's menu flow).
+                    if (value.compare("") != 0)
+                    {
+                        loadLevel.assign(value);
+                        isServer = true;
+                        bf2warmup::configure(value);
+                        // Windowed, whatever +fullscreen or the profile say: a fullscreen client that
+                        // starts behind another app (the setup launches it while the user works
+                        // elsewhere) gets WM_ACTIVATEAPP false, and the mainLoop gate (byte52, event
+                        // 15) then skips renderMenu and the world frame, so the JOIN waits and the
+                        // first world frame's effects are not built until the window is activated.
+                        // The window mode does not change the shader set.
+                        settings->boolSet("GSFullScreen", false);
+                    }
+                    break;
+#endif
 
                 // 6 (+checkForAvailablePatch), 7 (+checkForPatch) and 10 (+lowPriority) are
                 // registered but share the default target 0x8133400 - they parse and do nothing.
@@ -1436,6 +1544,24 @@ bool BF2Engine::startGame(bool noAutoJoin, bool startFromMenu)   // 2nd bool fro
         bool menuFlow = false;
         if (startFromMenu)
             menuFlow = !settings->boolGet("GSDeveloper", false);            // vptr+0x50
+#if defined(__APPLE__)
+        if (bf2warmup::active())                                            // [CHOSEN] +warmupLevel: the
+        {                                                                   //   non-menu start, as a developer host
+            menuFlow = false;
+            // The shader set follows the profile's video settings, so log in the profile the game will
+            // use: +playerName, else GlobalSettings' default user (the menu's own login). Without a
+            // profile the engine defaults apply (a new profile starts from them).
+            ILocalProfileManager* lpm = static_cast<ILocalProfileManager*>(classManager->getSingleton("LocalProfileManager"));
+            std::string profile = settings->stringGet("GSPlayerName", std::string());
+            if (profile.empty())
+                if (IBase* gs = classManager->getSingleton("GlobalSettings"))
+                    profile = static_cast<IGlobalSettings*>(gs)->getDefaultUser();
+            bool loggedIn = lpm && lpm->getCurrentProfile();
+            if (!loggedIn && lpm && !profile.empty())
+                loggedIn = lpm->quickLogin(profile, settings->stringGet("GSPlayerPassword", std::string()));
+            bf2warmup::profile(loggedIn ? profile : std::string());
+        }
+#endif
         if (!menuFlow)
         {
             swiffHost->setGameStarting(true);                           // +0xD8
@@ -1736,6 +1862,13 @@ bool BF2Engine::initEngine()
     {
         if (!isDedicated())
         {
+#if !DEDICATED
+            // [CHOSEN, not recovered] No retail call: between the renderer test (0x40939E) and the
+            // input init (0x4093C0), a Default profile created by init above takes the
+            // renderer-aware video defaults and the session switches to them.
+            static_cast<LocalProfileManager*>(static_cast<ILocalProfileManager*>(
+                classManager->getSingleton("LocalProfileManager")))->applyFirstStartVideoDefaults();
+#endif
             if (!static_cast<io::IInputManager*>(io::inputManager)->init(1087))   // vslot +0x10, device mask 1087
                 return false;
             io::mainConsole->run("Settings/Controls.con", "", "", "", "", "", "", "", "", io::Console::ignoredString_);
@@ -1907,6 +2040,22 @@ bool BF2Engine::mainLoop()
         return false;
 #if defined(__APPLE__) && !DEDICATED
     frametrace::begin();                                            // [TEMP] BF2_FRAME_TRACE
+    bf2warmup::tick();                                              // [CHOSEN] +warmupLevel: progress / exit
+    // [CHOSEN, not recovered] +warmupLevel only: a listen server draws no world until the local
+    // player presses JOIN GAME on the map-loaded screen, and the first world frame builds effects
+    // too. Issue the button's own action: its ActionScript calls dice.bf2.Logic.readyToPlay
+    // (SwiffPlayer.dll 0x1004DE90, as_logic_readyToPlay), which pushes an empty type-15 MenuEvent
+    // through ISwiffHost +0x2C pushEvent (BF2.exe 0x49D210); renderMenu (0x40BD10) case 15 removes
+    // the loading screen and clears gameStarting. Gated on the map-loaded state: the same
+    // "not loading" the AS reads (getIsLoading: host +0xCC, +0x2A8).
+    if (bf2warmup::active())
+        if (ui::ISwiffHost* host = static_cast<ui::ISwiffHost*>(classManager->getSingleton("SwiffHost")))
+            if (!host->getFlag7B8() && !host->getFlagEA8() && bf2warmup::wantsJoinGame())
+            {
+                MenuEvent event;
+                event.type = 15;
+                host->pushEvent(event);
+            }
 #endif
 
     // : the idle throttle. The binary does `if (!byte52) usleep(100000);` - a flat 100 ms
@@ -2102,8 +2251,11 @@ bool BF2Engine::mainLoop()
         }
     }
 
-    // [CHOSEN, not recovered] Client VoIP updates are omitted.
-    // [RETIRE-WHEN: client-voip-optional] Restore the voice update when game and voice client are available.
+#if !DEDICATED
+    // BF2.exe 0x40CFF9..0x40D017: the voice client's frame (+0x9C) on a client with a game.
+    if (!isDedicated() && bf2VoipClient && game)
+        bf2VoipClient->updateClient();
+#endif
     if (game)
         updateMenuPause(*savedPauseState, menuLogic != 0);          //  on the heap int
     {
@@ -2321,7 +2473,15 @@ bool BF2Engine::mainLoop()
     frametrace::end(ticks, game != 0 && menuLogic == 0);            // [TEMP] BF2_FRAME_TRACE
 #endif
 
-    // [CHOSEN, not recovered] The per-frame PunkBuster SDK pump is omitted.
+    // 0x40D5CB..0x40D5FE: the per-frame PunkBuster pump, client glue first.
+    if (game && game->isPunkBusterEnabled())
+    {
+#if !DEDICATED
+        PbClientProcessEvents();
+#endif
+        if (game->queryInterface(IID_IGameServer))
+            PbServerProcessEvents();
+    }
     // A queued quit makes this the final frame.
     return !quitNextFrameFlag;
 }
@@ -2936,6 +3096,18 @@ void BF2Engine::renderMenu(int renderTicks, float renderDt, double wallDelta, bo
     ui::ISwiffHost* host = menuLogic->getSwiffHost();       // +0x20
     if (host->pollEvent(event))                             // +0x28 on that object
     {
+#if defined(__APPLE__)
+        // [CHOSEN, not recovered] +warmupLevel only: without a logged-in profile the main menu that
+        // loads after JOIN GAME posts type 13 (save profile, log out, shutdownGame) at once, which
+        // ends the hosted game before the first world frames' effects are built. The warm-up keeps
+        // the game: the events that end it (8 disconnect, 13 logout, 14 kicked to the menu, 17) are
+        // dropped and logged. Retail cannot reach a hosted game without a profile through the menu.
+        if (bf2warmup::active() && (event.type == 8 || event.type == 13 || event.type == 14 || event.type == 17))
+        {
+            bf2warmup::menuEventDropped(event.type);
+            event.type = 0;                                 // the switch's default: nothing
+        }
+#endif
         ui::ISwiffHost* swiffHost = 0;
         switch (event.type)
         {

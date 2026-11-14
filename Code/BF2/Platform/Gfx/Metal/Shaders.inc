@@ -1,5 +1,5 @@
 // [CHOSEN, not recovered] G4 shader objects over offline-translated FX2 shader records.
-// Included only in Device.cpp after Resources.inc. See docs/macos-c-g4-effect.md.
+// Included only in Device.cpp after Resources.inc.
 static const GUID iidVertexShader={0xefc5557e,0x6265,0x4613,{0x8a,0x94,0x43,0x85,0x78,0x89,0xeb,0x36}};
 static const GUID iidPixelShader={0x6d3bdbdc,0x5b02,0x4415,{0xb8,0x52,0xce,0x5e,0x8b,0xcc,0xb2,0x89}};
 thread_local std::shared_ptr<const bf2fx::Shader> offeredShader;
@@ -15,9 +15,17 @@ thread_local std::shared_ptr<const bf2fx::Shader> offeredShader;
 struct FragmentVariant {
     unsigned fog=0;
     std::vector<std::pair<unsigned,unsigned>> samplers;
+    // D3DSAMP_MIPMAPLODBIAS per pixel sampler (non-zero only): Metal sampler states carry no LOD
+    // bias, so the shader's samples take it as MSL bias() (lodBiasSamples).
+    std::vector<std::pair<unsigned,float>> bias;
+    // D3DRS_SHADEMODE = D3DSHADE_FLAT: the colour inputs (COLOR0/COLOR1) take the provoking
+    // (first) vertex's value, as D3D9 flat shading does for oD0/oD1 and color-semantic inputs.
+    bool flat=false;
     std::string key() const {
-        std::string k=std::to_string(fog);
+        std::string k=std::to_string(fog)+(flat?"F":"");
         for(const auto& s:samplers) k+=":"+std::to_string(s.first)+"="+std::to_string(s.second);
+        char b[48];
+        for(const auto& s:bias) { std::snprintf(b,sizeof(b),"|b%u=%a",s.first,double(s.second)); k+=b; }
         return k;
     }
 };
@@ -30,6 +38,30 @@ static std::size_t closingParen(const std::string& t,std::size_t open) {
         else if(t[i]==')' && --depth==0) return i;
     }
     return std::string::npos;
+}
+// The MSL literal of a bias value (exact: hexadecimal float).
+static std::string biasLiteral(float v) { char b[48]; std::snprintf(b,sizeof(b),"%a",double(v)); return b; }
+// D3D9 D3DSAMP_MIPMAPLODBIAS: the bias is added to the level of detail of every sample of the
+// sampler (texld/texldp and the ps_1_x tex forms; a texldb shader bias and a texldl explicit LOD
+// add to it, as the sampler bias adds to both in the reference rasterizer and GL). `sample(sN,
+// coord)` becomes `sample(sN, coord, bias(B))`; Metal clamps the biased LOD to the sampler's mip
+// range as D3D9 clamps it to MAXMIPLEVEL..last level. [UNRESOLVED] texldd (gradient2d) cannot
+// take a bias in MSL; MojoShader emits no gradient sample for BF2's effects.
+static bool lodBiasSamples(std::string& msl,unsigned slot,float value,std::string& error) {
+    const std::string n=std::to_string(slot), call="s"+n+"_texture.sample(s"+n+", ";
+    for(std::size_t at=msl.find(call);at!=std::string::npos;at=msl.find(call,at+1)) {
+        const std::size_t a=at+call.size(), e=closingParen(msl,a);
+        if(e==std::string::npos) { error="unterminated sample of sampler "+n; return false; }
+        const std::string arg=msl.substr(a,e-a);
+        std::string patched;
+        const std::size_t b=arg.find(", bias(");
+        if(b!=std::string::npos) patched=arg.substr(0,b+7)+biasLiteral(value)+" + "+arg.substr(b+7);
+        else if(arg.find(", level(")!=std::string::npos) { const std::size_t l=arg.find(", level("); patched=arg.substr(0,l+8)+biasLiteral(value)+" + "+arg.substr(l+8); }
+        else if(arg.find(", gradient")!=std::string::npos) patched=arg;
+        else patched=arg+", bias("+biasLiteral(value)+")";
+        msl.replace(a,e-a,patched);
+    }
+    return true;
 }
 // Retypes MojoShader's ps_1_x 2D sampler `sN` to a cube (kind 1) or volume (kind 2) texture.
 // SM1 samples come in two forms: `sN_texture.sample(sN, X.xy)` and, for texld with _dw/_dz,
@@ -76,6 +108,11 @@ static bool patchMsl(const std::string& source,bool vertex,std::string& out,std:
                      const FragmentVariant* variant=nullptr,bool clampColors=false) {
     std::string msl=source;
     if(variant) for(const auto& s:variant->samplers) if(!retypeSampler(msl,s.first,s.second,error)) return false;
+    if(variant) for(const auto& s:variant->bias) if(!lodBiasSamples(msl,s.first,s.second,error)) return false;
+    if(variant && variant->flat && !vertex)
+        for(const char* user:{"[[user(color0)]]","[[user(color1)]]"})
+            for(std::size_t at=msl.find(user);at!=std::string::npos;at=msl.find(user,at+1))
+                msl.replace(at,std::strlen(user),std::string(user).substr(0,std::strlen(user)-2)+", flat]]");
     const std::string keyword=vertex?"vertex ":"fragment ";
     std::size_t sig=msl.rfind("\n"+keyword); if(sig==std::string::npos) { error="no "+keyword+"entry"; return false; }
     std::size_t close=msl.find("\n) {",sig);

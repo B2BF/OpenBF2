@@ -1,8 +1,9 @@
 # Building the engine and tools
 
 Run commands from the repository root unless a step says otherwise. The checked-in
-[presets](../CMakePresets.json) select Ninja and a build configuration; the Windows
-presets expect an initialized Visual Studio environment. They do not switch an x64
+[presets](../CMakePresets.json) select Ninja (Unix Makefiles on macOS) and a build
+configuration; the Windows presets expect an initialized Visual Studio environment.
+They do not switch an x64
 compiler into x86 mode. In an IDE, select the matching Visual Studio architecture.
 
 ## Targets and outputs
@@ -16,16 +17,33 @@ Paths below are relative to the selected CMake build directory.
 | Preset | Target | Output | Link contract |
 | --- | --- | --- | --- |
 | `msvc-x86` | `bf2_recovered` | Static engine archive | Compile check |
-| `msvc-x86` | `bf2_w32ded` | `bin/bf2_w32ded.exe` | Diagnostic `/FORCE` |
+| `msvc-x86` | `bf2_w32ded` | `bin/bf2_w32ded.exe` | Strict |
 | `msvc-x64` | `bf2_w64ded` | `bin_w64ded/bf2_w64ded.exe` | Strict |
 | `linux-x64` | `bf2` | `bin_linux/bf2` | Strict |
-| `msvc-x86` | `bf2_client` | `bin_client/BF2.exe` | Diagnostic `/FORCE` |
-| `msvc-x86` | `bf2_editor` | `bin_editor/BF2Editor.exe` | Diagnostic `/FORCE` |
+| `macos-x64` | `bf2` | `bin_macos/bf2` | Strict |
+| `macos-universal` | `bf2_client`, `bf2`, `bf2_aidll`, `dice_py`, `dice_py_check`, `bf2_aidll_loader_check` | `bin_macos/` | Strict; arm64 + x86_64 slices; native effect dependencies required for the renderer |
+| `linux-x64` / `macos-x64` | `bf2_aidll` | `bin_linux/libaidll.so` / `bin_macos/libaidll.dylib` | Strict; native AI image |
+| `macos-x64` | `bf2_client` | `bin_macos/bf2_client` | Strict; renderer excluded; renderer-free startup reaches the main loop (S2.12) |
+| `msvc-x86` | `bf2_client` | `bin_client/BF2.exe` | Strict |
+| `msvc-x86` | `bf2_editor` | `bin_editor/BF2Editor.exe` | Strict; voice dependency fix awaits VM verification |
+| `msvc-x64` | `bf2_client` | `bin_client/BF2.exe` | Strict |
+| `msvc-x64` | `bf2_aidll` | `bin_client/aidll.dll`; staged into `bin_w64ded/` | Strict; native AI image, pending MSVC validation |
+| `msvc-x64` | `bf2_editor` | `bin_editor/BF2Editor.exe` | Strict; voice dependency fix awaits VM verification |
 
 The x86 preset uses `Reconstruction` with `BUILD_TESTING=ON`. Windows x64 uses `Release`;
 Linux uses `RelWithDebInfo`; both default to `BUILD_TESTING=OFF`. The client and editor
-are explicit targets, available only on Windows x86. The optional `bf2_aidll` target
-builds `bin/AIDLL_w32ded.dll`.
+are explicit targets on Windows x86 and x64 and need the
+[April 2005 DirectX SDK](#directx-sdk). The optional `bf2_aidll` target
+builds `bin/AIDLL_w32ded.dll` with a diagnostic link in the x86 configuration.
+On Windows x64, both `bf2_client` and `bf2_w64ded` depend on the strictly linked
+native `bf2_aidll`; the server stages the same `aidll.dll` beside its executable.
+This is `[CHOSEN, not recovered]` under [issue #11](https://github.com/kr4uzi/OpenBF2/issues/11).
+
+On POSIX, building `bf2` also builds `bf2_aidll` from the same native headers and
+toolchain. Keep the resulting library beside the executable; never use the retail
+32-bit `libaidll.so`. The AI still contains named aborting frontiers. The optional
+`bf2_aidll_loader_check` target checks dynamic loading and export lookup without
+initializing AI or starting a server.
 
 A strict link resolves the image's symbols. Runtime behavior still needs validation.
 A `/FORCE` link can produce an executable with unresolved calls, so treat it as a
@@ -34,6 +52,8 @@ diagnostic artifact and report the exact paths a run exercised.
 ## Windows prerequisites
 
 - MSVC C++ tools and Windows SDK, with x86 and x64 components as needed.
+- For the client, the editor and their renderer plugins: the April 2005 DirectX SDK
+  (see [DirectX SDK](#directx-sdk)). Dedicated servers do not need it.
 - CMake 3.21 or newer and Ninja on `PATH`.
 - Your own Battlefield 2 1.50 installation for runtime content and reference binaries.
   Compiling an archive or running engine-free checks does not require game content.
@@ -83,7 +103,8 @@ cmake --build out/build/local-x64 --target bf2_w64ded
 The x64 Python pair defaults to
 `Code/BF2/External/python-embedded/OBJ/python/x64/release/`. Never reuse the x86 import
 library or DLL. This target is a native dedicated-server port; its object layouts do
-not validate retail x86 offsets.
+not validate retail x86 offsets. The same configuration also builds the native x64 client
+and editor (see [Client and plugins](#client-and-plugins)).
 
 For isolated Python builds, set `BF2_PYTHON_OUT` before calling `build_python.cmd`, then
 configure CMake with `-DBF2_DICE_PY_LIB=<output>/dice_py.lib` and
@@ -110,27 +131,151 @@ the check executable; `dice_py_check_run` builds and runs it.
 glibc and the other system dependencies remain dynamic. Pass
 `-DBF2_LINUX_STATIC_RUNTIME=OFF` if you need dynamic compiler runtimes instead.
 
+## macOS
+
+The macOS dedicated server is a native port of the Linux one: the same `bf2` sources
+and `[CHOSEN, not recovered]` 64-bit layouts, built with AppleClang and libc++. It is
+an owner-requested port change; see [the macOS port notes](macos-port.md) for what
+differs from Linux and what the client and Metal milestones still need.
+
+Prerequisites are the Xcode Command Line Tools (Apple clang, the macOS SDK and
+`make`) and CMake 3.21 or newer. Full Xcode and Ninja are not required. The SDK
+supplies ncurses, pthreads and `dlopen`.
+
+The macOS configuration also defines the client and requires its native effect
+dependencies ([CHOSEN, not recovered], owner decision 2026-11-01). With an existing
+x86_64 native dependency bundle, configure and build the renderer-ON client and server
+in one command from the repository root (`NATIVEFX_DIR` is the bundle's directory, built
+with `sh tools/macos/nativefx/build.sh`):
+
+```bash
+cmake --preset macos-x64 -B out/build/local-macos -DBF2_MACOS_LINK_RENDDX9=ON -DBF2_FX_NATIVE_DEPS="$NATIVEFX_DIR" && cmake --build out/build/local-macos --target bf2_client bf2 -j4
+```
+
+`BF2_FX_NATIVE_DEPS` names a directory with `vkd3d/.libs/libvkd3d-shader.a`,
+`vkd3d/.libs/libvkd3d-common.a`, `vkd3d-src/include/vkd3d_shader.h`,
+`mojo/libmojoshader.a` and `mojo-src/mojoshader.h`. The libraries must contain every
+requested architecture and use the repository's vkd3d/MojoShader patches. CMake
+checks all three archives with `lipo -verify_arch`. The default directory is
+`out/build/nativefx` for x86_64, `out/build/nativefx-arm64` for arm64, or
+`out/build/nativefx-universal` for both; if dependencies are absent or incompatible,
+renderer-enabled configuration fails with instructions instead
+of building a cache-only client. Local dependency sources are not vendored in this
+checkout. If already supplied under `out/third_party/vkd3d` (vkd3d 2.1) and
+`out/third_party/mojoshader`, `sh tools/macos/nativefx/build.sh` builds the dependencies
+offline there. That optional source build also needs the native autotools/libtool,
+flex, bison and MinGW widl tools expected by `build-vkd3d.sh`; nothing is downloaded
+or installed. The production CMake build consumes the native libraries directly and
+does not invoke Wine, D3DX or an oracle tool. Pass `arm64` or `universal` to
+`build.sh` to cross-compile or assemble both slices with `lipo`; no argument keeps
+the historical x86_64 output. All use the same patched sources and default to
+`MACOSX_DEPLOYMENT_TARGET=11.0`. Cross builds use host-native generators and never
+execute the arm64 harness.
+
+The client compiles effects with vkd3d-shader, the D3D9 asm assembler, the effect
+parser and MojoShader to MSL, caching under `@HOME@/FxNative`. No Wine, Windows DLL,
+offline prebuild or identity file is needed to install or run it. See the
+[effect policy](macos-port.md).
+Optional historical oracle/cache checks require `-DBF2_FX_DEVELOPER_ORACLE=ON`;
+they are excluded from the default build and are never client dependencies.
+
+With native dependencies in the default directory, the server command remains:
+
+```bash
+cmake --preset macos-x64
+cmake --build out/build/macos-x64 --target bf2 dice_py_check_run -j4
+```
+
+The preset uses the Unix Makefiles generator, `RelWithDebInfo`, and
+`CMAKE_OSX_SYSROOT=macosx`. The explicit SDK sysroot keeps Homebrew headers in
+`/usr/local/include` out of the build. The outputs are
+`out/build/macos-x64/bin_macos/bf2`, `libdice_py.dylib` and `libaidll.dylib`;
+`bf2` finds the libraries through an `@loader_path` runtime search path, so copy
+the three together. `+ai 1` enables the AI connection. A co-op mode also needs a
+map with its matching AI layer and navigation files.
+
+`macos-x64` explicitly selects `CMAKE_OSX_ARCHITECTURES=x86_64`, including on Apple
+silicon. The `[CHOSEN, not recovered]` `macos-universal` preset selects
+`CMAKE_OSX_ARCHITECTURES="arm64;x86_64"` for the server, client and plugins.
+With the local sources and generator tools above available, this single command
+builds the native dependencies, Metal client, dedicated server and AI library:
+
+```bash
+sh tools/macos/nativefx/build.sh universal && cmake --preset macos-universal -B out/build/local-universal -DBF2_MACOS_LINK_RENDDX9=ON && cmake --build out/build/local-universal --target bf2_client bf2 bf2_aidll -j4
+lipo -archs out/build/local-universal/bin_macos/bf2
+```
+
+Python's Darwin configuration selects `va_list` handling per compiler slice; the
+other configured widths are shared. No host Python or additional software is needed.
+For an arm64-only compile measurement, use a separate directory:
+
+```bash
+sh tools/macos/nativefx/build.sh arm64 && cmake --preset macos-x64 -B out/build/local-arm64 -DCMAKE_OSX_ARCHITECTURES=arm64 -DBF2_MACOS_LINK_RENDDX9=ON && cmake --build out/build/local-arm64 --target bf2_client bf2 bf2_aidll -j4
+```
+
+Cross-compiling and linking arm64 does not establish native runtime behavior. See
+[stage 1a](macos-port.md#stage-1a-universal-build-and-m2-validation) for the owner-run
+M2 bundle, offline sandbox, port 16890 and remaining client blockers.
+These build commands do not run a client
+or server. On an Intel host the arm64 vtable probes compile but their executable
+checks are left for the M2; universal executable checks use the host slice.
+
+`bf2_client` is the macOS client target ([CHOSEN, not recovered], package S2.0). Its
+renderer, movie and audio plugins are static libraries linked into the executable. The
+Metal renderer is enabled with `BF2_MACOS_LINK_RENDDX9=ON`; OFF retains the earlier
+renderer-free diagnostic client. Native effect dependencies are required at configure time
+when the renderer is enabled. The
+renderer-excluded x86_64 client compiles and links strictly after the
+PR #55 integration (`--target bf2_client -j4`). Renderer-free
+startup reaches the main loop; see [S2.12](macos-port.md#renderer-free-startup-end-s212).
+Run it only through the sandboxed offline harness, with HOME and cloned content under
+`out/`. Build `bf2_renddx9_static` separately with `-- -k` to measure the remaining
+renderer compile blockers.
+
+Run the server from a content root as on Linux. Pass `+config` and `+mapList` paths
+**relative to the content root**: with an absolute `+config` path the macOS smoke run
+ignored the file and started with the default settings, including port 16567. Use
+`+noStatusMonitor 1` when no terminal is attached. The ncurses status monitor is the
+only console input, so a graceful `quit` needs a terminal; the server installs no signal
+handler, and `SIGTERM` ends it without the shutdown path.
+
+### macOS client options that are not retail
+
+These `[CHOSEN, not recovered]` port additions exist only in the macOS client:
+
+| Option | Effect |
+|---|---|
+| `+help 0` / `+help 1` | Hides / shows the tutorial messages for this session (option id 57; bare `+help` keeps the retail usage text). |
+| `+warmupLevel <level>` | Hosts `<level>` locally through the non-menu start path, logs in the `+playerName` profile (else the default user) so its video settings apply, builds every shader of the level load, presses JOIN GAME through the button's own action (`dice.bf2.Logic.readyToPlay`) so the first world frame builds its effects too, waits for the background effect builds and exits. Runs windowed whatever `+fullscreen` says (a fullscreen client started behind another app is deactivated, and the deactivated main loop draws neither the menu nor the world). Without a logged-in profile the menu that loads after JOIN GAME asks to log out (renderMenu type 13), which would end the hosted game; the warm-up drops the game-ending menu events (8, 13, 14, 17) and prints `warmup: menu event N dropped`. `warmup: effects N/M` is printed at most once a second whenever N or M changes, during the level load too. Option id 74 (ids up to 73 are retail). For the setup assistant: one run per shader set fills the native effect cache. stdout lines `warmup: start`, `warmup: profile`, `warmup: effects N/M`, `warmup: level loaded`, `warmup: player joined`, `warmup: join game`, `warmup: world frame`, `warmup: done ...`; exit status 0 done, 2 the start failed, 3 timeout (`BF2_WARMUP_TIMEOUT`, default 3600 s), 4 done with native build failures. Check: `tools/macos/rendergate/warmup.sh`. |
+
 ## Client and plugins
 
-Use the x86 configuration and Python runtime above:
+Use the x86 or x64 configuration and the matching Python runtime above:
 
 ```powershell
 cmake --build out/build/local-x86 --target bf2_client
 cmake --build out/build/local-x86 --target bf2_client_linkcheck
 ```
 
+The x64 configuration builds the same targets (`out/build/local-x64`). See
+[Native x64 client](#native-x64-client) for what differs on x64.
+
 `bf2_client` rebuilds and stages `RendDX9.dll`, `SwiffPlayer.dll`, `BF2Audio.dll`, and
-`TextureAtlasBuilder.dll` beside `BF2.exe`. `bf2_client_linkcheck` is the strict companion link;
-unresolved symbols make it fail and identify remaining work. The main client target's
-`/FORCE` output does not imply that the strict companion passes.
+`TextureAtlasBuilder.dll` beside `BF2.exe`. On x86 it also builds `BF2VoipServer.dll`
+there. The client links strictly on both Windows architectures.
+`bf2_client_linkcheck` and the x86 server's `bf2_w32ded_linkcheck` are buildable
+compatibility aliases for their production targets; they emit no separate executable.
+The x86 voice and AI DLLs retain independent diagnostic `/FORCE` links.
 
 The client plugin steps currently share `Code/Build/obj_*_native` and
-`Code/Build/bin_*_native` across CMake trees. **Serialize client builds.** The staging
+`Code/Build/bin_*_native` (x86) or `Code/Build/obj_*_x64` and `Code/Build/bin_*_x64` (x64)
+across CMake trees of that architecture. **Serialize client builds.** The staging
 paths are fixed, so redirecting a plugin's `BIN` environment variable during a CMake
 client build would make it stage from the wrong location.
 
-Standalone plugin scripts build only for the rebuilt x86 client. No argument and the
-optional `native` argument select the same build; other arguments are rejected.
+Standalone plugin scripts build for the rebuilt client. No argument and the optional
+`native` argument select the x86 build; `x64` selects the native x64 build; other
+arguments are rejected.
 Renderer, movie, and audio DLLs share the host's dynamic CRT and require
 `_ITERATOR_DEBUG_LEVEL=0`. Retail executable/DLL swapping is retired under
 [issue #7](https://github.com/B2BF/OpenBF2/issues/7). Gameplay and content compatibility
@@ -143,10 +288,12 @@ cmd /c Code\Build\renddx9.cmd
 cmd /c Code\Build\swiffplayer.cmd
 cmd /c Code\Build\bf2audio.cmd
 cmd /c Code\Build\textureatlasbuilder.cmd
+cmd /c Code\Build\renddx9.cmd x64
 ```
 
 Default DLL directories remain `Code/Build/bin_renddx9_native`,
-`bin_swiffplayer_native`, `bin_bf2audio_native`, and `bin_textureatlasbuilder_native`.
+`bin_swiffplayer_native`, `bin_bf2audio_native`, and `bin_textureatlasbuilder_native`;
+the `x64` argument uses the `_x64` suffix instead of `_native`.
 Object directories use `obj_` instead of `bin_`. Existing compatibility outputs are
 not selected or removed by these scripts. Standalone builds support these isolation overrides:
 
@@ -156,16 +303,18 @@ not selected or removed by these scripts. Standalone builds support these isolat
 | `swiffplayer.cmd` | `BF2_SWIFFPLAYER_OUT` | `BF2_SWIFFPLAYER_BIN` |
 | `bf2audio.cmd` | `BF2_BF2AUDIO_OUT` | `BF2_BF2AUDIO_BIN` |
 | `textureatlasbuilder.cmd` | `BF2_TEXTUREATLAS_OUT` | `BF2_TEXTUREATLAS_BIN` |
+| `memory.cmd` | `BF2_MEMORY_OUT` | `BF2_MEMORY_BIN` |
 
 TextureAtlasBuilder uses its own static CRT and legacy float rounding to preserve `.tai`
 output. It does not transfer ownership of CRT allocations across the DLL boundary;
 callback string references are borrowed. The rebuilt plugins
 do not depend on `Memory.dll`, `msvcr71.dll`, or `msvcp71.dll`.
-The renderer and atlas scripts can use the April 2005 DirectX SDK (D3DX version 25)
-through `DXSDK_DIR`; they also have a no-SDK import-library fallback. The runtime still
-needs the matching `d3dx9_25.dll`. Client runtime dependencies also include the game's
-Bink and Novint components, TextureAtlasBuilder, and an OpenAL provider for audio.
-The audio build uses vendored Ogg/Vorbis by default; setting `BF2AUDIO_NO_VORBIS` omits it.
+`memory.cmd` builds the recovered `Memory.dll` (`Code/BF2/Memory`) into
+`bin_memory_native` (`bin_memory_x64` for x64); no game image links it.
+The renderer and atlas DLLs compile and link against the installed DirectX SDK described
+below, and at run time need the matching `d3dx9_25.dll`. Client runtime dependencies also
+include the game's Bink and Novint components, TextureAtlasBuilder, and an OpenAL provider for audio.
+The audio build always compiles the vendored Ogg/Vorbis decoder in, as the shipped DLL links its own.
 
 The CMake client target stages all four rebuilt DLLs above. It also stages Python
 and `NovintHFX.dll` when present at configuration time. Keep runtime testing in a separate
@@ -184,10 +333,156 @@ construction without supplying a device. That fixture crashes with both the pre-
 and native-only DLLs; it is not a passing startup acceptance gate. Restore its required
 host services before using it to claim plugin initialization coverage.
 
+### Native x64 client
+
+`[CHOSEN, not recovered]` under [issue #7](https://github.com/B2BF/OpenBF2/issues/7). The x86
+build remains the retail-fidelity reference; the x64 images are native ports with their own
+pointer-sized layouts. They keep the shipped file names, are written only inside the x64
+build tree, and can be mixed only with each other.
+
+- **Movies.** `binkw32.dll` exists only as a 32-bit DLL, so the x64 `RendDX9.dll` has no Bink
+  import. Each movie is skipped with one log line per movie name (`Video::open(...): movie
+  skipped`), through the same failure return the x86 renderer uses when a `.bik` is missing.
+- **Novint Falcon.** `NovintHFX.dll` is 32-bit only. The x64 client neither links nor stages it;
+  `FalconDevice::init` writes one line to stderr and reports the device as not connected.
+- **Audio.** The default providers load the game directory's 32-bit `BF2OpenAL.dll`, which an
+  x64 process cannot load, so sound stays off with a `Could not find BF2OpenAL.dll` warning.
+  Select the **System OpenAL** provider with a 64-bit `OpenAL32.dll` installed on the system, or
+  place a 64-bit `BF2OpenAL.dll` beside the x64 `BF2.exe` (the application directory is searched
+  before the game directory).
+- **D3DX.** The x64 renderer and atlas DLLs import the 64-bit `d3dx9_25.dll`, which the DirectX
+  End-User Runtime installs in `System32`. The copy in the game directory is 32-bit.
+- **AI.** The native `aidll.dll` builds with the client and dedicated server and is packaged
+  with both. It shares the host's native ABI; retail x86 AI DLLs cannot be used.
+  Windows compilation, exports, strict linking and bot execution await coordinator validation.
+- **Floating point.** Recovered x87 inline assembly keeps its x86 body; the x64 arms use SSE2
+  with the same operation order, rounding and NaN handling, marked
+  `[PLATFORM] x64: SSE2 arithmetic`. They match x87 at the CRT's 53-bit precision, not at the
+  24-bit precision Direct3D selects on a device thread without `D3DCREATE_FPU_PRESERVE`.
+
+Every x64 compile treats pointer truncation (C4311, C4312) as an error. The client links
+strictly; `bf2_client_linkcheck` builds the same target.
+
+**High-DPI displays (x86 and x64).** Retail `BF2.exe` has no manifest and does not declare DPI
+awareness, and the rebuilt one does not either (owner decision 2026-11-06: behave like shipped retail).
+Windows therefore bitmap-scales the game window on displays above 100 % scaling, for retail and
+rebuilt alike. A retail install that looks unscaled carries the compatibility setting *Override high
+DPI scaling behaviour: Application*, stored as `~ HIGHDPIAWARE` under
+`HKCU\Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers` for its path. Set the same
+layer for the rebuilt `BF2.exe` path for a 1:1 window; the setting is per executable path, so every
+staged copy needs its own entry. For pixel comparisons, give every compared client the same setting.
+
+### DirectX SDK
+
+`RendDX9.dll` and `TextureAtlasBuilder.dll` use the D3DX9 headers and import libraries of
+the installed **Microsoft DirectX 9.0 SDK (April 2005)**, `D3DX_SDK_VERSION` 25. That
+SDK's `d3dx9.lib` binds `d3dx9_25.dll`, the D3DX both shipped DLLs import, so the rebuilt
+renderer gets the same effect compiler and texture loaders as retail. Its `DxErr9.lib`
+supplies the atlas DLL's `DXGetErrorString9A`. A later SDK binds a later `d3dx9_NN.dll`
+with a different shader compiler; the June 2010 SDK, for example, binds `d3dx9_43.dll`
+and rejects `ps_1_x` targets by default. The build refuses such SDKs instead of linking
+them. Without the April 2005 SDK the build can use the
+[D3DX fallback](#d3dx-without-the-directx-sdk) instead.
+
+`Code\Build\dxsdk.cmd` locates the SDK for every script that needs it: `renddx9.cmd`,
+`textureatlasbuilder.cmd` (and so the `bf2_client` and `bf2_editor` plugin steps), the
+renderer fixtures under `Code\Tests`, and the renderer section of `syntaxcheck.cmd`. It
+checks `DXSDK_DIR`, which the SDK installer sets, and then the SDK's default folder under
+`Program Files (x86)`. It accepts a directory only when `Include\d3dx9core.h` declares
+version 25 and `Lib\<arch>` holds `d3dx9.lib` and `DxErr9.lib`. Run it after
+`vsdevcmd.cmd`, because it *appends* the SDK's `Include` and `Lib\<arch>` directories to
+`INCLUDE` and `LIB`. The Windows SDK therefore still provides `d3d9.h`, `dinput.h`,
+`dsound.h`, `strsafe.h`, `d3d9.lib`, `dinput8.lib` and `dxguid.lib`; only the D3DX headers
+and libraries come from the DirectX SDK. It also sets `BF2_DXSDK_DIR` and `BF2_DXSDK_LIB`.
+Without a suitable SDK it names what is missing and fails, unless the caller supports the
+fallback below.
+
+To check an installation, run the helper by itself. It prints the SDK it selected, or
+the reason it rejected each candidate:
+
+```powershell
+cmd /c Code\Build\dxsdk.cmd x86
+```
+
+The architecture argument selects `Lib\x86` or `Lib\x64`; the April 2005 SDK ships both,
+and its x64 `d3dx9.lib` binds the 64-bit `d3dx9_25.dll`. Renderer sources take D3DX
+through `Code/RendDX9Abi/D3dx9Sdk.h` and use the SDK's typed interfaces (`ID3DXEffect`
+and the others), not hand-declared prototypes or fixed vtable offsets. The x64 client,
+renderer and editor link against `Lib\x64`.
+Include `D3dx9Sdk.h` only inside a `BF2_IMAGE_RENDDX9` or
+`BF2_IMAGE_TEXTUREATLASBUILDER` region: the engine images compile every `Code/BF2`
+source without a DirectX SDK.
+
+### D3DX without the DirectX SDK
+
+`[CHOSEN, not recovered]`. Microsoft no longer distributes the April 2005 SDK, so
+`renddx9.cmd`, `textureatlasbuilder.cmd` and the renderer section of `syntaxcheck.cmd` can
+build without it. The fallback changes only where the declarations and the import library
+come from. The rebuilt DLLs still import the same `d3dx9_25.dll` by the same names, so the
+effect compiler and texture loaders are retail's. It works for x86 and x64.
+
+`BF2_D3DX` selects the source. These scripts call `dxsdk.cmd <arch> fallback`:
+
+| `BF2_D3DX` | Behaviour |
+| --- | --- |
+| `auto` (default) | Use the April 2005 SDK when `dxsdk.cmd` finds it, otherwise the fallback. |
+| `sdk` | Use the SDK only, and fail without it. |
+| `def` | Use the fallback even when the SDK is installed. |
+
+Callers without the `fallback` argument (the renderer fixtures under `Code\Tests` and the
+G2w seam build, `BF2_GFX_SEAM=ON`) still require the SDK. `dxsdk.cmd` prints which source it
+selected.
+
+With the fallback:
+
+- **Import library.** `d3dx9_25.lib` is generated with `lib /def /machine:<arch>` from
+  `Code/RendDX9Abi/D3dx9_25.def`. The `.def` lists the 37 names the rebuilt images call,
+  without ordinals. The x86 and x64 DLLs export the same 323 names, but four names have
+  different ordinals on x64. On x86 the D3DX functions are `__stdcall`, so callers reference
+  `_Name@bytes` while the DLL exports `Name`. `lib.exe` cannot produce that pairing, so
+  `Code/RendDX9Abi/D3dx9Fallback.h` maps each decorated name onto the library's plain one with
+  `/alternatename`. If a byte count is wrong, the link fails.
+- **Declarations.** `<d3dx9.h>` resolves to `Code/RendDX9Abi/D3dxFallbackInclude/d3dx9.h`. That
+  header places the renderer's D3DX subset (`Code/BF2/Platform/Gfx/D3DX9Subset.h`, shared with
+  the macOS build) on top of the Windows SDK's `<d3d9.h>`. `D3dx9Sdk.h` is unchanged: the subset
+  declares `D3DX_SDK_VERSION` 25.
+- **Error text.** `<dxerr9.h>` resolves to the fallback directory too. The SDK's `DxErr9.lib`
+  supplied `DXGetErrorDescription9A` (renderer effect errors) and `DXGetErrorString9A` (atlas
+  builder errors). Without it, `Code/RendDX9Abi/DxErr9StandIn.cpp` supplies both. They return
+  `HRESULT 0x........` instead of the name or description. `renddx9.cmd` links with
+  `/NODEFAULTLIB:dxerr9.lib` because `Effect.cpp` requests that library by `#pragma`. Only the
+  diagnostic text differs.
+- **Checks.** `renddx9.cmd` fails when a `d3dx9_25.dll` import name carries an `@bytes`
+  decoration. Such an image links cleanly but fails to load with `ERROR_PROC_NOT_FOUND`.
+
+The subset's COM interfaces must list their methods in the slot order of the real
+`d3dx9_25.dll`. `tools/d3dx/check_d3dx9_25.py` checks this against both architectures. It
+needs the x86 and x64 `d3dx9_25.dll` (SysWOW64 and System32 of a system with the DirectX
+End-User Runtime) and Microsoft's public symbols for each, all copied under `out/`. Its
+`--pdb-urls` option prints the symbol-server URLs.
+
+| Check | Evidence |
+| --- | --- |
+| Interfaces D3DX implements | `ID3DXBuffer`, `ID3DXEffectPool`, `ID3DXBaseEffect`, `ID3DXEffect`, `ID3DXEffectCompiler`, `ID3DXBaseMesh`, `ID3DXMesh`, `ID3DXRenderToSurface` and `ID3DXConstantTable` (declared in `D3dx9Fallback.h`, Windows only) match their implementation classes' vtables slot by slot, by the method names in the public symbols. Identical-code folding gives some stub slots another function's name. The `ID3DXBaseEffect` slots are therefore accepted when either `CEffect` or `CEffectCompiler` names them. |
+| Interfaces the engine implements | `ID3DXEffectStateManager` (21 slots) matches the slots that `CLoggableDevice`'s setters call. `ID3DXInclude` matches `Open` at slot 0 and `Close` at slot 1, as `CPPInclude` calls them. |
+| Exports | Every `.def` name is exported by both DLLs. Every `d3dx9_25` import of the retail `RendDX9.dll` (49) and `TextureAtlasBuilder.dll` (5) is exported by both DLLs (`--retail <game dir>`). |
+
+Run it after any change to the subset or the `.def`:
+
+```bash
+python3 tools/d3dx/check_d3dx9_25.py --dir out/win64/d3dx --retail "<Battlefield 2 dir>"
+```
+
+Some interfaces have trailing methods that the subset does not declare: `ID3DXEffect`'s
+`GetStateManager`, parameter blocks and `CloneEffect`, `ID3DXMesh::SetAttributeTable`, and
+`ID3DXEffectCompiler::CompileShader`. No rebuilt code calls them. Declare them, in DLL order,
+before using them.
+
 ## Editor
 
-The editor uses the x86 client engine and its own application entry point. Dear ImGui
-and ImGuizmo are vendored. Build its engine-free checks before the application:
+The editor uses the client engine of its configuration (x86 or x64) and its own
+application entry point. Dear ImGui and ImGuizmo are vendored. Build its engine-free checks
+before the application:
 
 ```powershell
 cmake --build out/build/local-x86 --target bf2_editor_run_checks
@@ -196,8 +491,16 @@ cmake --build out/build/local-x86 --target bf2_editor_linkcheck
 ```
 
 `bf2_editor_run_checks` exercises framework code without loading the engine or game
-content. `bf2_editor_linkcheck` reports unresolved image symbols; it may fail while the
-diagnostic `bf2_editor` target still emits an executable.
+content. Both editor targets reject unresolved image symbols. They share the client
+engine's voice-server dependency: the rebuilt `BF2VoipServer.dll` on x86 (staged beside
+`BF2Editor.exe`), or the client's native voice objects on x64. The dependency fix and
+strict editor links await fresh VM verification; no retail editor
+voice behavior is claimed. The x86 voice DLL retains its own diagnostic link.
+Configuration reports each editor target's voice provider and fails if it is absent.
+`bf2_editor_linkcheck` is a separate executable, independent of `bf2_editor`;
+requesting `bf2_editor` builds `BF2Editor.exe` and its renderer staging dependency.
+Use a new build directory when checking a different checkout, and retain verbose
+link commands and Ninja response files when investigating unresolved symbols.
 
 Each editor build normally rebuilds its native renderer and TextureAtlasBuilder under
 `<build>/editor_renddx9/` and stages them into `<build>/bin_editor/`. Python and the

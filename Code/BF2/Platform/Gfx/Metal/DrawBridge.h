@@ -1,5 +1,5 @@
 // [CHOSEN, not recovered] G4 draw bridge between the D3D9 device (Device.cpp) and Metal
-// (MetalBridge.mm). See docs/macos-c-g4-effect.md. No D3D or Objective-C types cross it.
+// (MetalBridge.mm). No D3D or Objective-C types cross it.
 #ifndef BF2_METAL_DRAWBRIDGE_H
 #define BF2_METAL_DRAWBRIDGE_H
 #include "MetalBridge.h"

@@ -34,6 +34,7 @@ public:
     void selectPrevious(int unusedWord);
 private:
     friend class BF2HudManager;
+    friend struct HudConsoleAccess;          // hudMessages.setReverseItems (76EB14) writes +08 directly
     friend class dice::hfe::GeneralSettings; // apply (PE 4B6975) stores its itemSelectionReverseItems byte into +08
     // HudVehicleInformation::setupOccupiedVehicle (PE 78D89C) stores 2.0f into +0x18 the same
     // way BF2HudManager's own arms do - a direct write, not through a setter.

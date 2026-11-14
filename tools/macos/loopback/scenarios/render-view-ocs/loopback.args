@@ -1,0 +1,1 @@
+--map operation_clean_sweep --ai --ai-spawn-only --bots 2 --spawn-time 1 --client-seconds 200

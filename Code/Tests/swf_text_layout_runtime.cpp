@@ -68,6 +68,7 @@ struct text_observer : gameswf::render_handler
 	int created_height = 0;
 	edit_text_character_def* definition = NULL;
 	bitmap_info* create_bitmap_info_empty() override { std::abort(); }
+	void set_depth(int) override {}
 	bitmap_info* create_bitmap_info_alpha(int, int, unsigned char*) override { std::abort(); }
 	bitmap_info* create_bitmap_info_rgb(image::rgb*) override { std::abort(); }
 	bitmap_info* create_bitmap_info_rgba(image::rgba*) override { std::abort(); }

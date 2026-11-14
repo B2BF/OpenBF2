@@ -44,8 +44,6 @@ call :death data-death     "FIXTURE_DEBUG line=757 Failed setting data on node: 
 if errorlevel 1 exit /b 1
 call :death child-death    "FIXTURE_DEBUG line=786 Failed adding child - NoSuchNode to sliderNode: Absent" FIXTURE_CHILD_RETURNED
 if errorlevel 1 exit /b 1
-call :death frontier-death "[FRONTIER] dice::meme::BfFixedSliderNode::updateSelf reached"                 FIXTURE_FRONTIER_RETURNED
-if errorlevel 1 exit /b 1
 echo HUD slider node and its three rows passed
 exit /b 0
 

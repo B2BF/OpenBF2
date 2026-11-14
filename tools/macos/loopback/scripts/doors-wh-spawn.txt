@@ -1,0 +1,190 @@
+# [TEMP] rend-doors: join and spawn at Construction Site until the spawn point can see the green
+# warehouse lrgstrgbuilding_03: spawn points -181/-78 and -175.7/-92.4
+# (gpm_coop/16 CPNAME_DP_SP16_constructionsite_6 and _5) look at its north gable. Any other spawn
+# point suicides from the spawn screen (SuicideButton 542 539 124 17) and respawns, at most ten
+# times. The [PLAY] trace (BF2_PLAY_TRACE) supplies the pos= lines the branches match.
+include join-and-spawn
+wait-ms 2000
+label check1
+wait-log-else 3 notA1 pos=-181.0/154.3/-78.0
+wait-log-else 0 view doors-never-matches
+label notA1
+wait-log-else 3 retry1 pos=-175.7/154.2/-92.4
+wait-log-else 0 view doors-never-matches
+label retry1
+log doors: spawn 1 cannot see the warehouse; suicide and respawn
+key enter
+wait-ms 2500
+hud-click 604 547
+wait-ms 3000
+hud-click 432 282
+wait-ms 1000
+hud-click 728 546
+wait-log alive=0
+wait-log alive=1
+wait-ms 4000
+label check2
+wait-log-else 3 notA2 pos=-181.0/154.3/-78.0
+wait-log-else 0 view doors-never-matches
+label notA2
+wait-log-else 3 retry2 pos=-175.7/154.2/-92.4
+wait-log-else 0 view doors-never-matches
+label retry2
+log doors: spawn 2 cannot see the warehouse; suicide and respawn
+key enter
+wait-ms 2500
+hud-click 604 547
+wait-ms 3000
+hud-click 432 282
+wait-ms 1000
+hud-click 728 546
+wait-log alive=0
+wait-log alive=1
+wait-ms 4000
+label check3
+wait-log-else 3 notA3 pos=-181.0/154.3/-78.0
+wait-log-else 0 view doors-never-matches
+label notA3
+wait-log-else 3 retry3 pos=-175.7/154.2/-92.4
+wait-log-else 0 view doors-never-matches
+label retry3
+log doors: spawn 3 cannot see the warehouse; suicide and respawn
+key enter
+wait-ms 2500
+hud-click 604 547
+wait-ms 3000
+hud-click 432 282
+wait-ms 1000
+hud-click 728 546
+wait-log alive=0
+wait-log alive=1
+wait-ms 4000
+label check4
+wait-log-else 3 notA4 pos=-181.0/154.3/-78.0
+wait-log-else 0 view doors-never-matches
+label notA4
+wait-log-else 3 retry4 pos=-175.7/154.2/-92.4
+wait-log-else 0 view doors-never-matches
+label retry4
+log doors: spawn 4 cannot see the warehouse; suicide and respawn
+key enter
+wait-ms 2500
+hud-click 604 547
+wait-ms 3000
+hud-click 432 282
+wait-ms 1000
+hud-click 728 546
+wait-log alive=0
+wait-log alive=1
+wait-ms 4000
+label check5
+wait-log-else 3 notA5 pos=-181.0/154.3/-78.0
+wait-log-else 0 view doors-never-matches
+label notA5
+wait-log-else 3 retry5 pos=-175.7/154.2/-92.4
+wait-log-else 0 view doors-never-matches
+label retry5
+log doors: spawn 5 cannot see the warehouse; suicide and respawn
+key enter
+wait-ms 2500
+hud-click 604 547
+wait-ms 3000
+hud-click 432 282
+wait-ms 1000
+hud-click 728 546
+wait-log alive=0
+wait-log alive=1
+wait-ms 4000
+label check6
+wait-log-else 3 notA6 pos=-181.0/154.3/-78.0
+wait-log-else 0 view doors-never-matches
+label notA6
+wait-log-else 3 retry6 pos=-175.7/154.2/-92.4
+wait-log-else 0 view doors-never-matches
+label retry6
+log doors: spawn 6 cannot see the warehouse; suicide and respawn
+key enter
+wait-ms 2500
+hud-click 604 547
+wait-ms 3000
+hud-click 432 282
+wait-ms 1000
+hud-click 728 546
+wait-log alive=0
+wait-log alive=1
+wait-ms 4000
+label check7
+wait-log-else 3 notA7 pos=-181.0/154.3/-78.0
+wait-log-else 0 view doors-never-matches
+label notA7
+wait-log-else 3 retry7 pos=-175.7/154.2/-92.4
+wait-log-else 0 view doors-never-matches
+label retry7
+log doors: spawn 7 cannot see the warehouse; suicide and respawn
+key enter
+wait-ms 2500
+hud-click 604 547
+wait-ms 3000
+hud-click 432 282
+wait-ms 1000
+hud-click 728 546
+wait-log alive=0
+wait-log alive=1
+wait-ms 4000
+label check8
+wait-log-else 3 notA8 pos=-181.0/154.3/-78.0
+wait-log-else 0 view doors-never-matches
+label notA8
+wait-log-else 3 retry8 pos=-175.7/154.2/-92.4
+wait-log-else 0 view doors-never-matches
+label retry8
+log doors: spawn 8 cannot see the warehouse; suicide and respawn
+key enter
+wait-ms 2500
+hud-click 604 547
+wait-ms 3000
+hud-click 432 282
+wait-ms 1000
+hud-click 728 546
+wait-log alive=0
+wait-log alive=1
+wait-ms 4000
+label check9
+wait-log-else 3 notA9 pos=-181.0/154.3/-78.0
+wait-log-else 0 view doors-never-matches
+label notA9
+wait-log-else 3 retry9 pos=-175.7/154.2/-92.4
+wait-log-else 0 view doors-never-matches
+label retry9
+log doors: spawn 9 cannot see the warehouse; suicide and respawn
+key enter
+wait-ms 2500
+hud-click 604 547
+wait-ms 3000
+hud-click 432 282
+wait-ms 1000
+hud-click 728 546
+wait-log alive=0
+wait-log alive=1
+wait-ms 4000
+label check10
+wait-log-else 3 notA10 pos=-181.0/154.3/-78.0
+wait-log-else 0 view doors-never-matches
+label notA10
+wait-log-else 3 retry10 pos=-175.7/154.2/-92.4
+wait-log-else 0 view doors-never-matches
+label retry10
+log doors: spawn 10 cannot see the warehouse; suicide and respawn
+key enter
+wait-ms 2500
+hud-click 604 547
+wait-ms 3000
+hud-click 432 282
+wait-ms 1000
+hud-click 728 546
+wait-log alive=0
+wait-log alive=1
+wait-ms 4000
+log doors: no warehouse spawn after ten attempts
+label view
+log doors: warehouse view

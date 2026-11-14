@@ -1,8 +1,6 @@
-// Client-only game loop and network session. Unimplemented calls retain named
-// [FRONTIER] diagnostics and stop execution. [TEMP] [CHOSEN, not recovered]
-// [RETIRE-WHEN: game-client-bodies] Replace remaining GAMECLIENT_FRONTIER sites
-// with their implementations.
+// Client-only game loop and network session.
 #include "GameClient.h"
+#include "../PunkBuster/PbGlue.h"
 #if !DEDICATED
 
 #include <cstddef>
@@ -23,12 +21,14 @@
 #include "../Main/BF2Engine.h"                       // bf2Engine->demo (isPlayingDemo)
 #include "../Main/Demo.h"
 #include "../Main/BF2ClientSeams.h"                  // hudManager, g_distributedLightRenderer
+#include "../DistributedLightRenderer/DistributedLightRenderer.h"
 #include "../Main/StatsMonitor.h"
 #include "../Utility/BuildNrUtil.h"
 #include "../Common/ClientConnection.h"
 #include "../Common/GhostManager.h"            // ECNetwork 17: removeGhostable
 #include "../Common/ClientVoteManager.h"             // update's per-frame kick-vote ticker (599290)
 #include "../Common/GameEventManager.h"
+#include "../GameEvents/ChangePlayerNameEvent.h"
 #include "../Common/StringManager.h"
 #include "../Common/GameEvent.h"
 #include "../GameEvents/ChallengeEvent.h"
@@ -59,6 +59,10 @@
 #include "../../IO/Input/Input.h"             // enterVehicle: io::IInputManager +0x2C
 #include "../Objects/IObjectTemplate.h"
 #include "../DemoRecorder/DemoRecorder.h"
+#include "../DemoAvailableInfo.h"
+#include "../../Core/SystemInfo.h"
+#include "../DemoRecorder/DemoLibrary.h"
+#include "../LocalProfileManager.h"
 #include "../../Scene/Object/PlayerManager.h"
 #include "../../Scene/Object/ObjectManager.h"
 #include "../../Scene/Object/ObjectTypes/Base/ObjectTemplateManager.h"
@@ -118,13 +122,11 @@ namespace hfe {
 
 #define GAMECLIENT_FILE "C:\\dice\\Projects\\BF2Branches\\Patch_1_50\\Code\\BF2\\Game\\GameClient\\GameClient.cpp"
 
-// [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: game-client-bodies]
-#define GAMECLIENT_FRONTIER(method, text)                                                              \
-    do {                                                                                               \
-        std::fprintf(stderr, "[FRONTIER] dice::hfe::GameClient::" method ": " text "\n");             \
-        std::fflush(stderr);                                                                           \
-        std::abort();                                                                                  \
-    } while (0)
+// The recorder test BF2.exe inlines at every demo site: `recorder && 54B8F0(recorder)`.
+static bool demoPlaybackActive(const DemoRecorder* recorder)
+{
+    return recorder != 0 && recorder->isOpenForPlayback();
+}
 
 // Rejects aggregation and releases an object whose interface query fails.
 // The original unchecked query after failed allocation remains.
@@ -323,17 +325,14 @@ int GameClient::disconnect()
 
 // Loads the current map after preparing squads and notifying listeners. Clears
 // readiness first and restores file resolve mode after load success or failure.
-// The recorder's playback-skip flag bypasses loading and returns true.
+// A restarted demo playback (the recorder's playbackPlaying, PE +0x105) keeps the loaded level
+// and returns true (4D2EAD).
 bool GameClient::load()
 {
     DemoRecorder* const recorder = m_demoRecorder;
     m_isReady = false;
-    if (recorder)
-    {
-        // ..4D2EBD: `recorder+0xC4 && !recorder+0xCD` (54B8F0) and the byte at +0x105 - the
-        // DemoRecorder's PE layout is not mapped onto the tree's ELF-recovered class.
-        GAMECLIENT_FRONTIER("load", "DemoRecorder playback predicate (54B8F0, bytes +0xC4/+0xCD/+0x105) is unmapped");
-    }
+    if (demoPlaybackActive(recorder) && recorder->playbackPlaying)
+        return true;
 
     if (squadManager)
         static_cast<ISquadManager*>(squadManager)->reAddDynamicSpawnGroups();     // +0x14
@@ -355,9 +354,10 @@ bool GameClient::load()
     io::fileManager->setFileResolveMode(1);
     if (!gameLogic->load(levelPath))                 // +0x14
     {
-        //  / 4D3072: two LoadStat calls on the singleton (45D6D0, then 45D540) - the failed
-        // load's report. [UNRESOLVED] which two of LoadStat's methods those PE bodies are.
-        GAMECLIENT_FRONTIER("load", "IGameLogic::load refused; the LoadStat pair 45D6D0/45D540 is unmapped");
+        // 4D3064: the loading screen's callback ends (unregisterLoadCallback 45D6D0, which also
+        // resets) and the statistics are reset once more (resetLoadStats 45D540).
+        loadStat->unregisterLoadCallback();
+        loadStat->resetLoadStats();
         io::fileManager->setFileResolveMode(resolveMode);
         return false;
     }
@@ -392,18 +392,21 @@ bool GameClient::update(int steps, float dt)
     world::IPlayer* const local = world::playerManager->getLocalHumanPlayer();
     if (isLightmapRenderingNode())
     {
-        // : g_distributedLightRenderer->+0x28(); then the quit latch on byte_9A7758 and
-        // mainConsole->executeLine("quit\n", ignoredString_, 0, 0, 0, 0, 0).
-        GAMECLIENT_FRONTIER("update", "the lightmap-rendering node's DistributedLightRenderer +0x28 is unrecovered");
+        // 4D57B6: the renderer's update, then quit once a connection that was up has gone
+        // (the latch is byte_9A7758). Unreachable in retail: see Game.h isLightmapRenderingNode.
+        static_cast<IDistributedLightRenderer*>(g_distributedLightRenderer)->update();   // +0x28
+        static bool wasConnected = false;
+        if (m_connection)                                                           // +0xC0
+            wasConnected = true;
+        else if (wasConnected)
+            io::mainConsole->executeLine(std::string("quit\n"), io::Console::ignoredString_, 0, 0, 0, 0, 0);
     }
     else if (local && gameLogic->getGameStatus() == 1)   // +0x158
     {
         static_cast<Player*>(local)->update(static_cast<float>(delta));
     }
 
-    const bool demoPlaying = m_demoRecorder != 0;    // : recorder && 54B8F0(recorder)
-    if (demoPlaying)
-        GAMECLIENT_FRONTIER("update", "DemoRecorder playback predicate (54B8F0) is unmapped");
+    const bool demoPlaying = demoPlaybackActive(m_demoRecorder);
     if (!demoPlaying)
     {
         if (steps)
@@ -443,8 +446,15 @@ bool GameClient::update(int steps, float dt)
             world::responsePhysicsManager->startFrame();                    // +0x2C
             if (i == steps - 1)
             {
-                if (demoPlaying)
-                    GAMECLIENT_FRONTIER("update", "the demo listener transform (440B20 / 54BC20) is unmapped");
+                // 4D5945: a playing demo listens from the spectator camera (identity Mat4 440B20,
+                // then 54BC20), with a zero velocity; the recorder test is repeated here.
+                if (demoPlaybackActive(m_demoRecorder))
+                {
+                    Mat4 listener = Mat4::getIdentity();
+                    m_demoRecorder->getPlaybackMatrixAndFOV(&listener, 0);
+                    const Vec3 velocity = { 0.0f, 0.0f, 0.0f };
+                    g_bfSound->update(steps, listener, velocity, false);   // PE +0x14
+                }
                 else
                     g_bfSound->update(steps);                               // PE +0x18
             }
@@ -454,8 +464,12 @@ bool GameClient::update(int steps, float dt)
     ClientVoteManager::getInstance()->update(dt);
     transmit(steps, delta);
     m_playerInputs.clear();
-    if (m_showNetGraph && m_bitStream)
-        GAMECLIENT_FRONTIER("update", "BitStream PE +0x04 (the net-graph reset) is unmapped");
+    // 4D5A15: with the net graph shown, the stats object's update (PE +0x04, no null test).
+    // [CHOSEN, not recovered] retail's object is the 0x88-byte client derivative (vtable 9135C8)
+    // whose update (6BB110) also runs 6BAE90 and 6BB090; the tree builds the base class (see
+    // playDemo/connect), so the base update (client then server status) runs.
+    if (m_showNetGraph)
+        m_networkableStats->update();
     return ok;
 }
 
@@ -742,9 +756,35 @@ bool GameClient::stepWorld(float dt)
         if (player->getAltFiringState())   fireMask |= 2u;              // PE +0x1A8 = ELF +0x1AC
         if (player->getFiringState())      fireMask |= 1u;              // PE +0x1A0 = ELF +0x1A4
 
-        // [UNRESOLVED] The original Player state-clear has no mapped member in this layout
-        // and is omitted to avoid writing an unrelated field.
-        // [RETIRE-WHEN: player-pe-layout] Map the client Player member before restoring the store.
+        // PE 0x5C056A `mov byte [esi+0x234], 0`, straight after the getFiringState call: the
+        // primary-fire press latch (PE +0x234 = ELF +0x204, the second operand of
+        // getFiringState, PE 0x504D00) is consumed here. Player::netUpdate sets it for a press
+        // seen on the wire, so a tap shorter than one update still fires exactly one message 6;
+        // without this clear every remote player's primary fire stays held after the first press.
+        static_cast<Player*>(player)->m_field204 = false;
+
+        // [TEMP] [CHOSEN, not recovered] remote-fire replay tracer, armed by
+        // BF2_TRACE_REMOTE_FIRE=1: one stderr line whenever the replayed fire mask of a player
+        // changes, so a stuck or never-raised trigger shows up. Read-only.
+        // [RETIRE-WHEN: remote-fire-validated]
+        {
+            static int traceArmed = -1;
+            if (traceArmed < 0)
+                traceArmed = std::getenv("BF2_TRACE_REMOTE_FIRE") ? 1 : 0;
+            const int id = player->getId();
+            if (traceArmed && id >= 0 && id < 256)
+            {
+                static unsigned int lastMask[256];
+                if (lastMask[id] != fireMask)
+                {
+                    lastMask[id] = fireMask;
+                    std::fprintf(stderr, "[REMOTEFIRE] frame=%d p%d mask=%u vehicle=%s\n",
+                                 m_frameCount, id, fireMask,
+                                 vehicle->getTemplate()->getName().c_str());
+                    std::fflush(stderr);
+                }
+            }
+        }
 
         if (fireMask)
             sendFireMessages(fireMask, player, vehicle, false);
@@ -857,7 +897,7 @@ bool GameClient::receive(float dt)
         for (std::list<io::StoredPacket>::iterator it = packets.begin(); it != packets.end(); ++it)
         {
             if (m_punkBuster)
-                GAMECLIENT_FRONTIER("receive", "the PunkBuster client packet handler (4D9DE0) is unrecovered");
+                PB_handlePacket(static_cast<char*>(it->data), static_cast<int>(it->size), it->name);  // 0x4D4F43
             else
                 Debug(DEBUGTYPE_6, GAMECLIENT_FILE, 672, "") << "PunkBuster packets on a disabled client";
             std::free(it->data);
@@ -870,9 +910,10 @@ bool GameClient::receive(float dt)
             code = m_netClient->receive(m_bitStream);
         else
         {
-            // ..4D4FF8: the demo playback read - 4C4420()'s recorder stream through 54C3B0 into
-            // m_bitStream; a non-empty stream is a packet (0), else 8.
-            GAMECLIENT_FRONTIER("receive", "the demo playback packet read (4C4420 / 54C3B0) is unmapped");
+            // 4D5034: without a NetClient the packets come from the recorder at the world tick
+            // (4C4420); a filled stream is a packet (0), an empty or failed read is code 8.
+            const bool read = m_demoRecorder->readData(WorldPref::getTickCount(), m_bitStream);   // 54C3B0
+            code = (read && m_bitStream->m_highWaterBits != 0) ? 0 : 8;
         }
         switch (code)
         {
@@ -1463,14 +1504,16 @@ bool GameClient::isPlayingDemo()
     return demo != 0 && demo->isPlayback;
 }
 
-// setSimulationRate - 4D3110, 62 B: only while a demo plays - a rate other than 100 runs
-// IBfSound PE +0xC4, then 5965B0(rate) (the recorder's rate).
+// setSimulationRate - 4D3110, 62 B: only while a demo plays. A rate other than 100 forces the
+// sound update (IBfSound PE +0xC4, setForceUpdate), then the engine rate is set (ds:99E2B8 is
+// g_system; 5965B0 stores System +0x08).
 void GameClient::setSimulationRate(int rate)
 {
-    (void) rate;
-    if (!m_demoRecorder)
+    if (!demoPlaybackActive(m_demoRecorder))
         return;
-    GAMECLIENT_FRONTIER("setSimulationRate", "DemoRecorder playback predicate and rate (54B8F0 / 5965B0) are unmapped");
+    if (rate != 100)
+        g_bfSound->setForceUpdate();
+    g_system->setSimulationRate(rate);
 }
 int  GameClient::getSimulationRate() { return g_system->getSimulationRate(); }   //  (11 B, shared with GameServer)
 void GameClient::debugShowActiveGhosts(int) {}                                  // : empty
@@ -1604,9 +1647,8 @@ bool GameClient::handleControlObjectState(io::BitStream*, unsigned short network
 // networkables, and client statistics. Returns false if connection setup fails.
 bool GameClient::playDemo(DemoRecorder* recorder)
 {
-    // ..4D41EA: io::inputManager->+0x2C("InfantryPlayerInputControlMap") - the tree's
-    // InputManager carries no such slot yet.
-    GAMECLIENT_FRONTIER("playDemo", "io::InputManager PE +0x2C (the control-map selector) is unmapped");
+    static_cast<io::IInputManager*>(io::inputManager)
+        ->setPlayerControlMap(std::string("InfantryPlayerInputControlMap"));     // 4D41EA, +0x2C
     m_demoRecorder = recorder;
     world::objectManager->destroyObjects();
     m_netClient = 0;
@@ -2061,52 +2103,96 @@ std::string GameClient::getServerAddress()     { return m_serverAddress; }     /
 std::string GameClient::getServerAddressCopy() { return m_serverAddress; }     // the folded twin, +0x78
 void        GameClient::slot44(int)            {}                              // > nullsub_2
 
-// The demo group - 4D2650 (109 B), 4D26C0 (57 B), 4D2700 (36 B), 4D2730 (39 B), 4D2760 (38 B),
-//  (25 B), 4D3D60 (257 B). Every one reads DemoRecorder bytes by PE offset (+0xC4, +0xCD,
-// +0xE8, +0xEC, +0x105 and the object at +0xE8) that the tree's ELF-recovered DemoRecorder does
-// not map; a null recorder is the only arm transcribed.
+// The demo group - BF2.exe 4D2650..4D2800 and 4D3D60. These run on the IGameClient subobject
+// (+0xA8); the recorder is +0x98 there, GameClient +0x140. Each acts only while the recorder plays
+// (54B8F0, DemoRecorder::isOpenForPlayback). Slot names are [INFERRED] from the recorder calls.
+
+// restartDemo - 4D2650, 109 B: back to the first frame with an empty world and fresh ghost and
+// event state.
 void GameClient::restartDemo()
 {
-    if (!m_demoRecorder) return;
-    GAMECLIENT_FRONTIER("restartDemo", "DemoRecorder PE members (+0xC4/+0xCD/+0x105) are unmapped");
+    if (!m_demoRecorder || !m_demoRecorder->isOpenForPlayback())
+        return;
+    gameLogic->reset();                                           // +0x24
+    destroyAllPlayers();                                          // Game:: 4444C0
+    g_bfSound->engine()->stopAllSamples();                        // IBfSound PE +0x24, ISoundEngine +0x18
+    gameLogic->restartDemoPlayback();                             // +0x28
+    m_connection->m_gameEventManager->reset();                    // PE +0x34 (one destructor slot)
+    m_connection->m_ghostManager->reset();                        // 5BADF0
+    m_demoRecorder->restartPlayback();                            // 54CB60
 }
-void GameClient::setDemoPaused(bool)
+
+// demoSwitchPlayer - 4D26C0, 57 B: the spectator camera's next (true) or previous player
+// (54BC90 / 54BCB0).
+void GameClient::demoSwitchPlayer(bool next)
 {
-    if (!m_demoRecorder) return;
-    GAMECLIENT_FRONTIER("setDemoPaused", "DemoRecorder pause/resume (54BC90 / 54BCB0) are unmapped");
+    if (!m_demoRecorder || !m_demoRecorder->isOpenForPlayback())
+        return;
+    if (next)
+        m_demoRecorder->nextPlayer();
+    else
+        m_demoRecorder->previousPlayer();
 }
-void GameClient::slot50()
+
+// demoNextCamera - 4D2700, 36 B (54BC70).
+void GameClient::demoNextCamera()
 {
-    if (!m_demoRecorder) return;
-    GAMECLIENT_FRONTIER("slot50", "DemoRecorder +0xE8 and 62AA10 are unmapped");
+    if (m_demoRecorder && m_demoRecorder->isOpenForPlayback())
+        m_demoRecorder->nextCamera();
 }
-int GameClient::slot54()
+
+// demoGetCurrentPlayerId - 4D2730, 39 B (54BCD0); -1 when no demo plays.
+int GameClient::demoGetCurrentPlayerId()
 {
-    if (!m_demoRecorder) return -1;
-    GAMECLIENT_FRONTIER("slot54", "DemoRecorder +0xE8 and 68E7B0 are unmapped");
+    if (m_demoRecorder && m_demoRecorder->isOpenForPlayback())
+        return m_demoRecorder->getCurrentDemoPlayerId();
+    return -1;
 }
-bool GameClient::slot58()
+
+// demoIsFreeFlying - 4D2760, 38 B (54BCF0).
+bool GameClient::demoIsFreeFlying()
 {
-    if (!m_demoRecorder) return false;
-    GAMECLIENT_FRONTIER("slot58", "DemoRecorder +0xE8 (+0x10) is unmapped");
+    if (m_demoRecorder && m_demoRecorder->isOpenForPlayback())
+        return m_demoRecorder->getIsFreeFlying();
+    return false;
 }
-bool GameClient::isDemoPlaying()
+
+// isDemoAtEnd - 4D2800: the recorder's end-of-stream byte (PE +0xEC). BF2Engine pauses on it.
+bool GameClient::isDemoAtEnd()
 {
-    if (!m_demoRecorder) return false;
-    GAMECLIENT_FRONTIER("isDemoPlaying", "DemoRecorder +0xEC is unmapped");
+    return m_demoRecorder != 0 && m_demoRecorder->endOfStream;
 }
-void GameClient::slot6C(int, int)
+
+// addDemoBookmark - 4D3D60, 257 B: a demo announced by the server (handleDataBlock block 9) is
+// bookmarked in the current profile as {joined server name, map, url, now}, the profile is saved
+// and the demo library is flagged. No profile manager: nothing. Argument names [INFERRED] from
+// the bookmark fields the menu's "demobm" list reads (field1c is the map).
+void GameClient::addDemoBookmark(const std::string& url, const std::string& mapName)
 {
-    GAMECLIENT_FRONTIER("slot6C", "LocalProfileManager +0xA4 and DemoLibrary +0x44 (the recorded-demo registration) are unmapped");
+    ILocalProfileManager* const profiles = static_cast<ILocalProfileManager*>(
+        classManager->getSingleton(std::string("LocalProfileManager")));        // +0x48
+    if (!profiles)
+        return;
+    ui::ISwiffHost* const host = static_cast<ui::ISwiffHost*>(
+        classManager->getSingleton(std::string("SwiffHost")));
+    std::string serverName;
+    if (host)
+        serverName = host->getStringE5C();                                       // +0x300
+    const std::string now = systemInfo()->getDateTimeString();                   // 434320, PE +0x08
+    profiles->addDemoBookmark(serverName, mapName, url, now);                    // PE +0xA4
+    profiles->saveCurrentProfile();                                              // PE +0x40
+    IBase* const library = classManager->getSingleton(std::string("DemoLibrary"));
+    if (library)
+        static_cast<IDemoLibrary*>(library)->setFlagA4(true);                    // +0x44
 }
 
 // togglePause - 4D2790: setPause(!getPause()), both through the +0xA8 table.
 void GameClient::togglePause() { setPause(!getPause()); }
-// setPause - 4D27B0, 71 B: pausing always sticks; unpausing only while no demo plays. The rate goes
-// to 0 or 100 through IGame::setSimulationRate (primary +0xE0).
+// setPause - 4D27B0, 71 B: pausing always sticks; unpausing is refused once a demo has reached its
+// end (+0x68). The rate goes to 0 or 100 through IGame::setSimulationRate (primary +0xE0).
 void GameClient::setPause(bool paused)
 {
-    if (paused || !isDemoPlaying())
+    if (paused || !isDemoAtEnd())
     {
         m_paused = paused;
         setSimulationRate(paused ? 0 : 100);
@@ -2139,8 +2225,18 @@ void GameClient::handleEvent(EventCategory category, unsigned int id, EventNode*
         {
             if (node && *reinterpret_cast<unsigned int*>(node) == 1007)
             {
+                // 4D668F: the settings' player name goes to the server as a ChangePlayerNameEvent
+                // (0x30 bytes, 53D2E0) for the local player (IPlayer PE +0x50, getId), queued on
+                // the connection's event manager (PE +0x38, addEvent). A failed allocation queues 0.
                 if (world::playerManager->getLocalHumanPlayer() && m_netClient)
-                    GAMECLIENT_FRONTIER("handleEvent", "ECCore 1/1007: the ChangePlayerNameEvent resend (53D2E0) through the connection is unmapped");
+                {
+                    GameEvent* rename = 0;
+                    if (void* allocation = ::operator new(sizeof(ChangePlayerNameEvent), std::nothrow))
+                        rename = new (allocation) ChangePlayerNameEvent(
+                            world::playerManager->getLocalHumanPlayer()->getId(),
+                            settings->stringGet(std::string("GSPlayerName"), std::string("player")));
+                    m_connection->m_gameEventManager->addEvent(rename);
+                }
             }
         }
         else if (id == 14)
@@ -2304,8 +2400,9 @@ void GameClient::handleEvent(EventCategory category, unsigned int id, EventNode*
 void GameClient::handleDataBlock(EventNode* node, void* data)
 {
     (void) data;
-    if (m_demoRecorder)
-        GAMECLIENT_FRONTIER("handleDataBlock", "DemoRecorder playback predicate (54B8F0) is unmapped");
+    // 4D5A4C: a restarted demo playback has already seen its blocks.
+    if (demoPlaybackActive(m_demoRecorder) && m_demoRecorder->playbackPlaying)
+        return;
 
     DataBlockReadyEvent* const block = static_cast<DataBlockReadyEvent*>(node);
     const unsigned int   type  = block->m_blockEventId;            // PE +0x2C
@@ -2330,7 +2427,8 @@ void GameClient::handleDataBlock(EventNode* node, void* data)
         }
         if (serverInfo->m_block.voipEnabled)                                    // +0x31
             gameLogic->startupVoipClient();                                     // +0x25C
-        if (serverInfo->getRequestResponse())                                   // the server wants our ClientInfo
+        // 4D5B71: a demo playback never answers with a ClientInfo.
+        if (serverInfo->getRequestResponse() && !demoPlaybackActive(m_demoRecorder))
         {
             ClientInfo info;
             info.m_playerNameHash = AntiHacks::instance()->m_playerNameHash;   //  +0x00 -> info +0x38
@@ -2380,7 +2478,9 @@ void GameClient::handleDataBlock(EventNode* node, void* data)
         eventManager->postEvent(ECHud, 63, &m_commanderEnabled, 4.0f);            // +0x10
         if (load())                                                               // PE +0x1C = ELF +0x20
         {
-            // the demo predicate again (a null recorder here - see the top), then the proceed event
+            // 4D5EE0: a demo playback sends neither the loaded event nor the content checks.
+            if (demoPlaybackActive(m_demoRecorder))
+                break;
             GameEvent* const loaded =
                 new (std::nothrow) PostRemoteEvent(ECNetwork, 2, false, 0, 0, 0.0f);   // 0x54
             sendGameEvent(0xFFFFFFFFu, loaded);                                   // PE +0x8C = ELF +0x90
@@ -2405,7 +2505,12 @@ void GameClient::handleDataBlock(EventNode* node, void* data)
     }
     case 4:
         if (isLightmapRenderingNode())
-            GAMECLIENT_FRONTIER("handleDataBlock", "block 4: DistributedLightRenderer +0x24 is unrecovered");
+        {
+            // 4D5FAE: a lightmap job for this node. Unreachable in retail (see update).
+            static_cast<IDistributedLightRenderer*>(g_distributedLightRenderer)
+                ->performTraceObject(const_cast<unsigned char*>(bytes), size);       // +0x24
+            break;
+        }
         Debug(DEBUGTYPE_6, GAMECLIENT_FILE, 1300, "")
             << "Server asked us to generate lightmaps, and we arent a lightmap rendering node";
         break;
@@ -2428,8 +2533,13 @@ void GameClient::handleDataBlock(EventNode* node, void* data)
                       static_cast<float>(endOfRound.getDelay()));    // PE +0x170
         break;
     }
-    case 9:
-        GAMECLIENT_FRONTIER("handleDataBlock", "block 9: the 5BCC50 block and IGameClient +0x6C are unmapped");
+    case 9:                                                        // DemoAvailableInfo - 4D613E
+    {
+        DemoAvailableInfo announced;                               // 5BCC50
+        announced.setFromDataBlock(bytes, size);                   // 5BCB40
+        addDemoBookmark(announced.getUrl(), announced.getMapName());   // IGameClient +0x6C
+        break;
+    }
     default:
         break;
     }

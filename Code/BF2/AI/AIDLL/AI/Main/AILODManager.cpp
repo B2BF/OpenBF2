@@ -82,7 +82,7 @@ AILODManager::AILODManager(float basicLODDistance, float f36)
         m_instance = this;
 }
 
-// ELF 0x39B690 (D1, 240 B; recovered on the client track, docs/macos-c-singleplayer.md): the
+// ELF 0x39B690 (D1, 240 B; recovered on the client track): the
 // singleton is zeroed when it is this one; the set and the stats map go as members.
 AILODManager::~AILODManager()
 {

@@ -11,7 +11,6 @@
 #include "../../../AI/AIInterface/AIInstance.h"
 #include "../../../AI/AIInterface/IAIEventCourier.h"
 #include "../../../AI/AIInterface/SingletonServer.h"
-#include "../../../AI/AIInterface/BFKnowledge/AIFrontier.h"
 #include "../../../Scene/Object/PlayerManager.h"     // getPlayersSortedByScore (+0x4C) - client arm
 #include "../../../Scene/Object/PlayerScoreData.h"   // join eligibility field +0x10
 #include "../../Common/GameEvent.h"                  // PostRemoteEvent

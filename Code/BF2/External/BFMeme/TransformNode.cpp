@@ -66,7 +66,7 @@ float decodedState(float value) // float stores in838F40 and82D340
     return static_cast<float>(value < 0.0f ? -(loaded + 1.0) : loaded);
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     float result;
     // [CHOSEN, not recovered] Preserve x87 negative-state decoding and float store.
     result = bf2x87::store(bf2x87::decoded(value));
@@ -102,7 +102,7 @@ bool sumNotLess(float first, float second, float limit) // 82D49E..4BB, unordere
     return !(sum < limit);
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     bool result;
     // [CHOSEN, not recovered] Preserve x87 unordered-or-not-less sum.
     result = bf2x87::sumNotLess(first, second, limit);

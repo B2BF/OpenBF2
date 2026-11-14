@@ -26,9 +26,7 @@
 #include <cstdlib>
 #endif
 
-#if defined(BF2AUDIO_WITH_VORBIS)
 #include <vorbis/vorbisfile.h>
-#endif
 
 namespace dice {
 namespace hfe {
@@ -202,7 +200,6 @@ void purgeLoopInfoCache()
 // and a loop is left; upload it to `alBuffer`. False when nothing was decoded or the file failed.
 bool bufferData(OggVorbis_File* vf, SoundFile* file, char* buffer, int* loopsLeft, ALuint alBuffer, bool report)
 {
-#if defined(BF2AUDIO_WITH_VORBIS)
     int chunk = file->m_format.channels != 2 ? 4096 : 0x2000;
     const unsigned int rate = (unsigned int) file->m_format.samplesPerSecond;
     if (rate < 12000)
@@ -244,19 +241,6 @@ bool bufferData(OggVorbis_File* vf, SoundFile* file, char* buffer, int* loopsLef
     if (report)
         return checkOpenALError("StreamingHelper::bufferData");
     return true;
-#else
-    (void) vf; (void) buffer; (void) loopsLeft; (void) alBuffer;
-    // [FRONTIER] [TEMP] [CHOSEN, not recovered] (opt-out build: BF2AUDIO_NO_VORBIS=1; the vendored decoder is linked by default)
-    // The Ogg decoder is not linked into this build (BF2AUDIO_WITH_VORBIS is off until libogg and
-    // libvorbis 1.0 are vendored under Code/BF2/External). Report through the same error slot the
-    // shipped body uses for an unreadable stream and answer its failure value; the only effect is
-    // that this stream stays silent, which is the audible-only case agents.md's sound-seam
-    // exception covers.
-    if (report)
-        g_soundTrace->error(sndFormat("[FRONTIER] dice::hfe::bufferData reached for %s: vorbis decoder not linked",
-                                      file->m_name.c_str()), kFile, 924);
-    return false;
-#endif
 }
 
 // "SoundFileOgg::updateSourceBuffers". Either queue one new buffer (the first
@@ -311,7 +295,6 @@ bool updateSourceBuffers(OggVorbis_File* vf, SoundFile* file, char* buffer, int*
     return queuedNew;
 }
 
-#if defined(BF2AUDIO_WITH_VORBIS)
 namespace {
 // Callbacks for SoundFile::MemoryFile storage.
 size_t memRead(void* dst, size_t size, size_t count, void* source)
@@ -341,14 +324,12 @@ int memSeek(void* source, ogg_int64_t offset, int whence)
 int memClose(void* source) { ((SoundFile::MemoryFile*) source)->position = 0; return 0; }
 long memTell(void* source)  { return ((SoundFile::MemoryFile*) source)->position; }
 }
-#endif
 
 // Open the decoder on the first call (the SoundFile's in-memory copy is the
 // data source), seek on later ones, decode the first chunk into `alBuffer` and queue it.
 bool streamStart(OggVorbis_File** vfHolder, SoundFile* file, char* buffer, int* loopsLeft,
                  int seekSample, ALuint source, ALuint alBuffer, bool report)
 {
-#if defined(BF2AUDIO_WITH_VORBIS)
     bool opened = false;
     if (!*vfHolder)
     {
@@ -375,14 +356,6 @@ bool streamStart(OggVorbis_File** vfHolder, SoundFile* file, char* buffer, int* 
     if (report)
         checkOpenALError("StreamingSample::startBuffers");
     return true;
-#else
-    (void) vfHolder; (void) buffer; (void) loopsLeft; (void) seekSample; (void) source; (void) alBuffer;
-    // [FRONTIER] [TEMP] [CHOSEN, not recovered] (opt-out build: BF2AUDIO_NO_VORBIS=1; the vendored decoder is linked by default) - as bufferData.
-    if (report)
-        g_soundTrace->error(sndFormat("[FRONTIER] dice::hfe::streamStart reached for %s: vorbis decoder not linked",
-                                      file->m_name.c_str()), kFile, 761);
-    return false;
-#endif
 }
 
 // OpenALSample
@@ -862,9 +835,7 @@ StreamingSample::~StreamingSample()
             s_streamingBufferPool.push_front(m_buffers[i]);    // _Insert(begin()) - the front
     if (m_vorbisFile)
     {
-#if defined(BF2AUDIO_WITH_VORBIS)
         ov_clear(m_vorbisFile);
-#endif
         SoundFile::destroyMemoryFile(m_vorbisFile);
     }
 }

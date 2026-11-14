@@ -1,11 +1,10 @@
 // [CHOSEN, not recovered] Owner-approved offline LAN dialog policy.
-// See docs/macos-feat-connectip3.md; shared by every rebuilt client platform.
+// Shared by every rebuilt client platform.
 #ifndef BF2_SWIFFPLAYER_OFFLINECONNECTPOPUP_H
 #define BF2_SWIFFPLAYER_OFFLINECONNECTPOPUP_H
 
 #include <cstring>
 #include <cstdio>
-#include <cstdlib>
 #include "../gameswf_impl.h"
 
 namespace dice { namespace hfe { namespace ui {
@@ -19,16 +18,27 @@ inline bool shouldOpenOfflineConnectPopup(bool liveMainMenu, double loginStatus,
         popupName && std::strcmp(popupName, "connecttoip") == 0;
 }
 
-[[noreturn]] inline void offlineConnectPopupFrontier(const char* reason)
+// Missing menu content declines quietly (owner decision, 2026-11-13). This matches what
+// retail does offline. The authored popups.flush gate (sprite 457, +0x1AF..+0x1C2) exits
+// while the cached loginStatus is below 2, and the native side never navigates, so AVM1
+// leaves the selection in place and no dialog appears. A decline is logged once per
+// process; it is not a stop.
+inline bool declineOfflineConnectPopup(const char* reason)
 {
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::ui::openOfflineConnectPopup: %s\n", reason);
-    std::fflush(stderr);
-    std::abort();
+    static bool logged = false;
+    if (!logged)
+    {
+        logged = true;
+        std::fprintf(stderr, "[SwiffPlayer] offline connecttoip declined: %s\n", reason);
+        std::fflush(stderr);
+    }
+    return false;
 }
 
 // Complete the authored request after movie actions and before display. The movie
 // keeps its offline status, callbacks, flushObject, selectedPopup and close flow.
-// Returns true only when this pass actually selects the dialog frame.
+// Returns true only when this pass actually selects the dialog frame; any missing piece of
+// the authored content answers false, with no dialog.
 inline bool openOfflineConnectPopup(gameswf::movie* root, bool liveMainMenu)
 {
     if (!liveMainMenu || !root) return false;
@@ -43,18 +53,18 @@ inline bool openOfflineConnectPopup(gameswf::movie* root, bool liveMainMenu)
 
     gameswf::as_value popup, visible;
     if (!root->get_member("popups", &popup) || !popup.to_object() || !popup.to_object()->to_movie())
-        offlineConnectPopupFrontier("main-menu popups clip absent");
+        return declineOfflineConnectPopup("main-menu popups clip absent");
     gameswf::movie* clip = popup.to_object()->to_movie();
     if (!clip->get_member("_visible", &visible) || !visible.to_bool()) return false;
 
     int frame = -1;
     auto* definition = static_cast<gameswf::movie_definition_sub*>(clip->get_movie_definition());
     if (!definition || !definition->get_labeled_frame("connecttoip", &frame))
-        offlineConnectPopupFrontier("popups connecttoip frame absent");
+        return declineOfflineConnectPopup("popups connecttoip frame absent");
     // Do not restart the dialog or its editable fields on subsequent updates.
     if (clip->get_current_frame() == frame) return false;
     if (!clip->goto_labeled_frame("connecttoip"))
-        offlineConnectPopupFrontier("popups connecttoip navigation failed");
+        return declineOfflineConnectPopup("popups connecttoip navigation failed");
     clip->set_play_state(gameswf::movie_interface::STOP);
     return true;
 }

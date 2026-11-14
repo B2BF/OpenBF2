@@ -1,0 +1,9 @@
+vtable,class,known_slots,slots,declared_virtuals,writers,decision
+0x100DF780,movie_root,19,28,15,0x10073560;0x10075370,candidate:manual-inheritance-and-slot-review
+0x100DFC90,movie_def_impl,1,37,14,0x10077FB0;0x1007CE20,candidate:manual-inheritance-and-slot-review
+0x100E0138,sprite_definition,30,37,33,0x1007B5A0;0x1007D730,candidate:manual-inheritance-and-slot-review
+0x100E0C4C,sprite_instance,1,6,21,,candidate:manual-inheritance-and-slot-review
+0x100E0C70,sprite_instance,21,66,21,0x1007F310;0x10084B60,candidate:manual-inheritance-and-slot-review
+0x100E2F14,button_character_instance,2,6,2,,candidate:manual-inheritance-and-slot-review
+0x100E2F38,button_character_instance,3,66,2,0x100A2C50;0x100A3C30,candidate:manual-inheritance-and-slot-review
+0x100E30EC,button_character_definition,1,12,1,0x100A3A60;0x100A3AF0,candidate:manual-inheritance-and-slot-review

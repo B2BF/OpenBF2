@@ -214,6 +214,7 @@ struct Events : EventManager {
         ++removals; check(category==ECGame,"shutdown category is ECGame");
         LocalProfileManager* owner=current?current:factoryOwner;
         check(owner && listener==static_cast<IEventListener*>(owner),"actual adjusted secondary listener pointer");
+        if(!owner) return EventManager::unregisterEventHandler(category,listener);   // untracked owner: no state to read
         check(LocalProfileFixture::resetBeforeUnregister(*owner),"current record/string/index reset before callback");
         LocalProfileFixture::setDirty(*owner,false);
         return EventManager::unregisterEventHandler(category,listener);
@@ -1763,36 +1764,12 @@ static void onlineLoginArmTests(Events& events,Files& files,Registry& registry)
 }
 #endif
 
-static void death(const char* mode,const char* expected,const char* prelude=nullptr)
-{
-    char executable[MAX_PATH]; GetModuleFileNameA(nullptr,executable,MAX_PATH);
-    std::string command=std::string("\"")+executable+"\" "+mode;
-    SECURITY_ATTRIBUTES security{sizeof(security),nullptr,TRUE};
-    HANDLE reader=nullptr,writer=nullptr;
-    if(!CreatePipe(&reader,&writer,&security,0)) { check(false,"diagnostic pipe"); return; }
-    SetHandleInformation(reader,HANDLE_FLAG_INHERIT,0);
-    STARTUPINFOA startup{}; startup.cb=sizeof(startup); startup.dwFlags=STARTF_USESTDHANDLES;
-    startup.hStdOutput=startup.hStdError=writer; startup.hStdInput=GetStdHandle(STD_INPUT_HANDLE);
-    PROCESS_INFORMATION process{};
-    bool started=CreateProcessA(nullptr,&command[0],nullptr,nullptr,TRUE,CREATE_NO_WINDOW,nullptr,nullptr,&startup,&process)!=FALSE;
-    CloseHandle(writer); check(started,"start diagnostic child");
-    if(!started) { CloseHandle(reader); return; }
-    DWORD wait=WaitForSingleObject(process.hProcess,10000); check(wait==WAIT_OBJECT_0,"diagnostic child stops promptly");
-    if(wait!=WAIT_OBJECT_0) TerminateProcess(process.hProcess,99);
-    DWORD result; GetExitCodeProcess(process.hProcess,&result);
-    std::string output; char data[512]; DWORD count;
-    while(ReadFile(reader,data,sizeof(data),&count,nullptr)&&count) output.append(data,count);
-    CloseHandle(reader); CloseHandle(process.hThread); CloseHandle(process.hProcess);
-    check(result!=0 && result!=STILL_ACTIVE,"diagnostic cannot succeed");
-    const std::size_t expectedOffset=prelude?std::strlen(prelude):0;
-    if(prelude)check(output.find(prelude)==0,"expected callback completes before the next production frontier");
-    if(output.find(expected)!=expectedOffset) std::printf("Diagnostic mismatch for %s: expected %s; actual %s\n",mode,expected,output.c_str());
-    check(output.find(expected)==expectedOffset,"qualified diagnostic is first production output after expected callbacks");
-    check(output.find("unexpected return")==std::string::npos,"diagnostic never returns");
-}
 
-int main(int argc,char** argv)
+int main()
 {
+    // Unbuffered, so a run that ends early still leaves every line it reached in runtime.log.
+    std::setvbuf(stdout,nullptr,_IONBF,0);
+    std::printf("local profile lifetime: start\n");
     SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX);
     _set_abort_behavior(0,_WRITE_ABORT_MSG|_CALL_REPORTFAULT);
     Registry registry; Events events; classManager=&registry; eventManager=&events;
@@ -1810,23 +1787,6 @@ int main(int argc,char** argv)
 #ifdef BF2_PROFILE_DISCOVERY_FIXTURE
     Files& files=*new Files;io::fileManager=&files;
 #endif
-    if(argc==2) {
-        LocalProfileManager manager; events.current=&manager; std::string value;
-        ILocalProfileManager* prefix=&manager;
-        if(!std::strcmp(argv[1],"online-account")) {
-            LocalProfileFixture::seed(manager); prefix->createOnlineAccount(value,value,value,value);
-        }
-        if(!std::strcmp(argv[1],"slot30")) prefix->frontierPrimary30();
-        if(!std::strcmp(argv[1],"slot34")) prefix->frontierPrimary34();
-        if(!std::strcmp(argv[1],"online-login")) prefix->loginOnline(value,value,false);
-        if(!std::strcmp(argv[1],"online-alternate")) prefix->loginOnlineAlternate(value,value,true);
-        if(!std::strcmp(argv[1],"voice-load")) prefix->loadVoiceSettings();
-        if(!std::strcmp(argv[1],"voice-save")) prefix->saveVoiceSettings();
-        if(!std::strcmp(argv[1],"voice-read")) { float a=1,b=2,c=3;bool d=false;prefix->readVoiceSettings(a,b,c,d); }
-#ifdef BF2_PROFILE_DISCOVERY_FIXTURE
-#endif
-        std::puts("unexpected return"); return 0;
-    }
     check(sizeof(void*)==4,"x86 pointers");
     check(sizeof(LocalProfile)==6*sizeof(std::string)+8,"native six-string profile shape");
     check(sizeof(LocalDemoBookmark)==4*sizeof(std::string),"native four-string bookmark shape");
@@ -1907,15 +1867,20 @@ int main(int argc,char** argv)
     // The default-profile creation, both saves, both loads and the settings apply are complete
     // production paths now; they are exercised in-process (applyTests, saveLoadTests) instead of
     // as diagnostic children.
-    death("online-account","[FRONTIER] dice::hfe::LocalProfileManager::createOnlineAccount:");
-    death("slot30","[FRONTIER] dice::hfe::LocalProfileManager::frontierPrimary30:");
-    death("slot34","[FRONTIER] dice::hfe::LocalProfileManager::frontierPrimary34:");
-    for(const auto& pair:{std::make_pair("online-login","loginOnline"),std::make_pair("online-alternate","loginOnlineAlternate"),
-        std::make_pair("voice-load","loadVoiceSettings"),std::make_pair("voice-save","saveVoiceSettings"),
-        std::make_pair("voice-read","readVoiceSettings")}) {
-        std::string expected=std::string("[FRONTIER] dice::hfe::LocalProfileManager::")+pair.second+":";
-        death(pair.first,expected.c_str());
+    // The former diagnostic stops (createOnlineAccount, PE+30/+34, both online logins, the three voice
+    // settings bodies) are recovered. Their no-profile paths need no service and run in-process here.
+    {
+        {
+            LocalProfileManager manager; events.current=&manager; std::string value;
+            ILocalProfileManager* prefix=&manager;
+            check(!prefix->hasCurrentProfile(7),"PE+30 hasCurrentProfile: false without a current profile");
+            check(prefix->slot34(1,2),"PE+34 returns true and ignores both arguments");
+            check(!prefix->createOnlineAccount(value,value,value,value),"createOnlineAccount refuses without a current profile");
+            check(!prefix->loadVoiceSettings(),"loadVoiceSettings refuses without a current profile");
+        }   // the destructor's shutdown unregisters while the fixture still knows its owner
+        events.current=nullptr;
     }
-    std::printf("LocalProfile lifetime: %u/%u passed; native manager=%zu record=%zu bookmark=%zu\n",checks-failures,checks,sizeof(LocalProfileManager),sizeof(LocalProfile),sizeof(LocalDemoBookmark));
+    std::printf("local profile lifetime %u/%u checks passed (native manager=%zu record=%zu bookmark=%zu)\n",checks-failures,checks,sizeof(LocalProfileManager),sizeof(LocalProfile),sizeof(LocalDemoBookmark));
+    std::fflush(stdout);
     return failures?1:0;
 }

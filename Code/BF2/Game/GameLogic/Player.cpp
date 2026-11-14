@@ -10,6 +10,9 @@
 #include "../../IO/Stream/IStream.h"
 #include "ClientGameLogic.h"                   // getAutoInput's runtime !isServer() arm
 #include "../Main/Game.h"                      // isDedicated() - updateClientSettings' client arm
+#if !DEDICATED
+#include "../VoipClient/BF2VoipClient.h"         // bf2VoipClient (ds:0x9A4DA0) - setVoipSessionId
+#endif
 #include "../GeneralSettings.h"                // IGeneralSettings::getAutoReload - updateClientSettings
 #include "../../Core/ClassManager.h"
 #include "../../Core/EventManager.h"
@@ -2662,6 +2665,11 @@ unsigned short Player::getVoipSessionId()
 void Player::setVoipSessionId(unsigned short sessionId)
 {
     m_voipSessionId = sessionId;
+#if !DEDICATED
+    // BF2.exe 0x4FA481..0x4FA4A2: the local player's id is also the voice client's header id (+0x60).
+    if (bf2VoipClient && this == world::playerManager->getLocalHumanPlayer())
+        bf2VoipClient->setPlayerId(sessionId);
+#endif
 }
 
 // . IPlayer +0x98. One load - IPlayer.h already recorded "(Player +0x158)".
@@ -3639,6 +3647,23 @@ bool Player::getIsSquadLeader() const
     return m_isSquadLeader;                               // byte +0xF5
 }
 
+// [INFERRED] The client tests the new value through a code-virtualised predicate pair before the
+// keep-alive (0x502D50/0x502DB0 -> 0x4FD280/0x4FD380, bodies not statically readable). The same
+// stubs, called as 0x502F30(x, x), produce the stored flag where the ELF stores `x != 0`, so the
+// keep-alive test is read as `x != 0`. The periodic keep-alive (3 s) covers any other reading.
+static void voipKeepAliveOnRoleChange(int value, bool localOnly, const world::IPlayer* self)
+{
+#if !DEDICATED
+    if (isDedicated() || value == 0)
+        return;
+    if (localOnly && self != world::playerManager->getLocalHumanPlayer())
+        return;
+    bf2VoipClient->sendKeepAlive();                     // +0x58, no null test (the client always has one)
+#else
+    (void)value; (void)localOnly; (void)self;
+#endif
+}
+
 // Normalize the public squad id to 16 bits before applying membership side effects.
 void Player::setSquadId(unsigned int id)
 {
@@ -3660,6 +3685,8 @@ void Player::setSquadId(unsigned short id)
 
     if (gameLogic->isServer() && !m_isAI)
         VoipServerConnection::GetInstance()->UpdatePlayerRouting(this);
+
+    voipKeepAliveOnRoleChange(id, false, this);          // PE 0x5040C0..0x5040E6
 }
 
 //  / PE 0x4746B0, 24 B. The bool is explicitly normalised to an int.
@@ -3677,6 +3704,8 @@ void Player::setIsSquadLeader(int leader)
         VoipServerConnection::GetInstance()->UpdatePlayerRouting(this);
 
     static_cast<ISquadManager*>(squadManager)->updateOrderMarkers(this);
+
+    voipKeepAliveOnRoleChange(leader, false, this);      // PE 0x504145..0x504169
 }
 
 //  / PE 0x4746D0, 24 B. The bool is explicitly normalised to an int.
@@ -3704,6 +3733,8 @@ void Player::setIsCommander(int commander)
 
     if (gameLogic->isServer())
         VoipServerConnection::GetInstance()->UpdatePlayerRouting(this);
+
+    voipKeepAliveOnRoleChange(commander, true, this);    // PE 0x504248..0x50427B, local player only
 }
 
 // . IPlayer +0x10C. The same shape one field over, and the very next call in
@@ -4942,9 +4973,10 @@ void Player::setFlagHolder(bool holder)              { m_flagHolder = holder; } 
 bool Player::getFlagHolder() const                   { return m_flagHolder; }           // +0x124
 
 // the firing trio: 0x80F9390 / 0x80F93E0 / 0x80F9410
-// getFiringState IS NOT AN accessor. It ORs the live firing bool with a second field at +0x204,
-// so a player counts as firing when either is set. [UNRESOLVED] what +0x204 is - the ctor zeroes it
-// and nothing recovered writes it - but the OR is compiled and is reproduced.
+// getFiringState IS NOT AN accessor. It ORs the live firing bool with the primary-fire press latch
+// at +0x204 (PE 0x504D00: +0x184 || +0x234), so a player counts as firing when either is set. The
+// client's network apply sets the latch for a remote press; GameClient::stepWorld clears it once
+// it has been read (PE 0x5C056A).
 bool Player::getFiringState() const
 {
     return m_field160[0] != 0 || m_field204 != 0;            // +0x160 || +0x204

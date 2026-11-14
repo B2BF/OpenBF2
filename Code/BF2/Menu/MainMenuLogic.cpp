@@ -185,12 +185,8 @@ bool MainMenuLogic::init()
         s_firstInitDone = true;
     }
     time(&m_activatedAt);
-    // The six haptic force targets (ds:0x9EBEC8, 0x9EBECC, 0x9EBF00..0x9EBF0C) each get a zero
-    // NovintHFX::Vect3 through their slot +0x4C; every one is null-tested first.
-    const double zero[3] = { 0.0, 0.0, 0.0 };
-    for (int i = 0; i < 6; ++i)
-        if (g_hapticForceTargets[i])
-            hapticTarget_vslot0x4C(g_hapticForceTargets[i], zero);
+    // 0x4A3490..0x4A3535: every haptic force effect gets a zero force (FalconDevice.cpp).
+    io::zeroHapticForceTargets();
     return true;
 }
 

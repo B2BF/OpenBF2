@@ -1,0 +1,15 @@
+# [TEMP] probe-burst: two 2 s full-auto bursts with no mouse input; compare the [PLAY] view and
+# the [LOOK] per-call pitch (BF2_LOOK_TRACE=1) for the sustained-fire view climb.
+include join-and-spawn
+wait-ms 3000
+log probe: burst 2s (1)
+button-down 0
+wait-ms 2000
+button-up 0
+wait-ms 3000
+log probe: burst 2s (2)
+button-down 0
+wait-ms 2000
+button-up 0
+wait-ms 3000
+log probe: done

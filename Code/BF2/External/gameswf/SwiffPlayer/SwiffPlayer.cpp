@@ -36,14 +36,10 @@ static void* SetCursor(void* cursor)
     ::dice::hfe::macos::CocoaHost::instance().setCursor(cursor);
     return previous;
 }
-static short GetKeyState(int vkey)
+// SwiffPlayer.dll calls GetKeyState once, with VK_CAPITAL (0x1004D457 pushes 0x14), so the macOS
+// shim is that one query: the Caps Lock toggle bit.
+static short capsLockKeyState()
 {
-    if (vkey != 20) {
-        // [FRONTIER] [TEMP] Only VK_CAPITAL has a mapping. [RETIRE-WHEN: swiff-getkeystate-keys]
-        std::fprintf(stderr, "[FRONTIER] SwiffPlayer GetKeyState(%d) reached: only VK_CAPITAL is mapped on macOS\n", vkey);
-        std::fflush(stderr);
-        std::abort();
-    }
     return (::dice::hfe::macos::CocoaHost::instance().modifierFlags() & ::dice::hfe::macos::HostModCapsLock) ? 1 : 0;
 }
 #endif
@@ -67,6 +63,7 @@ static short GetKeyState(int vkey)
 #include "../../../Game/VideoSettings.h"    // native: IVideoSettings, the dice.bf2.VideoSettings rows' owner
 #include "../../../Game/ControlSettings.h"  // native: IControlSettings, the dice.bf2.ControlSettings rows' owner
 #include "../../../Game/AudioSettings.h"    // native: IAudioSettings, the dice.bf2.AudioSettings rows' owner
+#include "../../../Game/VoipClient/BF2VoipClient.h" // the "Bf2VoipClient" singleton's slots (BF2.exe vtable 0x89C1A8)
 #include "../../../Game/GameServerSettings.h" // native: IGameServerSettings::setTeamRatio / setNoVehicles
 #include "../../../Game/HudInformationLayer.h" // native: eorsinfo publishes the joined server through +0x8C
 #include "../../../Game/Persistence/PlayerUnlockInfo.h" // native: IPlayerUnlockInfo::getItems, the names selectFirstUnlock resolves
@@ -100,6 +97,9 @@ extern IBase*         fileManager;
 // playerManager (dword_100EFEE0, "PlayerManager" stored by initDll): the HapticSettings vector
 // setters ask it for the local human player (+0x30). Typed IBase* as PluginEntry.cpp keeps it.
 extern IBase*         playerManager;
+// settings (dword_100EFE90, "SettingsRepostitory" stored by initDll): the log callback's
+// "swiffDebug" read.
+extern IBase*         settings;
 
 namespace ui {
 
@@ -113,7 +113,7 @@ static int s_livePlayers = 0;
 
 // [CHOSEN, not recovered] Owner-approved offline popup policy, without player
 // layout or virtual-slot changes. releaseMovie removes the borrowed instance.
-// See docs/macos-feat-connectip3.md; no script callback is replaced or retained.
+// No script callback is replaced or retained.
 static std::set<gameswf::movie_interface*> s_mainMenus;
 
 // The gameswf modifier-key latches the shipped image keeps as file-scope bytes (byte_100F8EE8/9/A/B),
@@ -179,13 +179,35 @@ static tu_file* swiffFileOpener(const char* urlOrPath)
                        swiffFileSeekToEnd, swiffFileTell, swiffFileGetEof, swiffFileClose);
 }
 
-static void swiffFsCommand(gameswf::movie_interface* /*movie*/, const char* /*command*/,
-                           const char* /*arg*/)
+// SwiffPlayer.dll 0x10005160, the gameswf log callback the ctor registers (0x1009AF40). With the
+// "swiffDebug" setting at 1 it keeps the first line of each log message (up to 0x1FE characters) in
+// a static buffer; a message without a newline is ignored. Nothing in the DLL reads the buffer.
+namespace {
+char s_swiffDebugLine[0x200];                                         // 0x100F2F28
+class SettingsIntView : public IBase                                  // SettingsRepostitory +0x10
 {
-    // [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: swiff-native-as-host]
-    ::fprintf(stderr, "[FRONTIER] dice::hfe::ui::swiffFsCommand reached (native settings/debug sink unresolved)\n");
-    ::fflush(stderr);
-    ::abort();
+public:
+    virtual const int& intGet(const renddx9abi::HostString& name, const int& fallback) = 0;
+protected:
+    ~SettingsIntView() {}
+};
+}
+
+static void swiffLogCallback(bool /*error*/, const char* message)
+{
+    const int fallback = 0;
+    const bool debug = static_cast<SettingsIntView*>(::dice::hfe::settings)->intGet(
+        renddx9abi::HostString("swiffDebug"), fallback) == 1;
+    if (!debug)
+        return;
+    const char* const end = std::strchr(message, '\n');
+    if (!end)
+        return;
+    std::size_t length = static_cast<std::size_t>(end - message);
+    if (length > 0x1FE)
+        length = 0x1FE;
+    std::memcpy(s_swiffDebugLine, message, length);
+    s_swiffDebugLine[length] = '\0';
 }
 
 
@@ -843,6 +865,12 @@ struct ListResult
         gameswf::array_object_push(row.get_ptr(), gameswf::as_value(rowObj.get_ptr()));
         gameswf::array_object_push(arr.get_ptr(), gameswf::as_value(row.get_ptr()));
         ++rows;
+    }
+    // sub_1001C920 - a row whose id is a vsprintf result (the shipped 0x100F70F0 buffer).
+    void beginRowFormatted(const char* fmt, int v)
+    {
+        char buf[64]; ::sprintf(buf, fmt, v);
+        beginRowStr(buf);
     }
     void setInt(const char* key, int v)
     {
@@ -2228,6 +2256,20 @@ static void listGameModes(const gameswf::fn_call& fn, ListResult& r, ListHost h,
 // The HapticSettings page's two selectors, defined with the HapticSettings rows (SwiffNativesRecovered.inl).
 static void listHapticWeaponSelect(const gameswf::fn_call& fn, ListResult& r, ListHost h);
 static void listHapticThresholdSelect(const gameswf::fn_call& fn, ListResult& r, ListHost h);
+// The remaining shipped branches (frontier batch 12), defined after the team-manager helpers.
+static void listMissions(const gameswf::fn_call& fn, ListResult& r, ListHost h, int start, int end);
+static void listProfileSearch(const gameswf::fn_call& fn, ListResult& r, ListHost h, int start, int end);
+static void listMods(const gameswf::fn_call& fn, ListResult& r, ListHost h, int start, int end);
+static void listTeamSummary(const gameswf::fn_call& fn, ListResult& r, ListHost h, const char* word1);
+static void listDateOfBirth(const gameswf::fn_call& fn, ListResult& r, const char* word1, int start, int end);
+static void listGender(const gameswf::fn_call& fn, ListResult& r);
+static void listModFilter(const gameswf::fn_call& fn, ListResult& r, ListHost h);
+static void listSuggestedNicks(const gameswf::fn_call& fn, ListResult& r, int start, int end);
+static void listUnlockWeapons(const gameswf::fn_call& fn, ListResult& r, ListHost h, int start, int end);
+static void listCurrentUnlockStats(const gameswf::fn_call& fn, ListResult& r, ListHost h);
+static void listCredits(const gameswf::fn_call& fn, ListResult& r, ListHost h, int start, int end);
+static void listAges(const gameswf::fn_call& fn, ListResult& r, int start, int end);
+static void listRanks(const gameswf::fn_call& fn, ListResult& r, ListHost h, int start, int end);
 
 void as_general_getListEntries(const gameswf::fn_call& fn)
 {
@@ -3340,18 +3382,27 @@ void as_general_getListEntries(const gameswf::fn_call& fn)
         fn.result->set_as_object_interface(r.arr.get_ptr());
         return;
     }
-    if (tok[0] == "cmapbg" || tok[0] == "cmapgm" || tok[0] == "buddiesOnline" || tok[0] == "buddies"
-        || tok[0] == "buddyRequests" || tok[0] == "buddyMessages" || tok[0] == "gamespyNicknameSuggestions")
-    {
-        r.begin();
-        r.setTotalCount(0);
-        fn.result->set_as_object_interface(r.arr.get_ptr());
-        return;
-    }
-    // [FRONTIER] [RETIRE-WHEN: RW-88] Always reported, not only under the AS log: this row is live
-    // now, so an unread branch must name itself every time it is reached rather than answer quietly.
-    ::renddx9abi::logf("[FRONTIER] dice.General.getListEntries: list '%s' not written (sub_10022610 branch unread)", id.c_str());
-    fn.result->set_undefined();
+    // The branches frontier batch 12 recovered, at their compare addresses in sub_10022610.
+    if (tok[0] == "missionList")      { listMissions(fn, r, h, start, end); return; }            // 10023D53
+    if (tok[0] == "serverHistory")    return;                                                     // 1002563C: no result
+    if (tok[0] == "profileSearch")    { listProfileSearch(fn, r, h, start, end); return; }       // 100260D5
+    if (tok[0] == "mods")             { listMods(fn, r, h, start, end); return; }                // 1002693F
+    if (tok[0] == "teamSummary")      { listTeamSummary(fn, r, h, tok[1].c_str()); return; }     // 100275B1
+    if (tok[0] == "dateOfBirth")      { listDateOfBirth(fn, r, tok[1].c_str(), start, end); return; } // 10028B52
+    if (tok[0] == "gender")           { listGender(fn, r); return; }                             // 10028E93
+    if (tok[0] == "modfilter")        { listModFilter(fn, r, h); return; }                       // 1002DD11
+    if (tok[0] == "suggestNicks")     { listSuggestedNicks(fn, r, start, end); return; }         // 1002DEFC
+    if (tok[0] == "uweapons")         { listUnlockWeapons(fn, r, h, start, end); return; }       // 10030026
+    if (tok[0] == "custats")          { listCurrentUnlockStats(fn, r, h); return; }              // 100304A7
+    if (tok[0] == "credits")          { listCredits(fn, r, h, start, end); return; }             // 10030A17
+    if (tok[0] == "age")              { listAges(fn, r, start, end); return; }                   // 10030B66
+    if (tok[0] == "ranklist")         { listRanks(fn, r, h, start, end); return; }               // 10030BF4
+    // loc_1003147D, the chain's shared empty exit: begin, totalCount 0, publish. serverMessage
+    // (1002776B), cmapbg and cmapgm, the four buddy lists, gamespyNicknameSuggestions and every
+    // name nothing matches answer this.
+    r.begin();
+    r.setTotalCount(0);
+    fn.result->set_as_object_interface(r.arr.get_ptr());
 }
 
 // PE1005FCF0..1005FD82, helper10013520: a guarded registry SwiffHost owns
@@ -3467,10 +3518,18 @@ void as_logic_getCommandLine(const gameswf::fn_call& fn)
 
 // Joins the command-line address using the configured game port and query port zero.
 // Returns numeric 1 or 0, not Boolean; destroys the address before publishing the result.
+// SwiffPlayer.dll 0x1004D740: port (+0xE4), address (+0xDC), joinServer (+0x100); nothing else.
 void as_logic_joinCommandlineServer(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_logic_joinCommandlineServer");
     ISwiffHost* h = g_swiffPlayerInstance->getSwiffHost();
+    // [CHOSEN, not recovered] Retail drops +password on this path: BF2Engine::joinServer (BF2.exe
+    // 0x405C10) overwrites GSPassword with the menu's join password (+0x180), which only the in-menu
+    // password dialog sets, and the shipped menu script never reads getCommandlineServerPassword, so
+    // a passworded server refused every command-line join (owner decision 2026-11-14: fix it). The
+    // command-line password (+0xE0, GSPassword) becomes the join password when the menu has none.
+    if (h->getJoinPassword().empty())                             // +0x180
+        h->setJoinPassword(h->getPasswordSetting());              // +0x184 <- +0x0E0
     const int port = h->getPortSetting();                        // +0x0E4
     const std::string address = h->getJoinAddressSetting();       // +0x0DC
     const bool ok = h->joinServer(address, port, 0);              // +0x100
@@ -3484,7 +3543,11 @@ extern "C" __declspec(dllimport) short __stdcall GetKeyState(int vkey);
 void as_logic_isCapsLockPressed(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_logic_isCapsLockPressed");
+#if defined(__APPLE__)
+    fn.result->set_bool((capsLockKeyState() & 1) != 0);
+#else
     fn.result->set_bool((GetKeyState(20) & 1) != 0);
+#endif
 }
 
 // Returns host GameSpy availability as Boolean. Requires player/host and blocks while
@@ -3906,29 +3969,15 @@ void as_multiplay_browse(const gameswf::fn_call& fn)
     }
 }
 
-// Stops the VoIP test when its host and client exist. Only the absent-settings
-// refusal normally publishes false; early returns leave the ActionScript result alone.
-// [FRONTIER] [CHOSEN, not recovered] The unavailable client arm reports and continues
-// with that refusal value. Reports retain a hit count and are rate-limited.
-// [RETIRE-WHEN: RW-88] Replace the stop-test seam when the client and audio-settings
-// calls are implemented and validated through the menu.
+// byte_100F8B4D: a voice test is running (voipStartTest raises it, voipStopTest clears it).
 static bool s_voipTestRunning = false;
-static void voipStopTestFrontier()
-{
-    // Reachable repeatedly once a Bf2VoipClient exists, so it is rate-limited the way this file's
-    // AS-error log is: the first five, then every thousandth, always carrying the count.
-    static unsigned s_hits = 0;
-    ++s_hits;
-    if (s_hits <= 5 || (s_hits % 1000) == 0)
-    {
-        ::renddx9abi::logf("[FRONTIER] dice::hfe::ui::as_sound_voipStopTest: the Bf2VoipClient arm "
-                           "(sub_100BC8B0, the client's +52/+56/+20 and AudioSettings +0x54) is not "
-                           "written; answering the shipped refusal, false. Hit #%u.", s_hits);
-        ::fprintf(stderr, "[FRONTIER] dice::hfe::ui::as_sound_voipStopTest: the Bf2VoipClient arm is "
-                          "not written; answering false (hit #%u)\n", s_hits);
-        ::fflush(stderr);
-    }
-}
+// flt_100EC92C: the menu's capture threshold (the dice.bf2.Sound VoIP rows, SwiffNativesRecovered.inl).
+static float s_voipThreshold = 0.0f;
+
+// sub_10069620 "voipStopTest": only while a test runs. Unmutes the host's sound groups, then with a
+// client and AudioSettings ends the test: loopback off, and with a session or test still running the
+// menu threshold goes back to the client and AudioSettings (+0x14, +0x54). An absent AudioSettings
+// answers false; the other exits leave the result alone.
 void as_sound_voipStopTest(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_sound_voipStopTest");
@@ -3936,17 +3985,24 @@ void as_sound_voipStopTest(const gameswf::fn_call& fn)
         return;
     if (!g_swiffPlayerInstance)
         return;
-    ISwiffHost* h = g_swiffPlayerInstance->getSwiffHost();
-    h->slot18C(0);
-    if (!g_swiffPlayerInstance->getBf2VoipClient())          // +0x8C; absent in this tree
+    g_swiffPlayerInstance->getSwiffHost()->slot18C(0);                                     // +0x5C, +0x18C
+    BF2VoipClient* client = static_cast<BF2VoipClient*>(g_swiffPlayerInstance->getBf2VoipClient());  // +0x8C
+    if (!client)
         return;
-    if (!classManager->getSingleton(renddx9abi::HostString("AudioSettings")))
+    IAudioSettings* as = static_cast<IAudioSettings*>(
+        classManager->getSingleton(renddx9abi::HostString("AudioSettings")));
+    if (!as)
     {
         fn.result->set_bool(false);                          // the shipped refusal
         return;
     }
-    voipStopTestFrontier();
-    fn.result->set_bool(false);
+    s_voipTestRunning = false;
+    client->setLocalLoopback(false);                         // 0x100BC8B0
+    if (client->isTesting() || client->isActive())           // +0x34 / +0x38
+    {
+        client->setCaptureThreshold(s_voipThreshold);        // +0x14
+        as->setVoipCaptureThreshold(s_voipThreshold);        // +0x54
+    }
 }
 
 // Logs into the numbered online profile after the disc check and returns Boolean success.
@@ -5468,6 +5524,413 @@ void pushLocalised(ListResult& r, ListHost h, const char* key)
     HostWide w;
     hostLocalise(h, key, w);
     r.pushWide(w.c_str(), (int) w.size());
+}
+
+// ---- the getListEntries branches recovered in frontier batch 12 (sub_10022610) ----
+
+static bool inWindow(unsigned int i, int start, int end)
+{
+    return i >= static_cast<unsigned int>(start) && i < static_cast<unsigned int>(end);
+}
+static void publishList(const gameswf::fn_call& fn, ListResult& r, int total)
+{
+    r.setTotalCount(total);
+    fn.result->set_as_object_interface(r.arr.get_ptr());
+}
+
+// "missionList" (10023D53..10023EBF): host +0xEC getSinglePlayerLevels; a refusal answers the
+// number 0. Rows: id "%d" of the level index, its name and mode; every level counts.
+static void listMissions(const gameswf::fn_call& fn, ListResult& r, ListHost h, int start, int end)
+{
+    std::vector<SwiffSinglePlayerLevel> levels;
+    if (!h->getSinglePlayerLevels(levels))
+    {
+        fn.result->set_int(0);
+        return;
+    }
+    r.begin();
+    int total = 0;
+    for (unsigned int i = 0; i < levels.size(); ++i)
+    {
+        if (inWindow(i, start, end))
+        {
+            r.beginRowFormatted("%d", levels[i].index);
+            r.pushNarrow(levels[i].name.c_str());
+            r.pushNarrow(levels[i].mode.c_str());
+        }
+        ++total;
+    }
+    publishList(fn, r, total);
+}
+
+// "profileSearch" (100260D5..100261EC): host +0x3C getSearchForPlayer, +0x18 getPlayers. A row
+// inside the window with an empty nick is neither listed nor counted; rows outside count.
+static void listProfileSearch(const gameswf::fn_call& fn, ListResult& r, ListHost h, int start, int end)
+{
+    r.begin();
+    std::vector<ISearchForPlayer::Player> players;
+    (void) static_cast<ISearchForPlayer*>(h->getSearchForPlayer())->getPlayers(players);
+    int total = 0;
+    for (unsigned int i = 0; i < players.size(); ++i)
+    {
+        if (inWindow(i, start, end))
+        {
+            if (players[i].nick.length() == 0)
+                continue;
+            r.beginRow(players[i].profileId);
+            r.pushInt(static_cast<int>(i) + 1);
+            r.pushNarrow(players[i].nick.c_str());
+        }
+        ++total;
+    }
+    publishList(fn, r, total);
+}
+
+// "mods" (1002693F..10026BA5): host +0x190 getModCount, +0x194 getModAt per row inside the window.
+// Fields path/logo/url; columns: the path after its first '/' or '\\', the localised title, the
+// version. Every index counts, including one getModAt refuses.
+static void listMods(const gameswf::fn_call& fn, ListResult& r, ListHost h, int start, int end)
+{
+    r.begin();
+    int count = 0;
+    h->getModCount(&count);
+    int total = 0;
+    for (unsigned int i = 0; i < static_cast<unsigned int>(count); ++i)
+    {
+        if (inWindow(i, start, end))
+        {
+            IModInfo::Mod mod;
+            if (h->getModAt(static_cast<int>(i), &mod))
+            {
+                r.beginRow(static_cast<int>(i));
+                r.setString("path", mod.path.c_str());
+                r.setString("logo", mod.logo.c_str());
+                r.setString("url", mod.url.c_str());
+                std::string folder("");
+                bool slash = false;
+                for (std::size_t c = 0; c < mod.path.length(); ++c)
+                {
+                    if (slash)
+                        folder += mod.path[c];
+                    else if (mod.path[c] == '/' || mod.path[c] == '\\')
+                        slash = true;
+                }
+                r.pushNarrow(folder.c_str());
+                pushLocalised(r, h, mod.title.c_str());
+                r.pushNarrow(mod.version.c_str());
+            }
+        }
+        ++total;
+    }
+    publishList(fn, r, total);
+}
+
+// "teamSummary <team>" (100275B1..10027752): host +0x1A4 getEndOfRoundSummary (refused: an empty
+// list); one row keyed by the team's player count with its five column sums. The team is unchecked.
+static void listTeamSummary(const gameswf::fn_call& fn, ListResult& r, ListHost h, const char* word1)
+{
+    const int team = ::atoi(word1);
+    r.begin();
+    SwiffEndOfRoundSummary summary;
+    if (!h->getEndOfRoundSummary(summary))
+    {
+        publishList(fn, r, 0);
+        return;
+    }
+    const std::vector<SwiffEndOfRoundSummaryPlayer>& players = summary.teams[team].players;
+    r.beginRow(static_cast<int>(players.size()));
+    int score = 0, teamScore = 0, kills = 0, deaths = 0, field48 = 0;
+    for (std::size_t i = 0; i < players.size(); ++i)
+    {
+        score += players[i].score;
+        teamScore += players[i].teamScore;
+        kills += players[i].kills;
+        deaths += players[i].deaths;
+        field48 += players[i].field48;
+    }
+    r.pushInt(score);
+    r.pushInt(teamScore);
+    r.pushInt(kills);
+    r.pushInt(deaths);
+    r.pushInt(field48);
+    publishList(fn, r, 1);
+}
+
+// "dateOfBirth <part>" (10028B52..10028E7A): 0 the 90 years before this one (GetSystemTime, UTC),
+// 1 the months "01".."12", 2 the days 1..31; the first counted row is "selected". Other parts: empty.
+static void listDateOfBirth(const gameswf::fn_call& fn, ListResult& r, const char* word1, int start, int end)
+{
+    r.begin();
+    int total = 0;
+    switch (::atoi(word1))
+    {
+    case 0:
+    {
+        const std::time_t now = std::time(0);
+        const int year = std::gmtime(&now)->tm_year + 1900;
+        for (unsigned int i = 0; i < 90; ++i)
+        {
+            if (inWindow(i, start, end))
+            {
+                const int value = year + static_cast<int>(i) - 90;
+                char text[16]; ::sprintf(text, "%d", value);
+                r.beginRow(value);
+                r.pushNarrow(text);
+                if (total == 0)
+                    r.setInt("selected", 1);
+            }
+            ++total;
+        }
+        break;
+    }
+    case 1:
+    {
+        static const char* const months[12] = { "01", "02", "03", "04", "05", "06",
+                                                "07", "08", "09", "10", "11", "12" };
+        for (unsigned int i = 0; i < 12; ++i)
+        {
+            if (inWindow(i, start, end))
+            {
+                r.beginRow(static_cast<int>(i) + 1);
+                r.pushNarrow(months[i]);
+                if (total == 0)
+                    r.setInt("selected", 1);
+            }
+            ++total;
+        }
+        break;
+    }
+    case 2:
+        for (unsigned int i = 0; i < 31; ++i)
+        {
+            if (inWindow(i, start, end))
+            {
+                char text[16]; ::sprintf(text, "%d", static_cast<int>(i) + 1);
+                r.beginRow(static_cast<int>(i));
+                r.pushNarrow(text);
+                if (total == 0)
+                    r.setInt("selected", 1);
+            }
+            ++total;
+        }
+        break;
+    default:
+        break;
+    }
+    publishList(fn, r, total);
+}
+
+// "gender" (10028E93..10028F86): Male (0x500, selected) and Female (0x501).
+static void listGender(const gameswf::fn_call& fn, ListResult& r)
+{
+    r.begin();
+    r.beginRow(0x500);
+    r.pushNarrow("Male");
+    r.setInt("selected", 1);
+    r.beginRow(0x501);
+    r.pushNarrow("Female");
+    publishList(fn, r, 2);
+}
+
+// "modfilter" (1002DD11..1002DEE3): "bf2" always; "xpack" too when the mod directory setting
+// (+0x124) is "mods/xpack", case-insensitively. The window is not read.
+static void listModFilter(const gameswf::fn_call& fn, ListResult& r, ListHost h)
+{
+    r.begin();
+    r.beginRowStr("bf2");
+    pushLocalised(r, h, "MODDESC_BF2_TITLE");
+    int total = 1;
+    const std::string directory = h->getModDirectorySetting();
+    if (::_stricmp(directory.c_str(), "mods/xpack") == 0)
+    {
+        r.beginRowStr("xpack");
+        pushLocalised(r, h, "MODDESC_XP_TITLE");
+        total = 2;
+    }
+    publishList(fn, r, total);
+}
+
+// "suggestNicks" (1002DEFC..1002E00B): the "ProfileManager" (unguarded) +0x50 getNickSuggestions;
+// each nick is both the row id and its column.
+static void listSuggestedNicks(const gameswf::fn_call& fn, ListResult& r, int start, int end)
+{
+    r.begin();
+    IProfileManager* pm = static_cast<IProfileManager*>(
+        classManager->getSingleton(renddx9abi::HostString("ProfileManager")));
+    std::vector<std::string> nicks;
+    (void) pm->getNickSuggestions(nicks);
+    int total = 0;
+    for (std::size_t i = 0; i < nicks.size(); ++i)
+    {
+        if (inWindow(static_cast<unsigned int>(total), start, end))
+        {
+            r.beginRowStr(nicks[i].c_str());
+            r.pushNarrow(nicks[i].c_str());
+        }
+        ++total;
+    }
+    publishList(fn, r, total);
+}
+
+// "uweapons" (10030026..1003048E): the profile's unlocks (ProfileManager +0x30, host +0x1C4) against
+// the unlock definitions (host +0x48, +0x1C getItems). An unlock without a definition, or one whose
+// status is not 0, is neither listed nor counted. Row id: the definition name; "wid" the unlock id,
+// "kitId" its kit when exactly one definition carries it (else -1), "selected" for the selected
+// unlock (or the first row when none is selected); the column is the equipment's display name
+// (MenuTeamManager +0x28), its template name when that is empty.
+static void listUnlockWeapons(const gameswf::fn_call& fn, ListResult& r, ListHost h, int start, int end)
+{
+    r.begin();
+    IProfileManager* pm = static_cast<IProfileManager*>(
+        classManager->getSingleton(renddx9abi::HostString("ProfileManager")));
+    int profileId = 0;
+    if (pm)
+        (void) pm->getProfileId(profileId);                                                 // +0x30
+    IPlayerUnlocks::UnlockCache cache;
+    cache.field0 = static_cast<int>(::time(0)); cache.field4 = 0; cache.available = 0; cache.selected = 0;
+    (void) h->getUnlocks(profileId, &cache);                                                // +0x1C4
+    const std::vector<IPlayerUnlocks::Item> unlocks(cache.items);
+    std::vector<IPlayerUnlockInfo::Item> definitions;
+    (void) static_cast<IPlayerUnlockInfo*>(h->getPlayerUnlockInfo())->getItems(definitions); // +0x48, +0x1C
+    std::map<int, std::vector<int> > kitsById;
+    for (std::size_t k = 0; k < definitions.size(); ++k)
+        kitsById[static_cast<int>(definitions[k].id)].push_back(static_cast<int>(definitions[k].kit));
+    int total = 0;
+    for (std::size_t j = 0; j < unlocks.size(); ++j)
+    {
+        const int id = unlocks[j].id;
+        if (kitsById.find(id) == kitsById.end())
+            continue;
+        std::string name;
+        for (std::size_t k = 0; k < definitions.size(); ++k)
+        {
+            if (static_cast<int>(definitions[k].id) == id)
+            {
+                name = definitions[k].name;
+                break;
+            }
+        }
+        if (unlocks[j].status != 0)
+            continue;
+        if (inWindow(static_cast<unsigned int>(total), start, end))
+        {
+            r.beginRowStr(name.c_str());
+            r.setInt("wid", id);
+            const std::vector<int>& kits = kitsById[id];
+            r.setInt("kitId", kits.size() == 1 ? kits[0] : -1);
+            if (s_selectedUnlock == "" && total == 0)
+                r.setInt("selected", 1);
+            else if (::_stricmp(s_selectedUnlock.c_str(), name.c_str()) == 0)
+                r.setInt("selected", 1);
+            const MenuEquipment* e =
+                static_cast<IMenuTeamManager*>(h->getMenuTeamManager())->findEquipment(name);  // +0x50, +0x28
+            if (e)
+                pushLocalised(r, h, e->displayName != "" ? e->displayName.c_str() : e->templateName.c_str());
+        }
+        ++total;
+    }
+    publishList(fn, r, total);
+}
+
+// "custats" (100304A7..100307E5): the selected unlock's equipment (MenuTeamManager +0x28). When its
+// template carries exactly one kit among the unlock definitions, a "KIT" row first; then Damage,
+// Accuracy and Rate of fire (stat70/74/78), each "available"; "weapon" on the last row. The total
+// is 2 whenever the equipment exists, as shipped; 0 otherwise.
+static void listCurrentUnlockStats(const gameswf::fn_call& fn, ListResult& r, ListHost h)
+{
+    r.begin();
+    std::vector<IPlayerUnlockInfo::Item> definitions;
+    (void) static_cast<IPlayerUnlockInfo*>(h->getPlayerUnlockInfo())->getItems(definitions); // +0x48, +0x1C
+    std::map<std::string, std::vector<int> > kitsByName;
+    for (std::size_t k = 0; k < definitions.size(); ++k)
+        kitsByName[definitions[k].name].push_back(static_cast<int>(definitions[k].kit));
+    int total = 0;
+    const MenuEquipment* e =
+        static_cast<IMenuTeamManager*>(h->getMenuTeamManager())->findEquipment(s_selectedUnlock); // +0x50, +0x28
+    if (e)
+    {
+        std::map<std::string, std::vector<int> >::const_iterator kits = kitsByName.find(e->templateName);
+        if (kits != kitsByName.end() && kits->second.size() == 1)
+        {
+            r.beginRow(0);
+            r.pushNarrow("KIT");
+            r.pushInt(kits->second[0]);
+        }
+        r.beginRow(0);
+        r.pushNarrow("Damage");
+        r.pushInt(e->stat70);
+        r.setInt("available", 1);
+        r.beginRow(1);
+        r.pushNarrow("Accuracy");
+        r.pushInt(e->stat74);
+        r.setInt("available", 1);
+        r.beginRow(2);
+        r.pushNarrow("Rate of fire");
+        r.pushInt(e->stat78);
+        r.setInt("available", 1);
+        total = 2;
+        r.setInt("weapon", e->equipmentType == 0 ? 1 : 0);
+    }
+    publishList(fn, r, total);
+}
+
+// "credits" (10030A17..10030B4D): host +0x2DC's text/value rows; each row id 0, the localised text
+// and "size" = the value. The window is read against the running count.
+static void listCredits(const gameswf::fn_call& fn, ListResult& r, ListHost h, int start, int end)
+{
+    r.begin();
+    const std::vector<SwiffStringIntEntry>* entries = h->getEntriesEC8();
+    int total = 0;
+    for (std::size_t i = 0; i < entries->size(); ++i)
+    {
+        if (inWindow(static_cast<unsigned int>(total), start, end))
+        {
+            r.beginRow(0);
+            pushLocalised(r, h, (*entries)[i].text.c_str());
+            r.setInt("size", (*entries)[i].value);
+        }
+        ++total;
+    }
+    publishList(fn, r, total);
+}
+
+// "age" (10030B66..10030BDB): 10..98; the total is always 89.
+static void listAges(const gameswf::fn_call& fn, ListResult& r, int start, int end)
+{
+    r.begin();
+    for (unsigned int i = 0; i < 89; ++i)
+    {
+        if (inWindow(i, start, end))
+        {
+            r.beginRow(static_cast<int>(i) + 10);
+            r.pushInt(static_cast<int>(i) + 10);
+        }
+    }
+    publishList(fn, r, 89);
+}
+
+// "ranklist" (10030BF4..10030D58): the selected statistics player's record (+0x21C, +0x1B0); per
+// rank (+0x1C0, asked every pass) the localised name (+0x1B4), "selected" on the player's rank.
+static void listRanks(const gameswf::fn_call& fn, ListResult& r, ListHost h, int start, int end)
+{
+    r.begin();
+    const int playerId = h->getSelectedPlayerId();
+    SwiffPlayerStatsRecord stats;
+    (void) h->getPlayerStatsRecord(playerId, stats);
+    int total = 0;
+    for (unsigned int i = 0; i < static_cast<unsigned int>(h->getRankCount()); ++i)
+    {
+        if (inWindow(i, start, end))
+        {
+            r.beginRow(static_cast<int>(i));
+            const std::string name = h->getRankName(static_cast<int>(i));
+            pushLocalised(r, h, name.c_str());
+            if (static_cast<int>(i) == stats.rank)
+                r.setInt("selected", 1);
+        }
+        ++total;
+    }
+    publishList(fn, r, total);
 }
 
 // "teams" (100264EA..10026616): "MenuTeamManager" before the builder; the count asked before the
@@ -9084,7 +9547,7 @@ static void statsRankIdAt(const gameswf::fn_call& fn, std::string PlayerStatsRec
 void as_playerstats_getOpponentRankId(const gameswf::fn_call& fn) { SWF_AS_TRACE("as_playerstats_getOpponentRankId"); statsRankIdAt(fn, &PlayerStatsRecord::vmns, &PlayerStatsRecord::vmrs); }
 void as_playerstats_getVictimRankId(const gameswf::fn_call& fn)   { SWF_AS_TRACE("as_playerstats_getVictimRankId");   statsRankIdAt(fn, &PlayerStatsRecord::mvns, &PlayerStatsRecord::mvrs); }
 
-// The retail natives recovered by c-swiff-natives (docs/macos-c-swiff-natives.md).
+// The retail natives recovered by c-swiff-natives.
 #include "SwiffNativesRecovered.inl"
 
 static void registerAsMethods(SwiffAsNamespace* general, SwiffAsNamespace** ns,
@@ -9890,14 +10353,14 @@ SwiffPlayer::SwiffPlayer()
     // gameswf setter]. That byte is zero-initialised anyway, so omitting the call is a no-op
     // equivalent; resolve and reinstate in Stage 3 if the movie path proves it matters.
 
-    // The three gameswf registrations (file / fscommand / render), in the shipped
-    // ctor's order at 10006F79..10006F8F. NO sound handler is registered -
-    // the shipped ctor registers exactly these three.
+    // The three gameswf registrations (file opener 0x1006F160, log 0x1009AF40, render 0x1009A3F0),
+    // in the shipped ctor's order at 10006F79..10006F8F. No fscommand handler is registered (the
+    // setter 0x1008A1A0 has no caller, and gameswf tests the null handler) and no sound handler.
     gameswf::register_file_opener_callback(swiffFileOpener);
-    gameswf::register_fscommand_callback(swiffFsCommand);
+    gameswf::register_log_callback(swiffLogCallback);
     gameswf::set_render_handler(&render_handler);
 
-    // Retail registers no log callback. Preserve full AS tracing when explicitly selected;
+    // [TEMP] The AS trace replaces the shipped log callback when explicitly selected;
     // the separate input diagnostic admits only mouse-prefixed messages.
     if (asLogEnabled())
         gameswf::register_log_callback(swiffAsLogCb);
@@ -9960,10 +10423,26 @@ void SwiffPlayer::releaseMovie()
 SwiffPlayer::~SwiffPlayer()
 {
     // Shipped dtor also: sub_10071710 gameswf-global check, drops movie_definition/movie_instance
-    // via sub_1006F2A0, sub_10077700 gameswf AS/GC teardown, and a LocalProfileManager voip-volume
-    // save. The voip-volume save stays out [Stage 3]; releaseMovie() is this build's movie and
-    // global teardown ([CHOSEN, not recovered], issue #7).
+    // via sub_1006F2A0 and sub_10077700 gameswf AS/GC teardown; releaseMovie() is this build's movie
+    // and global teardown ([CHOSEN, not recovered], issue #7).
     releaseMovie();
+    // 0x10007030..0x100070A3: a voice test still looping back is ended, and the client's capture
+    // threshold goes back to the stored voice defaults (LocalProfileManager +0xA0, readVoiceSettings;
+    // threshold seeded 0.1f).
+    if (bf2_voip_client && static_cast<BF2VoipClient*>(bf2_voip_client)->m_localLoopback)
+    {
+        BF2VoipClient* voip = static_cast<BF2VoipClient*>(bf2_voip_client);
+        voip->setLocalLoopback(false);
+        IBase* lpm = classManager->getSingleton(renddx9abi::HostString("LocalProfileManager"));
+        if (lpm)
+        {
+            float playback, capture;
+            float threshold = 0.1f;
+            bool boost = false;
+            if (static_cast<ILocalProfileManager*>(lpm)->readVoiceSettings(playback, capture, threshold, boost))
+                voip->setCaptureThreshold(threshold);                                       // +0x14
+        }
+    }
     // [CHOSEN, not recovered] issue #7: cached native definitions can outlive
     // this player. Their bitmap destructors must not call its dead handler.
     if (gameswf::get_render_handler() == &render_handler)
@@ -10301,9 +10780,13 @@ void SwiffPlayer::update(float deltaTime)
         rcSetBackgroundColor(render_context, bgDword);
     }
 
+    // 0x100060D6..0x100060F1: outside a session the menu ticks the voice client's base frame (+0x64),
+    // which runs the voice test's loopback.
     if (voip_update_flag && bf2_voip_client)
     {
-        // VoIP tick (Stage 6). The shipped guard: if !voip->isBusy() then voip->tick().
+        BF2VoipClient* voip = static_cast<BF2VoipClient*>(bf2_voip_client);
+        if (!voip->isActive())                                                              // +0x38
+            voip->update();                                                                 // +0x64
     }
 }
 
@@ -10450,7 +10933,7 @@ void SwiffPlayer::renderSetPairState(intptr_t a, int b)
 #else
 // [CHOSEN, not recovered] Native spelling of 0x10005F50: `cmp [ecx+0xC],0; je ret 8` else
 // `jmp [vtbl+0xD4]` with the caller's two stack arguments, i.e. SwiffRender 0x10154E60
-// setTextureTechnique(const std::string&, int). See docs/macos-c-swiff-re.md.
+// setTextureTechnique(const std::string&, int).
 void SwiffPlayer::renderSetPairState(const std::string& textureName, int techniqueIndex)
 {
     if (render_context)

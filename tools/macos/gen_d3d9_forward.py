@@ -18,7 +18,7 @@
 # Two namespaces name the two worlds inside the wrapper TU: `sub::` is the subset (what the
 # renderer sees) and `real::` is the SDK. Struct and enum types are identical by design, so they
 # are converted with static_cast / reinterpret_cast; interface pointers are wrapped / unwrapped.
-# See docs/macos-c-g2w-forward.md. Standard library only.
+# Standard library only.
 import argparse
 import re
 import sys

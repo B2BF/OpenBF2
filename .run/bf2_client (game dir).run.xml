@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="bf2_client (game dir)" type="CMakeRunConfiguration" factoryName="Application" PROGRAM_PARAMS="+modPath mods/bf2 +fullscreen 0 +multi 1" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" WORKING_DIR="file://$PROJECT_DIR$/../../B2BF Launcher/Battlefield2" PASS_PARENT_ENVS_2="true" PROJECT_NAME="OpenBF2PrivateDevTools" TARGET_NAME="bf2_client" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="OpenBF2PrivateDevTools" RUN_TARGET_NAME="bf2_client">
+  <configuration default="false" name="bf2_client (game dir)" type="CMakeRunConfiguration" factoryName="Application" PROGRAM_PARAMS="+modPath mods/bf2 +fullscreen 0 +multi 1" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" WORKING_DIR="file://$PROJECT_DIR$/../../B2BF Launcher/Battlefield2" PASS_PARENT_ENVS_2="true" PROJECT_NAME="BF2Rebuilt" TARGET_NAME="bf2_client" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="BF2Rebuilt" RUN_TARGET_NAME="bf2_client">
     <method v="2">
       <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
     </method>

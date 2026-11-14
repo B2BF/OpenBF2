@@ -3,6 +3,9 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
+#if defined(__APPLE__) && !DEDICATED
+#include "../Platform/macOS/Warmup.h"   // [CHOSEN] +warmupLevel (port addition)
+#endif
 #include "../../RendDX9Abi/HfeAbi.h"
 #include "../../RendDX9Abi/PluginEntry.h"
 #include "../../RendDX9Abi/BfMemory.h"
@@ -292,6 +295,9 @@ void ResourceManager::postLoadLevel()
     overGrowthPostLoadResources();
     geom::g_LightManager->loadSimpleShadowMaps();
     bufferManagerCollectUnused();
+#if defined(__APPLE__) && !DEDICATED
+    bf2warmup::levelLoaded();   // [CHOSEN, not recovered] +warmupLevel (port addition, Warmup.h)
+#endif
 }
 
 

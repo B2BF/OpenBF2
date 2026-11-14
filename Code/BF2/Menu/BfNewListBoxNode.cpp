@@ -49,7 +49,7 @@ int floorToInt(double value)
     return _mm_cvttsd_si32(_mm_set_sd(floored));
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     const double floored = std::floor(value);
     unsigned short original, truncating;
     int result;
@@ -742,13 +742,8 @@ void BfNewListBoxNode::paintSelf(System* system, const NodeState*, const Rect* b
         }
     }
 
-    if (m_data->m_resource) {
-        // [FRONTIER] [TEMP] [CHOSEN, not recovered] Resource finalization requires an unidentified interface prefix.
-        std::fprintf(stderr, "[FRONTIER] dice::meme::BfNewListBoxNode::paintSelf "
-                             "resource-finalization dependency reached\n");
-        std::fflush(stderr);
-        std::abort();
-    }
+    if (m_data->m_resource)                                                      // 7C7906
+        static_cast<IListBoxCellResource*>(m_data->m_resource)->finishPaint();      // +0x2C
 
     if (m_rowCount > m_visibleRows && m_data->m_field021) {
         const float doubledStep = (m_spacing + m_rowHeight) * 2.0f;
@@ -1057,13 +1052,48 @@ bool BfNewListBoxNode::onEvent2(System* system, const Rect* bounds, const NodeSt
     m_field064 = -1;
     return false;
 }
-// [FRONTIER] [TEMP] [CHOSEN, not recovered] The remaining event method stops on invocation.
-// [RETIRE-WHEN: hud-list-box-frame] Replace after the remaining list-box event operations are implemented and validated.
-bool BfNewListBoxNode::onEvent3(System*, const Rect*, const NodeState*, int, int)
+// BF2.exe 0x7C46D0: the double-click release. onEvent2's gate with fewer tests: input code 1 only,
+// no top-inset, pointer-owner, negative-row or empty-list test, and the selectable flag is read
+// after the timing marks, just before the state test. A completed click runs the select action
+// and clears the marks.
+bool BfNewListBoxNode::onEvent3(System* system, const Rect* bounds, const NodeState* state,
+                                int first, int)
 {
-    std::fprintf(stderr, "[FRONTIER] dice::meme::BfNewListBoxNode::onEvent3 reached\n");
-    std::fflush(stderr);
-    std::abort();
+    m_field074 = false;
+    m_field07c = false;
+    m_field080 = -1;
+
+    if (first != 1) return true;
+
+    const float* const pointer = system->getPointerPosition();
+    const float px = pointer[0];
+    const float py = pointer[1];
+
+    const float scrollLeft = (bounds->width + bounds->x) - (m_scrollWidth + m_scrollOffset);
+    if (!(px < scrollLeft - m_scrollOffset)) return true;
+
+    const float bottomInset = (bounds->height + bounds->y) - static_cast<float>(m_bottom);
+    if (!(bottomInset > py)) return true;
+
+    const int row = m_data->m_row;
+    if (row > m_data->getRowCount()) return true;
+
+    if (!(m_field058 - m_field060 < 1.0f)) { m_field05c = m_field058; return true; }
+    if (m_field05c == 0.0f)                { m_field05c = m_field058; return true; }
+    if (!(m_field058 - m_field05c < 1.0f)) { m_field05c = m_field058; return true; }
+    if (!m_selectable)                     { m_field05c = m_field058; return true; }
+    if (!nodeStateCurrentIsNegative(state)) { m_field05c = m_field058; return true; }
+    if (m_field064 != row)                 { m_field05c = m_field058; return true; }
+
+    if (m_selectAction) {
+        const NodeInputEvent event = {1, 0, 0.0f, 0.0f, 0};
+        m_selectAction->execute(system, bounds, state, &event);                  // +0x40
+    }
+    m_field060 = 0.0f;
+    m_field05c = 0.0f;
+    m_field058 = 0.0f;
+    m_field064 = -1;
+    return false;
 }
 #if defined(_M_IX86)
 static_assert(sizeof(BfNewListBoxNode) == 296, "native BfNewListBoxNode storage");

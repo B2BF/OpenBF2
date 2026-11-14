@@ -49,7 +49,8 @@ def metal_caps():
     filt = value("TextureFilterCaps")
     caps = dict(ps=value("PixelShaderVersion") & 0xFFFF, vs=value("VertexShaderVersion") & 0xFFFF,
                 max_aniso=value("MaxAnisotropy"), min_aniso=bool(filt & 0x400), mag_aniso=bool(filt & 0x4000000),
-                vendor=0, multisample=False, alpha_to_coverage=False)
+                vendor=0, multisample=False, alpha_to_coverage=False,
+                ps20_swizzle=bool(int(re.search(r"c\.PS20Caps\s*=\s*\{\s*(0x[0-9a-fA-F]+|\d+)", text)[1], 0) & 1))
     # GetAdapterIdentifier zero-fills the identifier (VendorId 0); CheckDeviceMultiSampleType
     # refuses everything but D3DMULTISAMPLE_NONE.
     need(text, "*out = {};", "Device.cpp GetAdapterIdentifier")
@@ -81,7 +82,7 @@ def ra_attempts(caps, tables):
     force = tables["force14"][1 if caps["ps"] < 0x200 else 0]
     for vs in tables["vs"]:
         for i, (ps, ver) in enumerate(zip(tables["ps"], tables["psversion"])):
-            if caps["vendor"] == 4098 and i == 2:      # ATI without arbitrary swizzle (caps-dependent)
+            if caps["vendor"] == 4098 and i == 2 and not caps["ps20_swizzle"]:  # ATI without arbitrary swizzle (EffectManager.cpp skipPs2a)
                 continue
             if caps["vendor"] == 4318 and i == 3:      # nvidia skips ps_2_b
                 continue
@@ -122,7 +123,7 @@ def ra_defines(caps, raPath, filterQuality):
     return (s + stm_mip + bm_mip).encode()
 
 
-def legacy_macros(caps, filterQuality, terrainQuality):
+def legacy_macros(caps, filterQuality, terrainQuality, raPath=0):
     """ShaderManager::updateShaderDefines for a non-nvidia device, in engine order."""
     inc = src("Code/BF2/RendDX9/ShaderManagerDefines.inc")
     table = re.findall(r'\{\s*"([^"\n]+)",\s*"([^"\n]*)"\s*\}', inc)
@@ -134,7 +135,9 @@ def legacy_macros(caps, filterQuality, terrainQuality):
         need(sm, literal, "ShaderManager.cpp")
     nv, ati = caps["vendor"] == 4318, caps["vendor"] == 4098
     sm30 = not ((caps["ps"] >> 8) < 3 or (caps["vs"] >> 8) < 3)
-    special = dict(RAPATH="0",  # recovered body pushes a literal "0"; see the doc's gaps section
+    # RAPATH: ShaderManager::updateShaderDefines pushes the Renderer's raPath (+0x6CC, PE
+    # 0x10023793), or "0" while no Renderer exists; the caller enumerates both.
+    special = dict(RAPATH=str(raPath),
                    USEPARTIALPRECISIONTYPES="1" if nv else "0", PS2_EXT="ps_2_a" if nv else "ps_2_0",
                    NVIDIA="1" if nv else "0", ATI="1" if ati else "0", SM30="1" if sm30 else "0",
                    IS_NV4X="0", HASALPHA2MASK=str(int(caps["multisample"] and caps["alpha_to_coverage"])))
@@ -193,6 +196,10 @@ LEGACY_CALLS = [
     ("Shaders/\" + \"MeshParticleMesh", "Code/BF2/Geom/ParticleSystem/MeshParticleMesh/MeshParticleMeshTemplate.cpp", "client"),
     ("Shaders/LightManager_r3x0", "Code/BF2/Geom/XpLightManager.cpp", "conditional:GSRenderPath=2"),
     ("Shaders/%s\" % DebugLineGraph", "Code/BF2/GeomMisc/DebugLineGraphD3d.cpp", "conditional:debug line graph"),
+    # Debug drawers the client creates at startup (recovered GeomMisc; their effects are requested in
+    # normal play, seen in fresh-cache client captures 2026-11-12).
+    ("Shaders/\" + m_shaderName (DebugCircleShader)", "Code/BF2/GeomMisc/DebugCircleDrawer.cpp", "client"),
+    ("Shaders/\" + m_shaderName (DebugLineGraph)", "Code/BF2/GeomMisc/DebugBlockGraphD3D.cpp", "client"),
     ("Shaders/SplineShader", "Code/BF2/GeomMisc/EditorSpline.cpp", "editor"),
     ("Shaders/Road", "Code/BF2/Geom/RoadEditable.cpp", "editor"),
     ("shaders/LightGeom", "Code/BF2/Geom/LightmapGeneration/LightmapGeneration.cpp", "editor"),
@@ -208,7 +215,9 @@ LEGACY_RETAIL = [("Shaders/Rain", "unrecovered"), ("Shaders/Lightning", "unrecov
 # Literal evidence actually present at each call site (composite names are built in pieces).
 LEGACY_EVIDENCE = {"Shaders/\" + \"SkinnedMesh": ('"SkinnedMesh"', "Shaders/SkinnedMesh"),
                    "Shaders/\" + \"MeshParticleMesh": ('"MeshParticleMesh"', "Shaders/MeshParticleMesh"),
-                   "Shaders/%s\" % DebugLineGraph": ('"DebugLineGraph"', "Shaders/DebugLineGraph")}
+                   "Shaders/%s\" % DebugLineGraph": ('"DebugLineGraph"', "Shaders/DebugLineGraph"),
+                   "Shaders/\" + m_shaderName (DebugCircleShader)": ('m_shaderName("DebugCircleShader")', "Shaders/DebugCircleShader"),
+                   "Shaders/\" + m_shaderName (DebugLineGraph)": ('m_shaderName("DebugLineGraph")', "Shaders/DebugLineGraph")}
 
 
 def legacy_effects(retail_dll=None):
@@ -371,11 +380,48 @@ def string_arrays(text):
     return out
 
 
+def preprocess_metadata(text, defines=None):
+    """The metadata compile's preprocessor (MetaFx::shaderMacros: _FORCE_1_4_SHADERS_ = "0" on
+    the Metal caps, PS 3.0 and EffectManager flag 0x40 clear). xpack's RaShaderSTM.mfx has
+    #if/#else/#endif around requirement strings; anything beyond simple conditionals stops."""
+    defines = {"_FORCE_1_4_SHADERS_": 0} if defines is None else defines
+    def cond(expr):
+        e = expr.strip()
+        neg = e.startswith("!")
+        e = e[1:].strip() if neg else e
+        if re.fullmatch(r"\d+", e):
+            v = int(e)
+        elif re.fullmatch(r"\w+", e):
+            v = int(defines.get(e, 0))
+        else:
+            raise ValueError(f"Metadata preprocessor condition not modelled: {expr!r}")
+        return (not v) if neg else bool(v)
+    out, stack = [], []
+    for line in text.split("\n"):
+        m = re.match(r"\s*#\s*(\w+)\s*(.*)$", line)
+        if not m:
+            out.append(line if all(stack) else "")
+            continue
+        d, arg = m[1], m[2]
+        if d == "if":
+            stack.append(cond(arg))
+        elif d in ("ifdef", "ifndef"):
+            stack.append((arg.strip() in defines) == (d == "ifdef"))
+        elif d == "else":
+            stack[-1] = not stack[-1]
+        elif d == "endif":
+            stack.pop()
+        else:
+            raise ValueError(f"Metadata preprocessor directive not modelled: #{d}")
+        out.append("")
+    if stack:
+        raise ValueError("Unterminated #if in metadata")
+    return "\n".join(out)
+
+
 def metafx(raw_bytes, bits):
     raw = raw_bytes.decode("cp1252")
-    text = uncomment(raw)
-    if re.search(r"^\s*#", text, re.M):
-        raise ValueError("Metadata now contains preprocessor directives; extend the D3DX-side model")
+    text = preprocess_metadata(uncomment(raw))
     # Separate literal annotation blocks from top-level declarations.
     annotations, top, pos = {}, [], 0
     for m in re.finditer(r"\bconst\s+(?:bool|int|dword)\s+(\w+)\s*:\s*LITERAL\s*(<)?", text):
@@ -537,8 +583,9 @@ def main():
     p.add_argument("--output", type=Path, default=REPO / "out/c-fx/requests")
     p.add_argument("--config", action="append", default=[], help="restrict to config IDs (e.g. L3S1F3T3)")
     p.add_argument("--classes", default="client", help="legacy classes: client[,conditional][,unrecovered][,editor]")
-    p.add_argument("--caps", default="metal", choices=("metal", "s1b-sm2"),
-                   help="device caps: the Metal device, or s1b's SM2 snapshot (validation against s1b/s2 keys)")
+    p.add_argument("--caps", default="metal", choices=("metal", "metal-ati", "s1b-sm2"),
+                   help="device caps: the Metal device, the Metal device on an AMD GPU (VendorId 0x1002: ATI=1 "
+                        "defines), or s1b's SM2 snapshot (validation against s1b/s2 keys)")
     a = p.parse_args()
     out = a.output.resolve()
     if not out.is_relative_to(REPO / "out"):
@@ -549,6 +596,9 @@ def main():
     (out / "virtual").mkdir(exist_ok=True)
     content = Content(a.mod)
     caps, tables = metal_caps(), ra_tables()
+    if a.caps == "metal-ati":
+        # Owner decision 2026-11-12: the adapter reports the real vendor; AMD Macs report 0x1002.
+        caps.update(vendor=4098)
     if a.caps == "s1b-sm2":
         # engine_inputs.snapshot(): non-vendor SM2, 16x anisotropy, min and mag anisotropy.
         caps.update(ps=0x200, vs=0x200, max_aniso=16, min_aniso=True, mag_aniso=True)
@@ -597,7 +647,11 @@ def main():
             raise ValueError(f"{mfx}.mfx missing from the Shaders archive")
         data = content.read("shaders/" + listed)
         fx = metafx(data, bit_names(bits_src, pattern))
-        fx["m_name"] = prefix + "shaders/" + listed[:-4]
+        # The engine enumerates shaders/*.mfx through FileManager::findFiles, whose ZipArchive index
+        # holds lowercased entry names (retail ELF ZipArchive::readEntries 0x0848B860 calls
+        # getLowerCase; findFiles 0x0848ADD0 returns those keys): MetaFx's name, the generated
+        # header and its #include are lowercase (EffectManager.cpp loadMetaFx, RaShaderPermutator.cpp).
+        fx["m_name"] = prefix + "shaders/" + listed[:-4].lower()
         fx["prefix"] = tprefix
         fx["raw"] = data + b"\0"          # m_sourceSize counts the terminator
         fams[mfx] = fx
@@ -673,14 +727,17 @@ def main():
             if data is None:
                 raise ValueError(f"Legacy effect {key}.fx missing from the Shaders archive")
             path, h = root(rec["file"], data)
-            macros = legacy_macros(caps, cfg["filter"], cfg["terrain"])
-            mh = sha(json.dumps(macros).encode())
-            ident = ("legacy", h, mh)
-            add(ident, dict(kind="legacy", effect=key + ".fx", source=path, root_sha256=h, macros=macros,
-                            flags=0x100, include_mode="legacy", virtual_root=vroot, profile_rank=0,
-                            legacy_class=rec["class"]), cfg)
-            groups.append(dict(config=cfg["id"], effect=key + ".fx", kind="legacy", attempts=[ident]))
-            counts["legacy"] += 1
+            # A legacy effect created before the Renderer publishes its path has RAPATH 0, one
+            # created later (DebugLineGraph, effects reloaded on a video change) the config's.
+            for rp in sorted({0, cfg["raPath"]}):
+                macros = legacy_macros(caps, cfg["filter"], cfg["terrain"], rp)
+                mh = sha(json.dumps(macros).encode())
+                ident = ("legacy", h, mh)
+                add(ident, dict(kind="legacy", effect=key + ".fx", source=path, root_sha256=h, macros=macros,
+                                flags=0x100, include_mode="legacy", virtual_root=vroot, profile_rank=0,
+                                legacy_class=rec["class"]), cfg)
+                groups.append(dict(config=cfg["id"], effect=key + ".fx", kind="legacy", attempts=[ident]))
+                counts["legacy"] += 1
         summary["configs"][cfg["id"]] = dict(cfg, **counts)
 
     ids = {}

@@ -2,6 +2,9 @@
 // GameServer owns level loading, client admission, simulation and outgoing game state.
 // Keep the recovered lifecycle and dispatch ordering; method-level exceptions remain at their sites.
 
+#if defined(__APPLE__) && !DEDICATED
+#include "../../Platform/macOS/Warmup.h"   // [CHOSEN] +warmupLevel (port addition)
+#endif
 #include "GameServer.h"
 #include "VoipServerConnection.h"
 #include "ClientInfo.h"                    // handleDataBlock parses a block-id-1 payload into one
@@ -56,6 +59,7 @@
 #include "../../AI/AIDLL/AI/Main/BF2AI.h"      // PE unload's AI isInitialized/clear pair
 #endif
 #include "../Main/BF2Engine.h"                 // loadAI / quitNextFrame / updateStatusMonitor
+#include "../PunkBuster/PbGlue.h"            // PbAuthClient, PB_handlePacket, PB_get_sv_punkbusterInstalled
 #include "../Utility/BuildNrUtil.h"            // getNetVersionNumber - the protocol stamp
 #include "../../Core/ClassManager.h"           // createInstance2 +0x34 / getSimpleSingleton +0x5C
 #include "../../Core/EventManager.h"           // postEvent +0x14
@@ -156,17 +160,6 @@ inline ServerConnection* asServerConnection(IClientConnection* c)
 // SDK Winsock headers into this translation unit.
 extern "C" char* gcd_getkeyhash(int gameid, int localid);
 
-// [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: PB-ADMISSION-SDK]
-// Stops before optional PunkBuster admission until its SDK state and loader are
-// recovered; a null SDK must not be treated as successful authentication.
-const char* punkBusterAuthClient(const char*, int, const char*)
-{
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::(anon)::punkBusterAuthClient (PbAuthClient SDK state/loader) reached\n");
-    std::fflush(stderr);
-    //std::abort();
-    return nullptr;
-}
-
 void cdkey_auth_callback(int localId, AuthResult result, void* context)
 {
     GameServer* const gs = static_cast<GameServer*>(context);
@@ -181,8 +174,9 @@ void cdkey_auth_callback(int localId, AuthResult result, void* context)
         {
             std::string ipAndPort;
             gs->getConnectionIpAndPort(localId, ipAndPort);
-            const char* hash = gcd_getkeyhash(gamespy::g_gameID, localId);
-            const char* reason = punkBusterAuthClient(ipAndPort.c_str(), 1, hash);
+            char* hash = gcd_getkeyhash(gamespy::g_gameID, localId);
+            // ELF 0x80A4CB7: pbsv's admission check; without a hook from pbsv it admits (0).
+            const char* reason = PbAuthClient(const_cast<char*>(ipAndPort.c_str()), 1, hash);
             if (reason) gs->kickPlayer(localId, static_cast<io::PResult>(34), std::string(reason));
             else gs->authOk(localId);
         }
@@ -215,16 +209,8 @@ bool GameServer::init()
         serverSettings->m_punkBuster = false;
     }
 
-    // PB_get_sv_punkbusterInstalled: ELF 0x84F8A10 / PE 0x453B80 is only fileExists.
-    // [CHOSEN, placement only] inline its read here until the PB integration TU is recovered.
-    // [PLATFORM] the shipped Linux path is pb/pbsv.so; Windows uses pb/pbsv.dll.
-#ifdef _WIN32
-    const char* const pbServerLibrary = "pb/pbsv.dll";
-#else
-    const char* const pbServerLibrary = "pb/pbsv.so";
-#endif
-    if (serverSettings->getRanked()
-        && !io::fileManager->fileExists(std::string(pbServerLibrary)))
+    // ELF 0x80A7500 / BF2.exe 0x4CF940: PB_get_sv_punkbusterInstalled (pb/pbsv.so, pb/pbsv.dll).
+    if (serverSettings->getRanked() && !PB_get_sv_punkbusterInstalled())
         Debug(DEBUGTYPE_7, "Game/GameServer/GameServer.cpp", 617)
             << "Cannot run a ranked server without punkbuster installed and enabled.";
     m_isPunkBusterEnabled = serverSettings->getSvPunkBuster();
@@ -611,6 +597,9 @@ bool GameServer::startServer(const std::string& a1, int port, int /* dead - neve
 #endif
         if (localPlayer == -1)
             return false;
+#if defined(__APPLE__)
+        bf2warmup::localPlayerJoined();             // [CHOSEN] +warmupLevel progress (notification only)
+#endif
     }
 #endif
 
@@ -2853,8 +2842,8 @@ void GameServer::challengeResponse(int connectionId, GameEvent* ev)
 // Drain received packets, then execute queued disconnects. Do not tear down
 // connections inside the receive loop: NetServer retains a map cursor. Connection
 // 129 is the demo stream. Packet payload lengths arrive without a packet-size clamp.
-// [FRONTIER] PunkBuster packet delivery remains omitted; its filtered payloads
-// are still drained and freed.
+// PunkBuster's filtered datagrams go to PB_handlePacket while the server runs PunkBuster, and are
+// freed either way.
 void GameServer::processReceivedPackets()
 {
     if (!m_netServer)
@@ -2879,9 +2868,9 @@ void GameServer::processReceivedPackets()
         for (std::list<io::StoredPacket>::iterator it = filtered.begin();
              it != filtered.end(); ++it)
         {
-            // disabled BY project decision - the guard and the call, both reproduced as comments:
-            //     if (m_isPunkbusterEnabled)
-            //         PB_handlePacket(it->m_data, it->m_size, &it->m_address);
+            // ELF 0x80AA199 / 0x80AAC94: the payload, its size and the sender's "ip:port" name.
+            if (m_isPunkBusterEnabled)
+                PB_handlePacket(static_cast<char*>(it->data), static_cast<int>(it->size), it->name);
             std::free(it->data);
         }
     }

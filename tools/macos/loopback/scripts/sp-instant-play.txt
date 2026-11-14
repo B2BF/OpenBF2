@@ -1,0 +1,46 @@
+# [TEMP] sp-instant-play: Welcome -> PLAY SINGLEPLAYER (instant battle) -> JOIN GAME -> Assault kit,
+# Beach spawn (gulf_of_oman, US) -> DONE -> scoreboard -> ~3 min in the round. Client-hosted
+# (docs/macos-c-input-script.md). 800x600. Run with BF2_AI_SPAWN_ONLY=1.
+timeout 300
+# The runner passes +restart 1 (no intros): the menu is up once menu.bik plays.
+wait-log mods/bf2/Movies/menu.bik
+wait-ms 3000
+capture welcome
+move 380 214
+wait-ms 300
+click 380 214
+wait-ms 2000
+capture loading
+wait-log ingameMap.tga
+wait-ms 5000
+capture loaded
+click 745 583
+wait-ms 4000
+key enter
+wait-ms 1500
+key enter
+wait-ms 3000
+capture spawn-screen
+# Assault kit (row 3 of the kit list), then the Beach spawn point, then DONE.
+hud-click 130 240
+wait-ms 1000
+hud-click 517 422
+wait-ms 1000
+capture selected
+hud-click 728 546
+wait-ms 20000
+capture spawned
+key-down tab
+wait-ms 1500
+capture scoreboard
+key-up tab
+log hold start
+wait-ms 60000
+capture hold-60
+move-rel 300 0
+wait-ms 60000
+capture hold-120
+wait-ms 60000
+capture hold-180
+log hold done
+end

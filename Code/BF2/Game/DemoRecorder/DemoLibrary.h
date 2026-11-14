@@ -31,7 +31,7 @@ struct DemoLibraryEntry
 class IDemoLibrary : public IBase {
 public:
     virtual bool refresh() = 0;                                        //+10 4C3030: 4C2A60, then true; LocalProfileManager::login 4AA4CD
-    virtual bool download(const std::string& name, const std::string& url, const std::string& description) = 0; //+14 4C2DF0 [FRONTIER] (4C26E0)
+    virtual bool download(const std::string& name, const std::string& url, const std::string& description) = 0; //+14 4C2DF0 (name helper 4C26E0)
     virtual unsigned int getNumEntries() = 0;
     virtual DemoLibraryEntry* getEntry(unsigned int index) = 0;        //+1C 4C1FF0: null past the count (through the virtual count)
     virtual bool removeEntry(unsigned int index) = 0;                  //+20 4C2660: deletes the file, erases the row
@@ -80,7 +80,8 @@ public:
 
 private:
     friend struct DemoLibraryFixture;
-    bool refreshEntries();                                             // [INFERRED] name
+    bool refreshEntries();
+    std::string nextFreeDemoName();                                    // 4C26E0 [INFERRED] name                                             // [INFERRED] name
     void reportError(const std::string& message);                      // [INFERRED] name: SwiffHost +1E4 record {1, message, 0}
     int m_refCount;                                                    // retail +1C
     std::vector<DemoLibraryEntry> m_entries;                           // retail +20

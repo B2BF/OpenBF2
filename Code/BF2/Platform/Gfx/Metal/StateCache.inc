@@ -62,7 +62,8 @@ struct StateCache {
         if(!extraSampler.empty()) return "IDirect3DDevice9::Draw state unmapped sampler-state ID";
         for(unsigned i=0;i<256;++i) {
             switch(i) {
-            case 7:case 8:case 14:case 15:case 19:case 20:case 22:case 23:case 24:case 25:case 27:
+            case 7:case 8:case 9:case 14:case 15: // 9 SHADEMODE: flat is a fragment variant (FragmentVariant::flat)
+           case 19:case 20:case 22:case 23:case 24:case 25:case 27:
             case 34:case 36:case 37: // Fog parameters are inert while fog is disabled.
             // 60 TEXTUREFACTOR: read only by a fixed-function stage argument D3DTA_TFACTOR
             // (shaders, ps_1_x included, cannot read it). No default stage argument is TFACTOR,

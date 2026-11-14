@@ -510,12 +510,13 @@ class Bf2MenuMapNodeTypeDescriptor final : public TypeDescriptor
 public:
     Bf2MenuMapNodeTypeDescriptor() : TypeDescriptor("dice::meme::Bf2MenuMapNode") {}
     TypeDescriptor* getBaseType() override { return Bf2TransformNode::getClassType(); }
+    // 783410: operator new(0xC80), then the constructor with six zeros. The constructor loads textures
+    // through its System (780D8E reads +0x358 unguarded), so a descriptor-created map node faults on the
+    // null System in retail too; nothing in the client creates one this way.
     RuntimeObject* create() override
     {
-        // [FRONTIER] [CHOSEN, not recovered] Saved-node construction is unimplemented; the builder constructs nodes directly.
-        std::fprintf(stderr, "[FRONTIER] dice::meme::Bf2MenuMapNodeTypeDescriptor::create reached\n");
-        std::fflush(stderr);
-        std::abort();
+        void* allocation = ::operator new(sizeof(Bf2MenuMapNode));
+        return allocation ? new(allocation) Bf2MenuMapNode(nullptr, nullptr, 0, 0, 0, 0) : nullptr;
     }
     void addInstance() override { ++bf2MenuMapNodeInstances; }
     void removeInstance() override { --bf2MenuMapNodeInstances; } // 773170, no zero guard

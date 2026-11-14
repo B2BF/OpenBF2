@@ -14,7 +14,7 @@
 namespace dice { namespace hfe {
 class HudInformationLayer;
 struct SquadOrder;
-namespace hud { class BF2HudManager; class HudKitSelection; class HudCommander; class HudVehicleInformation; class Bf2HudBuilder; }
+namespace hud { class BF2HudManager; class HudKitSelection; class HudCommander; class HudVehicleInformation; class Bf2HudBuilder; struct HudConsoleAccess; }
 namespace world { class IControlPoint; class IObject; class IPlayer; }
 namespace geom { class IMemeTexture; }
 }
@@ -124,6 +124,7 @@ public:
 private:
     friend class hfe::HudInformationLayer;
     friend class hfe::hud::BF2HudManager;
+    friend struct hfe::hud::HudConsoleAccess;   // the hudMap console rows write these fields directly
     friend class hfe::hud::HudKitSelection;
     friend class hfe::hud::HudCommander;
     friend class hfe::hud::HudVehicleInformation; // 78B1E0 reads772870 / overhead zoom flag

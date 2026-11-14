@@ -1,0 +1,66 @@
+# [TEMP] dinput8 proxy script for a retail client copy (DI8PROXY_SCRIPT=<this file>): the same screens
+# and cursor positions as tools/macos/loopback/scripts/ui-compare.txt, with fixed waits (retail writes
+# no log). Run the copy with __COMPAT_LAYER=HIGHDPIAWARE so the window is 800x600 client pixels.
+log ui-compare: connecting / loading
+click 400 300
+wait-ms 1500
+capture boot
+wait-ms 4000
+capture load-a
+wait-ms 8000
+capture load-b
+wait-ms 8000
+capture load-c
+wait-ms 8000
+capture load-d
+wait-ms 20000
+capture load-e
+wait-ms 20000
+capture load-f
+wait-ms 20000
+capture load-g
+wait-ms 30000
+capture loaded
+# "click" also moves the cursor; the menus take hover from WM_MOUSEMOVE. The proxy has no plain
+# move, so each hover is a press on an empty spot first, then the hover target is pressed only
+# where pressing is harmless (the tabs, the JOIN GAME button last).
+click 466 47
+wait-ms 800
+capture loaded-hover-activetab
+click 400 300
+wait-ms 800
+capture loaded-away
+click 745 583
+wait-ms 1000
+capture spawn-1s
+wait-ms 4000
+capture spawn-5s
+pointer 400 300
+wait-ms 1000
+capture spawn-pointer
+pointer 728 546
+wait-ms 1000
+capture spawn-hover-done
+pointer 130 107
+wait-ms 1000
+capture spawn-hover-kit0
+hud-click 130 107
+wait-ms 1000
+hud-click 432 282
+wait-ms 1000
+capture spawn-selected
+hud-click 728 546
+wait-ms 12000
+capture hud
+key enter
+wait-ms 2500
+capture menu-for-suicide
+hud-click 604 546
+wait-ms 1500
+capture dead-1s
+wait-ms 3000
+capture dead-4s
+pointer 400 300
+wait-ms 1000
+capture dead-pointer
+log ui-compare done

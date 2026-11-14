@@ -93,7 +93,7 @@ for lim in "$loop"/scenarios/*/limits.cfg; do
     fi
 done
 echo "package.sh: $nbase Intel baseline folder(s) staged"
-LOCK_LINE="_lock_path = OWNER_HOME / 'Source/OpenBF2-wt/coord/run/loopback.lock'" \
+LOCK_LINE="_lock_path = pathlib.Path(os.environ.get('BF2_LOOPBACK_LOCK') or OWNER_HOME / 'Library/Caches/OpenBF2-loopback/loopback.lock')" \
 /usr/bin/python3 -I - "$loop/loopback.py" "$dest/tools/macos/loopback/loopback.py" <<'PY'
 import os, sys
 src, dst = sys.argv[1], sys.argv[2]
@@ -171,8 +171,8 @@ if grep -E '^   (dep|rpath) ' "$dest/artifacts.txt" | grep -v -E ' @(rpath|loade
     grep -E '^   (dep|rpath) ' "$dest/artifacts.txt" | grep -v -E ' @(rpath|loader_path|executable_path)(/|$)' >&2
     exit 1
 fi
-# Debug info and __FILE__ strings name this Mac's source tree; harmless at run time, listed only.
-LC_ALL=C grep -a -l -E "$HOME/Source|/opt/homebrew|/usr/local/(Cellar|opt)" "${machos[@]}" \
+# Debug info and __FILE__ strings name the build machine's source tree; harmless at run time, listed only.
+LC_ALL=C grep -a -l -E "$HOME/|/opt/homebrew|/usr/local/(Cellar|opt)" "${machos[@]}" \
     | sed "s|^$dest/||" > "$dest/reference/build-path-strings.txt" || true
 
 (cd "$dest" && find . -type f ! -name MANIFEST.sha256 -print0 | sort -z | xargs -0 shasum -a 256 > MANIFEST.sha256)

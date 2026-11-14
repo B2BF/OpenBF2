@@ -135,7 +135,7 @@ void ServerQueryCache::update()
     m_serverKeys[SQK_teamRatioPercent]  = formatString("%f", sv->getTeamRatioPercent());
     m_serverKeys[SQK_numReservedSlots]  = formatString("%d", sv->getNumReservedSlots());
     // [CHOSEN, not recovered] Owner-approved R-main-1 improvement: retail leaves
-    // these registered bot keys empty. See docs/macos-srvinfo-bots.md.
+    // these registered bot keys empty.
     m_serverKeys[SQK_coopBotRatio]      = formatString("%f", sv->getCoopBotRatio());
     m_serverKeys[SQK_coopBotCount]      = formatString("%d", sv->getCoopBotCount());
     m_serverKeys[SQK_coopBotDifficulty] = formatString("%f", sv->getCoopBotDifficulty());

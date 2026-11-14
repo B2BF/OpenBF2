@@ -1,4 +1,4 @@
-// [TEMP] macOS input review harness (docs/macos-c-input-review.md). Runs the Cocoa host headless
+// [TEMP] macOS input review harness. Runs the Cocoa host headless
 // (CocoaHost::enableHeadlessForTest: no window, no NSApplication, the real cursor untouched),
 // routes NSEvents built from CoreGraphics events through it exactly as pumpEvents routes them,
 // drives MacInputDeviceManager with InputManager::update's protocol (update(-1) polls, then one

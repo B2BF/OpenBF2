@@ -80,6 +80,7 @@ std::list<ConsoleObject*>& toolObjectConsoleObjects();      // Scene/Object/Tool
 #include "../Game/GeneralSettings.h"     // client factory4106BE, native settings owner
 #include "../Game/GameServerSettings.h"  // client factory41067C, the ServerSettings mirror
 #include "../Game/HudInformationLayer.h" // client factory40FECC, native HUD data owner
+#include "../Game/DistributedLightRenderer/DistributedLightRenderer.h" // client factory 40FF0E
 #include "../Game/VideoSettings.h"       // client factory4105FB, the renderer options owner
 #include "../Game/ControlSettings.h"     // client factory41063D, the control-map backup owner
 #include "../Game/HapticSettings.h"      // client factory410700, the force-feedback tuning owner
@@ -384,7 +385,9 @@ void ModuleGame::getClassList(std::vector<ClassRegInfo>& out)
         // PE430A53..430A7B, then430A9F..430AC7: settings, then HUD information.
         out.push_back(ClassRegInfo{CID_GameServerSettings, "dice.hfe.GameServerSettings", &GameServerSettings::create});
         out.push_back(ClassRegInfo{CID_HudInformationLayer, "dice.bf2.HudInformationLayer", &HudInformationLayer::create});
-        // PE430B1D..430B45 and430B5C..430B84; DistributedLightRenderer lies between HUD and host.
+        // PE430ADE..430B06: the distributed lightmap renderer, between HUD and host.
+        out.push_back(ClassRegInfo{CID_DistributedLightRenderer, "dice.bf2.DistributedLightRenderer", &DistributedLightRenderer::create});
+        // PE430B1D..430B45 and430B5C..430B84.
         out.push_back(ClassRegInfo{CID_SwiffHost, "dice.hfe.SwiffHost", &SwiffHost::create});
         out.push_back(ClassRegInfo{CID_MainMenuLogic, "dice.hfe.MainMenuLogic", &MainMenuLogic::create});
         // Loading-screen logic created by the InitLoadingScreen menu event.

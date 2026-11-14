@@ -2,16 +2,15 @@
 
 **Developer oracle, not used by the client.** These optional Wine/D3DX reference
 tools are outside the client build. The client compiles effects natively; see
-[building](../../../docs/building.md#macos) and [r2-no-wine](../../../docs/macos-r2-no-wine.md).
+[building](../../../docs/building.md#macos).
 `patches/` holds shared native-source patch data; `patch-mojo.py` delegates to the
 native utility without invoking Wine or D3DX. Exporter/runtime checks in the root CMake project
 require `-DBF2_FX_DEVELOPER_ORACLE=ON` and explicit build targets.
 
 [CHOSEN, not recovered] Standalone owner-requested macOS port tooling. It never links
-into an engine image. See [the s1 report](../../../docs/macos-s1-d3dx-wine.md) for measured
-results, limitations, cache design and maintainer instructions.
+into an engine image.
 
-The [s1c coverage report](../../../docs/macos-s1c-fx-coverage.md) records the current
+The s1c coverage work measured this
 result: 219/269 D3DX attempts accepted (including the two original controls), all
 219 effects parsed, 982/982 shaders translated and Metal libraries compiled.
 The 50 remaining failures are genuine lower-profile attempts followed by engine
@@ -129,7 +128,7 @@ collection, 3 if compiler jobs were unattempted, 2 on setup failure. Inspect cou
 `--stage2-only` rewrites the CSV; `--metal` appends fresh Metal rows afterwards.
 The classifier uses the latest row per shader when Metal has been repeated.
 
-Regression without Wine/Metal, using the retained maintainer binaries:
+Regression without Wine/Metal, using the retained coordinator binaries:
 
 ```sh
 python3 Code/Tests/macos_d3dxfx/check.py out/d3dxfx/results.csv
@@ -147,9 +146,8 @@ It tests libraries, not render pipelines, shader linkage, draws or visual output
 
 ## CPU effect cache
 
-The [s2 runtime guide](../../../docs/macos-s2-fx-runtime.md) documents the separate
-`bf2_fx_runtime` library, versioned cache, include closure/key, parameter store,
-expression evaluator and G4 callback contract. Build its offline exporter with:
+The separate `bf2_fx_runtime` library holds the versioned cache, include closure/key,
+parameter store, expression evaluator and G4 callback contract. Build its offline exporter with:
 
 ```sh
 sh tools/macos/d3dxfx/build-runtime-tools.sh

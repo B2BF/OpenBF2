@@ -82,6 +82,8 @@ public:
     VOIP::VRESULT HandlePacketDebugRoutingData(const char* data, int length);
 
 private:
+    friend class CDebugRoutingState;   // OutputFullState reads the routing and name tables directly
+
     std::string              m_password;              // +0x880  shared secret from Start
     std::deque<std::string>  m_outputStrings;         // +0x888  push/popOutputString queue
     VOIP::DataString         m_field08D8;             // +0x8D8  [UNRESOLVED]

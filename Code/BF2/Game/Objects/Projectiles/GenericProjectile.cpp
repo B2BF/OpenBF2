@@ -17,8 +17,6 @@
 
 #include <cfloat>                                   // FLT_EPSILON
 #include <cmath>
-#include <cstdio>
-#include <cstdlib>
 #include <cstring>
 
 #include "GenericProjectileTemplate.h"
@@ -165,14 +163,6 @@ void normaliseVec3(Vec3& v)
     }
     const float inverse = 1.0f / sqrtf(lengthSq);
     v.x *= inverse; v.y *= inverse; v.z *= inverse;
-}
-
-// Reports and stops unresolved projectile operations.
-void projectileFrontier(const char* method)
-{
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::world::GenericProjectile::%s reached\n", method);
-    std::fflush(stderr);
-    std::abort();
 }
 
 } // namespace

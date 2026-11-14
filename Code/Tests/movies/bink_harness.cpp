@@ -1,4 +1,4 @@
-// [TEMP] [CHOSEN, not recovered] Black-box Bink harness (docs/tracks/bink/README.md).
+// [TEMP] [CHOSEN, not recovered] Black-box Bink harness (Code/BF2/External/ffmpeg-bink/README.md).
 //
 // One source, two builds:
 //   - retail: a 32-bit Windows program (i686-w64-mingw32 or MSVC x86) that loads RAD's binkw32.dll

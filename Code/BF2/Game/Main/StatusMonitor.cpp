@@ -2,6 +2,7 @@
 // service checks define the display layout. [INFERRED] File placement.
 
 #include "StatusMonitor.h"
+#include "../PunkBuster/PbGlue.h"
 #include "StatusMonitorImpl.h"
 
 #include "../../IO/Network/ProtocolLayer/NetServer.h"
@@ -21,7 +22,7 @@
 
 // These declarations have global scope; the PunkBuster query uses C linkage.
 std::string getTimeString(unsigned int seconds);
-extern "C" bool isPbSvEnabled();
+extern "C" bool isPbSvEnabled();   // Game/PunkBuster/PbServer.cpp
 
 // formatString is declared with the rest of the free functions further down, inside dice::hfe;
 // getTimeString sits above that block (it is global, and the ELF puts it below the ctor), so it
@@ -42,13 +43,6 @@ std::string getTimeString(unsigned int seconds)
     if (secs    >=  60u) secs    = 0u;
 
     return dice::hfe::formatString("%02d:%02d:%02d", hours, minutes, secs);
-}
-
-// [CHOSEN, not recovered] Reports no PunkBuster service until SDK glue is available.
-// Replace this local stand-in with the SDK query when that service is recovered.
-extern "C" bool isPbSvEnabled()
-{
-    return false;
 }
 
 namespace dice {

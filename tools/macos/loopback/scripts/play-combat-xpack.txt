@@ -1,0 +1,157 @@
+# [TEMP] play-combat for SF (xpack) maps: join, wait out the pre-round countdown, pick kit 0 and click
+# spawn dots until alive (Surge Supply Depot and Devils_Perch Lower Village/Helipad first, then a
+# grid), then play-combat's body. play-combat's own include (join-and-spawn) clicks Dalian's dot.
+# wait-log-else jumps on timeout only; the 1 s wait for a line that never appears jumps past the
+# remaining tries once alive. Used by the xpack check of the renderer frontier closure.
+timeout 1500
+wait-log ingameMap.tga
+wait-ms 3000
+click 745 583
+wait-ms 15000
+hud-click 130 107
+wait-ms 500
+hud-click 700 241
+wait-ms 500
+hud-click 728 546
+wait-log-else 8 t1 [PLAY] alive=1
+wait-log-else 1 spawned play-combat-xpack-no-such-line
+label t1
+hud-click 563 222
+wait-ms 500
+hud-click 728 546
+wait-log-else 8 t2 [PLAY] alive=1
+wait-log-else 1 spawned play-combat-xpack-no-such-line
+label t2
+hud-click 566 163
+wait-ms 500
+hud-click 728 546
+wait-log-else 8 t3 [PLAY] alive=1
+wait-log-else 1 spawned play-combat-xpack-no-such-line
+label t3
+hud-click 660 200
+wait-ms 500
+hud-click 728 546
+wait-log-else 8 t4 [PLAY] alive=1
+wait-log-else 1 spawned play-combat-xpack-no-such-line
+label t4
+hud-click 520 330
+wait-ms 500
+hud-click 728 546
+wait-log-else 8 t5 [PLAY] alive=1
+wait-log-else 1 spawned play-combat-xpack-no-such-line
+label t5
+hud-click 560 260
+wait-ms 500
+hud-click 728 546
+wait-log-else 8 t6 [PLAY] alive=1
+wait-log-else 1 spawned play-combat-xpack-no-such-line
+label t6
+hud-click 600 300
+wait-ms 500
+hud-click 728 546
+wait-log-else 8 t7 [PLAY] alive=1
+wait-log-else 1 spawned play-combat-xpack-no-such-line
+label t7
+hud-click 480 250
+wait-ms 500
+hud-click 728 546
+wait-log-else 8 t8 [PLAY] alive=1
+wait-log-else 1 spawned play-combat-xpack-no-such-line
+label t8
+hud-click 640 380
+wait-ms 500
+hud-click 728 546
+wait-log-else 8 t9 [PLAY] alive=1
+wait-log-else 1 spawned play-combat-xpack-no-such-line
+label t9
+hud-click 420 300
+wait-ms 500
+hud-click 728 546
+wait-log-else 8 t10 [PLAY] alive=1
+wait-log-else 1 spawned play-combat-xpack-no-such-line
+label t10
+hud-click 400 300
+wait-ms 500
+hud-click 728 546
+wait-log-else 8 t11 [PLAY] alive=1
+wait-log-else 1 spawned play-combat-xpack-no-such-line
+label t11
+hud-click 500 250
+wait-ms 500
+hud-click 728 546
+wait-log-else 8 t12 [PLAY] alive=1
+wait-log-else 1 spawned play-combat-xpack-no-such-line
+label t12
+hud-click 600 250
+wait-ms 500
+hud-click 728 546
+wait-log-else 8 t13 [PLAY] alive=1
+wait-log-else 1 spawned play-combat-xpack-no-such-line
+label t13
+hud-click 450 400
+wait-ms 500
+hud-click 728 546
+wait-log-else 8 t14 [PLAY] alive=1
+wait-log-else 1 spawned play-combat-xpack-no-such-line
+label t14
+hud-click 550 400
+wait-ms 500
+hud-click 728 546
+wait-log-else 8 t15 [PLAY] alive=1
+wait-log-else 1 spawned play-combat-xpack-no-such-line
+label t15
+label spawned
+wait-ms 3000
+
+log play: combat start
+wait-ms 2000
+# The nearest friendly bot first (friendly fire is on in the stock server settings), then the
+# nearest enemy if one is close enough. aim steers the view by relative mouse motion.
+log play: aim friend
+aim friend 1.5 6000
+capture aim-friend
+log play: fire at friend
+button-down 0
+wait-ms 2500
+button-up 0
+wait-ms 500
+aim friend 1.5 3000
+button-down 0
+wait-ms 2500
+button-up 0
+wait-ms 1500
+capture after-fire-friend
+key r
+wait-ms 3500
+log play: walk towards the nearest enemy
+walk-to enemy 40 60000
+aim enemy 1.0 6000
+capture aim-enemy
+log play: fire at enemy
+button-down 0
+wait-ms 3000
+button-up 0
+wait-ms 500
+aim enemy 1.0 3000
+button-down 0
+wait-ms 3000
+button-up 0
+wait-ms 2000
+capture after-fire-enemy
+# Die: the in-game menu (Enter) shows the spawn screen with SUICIDE (542 539 124 17).
+log play: suicide
+key enter
+wait-ms 2500
+capture menu-for-suicide
+hud-click 604 546
+wait-ms 3000
+capture dead
+log play: respawn
+# The spawn screen stays up after death; spawn point and DONE as in join-and-spawn.
+wait-ms 6000
+hud-click 432 282
+wait-ms 1000
+hud-click 728 546
+wait-ms 12000
+capture respawned
+log play: combat done

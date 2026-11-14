@@ -40,7 +40,7 @@ public:
     virtual void setDefaults() = 0;                          //+20 4B2600; LocalProfileManager::createDefaultProfile 4A8113
     virtual void revertChanges() = 0;                        //+24 4B2890: pending takes current
     virtual void applyToOptions(IVideoOptions* options) = 0; //+28 4B2040: pushes pending into the renderer's options unless a game is loaded
-    virtual int detectVideoOptionScheme() = 0;               //+2C 4B1DB0: the renderer's detected level; 1 without a renderer
+    virtual int detectVideoOptionScheme() = 0;               //+2C 4B1DB0: the renderer's detected level ([CHOSEN] High); 1 without a renderer
     virtual void applyVideoOptionScheme(int unused) = 0;     //+30 4B1F20: presets the renderer with the pending scheme, then reads back; the argument is not read
     virtual void setCustomVideoOptionScheme() = 0;           //+34 4B2160: pending scheme 3
     virtual bool hasChangesInGame() = 0;                     //+38 4B1DE0: game && hasChanges

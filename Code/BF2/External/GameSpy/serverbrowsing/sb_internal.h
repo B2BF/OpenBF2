@@ -246,6 +246,11 @@ struct _SBServerList
 
 	SOCKET slsocket;
 	gsi_time lanstarttime;
+#if !defined(_WIN32)
+	// [CHOSEN, not recovered] errno of the first failed broadcast sendto of the last LAN browse
+	// (0 when every send went out); read through ServerBrowserLANSendError.
+	int lansenderror;
+#endif
 	int fromgamever;
 	GOACryptState cryptkey;
 	int queryoptions;

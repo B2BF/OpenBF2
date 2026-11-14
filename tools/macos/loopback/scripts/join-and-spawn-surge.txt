@@ -1,0 +1,40 @@
+# [TEMP] join-and-spawn-surge: join-and-spawn for Special Forces Surge (loopback --mod xpack --map surge;
+# R-main-5). Same flow; the spawn click is the Spetsnaz Supply Depot flag on the Surge spawn map.
+# Coordinates are 800x600: the harness runs +szx 800 +szy 600, which is also the HUD's own layout
+# space (Menu_client.zip HUD/HudSetup/SpawnInterface/*.con).
+# Waits: wait-log on concrete events where the client prints one; the remaining fixed waits are the
+# menu / HUD transitions, which print nothing.
+timeout 300
+log waiting for the level load
+wait-log ingameMap.tga
+wait-ms 3000
+capture loaded
+# "MAP LOADED, SELECT THE JOIN GAME BUTTON OR PRESS ESCAPE TO ENTER THE GAME" (Swiff menu, window path)
+# Click JOIN GAME rather than pressing Escape: Escape went to the main menu in 2 of 5 runs (ai-bot, 2026-11-01).
+click 745 583
+# The spawn screen opens with its map shown (Bf2MenuMapNode +0x68D is zeroed now; the old
+# "press Enter twice" workaround covered for that uninitialised field, R-game-2).
+wait-ms 3000
+capture spawn-screen-first
+capture spawn-screen
+# Kit 0, Special Forces (SelectKit0 10 73 246 69: "spawnManager.setPlayerKit 0"); in-game HUD pointer path.
+hud-click 130 107
+wait-ms 500
+# Spawn point: in spawn mode a press on the map picks the nearest spawn group
+# (Bf2MenuMapNode::pickSpawnGroup; within the icon pick radius). Spetsnaz at Supply Depot.
+hud-click 700 241
+wait-ms 500
+capture selected
+# DoneButton 666 539 124 17, mouse area 0 -5 124 22: "hudManager.setDone 1"
+hud-click 728 546
+# Spawned: the first BF2_PLAY_TRACE line of a living player (loopback.py sets the trace with a
+# script); a client without the trace falls through after 12 s.
+wait-log-else 12 spawned [PLAY] alive=1
+label spawned
+wait-ms 1500
+capture spawned-1
+# Look around a little (mouse look) and capture again.
+move-rel 300 0
+wait-ms 700
+capture spawned-2
+log join-and-spawn-surge done

@@ -1,0 +1,7295 @@
+{
+ "binary": "libaidll.so",
+ "output": "Code/BF2/AI/AIDLL/AI/Main/AIModuleConsole.inc",
+ "classes": [
+  {
+   "line": 161,
+   "object": "AI",
+   "function": "createHeightMap",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x40FED0",
+    "D1": "0x40FF10",
+    "checkObjectRange": "0x410080",
+    "executeObjectMethod": "0x4102D0",
+    "getObjectRange": "0x40FFA0",
+    "getObjectRangeAsString": "0x40FFC0",
+    "getReturnValueAsString": "0x40FF30",
+    "isObjectActive": "0x40FF70",
+    "objectHasRange": "0x40FF90",
+    "setArgFromString": "0x410090"
+   },
+   "teardown": [
+    "0x40A8D0"
+   ]
+  },
+  {
+   "line": 162,
+   "object": "AI",
+   "function": "readHeightMapFromFile",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x410340",
+    "D1": "0x410380",
+    "checkObjectRange": "0x4104F0",
+    "executeObjectMethod": "0x410510",
+    "getObjectRange": "0x410410",
+    "getObjectRangeAsString": "0x410430",
+    "getReturnValueAsString": "0x4103A0",
+    "isObjectActive": "0x4103E0",
+    "objectHasRange": "0x410400",
+    "setArgFromString": "0x410500"
+   },
+   "teardown": [
+    "0x40A8F0"
+   ]
+  },
+  {
+   "line": 165,
+   "object": "AI",
+   "function": "init",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x410550",
+    "D1": "0x410590",
+    "checkObjectRange": "0x410700",
+    "executeObjectMethod": "0x410950",
+    "getObjectRange": "0x410620",
+    "getObjectRangeAsString": "0x410640",
+    "getReturnValueAsString": "0x4105B0",
+    "isObjectActive": "0x4105F0",
+    "objectHasRange": "0x410610",
+    "setArgFromString": "0x410710"
+   },
+   "teardown": [
+    "0x40A910"
+   ]
+  },
+  {
+   "line": 168,
+   "object": "AI",
+   "function": "debug",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4109A0",
+    "D1": "0x4109E0",
+    "checkObjectRange": "0x410B50",
+    "executeObjectMethod": "0x410B70",
+    "getObjectRange": "0x410A70",
+    "getObjectRangeAsString": "0x410A90",
+    "getReturnValueAsString": "0x410A00",
+    "isObjectActive": "0x410A40",
+    "objectHasRange": "0x410A60",
+    "setArgFromString": "0x410B60"
+   },
+   "teardown": [
+    "0x40A930"
+   ]
+  },
+  {
+   "line": 171,
+   "object": "AI",
+   "function": "writeBotPlans",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x410BB0",
+    "D1": "0x410BF0",
+    "checkObjectRange": "0x410D60",
+    "executeObjectMethod": "0x410D80",
+    "getObjectRange": "0x410C80",
+    "getObjectRangeAsString": "0x410CA0",
+    "getReturnValueAsString": "0x410C10",
+    "isObjectActive": "0x410C50",
+    "objectHasRange": "0x410C70",
+    "setArgFromString": "0x410D70"
+   },
+   "teardown": [
+    "0x40A950"
+   ]
+  },
+  {
+   "line": 174,
+   "object": "AI",
+   "function": "aiSystemQuotient",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x410DC0",
+    "D1": "0x410E00",
+    "checkObjectRange": "0x411180",
+    "executeObjectMethod": "0x4113D0",
+    "getObjectRange": "0x4110A0",
+    "getObjectRangeAsString": "0x4110C0",
+    "getReturnValueAsString": "0x410E20",
+    "isObjectActive": "0x411060",
+    "objectHasRange": "0x411090",
+    "setArgFromString": "0x411190"
+   },
+   "teardown": [
+    "0x40A970"
+   ]
+  },
+  {
+   "line": 175,
+   "object": "AI",
+   "function": "setAISystemComponentsQuotient",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x411450",
+    "D1": "0x411490",
+    "checkObjectRange": "0x411610",
+    "executeObjectMethod": "0x411AA0",
+    "getObjectRange": "0x411530",
+    "getObjectRangeAsString": "0x411550",
+    "getReturnValueAsString": "0x4114B0",
+    "isObjectActive": "0x4114F0",
+    "objectHasRange": "0x411520",
+    "setArgFromString": "0x411620"
+   },
+   "teardown": [
+    "0x40A990"
+   ]
+  },
+  {
+   "line": 176,
+   "object": "AI",
+   "function": "getBotManagerQuotient",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x411B00",
+    "D1": "0x411B40",
+    "checkObjectRange": "0x411CC0",
+    "executeObjectMethod": "0x411CE0",
+    "getObjectRange": "0x411BE0",
+    "getObjectRangeAsString": "0x411C00",
+    "getReturnValueAsString": "0x411B60",
+    "isObjectActive": "0x411BA0",
+    "objectHasRange": "0x411BD0",
+    "setArgFromString": "0x411CD0"
+   },
+   "teardown": [
+    "0x40A9B0"
+   ],
+   "inlineEvidence": {
+    "address": "0x411CE0",
+    "size": 53,
+    "sha256": "50ee9896d257782c5e7257fd95658e3e81f4ac94d8a2c5c0bf32714f793adbcb",
+    "description": "discarded quotient getter; evaluates only the receiver"
+   }
+  },
+  {
+   "line": 177,
+   "object": "AI",
+   "function": "getSAIQuotient",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x411D20",
+    "D1": "0x411D60",
+    "checkObjectRange": "0x411EE0",
+    "executeObjectMethod": "0x411F00",
+    "getObjectRange": "0x411E00",
+    "getObjectRangeAsString": "0x411E20",
+    "getReturnValueAsString": "0x411D80",
+    "isObjectActive": "0x411DC0",
+    "objectHasRange": "0x411DF0",
+    "setArgFromString": "0x411EF0"
+   },
+   "teardown": [
+    "0x40A9D0"
+   ],
+   "inlineEvidence": {
+    "address": "0x411F00",
+    "size": 53,
+    "sha256": "7e255e179e69ad7d298869cbe25a0286fbd653d7afb4933c2cf452dd57d3b9bc",
+    "description": "discarded quotient getter; evaluates only the receiver"
+   }
+  },
+  {
+   "line": 178,
+   "object": "AI",
+   "function": "botStatisticUpdateSpeed",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x411F40",
+    "D1": "0x411F80",
+    "checkObjectRange": "0x412300",
+    "executeObjectMethod": "0x412550",
+    "getObjectRange": "0x412220",
+    "getObjectRangeAsString": "0x412240",
+    "getReturnValueAsString": "0x411FA0",
+    "isObjectActive": "0x4121E0",
+    "objectHasRange": "0x412210",
+    "setArgFromString": "0x412310"
+   },
+   "teardown": [
+    "0x40A9F0"
+   ],
+   "inlineEvidence": {
+    "address": "0x412550",
+    "size": 128,
+    "sha256": "175be289bae4a6aa273d1a5f7f19a6e59ca90beae4810f5c23df772cf1e77596",
+    "description": "statistic speed; ia-32 negates exactly when value < 0 (retains -0 and unordered values)"
+   }
+  },
+  {
+   "line": 181,
+   "object": "AI",
+   "function": "getBotCount",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4125D0",
+    "D1": "0x412610",
+    "checkObjectRange": "0x412980",
+    "executeObjectMethod": "0x4129A0",
+    "getObjectRange": "0x4128A0",
+    "getObjectRangeAsString": "0x4128C0",
+    "getReturnValueAsString": "0x412630",
+    "isObjectActive": "0x412870",
+    "objectHasRange": "0x412890",
+    "setArgFromString": "0x412990"
+   },
+   "teardown": [
+    "0x40AA10"
+   ]
+  },
+  {
+   "line": 182,
+   "object": "AI",
+   "function": "getNumberOfActiveBots",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x412A00",
+    "D1": "0x412A40",
+    "checkObjectRange": "0x412DB0",
+    "executeObjectMethod": "0x412DD0",
+    "getObjectRange": "0x412CD0",
+    "getObjectRangeAsString": "0x412CF0",
+    "getReturnValueAsString": "0x412A60",
+    "isObjectActive": "0x412CA0",
+    "objectHasRange": "0x412CC0",
+    "setArgFromString": "0x412DC0"
+   },
+   "teardown": [
+    "0x40AA30"
+   ]
+  },
+  {
+   "line": 183,
+   "object": "AI",
+   "function": "getNumberOfDeactivedBots",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x412E30",
+    "D1": "0x412E70",
+    "checkObjectRange": "0x4131E0",
+    "executeObjectMethod": "0x413200",
+    "getObjectRange": "0x413100",
+    "getObjectRangeAsString": "0x413120",
+    "getReturnValueAsString": "0x412E90",
+    "isObjectActive": "0x4130D0",
+    "objectHasRange": "0x4130F0",
+    "setArgFromString": "0x4131F0"
+   },
+   "teardown": [
+    "0x40AA50"
+   ]
+  },
+  {
+   "line": 186,
+   "object": "AI",
+   "function": "addBot",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x413260",
+    "D1": "0x4132A0",
+    "checkObjectRange": "0x413640",
+    "executeObjectMethod": "0x413FC0",
+    "getObjectRange": "0x413560",
+    "getObjectRangeAsString": "0x413580",
+    "getReturnValueAsString": "0x4132C0",
+    "isObjectActive": "0x413530",
+    "objectHasRange": "0x413550",
+    "setArgFromString": "0x413650"
+   },
+   "teardown": [
+    "0x40AA70",
+    "0x40D7C0",
+    "0x40D810",
+    "0x40D860"
+   ]
+  },
+  {
+   "line": 187,
+   "object": "AI",
+   "function": "addUnspawnedBot",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4141E0",
+    "D1": "0x414220",
+    "checkObjectRange": "0x4145C0",
+    "executeObjectMethod": "0x414CE0",
+    "getObjectRange": "0x4144E0",
+    "getObjectRangeAsString": "0x414500",
+    "getReturnValueAsString": "0x414240",
+    "isObjectActive": "0x4144B0",
+    "objectHasRange": "0x4144D0",
+    "setArgFromString": "0x4145D0"
+   },
+   "teardown": [
+    "0x40AA90",
+    "0x40D8B0",
+    "0x40D900"
+   ]
+  },
+  {
+   "line": 188,
+   "object": "AI",
+   "function": "deactivateBot",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x414E40",
+    "D1": "0x414E80",
+    "checkObjectRange": "0x415200",
+    "executeObjectMethod": "0x415450",
+    "getObjectRange": "0x415120",
+    "getObjectRangeAsString": "0x415140",
+    "getReturnValueAsString": "0x414EA0",
+    "isObjectActive": "0x4150E0",
+    "objectHasRange": "0x415110",
+    "setArgFromString": "0x415210"
+   },
+   "teardown": [
+    "0x40AAB0"
+   ]
+  },
+  {
+   "line": 189,
+   "object": "AI",
+   "function": "updateBot",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4154C0",
+    "D1": "0x415500",
+    "checkObjectRange": "0x415670",
+    "executeObjectMethod": "0x4158C0",
+    "getObjectRange": "0x415590",
+    "getObjectRangeAsString": "0x4155B0",
+    "getReturnValueAsString": "0x415520",
+    "isObjectActive": "0x415560",
+    "objectHasRange": "0x415580",
+    "setArgFromString": "0x415680"
+   },
+   "teardown": [
+    "0x40AAD0"
+   ]
+  },
+  {
+   "line": 190,
+   "object": "AI",
+   "function": "killBotId",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x415910",
+    "D1": "0x415980",
+    "checkObjectRange": "0x415D40",
+    "executeObjectMethod": "0x415F90",
+    "getObjectRange": "0x415C60",
+    "getObjectRangeAsString": "0x415C80",
+    "getReturnValueAsString": "0x4159F0",
+    "isObjectActive": "0x415C30",
+    "objectHasRange": "0x415C50",
+    "setArgFromString": "0x415D50"
+   },
+   "teardown": [
+    "0x40AAF0"
+   ]
+  },
+  {
+   "line": 191,
+   "object": "AI",
+   "function": "killBotName",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x416030",
+    "D1": "0x4160A0",
+    "checkObjectRange": "0x416460",
+    "executeObjectMethod": "0x4166F0",
+    "getObjectRange": "0x416380",
+    "getObjectRangeAsString": "0x4163A0",
+    "getReturnValueAsString": "0x416110",
+    "isObjectActive": "0x416350",
+    "objectHasRange": "0x416370",
+    "setArgFromString": "0x416470"
+   },
+   "teardown": [
+    "0x40AB60",
+    "0x40D950"
+   ]
+  },
+  {
+   "line": 192,
+   "object": "AI",
+   "function": "killAllBots",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4167D0",
+    "D1": "0x416810",
+    "checkObjectRange": "0x416980",
+    "executeObjectMethod": "0x4169A0",
+    "getObjectRange": "0x4168A0",
+    "getObjectRangeAsString": "0x4168C0",
+    "getReturnValueAsString": "0x416830",
+    "isObjectActive": "0x416870",
+    "objectHasRange": "0x416890",
+    "setArgFromString": "0x416990"
+   },
+   "teardown": [
+    "0x40ABD0"
+   ]
+  },
+  {
+   "line": 195,
+   "object": "AI",
+   "function": "botGiveOrder",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4169E0",
+    "D1": "0x416A20",
+    "checkObjectRange": "0x416B90",
+    "executeObjectMethod": "0x4172B0",
+    "getObjectRange": "0x416AB0",
+    "getObjectRangeAsString": "0x416AD0",
+    "getReturnValueAsString": "0x416A40",
+    "isObjectActive": "0x416A80",
+    "objectHasRange": "0x416AA0",
+    "setArgFromString": "0x416BA0"
+   },
+   "teardown": [
+    "0x40ABF0",
+    "0x40D9A0",
+    "0x40D9F0"
+   ]
+  },
+  {
+   "line": 196,
+   "object": "AI",
+   "function": "botSetWaypoints_Patrol",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4173F0",
+    "D1": "0x417430",
+    "checkObjectRange": "0x4175A0",
+    "executeObjectMethod": "0x418570",
+    "getObjectRange": "0x4174C0",
+    "getObjectRangeAsString": "0x4174E0",
+    "getReturnValueAsString": "0x417450",
+    "isObjectActive": "0x417490",
+    "objectHasRange": "0x4174B0",
+    "setArgFromString": "0x4175B0"
+   },
+   "teardown": [
+    "0x40AC10"
+   ]
+  },
+  {
+   "line": 197,
+   "object": "AI",
+   "function": "botSetWaypoints_Patrol3d",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x418730",
+    "D1": "0x418770",
+    "checkObjectRange": "0x4188E0",
+    "executeObjectMethod": "0x4198B0",
+    "getObjectRange": "0x418800",
+    "getObjectRangeAsString": "0x418820",
+    "getReturnValueAsString": "0x418790",
+    "isObjectActive": "0x4187D0",
+    "objectHasRange": "0x4187F0",
+    "setArgFromString": "0x4188F0"
+   },
+   "teardown": [
+    "0x40AC30"
+   ]
+  },
+  {
+   "line": 198,
+   "object": "AI",
+   "function": "botMoveTo",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x419A70",
+    "D1": "0x419AB0",
+    "checkObjectRange": "0x419C20",
+    "executeObjectMethod": "0x41A370",
+    "getObjectRange": "0x419B40",
+    "getObjectRangeAsString": "0x419B60",
+    "getReturnValueAsString": "0x419AD0",
+    "isObjectActive": "0x419B10",
+    "objectHasRange": "0x419B30",
+    "setArgFromString": "0x419C30"
+   },
+   "teardown": [
+    "0x40AC50"
+   ]
+  },
+  {
+   "line": 199,
+   "object": "AI",
+   "function": "botFlyTo",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x41A400",
+    "D1": "0x41A440",
+    "checkObjectRange": "0x41A5B0",
+    "executeObjectMethod": "0x41B150",
+    "getObjectRange": "0x41A4D0",
+    "getObjectRangeAsString": "0x41A4F0",
+    "getReturnValueAsString": "0x41A460",
+    "isObjectActive": "0x41A4A0",
+    "objectHasRange": "0x41A4C0",
+    "setArgFromString": "0x41A5C0"
+   },
+   "teardown": [
+    "0x40AC70"
+   ]
+  },
+  {
+   "line": 202,
+   "object": "AI",
+   "function": "createSAI",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x41B1F0",
+    "D1": "0x41B230",
+    "checkObjectRange": "0x41B3B0",
+    "executeObjectMethod": "0x41B3D0",
+    "getObjectRange": "0x41B2D0",
+    "getObjectRangeAsString": "0x41B2F0",
+    "getReturnValueAsString": "0x41B250",
+    "isObjectActive": "0x41B290",
+    "objectHasRange": "0x41B2C0",
+    "setArgFromString": "0x41B3C0"
+   },
+   "teardown": [
+    "0x40AC90"
+   ]
+  },
+  {
+   "line": 203,
+   "object": "AI",
+   "function": "saiEnable",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x41B410",
+    "D1": "0x41B450",
+    "checkObjectRange": "0x41B7D0",
+    "executeObjectMethod": "0x41BA20",
+    "getObjectRange": "0x41B6F0",
+    "getObjectRangeAsString": "0x41B710",
+    "getReturnValueAsString": "0x41B470",
+    "isObjectActive": "0x41B6B0",
+    "objectHasRange": "0x41B6E0",
+    "setArgFromString": "0x41B7E0"
+   },
+   "teardown": [
+    "0x40ACB0"
+   ]
+  },
+  {
+   "line": 204,
+   "object": "AI",
+   "function": "saiMapXDimension",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x41BAB0",
+    "D1": "0x41BAF0",
+    "checkObjectRange": "0x41BEA0",
+    "executeObjectMethod": "0x41C0F0",
+    "getObjectRange": "0x41BDC0",
+    "getObjectRangeAsString": "0x41BDE0",
+    "getReturnValueAsString": "0x41BB10",
+    "isObjectActive": "0x41BD80",
+    "objectHasRange": "0x41BDB0",
+    "setArgFromString": "0x41BEB0"
+   },
+   "teardown": [
+    "0x40ACD0"
+   ]
+  },
+  {
+   "line": 205,
+   "object": "AI",
+   "function": "saiMapYDimension",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x41C170",
+    "D1": "0x41C1B0",
+    "checkObjectRange": "0x41C560",
+    "executeObjectMethod": "0x41C7B0",
+    "getObjectRange": "0x41C480",
+    "getObjectRangeAsString": "0x41C4A0",
+    "getReturnValueAsString": "0x41C1D0",
+    "isObjectActive": "0x41C440",
+    "objectHasRange": "0x41C470",
+    "setArgFromString": "0x41C570"
+   },
+   "teardown": [
+    "0x40ACF0"
+   ]
+  },
+  {
+   "line": 206,
+   "object": "AI",
+   "function": "addSAIStrategy",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x41C830",
+    "D1": "0x41C870",
+    "checkObjectRange": "0x41C9E0",
+    "executeObjectMethod": "0x41CEC0",
+    "getObjectRange": "0x41C900",
+    "getObjectRangeAsString": "0x41C920",
+    "getReturnValueAsString": "0x41C890",
+    "isObjectActive": "0x41C8D0",
+    "objectHasRange": "0x41C8F0",
+    "setArgFromString": "0x41C9F0"
+   },
+   "teardown": [
+    "0x40AD10",
+    "0x40DA40"
+   ]
+  },
+  {
+   "line": 209,
+   "object": "AI",
+   "function": "renderSide",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x41CF90",
+    "D1": "0x41CFD0",
+    "checkObjectRange": "0x41D380",
+    "executeObjectMethod": "0x41D5D0",
+    "getObjectRange": "0x41D2A0",
+    "getObjectRangeAsString": "0x41D2C0",
+    "getReturnValueAsString": "0x41CFF0",
+    "isObjectActive": "0x41D260",
+    "objectHasRange": "0x41D290",
+    "setArgFromString": "0x41D390"
+   },
+   "teardown": [
+    "0x40AD30"
+   ]
+  },
+  {
+   "line": 211,
+   "object": "AI",
+   "function": "validateDataStructuresEnabled",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x41D650",
+    "D1": "0x41D690",
+    "checkObjectRange": "0x41DA10",
+    "executeObjectMethod": "0x41DC60",
+    "getObjectRange": "0x41D930",
+    "getObjectRangeAsString": "0x41D950",
+    "getReturnValueAsString": "0x41D6B0",
+    "isObjectActive": "0x41D8F0",
+    "objectHasRange": "0x41D920",
+    "setArgFromString": "0x41DA20"
+   },
+   "teardown": [
+    "0x40AD50"
+   ]
+  },
+  {
+   "line": 212,
+   "object": "AI",
+   "function": "showBotUrgencies",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x41DCF0",
+    "D1": "0x41DD30",
+    "checkObjectRange": "0x41E0B0",
+    "executeObjectMethod": "0x41E300",
+    "getObjectRange": "0x41DFD0",
+    "getObjectRangeAsString": "0x41DFF0",
+    "getReturnValueAsString": "0x41DD50",
+    "isObjectActive": "0x41DF90",
+    "objectHasRange": "0x41DFC0",
+    "setArgFromString": "0x41E0C0"
+   },
+   "teardown": [
+    "0x40AD70"
+   ]
+  },
+  {
+   "line": 213,
+   "object": "AI",
+   "function": "showBotSpawnCoord",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x41E390",
+    "D1": "0x41E3D0",
+    "checkObjectRange": "0x41E750",
+    "executeObjectMethod": "0x41E9A0",
+    "getObjectRange": "0x41E670",
+    "getObjectRangeAsString": "0x41E690",
+    "getReturnValueAsString": "0x41E3F0",
+    "isObjectActive": "0x41E630",
+    "objectHasRange": "0x41E660",
+    "setArgFromString": "0x41E760"
+   },
+   "teardown": [
+    "0x40AD90"
+   ]
+  },
+  {
+   "line": 214,
+   "object": "AI",
+   "function": "showStrategies",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x41EA30",
+    "D1": "0x41EA70",
+    "checkObjectRange": "0x41EDF0",
+    "executeObjectMethod": "0x41F040",
+    "getObjectRange": "0x41ED10",
+    "getObjectRangeAsString": "0x41ED30",
+    "getReturnValueAsString": "0x41EA90",
+    "isObjectActive": "0x41ECD0",
+    "objectHasRange": "0x41ED00",
+    "setArgFromString": "0x41EE00"
+   },
+   "teardown": [
+    "0x40ADB0"
+   ]
+  },
+  {
+   "line": 215,
+   "object": "AI",
+   "function": "showSAIStats",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x41F0D0",
+    "D1": "0x41F110",
+    "checkObjectRange": "0x41F490",
+    "executeObjectMethod": "0x41F6E0",
+    "getObjectRange": "0x41F3B0",
+    "getObjectRangeAsString": "0x41F3D0",
+    "getReturnValueAsString": "0x41F130",
+    "isObjectActive": "0x41F370",
+    "objectHasRange": "0x41F3A0",
+    "setArgFromString": "0x41F4A0"
+   },
+   "teardown": [
+    "0x40ADD0"
+   ]
+  },
+  {
+   "line": 216,
+   "object": "AI",
+   "function": "showBotStats",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x41F770",
+    "D1": "0x41F7B0",
+    "checkObjectRange": "0x41FB30",
+    "executeObjectMethod": "0x41FD80",
+    "getObjectRange": "0x41FA50",
+    "getObjectRangeAsString": "0x41FA70",
+    "getReturnValueAsString": "0x41F7D0",
+    "isObjectActive": "0x41FA10",
+    "objectHasRange": "0x41FA40",
+    "setArgFromString": "0x41FB40"
+   },
+   "teardown": [
+    "0x40ADF0"
+   ]
+  },
+  {
+   "line": 217,
+   "object": "AI",
+   "function": "showBotSense",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x41FE10",
+    "D1": "0x41FE50",
+    "checkObjectRange": "0x4201C0",
+    "executeObjectMethod": "0x420410",
+    "getObjectRange": "0x4200E0",
+    "getObjectRangeAsString": "0x420100",
+    "getReturnValueAsString": "0x41FE70",
+    "isObjectActive": "0x4200B0",
+    "objectHasRange": "0x4200D0",
+    "setArgFromString": "0x4201D0"
+   },
+   "teardown": [
+    "0x40AE10"
+   ]
+  },
+  {
+   "line": 218,
+   "object": "AI",
+   "function": "showStrategicAreas",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4204A0",
+    "D1": "0x4204E0",
+    "checkObjectRange": "0x420860",
+    "executeObjectMethod": "0x420AB0",
+    "getObjectRange": "0x420780",
+    "getObjectRangeAsString": "0x4207A0",
+    "getReturnValueAsString": "0x420500",
+    "isObjectActive": "0x420740",
+    "objectHasRange": "0x420770",
+    "setArgFromString": "0x420870"
+   },
+   "teardown": [
+    "0x40AE30"
+   ]
+  },
+  {
+   "line": 219,
+   "object": "AI",
+   "function": "showAll",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x420B40",
+    "D1": "0x420B80",
+    "checkObjectRange": "0x420D00",
+    "executeObjectMethod": "0x420F50",
+    "getObjectRange": "0x420C20",
+    "getObjectRangeAsString": "0x420C40",
+    "getReturnValueAsString": "0x420BA0",
+    "isObjectActive": "0x420BE0",
+    "objectHasRange": "0x420C10",
+    "setArgFromString": "0x420D10"
+   },
+   "teardown": [
+    "0x40AE50"
+   ]
+  },
+  {
+   "line": 220,
+   "object": "AI",
+   "function": "showStrategic",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x420FA0",
+    "D1": "0x420FE0",
+    "checkObjectRange": "0x421160",
+    "executeObjectMethod": "0x4213B0",
+    "getObjectRange": "0x421080",
+    "getObjectRangeAsString": "0x4210A0",
+    "getReturnValueAsString": "0x421000",
+    "isObjectActive": "0x421040",
+    "objectHasRange": "0x421070",
+    "setArgFromString": "0x421170"
+   },
+   "teardown": [
+    "0x40AE70"
+   ]
+  },
+  {
+   "line": 221,
+   "object": "AI",
+   "function": "showBot",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x421400",
+    "D1": "0x421440",
+    "checkObjectRange": "0x4215C0",
+    "executeObjectMethod": "0x421810",
+    "getObjectRange": "0x4214E0",
+    "getObjectRangeAsString": "0x421500",
+    "getReturnValueAsString": "0x421460",
+    "isObjectActive": "0x4214A0",
+    "objectHasRange": "0x4214D0",
+    "setArgFromString": "0x4215D0"
+   },
+   "teardown": [
+    "0x40AE90"
+   ]
+  },
+  {
+   "line": 223,
+   "object": "AI",
+   "function": "getRendCameraPosition",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x421860",
+    "D1": "0x4218A0",
+    "checkObjectRange": "0x421C70",
+    "executeObjectMethod": "0x421C90",
+    "getObjectRange": "0x421B90",
+    "getObjectRangeAsString": "0x421BB0",
+    "getReturnValueAsString": "0x4218C0",
+    "isObjectActive": "0x421B60",
+    "objectHasRange": "0x421B80",
+    "setArgFromString": "0x421C80"
+   },
+   "teardown": [
+    "0x40AEB0"
+   ]
+  },
+  {
+   "line": 224,
+   "object": "AI",
+   "function": "getRendCameraRotation",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x421D10",
+    "D1": "0x421D50",
+    "checkObjectRange": "0x422120",
+    "executeObjectMethod": "0x422140",
+    "getObjectRange": "0x422040",
+    "getObjectRangeAsString": "0x422060",
+    "getReturnValueAsString": "0x421D70",
+    "isObjectActive": "0x422010",
+    "objectHasRange": "0x422030",
+    "setArgFromString": "0x422130"
+   },
+   "teardown": [
+    "0x40AED0"
+   ]
+  },
+  {
+   "line": 228,
+   "object": "AI",
+   "function": "getCurrentPitchAngle",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4221C0",
+    "D1": "0x422200",
+    "checkObjectRange": "0x422570",
+    "executeObjectMethod": "0x422590",
+    "getObjectRange": "0x422490",
+    "getObjectRangeAsString": "0x4224B0",
+    "getReturnValueAsString": "0x422220",
+    "isObjectActive": "0x422460",
+    "objectHasRange": "0x422480",
+    "setArgFromString": "0x422580"
+   },
+   "teardown": [
+    "0x40AEF0"
+   ]
+  },
+  {
+   "line": 229,
+   "object": "AI",
+   "function": "getCurrentYawAngle",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4225F0",
+    "D1": "0x422630",
+    "checkObjectRange": "0x4229A0",
+    "executeObjectMethod": "0x4229C0",
+    "getObjectRange": "0x4228C0",
+    "getObjectRangeAsString": "0x4228E0",
+    "getReturnValueAsString": "0x422650",
+    "isObjectActive": "0x422890",
+    "objectHasRange": "0x4228B0",
+    "setArgFromString": "0x4229B0"
+   },
+   "teardown": [
+    "0x40AF10"
+   ]
+  },
+  {
+   "line": 248,
+   "object": "AI",
+   "function": "addPlacement",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x422A20",
+    "D1": "0x422A60",
+    "checkObjectRange": "0x422DD0",
+    "executeObjectMethod": "0x423D10",
+    "getObjectRange": "0x422CF0",
+    "getObjectRangeAsString": "0x422D10",
+    "getReturnValueAsString": "0x422A80",
+    "isObjectActive": "0x422CC0",
+    "objectHasRange": "0x422CE0",
+    "setArgFromString": "0x422DE0"
+   },
+   "teardown": [
+    "0x40AF30",
+    "0x40DA90",
+    "0x40DAE0",
+    "0x40DB30"
+   ]
+  },
+  {
+   "line": 249,
+   "object": "AI",
+   "function": "spawnBot",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x423EA0",
+    "D1": "0x423EE0",
+    "checkObjectRange": "0x424250",
+    "executeObjectMethod": "0x4244A0",
+    "getObjectRange": "0x424170",
+    "getObjectRangeAsString": "0x424190",
+    "getReturnValueAsString": "0x423F00",
+    "isObjectActive": "0x424140",
+    "objectHasRange": "0x424160",
+    "setArgFromString": "0x424260"
+   },
+   "teardown": [
+    "0x40AF50"
+   ]
+  },
+  {
+   "line": 252,
+   "object": "AI",
+   "function": "pause",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x424500",
+    "D1": "0x424540",
+    "checkObjectRange": "0x4248B0",
+    "executeObjectMethod": "0x424B00",
+    "getObjectRange": "0x4247D0",
+    "getObjectRangeAsString": "0x4247F0",
+    "getReturnValueAsString": "0x424560",
+    "isObjectActive": "0x4247A0",
+    "objectHasRange": "0x4247C0",
+    "setArgFromString": "0x4248C0"
+   },
+   "teardown": [
+    "0x40AF70"
+   ]
+  },
+  {
+   "line": 259,
+   "object": "aiSettings",
+   "function": "setMaxNBots",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x424B90",
+    "D1": "0x424BD0",
+    "checkObjectRange": "0x424D40",
+    "executeObjectMethod": "0x424F90",
+    "getObjectRange": "0x424C60",
+    "getObjectRangeAsString": "0x424C80",
+    "getReturnValueAsString": "0x424BF0",
+    "isObjectActive": "0x424C30",
+    "objectHasRange": "0x424C50",
+    "setArgFromString": "0x424D50"
+   },
+   "teardown": [
+    "0x40AF90"
+   ]
+  },
+  {
+   "line": 260,
+   "object": "aiSettings",
+   "function": "maxBotsIncludeHumans",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x424FE0",
+    "D1": "0x425020",
+    "checkObjectRange": "0x425190",
+    "executeObjectMethod": "0x4253E0",
+    "getObjectRange": "0x4250B0",
+    "getObjectRangeAsString": "0x4250D0",
+    "getReturnValueAsString": "0x425040",
+    "isObjectActive": "0x425080",
+    "objectHasRange": "0x4250A0",
+    "setArgFromString": "0x4251A0"
+   },
+   "teardown": [
+    "0x40AFB0"
+   ]
+  },
+  {
+   "line": 261,
+   "object": "aiSettings",
+   "function": "setIgnoreCommanderDistance",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x425430",
+    "D1": "0x425470",
+    "checkObjectRange": "0x4255E0",
+    "executeObjectMethod": "0x425830",
+    "getObjectRange": "0x425500",
+    "getObjectRangeAsString": "0x425520",
+    "getReturnValueAsString": "0x425490",
+    "isObjectActive": "0x4254D0",
+    "objectHasRange": "0x4254F0",
+    "setArgFromString": "0x4255F0"
+   },
+   "teardown": [
+    "0x40AFD0"
+   ]
+  },
+  {
+   "line": 262,
+   "object": "aiSettings",
+   "function": "setMaxNumberOfBehaviours",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x425880",
+    "D1": "0x4258C0",
+    "checkObjectRange": "0x425A30",
+    "executeObjectMethod": "0x425C80",
+    "getObjectRange": "0x425950",
+    "getObjectRangeAsString": "0x425970",
+    "getReturnValueAsString": "0x4258E0",
+    "isObjectActive": "0x425920",
+    "objectHasRange": "0x425940",
+    "setArgFromString": "0x425A40"
+   },
+   "teardown": [
+    "0x40AFF0"
+   ]
+  },
+  {
+   "line": 263,
+   "object": "aiSettings",
+   "function": "setViewDistance",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x425CD0",
+    "D1": "0x425D10",
+    "checkObjectRange": "0x425E80",
+    "executeObjectMethod": "0x4260D0",
+    "getObjectRange": "0x425DA0",
+    "getObjectRangeAsString": "0x425DC0",
+    "getReturnValueAsString": "0x425D30",
+    "isObjectActive": "0x425D70",
+    "objectHasRange": "0x425D90",
+    "setArgFromString": "0x425E90"
+   },
+   "teardown": [
+    "0x40B010"
+   ]
+  },
+  {
+   "line": 264,
+   "object": "aiSettings",
+   "function": "setStatsViewDistance",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x426120",
+    "D1": "0x426160",
+    "checkObjectRange": "0x4262D0",
+    "executeObjectMethod": "0x426520",
+    "getObjectRange": "0x4261F0",
+    "getObjectRangeAsString": "0x426210",
+    "getReturnValueAsString": "0x426180",
+    "isObjectActive": "0x4261C0",
+    "objectHasRange": "0x4261E0",
+    "setArgFromString": "0x4262E0"
+   },
+   "teardown": [
+    "0x40B030"
+   ]
+  },
+  {
+   "line": 265,
+   "object": "aiSettings",
+   "function": "setDrawBotStats",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x426570",
+    "D1": "0x4265B0",
+    "checkObjectRange": "0x426720",
+    "executeObjectMethod": "0x426970",
+    "getObjectRange": "0x426640",
+    "getObjectRangeAsString": "0x426660",
+    "getReturnValueAsString": "0x4265D0",
+    "isObjectActive": "0x426610",
+    "objectHasRange": "0x426630",
+    "setArgFromString": "0x426730"
+   },
+   "teardown": [
+    "0x40B050"
+   ]
+  },
+  {
+   "line": 266,
+   "object": "aiSettings",
+   "function": "setInformationGridDimension",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4269C0",
+    "D1": "0x426A00",
+    "checkObjectRange": "0x426B70",
+    "executeObjectMethod": "0x426DC0",
+    "getObjectRange": "0x426A90",
+    "getObjectRangeAsString": "0x426AB0",
+    "getReturnValueAsString": "0x426A20",
+    "isObjectActive": "0x426A60",
+    "objectHasRange": "0x426A80",
+    "setArgFromString": "0x426B80"
+   },
+   "teardown": [
+    "0x40B070"
+   ]
+  },
+  {
+   "line": 267,
+   "object": "aiSettings",
+   "function": "setVehicle",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x426E10",
+    "D1": "0x426E50",
+    "checkObjectRange": "0x426FC0",
+    "executeObjectMethod": "0x427250",
+    "getObjectRange": "0x426EE0",
+    "getObjectRangeAsString": "0x426F00",
+    "getReturnValueAsString": "0x426E70",
+    "isObjectActive": "0x426EB0",
+    "objectHasRange": "0x426ED0",
+    "setArgFromString": "0x426FD0"
+   },
+   "teardown": [
+    "0x40B090",
+    "0x40DB80"
+   ]
+  },
+  {
+   "line": 268,
+   "object": "aiSettings",
+   "function": "setVehicleClusterMapping",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4272E0",
+    "D1": "0x427320",
+    "checkObjectRange": "0x427490",
+    "executeObjectMethod": "0x427990",
+    "getObjectRange": "0x4273B0",
+    "getObjectRangeAsString": "0x4273D0",
+    "getReturnValueAsString": "0x427340",
+    "isObjectActive": "0x427380",
+    "objectHasRange": "0x4273A0",
+    "setArgFromString": "0x4274A0"
+   },
+   "teardown": [
+    "0x40B0B0",
+    "0x40DBD0",
+    "0x40DC20"
+   ]
+  },
+  {
+   "line": 269,
+   "object": "aiSettings",
+   "function": "setVehicleMaterialCost",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x427A60",
+    "D1": "0x427AA0",
+    "checkObjectRange": "0x427C10",
+    "executeObjectMethod": "0x4282E0",
+    "getObjectRange": "0x427B30",
+    "getObjectRangeAsString": "0x427B50",
+    "getReturnValueAsString": "0x427AC0",
+    "isObjectActive": "0x427B00",
+    "objectHasRange": "0x427B20",
+    "setArgFromString": "0x427C20"
+   },
+   "teardown": [
+    "0x40B0D0",
+    "0x40DC70"
+   ]
+  },
+  {
+   "line": 270,
+   "object": "aiSettings",
+   "function": "setManDownEquipment",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x428390",
+    "D1": "0x4283D0",
+    "checkObjectRange": "0x428540",
+    "executeObjectMethod": "0x4287D0",
+    "getObjectRange": "0x428460",
+    "getObjectRangeAsString": "0x428480",
+    "getReturnValueAsString": "0x4283F0",
+    "isObjectActive": "0x428430",
+    "objectHasRange": "0x428450",
+    "setArgFromString": "0x428550"
+   },
+   "teardown": [
+    "0x40B0F0",
+    "0x40DCC0"
+   ]
+  },
+  {
+   "line": 271,
+   "object": "aiSettings",
+   "function": "getInformationGridDimension",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x428860",
+    "D1": "0x4288A0",
+    "checkObjectRange": "0x428C40",
+    "executeObjectMethod": "0x428C60",
+    "getObjectRange": "0x428B60",
+    "getObjectRangeAsString": "0x428B80",
+    "getReturnValueAsString": "0x4288C0",
+    "isObjectActive": "0x428B30",
+    "objectHasRange": "0x428B50",
+    "setArgFromString": "0x428C50"
+   },
+   "teardown": [
+    "0x40B110"
+   ]
+  },
+  {
+   "line": 272,
+   "object": "aiSettings",
+   "function": "getViewDistance",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x428CC0",
+    "D1": "0x428D00",
+    "checkObjectRange": "0x429070",
+    "executeObjectMethod": "0x429090",
+    "getObjectRange": "0x428F90",
+    "getObjectRangeAsString": "0x428FB0",
+    "getReturnValueAsString": "0x428D20",
+    "isObjectActive": "0x428F60",
+    "objectHasRange": "0x428F80",
+    "setArgFromString": "0x429080"
+   },
+   "teardown": [
+    "0x40B130"
+   ]
+  },
+  {
+   "line": 273,
+   "object": "aiSettings",
+   "function": "getStatsViewDistance",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4290F0",
+    "D1": "0x429130",
+    "checkObjectRange": "0x4294A0",
+    "executeObjectMethod": "0x4294C0",
+    "getObjectRange": "0x4293C0",
+    "getObjectRangeAsString": "0x4293E0",
+    "getReturnValueAsString": "0x429150",
+    "isObjectActive": "0x429390",
+    "objectHasRange": "0x4293B0",
+    "setArgFromString": "0x4294B0"
+   },
+   "teardown": [
+    "0x40B150"
+   ]
+  },
+  {
+   "line": 274,
+   "object": "aiSettings",
+   "function": "getVehicle",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x429520",
+    "D1": "0x429590",
+    "checkObjectRange": "0x429950",
+    "executeObjectMethod": "0x429BA0",
+    "getObjectRange": "0x429870",
+    "getObjectRangeAsString": "0x429890",
+    "getReturnValueAsString": "0x429600",
+    "isObjectActive": "0x429840",
+    "objectHasRange": "0x429860",
+    "setArgFromString": "0x429960"
+   },
+   "teardown": [
+    "0x40B170"
+   ]
+  },
+  {
+   "line": 275,
+   "object": "aiSettings",
+   "function": "getVehicleClusterMapping",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x429C10",
+    "D1": "0x429C80",
+    "checkObjectRange": "0x42A040",
+    "executeObjectMethod": "0x42A2D0",
+    "getObjectRange": "0x429F60",
+    "getObjectRangeAsString": "0x429F80",
+    "getReturnValueAsString": "0x429CF0",
+    "isObjectActive": "0x429F30",
+    "objectHasRange": "0x429F50",
+    "setArgFromString": "0x42A050"
+   },
+   "teardown": [
+    "0x40B1E0",
+    "0x40DD10"
+   ]
+  },
+  {
+   "line": 276,
+   "object": "aiSettings",
+   "function": "setNSides",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x42A370",
+    "D1": "0x42A3B0",
+    "checkObjectRange": "0x42A520",
+    "executeObjectMethod": "0x42A770",
+    "getObjectRange": "0x42A440",
+    "getObjectRangeAsString": "0x42A460",
+    "getReturnValueAsString": "0x42A3D0",
+    "isObjectActive": "0x42A410",
+    "objectHasRange": "0x42A430",
+    "setArgFromString": "0x42A530"
+   },
+   "teardown": [
+    "0x40B250"
+   ]
+  },
+  {
+   "line": 277,
+   "object": "aiSettings",
+   "function": "getNSides",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x42A7C0",
+    "D1": "0x42A800",
+    "checkObjectRange": "0x42ABA0",
+    "executeObjectMethod": "0x42ABC0",
+    "getObjectRange": "0x42AAC0",
+    "getObjectRangeAsString": "0x42AAE0",
+    "getReturnValueAsString": "0x42A820",
+    "isObjectActive": "0x42AA90",
+    "objectHasRange": "0x42AAB0",
+    "setArgFromString": "0x42ABB0"
+   },
+   "teardown": [
+    "0x40B270"
+   ]
+  },
+  {
+   "line": 278,
+   "object": "aiSettings",
+   "function": "setBotSkill",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x42AC20",
+    "D1": "0x42AC60",
+    "checkObjectRange": "0x42ADD0",
+    "executeObjectMethod": "0x42B020",
+    "getObjectRange": "0x42ACF0",
+    "getObjectRangeAsString": "0x42AD10",
+    "getReturnValueAsString": "0x42AC80",
+    "isObjectActive": "0x42ACC0",
+    "objectHasRange": "0x42ACE0",
+    "setArgFromString": "0x42ADE0"
+   },
+   "teardown": [
+    "0x40B290"
+   ]
+  },
+  {
+   "line": 279,
+   "object": "aiSettings",
+   "function": "getBotSkill",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x42B070",
+    "D1": "0x42B0B0",
+    "checkObjectRange": "0x42B420",
+    "executeObjectMethod": "0x42B440",
+    "getObjectRange": "0x42B340",
+    "getObjectRangeAsString": "0x42B360",
+    "getReturnValueAsString": "0x42B0D0",
+    "isObjectActive": "0x42B310",
+    "objectHasRange": "0x42B330",
+    "setArgFromString": "0x42B430"
+   },
+   "teardown": [
+    "0x40B2B0"
+   ]
+  },
+  {
+   "line": 280,
+   "object": "aiSettings",
+   "function": "getNumberOfVehicleGroups",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x42B4A0",
+    "D1": "0x42B4E0",
+    "checkObjectRange": "0x42B880",
+    "executeObjectMethod": "0x42B8A0",
+    "getObjectRange": "0x42B7A0",
+    "getObjectRangeAsString": "0x42B7C0",
+    "getReturnValueAsString": "0x42B500",
+    "isObjectActive": "0x42B770",
+    "objectHasRange": "0x42B790",
+    "setArgFromString": "0x42B890"
+   },
+   "teardown": [
+    "0x40B2D0"
+   ]
+  },
+  {
+   "line": 281,
+   "object": "aiSettings",
+   "function": "getVehicleGroup",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x42B900",
+    "D1": "0x42B940",
+    "checkObjectRange": "0x42BCE0",
+    "executeObjectMethod": "0x42BF30",
+    "getObjectRange": "0x42BC00",
+    "getObjectRangeAsString": "0x42BC20",
+    "getReturnValueAsString": "0x42B960",
+    "isObjectActive": "0x42BBD0",
+    "objectHasRange": "0x42BBF0",
+    "setArgFromString": "0x42BCF0"
+   },
+   "teardown": [
+    "0x40B2F0"
+   ]
+  },
+  {
+   "line": 282,
+   "object": "aiSettings",
+   "function": "getVehicleGroupName",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x42BF90",
+    "D1": "0x42C000",
+    "checkObjectRange": "0x42C3C0",
+    "executeObjectMethod": "0x42C610",
+    "getObjectRange": "0x42C2E0",
+    "getObjectRangeAsString": "0x42C300",
+    "getReturnValueAsString": "0x42C070",
+    "isObjectActive": "0x42C2B0",
+    "objectHasRange": "0x42C2D0",
+    "setArgFromString": "0x42C3D0"
+   },
+   "teardown": [
+    "0x40B310"
+   ]
+  },
+  {
+   "line": 283,
+   "object": "aiSettings",
+   "function": "createVehicleGroup",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x42C680",
+    "D1": "0x42C6C0",
+    "checkObjectRange": "0x42C830",
+    "executeObjectMethod": "0x42CAC0",
+    "getObjectRange": "0x42C750",
+    "getObjectRangeAsString": "0x42C770",
+    "getReturnValueAsString": "0x42C6E0",
+    "isObjectActive": "0x42C720",
+    "objectHasRange": "0x42C740",
+    "setArgFromString": "0x42C840"
+   },
+   "teardown": [
+    "0x40B380",
+    "0x40DD60"
+   ]
+  },
+  {
+   "line": 284,
+   "object": "aiSettings",
+   "function": "addVehicleToVehicleGroup",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x42CB50",
+    "D1": "0x42CB90",
+    "checkObjectRange": "0x42CD00",
+    "executeObjectMethod": "0x42D200",
+    "getObjectRange": "0x42CC20",
+    "getObjectRangeAsString": "0x42CC40",
+    "getReturnValueAsString": "0x42CBB0",
+    "isObjectActive": "0x42CBF0",
+    "objectHasRange": "0x42CC10",
+    "setArgFromString": "0x42CD10"
+   },
+   "teardown": [
+    "0x40B3A0",
+    "0x40DDB0",
+    "0x40DE00"
+   ]
+  },
+  {
+   "line": 285,
+   "object": "aiSettings",
+   "function": "getSAIUpdateFrequency",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x42D2D0",
+    "D1": "0x42D310",
+    "checkObjectRange": "0x42D680",
+    "executeObjectMethod": "0x42D6A0",
+    "getObjectRange": "0x42D5A0",
+    "getObjectRangeAsString": "0x42D5C0",
+    "getReturnValueAsString": "0x42D330",
+    "isObjectActive": "0x42D570",
+    "objectHasRange": "0x42D590",
+    "setArgFromString": "0x42D690"
+   },
+   "teardown": [
+    "0x40B3C0"
+   ]
+  },
+  {
+   "line": 286,
+   "object": "aiSettings",
+   "function": "setSAIUpdateFrequency",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x42D700",
+    "D1": "0x42D740",
+    "checkObjectRange": "0x42D8B0",
+    "executeObjectMethod": "0x42DB00",
+    "getObjectRange": "0x42D7D0",
+    "getObjectRangeAsString": "0x42D7F0",
+    "getReturnValueAsString": "0x42D760",
+    "isObjectActive": "0x42D7A0",
+    "objectHasRange": "0x42D7C0",
+    "setArgFromString": "0x42D8C0"
+   },
+   "teardown": [
+    "0x40B3E0"
+   ]
+  },
+  {
+   "line": 287,
+   "object": "aiSettings",
+   "function": "setRespawnAllowed",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x42DB50",
+    "D1": "0x42DB90",
+    "checkObjectRange": "0x42DD00",
+    "executeObjectMethod": "0x42DF50",
+    "getObjectRange": "0x42DC20",
+    "getObjectRangeAsString": "0x42DC40",
+    "getReturnValueAsString": "0x42DBB0",
+    "isObjectActive": "0x42DBF0",
+    "objectHasRange": "0x42DC10",
+    "setArgFromString": "0x42DD10"
+   },
+   "teardown": [
+    "0x40B400"
+   ]
+  },
+  {
+   "line": 288,
+   "object": "aiSettings",
+   "function": "addBotName",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x42DFA0",
+    "D1": "0x42DFE0",
+    "checkObjectRange": "0x42E150",
+    "executeObjectMethod": "0x42E650",
+    "getObjectRange": "0x42E070",
+    "getObjectRangeAsString": "0x42E090",
+    "getReturnValueAsString": "0x42E000",
+    "isObjectActive": "0x42E040",
+    "objectHasRange": "0x42E060",
+    "setArgFromString": "0x42E160"
+   },
+   "teardown": [
+    "0x40B420",
+    "0x40DE50",
+    "0x40DEA0"
+   ]
+  },
+  {
+   "line": 289,
+   "object": "aiSettings",
+   "function": "isRespawnAllowed",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x42E720",
+    "D1": "0x42E760",
+    "checkObjectRange": "0x42EAD0",
+    "executeObjectMethod": "0x42EAF0",
+    "getObjectRange": "0x42E9F0",
+    "getObjectRangeAsString": "0x42EA10",
+    "getReturnValueAsString": "0x42E780",
+    "isObjectActive": "0x42E9C0",
+    "objectHasRange": "0x42E9E0",
+    "setArgFromString": "0x42EAE0"
+   },
+   "teardown": [
+    "0x40B440"
+   ]
+  },
+  {
+   "line": 290,
+   "object": "aiSettings",
+   "function": "overrideMenuSettings",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x42EB50",
+    "D1": "0x42EB90",
+    "checkObjectRange": "0x42EF10",
+    "executeObjectMethod": "0x42F160",
+    "getObjectRange": "0x42EE30",
+    "getObjectRangeAsString": "0x42EE50",
+    "getReturnValueAsString": "0x42EBB0",
+    "isObjectActive": "0x42EDF0",
+    "objectHasRange": "0x42EE20",
+    "setArgFromString": "0x42EF20"
+   },
+   "teardown": [
+    "0x40B460"
+   ]
+  },
+  {
+   "line": 293,
+   "object": "aiSettings",
+   "function": "lodEnable",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x42F1F0",
+    "D1": "0x42F230",
+    "checkObjectRange": "0x42F5A0",
+    "executeObjectMethod": "0x42F7F0",
+    "getObjectRange": "0x42F4C0",
+    "getObjectRangeAsString": "0x42F4E0",
+    "getReturnValueAsString": "0x42F250",
+    "isObjectActive": "0x42F490",
+    "objectHasRange": "0x42F4B0",
+    "setArgFromString": "0x42F5B0"
+   },
+   "teardown": [
+    "0x40B480"
+   ]
+  },
+  {
+   "line": 294,
+   "object": "aiSettings",
+   "function": "setBasicLODDistance",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x42F870",
+    "D1": "0x42F8B0",
+    "checkObjectRange": "0x42FA20",
+    "executeObjectMethod": "0x42FC70",
+    "getObjectRange": "0x42F940",
+    "getObjectRangeAsString": "0x42F960",
+    "getReturnValueAsString": "0x42F8D0",
+    "isObjectActive": "0x42F910",
+    "objectHasRange": "0x42F930",
+    "setArgFromString": "0x42FA30"
+   },
+   "teardown": [
+    "0x40B4A0"
+   ]
+  },
+  {
+   "line": 296,
+   "object": "aiSettings",
+   "function": "setVehicleMods",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x42FCC0",
+    "D1": "0x42FD00",
+    "checkObjectRange": "0x42FE70",
+    "executeObjectMethod": "0x430370",
+    "getObjectRange": "0x42FD90",
+    "getObjectRangeAsString": "0x42FDB0",
+    "getReturnValueAsString": "0x42FD20",
+    "isObjectActive": "0x42FD60",
+    "objectHasRange": "0x42FD80",
+    "setArgFromString": "0x42FE80"
+   },
+   "teardown": [
+    "0x40B4C0",
+    "0x40DEF0",
+    "0x40DF40"
+   ]
+  },
+  {
+   "line": 297,
+   "object": "aiSettings",
+   "function": "setStandardPersonality",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x430440",
+    "D1": "0x430480",
+    "checkObjectRange": "0x4305F0",
+    "executeObjectMethod": "0x430AB0",
+    "getObjectRange": "0x430510",
+    "getObjectRangeAsString": "0x430530",
+    "getReturnValueAsString": "0x4304A0",
+    "isObjectActive": "0x4304E0",
+    "objectHasRange": "0x430500",
+    "setArgFromString": "0x430600"
+   },
+   "teardown": [
+    "0x40B4E0",
+    "0x40DF90"
+   ]
+  },
+  {
+   "line": 298,
+   "object": "aiSettings",
+   "function": "setVehicleBehaviour",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x430B40",
+    "D1": "0x430B80",
+    "checkObjectRange": "0x430CF0",
+    "executeObjectMethod": "0x431D90",
+    "getObjectRange": "0x430C10",
+    "getObjectRangeAsString": "0x430C30",
+    "getReturnValueAsString": "0x430BA0",
+    "isObjectActive": "0x430BE0",
+    "objectHasRange": "0x430C00",
+    "setArgFromString": "0x430D00"
+   },
+   "teardown": [
+    "0x40B500",
+    "0x40DFE0",
+    "0x40E030",
+    "0x40E080",
+    "0x40E0D0",
+    "0x40E120",
+    "0x40E170"
+   ]
+  },
+  {
+   "line": 299,
+   "object": "aiSettings",
+   "function": "setVehicleDefaultBehaviour",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x432130",
+    "D1": "0x432170",
+    "checkObjectRange": "0x4322E0",
+    "executeObjectMethod": "0x4327E0",
+    "getObjectRange": "0x432200",
+    "getObjectRangeAsString": "0x432220",
+    "getReturnValueAsString": "0x432190",
+    "isObjectActive": "0x4321D0",
+    "objectHasRange": "0x4321F0",
+    "setArgFromString": "0x4322F0"
+   },
+   "teardown": [
+    "0x40B520",
+    "0x40E1C0",
+    "0x40E210"
+   ]
+  },
+  {
+   "line": 300,
+   "object": "aiSettings",
+   "function": "addInterpreterEntry",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4328B0",
+    "D1": "0x4328F0",
+    "checkObjectRange": "0x432A60",
+    "executeObjectMethod": "0x433180",
+    "getObjectRange": "0x432980",
+    "getObjectRangeAsString": "0x4329A0",
+    "getReturnValueAsString": "0x432910",
+    "isObjectActive": "0x432950",
+    "objectHasRange": "0x432970",
+    "setArgFromString": "0x432A70"
+   },
+   "teardown": [
+    "0x40B540",
+    "0x40E260",
+    "0x40E2B0"
+   ]
+  },
+  {
+   "line": 301,
+   "object": "aiSettings",
+   "function": "removeInterpreterEntry",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4333C0",
+    "D1": "0x433400",
+    "checkObjectRange": "0x433570",
+    "executeObjectMethod": "0x433C90",
+    "getObjectRange": "0x433490",
+    "getObjectRangeAsString": "0x4334B0",
+    "getReturnValueAsString": "0x433420",
+    "isObjectActive": "0x433460",
+    "objectHasRange": "0x433480",
+    "setArgFromString": "0x433580"
+   },
+   "teardown": [
+    "0x40B560",
+    "0x40E300",
+    "0x40E350"
+   ]
+  },
+  {
+   "line": 302,
+   "object": "aiSettings",
+   "function": "activateDefaultInterpreter",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x433DD0",
+    "D1": "0x433E10",
+    "checkObjectRange": "0x433F80",
+    "executeObjectMethod": "0x434650",
+    "getObjectRange": "0x433EA0",
+    "getObjectRangeAsString": "0x433EC0",
+    "getReturnValueAsString": "0x433E30",
+    "isObjectActive": "0x433E70",
+    "objectHasRange": "0x433E90",
+    "setArgFromString": "0x433F90"
+   },
+   "teardown": [
+    "0x40B580",
+    "0x40E3A0"
+   ]
+  },
+  {
+   "line": 303,
+   "object": "aiSettings",
+   "function": "setBasicBotWeights",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x434730",
+    "D1": "0x434770",
+    "checkObjectRange": "0x4348E0",
+    "executeObjectMethod": "0x434B70",
+    "getObjectRange": "0x434800",
+    "getObjectRangeAsString": "0x434820",
+    "getReturnValueAsString": "0x434790",
+    "isObjectActive": "0x4347D0",
+    "objectHasRange": "0x4347F0",
+    "setArgFromString": "0x4348F0"
+   },
+   "teardown": [
+    "0x40B5A0",
+    "0x40E3F0"
+   ]
+  },
+  {
+   "line": 304,
+   "object": "aiSettings",
+   "function": "setBehaviour",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x434C30",
+    "D1": "0x434C70",
+    "checkObjectRange": "0x434DE0",
+    "executeObjectMethod": "0x4352C0",
+    "getObjectRange": "0x434D00",
+    "getObjectRangeAsString": "0x434D20",
+    "getReturnValueAsString": "0x434C90",
+    "isObjectActive": "0x434CD0",
+    "objectHasRange": "0x434CF0",
+    "setArgFromString": "0x434DF0"
+   },
+   "teardown": [
+    "0x40B5C0",
+    "0x40E440"
+   ]
+  },
+  {
+   "line": 305,
+   "object": "aiSettings",
+   "function": "getBehaviour",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x435390",
+    "D1": "0x435400",
+    "checkObjectRange": "0x4357C0",
+    "executeObjectMethod": "0x435A10",
+    "getObjectRange": "0x4356E0",
+    "getObjectRangeAsString": "0x435700",
+    "getReturnValueAsString": "0x435470",
+    "isObjectActive": "0x4356B0",
+    "objectHasRange": "0x4356D0",
+    "setArgFromString": "0x4357D0"
+   },
+   "teardown": [
+    "0x40B5E0"
+   ]
+  },
+  {
+   "line": 306,
+   "object": "aiSettings",
+   "function": "createBehaviourModifiers",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x435AB0",
+    "D1": "0x435AF0",
+    "checkObjectRange": "0x435C60",
+    "executeObjectMethod": "0x435EF0",
+    "getObjectRange": "0x435B80",
+    "getObjectRangeAsString": "0x435BA0",
+    "getReturnValueAsString": "0x435B10",
+    "isObjectActive": "0x435B50",
+    "objectHasRange": "0x435B70",
+    "setArgFromString": "0x435C70"
+   },
+   "teardown": [
+    "0x40B650",
+    "0x40E490"
+   ]
+  },
+  {
+   "line": 307,
+   "object": "aiSettings",
+   "function": "activeBehaviourModifiers",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x435FB0",
+    "D1": "0x436020",
+    "checkObjectRange": "0x4363E0",
+    "executeObjectMethod": "0x436670",
+    "getObjectRange": "0x436300",
+    "getObjectRangeAsString": "0x436320",
+    "getReturnValueAsString": "0x436090",
+    "isObjectActive": "0x4362D0",
+    "objectHasRange": "0x4362F0",
+    "setArgFromString": "0x4363F0"
+   },
+   "teardown": [
+    "0x40B670",
+    "0x40E4E0"
+   ]
+  },
+  {
+   "line": 308,
+   "object": "aiSettings",
+   "function": "setBehaviourModifier",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4367A0",
+    "D1": "0x4367E0",
+    "checkObjectRange": "0x436950",
+    "executeObjectMethod": "0x436E10",
+    "getObjectRange": "0x436870",
+    "getObjectRangeAsString": "0x436890",
+    "getReturnValueAsString": "0x436800",
+    "isObjectActive": "0x436840",
+    "objectHasRange": "0x436860",
+    "setArgFromString": "0x436960"
+   },
+   "teardown": [
+    "0x40B6E0",
+    "0x40E530"
+   ]
+  },
+  {
+   "line": 309,
+   "object": "aiSettings",
+   "function": "getBehaviourModifier",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x436EE0",
+    "D1": "0x436F20",
+    "checkObjectRange": "0x437290",
+    "executeObjectMethod": "0x437520",
+    "getObjectRange": "0x4371B0",
+    "getObjectRangeAsString": "0x4371D0",
+    "getReturnValueAsString": "0x436F40",
+    "isObjectActive": "0x437180",
+    "objectHasRange": "0x4371A0",
+    "setArgFromString": "0x4372A0"
+   },
+   "teardown": [
+    "0x40B700",
+    "0x40E580"
+   ]
+  },
+  {
+   "line": 310,
+   "object": "aiSettings",
+   "function": "listBehaviourModifiers",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x437600",
+    "D1": "0x437670",
+    "checkObjectRange": "0x437A30",
+    "executeObjectMethod": "0x437A50",
+    "getObjectRange": "0x437950",
+    "getObjectRangeAsString": "0x437970",
+    "getReturnValueAsString": "0x4376E0",
+    "isObjectActive": "0x437920",
+    "objectHasRange": "0x437940",
+    "setArgFromString": "0x437A40"
+   },
+   "teardown": [
+    "0x40B720"
+   ]
+  },
+  {
+   "line": 311,
+   "object": "aiSettings",
+   "function": "showAISettings",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x437AF0",
+    "D1": "0x437B60",
+    "checkObjectRange": "0x437F20",
+    "executeObjectMethod": "0x437F40",
+    "getObjectRange": "0x437E40",
+    "getObjectRangeAsString": "0x437E60",
+    "getReturnValueAsString": "0x437BD0",
+    "isObjectActive": "0x437E10",
+    "objectHasRange": "0x437E30",
+    "setArgFromString": "0x437F30"
+   },
+   "teardown": [
+    "0x40B790"
+   ]
+  },
+  {
+   "line": 312,
+   "object": "aiSettings",
+   "function": "createUCConstant",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x437FE0",
+    "D1": "0x438020",
+    "checkObjectRange": "0x438190",
+    "executeObjectMethod": "0x438650",
+    "getObjectRange": "0x4380B0",
+    "getObjectRangeAsString": "0x4380D0",
+    "getReturnValueAsString": "0x438040",
+    "isObjectActive": "0x438080",
+    "objectHasRange": "0x4380A0",
+    "setArgFromString": "0x4381A0"
+   },
+   "teardown": [
+    "0x40B800",
+    "0x40E5D0"
+   ]
+  },
+  {
+   "line": 313,
+   "object": "aiSettings",
+   "function": "createUCLinear",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x438710",
+    "D1": "0x438750",
+    "checkObjectRange": "0x4388C0",
+    "executeObjectMethod": "0x438F90",
+    "getObjectRange": "0x4387E0",
+    "getObjectRangeAsString": "0x438800",
+    "getReturnValueAsString": "0x438770",
+    "isObjectActive": "0x4387B0",
+    "objectHasRange": "0x4387D0",
+    "setArgFromString": "0x4388D0"
+   },
+   "teardown": [
+    "0x40B820",
+    "0x40E620"
+   ]
+  },
+  {
+   "line": 314,
+   "object": "aiSettings",
+   "function": "createUCXInverse",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x439060",
+    "D1": "0x4390A0",
+    "checkObjectRange": "0x439210",
+    "executeObjectMethod": "0x439D00",
+    "getObjectRange": "0x439130",
+    "getObjectRangeAsString": "0x439150",
+    "getReturnValueAsString": "0x4390C0",
+    "isObjectActive": "0x439100",
+    "objectHasRange": "0x439120",
+    "setArgFromString": "0x439220"
+   },
+   "teardown": [
+    "0x40B840",
+    "0x40E670"
+   ]
+  },
+  {
+   "line": 315,
+   "object": "aiSettings",
+   "function": "createLODManager",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x439DE0",
+    "D1": "0x439E20",
+    "checkObjectRange": "0x439F90",
+    "executeObjectMethod": "0x43A420",
+    "getObjectRange": "0x439EB0",
+    "getObjectRangeAsString": "0x439ED0",
+    "getReturnValueAsString": "0x439E40",
+    "isObjectActive": "0x439E80",
+    "objectHasRange": "0x439EA0",
+    "setArgFromString": "0x439FA0"
+   },
+   "teardown": [
+    "0x40B860"
+   ]
+  },
+  {
+   "line": 316,
+   "object": "aiSettings",
+   "function": "setSensingAgentPatternName",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x43A4B0",
+    "D1": "0x43A4F0",
+    "checkObjectRange": "0x43A660",
+    "executeObjectMethod": "0x43A8F0",
+    "getObjectRange": "0x43A580",
+    "getObjectRangeAsString": "0x43A5A0",
+    "getReturnValueAsString": "0x43A510",
+    "isObjectActive": "0x43A550",
+    "objectHasRange": "0x43A570",
+    "setArgFromString": "0x43A670"
+   },
+   "teardown": [
+    "0x40B880",
+    "0x40E6C0"
+   ]
+  },
+  {
+   "line": 317,
+   "object": "aiSettings",
+   "function": "setSensingAgentNullPattern",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x43A980",
+    "D1": "0x43A9C0",
+    "checkObjectRange": "0x43AB30",
+    "executeObjectMethod": "0x43ADC0",
+    "getObjectRange": "0x43AA50",
+    "getObjectRangeAsString": "0x43AA70",
+    "getReturnValueAsString": "0x43A9E0",
+    "isObjectActive": "0x43AA20",
+    "objectHasRange": "0x43AA40",
+    "setArgFromString": "0x43AB40"
+   },
+   "teardown": [
+    "0x40B8A0",
+    "0x40E710"
+   ]
+  },
+  {
+   "line": 318,
+   "object": "aiSettings",
+   "function": "addSensingAgentPattern",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x43AE50",
+    "D1": "0x43AE90",
+    "checkObjectRange": "0x43B000",
+    "executeObjectMethod": "0x43B500",
+    "getObjectRange": "0x43AF20",
+    "getObjectRangeAsString": "0x43AF40",
+    "getReturnValueAsString": "0x43AEB0",
+    "isObjectActive": "0x43AEF0",
+    "objectHasRange": "0x43AF10",
+    "setArgFromString": "0x43B010"
+   },
+   "teardown": [
+    "0x40B8C0",
+    "0x40E760",
+    "0x40E7B0"
+   ]
+  },
+  {
+   "line": 319,
+   "object": "aiSettings",
+   "function": "sensingAgentDebug",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x43B5D0",
+    "D1": "0x43B610",
+    "checkObjectRange": "0x43B780",
+    "executeObjectMethod": "0x43B7A0",
+    "getObjectRange": "0x43B6A0",
+    "getObjectRangeAsString": "0x43B6C0",
+    "getReturnValueAsString": "0x43B630",
+    "isObjectActive": "0x43B670",
+    "objectHasRange": "0x43B690",
+    "setArgFromString": "0x43B790"
+   },
+   "teardown": [
+    "0x40B8E0"
+   ]
+  },
+  {
+   "line": 321,
+   "object": "aiSettings",
+   "function": "autoSpawnBots",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x43B7E0",
+    "D1": "0x43B820",
+    "checkObjectRange": "0x43BB90",
+    "executeObjectMethod": "0x43BDE0",
+    "getObjectRange": "0x43BAB0",
+    "getObjectRangeAsString": "0x43BAD0",
+    "getReturnValueAsString": "0x43B840",
+    "isObjectActive": "0x43BA80",
+    "objectHasRange": "0x43BAA0",
+    "setArgFromString": "0x43BBA0"
+   },
+   "teardown": [
+    "0x40B900"
+   ]
+  },
+  {
+   "line": 327,
+   "object": "AIBotManager",
+   "function": "setLodLevelTicks",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x43BE70",
+    "D1": "0x43BEB0",
+    "checkObjectRange": "0x43C020",
+    "executeObjectMethod": "0x43C6E0",
+    "getObjectRange": "0x43BF40",
+    "getObjectRangeAsString": "0x43BF60",
+    "getReturnValueAsString": "0x43BED0",
+    "isObjectActive": "0x43BF10",
+    "objectHasRange": "0x43BF30",
+    "setArgFromString": "0x43C030"
+   },
+   "teardown": [
+    "0x40B920"
+   ]
+  },
+  {
+   "line": 328,
+   "object": "AIBotManager",
+   "function": "setLodLevelPriority",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x43C750",
+    "D1": "0x43C790",
+    "checkObjectRange": "0x43C900",
+    "executeObjectMethod": "0x43CFC0",
+    "getObjectRange": "0x43C820",
+    "getObjectRangeAsString": "0x43C840",
+    "getReturnValueAsString": "0x43C7B0",
+    "isObjectActive": "0x43C7F0",
+    "objectHasRange": "0x43C810",
+    "setArgFromString": "0x43C910"
+   },
+   "teardown": [
+    "0x40B940"
+   ]
+  },
+  {
+   "line": 329,
+   "object": "AIBotManager",
+   "function": "setPlannedDecisionMakingThreshold",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x43D030",
+    "D1": "0x43D070",
+    "checkObjectRange": "0x43D1E0",
+    "executeObjectMethod": "0x43D8A0",
+    "getObjectRange": "0x43D100",
+    "getObjectRangeAsString": "0x43D120",
+    "getReturnValueAsString": "0x43D090",
+    "isObjectActive": "0x43D0D0",
+    "objectHasRange": "0x43D0F0",
+    "setArgFromString": "0x43D1F0"
+   },
+   "teardown": [
+    "0x40B960"
+   ]
+  },
+  {
+   "line": 330,
+   "object": "AIBotManager",
+   "function": "setUnplannedDecisionMakingThreshold",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x43D910",
+    "D1": "0x43D950",
+    "checkObjectRange": "0x43DAC0",
+    "executeObjectMethod": "0x43E180",
+    "getObjectRange": "0x43D9E0",
+    "getObjectRangeAsString": "0x43DA00",
+    "getReturnValueAsString": "0x43D970",
+    "isObjectActive": "0x43D9B0",
+    "objectHasRange": "0x43D9D0",
+    "setArgFromString": "0x43DAD0"
+   },
+   "teardown": [
+    "0x40B980"
+   ]
+  },
+  {
+   "line": 331,
+   "object": "AIBotManager",
+   "function": "setDecisionMakingInterleave",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x43E1F0",
+    "D1": "0x43E230",
+    "checkObjectRange": "0x43E3A0",
+    "executeObjectMethod": "0x43E830",
+    "getObjectRange": "0x43E2C0",
+    "getObjectRangeAsString": "0x43E2E0",
+    "getReturnValueAsString": "0x43E250",
+    "isObjectActive": "0x43E290",
+    "objectHasRange": "0x43E2B0",
+    "setArgFromString": "0x43E3B0"
+   },
+   "teardown": [
+    "0x40B9A0"
+   ]
+  },
+  {
+   "line": 332,
+   "object": "AIBotManager",
+   "function": "setSensingQuotient",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x43E890",
+    "D1": "0x43E8D0",
+    "checkObjectRange": "0x43EA40",
+    "executeObjectMethod": "0x43EED0",
+    "getObjectRange": "0x43E960",
+    "getObjectRangeAsString": "0x43E980",
+    "getReturnValueAsString": "0x43E8F0",
+    "isObjectActive": "0x43E930",
+    "objectHasRange": "0x43E950",
+    "setArgFromString": "0x43EA50"
+   },
+   "teardown": [
+    "0x40B9C0"
+   ]
+  },
+  {
+   "line": 333,
+   "object": "AIBotManager",
+   "function": "setSystemQuotient",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x43EF30",
+    "D1": "0x43EF70",
+    "checkObjectRange": "0x43F0E0",
+    "executeObjectMethod": "0x43F7A0",
+    "getObjectRange": "0x43F000",
+    "getObjectRangeAsString": "0x43F020",
+    "getReturnValueAsString": "0x43EF90",
+    "isObjectActive": "0x43EFD0",
+    "objectHasRange": "0x43EFF0",
+    "setArgFromString": "0x43F0F0"
+   },
+   "teardown": [
+    "0x40B9E0"
+   ]
+  },
+  {
+   "line": 334,
+   "object": "AIBotManager",
+   "function": "getLodLevelFullTicks",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x43F810",
+    "D1": "0x43F850",
+    "checkObjectRange": "0x43FBC0",
+    "executeObjectMethod": "0x43FBE0",
+    "getObjectRange": "0x43FAE0",
+    "getObjectRangeAsString": "0x43FB00",
+    "getReturnValueAsString": "0x43F870",
+    "isObjectActive": "0x43FAB0",
+    "objectHasRange": "0x43FAD0",
+    "setArgFromString": "0x43FBD0"
+   },
+   "teardown": [
+    "0x40BA00"
+   ]
+  },
+  {
+   "line": 335,
+   "object": "AIBotManager",
+   "function": "getLodLevelMediumTicks",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x43FC40",
+    "D1": "0x43FC80",
+    "checkObjectRange": "0x43FFF0",
+    "executeObjectMethod": "0x440010",
+    "getObjectRange": "0x43FF10",
+    "getObjectRangeAsString": "0x43FF30",
+    "getReturnValueAsString": "0x43FCA0",
+    "isObjectActive": "0x43FEE0",
+    "objectHasRange": "0x43FF00",
+    "setArgFromString": "0x440000"
+   },
+   "teardown": [
+    "0x40BA20"
+   ]
+  },
+  {
+   "line": 336,
+   "object": "AIBotManager",
+   "function": "getLodLevelLightTicks",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x440070",
+    "D1": "0x4400B0",
+    "checkObjectRange": "0x440420",
+    "executeObjectMethod": "0x440440",
+    "getObjectRange": "0x440340",
+    "getObjectRangeAsString": "0x440360",
+    "getReturnValueAsString": "0x4400D0",
+    "isObjectActive": "0x440310",
+    "objectHasRange": "0x440330",
+    "setArgFromString": "0x440430"
+   },
+   "teardown": [
+    "0x40BA40"
+   ]
+  },
+  {
+   "line": 337,
+   "object": "AIBotManager",
+   "function": "getLodLevelFullPriority",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4404A0",
+    "D1": "0x4404E0",
+    "checkObjectRange": "0x440850",
+    "executeObjectMethod": "0x440870",
+    "getObjectRange": "0x440770",
+    "getObjectRangeAsString": "0x440790",
+    "getReturnValueAsString": "0x440500",
+    "isObjectActive": "0x440740",
+    "objectHasRange": "0x440760",
+    "setArgFromString": "0x440860"
+   },
+   "teardown": [
+    "0x40BA60"
+   ]
+  },
+  {
+   "line": 338,
+   "object": "AIBotManager",
+   "function": "getLodLevelMediumPriority",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4408D0",
+    "D1": "0x440910",
+    "checkObjectRange": "0x440C80",
+    "executeObjectMethod": "0x440CA0",
+    "getObjectRange": "0x440BA0",
+    "getObjectRangeAsString": "0x440BC0",
+    "getReturnValueAsString": "0x440930",
+    "isObjectActive": "0x440B70",
+    "objectHasRange": "0x440B90",
+    "setArgFromString": "0x440C90"
+   },
+   "teardown": [
+    "0x40BA80"
+   ]
+  },
+  {
+   "line": 339,
+   "object": "AIBotManager",
+   "function": "getLodLevelLightPriority",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x440D00",
+    "D1": "0x440D40",
+    "checkObjectRange": "0x4410B0",
+    "executeObjectMethod": "0x4410D0",
+    "getObjectRange": "0x440FD0",
+    "getObjectRangeAsString": "0x440FF0",
+    "getReturnValueAsString": "0x440D60",
+    "isObjectActive": "0x440FA0",
+    "objectHasRange": "0x440FC0",
+    "setArgFromString": "0x4410C0"
+   },
+   "teardown": [
+    "0x40BAA0"
+   ]
+  },
+  {
+   "line": 340,
+   "object": "AIBotManager",
+   "function": "getPlannedDecisionMakingThresholdFull",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x441130",
+    "D1": "0x441170",
+    "checkObjectRange": "0x4414E0",
+    "executeObjectMethod": "0x441500",
+    "getObjectRange": "0x441400",
+    "getObjectRangeAsString": "0x441420",
+    "getReturnValueAsString": "0x441190",
+    "isObjectActive": "0x4413D0",
+    "objectHasRange": "0x4413F0",
+    "setArgFromString": "0x4414F0"
+   },
+   "teardown": [
+    "0x40BAC0"
+   ]
+  },
+  {
+   "line": 341,
+   "object": "AIBotManager",
+   "function": "getPlannedDecisionMakingThresholdMedium",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x441560",
+    "D1": "0x4415A0",
+    "checkObjectRange": "0x441910",
+    "executeObjectMethod": "0x441930",
+    "getObjectRange": "0x441830",
+    "getObjectRangeAsString": "0x441850",
+    "getReturnValueAsString": "0x4415C0",
+    "isObjectActive": "0x441800",
+    "objectHasRange": "0x441820",
+    "setArgFromString": "0x441920"
+   },
+   "teardown": [
+    "0x40BAE0"
+   ]
+  },
+  {
+   "line": 342,
+   "object": "AIBotManager",
+   "function": "getPlannedDecisionMakingThresholdLight",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x441990",
+    "D1": "0x4419D0",
+    "checkObjectRange": "0x441D40",
+    "executeObjectMethod": "0x441D60",
+    "getObjectRange": "0x441C60",
+    "getObjectRangeAsString": "0x441C80",
+    "getReturnValueAsString": "0x4419F0",
+    "isObjectActive": "0x441C30",
+    "objectHasRange": "0x441C50",
+    "setArgFromString": "0x441D50"
+   },
+   "teardown": [
+    "0x40BB00"
+   ]
+  },
+  {
+   "line": 343,
+   "object": "AIBotManager",
+   "function": "getUnplannedDecisionMakingThresholdFull",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x441DC0",
+    "D1": "0x441E00",
+    "checkObjectRange": "0x442170",
+    "executeObjectMethod": "0x442190",
+    "getObjectRange": "0x442090",
+    "getObjectRangeAsString": "0x4420B0",
+    "getReturnValueAsString": "0x441E20",
+    "isObjectActive": "0x442060",
+    "objectHasRange": "0x442080",
+    "setArgFromString": "0x442180"
+   },
+   "teardown": [
+    "0x40BB20"
+   ]
+  },
+  {
+   "line": 344,
+   "object": "AIBotManager",
+   "function": "getUnplannedDecisionMakingThresholdMedium",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4421F0",
+    "D1": "0x442230",
+    "checkObjectRange": "0x4425A0",
+    "executeObjectMethod": "0x4425C0",
+    "getObjectRange": "0x4424C0",
+    "getObjectRangeAsString": "0x4424E0",
+    "getReturnValueAsString": "0x442250",
+    "isObjectActive": "0x442490",
+    "objectHasRange": "0x4424B0",
+    "setArgFromString": "0x4425B0"
+   },
+   "teardown": [
+    "0x40BB40"
+   ]
+  },
+  {
+   "line": 345,
+   "object": "AIBotManager",
+   "function": "getUnplannedDecisionMakingThresholdLight",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x442620",
+    "D1": "0x442660",
+    "checkObjectRange": "0x4429D0",
+    "executeObjectMethod": "0x4429F0",
+    "getObjectRange": "0x4428F0",
+    "getObjectRangeAsString": "0x442910",
+    "getReturnValueAsString": "0x442680",
+    "isObjectActive": "0x4428C0",
+    "objectHasRange": "0x4428E0",
+    "setArgFromString": "0x4429E0"
+   },
+   "teardown": [
+    "0x40BB60"
+   ]
+  },
+  {
+   "line": 346,
+   "object": "AIBotManager",
+   "function": "getPlannedDecisionMakingInterleave",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x442A50",
+    "D1": "0x442A90",
+    "checkObjectRange": "0x442E00",
+    "executeObjectMethod": "0x442E20",
+    "getObjectRange": "0x442D20",
+    "getObjectRangeAsString": "0x442D40",
+    "getReturnValueAsString": "0x442AB0",
+    "isObjectActive": "0x442CF0",
+    "objectHasRange": "0x442D10",
+    "setArgFromString": "0x442E10"
+   },
+   "teardown": [
+    "0x40BB80"
+   ]
+  },
+  {
+   "line": 347,
+   "object": "AIBotManager",
+   "function": "getUnplannedDecisionMakingInterleave",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x442E80",
+    "D1": "0x442EC0",
+    "checkObjectRange": "0x443230",
+    "executeObjectMethod": "0x443250",
+    "getObjectRange": "0x443150",
+    "getObjectRangeAsString": "0x443170",
+    "getReturnValueAsString": "0x442EE0",
+    "isObjectActive": "0x443120",
+    "objectHasRange": "0x443140",
+    "setArgFromString": "0x443240"
+   },
+   "teardown": [
+    "0x40BBA0"
+   ]
+  },
+  {
+   "line": 348,
+   "object": "AIBotManager",
+   "function": "getSensingQuotient",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4432B0",
+    "D1": "0x4432F0",
+    "checkObjectRange": "0x443660",
+    "executeObjectMethod": "0x443680",
+    "getObjectRange": "0x443580",
+    "getObjectRangeAsString": "0x4435A0",
+    "getReturnValueAsString": "0x443310",
+    "isObjectActive": "0x443550",
+    "objectHasRange": "0x443570",
+    "setArgFromString": "0x443670"
+   },
+   "teardown": [
+    "0x40BBC0"
+   ]
+  },
+  {
+   "line": 349,
+   "object": "AIBotManager",
+   "function": "getMemoryUpdateQuotient",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4436E0",
+    "D1": "0x443720",
+    "checkObjectRange": "0x443A90",
+    "executeObjectMethod": "0x443AB0",
+    "getObjectRange": "0x4439B0",
+    "getObjectRangeAsString": "0x4439D0",
+    "getReturnValueAsString": "0x443740",
+    "isObjectActive": "0x443980",
+    "objectHasRange": "0x4439A0",
+    "setArgFromString": "0x443AA0"
+   },
+   "teardown": [
+    "0x40BBE0"
+   ]
+  },
+  {
+   "line": 350,
+   "object": "AIBotManager",
+   "function": "getSystemDecisionMakingQuotient",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x443B10",
+    "D1": "0x443B50",
+    "checkObjectRange": "0x443EC0",
+    "executeObjectMethod": "0x443EE0",
+    "getObjectRange": "0x443DE0",
+    "getObjectRangeAsString": "0x443E00",
+    "getReturnValueAsString": "0x443B70",
+    "isObjectActive": "0x443DB0",
+    "objectHasRange": "0x443DD0",
+    "setArgFromString": "0x443ED0"
+   },
+   "teardown": [
+    "0x40BC00"
+   ]
+  },
+  {
+   "line": 351,
+   "object": "AIBotManager",
+   "function": "getSystemPathfindingQuotient",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x443F40",
+    "D1": "0x443F80",
+    "checkObjectRange": "0x4442F0",
+    "executeObjectMethod": "0x444310",
+    "getObjectRange": "0x444210",
+    "getObjectRangeAsString": "0x444230",
+    "getReturnValueAsString": "0x443FA0",
+    "isObjectActive": "0x4441E0",
+    "objectHasRange": "0x444200",
+    "setArgFromString": "0x444300"
+   },
+   "teardown": [
+    "0x40BC20"
+   ]
+  },
+  {
+   "line": 352,
+   "object": "AIBotManager",
+   "function": "getSystemSensingQuotient",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x444370",
+    "D1": "0x4443B0",
+    "checkObjectRange": "0x444720",
+    "executeObjectMethod": "0x444740",
+    "getObjectRange": "0x444640",
+    "getObjectRangeAsString": "0x444660",
+    "getReturnValueAsString": "0x4443D0",
+    "isObjectActive": "0x444610",
+    "objectHasRange": "0x444630",
+    "setArgFromString": "0x444730"
+   },
+   "teardown": [
+    "0x40BC40"
+   ]
+  },
+  {
+   "line": 353,
+   "object": "AIBotManager",
+   "function": "enableBotScriptDebugger",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4447A0",
+    "D1": "0x4447E0",
+    "checkObjectRange": "0x444950",
+    "executeObjectMethod": "0x444BA0",
+    "getObjectRange": "0x444870",
+    "getObjectRangeAsString": "0x444890",
+    "getReturnValueAsString": "0x444800",
+    "isObjectActive": "0x444840",
+    "objectHasRange": "0x444860",
+    "setArgFromString": "0x444960"
+   },
+   "teardown": [
+    "0x40BC60"
+   ]
+  },
+  {
+   "line": 361,
+   "object": "aiStrategy",
+   "function": "createStrategy",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x444C00",
+    "D1": "0x444C40",
+    "checkObjectRange": "0x444DC0",
+    "executeObjectMethod": "0x445050",
+    "getObjectRange": "0x444CE0",
+    "getObjectRangeAsString": "0x444D00",
+    "getReturnValueAsString": "0x444C60",
+    "isObjectActive": "0x444CA0",
+    "objectHasRange": "0x444CD0",
+    "setArgFromString": "0x444DD0"
+   },
+   "teardown": [
+    "0x40BC80",
+    "0x40E800"
+   ]
+  },
+  {
+   "line": 362,
+   "object": "aiStrategy",
+   "function": "setActiveStrategy",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x445110",
+    "D1": "0x445150",
+    "checkObjectRange": "0x4452D0",
+    "executeObjectMethod": "0x445560",
+    "getObjectRange": "0x4451F0",
+    "getObjectRangeAsString": "0x445210",
+    "getReturnValueAsString": "0x445170",
+    "isObjectActive": "0x4451B0",
+    "objectHasRange": "0x4451E0",
+    "setArgFromString": "0x4452E0"
+   },
+   "teardown": [
+    "0x40BCA0",
+    "0x40E850"
+   ]
+  },
+  {
+   "line": 363,
+   "object": "aiStrategy",
+   "function": "getActiveStrategyName",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x445620",
+    "D1": "0x445690",
+    "checkObjectRange": "0x445A60",
+    "executeObjectMethod": "0x445A80",
+    "getObjectRange": "0x445980",
+    "getObjectRangeAsString": "0x4459A0",
+    "getReturnValueAsString": "0x445700",
+    "isObjectActive": "0x445940",
+    "objectHasRange": "0x445970",
+    "setArgFromString": "0x445A70"
+   },
+   "teardown": [
+    "0x40BCC0"
+   ]
+  },
+  {
+   "line": 364,
+   "object": "aiStrategy",
+   "function": "aggression",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x445B10",
+    "D1": "0x445B50",
+    "checkObjectRange": "0x445ED0",
+    "executeObjectMethod": "0x446120",
+    "getObjectRange": "0x445DF0",
+    "getObjectRangeAsString": "0x445E10",
+    "getReturnValueAsString": "0x445B70",
+    "isObjectActive": "0x445DB0",
+    "objectHasRange": "0x445DE0",
+    "setArgFromString": "0x445EE0"
+   },
+   "teardown": [
+    "0x40BD30"
+   ]
+  },
+  {
+   "line": 365,
+   "object": "aiStrategy",
+   "function": "timeLimit",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4461A0",
+    "D1": "0x4461E0",
+    "checkObjectRange": "0x446560",
+    "executeObjectMethod": "0x4467B0",
+    "getObjectRange": "0x446480",
+    "getObjectRangeAsString": "0x4464A0",
+    "getReturnValueAsString": "0x446200",
+    "isObjectActive": "0x446440",
+    "objectHasRange": "0x446470",
+    "setArgFromString": "0x446570"
+   },
+   "teardown": [
+    "0x40BD50"
+   ]
+  },
+  {
+   "line": 366,
+   "object": "aiStrategy",
+   "function": "getPrerequisiteWeight",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x446820",
+    "D1": "0x446860",
+    "checkObjectRange": "0x446BE0",
+    "executeObjectMethod": "0x446C00",
+    "getObjectRange": "0x446B00",
+    "getObjectRangeAsString": "0x446B20",
+    "getReturnValueAsString": "0x446880",
+    "isObjectActive": "0x446AC0",
+    "objectHasRange": "0x446AF0",
+    "setArgFromString": "0x446BF0"
+   },
+   "teardown": [
+    "0x40BD70"
+   ]
+  },
+  {
+   "line": 367,
+   "object": "aiStrategy",
+   "function": "setPrerequisiteWeight",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x446C60",
+    "D1": "0x446CA0",
+    "checkObjectRange": "0x446E20",
+    "executeObjectMethod": "0x447070",
+    "getObjectRange": "0x446D40",
+    "getObjectRangeAsString": "0x446D60",
+    "getReturnValueAsString": "0x446CC0",
+    "isObjectActive": "0x446D00",
+    "objectHasRange": "0x446D30",
+    "setArgFromString": "0x446E30"
+   },
+   "teardown": [
+    "0x40BD90"
+   ]
+  },
+  {
+   "line": 368,
+   "object": "aiStrategy",
+   "function": "listStrategies",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4470D0",
+    "D1": "0x447140",
+    "checkObjectRange": "0x447510",
+    "executeObjectMethod": "0x447530",
+    "getObjectRange": "0x447430",
+    "getObjectRangeAsString": "0x447450",
+    "getReturnValueAsString": "0x4471B0",
+    "isObjectActive": "0x4473F0",
+    "objectHasRange": "0x447420",
+    "setArgFromString": "0x447520"
+   },
+   "teardown": [
+    "0x40BDB0"
+   ]
+  },
+  {
+   "line": 369,
+   "object": "aiStrategy",
+   "function": "setTreeModifier",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4475C0",
+    "D1": "0x447600",
+    "checkObjectRange": "0x447780",
+    "executeObjectMethod": "0x447C10",
+    "getObjectRange": "0x4476A0",
+    "getObjectRangeAsString": "0x4476C0",
+    "getReturnValueAsString": "0x447620",
+    "isObjectActive": "0x447660",
+    "objectHasRange": "0x447690",
+    "setArgFromString": "0x447790"
+   },
+   "teardown": [
+    "0x40BE20"
+   ]
+  },
+  {
+   "line": 370,
+   "object": "aiStrategy",
+   "function": "getTreeModifier",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x447C70",
+    "D1": "0x447CB0",
+    "checkObjectRange": "0x448030",
+    "executeObjectMethod": "0x448280",
+    "getObjectRange": "0x447F50",
+    "getObjectRangeAsString": "0x447F70",
+    "getReturnValueAsString": "0x447CD0",
+    "isObjectActive": "0x447F10",
+    "objectHasRange": "0x447F40",
+    "setArgFromString": "0x448040"
+   },
+   "teardown": [
+    "0x40BE40"
+   ]
+  },
+  {
+   "line": 371,
+   "object": "aiStrategy",
+   "function": "setTreeModifierCombatStrength",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4482F0",
+    "D1": "0x448330",
+    "checkObjectRange": "0x4484B0",
+    "executeObjectMethod": "0x448B70",
+    "getObjectRange": "0x4483D0",
+    "getObjectRangeAsString": "0x4483F0",
+    "getReturnValueAsString": "0x448350",
+    "isObjectActive": "0x448390",
+    "objectHasRange": "0x4483C0",
+    "setArgFromString": "0x4484C0"
+   },
+   "teardown": [
+    "0x40BE60"
+   ]
+  },
+  {
+   "line": 372,
+   "object": "aiStrategy",
+   "function": "getTreeModifierCombatStrength",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x448BE0",
+    "D1": "0x448C20",
+    "checkObjectRange": "0x448FA0",
+    "executeObjectMethod": "0x449430",
+    "getObjectRange": "0x448EC0",
+    "getObjectRangeAsString": "0x448EE0",
+    "getReturnValueAsString": "0x448C40",
+    "isObjectActive": "0x448E80",
+    "objectHasRange": "0x448EB0",
+    "setArgFromString": "0x448FB0"
+   },
+   "teardown": [
+    "0x40BE80"
+   ]
+  },
+  {
+   "line": 373,
+   "object": "aiStrategy",
+   "function": "numberOfAttacks",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4494B0",
+    "D1": "0x4494F0",
+    "checkObjectRange": "0x4498A0",
+    "executeObjectMethod": "0x449AF0",
+    "getObjectRange": "0x4497C0",
+    "getObjectRangeAsString": "0x4497E0",
+    "getReturnValueAsString": "0x449510",
+    "isObjectActive": "0x449780",
+    "objectHasRange": "0x4497B0",
+    "setArgFromString": "0x4498B0"
+   },
+   "teardown": [
+    "0x40BEA0"
+   ]
+  },
+  {
+   "line": 374,
+   "object": "aiStrategy",
+   "function": "numberOfDefences",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x449B70",
+    "D1": "0x449BB0",
+    "checkObjectRange": "0x449F60",
+    "executeObjectMethod": "0x44A1B0",
+    "getObjectRange": "0x449E80",
+    "getObjectRangeAsString": "0x449EA0",
+    "getReturnValueAsString": "0x449BD0",
+    "isObjectActive": "0x449E40",
+    "objectHasRange": "0x449E70",
+    "setArgFromString": "0x449F70"
+   },
+   "teardown": [
+    "0x40BEC0"
+   ]
+  },
+  {
+   "line": 375,
+   "object": "aiStrategy",
+   "function": "setPrerequisite",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x44A230",
+    "D1": "0x44A270",
+    "checkObjectRange": "0x44A3F0",
+    "executeObjectMethod": "0x44A680",
+    "getObjectRange": "0x44A310",
+    "getObjectRangeAsString": "0x44A330",
+    "getReturnValueAsString": "0x44A290",
+    "isObjectActive": "0x44A2D0",
+    "objectHasRange": "0x44A300",
+    "setArgFromString": "0x44A400"
+   },
+   "teardown": [
+    "0x40BEE0",
+    "0x40E8A0"
+   ]
+  },
+  {
+   "line": 376,
+   "object": "aiStrategy",
+   "function": "addRequiredPrecedingStrategy",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x44A740",
+    "D1": "0x44A780",
+    "checkObjectRange": "0x44AB00",
+    "executeObjectMethod": "0x44AD90",
+    "getObjectRange": "0x44AA20",
+    "getObjectRangeAsString": "0x44AA40",
+    "getReturnValueAsString": "0x44A7A0",
+    "isObjectActive": "0x44A9E0",
+    "objectHasRange": "0x44AA10",
+    "setArgFromString": "0x44AB10"
+   },
+   "teardown": [
+    "0x40BF00",
+    "0x40E8F0"
+   ]
+  },
+  {
+   "line": 377,
+   "object": "aiStrategy",
+   "function": "addProhibitedPrecedingStrategy",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x44AE70",
+    "D1": "0x44AEB0",
+    "checkObjectRange": "0x44B230",
+    "executeObjectMethod": "0x44B4C0",
+    "getObjectRange": "0x44B150",
+    "getObjectRangeAsString": "0x44B170",
+    "getReturnValueAsString": "0x44AED0",
+    "isObjectActive": "0x44B110",
+    "objectHasRange": "0x44B140",
+    "setArgFromString": "0x44B240"
+   },
+   "teardown": [
+    "0x40BF20",
+    "0x40E940"
+   ]
+  },
+  {
+   "line": 378,
+   "object": "aiStrategy",
+   "function": "setStrategicObjectsModifier",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x44B5A0",
+    "D1": "0x44B5E0",
+    "checkObjectRange": "0x44B760",
+    "executeObjectMethod": "0x44BE20",
+    "getObjectRange": "0x44B680",
+    "getObjectRangeAsString": "0x44B6A0",
+    "getReturnValueAsString": "0x44B600",
+    "isObjectActive": "0x44B640",
+    "objectHasRange": "0x44B670",
+    "setArgFromString": "0x44B770"
+   },
+   "teardown": [
+    "0x40BF40"
+   ]
+  },
+  {
+   "line": 379,
+   "object": "aiStrategy",
+   "function": "getStrategicObjectsModifier",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x44BED0",
+    "D1": "0x44BF10",
+    "checkObjectRange": "0x44C290",
+    "executeObjectMethod": "0x44C720",
+    "getObjectRange": "0x44C1B0",
+    "getObjectRangeAsString": "0x44C1D0",
+    "getReturnValueAsString": "0x44BF30",
+    "isObjectActive": "0x44C170",
+    "objectHasRange": "0x44C1A0",
+    "setArgFromString": "0x44C2A0"
+   },
+   "teardown": [
+    "0x40BF60"
+   ]
+  },
+  {
+   "line": 380,
+   "object": "aiStrategy",
+   "function": "clearAllStrategicObjectsModifiers",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x44C7C0",
+    "D1": "0x44C800",
+    "checkObjectRange": "0x44C980",
+    "executeObjectMethod": "0x44C9A0",
+    "getObjectRange": "0x44C8A0",
+    "getObjectRangeAsString": "0x44C8C0",
+    "getReturnValueAsString": "0x44C820",
+    "isObjectActive": "0x44C860",
+    "objectHasRange": "0x44C890",
+    "setArgFromString": "0x44C990"
+   },
+   "teardown": [
+    "0x40BF80"
+   ]
+  },
+  {
+   "line": 381,
+   "object": "aiStrategy",
+   "function": "addSpecificObjectModifier",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x44C9E0",
+    "D1": "0x44CA20",
+    "checkObjectRange": "0x44CDA0",
+    "executeObjectMethod": "0x44D260",
+    "getObjectRange": "0x44CCC0",
+    "getObjectRangeAsString": "0x44CCE0",
+    "getReturnValueAsString": "0x44CA40",
+    "isObjectActive": "0x44CC80",
+    "objectHasRange": "0x44CCB0",
+    "setArgFromString": "0x44CDB0"
+   },
+   "teardown": [
+    "0x40BFA0",
+    "0x40E990"
+   ]
+  },
+  {
+   "line": 382,
+   "object": "aiStrategy",
+   "function": "completeStrategies",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x44D350",
+    "D1": "0x44D390",
+    "checkObjectRange": "0x44D510",
+    "executeObjectMethod": "0x44D530",
+    "getObjectRange": "0x44D430",
+    "getObjectRangeAsString": "0x44D450",
+    "getReturnValueAsString": "0x44D3B0",
+    "isObjectActive": "0x44D3F0",
+    "objectHasRange": "0x44D420",
+    "setArgFromString": "0x44D520"
+   },
+   "teardown": [
+    "0x40BFC0"
+   ]
+  },
+  {
+   "line": 385,
+   "object": "aiStrategy",
+   "function": "createPrerequisite",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x44D570",
+    "D1": "0x44D5B0",
+    "checkObjectRange": "0x44D730",
+    "executeObjectMethod": "0x44D9C0",
+    "getObjectRange": "0x44D650",
+    "getObjectRangeAsString": "0x44D670",
+    "getReturnValueAsString": "0x44D5D0",
+    "isObjectActive": "0x44D610",
+    "objectHasRange": "0x44D640",
+    "setArgFromString": "0x44D740"
+   },
+   "teardown": [
+    "0x40BFE0",
+    "0x40E9E0"
+   ]
+  },
+  {
+   "line": 386,
+   "object": "aiStrategy",
+   "function": "setActivePrerequisite",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x44DA80",
+    "D1": "0x44DAC0",
+    "checkObjectRange": "0x44DC40",
+    "executeObjectMethod": "0x44DED0",
+    "getObjectRange": "0x44DB60",
+    "getObjectRangeAsString": "0x44DB80",
+    "getReturnValueAsString": "0x44DAE0",
+    "isObjectActive": "0x44DB20",
+    "objectHasRange": "0x44DB50",
+    "setArgFromString": "0x44DC50"
+   },
+   "teardown": [
+    "0x40C000",
+    "0x40EA30"
+   ]
+  },
+  {
+   "line": 387,
+   "object": "aiStrategy",
+   "function": "getActivePrerequisiteName",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x44DF90",
+    "D1": "0x44E000",
+    "checkObjectRange": "0x44E3D0",
+    "executeObjectMethod": "0x44E3F0",
+    "getObjectRange": "0x44E2F0",
+    "getObjectRangeAsString": "0x44E310",
+    "getReturnValueAsString": "0x44E070",
+    "isObjectActive": "0x44E2B0",
+    "objectHasRange": "0x44E2E0",
+    "setArgFromString": "0x44E3E0"
+   },
+   "teardown": [
+    "0x40C020"
+   ]
+  },
+  {
+   "line": 388,
+   "object": "aiStrategy",
+   "function": "listPrerequisites",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x44E480",
+    "D1": "0x44E4F0",
+    "checkObjectRange": "0x44E8C0",
+    "executeObjectMethod": "0x44E8E0",
+    "getObjectRange": "0x44E7E0",
+    "getObjectRangeAsString": "0x44E800",
+    "getReturnValueAsString": "0x44E560",
+    "isObjectActive": "0x44E7A0",
+    "objectHasRange": "0x44E7D0",
+    "setArgFromString": "0x44E8D0"
+   },
+   "teardown": [
+    "0x40C090"
+   ]
+  },
+  {
+   "line": 389,
+   "object": "aiStrategy",
+   "function": "addCondition",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x44E970",
+    "D1": "0x44E9B0",
+    "checkObjectRange": "0x44EB30",
+    "executeObjectMethod": "0x44EFF0",
+    "getObjectRange": "0x44EA50",
+    "getObjectRangeAsString": "0x44EA70",
+    "getReturnValueAsString": "0x44E9D0",
+    "isObjectActive": "0x44EA10",
+    "objectHasRange": "0x44EA40",
+    "setArgFromString": "0x44EB40"
+   },
+   "teardown": [
+    "0x40C100",
+    "0x40EA80"
+   ]
+  },
+  {
+   "line": 392,
+   "object": "aiStrategy",
+   "function": "setActiveCondition",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x44F150",
+    "D1": "0x44F190",
+    "checkObjectRange": "0x44F310",
+    "executeObjectMethod": "0x44F5A0",
+    "getObjectRange": "0x44F230",
+    "getObjectRangeAsString": "0x44F250",
+    "getReturnValueAsString": "0x44F1B0",
+    "isObjectActive": "0x44F1F0",
+    "objectHasRange": "0x44F220",
+    "setArgFromString": "0x44F320"
+   },
+   "teardown": [
+    "0x40C120",
+    "0x40EAD0"
+   ]
+  },
+  {
+   "line": 393,
+   "object": "aiStrategy",
+   "function": "getActiveConditionName",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x44F660",
+    "D1": "0x44F6D0",
+    "checkObjectRange": "0x44FAA0",
+    "executeObjectMethod": "0x44FAC0",
+    "getObjectRange": "0x44F9C0",
+    "getObjectRangeAsString": "0x44F9E0",
+    "getReturnValueAsString": "0x44F740",
+    "isObjectActive": "0x44F980",
+    "objectHasRange": "0x44F9B0",
+    "setArgFromString": "0x44FAB0"
+   },
+   "teardown": [
+    "0x40C140"
+   ]
+  },
+  {
+   "line": 394,
+   "object": "aiStrategy",
+   "function": "listConditions",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x44FB50",
+    "D1": "0x44FBC0",
+    "checkObjectRange": "0x44FF90",
+    "executeObjectMethod": "0x44FFB0",
+    "getObjectRange": "0x44FEB0",
+    "getObjectRangeAsString": "0x44FED0",
+    "getReturnValueAsString": "0x44FC30",
+    "isObjectActive": "0x44FE70",
+    "objectHasRange": "0x44FEA0",
+    "setArgFromString": "0x44FFA0"
+   },
+   "teardown": [
+    "0x40C1B0"
+   ]
+  },
+  {
+   "line": 395,
+   "object": "aiStrategy",
+   "function": "createConstantCondition",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x450040",
+    "D1": "0x450080",
+    "checkObjectRange": "0x450400",
+    "executeObjectMethod": "0x451100",
+    "getObjectRange": "0x450320",
+    "getObjectRangeAsString": "0x450340",
+    "getReturnValueAsString": "0x4500A0",
+    "isObjectActive": "0x4502E0",
+    "objectHasRange": "0x450310",
+    "setArgFromString": "0x450410"
+   },
+   "teardown": [
+    "0x40C220",
+    "0x40EB20"
+   ]
+  },
+  {
+   "line": 396,
+   "object": "aiStrategy",
+   "function": "createHomogenousCondition",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x451220",
+    "D1": "0x451260",
+    "checkObjectRange": "0x4515E0",
+    "executeObjectMethod": "0x451EC0",
+    "getObjectRange": "0x451500",
+    "getObjectRangeAsString": "0x451520",
+    "getReturnValueAsString": "0x451280",
+    "isObjectActive": "0x4514C0",
+    "objectHasRange": "0x4514F0",
+    "setArgFromString": "0x4515F0"
+   },
+   "teardown": [
+    "0x40C240",
+    "0x40EB70"
+   ]
+  },
+  {
+   "line": 397,
+   "object": "aiStrategy",
+   "function": "createHeterogeneousCondition",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x451FC0",
+    "D1": "0x452000",
+    "checkObjectRange": "0x452380",
+    "executeObjectMethod": "0x453080",
+    "getObjectRange": "0x4522A0",
+    "getObjectRangeAsString": "0x4522C0",
+    "getReturnValueAsString": "0x452020",
+    "isObjectActive": "0x452260",
+    "objectHasRange": "0x452290",
+    "setArgFromString": "0x452390"
+   },
+   "teardown": [
+    "0x40C260",
+    "0x40EBC0"
+   ]
+  },
+  {
+   "line": 398,
+   "object": "aiStrategy",
+   "function": "createAreaCondition",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4531A0",
+    "D1": "0x4531E0",
+    "checkObjectRange": "0x453560",
+    "executeObjectMethod": "0x453C80",
+    "getObjectRange": "0x453480",
+    "getObjectRangeAsString": "0x4534A0",
+    "getReturnValueAsString": "0x453200",
+    "isObjectActive": "0x453440",
+    "objectHasRange": "0x453470",
+    "setArgFromString": "0x453570"
+   },
+   "teardown": [
+    "0x40C280",
+    "0x40EC10",
+    "0x40EC60"
+   ]
+  },
+  {
+   "line": 399,
+   "object": "aiStrategy",
+   "function": "setConditionStrength",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x453DE0",
+    "D1": "0x453E20",
+    "checkObjectRange": "0x453FA0",
+    "executeObjectMethod": "0x4541F0",
+    "getObjectRange": "0x453EC0",
+    "getObjectRangeAsString": "0x453EE0",
+    "getReturnValueAsString": "0x453E40",
+    "isObjectActive": "0x453E80",
+    "objectHasRange": "0x453EB0",
+    "setArgFromString": "0x453FB0"
+   },
+   "teardown": [
+    "0x40C2A0"
+   ]
+  },
+  {
+   "line": 400,
+   "object": "aiStrategy",
+   "function": "getConditionStrength",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x454240",
+    "D1": "0x454280",
+    "checkObjectRange": "0x454600",
+    "executeObjectMethod": "0x454620",
+    "getObjectRange": "0x454520",
+    "getObjectRangeAsString": "0x454540",
+    "getReturnValueAsString": "0x4542A0",
+    "isObjectActive": "0x4544E0",
+    "objectHasRange": "0x454510",
+    "setArgFromString": "0x454610"
+   },
+   "teardown": [
+    "0x40C2C0"
+   ]
+  },
+  {
+   "line": 401,
+   "object": "aiStrategy",
+   "function": "setIsAbortCondition",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x454680",
+    "D1": "0x4546C0",
+    "checkObjectRange": "0x454840",
+    "executeObjectMethod": "0x454A90",
+    "getObjectRange": "0x454760",
+    "getObjectRangeAsString": "0x454780",
+    "getReturnValueAsString": "0x4546E0",
+    "isObjectActive": "0x454720",
+    "objectHasRange": "0x454750",
+    "setArgFromString": "0x454850"
+   },
+   "teardown": [
+    "0x40C2E0"
+   ]
+  },
+  {
+   "line": 402,
+   "object": "aiStrategy",
+   "function": "isAbortCondition",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x454AE0",
+    "D1": "0x454B20",
+    "checkObjectRange": "0x454EA0",
+    "executeObjectMethod": "0x454EC0",
+    "getObjectRange": "0x454DC0",
+    "getObjectRangeAsString": "0x454DE0",
+    "getReturnValueAsString": "0x454B40",
+    "isObjectActive": "0x454D80",
+    "objectHasRange": "0x454DB0",
+    "setArgFromString": "0x454EB0"
+   },
+   "teardown": [
+    "0x40C300"
+   ]
+  },
+  {
+   "line": 403,
+   "object": "aiStrategy",
+   "function": "completeConditions",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x454F20",
+    "D1": "0x454F60",
+    "checkObjectRange": "0x4550E0",
+    "executeObjectMethod": "0x455100",
+    "getObjectRange": "0x455000",
+    "getObjectRangeAsString": "0x455020",
+    "getReturnValueAsString": "0x454F80",
+    "isObjectActive": "0x454FC0",
+    "objectHasRange": "0x454FF0",
+    "setArgFromString": "0x4550F0"
+   },
+   "teardown": [
+    "0x40C320"
+   ]
+  },
+  {
+   "line": 404,
+   "object": "aiStrategy",
+   "function": "targetValue",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x455140",
+    "D1": "0x455180",
+    "checkObjectRange": "0x455500",
+    "executeObjectMethod": "0x455750",
+    "getObjectRange": "0x455420",
+    "getObjectRangeAsString": "0x455440",
+    "getReturnValueAsString": "0x4551A0",
+    "isObjectActive": "0x4553E0",
+    "objectHasRange": "0x455410",
+    "setArgFromString": "0x455510"
+   },
+   "teardown": [
+    "0x40C340"
+   ]
+  },
+  {
+   "line": 407,
+   "object": "aiStrategy",
+   "function": "forceStrategy",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4557E0",
+    "D1": "0x455850",
+    "checkObjectRange": "0x455C20",
+    "executeObjectMethod": "0x4560E0",
+    "getObjectRange": "0x455B40",
+    "getObjectRangeAsString": "0x455B60",
+    "getReturnValueAsString": "0x4558C0",
+    "isObjectActive": "0x455B00",
+    "objectHasRange": "0x455B30",
+    "setArgFromString": "0x455C30"
+   },
+   "teardown": [
+    "0x40C360",
+    "0x40ECB0"
+   ]
+  },
+  {
+   "line": 408,
+   "object": "aiStrategy",
+   "function": "enableDebug",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4561F0",
+    "D1": "0x456230",
+    "checkObjectRange": "0x4565B0",
+    "executeObjectMethod": "0x456800",
+    "getObjectRange": "0x4564D0",
+    "getObjectRangeAsString": "0x4564F0",
+    "getReturnValueAsString": "0x456250",
+    "isObjectActive": "0x456490",
+    "objectHasRange": "0x4564C0",
+    "setArgFromString": "0x4565C0"
+   },
+   "teardown": [
+    "0x40C3D0"
+   ]
+  },
+  {
+   "line": 411,
+   "object": "aiStrategy",
+   "function": "thresholdSpeed",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x456890",
+    "D1": "0x4568D0",
+    "checkObjectRange": "0x456C40",
+    "executeObjectMethod": "0x456E90",
+    "getObjectRange": "0x456B60",
+    "getObjectRangeAsString": "0x456B80",
+    "getReturnValueAsString": "0x4568F0",
+    "isObjectActive": "0x456B30",
+    "objectHasRange": "0x456B50",
+    "setArgFromString": "0x456C50"
+   },
+   "teardown": [
+    "0x40C3F0"
+   ]
+  },
+  {
+   "line": 417,
+   "object": "AIStrategicArea",
+   "function": "create",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x456F10",
+    "D1": "0x456F50",
+    "checkObjectRange": "0x4572D0",
+    "executeObjectMethod": "0x4580E0",
+    "getObjectRange": "0x4571F0",
+    "getObjectRangeAsString": "0x457210",
+    "getReturnValueAsString": "0x456F70",
+    "isObjectActive": "0x4571B0",
+    "objectHasRange": "0x4571E0",
+    "setArgFromString": "0x4572E0"
+   },
+   "teardown": [
+    "0x40C410",
+    "0x40ED00",
+    "0x40ED50"
+   ]
+  },
+  {
+   "line": 418,
+   "object": "AIStrategicArea",
+   "function": "setFlankPosition",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x458430",
+    "D1": "0x458470",
+    "checkObjectRange": "0x4585F0",
+    "executeObjectMethod": "0x458BC0",
+    "getObjectRange": "0x458510",
+    "getObjectRangeAsString": "0x458530",
+    "getReturnValueAsString": "0x458490",
+    "isObjectActive": "0x4584D0",
+    "objectHasRange": "0x458500",
+    "setArgFromString": "0x458600"
+   },
+   "teardown": [
+    "0x40C430"
+   ]
+  },
+  {
+   "line": 419,
+   "object": "AIStrategicArea",
+   "function": "createFromControlPoint",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x458C60",
+    "D1": "0x458CA0",
+    "checkObjectRange": "0x459020",
+    "executeObjectMethod": "0x459950",
+    "getObjectRange": "0x458F40",
+    "getObjectRangeAsString": "0x458F60",
+    "getReturnValueAsString": "0x458CC0",
+    "isObjectActive": "0x458F00",
+    "objectHasRange": "0x458F30",
+    "setArgFromString": "0x459030"
+   },
+   "teardown": [
+    "0x40C450",
+    "0x40EDA0",
+    "0x40EDF0"
+   ]
+  },
+  {
+   "line": 420,
+   "object": "AIStrategicArea",
+   "function": "removeActive",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x459B30",
+    "D1": "0x459B70",
+    "checkObjectRange": "0x459EF0",
+    "executeObjectMethod": "0x459F10",
+    "getObjectRange": "0x459E10",
+    "getObjectRangeAsString": "0x459E30",
+    "getReturnValueAsString": "0x459B90",
+    "isObjectActive": "0x459DD0",
+    "objectHasRange": "0x459E00",
+    "setArgFromString": "0x459F00"
+   },
+   "teardown": [
+    "0x40C470"
+   ]
+  },
+  {
+   "line": 421,
+   "object": "AIStrategicArea",
+   "function": "setActive",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x459F70",
+    "D1": "0x459FB0",
+    "checkObjectRange": "0x45A330",
+    "executeObjectMethod": "0x45A5C0",
+    "getObjectRange": "0x45A250",
+    "getObjectRangeAsString": "0x45A270",
+    "getReturnValueAsString": "0x459FD0",
+    "isObjectActive": "0x45A210",
+    "objectHasRange": "0x45A240",
+    "setArgFromString": "0x45A340"
+   },
+   "teardown": [
+    "0x40C490",
+    "0x40EE40"
+   ]
+  },
+  {
+   "line": 422,
+   "object": "AIStrategicArea",
+   "function": "getActive",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x45A6A0",
+    "D1": "0x45A710",
+    "checkObjectRange": "0x45AAE0",
+    "executeObjectMethod": "0x45AB00",
+    "getObjectRange": "0x45AA00",
+    "getObjectRangeAsString": "0x45AA20",
+    "getReturnValueAsString": "0x45A780",
+    "isObjectActive": "0x45A9C0",
+    "objectHasRange": "0x45A9F0",
+    "setArgFromString": "0x45AAF0"
+   },
+   "teardown": [
+    "0x40C4B0"
+   ]
+  },
+  {
+   "line": 423,
+   "object": "AIStrategicArea",
+   "function": "addNeighbour",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x45AB90",
+    "D1": "0x45ABD0",
+    "checkObjectRange": "0x45AF50",
+    "executeObjectMethod": "0x45B1E0",
+    "getObjectRange": "0x45AE70",
+    "getObjectRangeAsString": "0x45AE90",
+    "getReturnValueAsString": "0x45ABF0",
+    "isObjectActive": "0x45AE30",
+    "objectHasRange": "0x45AE60",
+    "setArgFromString": "0x45AF60"
+   },
+   "teardown": [
+    "0x40C520",
+    "0x40EE90"
+   ]
+  },
+  {
+   "line": 424,
+   "object": "AIStrategicArea",
+   "function": "addTwoWayNeighbour",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x45B2C0",
+    "D1": "0x45B300",
+    "checkObjectRange": "0x45B680",
+    "executeObjectMethod": "0x45BB80",
+    "getObjectRange": "0x45B5A0",
+    "getObjectRangeAsString": "0x45B5C0",
+    "getReturnValueAsString": "0x45B320",
+    "isObjectActive": "0x45B560",
+    "objectHasRange": "0x45B590",
+    "setArgFromString": "0x45B690"
+   },
+   "teardown": [
+    "0x40C540",
+    "0x40EEE0",
+    "0x40EF30"
+   ]
+  },
+  {
+   "line": 425,
+   "object": "AIStrategicArea",
+   "function": "getNeighbours",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x45BCD0",
+    "D1": "0x45BD40",
+    "checkObjectRange": "0x45C110",
+    "executeObjectMethod": "0x45C130",
+    "getObjectRange": "0x45C030",
+    "getObjectRangeAsString": "0x45C050",
+    "getReturnValueAsString": "0x45BDB0",
+    "isObjectActive": "0x45BFF0",
+    "objectHasRange": "0x45C020",
+    "setArgFromString": "0x45C120"
+   },
+   "teardown": [
+    "0x40C560"
+   ]
+  },
+  {
+   "line": 426,
+   "object": "AIStrategicArea",
+   "function": "layer",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x45C1C0",
+    "D1": "0x45C200",
+    "checkObjectRange": "0x45C5B0",
+    "executeObjectMethod": "0x45C800",
+    "getObjectRange": "0x45C4D0",
+    "getObjectRangeAsString": "0x45C4F0",
+    "getReturnValueAsString": "0x45C220",
+    "isObjectActive": "0x45C490",
+    "objectHasRange": "0x45C4C0",
+    "setArgFromString": "0x45C5C0"
+   },
+   "teardown": [
+    "0x40C5D0"
+   ]
+  },
+  {
+   "line": 427,
+   "object": "AIStrategicArea",
+   "function": "setVisible",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x45C880",
+    "D1": "0x45C8C0",
+    "checkObjectRange": "0x45CA40",
+    "executeObjectMethod": "0x45CC90",
+    "getObjectRange": "0x45C960",
+    "getObjectRangeAsString": "0x45C980",
+    "getReturnValueAsString": "0x45C8E0",
+    "isObjectActive": "0x45C920",
+    "objectHasRange": "0x45C950",
+    "setArgFromString": "0x45CA50"
+   },
+   "teardown": [
+    "0x40C5F0"
+   ],
+   "inlineEvidence": {
+    "address": "0x45CC90",
+    "size": 72,
+    "sha256": "70f551d5a2a464056062eb3d30f35b51337d7b4d7bfb2370cd10780e89259fa0",
+    "description": "normalized visibility store"
+   }
+  },
+  {
+   "line": 428,
+   "object": "AIStrategicArea",
+   "function": "getVisible",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x45CCE0",
+    "D1": "0x45CD20",
+    "checkObjectRange": "0x45D0A0",
+    "executeObjectMethod": "0x45D0C0",
+    "getObjectRange": "0x45CFC0",
+    "getObjectRangeAsString": "0x45CFE0",
+    "getReturnValueAsString": "0x45CD40",
+    "isObjectActive": "0x45CF80",
+    "objectHasRange": "0x45CFB0",
+    "setArgFromString": "0x45D0B0"
+   },
+   "teardown": [
+    "0x40C610"
+   ],
+   "inlineEvidence": {
+    "address": "0x45D0C0",
+    "size": 84,
+    "sha256": "b651ba868b5e8a4a4c9f21db25f2997ffc91cda64407b40c4c8b59c5f6cc272a",
+    "description": "normalized visibility load"
+   }
+  },
+  {
+   "line": 429,
+   "object": "AIStrategicArea",
+   "function": "drawVehicleSearchRadi",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x45D120",
+    "D1": "0x45D160",
+    "checkObjectRange": "0x45D4E0",
+    "executeObjectMethod": "0x45D730",
+    "getObjectRange": "0x45D400",
+    "getObjectRangeAsString": "0x45D420",
+    "getReturnValueAsString": "0x45D180",
+    "isObjectActive": "0x45D3C0",
+    "objectHasRange": "0x45D3F0",
+    "setArgFromString": "0x45D4F0"
+   },
+   "teardown": [
+    "0x40C630"
+   ],
+   "inlineEvidence": {
+    "address": "0x45D730",
+    "size": 110,
+    "sha256": "2f6dd52dcb795778ba546bf6ac69e7ce452a75dd54e10d77370b8e8e94ed44bf",
+    "description": "vehicle-search-radius drawing switch"
+   }
+  },
+  {
+   "line": 430,
+   "object": "AIStrategicArea",
+   "function": "removeAllNeighbours",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x45D7A0",
+    "D1": "0x45D7E0",
+    "checkObjectRange": "0x45D960",
+    "executeObjectMethod": "0x45D980",
+    "getObjectRange": "0x45D880",
+    "getObjectRangeAsString": "0x45D8A0",
+    "getReturnValueAsString": "0x45D800",
+    "isObjectActive": "0x45D840",
+    "objectHasRange": "0x45D870",
+    "setArgFromString": "0x45D970"
+   },
+   "teardown": [
+    "0x40C650"
+   ]
+  },
+  {
+   "line": 431,
+   "object": "AIStrategicArea",
+   "function": "setPosition",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x45D9C0",
+    "D1": "0x45DA00",
+    "checkObjectRange": "0x45DB80",
+    "executeObjectMethod": "0x45DE30",
+    "getObjectRange": "0x45DAA0",
+    "getObjectRangeAsString": "0x45DAC0",
+    "getReturnValueAsString": "0x45DA20",
+    "isObjectActive": "0x45DA60",
+    "objectHasRange": "0x45DA90",
+    "setArgFromString": "0x45DB90"
+   },
+   "teardown": [
+    "0x40C670"
+   ]
+  },
+  {
+   "line": 432,
+   "object": "AIStrategicArea",
+   "function": "getPosition",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x45DE90",
+    "D1": "0x45DED0",
+    "checkObjectRange": "0x45E280",
+    "executeObjectMethod": "0x45E2A0",
+    "getObjectRange": "0x45E1A0",
+    "getObjectRangeAsString": "0x45E1C0",
+    "getReturnValueAsString": "0x45DEF0",
+    "isObjectActive": "0x45E160",
+    "objectHasRange": "0x45E190",
+    "setArgFromString": "0x45E290"
+   },
+   "teardown": [
+    "0x40C690"
+   ]
+  },
+  {
+   "line": 433,
+   "object": "AIStrategicArea",
+   "function": "centerPosition",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x45E320",
+    "D1": "0x45E360",
+    "checkObjectRange": "0x45E710",
+    "executeObjectMethod": "0x45E9C0",
+    "getObjectRange": "0x45E630",
+    "getObjectRangeAsString": "0x45E650",
+    "getReturnValueAsString": "0x45E380",
+    "isObjectActive": "0x45E5F0",
+    "objectHasRange": "0x45E620",
+    "setArgFromString": "0x45E720"
+   },
+   "teardown": [
+    "0x40C6B0"
+   ]
+  },
+  {
+   "line": 434,
+   "object": "AIStrategicArea",
+   "function": "topLeftCorner",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x45EA50",
+    "D1": "0x45EA90",
+    "checkObjectRange": "0x45EE40",
+    "executeObjectMethod": "0x45F0F0",
+    "getObjectRange": "0x45ED60",
+    "getObjectRangeAsString": "0x45ED80",
+    "getReturnValueAsString": "0x45EAB0",
+    "isObjectActive": "0x45ED20",
+    "objectHasRange": "0x45ED50",
+    "setArgFromString": "0x45EE50"
+   },
+   "teardown": [
+    "0x40C6D0"
+   ]
+  },
+  {
+   "line": 435,
+   "object": "AIStrategicArea",
+   "function": "list",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x45F180",
+    "D1": "0x45F1F0",
+    "checkObjectRange": "0x45F5C0",
+    "executeObjectMethod": "0x45F5E0",
+    "getObjectRange": "0x45F4E0",
+    "getObjectRangeAsString": "0x45F500",
+    "getReturnValueAsString": "0x45F260",
+    "isObjectActive": "0x45F4A0",
+    "objectHasRange": "0x45F4D0",
+    "setArgFromString": "0x45F5D0"
+   },
+   "teardown": [
+    "0x40C6F0"
+   ]
+  },
+  {
+   "line": 436,
+   "object": "AIStrategicArea",
+   "function": "addObjectTypeFlag",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x45F670",
+    "D1": "0x45F6B0",
+    "checkObjectRange": "0x45FA60",
+    "executeObjectMethod": "0x45FCB0",
+    "getObjectRange": "0x45F980",
+    "getObjectRangeAsString": "0x45F9A0",
+    "getReturnValueAsString": "0x45F6D0",
+    "isObjectActive": "0x45F940",
+    "objectHasRange": "0x45F970",
+    "setArgFromString": "0x45FA70"
+   },
+   "teardown": [
+    "0x40C760"
+   ]
+  },
+  {
+   "line": 437,
+   "object": "AIStrategicArea",
+   "function": "setObjectTypeFlags",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x45FD20",
+    "D1": "0x45FD60",
+    "checkObjectRange": "0x460110",
+    "executeObjectMethod": "0x460360",
+    "getObjectRange": "0x460030",
+    "getObjectRangeAsString": "0x460050",
+    "getReturnValueAsString": "0x45FD80",
+    "isObjectActive": "0x45FFF0",
+    "objectHasRange": "0x460020",
+    "setArgFromString": "0x460120"
+   },
+   "teardown": [
+    "0x40C780"
+   ]
+  },
+  {
+   "line": 438,
+   "object": "AIStrategicArea",
+   "function": "getObjectTypeFlags",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4603D0",
+    "D1": "0x460410",
+    "checkObjectRange": "0x4607C0",
+    "executeObjectMethod": "0x4607E0",
+    "getObjectRange": "0x4606E0",
+    "getObjectRangeAsString": "0x460700",
+    "getReturnValueAsString": "0x460430",
+    "isObjectActive": "0x4606A0",
+    "objectHasRange": "0x4606D0",
+    "setArgFromString": "0x4607D0"
+   },
+   "teardown": [
+    "0x40C7A0"
+   ]
+  },
+  {
+   "line": 439,
+   "object": "AIStrategicArea",
+   "function": "removeObjectTypeFlag",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x460840",
+    "D1": "0x460880",
+    "checkObjectRange": "0x460C30",
+    "executeObjectMethod": "0x460E80",
+    "getObjectRange": "0x460B50",
+    "getObjectRangeAsString": "0x460B70",
+    "getReturnValueAsString": "0x4608A0",
+    "isObjectActive": "0x460B10",
+    "objectHasRange": "0x460B40",
+    "setArgFromString": "0x460C40"
+   },
+   "teardown": [
+    "0x40C7C0"
+   ]
+  },
+  {
+   "line": 440,
+   "object": "AIStrategicArea",
+   "function": "setStatus",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x460EF0",
+    "D1": "0x460F30",
+    "checkObjectRange": "0x4612B0",
+    "executeObjectMethod": "0x461740",
+    "getObjectRange": "0x4611D0",
+    "getObjectRangeAsString": "0x4611F0",
+    "getReturnValueAsString": "0x460F50",
+    "isObjectActive": "0x461190",
+    "objectHasRange": "0x4611C0",
+    "setArgFromString": "0x4612C0"
+   },
+   "teardown": [
+    "0x40C7E0"
+   ],
+   "inlineEvidence": {
+    "address": "0x461740",
+    "size": 101,
+    "sha256": "663cb0d80b8c36e799770bf010c0786f0ce063d3ecdf206b2a7e209324926718",
+    "description": "unchecked status stores: saved pair first, current pair second, then return the status"
+   }
+  },
+  {
+   "line": 441,
+   "object": "AIStrategicArea",
+   "function": "category",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4617B0",
+    "D1": "0x4617F0",
+    "checkObjectRange": "0x461BA0",
+    "executeObjectMethod": "0x461DF0",
+    "getObjectRange": "0x461AC0",
+    "getObjectRangeAsString": "0x461AE0",
+    "getReturnValueAsString": "0x461810",
+    "isObjectActive": "0x461A80",
+    "objectHasRange": "0x461AB0",
+    "setArgFromString": "0x461BB0"
+   },
+   "teardown": [
+    "0x40C800"
+   ],
+   "inlineEvidence": {
+    "address": "0x461DF0",
+    "size": 113,
+    "sha256": "c9302556a9016ff9ef3f983087487a3d27d38739848818e3fc9a5ea77125d06c",
+    "description": "inherited category property"
+   }
+  },
+  {
+   "line": 442,
+   "object": "AIStrategicArea",
+   "function": "vehicleSearchRadius",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x461E70",
+    "D1": "0x461EB0",
+    "checkObjectRange": "0x462230",
+    "executeObjectMethod": "0x462480",
+    "getObjectRange": "0x462150",
+    "getObjectRangeAsString": "0x462170",
+    "getReturnValueAsString": "0x461ED0",
+    "isObjectActive": "0x462110",
+    "objectHasRange": "0x462140",
+    "setArgFromString": "0x462240"
+   },
+   "teardown": [
+    "0x40C820"
+   ]
+  },
+  {
+   "line": 443,
+   "object": "AIStrategicArea",
+   "function": "setTakeable",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x462500",
+    "D1": "0x462540",
+    "checkObjectRange": "0x4626C0",
+    "executeObjectMethod": "0x462B50",
+    "getObjectRange": "0x4625E0",
+    "getObjectRangeAsString": "0x462600",
+    "getReturnValueAsString": "0x462560",
+    "isObjectActive": "0x4625A0",
+    "objectHasRange": "0x4625D0",
+    "setArgFromString": "0x4626D0"
+   },
+   "teardown": [
+    "0x40C840"
+   ],
+   "inlineEvidence": {
+    "address": "0x462B50",
+    "size": 87,
+    "sha256": "554e07cdb7ab07a0e31f6757c6bea5d84f35b93a99ab002f575fff27af78eb70",
+    "description": "unchecked one-based takeability store"
+   }
+  },
+  {
+   "line": 444,
+   "object": "AIStrategicArea",
+   "function": "isTakeable",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x462BB0",
+    "D1": "0x462BF0",
+    "checkObjectRange": "0x462F70",
+    "executeObjectMethod": "0x4631C0",
+    "getObjectRange": "0x462E90",
+    "getObjectRangeAsString": "0x462EB0",
+    "getReturnValueAsString": "0x462C10",
+    "isObjectActive": "0x462E50",
+    "objectHasRange": "0x462E80",
+    "setArgFromString": "0x462F80"
+   },
+   "teardown": [
+    "0x40C860"
+   ],
+   "inlineEvidence": {
+    "address": "0x4631C0",
+    "size": 89,
+    "sha256": "24c16e3fb313bfb355c63d2833e1b07caec13cf5afe31bae0dc58ca9ccbeebc6",
+    "description": "unchecked one-based takeability load"
+   }
+  },
+  {
+   "line": 445,
+   "object": "AIStrategicArea",
+   "function": "removeAllObjectTypeFlags",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x463220",
+    "D1": "0x463260",
+    "checkObjectRange": "0x4633E0",
+    "executeObjectMethod": "0x463400",
+    "getObjectRange": "0x463300",
+    "getObjectRangeAsString": "0x463320",
+    "getReturnValueAsString": "0x463280",
+    "isObjectActive": "0x4632C0",
+    "objectHasRange": "0x4632F0",
+    "setArgFromString": "0x4633F0"
+   },
+   "teardown": [
+    "0x40C880"
+   ]
+  },
+  {
+   "line": 446,
+   "object": "AIStrategicArea",
+   "function": "getObjectTypeFlagMapping",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x463440",
+    "D1": "0x4634B0",
+    "checkObjectRange": "0x463880",
+    "executeObjectMethod": "0x4638A0",
+    "getObjectRange": "0x4637A0",
+    "getObjectRangeAsString": "0x4637C0",
+    "getReturnValueAsString": "0x463520",
+    "isObjectActive": "0x463760",
+    "objectHasRange": "0x463790",
+    "setArgFromString": "0x463890"
+   },
+   "teardown": [
+    "0x40C8A0"
+   ]
+  },
+  {
+   "line": 447,
+   "object": "AIStrategicArea",
+   "function": "basicTemperature",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x463930",
+    "D1": "0x463970",
+    "checkObjectRange": "0x463CF0",
+    "executeObjectMethod": "0x463F40",
+    "getObjectRange": "0x463C10",
+    "getObjectRangeAsString": "0x463C30",
+    "getReturnValueAsString": "0x463990",
+    "isObjectActive": "0x463BD0",
+    "objectHasRange": "0x463C00",
+    "setArgFromString": "0x463D00"
+   },
+   "teardown": [
+    "0x40C910"
+   ],
+   "inlineEvidence": {
+    "address": "0x463F40",
+    "size": 113,
+    "sha256": "6b0dd9a2da4b12dba0448967ac7d44293f3c5b2585830e2605d15f7554c7fb5a",
+    "description": "inherited baseline temperature, the first word of the shared temperature/radius storage"
+   }
+  },
+  {
+   "line": 448,
+   "object": "AIStrategicArea",
+   "function": "setOrderPosition",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x463FC0",
+    "D1": "0x464000",
+    "checkObjectRange": "0x464380",
+    "executeObjectMethod": "0x4648F0",
+    "getObjectRange": "0x4642A0",
+    "getObjectRangeAsString": "0x4642C0",
+    "getReturnValueAsString": "0x464020",
+    "isObjectActive": "0x464260",
+    "objectHasRange": "0x464290",
+    "setArgFromString": "0x464390"
+   },
+   "teardown": [
+    "0x40C930",
+    "0x40EF80"
+   ]
+  },
+  {
+   "line": 449,
+   "object": "AIStrategicArea",
+   "function": "getOrderPosition",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4649E0",
+    "D1": "0x464A20",
+    "checkObjectRange": "0x464E00",
+    "executeObjectMethod": "0x465090",
+    "getObjectRange": "0x464D20",
+    "getObjectRangeAsString": "0x464D40",
+    "getReturnValueAsString": "0x464A40",
+    "isObjectActive": "0x464CE0",
+    "objectHasRange": "0x464D10",
+    "setArgFromString": "0x464E10"
+   },
+   "teardown": [
+    "0x40C950",
+    "0x40EFD0"
+   ]
+  },
+  {
+   "line": 450,
+   "object": "AIStrategicArea",
+   "function": "listOrderPositions",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x465180",
+    "D1": "0x4651F0",
+    "checkObjectRange": "0x4655C0",
+    "executeObjectMethod": "0x4655E0",
+    "getObjectRange": "0x4654E0",
+    "getObjectRangeAsString": "0x465500",
+    "getReturnValueAsString": "0x465260",
+    "isObjectActive": "0x4654A0",
+    "objectHasRange": "0x4654D0",
+    "setArgFromString": "0x4655D0"
+   },
+   "teardown": [
+    "0x40C970"
+   ]
+  },
+  {
+   "line": 451,
+   "object": "AIStrategicArea",
+   "function": "addWayPoint",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x465670",
+    "D1": "0x4656B0",
+    "checkObjectRange": "0x465830",
+    "executeObjectMethod": "0x466290",
+    "getObjectRange": "0x465750",
+    "getObjectRangeAsString": "0x465770",
+    "getReturnValueAsString": "0x4656D0",
+    "isObjectActive": "0x465710",
+    "objectHasRange": "0x465740",
+    "setArgFromString": "0x465840"
+   },
+   "teardown": [
+    "0x40C9E0",
+    "0x40F020",
+    "0x40F070",
+    "0x40F0C0"
+   ]
+  },
+  {
+   "line": 452,
+   "object": "AIStrategicArea",
+   "function": "removeWayPoint",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4663C0",
+    "D1": "0x466400",
+    "checkObjectRange": "0x466780",
+    "executeObjectMethod": "0x4671E0",
+    "getObjectRange": "0x4666A0",
+    "getObjectRangeAsString": "0x4666C0",
+    "getReturnValueAsString": "0x466420",
+    "isObjectActive": "0x466660",
+    "objectHasRange": "0x466690",
+    "setArgFromString": "0x466790"
+   },
+   "teardown": [
+    "0x40CA00",
+    "0x40F110",
+    "0x40F160",
+    "0x40F1B0"
+   ]
+  },
+  {
+   "line": 453,
+   "object": "AIStrategicArea",
+   "function": "clearWayPoints",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x467320",
+    "D1": "0x467360",
+    "checkObjectRange": "0x4674E0",
+    "executeObjectMethod": "0x467C40",
+    "getObjectRange": "0x467400",
+    "getObjectRangeAsString": "0x467420",
+    "getReturnValueAsString": "0x467380",
+    "isObjectActive": "0x4673C0",
+    "objectHasRange": "0x4673F0",
+    "setArgFromString": "0x4674F0"
+   },
+   "teardown": [
+    "0x40CA20",
+    "0x40F200",
+    "0x40F250",
+    "0x40F2A0"
+   ]
+  },
+  {
+   "line": 454,
+   "object": "AIStrategicArea",
+   "function": "setWayPointsToDraw",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x467D40",
+    "D1": "0x467D80",
+    "checkObjectRange": "0x467F00",
+    "executeObjectMethod": "0x468400",
+    "getObjectRange": "0x467E20",
+    "getObjectRangeAsString": "0x467E40",
+    "getReturnValueAsString": "0x467DA0",
+    "isObjectActive": "0x467DE0",
+    "objectHasRange": "0x467E10",
+    "setArgFromString": "0x467F10"
+   },
+   "teardown": [
+    "0x40CA40",
+    "0x40F2F0",
+    "0x40F340"
+   ]
+  },
+  {
+   "line": 455,
+   "object": "AIStrategicArea",
+   "function": "clearWaypointToDraw",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4684D0",
+    "D1": "0x468510",
+    "checkObjectRange": "0x468690",
+    "executeObjectMethod": "0x4686B0",
+    "getObjectRange": "0x4685B0",
+    "getObjectRangeAsString": "0x4685D0",
+    "getReturnValueAsString": "0x468530",
+    "isObjectActive": "0x468570",
+    "objectHasRange": "0x4685A0",
+    "setArgFromString": "0x4686A0"
+   },
+   "teardown": [
+    "0x40CA60"
+   ]
+  },
+  {
+   "line": 456,
+   "object": "AIStrategicArea",
+   "function": "setSide",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4686F0",
+    "D1": "0x468730",
+    "checkObjectRange": "0x4688B0",
+    "executeObjectMethod": "0x468B00",
+    "getObjectRange": "0x4687D0",
+    "getObjectRangeAsString": "0x4687F0",
+    "getReturnValueAsString": "0x468750",
+    "isObjectActive": "0x468790",
+    "objectHasRange": "0x4687C0",
+    "setArgFromString": "0x4688C0"
+   },
+   "teardown": [
+    "0x40CA80"
+   ]
+  },
+  {
+   "line": 457,
+   "object": "AIStrategicArea",
+   "function": "getSide",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x468B50",
+    "D1": "0x468B90",
+    "checkObjectRange": "0x468F40",
+    "executeObjectMethod": "0x468F60",
+    "getObjectRange": "0x468E60",
+    "getObjectRangeAsString": "0x468E80",
+    "getReturnValueAsString": "0x468BB0",
+    "isObjectActive": "0x468E20",
+    "objectHasRange": "0x468E50",
+    "setArgFromString": "0x468F50"
+   },
+   "teardown": [
+    "0x40CAA0"
+   ]
+  },
+  {
+   "line": 458,
+   "object": "AIStrategicArea",
+   "function": "enableDebug",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x468FC0",
+    "D1": "0x469000",
+    "checkObjectRange": "0x469380",
+    "executeObjectMethod": "0x4695D0",
+    "getObjectRange": "0x4692A0",
+    "getObjectRangeAsString": "0x4692C0",
+    "getReturnValueAsString": "0x469020",
+    "isObjectActive": "0x469260",
+    "objectHasRange": "0x469290",
+    "setArgFromString": "0x469390"
+   },
+   "teardown": [
+    "0x40CAC0"
+   ],
+   "inlineEvidence": {
+    "address": "0x4695D0",
+    "size": 86,
+    "sha256": "ec8d8d36a7911c2cf3c366a44bd85fce4d0d76b85118585d2f1b2e3a0816a066",
+    "description": "store and return the debug switch"
+   }
+  },
+  {
+   "line": 459,
+   "object": "AIStrategicArea",
+   "function": "addAllowedVehicleGroup",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x469630",
+    "D1": "0x469670",
+    "checkObjectRange": "0x4697F0",
+    "executeObjectMethod": "0x469A80",
+    "getObjectRange": "0x469710",
+    "getObjectRangeAsString": "0x469730",
+    "getReturnValueAsString": "0x469690",
+    "isObjectActive": "0x4696D0",
+    "objectHasRange": "0x469700",
+    "setArgFromString": "0x469800"
+   },
+   "teardown": [
+    "0x40CAE0",
+    "0x40F390"
+   ]
+  },
+  {
+   "line": 460,
+   "object": "AIStrategicArea",
+   "function": "attachLandingZone",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x469B10",
+    "D1": "0x469B50",
+    "checkObjectRange": "0x469CD0",
+    "executeObjectMethod": "0x469F60",
+    "getObjectRange": "0x469BF0",
+    "getObjectRangeAsString": "0x469C10",
+    "getReturnValueAsString": "0x469B70",
+    "isObjectActive": "0x469BB0",
+    "objectHasRange": "0x469BE0",
+    "setArgFromString": "0x469CE0"
+   },
+   "teardown": [
+    "0x40CB00",
+    "0x40F3E0"
+   ]
+  },
+  {
+   "line": 461,
+   "object": "AIStrategicArea",
+   "function": "listLandingZones",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x46A010",
+    "D1": "0x46A080",
+    "checkObjectRange": "0x46A450",
+    "executeObjectMethod": "0x46A470",
+    "getObjectRange": "0x46A370",
+    "getObjectRangeAsString": "0x46A390",
+    "getReturnValueAsString": "0x46A0F0",
+    "isObjectActive": "0x46A330",
+    "objectHasRange": "0x46A360",
+    "setArgFromString": "0x46A460"
+   },
+   "teardown": [
+    "0x40CB20"
+   ]
+  },
+  {
+   "line": 462,
+   "object": "AIStrategicArea",
+   "function": "getTemperature",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x46A500",
+    "D1": "0x46A540",
+    "checkObjectRange": "0x46A8C0",
+    "executeObjectMethod": "0x46AB10",
+    "getObjectRange": "0x46A7E0",
+    "getObjectRangeAsString": "0x46A800",
+    "getReturnValueAsString": "0x46A560",
+    "isObjectActive": "0x46A7A0",
+    "objectHasRange": "0x46A7D0",
+    "setArgFromString": "0x46A8D0"
+   },
+   "teardown": [
+    "0x40CB90"
+   ],
+   "inlineEvidence": {
+    "address": "0x46AB10",
+    "size": 88,
+    "sha256": "8958ae349594e76793638adb2e9d9f859ec0e962174939d89ff0e3ef87b1f162",
+    "description": "unchecked one-based current-temperature load"
+   }
+  },
+  {
+   "line": 463,
+   "object": "AIStrategicArea",
+   "function": "getStatus",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x46AB70",
+    "D1": "0x46ABB0",
+    "checkObjectRange": "0x46AF30",
+    "executeObjectMethod": "0x46B180",
+    "getObjectRange": "0x46AE50",
+    "getObjectRangeAsString": "0x46AE70",
+    "getReturnValueAsString": "0x46ABD0",
+    "isObjectActive": "0x46AE10",
+    "objectHasRange": "0x46AE40",
+    "setArgFromString": "0x46AF40"
+   },
+   "teardown": [
+    "0x40CBB0"
+   ],
+   "inlineEvidence": {
+    "address": "0x46B180",
+    "size": 85,
+    "sha256": "c6fa6594539d33f2f2122575113ec3af1e47d944f5d7fff11d0020c2cf7880ee",
+    "description": "unchecked one-based current-status load"
+   }
+  },
+  {
+   "line": 464,
+   "object": "AIStrategicArea",
+   "function": "getNumberOfPresentUnits",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x46B1E0",
+    "D1": "0x46B220",
+    "checkObjectRange": "0x46B5D0",
+    "executeObjectMethod": "0x46B820",
+    "getObjectRange": "0x46B4F0",
+    "getObjectRangeAsString": "0x46B510",
+    "getReturnValueAsString": "0x46B240",
+    "isObjectActive": "0x46B4B0",
+    "objectHasRange": "0x46B4E0",
+    "setArgFromString": "0x46B5E0"
+   },
+   "teardown": [
+    "0x40CBD0"
+   ]
+  },
+  {
+   "line": 465,
+   "object": "AIStrategicArea",
+   "function": "getNumberOfAvailableAttackers",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x46B890",
+    "D1": "0x46B8D0",
+    "checkObjectRange": "0x46BC80",
+    "executeObjectMethod": "0x46BED0",
+    "getObjectRange": "0x46BBA0",
+    "getObjectRangeAsString": "0x46BBC0",
+    "getReturnValueAsString": "0x46B8F0",
+    "isObjectActive": "0x46BB60",
+    "objectHasRange": "0x46BB90",
+    "setArgFromString": "0x46BC90"
+   },
+   "teardown": [
+    "0x40CBF0"
+   ]
+  },
+  {
+   "line": 466,
+   "object": "AIStrategicArea",
+   "function": "getNumberOfAvailableDefenders",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x46BF40",
+    "D1": "0x46BF80",
+    "checkObjectRange": "0x46C330",
+    "executeObjectMethod": "0x46C580",
+    "getObjectRange": "0x46C250",
+    "getObjectRangeAsString": "0x46C270",
+    "getReturnValueAsString": "0x46BFA0",
+    "isObjectActive": "0x46C210",
+    "objectHasRange": "0x46C240",
+    "setArgFromString": "0x46C340"
+   },
+   "teardown": [
+    "0x40CC10"
+   ]
+  },
+  {
+   "line": 467,
+   "object": "AIStrategicArea",
+   "function": "getNumberOfAssignedUnits",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x46C5F0",
+    "D1": "0x46C630",
+    "checkObjectRange": "0x46C9E0",
+    "executeObjectMethod": "0x46CC30",
+    "getObjectRange": "0x46C900",
+    "getObjectRangeAsString": "0x46C920",
+    "getReturnValueAsString": "0x46C650",
+    "isObjectActive": "0x46C8C0",
+    "objectHasRange": "0x46C8F0",
+    "setArgFromString": "0x46C9F0"
+   },
+   "teardown": [
+    "0x40CC30"
+   ]
+  },
+  {
+   "line": 468,
+   "object": "AIStrategicArea",
+   "function": "getCategoryName",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x46CCA0",
+    "D1": "0x46CD10",
+    "checkObjectRange": "0x46D0E0",
+    "executeObjectMethod": "0x46D330",
+    "getObjectRange": "0x46D000",
+    "getObjectRangeAsString": "0x46D020",
+    "getReturnValueAsString": "0x46CD80",
+    "isObjectActive": "0x46CFC0",
+    "objectHasRange": "0x46CFF0",
+    "setArgFromString": "0x46D0F0"
+   },
+   "teardown": [
+    "0x40CC50"
+   ]
+  },
+  {
+   "line": 469,
+   "object": "AIStrategicArea",
+   "function": "getCategoryFromName",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x46D3A0",
+    "D1": "0x46D3E0",
+    "checkObjectRange": "0x46D790",
+    "executeObjectMethod": "0x46DA20",
+    "getObjectRange": "0x46D6B0",
+    "getObjectRangeAsString": "0x46D6D0",
+    "getReturnValueAsString": "0x46D400",
+    "isObjectActive": "0x46D670",
+    "objectHasRange": "0x46D6A0",
+    "setArgFromString": "0x46D7A0"
+   },
+   "teardown": [
+    "0x40CCC0",
+    "0x40F430"
+   ]
+  },
+  {
+   "line": 470,
+   "object": "AIStrategicArea",
+   "function": "createNewCategory",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x46DAC0",
+    "D1": "0x46DB00",
+    "checkObjectRange": "0x46DC80",
+    "executeObjectMethod": "0x46DF10",
+    "getObjectRange": "0x46DBA0",
+    "getObjectRangeAsString": "0x46DBC0",
+    "getReturnValueAsString": "0x46DB20",
+    "isObjectActive": "0x46DB60",
+    "objectHasRange": "0x46DB90",
+    "setArgFromString": "0x46DC90"
+   },
+   "teardown": [
+    "0x40CCE0",
+    "0x40F480"
+   ]
+  },
+  {
+   "line": 471,
+   "object": "AIStrategicArea",
+   "function": "showNeighbours",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x46DFA0",
+    "D1": "0x46DFE0",
+    "checkObjectRange": "0x46E360",
+    "executeObjectMethod": "0x46E5B0",
+    "getObjectRange": "0x46E280",
+    "getObjectRangeAsString": "0x46E2A0",
+    "getReturnValueAsString": "0x46E000",
+    "isObjectActive": "0x46E240",
+    "objectHasRange": "0x46E270",
+    "setArgFromString": "0x46E370"
+   },
+   "teardown": [
+    "0x40CD00"
+   ],
+   "inlineEvidence": {
+    "address": "0x46E5B0",
+    "size": 116,
+    "sha256": "1fc546d3121657ae43954c27fd1b20cb54073aaea216e4a940b07808a14868ac",
+    "description": "neighbour drawing switch"
+   }
+  },
+  {
+   "line": 472,
+   "object": "AIStrategicArea",
+   "function": "getStrategicAreaNames",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x46E630",
+    "D1": "0x46E6A0",
+    "checkObjectRange": "0x46EA70",
+    "executeObjectMethod": "0x46EA90",
+    "getObjectRange": "0x46E990",
+    "getObjectRangeAsString": "0x46E9B0",
+    "getReturnValueAsString": "0x46E710",
+    "isObjectActive": "0x46E950",
+    "objectHasRange": "0x46E980",
+    "setArgFromString": "0x46EA80"
+   },
+   "teardown": [
+    "0x40CD20"
+   ]
+  },
+  {
+   "line": 473,
+   "object": "AIStrategicArea",
+   "function": "isInside",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x46EB20",
+    "D1": "0x46EB60",
+    "checkObjectRange": "0x46EEE0",
+    "executeObjectMethod": "0x46F400",
+    "getObjectRange": "0x46EE00",
+    "getObjectRangeAsString": "0x46EE20",
+    "getReturnValueAsString": "0x46EB80",
+    "isObjectActive": "0x46EDC0",
+    "objectHasRange": "0x46EDF0",
+    "setArgFromString": "0x46EEF0"
+   },
+   "teardown": [
+    "0x40CD90",
+    "0x40F4D0"
+   ]
+  },
+  {
+   "line": 474,
+   "object": "AIStrategicArea",
+   "function": "strategicAreaName",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x46F4C0",
+    "D1": "0x46F530",
+    "checkObjectRange": "0x46F900",
+    "executeObjectMethod": "0x46FB90",
+    "getObjectRange": "0x46F820",
+    "getObjectRangeAsString": "0x46F840",
+    "getReturnValueAsString": "0x46F5A0",
+    "isObjectActive": "0x46F7E0",
+    "objectHasRange": "0x46F810",
+    "setArgFromString": "0x46F910"
+   },
+   "teardown": [
+    "0x40CDB0",
+    "0x40F520"
+   ],
+   "inlineEvidence": {
+    "address": "0x46FB90",
+    "size": 158,
+    "sha256": "254b0202f7b7c2e75a68208e4b8e81ebd96d0996a992b2d3e630ec4b517be8a6",
+    "description": "name load; shipped defect: setter copies and destroys the argument without assigning it"
+   }
+  },
+  {
+   "line": 476,
+   "object": "AIStrategicArea",
+   "function": "saveAll",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x46FC30",
+    "D1": "0x46FC70",
+    "checkObjectRange": "0x46FFE0",
+    "executeObjectMethod": "0x4704E0",
+    "getObjectRange": "0x46FF00",
+    "getObjectRangeAsString": "0x46FF20",
+    "getReturnValueAsString": "0x46FC90",
+    "isObjectActive": "0x46FED0",
+    "objectHasRange": "0x46FEF0",
+    "setArgFromString": "0x46FFF0"
+   },
+   "teardown": [
+    "0x40CE20",
+    "0x40F570",
+    "0x40F5C0"
+   ]
+  },
+  {
+   "line": 477,
+   "object": "AIStrategicArea",
+   "function": "addAllowedUnit",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4705D0",
+    "D1": "0x470610",
+    "checkObjectRange": "0x470780",
+    "executeObjectMethod": "0x470A10",
+    "getObjectRange": "0x4706A0",
+    "getObjectRangeAsString": "0x4706C0",
+    "getReturnValueAsString": "0x470630",
+    "isObjectActive": "0x470670",
+    "objectHasRange": "0x470690",
+    "setArgFromString": "0x470790"
+   },
+   "teardown": [
+    "0x40CE40",
+    "0x40F610"
+   ]
+  },
+  {
+   "line": 478,
+   "object": "AIStrategicArea",
+   "function": "addExpelledUnit",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x470AA0",
+    "D1": "0x470AE0",
+    "checkObjectRange": "0x470C50",
+    "executeObjectMethod": "0x470EE0",
+    "getObjectRange": "0x470B70",
+    "getObjectRangeAsString": "0x470B90",
+    "getReturnValueAsString": "0x470B00",
+    "isObjectActive": "0x470B40",
+    "objectHasRange": "0x470B60",
+    "setArgFromString": "0x470C60"
+   },
+   "teardown": [
+    "0x40CE60",
+    "0x40F660"
+   ]
+  },
+  {
+   "line": 479,
+   "object": "AIStrategicArea",
+   "function": "addLandingZoneUnit",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x470F70",
+    "D1": "0x470FB0",
+    "checkObjectRange": "0x471120",
+    "executeObjectMethod": "0x4713B0",
+    "getObjectRange": "0x471040",
+    "getObjectRangeAsString": "0x471060",
+    "getReturnValueAsString": "0x470FD0",
+    "isObjectActive": "0x471010",
+    "objectHasRange": "0x471030",
+    "setArgFromString": "0x471130"
+   },
+   "teardown": [
+    "0x40CE80",
+    "0x40F6B0"
+   ]
+  },
+  {
+   "line": 485,
+   "object": "AILandingZone",
+   "function": "activeZone",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x471440",
+    "D1": "0x4714B0",
+    "checkObjectRange": "0x471870",
+    "executeObjectMethod": "0x471B00",
+    "getObjectRange": "0x471790",
+    "getObjectRangeAsString": "0x4717B0",
+    "getReturnValueAsString": "0x471520",
+    "isObjectActive": "0x471760",
+    "objectHasRange": "0x471780",
+    "setArgFromString": "0x471880"
+   },
+   "teardown": [
+    "0x40CEA0",
+    "0x40F700"
+   ]
+  },
+  {
+   "line": 486,
+   "object": "AILandingZone",
+   "function": "createLandingZone",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x471BD0",
+    "D1": "0x471C10",
+    "checkObjectRange": "0x471D80",
+    "executeObjectMethod": "0x472990",
+    "getObjectRange": "0x471CA0",
+    "getObjectRangeAsString": "0x471CC0",
+    "getReturnValueAsString": "0x471C30",
+    "isObjectActive": "0x471C70",
+    "objectHasRange": "0x471C90",
+    "setArgFromString": "0x471D90"
+   },
+   "teardown": [
+    "0x40CF10",
+    "0x40F750"
+   ]
+  },
+  {
+   "line": 487,
+   "object": "AILandingZone",
+   "function": "listZones",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x472A70",
+    "D1": "0x472AE0",
+    "checkObjectRange": "0x472EA0",
+    "executeObjectMethod": "0x472EC0",
+    "getObjectRange": "0x472DC0",
+    "getObjectRangeAsString": "0x472DE0",
+    "getReturnValueAsString": "0x472B50",
+    "isObjectActive": "0x472D90",
+    "objectHasRange": "0x472DB0",
+    "setArgFromString": "0x472EB0"
+   },
+   "teardown": [
+    "0x40CF30"
+   ]
+  },
+  {
+   "line": 488,
+   "object": "AILandingZone",
+   "function": "minCorner",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x472F60",
+    "D1": "0x472FA0",
+    "checkObjectRange": "0x473350",
+    "executeObjectMethod": "0x473600",
+    "getObjectRange": "0x473270",
+    "getObjectRangeAsString": "0x473290",
+    "getReturnValueAsString": "0x472FC0",
+    "isObjectActive": "0x473230",
+    "objectHasRange": "0x473260",
+    "setArgFromString": "0x473360"
+   },
+   "teardown": [
+    "0x40CFA0"
+   ]
+  },
+  {
+   "line": 489,
+   "object": "AILandingZone",
+   "function": "maxCorner",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x473690",
+    "D1": "0x4736D0",
+    "checkObjectRange": "0x473A80",
+    "executeObjectMethod": "0x473D30",
+    "getObjectRange": "0x4739A0",
+    "getObjectRangeAsString": "0x4739C0",
+    "getReturnValueAsString": "0x4736F0",
+    "isObjectActive": "0x473960",
+    "objectHasRange": "0x473990",
+    "setArgFromString": "0x473A90"
+   },
+   "teardown": [
+    "0x40CFC0"
+   ]
+  },
+  {
+   "line": 490,
+   "object": "AILandingZone",
+   "function": "beachDirection",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x473DC0",
+    "D1": "0x473E00",
+    "checkObjectRange": "0x474180",
+    "executeObjectMethod": "0x4743D0",
+    "getObjectRange": "0x4740A0",
+    "getObjectRangeAsString": "0x4740C0",
+    "getReturnValueAsString": "0x473E20",
+    "isObjectActive": "0x474060",
+    "objectHasRange": "0x474090",
+    "setArgFromString": "0x474190"
+   },
+   "teardown": [
+    "0x40CFE0"
+   ]
+  },
+  {
+   "line": 496,
+   "object": "AIPathFinding",
+   "function": "createMap",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x474450",
+    "D1": "0x474490",
+    "checkObjectRange": "0x474800",
+    "executeObjectMethod": "0x474A90",
+    "getObjectRange": "0x474720",
+    "getObjectRangeAsString": "0x474740",
+    "getReturnValueAsString": "0x4744B0",
+    "isObjectActive": "0x4746F0",
+    "objectHasRange": "0x474710",
+    "setArgFromString": "0x474810"
+   },
+   "teardown": [
+    "0x40D000",
+    "0x40F7A0"
+   ]
+  },
+  {
+   "line": 497,
+   "object": "AIPathFinding",
+   "function": "deleteMap",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x474B30",
+    "D1": "0x474B70",
+    "checkObjectRange": "0x474EE0",
+    "executeObjectMethod": "0x475170",
+    "getObjectRange": "0x474E00",
+    "getObjectRangeAsString": "0x474E20",
+    "getReturnValueAsString": "0x474B90",
+    "isObjectActive": "0x474DD0",
+    "objectHasRange": "0x474DF0",
+    "setArgFromString": "0x474EF0"
+   },
+   "teardown": [
+    "0x40D020",
+    "0x40F7F0"
+   ]
+  },
+  {
+   "line": 498,
+   "object": "AIPathFinding",
+   "function": "activeMap",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x475210",
+    "D1": "0x475280",
+    "checkObjectRange": "0x475640",
+    "executeObjectMethod": "0x4758D0",
+    "getObjectRange": "0x475560",
+    "getObjectRangeAsString": "0x475580",
+    "getReturnValueAsString": "0x4752F0",
+    "isObjectActive": "0x475530",
+    "objectHasRange": "0x475550",
+    "setArgFromString": "0x475650"
+   },
+   "teardown": [
+    "0x40D040",
+    "0x40F840"
+   ]
+  },
+  {
+   "line": 499,
+   "object": "AIPathFinding",
+   "function": "traceMap",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x475990",
+    "D1": "0x475A00",
+    "checkObjectRange": "0x475DC0",
+    "executeObjectMethod": "0x476050",
+    "getObjectRange": "0x475CE0",
+    "getObjectRangeAsString": "0x475D00",
+    "getReturnValueAsString": "0x475A70",
+    "isObjectActive": "0x475CB0",
+    "objectHasRange": "0x475CD0",
+    "setArgFromString": "0x475DD0"
+   },
+   "teardown": [
+    "0x40D0B0",
+    "0x40F890"
+   ]
+  },
+  {
+   "line": 500,
+   "object": "AIPathFinding",
+   "function": "getMapList",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x476110",
+    "D1": "0x476180",
+    "checkObjectRange": "0x476540",
+    "executeObjectMethod": "0x476560",
+    "getObjectRange": "0x476460",
+    "getObjectRangeAsString": "0x476480",
+    "getReturnValueAsString": "0x4761F0",
+    "isObjectActive": "0x476430",
+    "objectHasRange": "0x476450",
+    "setArgFromString": "0x476550"
+   },
+   "teardown": [
+    "0x40D120"
+   ]
+  },
+  {
+   "line": 502,
+   "object": "AIPathFinding",
+   "function": "map.maxSlope",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x476600",
+    "D1": "0x476640",
+    "checkObjectRange": "0x4769C0",
+    "executeObjectMethod": "0x476C10",
+    "getObjectRange": "0x4768E0",
+    "getObjectRangeAsString": "0x476900",
+    "getReturnValueAsString": "0x476660",
+    "isObjectActive": "0x4768A0",
+    "objectHasRange": "0x4768D0",
+    "setArgFromString": "0x4769D0"
+   },
+   "teardown": [
+    "0x40D190"
+   ]
+  },
+  {
+   "line": 503,
+   "object": "AIPathFinding",
+   "function": "map.headClearance",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x476C90",
+    "D1": "0x476CD0",
+    "checkObjectRange": "0x477050",
+    "executeObjectMethod": "0x4772A0",
+    "getObjectRange": "0x476F70",
+    "getObjectRangeAsString": "0x476F90",
+    "getReturnValueAsString": "0x476CF0",
+    "isObjectActive": "0x476F30",
+    "objectHasRange": "0x476F60",
+    "setArgFromString": "0x477060"
+   },
+   "teardown": [
+    "0x40D1B0"
+   ]
+  },
+  {
+   "line": 504,
+   "object": "AIPathFinding",
+   "function": "map.radius",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x477320",
+    "D1": "0x477360",
+    "checkObjectRange": "0x4776E0",
+    "executeObjectMethod": "0x477930",
+    "getObjectRange": "0x477600",
+    "getObjectRangeAsString": "0x477620",
+    "getReturnValueAsString": "0x477380",
+    "isObjectActive": "0x4775C0",
+    "objectHasRange": "0x4775F0",
+    "setArgFromString": "0x4776F0"
+   },
+   "teardown": [
+    "0x40D1D0"
+   ]
+  },
+  {
+   "line": 505,
+   "object": "AIPathFinding",
+   "function": "map.allowedHeightDiff",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4779B0",
+    "D1": "0x4779F0",
+    "checkObjectRange": "0x477D70",
+    "executeObjectMethod": "0x477FC0",
+    "getObjectRange": "0x477C90",
+    "getObjectRangeAsString": "0x477CB0",
+    "getReturnValueAsString": "0x477A10",
+    "isObjectActive": "0x477C50",
+    "objectHasRange": "0x477C80",
+    "setArgFromString": "0x477D80"
+   },
+   "teardown": [
+    "0x40D1F0"
+   ]
+  },
+  {
+   "line": 506,
+   "object": "AIPathFinding",
+   "function": "map.minPolygonsInLeaf",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x478040",
+    "D1": "0x478080",
+    "checkObjectRange": "0x478430",
+    "executeObjectMethod": "0x478680",
+    "getObjectRange": "0x478350",
+    "getObjectRangeAsString": "0x478370",
+    "getReturnValueAsString": "0x4780A0",
+    "isObjectActive": "0x478310",
+    "objectHasRange": "0x478340",
+    "setArgFromString": "0x478440"
+   },
+   "teardown": [
+    "0x40D210"
+   ]
+  },
+  {
+   "line": 507,
+   "object": "AIPathFinding",
+   "function": "map.maxDepthInTree",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x478700",
+    "D1": "0x478740",
+    "checkObjectRange": "0x478AF0",
+    "executeObjectMethod": "0x478D40",
+    "getObjectRange": "0x478A10",
+    "getObjectRangeAsString": "0x478A30",
+    "getReturnValueAsString": "0x478760",
+    "isObjectActive": "0x4789D0",
+    "objectHasRange": "0x478A00",
+    "setArgFromString": "0x478B00"
+   },
+   "teardown": [
+    "0x40D230"
+   ]
+  },
+  {
+   "line": 509,
+   "object": "AIPathFinding",
+   "function": "map.addVehicleForClusterCost",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x478DC0",
+    "D1": "0x478E00",
+    "checkObjectRange": "0x478F80",
+    "executeObjectMethod": "0x479210",
+    "getObjectRange": "0x478EA0",
+    "getObjectRangeAsString": "0x478EC0",
+    "getReturnValueAsString": "0x478E20",
+    "isObjectActive": "0x478E60",
+    "objectHasRange": "0x478E90",
+    "setArgFromString": "0x478F90"
+   },
+   "teardown": [
+    "0x40D250",
+    "0x40F8E0"
+   ]
+  },
+  {
+   "line": 510,
+   "object": "AIPathFinding",
+   "function": "map.draw",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4792A0",
+    "D1": "0x4792E0",
+    "checkObjectRange": "0x479460",
+    "executeObjectMethod": "0x479480",
+    "getObjectRange": "0x479380",
+    "getObjectRangeAsString": "0x4793A0",
+    "getReturnValueAsString": "0x479300",
+    "isObjectActive": "0x479340",
+    "objectHasRange": "0x479370",
+    "setArgFromString": "0x479470"
+   },
+   "teardown": [
+    "0x40D270"
+   ]
+  },
+  {
+   "line": 511,
+   "object": "AIPathFinding",
+   "function": "map.undraw",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4794C0",
+    "D1": "0x479500",
+    "checkObjectRange": "0x479680",
+    "executeObjectMethod": "0x4796A0",
+    "getObjectRange": "0x4795A0",
+    "getObjectRangeAsString": "0x4795C0",
+    "getReturnValueAsString": "0x479520",
+    "isObjectActive": "0x479560",
+    "objectHasRange": "0x479590",
+    "setArgFromString": "0x479690"
+   },
+   "teardown": [
+    "0x40D290"
+   ]
+  },
+  {
+   "line": 512,
+   "object": "AIPathFinding",
+   "function": "map.drawCluster",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4796E0",
+    "D1": "0x479720",
+    "checkObjectRange": "0x4798A0",
+    "executeObjectMethod": "0x4798C0",
+    "getObjectRange": "0x4797C0",
+    "getObjectRangeAsString": "0x4797E0",
+    "getReturnValueAsString": "0x479740",
+    "isObjectActive": "0x479780",
+    "objectHasRange": "0x4797B0",
+    "setArgFromString": "0x4798B0"
+   },
+   "teardown": [
+    "0x40D2B0"
+   ]
+  },
+  {
+   "line": 513,
+   "object": "AIPathFinding",
+   "function": "map.undrawCluster",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x479900",
+    "D1": "0x479940",
+    "checkObjectRange": "0x479AC0",
+    "executeObjectMethod": "0x479AE0",
+    "getObjectRange": "0x4799E0",
+    "getObjectRangeAsString": "0x479A00",
+    "getReturnValueAsString": "0x479960",
+    "isObjectActive": "0x4799A0",
+    "objectHasRange": "0x4799D0",
+    "setArgFromString": "0x479AD0"
+   },
+   "teardown": [
+    "0x40D2D0"
+   ]
+  },
+  {
+   "line": 514,
+   "object": "AIPathFinding",
+   "function": "map.drawClusterNeighbourIndices",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x479B20",
+    "D1": "0x479B60",
+    "checkObjectRange": "0x479CE0",
+    "executeObjectMethod": "0x479FD0",
+    "getObjectRange": "0x479C00",
+    "getObjectRangeAsString": "0x479C20",
+    "getReturnValueAsString": "0x479B80",
+    "isObjectActive": "0x479BC0",
+    "objectHasRange": "0x479BF0",
+    "setArgFromString": "0x479CF0"
+   },
+   "teardown": [
+    "0x40D2F0"
+   ]
+  },
+  {
+   "line": 516,
+   "object": "AIPathFinding",
+   "function": "map.buildDebugMeshes",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x47A040",
+    "D1": "0x47A080",
+    "checkObjectRange": "0x47A200",
+    "executeObjectMethod": "0x47A220",
+    "getObjectRange": "0x47A120",
+    "getObjectRangeAsString": "0x47A140",
+    "getReturnValueAsString": "0x47A0A0",
+    "isObjectActive": "0x47A0E0",
+    "objectHasRange": "0x47A110",
+    "setArgFromString": "0x47A210"
+   },
+   "teardown": [
+    "0x40D310"
+   ]
+  },
+  {
+   "line": 517,
+   "object": "AIPathFinding",
+   "function": "map.buildDebugClusterMeshes",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x47A260",
+    "D1": "0x47A2A0",
+    "checkObjectRange": "0x47A420",
+    "executeObjectMethod": "0x47A440",
+    "getObjectRange": "0x47A340",
+    "getObjectRangeAsString": "0x47A360",
+    "getReturnValueAsString": "0x47A2C0",
+    "isObjectActive": "0x47A300",
+    "objectHasRange": "0x47A330",
+    "setArgFromString": "0x47A430"
+   },
+   "teardown": [
+    "0x40D330"
+   ]
+  },
+  {
+   "line": 518,
+   "object": "AIPathFinding",
+   "function": "map.loadGTSDebugMeshes",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x47A480",
+    "D1": "0x47A4C0",
+    "checkObjectRange": "0x47A640",
+    "executeObjectMethod": "0x47A660",
+    "getObjectRange": "0x47A560",
+    "getObjectRangeAsString": "0x47A580",
+    "getReturnValueAsString": "0x47A4E0",
+    "isObjectActive": "0x47A520",
+    "objectHasRange": "0x47A550",
+    "setArgFromString": "0x47A650"
+   },
+   "teardown": [
+    "0x40D350"
+   ]
+  },
+  {
+   "line": 519,
+   "object": "AIPathFinding",
+   "function": "map.unloadDebugMeshes",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x47A6A0",
+    "D1": "0x47A6E0",
+    "checkObjectRange": "0x47A860",
+    "executeObjectMethod": "0x47A880",
+    "getObjectRange": "0x47A780",
+    "getObjectRangeAsString": "0x47A7A0",
+    "getReturnValueAsString": "0x47A700",
+    "isObjectActive": "0x47A740",
+    "objectHasRange": "0x47A770",
+    "setArgFromString": "0x47A870"
+   },
+   "teardown": [
+    "0x40D370"
+   ]
+  },
+  {
+   "line": 520,
+   "object": "AIPathFinding",
+   "function": "map.unloadDebugClusterMeshes",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x47A8C0",
+    "D1": "0x47A900",
+    "checkObjectRange": "0x47AA80",
+    "executeObjectMethod": "0x47AAA0",
+    "getObjectRange": "0x47A9A0",
+    "getObjectRangeAsString": "0x47A9C0",
+    "getReturnValueAsString": "0x47A920",
+    "isObjectActive": "0x47A960",
+    "objectHasRange": "0x47A990",
+    "setArgFromString": "0x47AA90"
+   },
+   "teardown": [
+    "0x40D390"
+   ]
+  },
+  {
+   "line": 521,
+   "object": "AIPathFinding",
+   "function": "map.recalculatePortalCosts",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x47AAE0",
+    "D1": "0x47AB20",
+    "checkObjectRange": "0x47ACA0",
+    "executeObjectMethod": "0x47ACC0",
+    "getObjectRange": "0x47ABC0",
+    "getObjectRangeAsString": "0x47ABE0",
+    "getReturnValueAsString": "0x47AB40",
+    "isObjectActive": "0x47AB80",
+    "objectHasRange": "0x47ABB0",
+    "setArgFromString": "0x47ACB0"
+   },
+   "teardown": [
+    "0x40D3B0"
+   ]
+  },
+  {
+   "line": 524,
+   "object": "AIPathFinding",
+   "function": "map.loadQuadTrees",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x47AD00",
+    "D1": "0x47AD40",
+    "checkObjectRange": "0x47AEC0",
+    "executeObjectMethod": "0x47AEE0",
+    "getObjectRange": "0x47ADE0",
+    "getObjectRangeAsString": "0x47AE00",
+    "getReturnValueAsString": "0x47AD60",
+    "isObjectActive": "0x47ADA0",
+    "objectHasRange": "0x47ADD0",
+    "setArgFromString": "0x47AED0"
+   },
+   "teardown": [
+    "0x40D3D0"
+   ]
+  },
+  {
+   "line": 525,
+   "object": "AIPathFinding",
+   "function": "saveQuadTrees",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x47AF20",
+    "D1": "0x47AF60",
+    "checkObjectRange": "0x47B0D0",
+    "executeObjectMethod": "0x47B0F0",
+    "getObjectRange": "0x47AFF0",
+    "getObjectRangeAsString": "0x47B010",
+    "getReturnValueAsString": "0x47AF80",
+    "isObjectActive": "0x47AFC0",
+    "objectHasRange": "0x47AFE0",
+    "setArgFromString": "0x47B0E0"
+   },
+   "teardown": [
+    "0x40D3F0"
+   ]
+  },
+  {
+   "line": 526,
+   "object": "AIPathFinding",
+   "function": "loadQuadTrees",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x47B130",
+    "D1": "0x47B170",
+    "checkObjectRange": "0x47B2E0",
+    "executeObjectMethod": "0x47B300",
+    "getObjectRange": "0x47B200",
+    "getObjectRangeAsString": "0x47B220",
+    "getReturnValueAsString": "0x47B190",
+    "isObjectActive": "0x47B1D0",
+    "objectHasRange": "0x47B1F0",
+    "setArgFromString": "0x47B2F0"
+   },
+   "teardown": [
+    "0x40D410"
+   ]
+  },
+  {
+   "line": 527,
+   "object": "AIPathFinding",
+   "function": "loadGTSData",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x47B340",
+    "D1": "0x47B380",
+    "checkObjectRange": "0x47B4F0",
+    "executeObjectMethod": "0x47B510",
+    "getObjectRange": "0x47B410",
+    "getObjectRangeAsString": "0x47B430",
+    "getReturnValueAsString": "0x47B3A0",
+    "isObjectActive": "0x47B3E0",
+    "objectHasRange": "0x47B400",
+    "setArgFromString": "0x47B500"
+   },
+   "teardown": [
+    "0x40D430"
+   ]
+  },
+  {
+   "line": 528,
+   "object": "AIPathFinding",
+   "function": "exportGTSMeshes",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x47B550",
+    "D1": "0x47B590",
+    "checkObjectRange": "0x47B900",
+    "executeObjectMethod": "0x47B920",
+    "getObjectRange": "0x47B820",
+    "getObjectRangeAsString": "0x47B840",
+    "getReturnValueAsString": "0x47B5B0",
+    "isObjectActive": "0x47B7F0",
+    "objectHasRange": "0x47B810",
+    "setArgFromString": "0x47B910"
+   },
+   "teardown": [
+    "0x40D450"
+   ]
+  },
+  {
+   "line": 529,
+   "object": "AIPathFinding",
+   "function": "exportGTSMeshesWithinBoundary",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x47B980",
+    "D1": "0x47B9C0",
+    "checkObjectRange": "0x47BD30",
+    "executeObjectMethod": "0x47C280",
+    "getObjectRange": "0x47BC50",
+    "getObjectRangeAsString": "0x47BC70",
+    "getReturnValueAsString": "0x47B9E0",
+    "isObjectActive": "0x47BC20",
+    "objectHasRange": "0x47BC40",
+    "setArgFromString": "0x47BD40"
+   },
+   "teardown": [
+    "0x40D470"
+   ]
+  },
+  {
+   "line": 530,
+   "object": "AIPathFinding",
+   "function": "maxWaterDepth",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x47C310",
+    "D1": "0x47C350",
+    "checkObjectRange": "0x47C6C0",
+    "executeObjectMethod": "0x47C910",
+    "getObjectRange": "0x47C5E0",
+    "getObjectRangeAsString": "0x47C600",
+    "getReturnValueAsString": "0x47C370",
+    "isObjectActive": "0x47C5B0",
+    "objectHasRange": "0x47C5D0",
+    "setArgFromString": "0x47C6D0"
+   },
+   "teardown": [
+    "0x40D490"
+   ]
+  },
+  {
+   "line": 531,
+   "object": "AIPathFinding",
+   "function": "drawDynamicAIObjects",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x47C990",
+    "D1": "0x47C9D0",
+    "checkObjectRange": "0x47CB40",
+    "executeObjectMethod": "0x47CB60",
+    "getObjectRange": "0x47CA60",
+    "getObjectRangeAsString": "0x47CA80",
+    "getReturnValueAsString": "0x47C9F0",
+    "isObjectActive": "0x47CA30",
+    "objectHasRange": "0x47CA50",
+    "setArgFromString": "0x47CB50"
+   },
+   "teardown": [
+    "0x40D4B0"
+   ]
+  },
+  {
+   "line": 537,
+   "object": "AIDebug",
+   "function": "textGamma",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x47CBA0",
+    "D1": "0x47CBE0",
+    "checkObjectRange": "0x47CF50",
+    "executeObjectMethod": "0x47D1A0",
+    "getObjectRange": "0x47CE70",
+    "getObjectRangeAsString": "0x47CE90",
+    "getReturnValueAsString": "0x47CC00",
+    "isObjectActive": "0x47CE40",
+    "objectHasRange": "0x47CE60",
+    "setArgFromString": "0x47CF60"
+   },
+   "teardown": [
+    "0x40D4D0"
+   ]
+  },
+  {
+   "line": 538,
+   "object": "AIDebug",
+   "function": "draw",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x47D220",
+    "D1": "0x47D260",
+    "checkObjectRange": "0x47D5D0",
+    "executeObjectMethod": "0x47D820",
+    "getObjectRange": "0x47D4F0",
+    "getObjectRangeAsString": "0x47D510",
+    "getReturnValueAsString": "0x47D280",
+    "isObjectActive": "0x47D4C0",
+    "objectHasRange": "0x47D4E0",
+    "setArgFromString": "0x47D5E0"
+   },
+   "teardown": [
+    "0x40D4F0"
+   ]
+  },
+  {
+   "line": 539,
+   "object": "AIDebug",
+   "function": "ToolPathfinding",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x47D8B0",
+    "D1": "0x47D8F0",
+    "checkObjectRange": "0x47DC60",
+    "executeObjectMethod": "0x47DEB0",
+    "getObjectRange": "0x47DB80",
+    "getObjectRangeAsString": "0x47DBA0",
+    "getReturnValueAsString": "0x47D910",
+    "isObjectActive": "0x47DB50",
+    "objectHasRange": "0x47DB70",
+    "setArgFromString": "0x47DC70"
+   },
+   "teardown": [
+    "0x40D510"
+   ]
+  },
+  {
+   "line": 540,
+   "object": "AIDebug",
+   "function": "pathfindingDebugToolVehicle",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x47DF40",
+    "D1": "0x47DFB0",
+    "checkObjectRange": "0x47E370",
+    "executeObjectMethod": "0x47E600",
+    "getObjectRange": "0x47E290",
+    "getObjectRangeAsString": "0x47E2B0",
+    "getReturnValueAsString": "0x47E020",
+    "isObjectActive": "0x47E260",
+    "objectHasRange": "0x47E280",
+    "setArgFromString": "0x47E380"
+   },
+   "teardown": [
+    "0x40D530",
+    "0x40F930"
+   ]
+  },
+  {
+   "line": 541,
+   "object": "AIDebug",
+   "function": "clusterSearch",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x47E6D0",
+    "D1": "0x47E710",
+    "checkObjectRange": "0x47EA80",
+    "executeObjectMethod": "0x47ECD0",
+    "getObjectRange": "0x47E9A0",
+    "getObjectRangeAsString": "0x47E9C0",
+    "getReturnValueAsString": "0x47E730",
+    "isObjectActive": "0x47E970",
+    "objectHasRange": "0x47E990",
+    "setArgFromString": "0x47EA90"
+   },
+   "teardown": [
+    "0x40D5A0"
+   ]
+  },
+  {
+   "line": 542,
+   "object": "AIDebug",
+   "function": "setPathfindingDebugToolVehicleId",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x47ED60",
+    "D1": "0x47EDA0",
+    "checkObjectRange": "0x47EF10",
+    "executeObjectMethod": "0x47F160",
+    "getObjectRange": "0x47EE30",
+    "getObjectRangeAsString": "0x47EE50",
+    "getReturnValueAsString": "0x47EDC0",
+    "isObjectActive": "0x47EE00",
+    "objectHasRange": "0x47EE20",
+    "setArgFromString": "0x47EF20"
+   },
+   "teardown": [
+    "0x40D5C0"
+   ]
+  },
+  {
+   "line": 543,
+   "object": "AIDebug",
+   "function": "tryPath",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x47F1B0",
+    "D1": "0x47F1F0",
+    "checkObjectRange": "0x47F360",
+    "executeObjectMethod": "0x47F930",
+    "getObjectRange": "0x47F280",
+    "getObjectRangeAsString": "0x47F2A0",
+    "getReturnValueAsString": "0x47F210",
+    "isObjectActive": "0x47F250",
+    "objectHasRange": "0x47F270",
+    "setArgFromString": "0x47F370"
+   },
+   "teardown": [
+    "0x40D5E0"
+   ]
+  },
+  {
+   "line": 544,
+   "object": "AIDebug",
+   "function": "tryClusterPath",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x47F9C0",
+    "D1": "0x47FA00",
+    "checkObjectRange": "0x47FB70",
+    "executeObjectMethod": "0x480140",
+    "getObjectRange": "0x47FA90",
+    "getObjectRangeAsString": "0x47FAB0",
+    "getReturnValueAsString": "0x47FA20",
+    "isObjectActive": "0x47FA60",
+    "objectHasRange": "0x47FA80",
+    "setArgFromString": "0x47FB80"
+   },
+   "teardown": [
+    "0x40D600"
+   ]
+  },
+  {
+   "line": 551,
+   "object": "AIOrder",
+   "function": "createPatrolPath",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4801D0",
+    "D1": "0x480210",
+    "checkObjectRange": "0x480380",
+    "executeObjectMethod": "0x480A50",
+    "getObjectRange": "0x4802A0",
+    "getObjectRangeAsString": "0x4802C0",
+    "getReturnValueAsString": "0x480230",
+    "isObjectActive": "0x480270",
+    "objectHasRange": "0x480290",
+    "setArgFromString": "0x480390"
+   },
+   "teardown": [
+    "0x40D620",
+    "0x40F980"
+   ]
+  },
+  {
+   "line": 553,
+   "object": "AIOrder",
+   "function": "addPathPoint",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x480AF0",
+    "D1": "0x480B30",
+    "checkObjectRange": "0x480CB0",
+    "executeObjectMethod": "0x480F60",
+    "getObjectRange": "0x480BD0",
+    "getObjectRangeAsString": "0x480BF0",
+    "getReturnValueAsString": "0x480B50",
+    "isObjectActive": "0x480B90",
+    "objectHasRange": "0x480BC0",
+    "setArgFromString": "0x480CC0"
+   },
+   "teardown": [
+    "0x40D640"
+   ]
+  },
+  {
+   "line": 554,
+   "object": "AIOrder",
+   "function": "requiredResources",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x480FC0",
+    "D1": "0x481000",
+    "checkObjectRange": "0x4813B0",
+    "executeObjectMethod": "0x481600",
+    "getObjectRange": "0x4812D0",
+    "getObjectRangeAsString": "0x4812F0",
+    "getReturnValueAsString": "0x481020",
+    "isObjectActive": "0x481290",
+    "objectHasRange": "0x4812C0",
+    "setArgFromString": "0x4813C0"
+   },
+   "teardown": [
+    "0x40D660"
+   ]
+  },
+  {
+   "line": 555,
+   "object": "AIOrder",
+   "function": "minDistance",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x481680",
+    "D1": "0x4816C0",
+    "checkObjectRange": "0x481A40",
+    "executeObjectMethod": "0x481C90",
+    "getObjectRange": "0x481960",
+    "getObjectRangeAsString": "0x481980",
+    "getReturnValueAsString": "0x4816E0",
+    "isObjectActive": "0x481920",
+    "objectHasRange": "0x481950",
+    "setArgFromString": "0x481A50"
+   },
+   "teardown": [
+    "0x40D680"
+   ]
+  },
+  {
+   "line": 556,
+   "object": "AIOrder",
+   "function": "patrolSpeed",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x481D10",
+    "D1": "0x481D50",
+    "checkObjectRange": "0x4820D0",
+    "executeObjectMethod": "0x482320",
+    "getObjectRange": "0x481FF0",
+    "getObjectRangeAsString": "0x482010",
+    "getReturnValueAsString": "0x481D70",
+    "isObjectActive": "0x481FB0",
+    "objectHasRange": "0x481FE0",
+    "setArgFromString": "0x4820E0"
+   },
+   "teardown": [
+    "0x40D6A0"
+   ]
+  },
+  {
+   "line": 559,
+   "object": "AIOrder",
+   "function": "createGuardPosition",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4823A0",
+    "D1": "0x4823E0",
+    "checkObjectRange": "0x482550",
+    "executeObjectMethod": "0x483100",
+    "getObjectRange": "0x482470",
+    "getObjectRangeAsString": "0x482490",
+    "getReturnValueAsString": "0x482400",
+    "isObjectActive": "0x482440",
+    "objectHasRange": "0x482460",
+    "setArgFromString": "0x482560"
+   },
+   "teardown": [
+    "0x40D6C0",
+    "0x40F9D0"
+   ]
+  },
+  {
+   "line": 560,
+   "object": "AIOrder",
+   "function": "minDistance",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4831D0",
+    "D1": "0x483210",
+    "checkObjectRange": "0x483590",
+    "executeObjectMethod": "0x4837E0",
+    "getObjectRange": "0x4834B0",
+    "getObjectRangeAsString": "0x4834D0",
+    "getReturnValueAsString": "0x483230",
+    "isObjectActive": "0x483470",
+    "objectHasRange": "0x4834A0",
+    "setArgFromString": "0x4835A0"
+   },
+   "teardown": [
+    "0x40D6E0"
+   ]
+  },
+  {
+   "line": 561,
+   "object": "AIOrder",
+   "function": "rotation",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x483860",
+    "D1": "0x4838A0",
+    "checkObjectRange": "0x483C80",
+    "executeObjectMethod": "0x483F70",
+    "getObjectRange": "0x483BA0",
+    "getObjectRangeAsString": "0x483BC0",
+    "getReturnValueAsString": "0x4838C0",
+    "isObjectActive": "0x483B60",
+    "objectHasRange": "0x483B90",
+    "setArgFromString": "0x483C90"
+   },
+   "teardown": [
+    "0x40D700"
+   ]
+  },
+  {
+   "line": 562,
+   "object": "AIOrder",
+   "function": "addStrategicAreaAbortCondition",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x484020",
+    "D1": "0x484060",
+    "checkObjectRange": "0x4841E0",
+    "executeObjectMethod": "0x4846A0",
+    "getObjectRange": "0x484100",
+    "getObjectRangeAsString": "0x484120",
+    "getReturnValueAsString": "0x484080",
+    "isObjectActive": "0x4840C0",
+    "objectHasRange": "0x4840F0",
+    "setArgFromString": "0x4841F0"
+   },
+   "teardown": [
+    "0x40D720",
+    "0x40FA20"
+   ]
+  },
+  {
+   "line": 569,
+   "object": "AICover",
+   "function": "createCoverPosition",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x484730",
+    "D1": "0x484770",
+    "checkObjectRange": "0x4848E0",
+    "executeObjectMethod": "0x484E30",
+    "getObjectRange": "0x484800",
+    "getObjectRangeAsString": "0x484820",
+    "getReturnValueAsString": "0x484790",
+    "isObjectActive": "0x4847D0",
+    "objectHasRange": "0x4847F0",
+    "setArgFromString": "0x4848F0"
+   },
+   "teardown": [
+    "0x40D740"
+   ]
+  },
+  {
+   "line": 570,
+   "object": "AICover",
+   "function": "finaliseCoverPositions",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x484EB0",
+    "D1": "0x484EF0",
+    "checkObjectRange": "0x485060",
+    "executeObjectMethod": "0x485080",
+    "getObjectRange": "0x484F80",
+    "getObjectRangeAsString": "0x484FA0",
+    "getReturnValueAsString": "0x484F10",
+    "isObjectActive": "0x484F50",
+    "objectHasRange": "0x484F70",
+    "setArgFromString": "0x485070"
+   },
+   "teardown": [
+    "0x40D760"
+   ]
+  },
+  {
+   "line": 571,
+   "object": "AICover",
+   "function": "search",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x4850C0",
+    "D1": "0x485100",
+    "checkObjectRange": "0x485470",
+    "executeObjectMethod": "0x485900",
+    "getObjectRange": "0x485390",
+    "getObjectRangeAsString": "0x4853B0",
+    "getReturnValueAsString": "0x485120",
+    "isObjectActive": "0x485360",
+    "objectHasRange": "0x485380",
+    "setArgFromString": "0x485480"
+   },
+   "teardown": [
+    "0x40D780"
+   ]
+  },
+  {
+   "line": 576,
+   "object": "AIRandom",
+   "function": "seed",
+   "verdict": "emit",
+   "reason": null,
+   "functions": {
+    "D0": "0x485970",
+    "D1": "0x4859B0",
+    "checkObjectRange": "0x485D20",
+    "executeObjectMethod": "0x485F70",
+    "getObjectRange": "0x485C40",
+    "getObjectRangeAsString": "0x485C60",
+    "getReturnValueAsString": "0x4859D0",
+    "isObjectActive": "0x485C10",
+    "objectHasRange": "0x485C30",
+    "setArgFromString": "0x485D30"
+   },
+   "teardown": [
+    "0x40D7A0"
+   ],
+   "inlineEvidence": {
+    "address": "0x485F70",
+    "size": 95,
+    "sha256": "109be1bd1cad3ae38f8a21fdbd072fc33ac77d8bb2b535222f379294136f4c06",
+    "description": "seed word at offset zero of a non-polymorphic receiver"
+   }
+  }
+ ],
+ "coverage": [
+  {
+   "command": "aiSettings.setmaxnumberofbehaviours",
+   "uses": 1,
+   "files": 1,
+   "class": 262,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.setbehaviour",
+   "uses": 13,
+   "files": 1,
+   "class": 304,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.setvehicle",
+   "uses": 15,
+   "files": 1,
+   "class": 267,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.setvehicleclustermapping",
+   "uses": 6,
+   "files": 1,
+   "class": 268,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.setsensingagentpatternname",
+   "uses": 4,
+   "files": 1,
+   "class": 316,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.setsensingagentnullpattern",
+   "uses": 1,
+   "files": 1,
+   "class": 317,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.setmandownequipment",
+   "uses": 1,
+   "files": 1,
+   "class": 270,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.createbehaviourmodifiers",
+   "uses": 6,
+   "files": 1,
+   "class": 306,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.setbehaviourmodifier",
+   "uses": 77,
+   "files": 1,
+   "class": 308,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.setbasicbotweights",
+   "uses": 1,
+   "files": 1,
+   "class": 303,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.setstandardpersonality",
+   "uses": 2,
+   "files": 1,
+   "class": 297,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.createucconstant",
+   "uses": 1,
+   "files": 1,
+   "class": 312,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.createuclinear",
+   "uses": 2,
+   "files": 1,
+   "class": 313,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.createucxinverse",
+   "uses": 1,
+   "files": 1,
+   "class": 314,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.setvehiclemods",
+   "uses": 15,
+   "files": 1,
+   "class": 296,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.setvehiclematerialcost",
+   "uses": 24,
+   "files": 1,
+   "class": 269,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.setvehiclebehaviour",
+   "uses": 80,
+   "files": 1,
+   "class": 298,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.setvehicledefaultbehaviour",
+   "uses": 15,
+   "files": 1,
+   "class": 299,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.addinterpreterentry",
+   "uses": 132,
+   "files": 1,
+   "class": 300,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.activatedefaultinterpreter",
+   "uses": 320,
+   "files": 1,
+   "class": 302,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.addsensingagentpattern",
+   "uses": 9,
+   "files": 1,
+   "class": 318,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.setnsides",
+   "uses": 1,
+   "files": 1,
+   "class": 276,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.setautospawnbots",
+   "uses": 1,
+   "files": 1,
+   "class": 321,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.setmaxnbots",
+   "uses": 1,
+   "files": 1,
+   "class": 259,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.maxbotsincludehumans",
+   "uses": 1,
+   "files": 1,
+   "class": 260,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.setbotskill",
+   "uses": 1,
+   "files": 1,
+   "class": 278,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.setinformationgriddimension",
+   "uses": 1,
+   "files": 1,
+   "class": 266,
+   "state": "bound"
+  },
+  {
+   "command": "aiStrategy.createconstantcondition",
+   "uses": 12,
+   "files": 3,
+   "class": 395,
+   "state": "bound"
+  },
+  {
+   "command": "aiStrategy.setconditionstrength",
+   "uses": 12,
+   "files": 3,
+   "class": 399,
+   "state": "bound"
+  },
+  {
+   "command": "aiStrategy.createprerequisite",
+   "uses": 10,
+   "files": 3,
+   "class": 385,
+   "state": "bound"
+  },
+  {
+   "command": "aiStrategy.addcondition",
+   "uses": 12,
+   "files": 3,
+   "class": 389,
+   "state": "bound"
+  },
+  {
+   "command": "aiStrategy.createstrategy",
+   "uses": 11,
+   "files": 3,
+   "class": 361,
+   "state": "bound"
+  },
+  {
+   "command": "aiStrategy.aggression",
+   "uses": 11,
+   "files": 3,
+   "class": 364,
+   "state": "bound"
+  },
+  {
+   "command": "aiStrategy.numberofattacks",
+   "uses": 11,
+   "files": 3,
+   "class": 373,
+   "state": "bound"
+  },
+  {
+   "command": "aiStrategy.numberofdefences",
+   "uses": 11,
+   "files": 3,
+   "class": 374,
+   "state": "bound"
+  },
+  {
+   "command": "aiStrategy.setstrategicobjectsmodifier",
+   "uses": 17,
+   "files": 3,
+   "class": 378,
+   "state": "bound"
+  },
+  {
+   "command": "aiStrategy.setprerequisite",
+   "uses": 11,
+   "files": 3,
+   "class": 375,
+   "state": "bound"
+  },
+  {
+   "command": "AI.addsaistrategy",
+   "uses": 18,
+   "files": 6,
+   "class": 206,
+   "state": "bound"
+  },
+  {
+   "command": "AIPathFinding.createmap",
+   "uses": 2,
+   "files": 1,
+   "class": 496,
+   "state": "bound"
+  },
+  {
+   "command": "AIPathFinding.map.maxslope",
+   "uses": 35,
+   "files": 18,
+   "class": 502,
+   "state": "bound"
+  },
+  {
+   "command": "AIPathFinding.map.headclearance",
+   "uses": 2,
+   "files": 1,
+   "class": 503,
+   "state": "bound"
+  },
+  {
+   "command": "AIPathFinding.map.radius",
+   "uses": 2,
+   "files": 1,
+   "class": 504,
+   "state": "bound"
+  },
+  {
+   "command": "AIPathFinding.map.allowedheightdiff",
+   "uses": 2,
+   "files": 1,
+   "class": 505,
+   "state": "bound"
+  },
+  {
+   "command": "AIPathFinding.maxwaterdepth",
+   "uses": 1,
+   "files": 1,
+   "class": 530,
+   "state": "bound"
+  },
+  {
+   "command": "AIPathFinding.tracemap",
+   "uses": 1,
+   "files": 1,
+   "class": 499,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.addbotname",
+   "uses": 126,
+   "files": 1,
+   "class": 288,
+   "state": "bound"
+  },
+  {
+   "command": "AI.addbot",
+   "uses": 2,
+   "files": 2,
+   "class": 186,
+   "state": "bound"
+  },
+  {
+   "command": "AI.init",
+   "uses": 19,
+   "files": 19,
+   "class": 165,
+   "state": "bound"
+  },
+  {
+   "command": "AIPathFinding.setactivemap",
+   "uses": 34,
+   "files": 17,
+   "class": 498,
+   "state": "bound"
+  },
+  {
+   "command": "AIPathFinding.map.addvehicleforclustercost",
+   "uses": 53,
+   "files": 17,
+   "class": 509,
+   "state": "bound"
+  },
+  {
+   "command": "AIStrategicArea.createfromcontrolpoint",
+   "uses": 158,
+   "files": 41,
+   "class": 419,
+   "state": "bound"
+  },
+  {
+   "command": "AIStrategicArea.layer",
+   "uses": 188,
+   "files": 45,
+   "class": 426,
+   "state": "bound"
+  },
+  {
+   "command": "AIStrategicArea.setactive",
+   "uses": 189,
+   "files": 45,
+   "class": 421,
+   "state": "bound"
+  },
+  {
+   "command": "AIStrategicArea.addneighbour",
+   "uses": 405,
+   "files": 45,
+   "class": 423,
+   "state": "bound"
+  },
+  {
+   "command": "AIStrategicArea.addobjecttypeflag",
+   "uses": 183,
+   "files": 45,
+   "class": 436,
+   "state": "bound"
+  },
+  {
+   "command": "AIStrategicArea.setorderposition",
+   "uses": 378,
+   "files": 45,
+   "class": 448,
+   "state": "bound"
+  },
+  {
+   "command": "AIStrategicArea.setside",
+   "uses": 188,
+   "files": 45,
+   "class": 456,
+   "state": "bound"
+  },
+  {
+   "command": "AIStrategicArea.vehiclesearchradius",
+   "uses": 189,
+   "files": 45,
+   "class": 442,
+   "state": "bound"
+  },
+  {
+   "command": "AIStrategicArea.addwaypoint",
+   "uses": 664,
+   "files": 32,
+   "class": 451,
+   "state": "bound"
+  },
+  {
+   "command": "aiSettings.setviewdistance",
+   "uses": 2,
+   "files": 2,
+   "class": 263,
+   "state": "bound"
+  },
+  {
+   "command": "AI.saimapxdimension",
+   "uses": 1,
+   "files": 1,
+   "class": 204,
+   "state": "bound"
+  },
+  {
+   "command": "AI.saimapydimension",
+   "uses": 1,
+   "files": 1,
+   "class": 205,
+   "state": "bound"
+  },
+  {
+   "command": "AI.createsai",
+   "uses": 1,
+   "files": 1,
+   "class": 202,
+   "state": "bound"
+  },
+  {
+   "command": "AIBotManager.setlodlevelticks",
+   "uses": 1,
+   "files": 1,
+   "class": 327,
+   "state": "bound"
+  },
+  {
+   "command": "AIBotManager.setlodlevelpriority",
+   "uses": 1,
+   "files": 1,
+   "class": 328,
+   "state": "bound"
+  },
+  {
+   "command": "AIBotManager.setplanneddecisionmakingthreshold",
+   "uses": 1,
+   "files": 1,
+   "class": 329,
+   "state": "bound"
+  },
+  {
+   "command": "AIBotManager.setunplanneddecisionmakingthreshold",
+   "uses": 1,
+   "files": 1,
+   "class": 330,
+   "state": "bound"
+  },
+  {
+   "command": "AIBotManager.setdecisionmakinginterleave",
+   "uses": 1,
+   "files": 1,
+   "class": 331,
+   "state": "bound"
+  },
+  {
+   "command": "AIBotManager.setsensingquotient",
+   "uses": 1,
+   "files": 1,
+   "class": 332,
+   "state": "bound"
+  },
+  {
+   "command": "AIBotManager.setsystemquotient",
+   "uses": 1,
+   "files": 1,
+   "class": 333,
+   "state": "bound"
+  },
+  {
+   "command": "AI.saienable",
+   "uses": 1,
+   "files": 1,
+   "class": 203,
+   "state": "bound"
+  },
+  {
+   "command": "AIPathFinding.loadquadtrees",
+   "uses": 1,
+   "files": 1,
+   "class": 526,
+   "state": "bound"
+  },
+  {
+   "command": "AI.readheightmapfromfile",
+   "uses": 1,
+   "files": 1,
+   "class": 162,
+   "state": "bound"
+  },
+  {
+   "command": "AIStrategicArea.create",
+   "uses": 30,
+   "files": 9,
+   "class": 417,
+   "state": "bound"
+  }
+ ]
+}

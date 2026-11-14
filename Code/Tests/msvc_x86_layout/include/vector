@@ -1,0 +1,6 @@
+// [TEMP] Minimal stand-in for MSVC's x86 std::vector layout (three pointers, 12 bytes, as the
+// VS2022 STL in release with _ITERATOR_DEBUG_LEVEL=0), used only by msvc_x86_layout.cpp.
+#pragma once
+namespace std {
+template <class T> class vector { T* m_first; T* m_last; T* m_end; };
+}

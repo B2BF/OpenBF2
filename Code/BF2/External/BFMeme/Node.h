@@ -91,7 +91,7 @@ bool dispatchNodeEvent10(Node*, System*, const Rect*, const NodeState*); // chos
 bool dispatchNodeEvent11(Node*, System*, const Rect*, const NodeState*); // chosen native default for +94; 74/74 PE455410
 bool dispatchNodeEvent12(Node*, System*, const Rect*, const NodeState*); // chosen native default for +98; 74/74 PE455410
 bool dispatchNodeEvent15(Node*, System*, const Rect*, const NodeState*); // chosen native default for +9C; 74/74 PE455410
-bool dispatchNodeEvent16(Node*, System*, const Rect*, const NodeState*); // +A0 [FRONTIER] - 5 tables override it, see Node.cpp
+bool dispatchNodeEvent16(Node*, System*, const Rect*, const NodeState*); // +A0 - 455410 false default, BfEditNode/Bf2EditNode 7AA9B0
 bool dispatchNodeEvent13(Node*, System*, const Rect*, const NodeState*); // +A4
 bool dispatchNodeEvent17(Node*, System*, const Rect*, const NodeState*); // chosen native default for +A8; no virtual suffix access
 bool dispatchNodeEvent18(Node*, System*, const Rect*, const NodeState*); // chosen native default for +AC; 74/74 PE455410

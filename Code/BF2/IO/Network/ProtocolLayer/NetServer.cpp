@@ -627,7 +627,8 @@ int NetServer::_update(int* outConnectionId)
     return 8;                                                       // always - see the note above
 }
 
-// [CHOSEN, not recovered] PunkBuster status query controls the accept flag and client admission.
+// The PunkBuster server glue's status query (Game/PunkBuster/PbServer.cpp; ELF 0x84F62E0) controls the
+// accept flag and client admission.
 extern "C" bool isPbSvEnabled();
 
 // Completes an accept handshake, assigns the connection id and promotes state 1 to state 2.

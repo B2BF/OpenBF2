@@ -37,7 +37,7 @@ static void psmNsaPackRotation(float angle, short& sine, short& cosine)
     sine = static_cast<short>(sinValue);
     cosine = static_cast<short>(cosValue);
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     const float scale = 32767.0f;
     unsigned short savedControl, truncateControl;
     __int64 sinValue, cosValue;

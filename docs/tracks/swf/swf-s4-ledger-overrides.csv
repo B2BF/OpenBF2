@@ -1,0 +1,8 @@
+address,symbol,file,status,reason
+0x1006F860,gameswf::remove_object_2::remove_object_2/read,Code/BF2/External/gameswf/gameswf_impl.cpp,done,S4:fresh-PE32-Ghidra;constructor-1006F860-and-reader-1006F870;removed-tag-5-field-and-read-arm;depth-only-reader
+0x1006F900,gameswf::remove_object_2_loader,Code/BF2/External/gameswf/gameswf_impl.cpp,done,S4:fresh-PE32-Ghidra;tag-28-only;removed-tag-5-bridge
+0x1007CF60,gameswf::ensure_loaders_registered,Code/BF2/External/gameswf/gameswf_impl.cpp,done,S4:fresh-PE32-Ghidra;all-registration-instructions-read;removed-retail-absent-tag-5
+0x1007F1D0,gameswf::generic_character::display,Code/BF2/External/gameswf/gameswf_impl.h,done,S4:fresh-PE32-Ghidra;definition-display-delegate-only;removed-2006-display-callback
+0x1007FCA0,gameswf::sprite_instance::display,Code/BF2/External/gameswf/gameswf_impl.cpp,done,S4:fresh-PE32-Ghidra;visible-gate-and-display-list-tail-call;removed-2006-display-callback
+0x10085C70,gameswf::edit_text_character_def::~edit_text_character_def,Code/BF2/External/gameswf/gameswf_text.cpp,chosen,"S4:removed-extra-2006-text_format;default-text-before-default-name;[CHOSEN, not recovered] native-base-and-delete-adjustment-remains"
+0x1007AA80,gameswf::movie_def_impl::read,Code/BF2/External/gameswf/gameswf_impl.cpp,chosen,"S4:removed-2006-progress-hook-and-optional-decoder;[CHOSEN, not recovered] native-file-byte-storage-remains"

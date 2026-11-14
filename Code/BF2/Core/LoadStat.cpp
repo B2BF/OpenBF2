@@ -131,7 +131,7 @@ void LoadStat::setCurrentFile(const std::string& file)
 #if !DEDICATED
     // BF2.exe 0x45D610 (all seven FileManager/Win32FileSystem callers): `lea eax,[ecx+28h];
     // push eax; add ecx,0Ch; call basic_string::assign; ret 4`. The client ignores the file name
-    // and copies the phase name (+0x28 in the MSVC layout, m_string10; resetLoadStats 0x45D6D0
+    // and copies the phase name (+0x28 in the MSVC layout, m_string10; resetLoadStats 0x45D540
     // clears +0x28 then +0x0C, as the Linux reset clears m_string10 then m_string0C). So the
     // loading screen's progressText (endOfRound.swf, dice.bf2.Client.getCurrentLoadFile) shows
     // the load phase, never individual files.

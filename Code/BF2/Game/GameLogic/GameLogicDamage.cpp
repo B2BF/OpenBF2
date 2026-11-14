@@ -26,6 +26,9 @@
 #include "../Python/PythonHost.h"                         // buildArgs, pythonHost()->handleEvent
 #include "../Python/PyRef.h"
 #include "../../Math/Mat4.h"                              // calcLookAtMatrix
+#if !DEDICATED
+#include "../../IO/Input/FalconHaptics.h"                  // updateDamageForce (ledger N2)
+#endif
 #include "../../Scene/Object/PlayerManager.h"             // playerManager
 #include "../../Scene/Object/ObjectTypes/Game/IPlayerControlObject.h"
 #include "Player.h"                                       // dice::hfe::getPlayer; the +0x264 stamp
@@ -401,15 +404,22 @@ void GameLogicDamage::serverGiveDamage(IObject* object, float damage, IPlayer* a
                 victims.push_back(seatPlayer);
             }
 
-            // The vestigial client block - see the header. Virtual calls kept, results dropped.
+            // The Novint "Damage" envelope's inputs (BF2.exe 0x5E64A3..0x5E66A2, ledger N2 17b): the
+            // look-at frame from the owner to the hit and the owner's three rows; the ELF keeps these
+            // calls with the haptic block itself compiled out.
             {
                 Mat4 lookAt = Mat4::getIdentity();
-                owner->getAbsoluteTransformation();                               // +0x84
-                owner->getAbsoluteTransformation();
-                owner->getAbsoluteTransformation();
+                owner->getAbsoluteTransformation();                               // +0x84 (row 2)
+                owner->getAbsoluteTransformation();                               // (row 0)
+                const Mat4& ownerTransform = owner->getAbsoluteTransformation();  // (row 1)
                 Vec3 up = { 0.0f, 1.0f, 0.0f };
                 calcLookAtMatrix(lookAt, owner->getAbsolutePosition(), position, up);
-                playerManager->getLocalHumanPlayer();                             // +0x30
+                IPlayer* const localPlayer = playerManager->getLocalHumanPlayer(); // +0x30
+#if !DEDICATED
+                io::updateDamageForce(seatPlayer, localPlayer, lookAt, ownerTransform, damage);
+#else
+                (void) localPlayer; (void) ownerTransform;
+#endif
                 if (attacker && seatPlayer && attacker != seatPlayer)
                 {
                     seatPlayer->getTeam();

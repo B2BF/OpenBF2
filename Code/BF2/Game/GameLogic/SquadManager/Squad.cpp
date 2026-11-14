@@ -15,7 +15,6 @@
 #include "../../../AI/AIInterface/AIInstance.h"
 #include "../../../AI/AIInterface/IAIEventCourier.h"
 #include "../../../AI/AIInterface/SingletonServer.h"
-#include "../../../AI/AIInterface/BFKnowledge/AIFrontier.h"
 #include "../../../Core/EventManager.h"              // eventManager->postEvent - removeFromSquad
 #include "../../Common/GameEvent.h"                  // PostRemoteEvent - the ECHud 20/21 sends
 #include "../../IGameLogic.h"                        // gameLogic->isServer

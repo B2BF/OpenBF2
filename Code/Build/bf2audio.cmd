@@ -24,10 +24,8 @@ rem           bf2audio.cmd x64        the native x64 client's BF2Audio.dll
 rem   BF2_BF2AUDIO_OUT and BF2_BF2AUDIO_BIN override the output paths.
 rem [CHOSEN, not recovered] Native-only builds: https://github.com/B2BF/OpenBF2/issues/7
 rem
-rem   BF2AUDIO_VORBIS=<dir>  optional: an include root holding ogg\ and vorbis\
-rem     headers plus libogg/libvorbis/libvorbisfile static libs (see the status
-rem     doc). Without it the .ogg paths (streams, music) are [FRONTIER] reports
-rem     through the trace sink and .wav playback is everything the DLL does.
+rem   The vendored libogg/libvorbis sources under Code\BF2\External are compiled in;
+rem     the build stops if they are missing.
 rem ===========================================================================
 if not "%~2"=="" goto :usage
 set "ARCH=x86"
@@ -54,19 +52,16 @@ for %%I in ("%OUT%") do set "OUT=%%~fI"
 for %%I in ("%BIN%") do set "BIN=%%~fI"
 rem Ogg Vorbis: the vendored upstream sources (Code\BF2\External\libogg-1.3.6 and libvorbis-1.3.7,
 rem the decoder set plus vorbisfile) are compiled INTO the DLL, as the shipped image statically
-rem links its own (DICE-patched) libvorbis 1.0. BF2AUDIO_NO_VORBIS=1 leaves them out; the .ogg
-rem paths then report [FRONTIER] and stay silent.
+rem links its own (DICE-patched) libvorbis 1.0. They are required: the .ogg paths have no
+rem decoder-less variant.
 set OGG=%CODE%\BF2\External\libogg-1.3.6
 set VORBIS=%CODE%\BF2\External\libvorbis-1.3.7
-set VORBIS_INC=
-set VORBIS_LIBS=
-set VORBIS_DEF=
-set VORBIS_ON=0
-if exist "%VORBIS%\lib\vorbisfile.c" if not defined BF2AUDIO_NO_VORBIS (
-    set VORBIS_INC=/I "%OGG%\include" /I "%VORBIS%\include"
-    set VORBIS_DEF=/DBF2AUDIO_WITH_VORBIS=1
-    set VORBIS_ON=1
+if not exist "%VORBIS%\lib\vorbisfile.c" (
+    echo bf2audio: the vendored Ogg Vorbis sources are missing: %VORBIS%\lib\vorbisfile.c
+    exit /b 1
 )
+set VORBIS_INC=/I "%OGG%\include" /I "%VORBIS%\include"
+set VORBIS_LIBS=
 
 rem /MD              - shares the rebuilt host's current CRT/STL.
 rem /DBF2_IMAGE_BF2AUDIO - selects the DLL-side ISoundEngine table (Sound/NullSound.h slot 54) and
@@ -76,8 +71,12 @@ rem                    configuration of the shared source.
 rem /DNDEBUG         - the shipped image is a release build: no CRT asserts.
 set FLAGS=/nologo /c %CRT% /std:c++14 /permissive /EHsc /W3 /FS /Zi ^
  %VORBIS_INC% ^
- /DBF2_IMAGE_BF2AUDIO %PLUGIN_ABI% %VORBIS_DEF% /DDEDICATED=0 /FI"%BF2%\Core\BuildConfig.h" /DWIN32 /D_WINDOWS /DNDEBUG /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE ^
+ /DBF2_IMAGE_BF2AUDIO %PLUGIN_ABI% /DDEDICATED=0 /FI"%BF2%\Core\BuildConfig.h" /DWIN32 /D_WINDOWS /DNDEBUG /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE ^
  /wd4100 /wd4127 /wd4244 /wd4267 /wd4291 /wd4305 /wd4996 /Fd"%OUT%\BF2Audio.pdb"
+rem [CHOSEN, not recovered] BF2_FRONTIER_DEFAULT_CONTINUE=ON (CMake option of the same name, passed by
+rem the CMake plugin targets; CI release builds set it): Frontier.cpp's trap defaults to continue when
+rem BF2_BF2AUDIO_FRONTIER is unset. Anything else keeps the dev default, abort.
+if /i "%BF2_FRONTIER_DEFAULT_CONTINUE%"=="ON" set FLAGS=%FLAGS% /DBF2_FRONTIER_DEFAULT_CONTINUE=1
 rem x64: a pointer truncated into a 32-bit integer is an error, as for the x64 dedicated server.
 if "%ARCH%"=="x64" set FLAGS=%FLAGS% /we4311 /we4312
 
@@ -142,23 +141,21 @@ for %%F in (%SOURCES%) do (
 )
 
 rem The Ogg Vorbis decoder (C, third-party: no image define, no BuildConfig, its own warning set).
-if "%VORBIS_ON%"=="1" (
-    set CFLAGS=/nologo /c %CRT% /W3 /FS /Zi /DWIN32 /D_WINDOWS /DNDEBUG /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE ^
-     /I "%OGG%\include" /I "%VORBIS%\include" /I "%VORBIS%\lib" /wd4018 /wd4101 /wd4146 /wd4244 /wd4267 /wd4305 /wd4700 /wd4996 /Fd"%OUT%\BF2Audio.pdb"
-    for %%F in ("%OGG%\src\bitwise.c" "%OGG%\src\framing.c" "%VORBIS%\lib\analysis.c" "%VORBIS%\lib\bitrate.c" "%VORBIS%\lib\block.c" ^
-                "%VORBIS%\lib\codebook.c" "%VORBIS%\lib\envelope.c" "%VORBIS%\lib\floor0.c" "%VORBIS%\lib\floor1.c" "%VORBIS%\lib\info.c" ^
-                "%VORBIS%\lib\lookup.c" "%VORBIS%\lib\lpc.c" "%VORBIS%\lib\lsp.c" "%VORBIS%\lib\mapping0.c" "%VORBIS%\lib\mdct.c" ^
-                "%VORBIS%\lib\psy.c" "%VORBIS%\lib\registry.c" "%VORBIS%\lib\res0.c" "%VORBIS%\lib\sharedbook.c" "%VORBIS%\lib\smallft.c" ^
-                "%VORBIS%\lib\synthesis.c" "%VORBIS%\lib\vorbisfile.c" "%VORBIS%\lib\window.c") do (
-        set /a OBJN+=1
-        cl !CFLAGS! /Fo"%OUT%\!OBJN!_%%~nF.obj" "%%~F" >"%OUT%\cl_%%~nF.log" 2>&1
-        if errorlevel 1 (
-            set /a BAD+=1
-            echo   COMPILE FAIL %%~nxF
-            type "%OUT%\cl_%%~nF.log"
-        ) else (
-            set /a OK+=1
-        )
+set CFLAGS=/nologo /c %CRT% /W3 /FS /Zi /DWIN32 /D_WINDOWS /DNDEBUG /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE ^
+ /I "%OGG%\include" /I "%VORBIS%\include" /I "%VORBIS%\lib" /wd4018 /wd4101 /wd4146 /wd4244 /wd4267 /wd4305 /wd4700 /wd4996 /Fd"%OUT%\BF2Audio.pdb"
+for %%F in ("%OGG%\src\bitwise.c" "%OGG%\src\framing.c" "%VORBIS%\lib\analysis.c" "%VORBIS%\lib\bitrate.c" "%VORBIS%\lib\block.c" ^
+            "%VORBIS%\lib\codebook.c" "%VORBIS%\lib\envelope.c" "%VORBIS%\lib\floor0.c" "%VORBIS%\lib\floor1.c" "%VORBIS%\lib\info.c" ^
+            "%VORBIS%\lib\lookup.c" "%VORBIS%\lib\lpc.c" "%VORBIS%\lib\lsp.c" "%VORBIS%\lib\mapping0.c" "%VORBIS%\lib\mdct.c" ^
+            "%VORBIS%\lib\psy.c" "%VORBIS%\lib\registry.c" "%VORBIS%\lib\res0.c" "%VORBIS%\lib\sharedbook.c" "%VORBIS%\lib\smallft.c" ^
+            "%VORBIS%\lib\synthesis.c" "%VORBIS%\lib\vorbisfile.c" "%VORBIS%\lib\window.c") do (
+    set /a OBJN+=1
+    cl !CFLAGS! /Fo"%OUT%\!OBJN!_%%~nF.obj" "%%~F" >"%OUT%\cl_%%~nF.log" 2>&1
+    if errorlevel 1 (
+        set /a BAD+=1
+        echo   COMPILE FAIL %%~nxF
+        type "%OUT%\cl_%%~nF.log"
+    ) else (
+        set /a OK+=1
     )
 )
 

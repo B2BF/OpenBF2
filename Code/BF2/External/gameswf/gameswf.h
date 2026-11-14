@@ -139,11 +139,15 @@ namespace gameswf
 	struct font;
 	struct character_def;
 	struct bitmap_character_def;
+	struct rect;
 	struct sound_sample;
 	
 	// An interface for casting to different types of
 	// resources.
-	struct resource : public ref_counted
+	// SwiffPlayer.dll: ref_counted is a VIRTUAL base, shared by the resource/character_def and the
+	// movie_definition sides (sprite_definition ctor 0x1007B5A0 keeps one copy at +0x40 behind the
+	// vbtables 0x100E01D4 / 0x100E01CC; movie_def_impl ctor 0x10077FB0 at +0x90 behind 0x100DFD24).
+	struct resource : virtual public ref_counted
 	{
 		// SwiffPlayer.dll 0x10071460 / 0x10073020: only the reference-counted
 		// base has state; 0x10072FF0 is the compiler's deleting wrapper.
@@ -287,6 +291,11 @@ namespace gameswf
 		// SwiffPlayer.dll 0x1006EDF0 / 0x1006EE00 return positive zero.
 		virtual float	get_height_local() { return 0.0f; }
 		virtual float	get_width_local() { return 0.0f; }
+		// SwiffPlayer.dll character_def table 0x100DF268 +0x20 is _purecall: every concrete definition
+		// answers its rectangle (shape and morph 0x10099290, text 0x100853E0, edit text 0x10086B40,
+		// bitmap 0x100739E0, sprite 0x1007B670, button 0x100A1F90). Callers dispatch through it
+		// directly (generic character 0x1007F240 via its definition, button bounds 0x100A1F90).
+		virtual rect	get_bound_copy() const = 0;
 
 		// Should stick the result in a smart_ptr immediately.
 		virtual character*	create_character_instance(movie* parent, int id);	// default is to make a generic_character
@@ -323,7 +332,11 @@ namespace gameswf
 	// This is the client program's interface to the definition of
 	// a movie (i.e. the shared constant source info).
 	//
-	struct movie_definition : public character_def
+	// SwiffPlayer.dll: a movie definition is NOT a character definition. movie_definition derives only
+	// from the shared virtual ref_counted (movie_def_impl ctor 0x10077FB0: primary table 0x100DFC90,
+	// whose +0x20 is visit_imported_movies, not the bounds slot). Sprite definitions add character_def
+	// as a second base.
+	struct movie_definition : virtual public ref_counted
 	{
 		// Compiler deleting wrapper: SwiffPlayer.dll 0x10071680. Native bases
 		// retain their ownership adapters; this certifies the wrapper only.
@@ -970,7 +983,8 @@ namespace gameswf
 		virtual void	set_matrix(const matrix& m) = 0;
 		virtual void	set_cxform(const cxform& cx) = 0;
 		// Submit the display-list depth before mesh and line callbacks.
-		virtual void	set_depth(int depth);
+		// SwiffRenderHandler (SwiffPlayer.h) is the one backend; every handler supplies depth.
+		virtual void	set_depth(int depth) = 0;
 		
 		// Draw triangles using the current fill-style 0.
 		// Clears the style list after rendering.

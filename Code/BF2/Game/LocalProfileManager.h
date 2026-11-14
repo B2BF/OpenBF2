@@ -8,7 +8,8 @@
 #include "IEventListener.h"
 #include <string>
 #include <vector>
-#if !DEDICATED
+// The interface is declared in every image (the dedicated AI reaches it through BFGame's menu
+// arm, which no dedicated module can trigger); the implementation is client-only.
 namespace dice { namespace hfe {
 
 struct LocalProfile {
@@ -41,11 +42,12 @@ public:
     virtual bool deleteProfile(int profileIndex) = 0;
     virtual bool createOnlineAccount(const std::string& nick, const std::string& email,
                                      const std::string& password, const std::string& country) = 0; // PE+2C 4A7600
-    // [CHOSEN, not recovered] [RETIRE-WHEN: local-profile-approved-opaque-slots]
-    // Abort-only placeholders preserve virtual positions. Their void() signature is not the retail ABI;
-    // original parameter types are unknown. These methods must never return.
-    virtual void frontierPrimary30() = 0; // PE+30
-    virtual void frontierPrimary34() = 0; // PE+34
+    // PE+30 4A7690: `cmp [ecx+0C],0; setne al; ret 4` - whether a profile is current; the one stack
+    // argument is ignored (its type is unknown, a dword). Name [INFERRED].
+    virtual bool hasCurrentProfile(int ignored) = 0;
+    // PE+34 4553F0: the image's shared `mov al,1; ret 8` - true, both dword arguments ignored. Name
+    // [INFERRED]; no caller in the client image.
+    virtual bool slot34(int ignored, int ignored2) = 0;
     virtual bool hasProfile(const std::string& profileName) = 0;
     virtual bool loadCurrentProfile() = 0; // PE+3C 4AB1D0
     virtual bool saveCurrentProfile() = 0;
@@ -94,6 +96,7 @@ public:
     // PE+D4 4ABD10 is the scalar deleting destructor; no destructor slot is declared (see below).
 };
 
+#if !DEDICATED
 struct LocalProfileFixture;
 class LocalProfileManager final : public ILocalProfileManager, public IEventListener {
 public:
@@ -116,8 +119,8 @@ public:
     bool deleteProfile(int profileIndex) override;
     bool createOnlineAccount(const std::string& nick, const std::string& email,
                              const std::string& password, const std::string& country) override;
-    void frontierPrimary30() override;
-    void frontierPrimary34() override;
+    bool hasCurrentProfile(int ignored) override;
+    bool slot34(int ignored, int ignored2) override;
     bool hasProfile(const std::string& profileName) override;
     bool loadCurrentProfile() override;
     bool saveCurrentProfile() override;
@@ -158,6 +161,9 @@ public:
     int getLoginProfileIndex() override;
     std::string getLoginPassword() override;
     void handleEvent(EventCategory, unsigned int, EventNode*, void*) override; // actual5B74B0 RET16
+    // [CHOSEN, not recovered] Non-virtual, no retail counterpart: once the renderer exists, a Default
+    // profile created in this run takes the renderer-aware defaults (see LocalProfileManagerInit.cpp).
+    void applyFirstStartVideoDefaults();
 private:
     friend struct LocalProfileFixture;
     void reportProfileError(const std::string& message); // [INFERRED] name/caller-discard void; PE4B11A0
@@ -175,6 +181,6 @@ private:
     bool m_field54;
 };
 
+#endif // !DEDICATED
 } }
-#endif
 #endif

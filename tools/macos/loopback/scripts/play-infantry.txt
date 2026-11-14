@@ -1,0 +1,136 @@
+# [TEMP] play-infantry: after the spawn, the infantry actions a player uses.
+# Keys follow the shipped mods/bf2/Settings/Controls.con (InfantryPlayerInputControlMap and the
+# common map): fire IDButton_0, reload R, weapons 1-9, wheel = next/prev item, crouch LeftCtrl,
+# prone Z, jump Space, sprint LeftShift (with W), scoreboard Tab (hold), map M, in-game menu Enter.
+include join-and-spawn
+log play: infantry start
+wait-ms 2000
+log play: stance
+key-down leftctrl
+wait-ms 1500
+capture crouch
+key-up leftctrl
+wait-ms 800
+key z
+wait-ms 2000
+capture prone
+key z
+wait-ms 2000
+key space
+wait-ms 1200
+log play: walk and sprint
+key-down w
+wait-ms 1500
+key-down leftshift
+wait-ms 2500
+key-up leftshift
+key-up w
+wait-ms 500
+key space
+wait-ms 1000
+log play: look around
+move-rel 400 0
+wait-ms 500
+move-rel 400 0
+wait-ms 500
+move-rel 0 -100
+wait-ms 500
+move-rel 0 200
+wait-ms 500
+move-rel -800 -100
+wait-ms 500
+capture looked
+# Fire: one click, then hold for two seconds (automatic).
+log play: fire click
+button-down 0
+wait-ms 80
+button-up 0
+wait-ms 800
+log play: fire hold
+button-down 0
+wait-ms 2000
+button-up 0
+wait-ms 500
+capture fired
+log play: reload
+key r
+wait-ms 3500
+# Weapon slots 1-6, a shot with each.
+log play: weapon 1
+key 1
+wait-ms 1200
+button-down 0
+wait-ms 100
+button-up 0
+wait-ms 800
+log play: weapon 2
+key 2
+wait-ms 1200
+button-down 0
+wait-ms 100
+button-up 0
+wait-ms 800
+capture weapon-2
+log play: weapon 3
+key 3
+wait-ms 1200
+button-down 0
+wait-ms 100
+button-up 0
+wait-ms 800
+log play: weapon 4
+key 4
+wait-ms 1200
+capture weapon-4
+log play: weapon 5
+key 5
+wait-ms 1200
+log play: weapon 6
+key 6
+wait-ms 1200
+log play: wheel
+wheel 1
+wait-ms 800
+wheel 1
+wait-ms 800
+wheel -1
+wait-ms 800
+# Back to the primary.
+key 3
+wait-ms 1200
+log play: scoreboard
+key-down tab
+wait-ms 1500
+capture scoreboard
+key-up tab
+wait-ms 800
+log play: map
+key m
+wait-ms 1500
+capture map
+key m
+wait-ms 1000
+log play: in-game menu (squad/commander screen)
+key enter
+wait-ms 2000
+capture ingame-menu
+key enter
+wait-ms 1500
+capture after-menu
+# Last: in a bots game the explosion damage reaches ai::BFCollisionHandler (a stop until the AI
+# subproject recovers it).
+# Grenade: in the kits the grenade is item 4 or 5 after the sidearm; select and throw it far.
+log play: grenade
+key 4
+wait-ms 1200
+move-rel 0 -150
+wait-ms 300
+button-down 0
+wait-ms 1200
+button-up 0
+wait-ms 2500
+capture grenade
+move-rel 0 150
+key 3
+wait-ms 1000
+log play: infantry done

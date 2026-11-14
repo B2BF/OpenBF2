@@ -1,0 +1,71 @@
+address,key,symbol,file,score,margin,literals,callees,constants,size_distance,first,last,decision
+0x1006DF40,"tu_file::tu_file(FILE*,bool)",tu_file::tu_file,Code/BF2/External/base/tu_file.cpp,0.394,-1.085,0,0,0,0.053,0x1006DF30,0x1006E090,candidate-only
+0x1006DF80,"tu_file::tu_file(const char*,const char*)",tu_file::tu_file,Code/BF2/External/base/tu_file.cpp,-0.921,-2.104,0,0,0,0.710,0x1006DF30,0x1006E090,candidate-only
+0x1006DFC0,tu_file::tu_file(memory_buffer_enum),tu_file::tu_file,Code/BF2/External/base/tu_file.cpp,1.130,-0.263,0,0,0,0.185,0x1006DF30,0x1006E090,candidate-only
+0x1006E010,"tu_file::tu_file(memory_buffer_enum,int,void*)",tu_file::tu_file,Code/BF2/External/base/tu_file.cpp,-1.445,-1.866,0,0,0,0.972,0x1006DF30,0x1006E090,candidate-only
+0x1006E2B0,"tu_file::tu_file(FILE*,bool)",tu_file::tu_file,Code/BF2/External/base/tu_file.cpp,-0.299,-0.872,0,0,0,0.399,0x1006E280,0x1006E380,candidate-only
+0x1006E310,"tu_file::tu_file(const char*,const char*)",tu_file::tu_file,Code/BF2/External/base/tu_file.cpp,1.069,1.003,0,0,0,0.216,0x1006E280,0x1006E380,candidate-only
+0x1006F2C0,gameswf::ref_counted::get_weak_proxy() const,gameswf::ref_counted::get_weak_proxy,Code/BF2/External/gameswf/gameswf_impl.cpp,0.933,5.741,0,0,0,0.034,0x1006F2A0,0x1006F380,candidate-only
+0x1006F330,gameswf::character::do_mouse_drag(),gameswf::character::do_mouse_drag,Code/BF2/External/gameswf/gameswf_impl.cpp,-5.302,-5.312,0,0,0,2.901,0x1006F2A0,0x1006F380,candidate-only
+0x1006F560,gameswf::create_movie(const char*),gameswf::create_movie,Code/BF2/External/gameswf/gameswf_impl.cpp,-2.397,-2.356,0,0,0,1.449,0x1006F380,0x1006F600,candidate-only
+0x1006F570,gameswf::save_extern_movie(movie_interface*),gameswf::save_extern_movie,Code/BF2/External/gameswf/gameswf_impl.cpp,-2.737,-2.696,0,0,0,1.619,0x1006F380,0x1006F600,candidate-only
+0x1006F580,gameswf::get_workdir(),gameswf::get_workdir,Code/BF2/External/gameswf/gameswf_impl.cpp,-0.041,2.356,0,0,0,0.771,0x1006F380,0x1006F600,candidate-only
+0x1006F590,gameswf::set_workdir(const char*),gameswf::set_workdir,Code/BF2/External/gameswf/gameswf_impl.cpp,-0.572,-1.005,0,0,0,0.536,0x1006F380,0x1006F600,candidate-only
+0x1006F5B0,gameswf::clear_library(),gameswf::clear_library,Code/BF2/External/gameswf/gameswf_impl.cpp,0.111,-1.108,0,0,0,0.444,0x1006F380,0x1006F600,candidate-only
+0x1006F5E0,gameswf::create_library_movie_inst(movie_definition*),gameswf::create_library_movie_inst,Code/BF2/External/gameswf/gameswf_impl.cpp,0.548,-0.075,0,0,0,0.226,0x1006F380,0x1006F600,candidate-only
+0x1006F870,"gameswf::sprite_definition::create_character_instance(movie*,int)",gameswf::sprite_definition::create_character_instance,Code/BF2/External/gameswf/gameswf_impl.cpp,-1.145,-1.437,0,0,0,0.989,0x1006F7E0,0x1006F900,candidate-only
+0x1006F890,gameswf::movie_def_impl::create_instance(),gameswf::movie_def_impl::create_instance,Code/BF2/External/gameswf/gameswf_impl.cpp,-1.847,-2.279,0,0,0,1.245,0x1006F7E0,0x1006F900,candidate-only
+0x1006F8D0,gameswf::sprite_builtins_clear(),gameswf::sprite_builtins_clear,Code/BF2/External/gameswf/gameswf_impl.cpp,-0.567,3.186,0,0,0,1.034,0x1006F7E0,0x1006F900,candidate-only
+0x1006FA40,gameswf::sprite_builtins_clear(),gameswf::sprite_builtins_clear,Code/BF2/External/gameswf/gameswf_impl.cpp,1.292,101.292,0,0,0,0.104,0x1006F9A0,0x1006FA70,candidate-only
+0x100718B0,"gameswf::inflate_wrapper(tu_file*,void*,int)",gameswf::inflate_wrapper,Code/BF2/External/gameswf/gameswf_impl.cpp,-4.583,-5.144,0,0,0,2.592,0x10071720,0x100719F0,candidate-only
+0x10071900,"gameswf::sprite_definition::create_character_instance(movie*,int)",gameswf::sprite_definition::create_character_instance,Code/BF2/External/gameswf/gameswf_impl.cpp,-0.663,2.279,0,0,0,0.748,0x10071720,0x100719F0,candidate-only
+0x10071930,gameswf::movie_def_impl::create_instance(),gameswf::movie_def_impl::create_instance,Code/BF2/External/gameswf/gameswf_impl.cpp,-0.578,-0.066,0,0,0,0.539,0x10071720,0x100719F0,candidate-only
+0x100755A0,"gameswf::sprite_definition::create_character_instance(movie*,int)",gameswf::sprite_definition::create_character_instance,Code/BF2/External/gameswf/gameswf_impl.cpp,1.387,2.660,0,0,0,0.056,0x10075470,0x10075780,candidate-only
+0x100755E0,gameswf::movie_def_impl::create_instance(),gameswf::movie_def_impl::create_instance,Code/BF2/External/gameswf/gameswf_impl.cpp,-1.030,-1.924,0,0,0,0.908,0x10075470,0x10075780,candidate-only
+0x10077F50,"gameswf::sprite_definition::create_character_instance(movie*,int)",gameswf::sprite_definition::create_character_instance,Code/BF2/External/gameswf/gameswf_impl.cpp,1.227,2.115,0,0,0,0.136,0x10076A30,0x1007BB50,candidate-only
+0x100784F0,gameswf::movie_def_impl::create_instance(),gameswf::movie_def_impl::create_instance,Code/BF2/External/gameswf/gameswf_impl.cpp,0.719,1.574,0,0,0,0.034,0x10076A30,0x1007BB50,candidate-only
+0x1007D520,"gameswf::create_movie_no_recurse(tu_file*,create_bitmaps_flag,create_font_shapes_flag)",gameswf::create_movie_no_recurse,Code/BF2/External/gameswf/gameswf_impl.cpp,5.057,5.608,0,1,0,0.221,0x1007D3C0,0x1007D580,candidate-only
+0x1007D700,"gameswf::sprite_definition::create_character_instance(movie*,int)",gameswf::sprite_definition::create_character_instance,Code/BF2/External/gameswf/gameswf_impl.cpp,1.099,2.384,0,0,0,0.201,0x1007D580,0x1007D830,candidate-only
+0x1007D730,gameswf::movie_def_impl::create_instance(),gameswf::movie_def_impl::create_instance,Code/BF2/External/gameswf/gameswf_impl.cpp,-0.904,-0.170,0,0,0,0.916,0x1007D580,0x1007D830,candidate-only
+0x1008ABE0,"gameswf::key_get_code(as_value*,as_object_interface*,as_environment*,int,int)",gameswf::key_get_code,Code/BF2/External/gameswf/gameswf_action.cpp,-2.994,97.006,0,0,0,1.913,0x1008AB80,0x1008AC10,candidate-only
+0x1008B770,gameswf::as_value::convert_to_number(),gameswf::as_value::convert_to_number,Code/BF2/External/gameswf/gameswf_action.cpp,1.982,2.696,0,1,0,1.759,0x1008B6B0,0x1008B800,candidate-only
+0x1008B7C0,gameswf::as_value::convert_to_string(),gameswf::as_value::convert_to_string,Code/BF2/External/gameswf/gameswf_action.cpp,2.652,2.500,0,1,0,1.174,0x1008B6B0,0x1008B800,candidate-only
+0x1008B8F0,gameswf::as_value::string_concat(const tu_string&),gameswf::as_value::string_concat,Code/BF2/External/gameswf/gameswf_action.cpp,2.789,2.109,0,1,0,1.022,0x1008B800,0x1008B940,candidate-only
+0x1008EAD0,"gameswf::call_method0(const as_value&,as_environment*,as_object_interface*)",gameswf::call_method0,Code/BF2/External/gameswf/gameswf_action.cpp,3.526,2.900,0,1,0,0.820,0x1008EAA0,0x1008EB30,candidate-only
+0x1008F850,"gameswf::key_get_code(as_value*,as_object_interface*,as_environment*,int,int)",gameswf::key_get_code,Code/BF2/External/gameswf/gameswf_action.cpp,-0.628,99.372,0,0,0,0.730,0x1008EB30,0x1008FC50,candidate-only
+0x10090D00,gameswf::action_clear(),gameswf::action_clear,Code/BF2/External/gameswf/gameswf_action.cpp,0.775,0.927,0,0,0,0.113,0x1008FC50,0x10090FF0,candidate-only
+0x10090DF0,"gameswf::set_property(as_object_interface*,int,const as_value&)",gameswf::set_property,Code/BF2/External/gameswf/gameswf_action.cpp,-0.180,-0.955,0,0,0,0.528,0x1008FC50,0x10090FF0,candidate-only
+0x10090EE0,gameswf::action_buffer::read(stream*),gameswf::action_buffer::read,Code/BF2/External/gameswf/gameswf_action.cpp,0.320,0.042,0,0,1,0.682,0x1008FC50,0x10090FF0,candidate-only
+0x10091420,gameswf::as_value::to_object() const,gameswf::as_value::to_object,Code/BF2/External/gameswf/gameswf_action.cpp,0.374,0.000,0,0,0,0.563,0x10090FF0,0x100914C0,candidate-only
+0x10091450,gameswf::as_value::to_c_function() const,gameswf::as_value::to_c_function,Code/BF2/External/gameswf/gameswf_action.cpp,-0.152,-0.579,0,0,0,0.826,0x10090FF0,0x100914C0,candidate-only
+0x10091470,gameswf::as_value::convert_to_number(),gameswf::as_value::convert_to_number,Code/BF2/External/gameswf/gameswf_action.cpp,-5.492,0.304,0,0,0,2.996,0x10090FF0,0x100914C0,candidate-only
+0x10091480,gameswf::as_value::convert_to_string(),gameswf::as_value::convert_to_string,Code/BF2/External/gameswf/gameswf_action.cpp,-3.796,-0.304,0,0,0,2.148,0x10090FF0,0x100914C0,candidate-only
+0x10091490,gameswf::as_value::string_concat(const tu_string&),gameswf::as_value::string_concat,Code/BF2/External/gameswf/gameswf_action.cpp,0.652,0.000,0,0,0,0.174,0x10090FF0,0x100914C0,candidate-only
+0x10091890,"gameswf::as_environment::set_variable_raw(const tu_string&,const as_value&,const array<with_stack_entry>&)",gameswf::as_environment::set_variable_raw,Code/BF2/External/gameswf/gameswf_action.cpp,0.704,0.456,0,0,0,0.398,0x100914C0,0x10091960,candidate-only
+0x10092130,"gameswf::as_environment::set_local(const tu_string&,const as_value&)",gameswf::as_environment::set_local,Code/BF2/External/gameswf/gameswf_action.cpp,0.725,0.086,0,0,0,0.304,0x10092060,0x100921D0,candidate-only
+0x10097EA0,gameswf::shape_character_def::shape_character_def(),gameswf::shape_character_def::shape_character_def,Code/BF2/External/gameswf/gameswf_shape.cpp,-0.500,3.954,0,0,0,1.000,0x100978C0,0x10098B50,candidate-only
+0x10097F60,gameswf::shape_character_def::~shape_character_def(),gameswf::shape_character_def::~shape_character_def,Code/BF2/External/gameswf/gameswf_shape.cpp,1.190,7.334,0,0,0,0.155,0x100978C0,0x10098B50,candidate-only
+0x1009D440,gameswf::stream::read_fixed(),gameswf::stream::read_fixed,Code/BF2/External/gameswf/gameswf_stream.cpp,0.113,-0.017,0,0,0,0.193,0x1009D410,0x1009D5B0,candidate-only
+0x1009D470,gameswf::stream::align(),gameswf::stream::align,Code/BF2/External/gameswf/gameswf_stream.cpp,-0.870,-1.000,0,0,0,1.185,0x1009D410,0x1009D5B0,candidate-only
+0x1009D4A0,gameswf::stream::read_u8(),gameswf::stream::read_u8,Code/BF2/External/gameswf/gameswf_stream.cpp,-3.909,-4.695,0,0,0,2.454,0x1009D410,0x1009D5B0,candidate-only
+0x1009D530,gameswf::stream::read_s8(),gameswf::stream::read_s8,Code/BF2/External/gameswf/gameswf_stream.cpp,-2.101,-1.971,0,0,0,1.300,0x1009D410,0x1009D5B0,candidate-only
+0x1009D540,gameswf::stream::read_u16(),gameswf::stream::read_u16,Code/BF2/External/gameswf/gameswf_stream.cpp,-0.063,-0.274,0,0,0,0.282,0x1009D410,0x1009D5B0,candidate-only
+0x1009D560,gameswf::stream::read_s32(),gameswf::stream::read_s32,Code/BF2/External/gameswf/gameswf_stream.cpp,-2.101,-1.971,0,0,0,1.300,0x1009D410,0x1009D5B0,candidate-only
+0x1009D570,gameswf::stream::get_position(),gameswf::stream::get_position,Code/BF2/External/gameswf/gameswf_stream.cpp,0.514,1.000,0,0,0,0.493,0x1009D410,0x1009D5B0,candidate-only
+0x1009D580,gameswf::stream::get_tag_end_position(),gameswf::stream::get_tag_end_position,Code/BF2/External/gameswf/gameswf_stream.cpp,0.288,-1.000,0,0,0,0.272,0x1009D410,0x1009D5B0,candidate-only
+0x1009DAE0,"gameswf::matrix::transform(point*,const point&) const",gameswf::matrix::transform,Code/BF2/External/gameswf/gameswf_types.cpp,-2.096,-3.421,0,0,0,1.298,0x1009DA80,0x1009E170,candidate-only
+0x1009DB50,"gameswf::matrix::transform_vector(point*,const point&) const",gameswf::matrix::transform_vector,Code/BF2/External/gameswf/gameswf_types.cpp,-0.940,-0.874,0,0,0,0.720,0x1009DA80,0x1009E170,candidate-only
+0x1009DC00,"gameswf::matrix::transform_by_inverse(point*,const point&) const",gameswf::matrix::transform_by_inverse,Code/BF2/External/gameswf/gameswf_types.cpp,0.422,0.251,0,0,0,0.039,0x1009DA80,0x1009E170,candidate-only
+0x1009DC30,gameswf::matrix::get_determinant() const,gameswf::matrix::get_determinant,Code/BF2/External/gameswf/gameswf_types.cpp,-2.149,-1.259,0,0,0,1.824,0x1009DA80,0x1009E170,candidate-only
+0x1009DC40,gameswf::matrix::get_max_scale() const,gameswf::matrix::get_max_scale,Code/BF2/External/gameswf/gameswf_types.cpp,-0.979,-1.203,0,0,0,0.740,0x1009DA80,0x1009E170,candidate-only
+0x1009DC90,gameswf::matrix::get_x_scale() const,gameswf::matrix::get_x_scale,Code/BF2/External/gameswf/gameswf_types.cpp,-1.089,-1.454,0,0,0,0.795,0x1009DA80,0x1009E170,candidate-only
+0x1009DCD0,gameswf::matrix::get_y_scale() const,gameswf::matrix::get_y_scale,Code/BF2/External/gameswf/gameswf_types.cpp,-1.637,-1.779,0,0,0,1.069,0x1009DA80,0x1009E170,candidate-only
+0x1009DCF0,gameswf::matrix::get_rotation() const,gameswf::matrix::get_rotation,Code/BF2/External/gameswf/gameswf_types.cpp,-1.601,-1.656,0,0,0,1.051,0x1009DA80,0x1009E170,candidate-only
+0x1009DD20,gameswf::cxform::cxform(),gameswf::cxform::cxform,Code/BF2/External/gameswf/gameswf_types.cpp,-2.605,-2.796,0,0,0,2.053,0x1009DA80,0x1009E170,candidate-only
+0x1009DD50,gameswf::cxform::concatenate(const cxform&),gameswf::cxform::concatenate,Code/BF2/External/gameswf/gameswf_types.cpp,-2.050,-2.940,0,0,0,1.775,0x1009DA80,0x1009E170,candidate-only
+0x1009DDB0,gameswf::cxform::transform(rgba) const,gameswf::cxform::transform,Code/BF2/External/gameswf/gameswf_types.cpp,0.249,0.752,0,0,0,0.250,0x1009DA80,0x1009E170,candidate-only
+0x1009DF10,gameswf::cxform::read_rgb(stream*),gameswf::cxform::read_rgb,Code/BF2/External/gameswf/gameswf_types.cpp,7.312,0.261,0,2,0,0.744,0x1009DA80,0x1009E170,candidate-only
+0x1009E010,gameswf::cxform::read_rgba(stream*),gameswf::cxform::read_rgba,Code/BF2/External/gameswf/gameswf_types.cpp,7.381,-0.261,0,2,0,0.684,0x1009DA80,0x1009E170,candidate-only
+0x1009E130,gameswf::rgba::read_rgb(stream*),gameswf::rgba::read_rgb,Code/BF2/External/gameswf/gameswf_types.cpp,1.428,0.340,0,0,1,0.003,0x1009DA80,0x1009E170,candidate-only
+0x1009E1A0,"gameswf::rgba::set_lerp(const rgba&,const rgba&,float)",gameswf::rgba::set_lerp,Code/BF2/External/gameswf/gameswf_types.cpp,-0.007,0.471,0,0,0,0.316,0x1009E170,0x1009E2D0,candidate-only
+0x1009E260,gameswf::rect::read(stream*),gameswf::rect::read,Code/BF2/External/gameswf/gameswf_types.cpp,9.485,9.238,0,2,1,0.058,0x1009E170,0x1009E2D0,candidate-only

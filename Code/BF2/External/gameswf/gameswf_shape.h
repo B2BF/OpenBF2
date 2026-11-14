@@ -163,8 +163,7 @@ namespace gameswf
 	};
 
 
-	struct shape_character_def : public character_def, public tesselate::tesselating_shape,
-		public definition_bounds_provider
+	struct shape_character_def : public character_def, public tesselate::tesselating_shape
 	// Represents the outline of one or more shapes, along with
 	// information on fill and line styles.
 	{

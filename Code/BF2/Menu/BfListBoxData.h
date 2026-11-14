@@ -94,6 +94,26 @@ struct ListBoxColumn
 
 // Complete34-slot declaration936880. The visual node remains unpublished;
 // this data object's own table, constructor and descriptor are complete.
+// The list's +0x48 cell resource ([INFERRED] interface and slot names). clearCell (7C4CF3) and copyCell
+// (7C4A67) hand it a cell's resource index at +0x20, paintSelf (7C7912) calls +0x2C after the rows,
+// and the destructor releases it. Retail never sets it: the constructor (7C8034) zeroes it, it is
+// not streamed, and none of the twelve creation sites stores one, so every caller's null test fails.
+class IListBoxCellResource : public dice::hfe::IBase
+{
+public:
+    virtual void unused10() = 0;
+    virtual void unused14() = 0;
+    virtual void unused18() = 0;
+    virtual void unused1C() = 0;
+    virtual void releaseCell(int resourceIndex) = 0;      // +0x20
+    virtual void unused24() = 0;
+    virtual void unused28() = 0;
+    virtual void finishPaint() = 0;                        // +0x2C
+
+protected:
+    ~IListBoxCellResource() {}
+};
+
 class BfListBoxData : public ListBoxData
 {
 public:

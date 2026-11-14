@@ -24,6 +24,12 @@
 #include <cstdlib>
 #include <cstring>
 #include <list>
+#if !defined(_WIN32)
+#include <cerrno>
+#include <ifaddrs.h>
+#include <net/if.h>
+#include <netinet/in.h>
+#endif
 
 namespace dice { namespace hfe {
 
@@ -103,6 +109,58 @@ std::string localAddress()
     }
     return std::string("127.0.0.1");
 }
+
+#if !defined(_WIN32)
+// [CHOSEN, not recovered] Retail has no such message. On macOS a denied Local Network permission
+// makes every LAN broadcast send fail and the LAN list stays empty without a word. The text goes
+// through the menu's own message channel: SwiffHost::postMessage (BF2.exe 0x496CA0, host +0x1E4),
+// polled by mainMenu.swf's checkForMessages through dice.MessageHandler.getLastType/getLastText
+// (SwiffPlayer.dll 0x1004F0A0 / 0x1004F000, host +0x204). Type 1 is that page's "error" frame:
+// the text as given under the title MESSAGEHANDLER_error ("GAME MESSAGE"), the kind retail uses for
+// its own plain-text messages (ProfileManager::reportError). Type 2 "warning" shows its title id
+// raw (no MESSAGEHANDLER_warning string ships), type 3 looks the text up as a localization id.
+const char kLanDeniedText[] =
+    "OpenBF2 can't search the local network for servers. Allow it in System Settings > "
+    "Privacy & Security > Local Network, then refresh the list.";
+
+// Whether an IPv4 interface other than loopback is up and can broadcast: without one an empty LAN
+// list is expected and the failed send is not a permission problem.
+bool hasBroadcastInterface()
+{
+    struct ifaddrs* list = 0;
+    if (getifaddrs(&list) != 0)
+        return false;
+    bool found = false;
+    for (struct ifaddrs* it = list; it && !found; it = it->ifa_next)
+    {
+        const unsigned int flags = it->ifa_flags;
+        found = it->ifa_addr && it->ifa_addr->sa_family == AF_INET
+             && (flags & IFF_UP) && (flags & IFF_RUNNING) && (flags & IFF_BROADCAST) && !(flags & IFF_LOOPBACK);
+    }
+    freeifaddrs(list);
+    return found;
+}
+
+// The LAN browse's broadcast failed with `error`. macOS refuses a send that Local Network privacy
+// denies with EHOSTUNREACH; a sandbox or firewall rule refuses it with EPERM. Anything else (e.g.
+// ENETUNREACH / ENETDOWN with no network) raises nothing. At most one message per browse, and
+// none while the same message is still the newest one queued.
+void reportLanBroadcastFailure(int error)
+{
+    if (error != EHOSTUNREACH && error != EPERM)
+        return;
+    if (!hasBroadcastInterface())
+        return;
+    IBase* host = classManager->getSingleton(std::string("SwiffHost"));
+    if (!host)
+        return;
+    ui::ISwiffHost* swiffHost = static_cast<ui::ISwiffHost*>(host);
+    SwiffHostMessage last;
+    if (swiffHost->popLastMessage(last, false) && last.type == 1 && last.text == kLanDeniedText)
+        return;
+    swiffHost->postMessage(SwiffHostMessage(1, std::string(kLanDeniedText), 0));
+}
+#endif
 
 } // namespace
 
@@ -249,8 +307,16 @@ bool ServerBrowser::startUpdate(bool async)
     }
     else
     {
+#if !defined(_WIN32)
+        const SBError lanError = ServerBrowserLANUpdate(m_browser, async ? SBTrue : SBFalse, 29900, 29950);
+        if (ServerBrowserLANSendError(m_browser) != 0)   // [CHOSEN, not recovered], see reportLanBroadcastFailure
+            reportLanBroadcastFailure(ServerBrowserLANSendError(m_browser));
+        if (lanError != sbe_noerror)
+            return false;
+#else
         if (ServerBrowserLANUpdate(m_browser, async ? SBTrue : SBFalse, 29900, 29950) != sbe_noerror)
             return false;
+#endif
     }
     m_updateStarted = true;
     return true;

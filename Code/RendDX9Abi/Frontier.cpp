@@ -20,9 +20,6 @@
 #include <unistd.h>
 #endif
 #endif
-#if defined(__APPLE__) && !DEDICATED
-#include "../BF2/Platform/macOS/ClientPaths.h"
-#endif
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -41,6 +38,15 @@
 #endif
 #ifndef RD9ABI_LOG_BANNER
 #define RD9ABI_LOG_BANNER "RendDX9 replacement"
+#endif
+
+// [CHOSEN, not recovered] The trap's default when the env var is unset (owner decision 2026-11-14).
+// 0 (dev builds, every gate): armed, a frontier logs and aborts. 1 (release packages built by CI):
+// disarmed, a frontier logs and returns. CMake option BF2_FRONTIER_DEFAULT_CONTINUE sets it; the
+// .cmd image builds (renddx9/swiffplayer/bf2audio) see it through the same-named env var, which
+// the CMake plugin targets always pass explicitly. The [FRONTIER] lines are logged either way.
+#ifndef BF2_FRONTIER_DEFAULT_CONTINUE
+#define BF2_FRONTIER_DEFAULT_CONTINUE 0
 #endif
 
 namespace renddx9abi {
@@ -172,13 +178,23 @@ bool frontierTrapEnabled()
                 ::memcpy(value, env, length + 1);
         }
 #endif
-        // Anything other than the exact word "continue" leaves the trap armed. An unset variable,
-        // a typo, and a truncated value all mean abort - which is the safe direction.
+        // An explicit value wins in every build: "continue" disarms, "abort" arms (case-insensitive).
+        // Anything unexpected - an unset variable, a typo, a truncated value - is the build's
+        // default (BF2_FRONTIER_DEFAULT_CONTINUE above): abort in dev builds, continue in release
+        // packages.
 #if defined(_WIN32)
-        s_trap = (n > 0 && n < sizeof(value) && ::_stricmp(value, "continue") == 0) ? 0 : 1;
+#define RD9ABI_STRICMP ::_stricmp
 #else
-        s_trap = (n > 0 && n < sizeof(value) && ::strcasecmp(value, "continue") == 0) ? 0 : 1;
+#define RD9ABI_STRICMP ::strcasecmp
 #endif
+        const bool readable = n > 0 && n < sizeof(value);
+        if (readable && RD9ABI_STRICMP(value, "continue") == 0)
+            s_trap = 0;
+        else if (readable && RD9ABI_STRICMP(value, "abort") == 0)
+            s_trap = 1;
+        else
+            s_trap = BF2_FRONTIER_DEFAULT_CONTINUE ? 0 : 1;
+#undef RD9ABI_STRICMP
     }
     return s_trap != 0;
 }
@@ -190,22 +206,11 @@ void logOpen()
     if (!s_log)
     {
         // The game runs with the game directory as its working directory, so a relative name lands
-        // beside BF2.exe where a tester will look for it.
+        // beside BF2.exe where a tester will look for it. The macOS client is started in the
+        // installed game folder and writes the log there too (docs/macos-write-paths.md).
 #if defined(_WIN32)
         if (::fopen_s(&s_log, RD9ABI_LOG_FILENAME, "w") != 0)
             s_log = 0;
-#elif defined(__APPLE__) && !DEDICATED
-        // [CHOSEN, not recovered] The macOS client keeps the log in its data directory
-        // (~/Library/Application Support/OpenBF2, HOME first; ClientPaths.h), not in the working
-        // directory. The installer starts the client in the installed game-data tree, which it has
-        // verified and treats as read-only content, so a relative name would leave a new file
-        // there. The host has taken its instance lock in that directory before any image calls
-        // initDll, so the call below only reads the cached path; the name is built on the stack
-        // because operator new here is the engine heap. Windows keeps the retail-like cwd name.
-        char path[1024];
-        const int n = ::snprintf(path, sizeof(path), "%s/%s",
-                                 dice::hfe::macos::clientDataDirectory().c_str(), RD9ABI_LOG_FILENAME);
-        s_log = (n > 0 && static_cast<size_t>(n) < sizeof(path)) ? ::fopen(path, "w") : 0;
 #else
         s_log = ::fopen(RD9ABI_LOG_FILENAME, "w");
 #endif

@@ -1,6 +1,6 @@
 // [CHOSEN, not recovered] Cached native movie images retain CPU pixels and bind
 // separately in each player's texture registry. Native cache lifetime follows
-// issue #7; see docs/macos-ui-gradients.md. No retail layout is exposed.
+// issue #7. No retail layout is exposed.
 #ifndef BF2_SWIFF_BITMAP_CACHE_H
 #define BF2_SWIFF_BITMAP_CACHE_H
 

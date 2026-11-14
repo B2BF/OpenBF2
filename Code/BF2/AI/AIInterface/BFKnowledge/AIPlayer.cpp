@@ -387,7 +387,7 @@ int AIPlayer::getNumShotsFired(IWeapon*)
     return 0;
 }
 
-// bf2 0x83FC3D0 (recovered on the client track, docs/macos-c-singleplayer.md). The singleton at
+// bf2 0x83FC3D0 (recovered on the client track). The singleton at
 // ds:0x8AC37F8 is AIInstanceServer::m_iAI (g_aiInstance here); +0x20 is isShuttingDown. While the
 // AI is not shutting down, a live player (IPlayer +0x6C) is killed through the game logic
 // (ds:0x8ACBFA0, IGameLogic +0x6C, killPlayer(player, true, false)). The instance is not null-

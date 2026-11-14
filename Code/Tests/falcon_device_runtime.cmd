@@ -15,6 +15,7 @@ if errorlevel 1 exit /b 1
 link /nologo /FORCE /OPT:REF /INCREMENTAL:NO /DEBUG /SUBSYSTEM:CONSOLE /OUT:"%BF2_BUILD_OUT%\falcon_device_runtime.exe" /PDB:"%BF2_BUILD_OUT%\falcon_device_runtime.pdb" "%BF2_BUILD_OUT%\FalconDevice.obj" "%BF2_BUILD_OUT%\fixture.obj" "%BF2_BUILD_OUT%\NovintHFX.lib" user32.lib
 if errorlevel 1 exit /b 1
 rem Loader searches the unchanged original DLL directory through PATH; no original file is written.
-set "PATH=D:\B2BF Launcher\Battlefield2;%PATH%"
+if not defined BF2_GAME_DIR set "BF2_GAME_DIR=D:\B2BF Launcher\Battlefield2"
+set "PATH=%BF2_GAME_DIR%;%PATH%"
 "%BF2_BUILD_OUT%\falcon_device_runtime.exe"
 exit /b %errorlevel%

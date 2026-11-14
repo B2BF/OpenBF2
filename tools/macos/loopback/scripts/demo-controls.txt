@@ -1,0 +1,123 @@
+# [TEMP] demo-controls: the battlerecorder playback controls (loopback --play-demo; docs/tracks/game/demo.md).
+# Bindings are the shipped Controls.con ones: right mouse = PIAltFire (free <-> follow camera),
+# Space = PIAction (next player, Shift = previous), 1..9 = PIWeaponSelect1..9 (simulation rates
+# 0,100,5,25,50,75,150,300,1000), Q = GIRadioComm (Playback Control rose, HUD mode 31),
+# T = GITacticalComm (Camera Control rose, HUD mode 30).
+# The presses wait 15 s after JOIN GAME: the recorded bots spawn a few seconds into the demo, and
+# with nobody alive the follow camera falls back to free flight, as in retail.
+# A capture is taken at the next presented frame, so each rose stays held 300 ms after its capture
+# (a key-up on the next line can land first; the T rose's side items have no out-time).
+# The rose items are clicked with the left button (GIOk) while the rose key is held; the pointer
+# starts at the rose centre (move-rel 300 0 = NEXT PLAYER, 0 400 = QUIT).
+# Judge from the captures: follow view with the name at the bottom, the PLAY label while paused,
+# both roses, a new followed name after NEXT PLAYER, PLAY after the PAUSE click, and the LOGIN
+# screen after QUIT. Every capture that is followed by an input waits 300 ms first: a capture is
+# taken at the next presented frame, and ctl-next used to show the state after Shift+Space.
+timeout 260
+log waiting for the demo level load
+wait-log ingameMap.tga
+wait-ms 3000
+click 745 583
+log demo: entered playback
+wait-ms 2000
+capture ctl-start
+wait-ms 13000
+log demo: right mouse - follow camera
+button-down 1
+wait-ms 300
+button-up 1
+wait-ms 2000
+capture ctl-follow
+wait-ms 300
+log demo: space - next player
+key space 300
+wait-ms 2000
+capture ctl-next
+wait-ms 300
+log demo: shift+space - previous player
+key-down leftshift
+key space 300
+key-up leftshift
+wait-ms 2000
+capture ctl-prev
+wait-ms 300
+log demo: hold t - camera rose
+key-down t
+wait-ms 1500
+capture ctl-rose-t
+wait-ms 300
+key-up t
+wait-ms 1000
+log demo: key 1 - pause
+key 1 300
+wait-ms 1000
+capture ctl-paused-1
+wait-ms 2000
+capture ctl-paused-2
+wait-ms 300
+log demo: hold q - playback rose
+key-down q
+wait-ms 1500
+capture ctl-rose-q-paused
+wait-ms 300
+key-up q
+wait-ms 500
+log demo: key 2 - normal speed
+key 2 300
+wait-ms 2000
+log demo: T rose - click NEXT PLAYER (demo.togglePlayerDemo 1)
+key-down t
+wait-ms 600
+move-rel 300 0
+wait-ms 300
+capture ctl-rose-t-next
+wait-ms 300
+button-down 0
+wait-ms 120
+button-up 0
+wait-ms 300
+key-up t
+wait-ms 1500
+capture ctl-after-next
+wait-ms 300
+log demo: Q rose - click PAUSE (demo.toggleDemoPauseOrPlay)
+key-down q
+wait-ms 600
+button-down 0
+wait-ms 120
+button-up 0
+wait-ms 300
+key-up q
+wait-ms 1000
+key-down q
+wait-ms 600
+capture ctl-rose-q-after-pause
+wait-ms 300
+key-up q
+wait-ms 500
+key 2 300
+wait-ms 1000
+log demo: right mouse - free camera
+button-down 1
+wait-ms 300
+button-up 1
+wait-ms 2000
+capture ctl-free
+wait-ms 300
+log demo: Q rose - click QUIT (demo.shutdownDemo)
+key-down q
+wait-ms 600
+move-rel 0 400
+wait-ms 300
+capture ctl-rose-q-quit
+wait-ms 300
+button-down 0
+wait-ms 120
+button-up 0
+wait-ms 300
+key-up q
+wait-ms 8000
+capture ctl-quit-login
+log demo: controls done
+wait-ms 2000
+quit

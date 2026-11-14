@@ -79,7 +79,7 @@ float multiplyAdd(float value, float factor, float translation)
     return static_cast<float>(static_cast<double>(value) * factor + translation);
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     float result;
     // [CHOSEN, not recovered] Preserve x87 retained multiply/add.
     result = bf2x87::multiplyAdd(value, factor, translation);
@@ -149,7 +149,7 @@ float targetDistance(const Vec3& from, const Vec3& to, float scale, bool storeX)
 #endif
     return result;
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     const float fromX=from.x, fromY=from.y, fromZ=from.z;
     const float toX=to.x, toY=to.y, toZ=to.z;
     float x, result;
@@ -239,7 +239,7 @@ void pullHitTowardOrigin(const Vec3& hit, const Vec3& origin, Vec3& output)
     }
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     const float hx=hit.x, hy=hit.y, hz=hit.z;
     const float ox=origin.x, oy=origin.y, oz=origin.z;
     const float bias=0.2f;

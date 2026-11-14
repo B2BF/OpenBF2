@@ -39,10 +39,15 @@ int main()
     require(stat(expected.c_str(), &info) == 0 && S_ISDIR(info.st_mode)
             && (info.st_mode & 0777) == 0700, "new client data directory has mode 0700");
 
+    // The lock lives in the working directory (the game folder), not the client data directory.
+    const std::string gameFolder = std::string(home) + "/game";
+    require(mkdir(gameFolder.c_str(), 0700) == 0 && chdir(gameFolder.c_str()) == 0,
+            "enter a fresh game folder");
     int fd = acquireClientInstanceLock();
     require(fd >= 0, "first instance acquires lock without +multi");
     require((fcntl(fd, F_GETFD) & FD_CLOEXEC) != 0, "relaunch does not inherit lock");
-    const std::string lock = expected + "/Client.lock";
+    const std::string lock = gameFolder + "/Client.lock";
+    require(access((expected + "/Client.lock").c_str(), F_OK) != 0, "no lock in the client data directory");
     require(stat(lock.c_str(), &info) == 0 && S_ISREG(info.st_mode)
             && (info.st_mode & 0777) == 0600, "new lock file has mode 0600");
     const ino_t inode = info.st_ino;

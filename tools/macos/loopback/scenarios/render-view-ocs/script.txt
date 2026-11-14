@@ -1,0 +1,121 @@
+# [TEMP] render-view-ocs: fixed poses and world-point views, one capture per named view, for renderer
+# screenshot comparisons (our macOS / Windows clients, the retail client through the dinput8 proxy).
+# Compare the scene without the pistol (see the Standard scenarios docs for the region). Waits: wait-log on the
+# capture file and on the BF2_PLAY_TRACE position after a teleport; a client without the trace falls
+# through after 5 s.
+include join-ocs
+log scenario: render-view-ocs start
+# Scene only: the HUD (with the chat lines, minimap, kill messages) off. renderer.drawHud has the
+# player console's access level in retail too; the first-person meshes (renderer.draw1pMeshes) do not,
+# so the pistol (slot 2, a small one-handed first-person model) is drawn and comparisons crop it.
+console renderer.drawHud 0
+wait-ms 300
+key 2
+wait-ms 1200
+log scenario: view shore (the beach, the docks with boats, the water and the islands to the south)
+aim -560/29/440 0.5 3000
+wait-ms 250
+aim -560/29/440 0.15 2000
+wait-ms 250
+aim -560/29/440 0.08 1500
+# switch away and back right before the capture: the draw animation ends in a fixed
+# pose and the idle sway only starts after a few seconds without input (owner's idea)
+key 1
+wait-ms 400
+key 2
+wait-ms 1200
+capture view-shore
+wait-log view-shore.png
+# check: reports the view error right after the capture
+aim -560/29/440 0.08 300
+log scenario: view sun (the sun low over the water (sky, sun glare))
+aim -560/60/420 0.5 3000
+wait-ms 250
+aim -560/60/420 0.15 2000
+wait-ms 250
+aim -560/60/420 0.08 1500
+# switch away and back right before the capture: the draw animation ends in a fixed
+# pose and the idle sway only starts after a few seconds without input (owner's idea)
+key 1
+wait-ms 400
+key 2
+wait-ms 1200
+capture view-sun
+wait-log view-sun.png
+# check: reports the view error right after the capture
+aim -560/60/420 0.08 300
+console renderer.drawHud 1
+wait-ms 300
+key j
+wait-ms 300
+type goto sea
+key enter
+wait-log-else 5 at-sea pos=-605.0/
+label at-sea
+console renderer.drawHud 0
+# settle after the teleport: weapon raise and landing finish before the aim
+wait-ms 2000
+# second teleport to the same pose after settling: the landing then repeats to the centimetre
+console renderer.drawHud 1
+key j
+wait-ms 300
+type goto sea
+key enter
+wait-ms 1500
+console renderer.drawHud 0
+wait-ms 1500
+log scenario: view sea (the open water surface and the far shore to the west)
+aim -680/29/552 0.5 3000
+wait-ms 250
+aim -680/29/552 0.15 2000
+wait-ms 250
+aim -680/29/552 0.08 1500
+# switch away and back right before the capture: the draw animation ends in a fixed
+# pose and the idle sway only starts after a few seconds without input (owner's idea)
+key 1
+wait-ms 400
+key 2
+wait-ms 1200
+capture view-sea
+wait-log view-sea.png
+# check: reports the view error right after the capture
+aim -680/29/552 0.08 300
+console renderer.drawHud 1
+wait-ms 300
+key j
+wait-ms 300
+type goto palms
+key enter
+wait-log-else 5 at-palms pos=-600.0/
+label at-palms
+console renderer.drawHud 0
+# settle after the teleport: weapon raise and landing finish before the aim
+wait-ms 2000
+# second teleport to the same pose after settling: the landing then repeats to the centimetre
+console renderer.drawHud 1
+key j
+wait-ms 300
+type goto palms
+key enter
+wait-ms 1500
+console renderer.drawHud 0
+wait-ms 1500
+log scenario: view palms (palms on the hill above the bay and the far shore)
+aim -560/29/450 0.5 3000
+wait-ms 250
+aim -560/29/450 0.15 2000
+wait-ms 250
+aim -560/29/450 0.08 1500
+# switch away and back right before the capture: the draw animation ends in a fixed
+# pose and the idle sway only starts after a few seconds without input (owner's idea)
+key 1
+wait-ms 400
+key 2
+wait-ms 1200
+capture view-palms
+wait-log view-palms.png
+# check: reports the view error right after the capture
+aim -560/29/450 0.08 300
+console renderer.drawHud 1
+log scenario: render-view-ocs done
+quit

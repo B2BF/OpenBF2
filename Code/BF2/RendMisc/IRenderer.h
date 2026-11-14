@@ -153,6 +153,11 @@ public:
     virtual bool present(unsigned int mode) = 0;                              // +0xD0
     virtual IRenderView* getRenderView2() = 0;                                // +0xD4
     virtual void shutdown() = 0;                                              // +0xD8
+    // +0xDC [CHOSEN, not recovered] Port addition after retail's last slot (+0xD8): the adapter's
+    // current display mode, IDirect3D9::GetAdapterDisplayMode, for VideoSettings' new-profile
+    // resolution. False when the device reports none (the outputs are then unchanged).
+    virtual bool getDesktopMode(unsigned int& width, unsigned int& height,
+                                unsigned int& refreshHz) = 0;
 };
 
 } // namespace dx9rend

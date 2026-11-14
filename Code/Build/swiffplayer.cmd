@@ -74,6 +74,10 @@ set FLAGS=/nologo /c %CRT% /std:c++14 /permissive /EHsc /W3 /FS /Zi ^
  /I "%EXT%" /I "%EXT%\gameswf" ^
  /DBF2_IMAGE_SWIFFPLAYER %PLUGIN_ABI% /DDEDICATED=0 /FI"%BF2%\Core\BuildConfig.h" /DWIN32 /D_WINDOWS /DNDEBUG /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE ^
  /wd4100 /wd4127 /wd4244 /wd4267 /wd4291 /wd4305 /wd4996 /Fd"%OUT%\SwiffPlayer.pdb"
+rem [CHOSEN, not recovered] BF2_FRONTIER_DEFAULT_CONTINUE=ON (CMake option of the same name, passed by
+rem the CMake plugin targets; CI release builds set it): Frontier.cpp's trap defaults to continue when
+rem BF2_SWIFFPLAYER_FRONTIER is unset. Anything else keeps the dev default, abort.
+if /i "%BF2_FRONTIER_DEFAULT_CONTINUE%"=="ON" set FLAGS=%FLAGS% /DBF2_FRONTIER_DEFAULT_CONTINUE=1
 rem x64: a pointer truncated into a 32-bit integer is an error, as for the x64 dedicated server.
 if "%ARCH%"=="x64" set FLAGS=%FLAGS% /we4311 /we4312
 

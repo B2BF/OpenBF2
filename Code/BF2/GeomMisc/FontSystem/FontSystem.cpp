@@ -632,7 +632,7 @@ private:
 // and the listener is registered at priority 1 (renderer list +0x5C, 0x10009D60).
 // [CHOSEN, not recovered] m_font = 0: retail never initialises +0x0C (the engine heap does not
 // zero), so a font released before load() reads a stale pointer; the memory-safety exception
-// keeps that uninitialised read out (docs/tracks/rend/codex/rules.md).
+// keeps that uninitialised read out (docs/macos-port.md, "Port rules").
 EditorFont::EditorFont()
     : m_refCount(1), m_font(0)
 {

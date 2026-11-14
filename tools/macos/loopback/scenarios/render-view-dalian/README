@@ -1,0 +1,1 @@
+render-view-dalian: dalian_plant (conquest, no bots); fixed poses (lake plateau -80/154.3/136, road -89.6/152.0/157, construction-site yard -167.5/154.2/-16.5, main entrance -190/154.2/-250) and world-point aims; captures view-horizon, view-water, view-road, view-shadows, view-vegetation for renderer screenshot comparisons.

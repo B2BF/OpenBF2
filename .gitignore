@@ -78,6 +78,7 @@ compile_commands.json
 !/Code/Build/bf2audio_diff/
 !/Code/Build/bf2audio_smoke/
 !/Code/Build/textureatlas_diff/
+!/Code/Build/macos/
 !/Code/Build/bin/
 /Code/Build/bin/**
 !/Code/Build/bin/README.md

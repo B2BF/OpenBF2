@@ -1,4 +1,4 @@
-// [TEMP] [CHOSEN, not recovered] In-game draw-state checks (docs/macos-c-metal-ingame.md):
+// [TEMP] [CHOSEN, not recovered] In-game draw-state checks:
 // fog after shaders, ps_1_x samplers bound to cube textures, and occlusion queries with draws.
 // The shaders are MojoShader-shaped MSL records offered to Create*Shader like the effect cache's.
 #include "../../BF2/Platform/Gfx/Metal/EffectShaders.h"

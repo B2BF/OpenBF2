@@ -5,6 +5,10 @@
 //   nativefx build REQUEST OUT.entry [DUMP.txt]          native Description (entry envelope)
 //   nativefx dump ENTRY [OUT.txt]                        canonical description text
 //   nativefx compare LIST.tsv REQUESTS_DIR ENTRIES_DIR OUT_DIR   native vs reference
+//   nativefx export-jobs LISTING OUTDIR                 accepted shader jobs for a reference compiler
+//   nativefx compile-jobs JOBSDIR OUTDIR                our bytecode for those jobs
+//   nativefx export-effects LIST OUTDIR                 preprocessed effects for Code/Tests/effect_check
+//   nativefx temp-check FILE.bin...                     D3D9 validator rules (D3dbcCheck.h)
 //
 // LIST.tsv rows: id, key, d3dx_ok (0/1), d3dx_class.
 #include "Cache.h"
@@ -16,6 +20,7 @@
 #include "Native.h"
 #include "Dump.h"
 #include "D3DAsm.h"
+#include "D3dbcCheck.h"
 #include <chrono>
 #include <cstdlib>
 #include <cstdio>
@@ -23,6 +28,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <regex>
 #include <set>
 #include <sstream>
 
@@ -249,6 +255,220 @@ int shaderOne(const std::string& requestPath, const std::string& function, const
     std::cerr << "no such shader\n"; return 1;
 }
 // Native vs reference structure: canonical dumps of both descriptions per accepted request.
+// memo-guard LISTING OUT.tsv: for every shader job of every request file in LISTING (one path
+// per line), compile the full text and the trimmed text (bf2fx::native::trimSource) and compare
+// outcome and bytecode. Only D3DX-accepted requests use the memo; others are skipped. Prints a
+// summary; exit 1 on any difference.
+// export-jobs LISTING OUTDIR: every distinct shader job of the D3DX-accepted requests in LISTING as
+// OUTDIR/<key>.hlsl (the trimmed compile text, the input the shader memo compiles) plus OUTDIR/jobs.tsv
+// rows key, profile, entry, loop (1 when the text has a for/while/do loop), flags. The key is memo-guard's
+// MEMO_GUARD_BYTECODE_DIR name, so a reference compiler's output lines up with ours. Game-derived:
+// stays under out/, never committed.
+int exportJobs(const std::string& listing, const std::string& outDir) {
+    fs::create_directories(outDir);
+    std::ifstream in(listing);
+    std::ofstream tsv(outDir + "/jobs.tsv", std::ios::app);
+    std::ofstream sources(outDir + "/sources.tsv", std::ios::app);  // key, function, request path (every use)
+    std::set<std::string> written;
+    for (const auto& e : fs::directory_iterator(outDir)) if (e.path().extension() == ".hlsl") written.insert(e.path().stem().string());
+    std::string path; unsigned added = 0, requests = 0;
+    while (std::getline(in, path)) {
+        if (path.empty()) continue;
+        Request req;
+        try { req = unenvelope<Request>(readFile(path), "request"); } catch (...) { continue; }
+        if (bf2fx::native::known(req) != bf2fx::native::Known::Accepted) continue;
+        std::string text, log;
+        if (!bf2fx::native::preprocessSource(req, text, log)) continue;
+        src::Effect fx; src::Error perr;
+        if (!src::parse(text, fx, perr)) continue;
+        ++requests;
+        std::vector<std::pair<uint32_t, const src::Expr*>> values;
+        for (const auto& g : fx.globals) if (g.init && (g.type.base == src::Base::VertexShader || g.type.base == src::Base::PixelShader))
+            collect(*g.init, g.type.base == src::Base::VertexShader ? VertexShader : PixelShader, values);
+        for (const auto& t : fx.techniques) for (const auto& ps : t.passes) for (const auto& st : ps.states) {
+            if (src::iequals(st.name, "VertexShader")) collect(*st.value, VertexShader, values);
+            if (src::iequals(st.name, "PixelShader")) collect(*st.value, PixelShader, values);
+        }
+        const std::string texts[2] = {compilerText(fx, text, PixelShader), compilerText(fx, text, VertexShader)};
+        for (const auto& v : values) {
+            ShaderJob job; std::string error;
+            if (!shaderJob(fx, text, *v.second, v.first, job, error) || !job.asmText.empty()) continue;
+            const std::string full = texts[v.first == VertexShader ? 1 : 0] + job.wrapper;
+            std::string trimmed;
+            if (!bf2fx::native::trimSource(full, job.entry, trimmed)) continue;
+            std::ostringstream key;
+            key << std::hex << std::hash<std::string>()(job.profile + "|" + job.entry + "|" + trimmed);
+            sources << key.str() << "\t" << job.function << "\t" << path << "\n";
+            if (!written.insert(key.str()).second) continue;
+            std::ofstream(outDir + "/" + key.str() + ".hlsl", std::ios::binary) << trimmed;
+            static const std::regex loop("\\b(for|while)\\s*\\(|\\bdo\\s*\\{");
+            // Shader compile flags: the request's D3DXSHADER_* bits (effect-only D3DXFX_NOT_CLONEABLE and
+            // D3DXFX_LARGEADDRESSAWARE removed).
+            tsv << key.str() << "\t" << job.profile << "\t" << job.entry << "\t" << (std::regex_search(trimmed, loop) ? 1 : 0)
+                << "\t" << (req.flags & ~0x20800u) << "\n";
+            ++added;
+        }
+    }
+    std::cout << "export-jobs: " << requests << " accepted requests, " << added << " new jobs, " << written.size() << " in " << outDir << "\n";
+    return 0;
+}
+
+// export-effects LIST OUTDIR: each request in LIST (one path per line) as OUTDIR/<request stem>.fx (the
+// preprocessed effect text) plus OUTDIR/effects.tsv rows stem, D3DXCreateEffect flags. Input of
+// Code/Tests/effect_check (D3DXCreateEffect, ValidateTechnique, FindNextValidTechnique on Windows).
+// Game-derived: stays under out/.
+int exportEffects(const std::string& listing, const std::string& outDir) {
+    fs::create_directories(outDir);
+    std::ifstream in(listing);
+    std::ofstream tsv(outDir + "/effects.tsv", std::ios::app);
+    std::string path; unsigned n = 0, failed = 0;
+    while (std::getline(in, path)) {
+        if (path.empty()) continue;
+        Request req = unenvelope<Request>(readFile(path), "request");
+        std::string text, log;
+        if (!bf2fx::native::preprocessSource(req, text, log)) { ++failed; continue; }
+        const std::string stem = fs::path(path).stem().string();
+        std::ofstream(outDir + "/" + stem + ".fx", std::ios::binary) << text;
+        tsv << stem << "\t" << req.flags << "\n";
+        ++n;
+    }
+    std::cout << "export-effects: " << n << " effects, " << failed << " not preprocessed\n";
+    return failed ? 1 : 0;
+}
+
+// compile-jobs JOBSDIR OUTDIR: compiles every export-jobs job (as the shader memo does: the trimmed
+// text, the requested profile's ladder) into OUTDIR/<key>.bin; failures are listed and counted.
+int compileJobs(const std::string& dir, const std::string& outDir) {
+    fs::create_directories(outDir);
+    std::ifstream tsv(dir + "/jobs.tsv");
+    std::string line; unsigned ok = 0, failed = 0;
+    while (std::getline(tsv, line)) {
+        std::istringstream f(line);
+        std::string key, profile, entry;
+        if (!std::getline(f, key, '\t') || !std::getline(f, profile, '\t') || !std::getline(f, entry, '\t')) continue;
+        auto text = readFile(dir + "/" + key + ".hlsl");
+        ShaderJob job; job.profile = profile; job.entry = entry; job.function = entry;
+        Bytes code; std::string error;
+        if (bf2fx::native::compileJob(job, std::string(text.begin(), text.end()), code, error)) {
+            writeFile(outDir + "/" + key + ".bin", code); ++ok;
+            // Promoted by the profile ladder (Native.cpp): why the requested profile failed.
+            const unsigned major = code.size() >= 4 ? code[1] : 0;
+            if (profile.size() >= 4 && major != unsigned(profile[3] - '0')) {
+                Bytes direct; std::string log;
+                bf2fx::native::compileShader(std::string(text.begin(), text.end()), entry, profile, direct, log);
+                std::string first;
+                std::istringstream ls(log);
+                for (std::string l; std::getline(ls, l);) if (l.find(": E") != std::string::npos) { first = l.substr(l.find(": E") + 2); break; }
+                std::cout << "promoted " << key << " " << profile << " -> " << major << ".x: " << first << "\n";
+            }
+        }
+        else { ++failed; std::cout << "failed " << key << " " << profile << ": " << error.substr(0, error.find('\n')) << "\n"; }
+    }
+    std::cout << "compile-jobs: " << ok << " compiled, " << failed << " failed\n";
+    return failed ? 1 : 0;
+}
+
+int memoGuard(const std::string& listing, const std::string& outPath) {
+    std::ifstream in(listing); std::ofstream out(outPath);
+    out << "request\tstage\tprofile\tfunction\tfull_ok\ttrim_ok\tsame\tfull_ms\ttrim_ms\thigher_vs\tuninit_reads\tencoding_findings\n";
+    std::string path; unsigned jobs = 0, diffs = 0, skipped = 0, untrimmed = 0; double fullMs = 0, trimMs = 0;
+    // higher: vs_1_x/vs_2_x jobs whose compile fails with E5017/E9015, i.e. the jobs the effect
+    // layer compiles internally as vs_3_0 (BuildReport::higherVertexProfile; these requests are
+    // all D3DX-accepted). uninit: compiled jobs reading a temp component before writing it.
+    unsigned higher = 0, uninit = 0, malformed = 0, encoding = 0, constLimit = 0, swizzle = 0, outputWrite = 0, tempLimit = 0, slotLimit = 0, failing = 0;
+    // MEMO_GUARD_BYTECODE_DIR: each distinct compiled job's bytecode as <hash of profile|entry|trimmed text>.bin, so
+    // two compilers' outputs for the same job can be compared (tools/macos/nativefx/d3dbc_compare.py).
+    const char* bytecodeDir = getenv("MEMO_GUARD_BYTECODE_DIR");
+    std::set<std::string> distinctHigher;
+    std::set<std::string> distinct;
+    while (std::getline(in, path)) {
+        if (path.empty()) continue;
+        Request req;
+        try { req = unenvelope<Request>(readFile(path), "request"); } catch (...) { ++skipped; continue; }
+        if (bf2fx::native::known(req) != bf2fx::native::Known::Accepted) { ++skipped; continue; }
+        std::string text, log;
+        if (!bf2fx::native::preprocessSource(req, text, log)) { ++skipped; continue; }
+        src::Effect fx; src::Error perr;
+        if (!src::parse(text, fx, perr)) { ++skipped; continue; }
+        std::vector<std::pair<uint32_t, const src::Expr*>> values;
+        for (const auto& g : fx.globals) if (g.init && (g.type.base == src::Base::VertexShader || g.type.base == src::Base::PixelShader))
+            collect(*g.init, g.type.base == src::Base::VertexShader ? VertexShader : PixelShader, values);
+        for (const auto& t : fx.techniques) for (const auto& ps : t.passes) for (const auto& st : ps.states) {
+            if (src::iequals(st.name, "VertexShader")) collect(*st.value, VertexShader, values);
+            if (src::iequals(st.name, "PixelShader")) collect(*st.value, PixelShader, values);
+        }
+        const std::string texts[2] = {compilerText(fx, text, PixelShader), compilerText(fx, text, VertexShader)};
+        std::set<std::string> seen;
+        for (const auto& v : values) {
+            ShaderJob job; std::string error;
+            if (!shaderJob(fx, text, *v.second, v.first, job, error) || !job.asmText.empty()) continue;
+            if (!seen.insert(std::to_string(v.first) + job.key).second) continue;
+            const std::string full = texts[v.first == VertexShader ? 1 : 0] + job.wrapper;
+            std::string trimmed;
+            if (!bf2fx::native::trimSource(full, job.entry, trimmed)) { ++untrimmed; continue; }
+            distinct.insert(job.profile + "|" + job.entry + "|" + trimmed);
+            Bytes a, b; std::string ea, eb;
+            auto t0 = std::chrono::steady_clock::now();
+            bool oa = bf2fx::native::compileJob(job, full, a, ea);
+            auto t1 = std::chrono::steady_clock::now();
+            bool ob = bf2fx::native::compileJob(job, trimmed, b, eb);
+            auto t2 = std::chrono::steady_clock::now();
+            double ma = std::chrono::duration<double, std::milli>(t1 - t0).count(), mb = std::chrono::duration<double, std::milli>(t2 - t1).count();
+            fullMs += ma; trimMs += mb; ++jobs;
+            const bool same = oa == ob && (!oa || a == b);
+            const bool isHigher = !oa && v.first == VertexShader && job.profile.rfind("vs_", 0) == 0 && job.profile != "vs_3_0" &&
+                (ea.find("E5017") != std::string::npos || ea.find("E9015") != std::string::npos);
+            if (isHigher) { ++higher; distinctHigher.insert(job.profile + "|" + job.entry + "|" + trimmed); }
+            unsigned uninitReads = 0, encodingFindings = 0;
+            if (oa) {
+                const auto t = nativefx::checkD3dbc(a);
+                uninitReads = t.uninitialized; encodingFindings = t.encodingFindings(); malformed += t.malformed;
+                if (t.uninitialized) {
+                    ++uninit;
+                    if (uninit <= 5) std::cerr << "uninitialized temp read: " << path << " " << job.profile << " " << job.function << ": " << t.first << "\n";
+                }
+                if (encodingFindings) {
+                    ++encoding; constLimit += !!t.constLimit; swizzle += !!t.swizzle; outputWrite += !!t.outputWrite;
+                    tempLimit += t.tempLimit; slotLimit += t.slotLimit;
+                    // [TEMP] Slot limits are allowed until vkd3d emits dp4/dp3 for mul() (piece 17b); every other
+                    // validator rule fails the guard.
+                    failing += encodingFindings > t.slotLimit;
+                    if (encoding <= 5) std::cerr << "encoding: " << path << " " << job.profile << " " << job.function << ": " << t.firstRule << "\n";
+                }
+            }
+            if (!same) {
+                ++diffs;
+                if (const char* dump = getenv("MEMO_GUARD_DUMP")) {
+                    const std::string base = std::string(dump) + "/" + std::to_string(diffs);
+                    std::ofstream(base + "-full.fx") << full; std::ofstream(base + "-trim.fx") << trimmed;
+                    std::string da, db; bf2fx::native::disassemble(a, da); bf2fx::native::disassemble(b, db);
+                    std::ofstream(base + "-full.asm") << ea << "\n" << da; std::ofstream(base + "-trim.asm") << eb << "\n" << db;
+                    std::ofstream(base + "-job.txt") << job.profile << " " << job.entry << " " << job.function << "\n";
+                }
+            }
+            if (oa && bytecodeDir) {
+                std::ostringstream name;
+                name << bytecodeDir << "/" << std::hex << std::hash<std::string>()(job.profile + "|" + job.entry + "|" + trimmed) << ".bin";
+                writeFile(name.str(), a);
+            }
+            out << path << "\t" << (v.first == VertexShader ? "vs" : "ps") << "\t" << job.profile << "\t" << job.function << "\t"
+                << oa << "\t" << ob << "\t" << same << "\t" << ma << "\t" << mb << "\t" << isHigher << "\t" << uninitReads << "\t" << encodingFindings << "\n";
+        }
+        out.flush();
+    }
+    std::cout << "memo-guard: " << jobs << " jobs, " << diffs << " differ, " << distinct.size() << " distinct trimmed inputs, "
+              << untrimmed << " not trimmable, " << skipped << " requests skipped; full " << fullMs / 1000 << " s, trimmed "
+              << trimMs / 1000 << " s\n";
+    std::cout << "memo-guard: " << higher << " vs_1_x/vs_2_x jobs need the internal vs_3_0 (E5017/E9015), "
+              << distinctHigher.size() << " distinct; " << uninit << " compiled jobs read an uninitialized temp, "
+              << malformed << " not decodable\n";
+    std::cout << "memo-guard: " << encoding << " compiled jobs break a validator encoding rule (" << constLimit
+              << " vs c# limit, " << swizzle << " ps_2_0 swizzle, " << outputWrite << " ps_2_x oC/oDepth write, " << tempLimit << " r# limit, " << slotLimit << " slot limit)\n";
+    std::cout << "memo-guard: " << failing << " compiled jobs fail a validator rule other than the slot limit; allowed until 17b: "
+              << slotLimit << " over the slot limit\n";
+    return diffs || uninit || malformed || failing ? 1 : 0;
+}
+
 int structure(const std::string& listPath, const std::string& requests, const std::string& entries, const std::string& outDir) {
     auto rows = readList(listPath);
     fs::create_directories(outDir);
@@ -345,6 +565,25 @@ int main(int argc, char** argv) {
             std::cout << nativefx::dump(d, true);
             for (const auto& f : report.shaderFailures) std::cout << "// failed: " << f << "\n";
             return 0;
+        }
+        if (cmd == "memo-guard" && argc == 4) return memoGuard(argv[2], argv[3]);
+        if (cmd == "export-jobs" && argc == 4) return exportJobs(argv[2], argv[3]);
+        if (cmd == "compile-jobs" && argc == 4) return compileJobs(argv[2], argv[3]);
+        if (cmd == "export-effects" && argc == 4) return exportEffects(argv[2], argv[3]);
+        if (cmd == "temp-check" && argc >= 3) {
+            // Each FILE: D3D9 bytecode. One line per file; exit 1 on any finding or undecodable file.
+            unsigned bad = 0;
+            for (int k = 2; k < argc; ++k) {
+                const auto t = nativefx::checkD3dbc(readFile(argv[k]));
+                std::cout << argv[k] << ": " << t.reads << " temp component reads, " << t.uninitialized << " uninitialized, "
+                          << t.constLimit << " c# limit, " << t.swizzle << " swizzle, " << t.outputWrite << " output write, r" << t.temps
+                          << ", " << t.slots << "+" << t.texSlots << " slots" << (t.tempLimit ? " OVER r# LIMIT" : "") << (t.slotLimit ? " OVER SLOT LIMIT" : "")
+                          << (t.malformed ? ", not decodable" : "") << (t.first.empty() ? "" : " (first read: " + t.first + ")")
+                          << (t.firstRule.empty() ? "" : " (first rule: " + t.firstRule + ")") << "\n";
+                bad += !t.clean();
+            }
+            std::cout << "temp-check: " << argc - 2 << " files, " << bad << " failed\n";
+            return bad ? 1 : 0;
         }
         if (cmd == "structure" && argc == 6) return structure(argv[2], argv[3], argv[4], argv[5]);
         if (cmd == "build" && (argc == 4 || argc == 5)) return buildOne(argv[2], argv[3], argc == 5 ? argv[4] : nullptr);

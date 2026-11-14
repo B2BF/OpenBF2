@@ -97,7 +97,7 @@ namespace gameswf
 	};
 
 
-	struct button_character_definition : public character_def, public definition_bounds_provider
+	struct button_character_definition : public character_def
 	{
 		struct sound_envelope
 		{

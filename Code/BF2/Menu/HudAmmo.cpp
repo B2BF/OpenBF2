@@ -39,6 +39,7 @@
 #include "Ref2System.h"                       // getRenderView, 7AD390
 #include "../RendMisc/IRenderView.h"          // +54 getOrthoWidth, +5C getOrthoHeight
 #include "../Game/Main/BF2ClientSeams.h"
+#include "../Game/VoipClient/BF2VoipClient.h"         // bf2VoipClient slots (vtable 0x89C1A8)
 #include "../External/BFMeme/Data.h"
 #include "../External/BFMeme/System.h"
 #include "../External/BFMeme/Pointer.h"
@@ -1039,7 +1040,7 @@ float armorAbilityRatio(float hitPoints, float maximum, float previous, bool ble
     return static_cast<float>(ratio);
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     const float half = 0.5f;
     float result;
     // [CHOSEN, not recovered] Preserve x87 retained division and optional blend.
@@ -1072,7 +1073,7 @@ float ammoAbilityRatio(int status, float previous, bool blend)
     return static_cast<float>(ratio);
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     const float scale = 0.06666667014360428f; // PE934BB0, bits3D888889
     const float half = 0.5f;
     float result;

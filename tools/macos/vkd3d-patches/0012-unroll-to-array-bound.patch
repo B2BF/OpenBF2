@@ -1,0 +1,131 @@
+[CHOSEN, not recovered] vkd3d-shader 2.1 patch for the BF2 macOS port (LGPL-2.1+, as vkd3d).
+Loop unrolling is bounded by array indexing when the exit depends on a uniform, as d3dcompiler
+does: xpack RaShaderSTM_Shadows.hlsl for (q < ShadowCount) Out.ShadowTexCoord[q] = ... unrolls to
+ShadowTexCoord's 6 elements (D3DX9_25's vs_1_1 output has no flow control) instead of failing at
+the implicit 1024-iteration limit. The first out-of-bounds iteration is recorded and the unroll is
+retried with that count as an explicit limit (SM3 targets only).
+
+--- a/libs/vkd3d-shader/hlsl.h	2026-11-12 13:58:49
++++ b/libs/vkd3d-shader/hlsl.h	2026-11-12 13:59:07
+@@ -721,6 +721,10 @@
+      * number of iterations, if any. */
+     struct hlsl_ir_var *limiter;
+     unsigned int limiter_component;
++
++    /* BF2 macOS port: the first unrolled iteration that indexes out of bounds behind a
++     * uniform-dependent exit test (0: none seen); unroll_loops retries with it as limit. */
++    unsigned int index_bound;
+ };
+ 
+ struct hlsl_ir_switch_case
+--- a/libs/vkd3d-shader/hlsl_codegen.c	2026-11-12 13:57:03
++++ b/libs/vkd3d-shader/hlsl_codegen.c	2026-11-12 14:04:11
+@@ -16043,8 +16043,70 @@
+         return false;
+ 
+     return hlsl_ir_constant(v->node)->value.u[0].u;
++}
++
++/* BF2 macOS port: true when a deref has a constant index beyond its array/vector/matrix
++ * (the out-of-bounds test of validate_component_index_range, without emitting an error). */
++static bool loop_unrolling_deref_out_of_bounds(struct hlsl_ctx *ctx, const struct hlsl_deref *deref)
++{
++    const struct hlsl_type *type;
++    unsigned int i;
++
++    if (!deref->var)
++        return false;
++    type = deref->var->data_type;
++    for (i = 0; i < deref->path_len; ++i)
++    {
++        struct hlsl_ir_node *path_node = deref->path[i].node;
++
++        if (path_node && path_node->type == HLSL_IR_CONSTANT)
++        {
++            unsigned int idx = hlsl_ir_constant(path_node)->value.u[0].u;
++
++            if ((type->class == HLSL_CLASS_ARRAY && idx >= type->e.array.elements_count)
++                    || (type->class == HLSL_CLASS_VECTOR && idx >= type->e.numeric.dimx)
++                    || (type->class == HLSL_CLASS_MATRIX && idx >= hlsl_type_major_size(type)))
++                return true;
++        }
++        if (!path_node || type->class == HLSL_CLASS_SCALAR)
++            return false;
++        type = hlsl_get_element_type_from_path_index(ctx, type, path_node);
++    }
++    return false;
+ }
+ 
++static bool loop_unrolling_block_out_of_bounds(struct hlsl_ctx *ctx, const struct hlsl_block *block)
++{
++    struct hlsl_ir_node *instr;
++
++    LIST_FOR_EACH_ENTRY(instr, &block->instrs, struct hlsl_ir_node, entry)
++    {
++        switch (instr->type)
++        {
++            case HLSL_IR_LOAD:
++                if (loop_unrolling_deref_out_of_bounds(ctx, &hlsl_ir_load(instr)->src))
++                    return true;
++                break;
++            case HLSL_IR_STORE:
++                if (loop_unrolling_deref_out_of_bounds(ctx, &hlsl_ir_store(instr)->lhs))
++                    return true;
++                break;
++            case HLSL_IR_IF:
++                if (loop_unrolling_block_out_of_bounds(ctx, &hlsl_ir_if(instr)->then_block)
++                        || loop_unrolling_block_out_of_bounds(ctx, &hlsl_ir_if(instr)->else_block))
++                    return true;
++                break;
++            case HLSL_IR_LOOP:
++                if (loop_unrolling_block_out_of_bounds(ctx, &hlsl_ir_loop(instr)->body))
++                    return true;
++                break;
++            default:
++                break;
++        }
++    }
++    return false;
++}
++
+ static bool loop_unrolling_unroll_loop(struct hlsl_ctx *ctx, struct hlsl_block *block,
+         struct hlsl_ir_loop *loop, unsigned int unroll_limit, bool identify_limiter)
+ {
+@@ -16109,6 +16171,18 @@
+         hlsl_block_add_block(&target_if->then_block, &tmp_dst);
+ 
+         loop_unrolling_simplify(ctx, &target_if->then_block, &state, &index);
++
++        /* BF2 macOS port: an iteration whose exit depends on a uniform (the loop is not known
++         * to have ended yet) and that would index an array, vector or matrix out of bounds
++         * records that iteration count and gives up; unroll_loops retries with it as an explicit
++         * limit, as d3dcompiler bounds for (q < ShadowCount) Out.ShadowTexCoord[q] = ... (xpack
++         * RaShaderSTM_Shadows.hlsl) by the array: the earlier iterations keep their exit guards. */
++        if (!identify_limiter && !unroll_limit && i > 0 && !loop_unrolling_check_val(&state, broken)
++                && loop_unrolling_block_out_of_bounds(ctx, &target_if->then_block))
++        {
++            loop->index_bound = i;
++            goto fail;
++        }
+ 
+         if (identify_limiter)
+         {
+@@ -16205,7 +16279,18 @@
+     }
+ 
+     if (!loop_unrolling_unroll_loop(ctx, program, loop, unroll_limit, false))
++    {
++        /* BF2 macOS port: d3dcompiler stops unrolling a loop whose exit depends on a uniform
++         * where the next iteration would index out of bounds (the array bound is the loop
++         * bound): retry with that iteration count as an explicit limit. */
++        /* SM3 only: below it the guarded iterations need flattened conditional jumps, which the
++         * SM1/2 lowering does not implement (the effect layer compiles such vertex shaders as
++         * vs_3_0, BuildReport::higherVertexProfile). */
++        if (!unroll_limit && loop->index_bound && hlsl_version_ge(ctx, 3, 0)
++                && loop_unrolling_unroll_loop(ctx, program, loop, loop->index_bound, false))
++            return true;
+         loop->unroll_type = HLSL_LOOP_FORCE_LOOP;
++    }
+ 
+     return true;
+ }

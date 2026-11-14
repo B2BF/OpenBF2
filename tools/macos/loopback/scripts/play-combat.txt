@@ -1,0 +1,56 @@
+# [TEMP] play-combat: shoot a stationary bot (they stand still with --ai-spawn-only), then die
+# (spawn screen SUICIDE button) and respawn.
+# Needs BF2_PLAY_TRACE (loopback.py sets it) for the [PLAY] lines that show who is alive.
+include join-and-spawn
+log play: combat start
+wait-ms 2000
+# The nearest friendly bot first (friendly fire is on in the stock server settings), then the
+# nearest enemy if one is close enough. aim steers the view by relative mouse motion.
+log play: aim friend
+aim friend 1.5 6000
+capture aim-friend
+log play: fire at friend
+button-down 0
+wait-ms 2500
+button-up 0
+wait-ms 500
+aim friend 1.5 3000
+button-down 0
+wait-ms 2500
+button-up 0
+wait-ms 1500
+capture after-fire-friend
+key r
+wait-ms 3500
+log play: walk towards the nearest enemy
+walk-to enemy 40 60000
+aim enemy 1.0 6000
+capture aim-enemy
+log play: fire at enemy
+button-down 0
+wait-ms 3000
+button-up 0
+wait-ms 500
+aim enemy 1.0 3000
+button-down 0
+wait-ms 3000
+button-up 0
+wait-ms 2000
+capture after-fire-enemy
+# Die: the in-game menu (Enter) shows the spawn screen with SUICIDE (542 539 124 17).
+log play: suicide
+key enter
+wait-ms 2500
+capture menu-for-suicide
+hud-click 604 546
+wait-ms 3000
+capture dead
+log play: respawn
+# The spawn screen stays up after death; spawn point and DONE as in join-and-spawn.
+wait-ms 6000
+hud-click 432 282
+wait-ms 1000
+hud-click 728 546
+wait-ms 12000
+capture respawned
+log play: combat done

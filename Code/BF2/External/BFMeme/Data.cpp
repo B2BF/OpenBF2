@@ -132,7 +132,7 @@ void formatStringDataFloat(float value, char* output, int digits)
 #endif
     *cursor = 0;
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     double magnitude = value;
     char* cursor = output;
     if (value < 0.0f) {
@@ -350,8 +350,7 @@ wchar_t* allocateWide(unsigned int characters)
 #else
 // [CHOSEN, not recovered] The shipped `characters * 2` is the byte size of a 16-bit
 // Windows wchar_t. POSIX wchar_t is 32 bits, so the same character count needs
-// sizeof(wchar_t) bytes each; `* 2` made every clone/widen write past its allocation
-// (docs/macos-c-asan-heap.md).
+// sizeof(wchar_t) bytes each; `* 2` made every clone/widen write past its allocation.
 wchar_t* allocateWide(unsigned int characters)
 { return static_cast<wchar_t*>(::operator new(characters * sizeof(wchar_t))); }
 #endif

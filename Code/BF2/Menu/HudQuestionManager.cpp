@@ -81,7 +81,7 @@ int voteMinutes(float seconds)
     return _mm_cvttsd_si32(_mm_set_sd(rounded));
 #endif
 #else
-// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-s2-1-asm.md).
+// [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     // PE7876C7 materializes the float product before ceil(float)->double463930;
     // the final x87 conversion truncates and preserves the caller's control word.
     const float fraction = 0.01666666753590107f;

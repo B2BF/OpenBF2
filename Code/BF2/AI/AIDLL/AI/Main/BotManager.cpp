@@ -821,7 +821,7 @@ void BotManager::setSystemQuotient(unsigned a, unsigned b, unsigned c)
     }
 }
 
-// ELF 0x3DA7A0 (D1; recovered on the client track, docs/macos-c-singleplayer.md): reset, then the
+// ELF 0x3DA7A0 (D1; recovered on the client track): reset, then the
 // three scheduling queues are deleted (reset has already replaced A and B with fresh ones). The
 // containers and both interface bases follow as members.
 BotManager::~BotManager()
@@ -1382,7 +1382,7 @@ void BotManager::removeMineTarget(unsigned int handle)
     }
 }
 
-// ELF 0x3DFCE0 (1056 B; recovered on the client track, docs/macos-c-singleplayer.md). Clears the
+// ELF 0x3DFCE0 (1056 B; recovered on the client track). Clears the
 // plan cursor, deletes every bot record (its bot through the virtual deleting destructor, +4,
 // then the record) and empties the record vector and the bot list; frees the two priority
 // queues and empties the +56 list; re-applies the construction-time scheduling defaults through

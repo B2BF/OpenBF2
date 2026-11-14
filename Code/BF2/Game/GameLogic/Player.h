@@ -395,6 +395,9 @@ private:
     // Zipline::detachSoldier writes the same raw world-time cooldown in both shipped ports
     // (ELF 0x81D0680 / PE 0x57CF30). Narrow friend, no setter.
     friend class world::Zipline;
+    // GameClient::stepWorld consumes the remote primary-fire press latch (+0x204) inline
+    // (PE 0x5C056A). Narrow friend, no setter.
+    friend class GameClient;
 
 protected:
 
