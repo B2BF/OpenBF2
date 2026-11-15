@@ -1,0 +1,57 @@
+# [CHOSEN, not recovered] sp-quit-after-map: a fresh profile (--no-server logs in LoopBot) -> SELECT
+# ACCOUNT -> SINGLEPLAYER (Dalian Plant, the page's first map) -> START SINGLEPLAYER -> JOIN GAME ->
+# Assault, spawn -> Escape -> DISCONNECT (back to the main menu) -> QUIT -> YES. The quit runs
+# BF2Engine::shutdown and the RendDX9 deinit, whose final device release must reach zero after a
+# level has been drawn (RendDX9Init.cpp:738). Run through sp-quit-check.sh. 800x600.
+timeout 400
+# The runner passes +restart 1 (no intros): the login page is up once menu.bik plays.
+wait-log mods/bf2/Movies/menu.bik
+wait-ms 4000
+move 533 414
+wait-ms 300
+click 533 414
+wait-ms 4000
+move 333 15
+wait-ms 300
+click 333 15
+wait-ms 3000
+capture sp-page
+move 730 585
+wait-ms 300
+click 730 585
+wait-log ingameMap.tga
+wait-ms 5000
+capture loaded
+click 745 583
+wait-ms 4000
+key enter
+wait-ms 1500
+key enter
+wait-ms 3000
+hud-click 130 240
+wait-ms 1000
+hud-click 517 422
+wait-ms 1000
+hud-click 728 546
+wait-ms 15000
+capture spawned
+key escape
+wait-ms 3000
+move 730 585
+wait-ms 300
+click 730 585
+# Escape already opened the menu (menu_loggedin.bik); the disconnect needs no confirmation in
+# single player and returns to the main menu.
+wait-ms 11000
+capture menu
+move 733 15
+wait-ms 300
+click 733 15
+wait-ms 2000
+capture quit-dialog
+move 440 305
+wait-ms 300
+# The quit ends the process before the next script step, so the marker comes first.
+log sp-quit: confirming the quit
+click 440 305
+wait-ms 60000

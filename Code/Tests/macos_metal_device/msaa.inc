@@ -96,3 +96,29 @@ static int msaaSurfaceChecks(IDirect3DDevice9* d) {
     std::puts("PASS: 4x render target/depth surfaces, refusals, StretchRect resolve, mismatched clear, back-buffer copy, screenshot PNG/JPEG");
     return 0;
 }
+// The overlay bracket of Renderer::renderFrame under multisampling (RendDX9 PE 0x100306D2 and
+// 0x10030AE7): GetDepthStencilSurface, SetDepthStencilSurface(0), the overlay passes, then the
+// saved surface back. A reference left on the implicit depth-stencil surface keeps the device
+// referenced (the final release at shutdown fails, RendDX9Init.cpp:738) and refuses Reset; the
+// bracket must leave the device count where it was.
+static int msaaOverlayDepthChecks(IDirect3DDevice9* d, D3DPRESENT_PARAMETERS& pp) {
+    const ULONG before = (d->AddRef(), d->Release());
+    IDirect3DSurface9* saved = nullptr;
+    for (unsigned frame = 0; frame < 3; ++frame) {
+        saved = nullptr;
+        CHECK(d->BeginScene() == D3D_OK && d->GetDepthStencilSurface(&saved) == D3D_OK && saved);
+        CHECK(d->SetDepthStencilSurface(nullptr) == D3D_OK);
+        CHECK(d->Clear(0,nullptr,D3DCLEAR_TARGET,0xff203040u,1.0f,0) == D3D_OK);
+        CHECK(d->SetDepthStencilSurface(saved) == D3D_OK);
+        CHECK(saved->Release() == 0);
+        CHECK(d->EndScene() == D3D_OK && d->Present(nullptr,nullptr,nullptr,nullptr) == D3D_OK);
+    }
+    CHECK((d->AddRef(), d->Release()) == before);
+    // One frame without the release: the device stays referenced and Reset is refused.
+    CHECK(d->GetDepthStencilSurface(&saved) == D3D_OK && (d->AddRef(), d->Release()) == before + 1);
+    CHECK(d->Reset(&pp) == D3DERR_INVALIDCALL);
+    CHECK(saved->Release() == 0 && (d->AddRef(), d->Release()) == before);
+    CHECK(d->Reset(&pp) == D3D_OK);
+    std::puts("PASS: multisampled overlay depth-stencil bracket leaves the device count unchanged; a leaked depth reference refuses Reset");
+    return 0;
+}

@@ -205,6 +205,7 @@ int main(int argc, char** argv)
               device->Clear(0,nullptr,D3DCLEAR_TARGET|D3DCLEAR_ZBUFFER|D3DCLEAR_STENCIL,0xff405060u,1.0f,0) == D3D_OK &&
               device->EndScene() == D3D_OK && device->Present(nullptr,nullptr,nullptr,nullptr) == D3D_OK);
         if (msaaSurfaceChecks(device)) return 1;
+        if (msaaOverlayDepthChecks(device,pp)) return 1;
     }
     pp.MultiSampleType = D3DMULTISAMPLE_NONE;
     CHECK(device->Reset(&pp) == D3D_OK && pp.MultiSampleType == D3DMULTISAMPLE_NONE);

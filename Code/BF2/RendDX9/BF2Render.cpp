@@ -2804,8 +2804,8 @@ bool Renderer::renderFrame(double time, float deltaTime)
 
             // PE 0x100306D2..0x1003070C: with a multisampled back buffer the overlay passes run
             // without multisampling and without a depth-stencil surface; the surface is put back
-            // after the console draw. The reference GetDepthStencilSurface adds is never released
-            // in the shipped body (reproduced).
+            // after the console draw (0x10030AE7..0x10030AFA). The shipped body never releases the
+            // reference GetDepthStencilSurface adds; it is dropped after the restore below.
             IDirect3DSurface9* savedDepthStencil = 0;
             if (isMultisampleActive())                                             // sub_1000A6B0
             {
@@ -2971,6 +2971,12 @@ bool Renderer::renderFrame(double time, float deltaTime)
             if (isMultisampleActive())                                             // 0x10030AE7
                 static_cast<RendDX9Base*>(g_rendererBase)->device->SetDepthStencilSurface(
                     savedDepthStencil);
+            // [CHOSEN, not recovered] Not in the shipped body: one leaked reference per frame
+            // drawn with multisampling kept the depth-stencil surface, and with it the device,
+            // referenced, so the final device release at shutdown (rendererReleaseD3DDevice,
+            // RendDX9Init.cpp:738) failed after any level had been drawn with antialiasing.
+            if (savedDepthStencil)
+                savedDepthStencil->Release();
 
             if (sw(1695) && geom::g_ParticleSystemManager)
             {

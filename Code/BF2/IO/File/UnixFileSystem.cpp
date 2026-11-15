@@ -31,7 +31,8 @@ std::string extractFilePath(const std::string& path, char separator);
 namespace io {
 namespace {
 
-// Fills directory and size information from stat, zeroing timestamps. The caller supplies the name.
+// Fills directory and size information from stat; timestamps are zero except in the macOS client.
+// The caller supplies the name.
 void buildFileInfo(FileInfo* info, const struct stat* st)
 {
     info->isDirectory = (st->st_mode & S_IFMT) == S_IFDIR;   // stat + 16
@@ -43,6 +44,23 @@ void buildFileInfo(FileInfo* info, const struct stat* st)
     info->lastAccessTimeHigh = 0;
     info->lastWriteTimeLow   = 0;
     info->lastWriteTimeHigh  = 0;
+#if defined(__APPLE__) && !DEDICATED
+    // [CHOSEN, not recovered] The client stands in for BF2.exe's Win32FileSystem, whose FileInfo
+    // carries the WIN32_FIND_DATAW file times (PE 0x6767E0): FILETIME, 100 ns since 1601-01-01.
+    // RendDX9's effect cache test (EffectManager::compileEffect, PE 0x10034F60) uses a .cfx only
+    // when its write time is later than the source's; with every time zero, each effect whose .fx
+    // exists was compiled again at every level load and "Optimizing shaders" showed each time.
+    auto filetime = [](const struct timespec& t, unsigned int& low, unsigned int& high) {
+        const unsigned long long ticks =
+            static_cast<unsigned long long>(t.tv_sec + 11644473600LL) * 10000000ull +
+            static_cast<unsigned long long>(t.tv_nsec) / 100u;
+        low  = static_cast<unsigned int>(ticks);
+        high = static_cast<unsigned int>(ticks >> 32);
+    };
+    filetime(st->st_birthtimespec, info->creationTimeLow, info->creationTimeHigh);
+    filetime(st->st_atimespec, info->lastAccessTimeLow, info->lastAccessTimeHigh);
+    filetime(st->st_mtimespec, info->lastWriteTimeLow, info->lastWriteTimeHigh);
+#endif
 }
 
 #if defined(__APPLE__) && !DEDICATED
