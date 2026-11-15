@@ -337,7 +337,7 @@ jobs:
     environment: ${{ (github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')) && 'release' || '' }}
     env:
       SETUP_REPOSITORY: kr4uzi/openbf2-setup
-      SETUP_REVISION: 2faf77572fd5376e60cb70d3489036ff49fef1c8 # v0.2.0
+      SETUP_REVISION: fcb05267b0e221b3ff55c012d9e1f43ae918605e # v0.3.0
       BF2_RELEASE_SIGNING: ${{ (github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')) && 'true' || 'false' }}
     steps:
       # The client entitlements and the signing helper; the app is built from the setup repository.
