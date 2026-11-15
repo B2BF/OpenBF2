@@ -73,7 +73,7 @@ required. CI passes it for the client and editor only when neither D3DX source i
 | `openbf2-windows-x64-client.zip` | `BF2.exe`, `dice_py.dll`, `RendDX9.dll`, `SwiffPlayer.dll`, `BF2Audio.dll`, `TextureAtlasBuilder.dll`, `aidll.dll` |
 | `openbf2-linux-x64-server.zip` | `bf2`, `libdice_py.so` |
 | `openbf2-macos-arm64-client.zip`, `openbf2-macos-x86_64-client.zip` | `bf2_client`, `libdice_py.dylib`, `libaidll.dylib` |
-| `openbf2-macos-arm64-server.zip`, `openbf2-macos-x86_64-server.zip` | `bf2`, `libdice_py.dylib`, `libaidll.dylib` |
+| `openbf2-macos-arm64-server.zip`, `openbf2-macos-x86_64-server.zip` | `bf2`, `libdice_py.dylib`, `libaidll.dylib`; CI artifact only, not attached to releases and not notarized |
 
 The Windows x64 client files are staged by CMake into `bin_client`. Both x64
 packages require the native `aidll.dll`; the dedicated build stages the same DLL
@@ -182,10 +182,10 @@ are x86 only). This setup was checked against the code, without a runtime test h
    chmod +x bf2_client
    ```
 
-   For a server use `openbf2-macos-arm64-server` and `chmod +x bf2`; substitute
-   `x86_64` for `arm64` on Intel. Release packages are Developer ID signed and
-   notarized, so the `xattr` line is only needed for CI artifacts, which are
-   ad-hoc signed (the package README says which applies).
+   For a server (a CI artifact, for development) use `openbf2-macos-arm64-server` and
+   `chmod +x bf2`; substitute `x86_64` for `arm64` on Intel. Release client packages are
+   Developer ID signed and notarized, so the `xattr` line is only needed for CI
+   artifacts, which are ad-hoc signed (the package README says which applies).
 4. Start the client with `./bf2_client +modPath mods/bf2 +fullscreen 0`.
    New user profiles are stored separately in
    `~/Library/Application Support/OpenBF2/Profiles/`; copying the installation's
@@ -239,7 +239,8 @@ are x86 only). This setup was checked against the code, without a runtime test h
    Publishing either a regular release or a prerelease triggers the workflow; merely
    saving a draft does not. A tag push by itself starts no workflow.
 3. The workflow rebuilds that tagged commit, then attaches the ZIP/checksum pairs
-   only after every platform succeeds: the server and macOS client packages always,
+   only after every platform succeeds: the Windows and Linux server packages and the macOS
+   client packages always,
    and the Windows x86 client/editor and x64 client packages when D3DX was usable. A missing
    client or editor package is reported as a notice. Re-running the release workflow replaces the
    same named assets on that release; it never creates or edits a release's notes.

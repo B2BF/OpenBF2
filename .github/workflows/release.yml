@@ -46,9 +46,7 @@ jobs:
             openbf2-windows-x64-server
             openbf2-linux-x64-server
             openbf2-macos-arm64-client
-            openbf2-macos-arm64-server
             openbf2-macos-x86_64-client
-            openbf2-macos-x86_64-server
           )
           # build.yml leaves these out, with a notice, when neither the April 2005
           # DirectX SDK nor the D3DX fallback is usable.

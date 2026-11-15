@@ -292,10 +292,9 @@ jobs:
         env:
           NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
           NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
-        run: |
-          for role in client server; do
-            bash tools/macos/ci/release-signing.sh notarize "out/packages/openbf2-macos-${{ matrix.arch }}-$role.zip"
-          done
+        # Only the client is notarized: releases don't ship the macOS dedicated server, whose
+        # package stays a CI artifact for development.
+        run: bash tools/macos/ci/release-signing.sh notarize "out/packages/openbf2-macos-${{ matrix.arch }}-client.zip"
 
       - name: Remove the signing keychain and key (release)
         if: always() && env.BF2_RELEASE_SIGNING == 'true'
