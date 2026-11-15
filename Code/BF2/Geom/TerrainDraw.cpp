@@ -45,6 +45,7 @@ namespace dx9rend {
 extern void* g_rendererBase;       // RendDX9Init.cpp   - dword_1023B970 (the Renderer object)
 extern void* g_shaderManager;      // ShaderManager.cpp - dword_1023B97C
 extern void* g_raShaderConstants;  // RenderQueues.cpp  - dword_1023DDBC (the Ra constants block)
+extern double g_waterClock;        // BF2Render.cpp     - [CHOSEN, not recovered] GlobalTime as a double
 
 bool  effectHasTechnique(void* effect, const std::string& name);          // Effect.cpp,  sub_1001DC20
 void  updateShaderDefines(void* shaderManager, void* base);                // ShaderManager.cpp, 0x10023730
@@ -124,6 +125,10 @@ const unsigned char kWaterCellTests     = 3;                               // by
 // flt_101DDF30 (0x3E4CCCCD) - the 2D water's cycle: one pass over the frame list every
 // waterAnimSpeed * 0.2 seconds of GlobalTime (updateWaterConstants, 0x100DBBB6).
 const float         kWater2DCycleScale  = 0.2f;
+// [CHOSEN, not recovered] The 3D water's wrap period in cycles (updateWaterConstants): about 7 to
+// 28 hours for the stock waterAnimSpeed range of 50 to 200. Below it a float keeps the cycle to
+// about 6e-5, a small fraction of a texel.
+const double        kWater3DCyclePeriod = 1000.0;
 
 // EnvMapManager - the singleton dword_10267A34, now published by RendModule. Its real
 // level/frame lifecycle supplies the borrowed +64 texture used by the detail pass.
@@ -261,17 +266,19 @@ void Terrain::updateWaterConstants()
     // build's cvttss2si.
     if (m_water3D)
     {
-        // GlobalTime is read before the vslot +0x90 call (0x100DBB52);
+        // Retail reads GlobalTime before the vslot +0x90 call (0x100DBB52) and writes
         // WaterCycleTime = frac(GlobalTime / waterAnimSpeed) (`fdivr`, `fld st0`, `fistp`, `fild`,
-        // `fsubr`).
-        const float globalTime = constantF(148);                                      // GlobalTime
-        const float cycle = globalTime / getWaterAnimSpeed();                         // vslot +0x90
-#if defined(__APPLE__)
-        // [CHOSEN, not recovered] Preserve the 32-bit FISTP invalid result on arm64.
-        constantF(412) = cycle - static_cast<float>(bf2x87::toIntTruncate(cycle));
-#else
-        constantF(412) = cycle - static_cast<float>(static_cast<int>(cycle));        // WaterCycleTime
-#endif
+        // `fsubr`). The 3D water shaders offset their texture by WaterScroll * WaterCycleTime and
+        // WaterCycleTime * 10 + 0.7 * u + 1.13 * v, so the wrap makes the surface jump every
+        // waterAnimSpeed / 2 seconds.
+        // [CHOSEN, not recovered] B2BF/OpenBF2 issue 69: the cycle runs on unwrapped, at the same
+        // rate, from the double-precision copy of GlobalTime. It wraps only every
+        // kWater3DCyclePeriod cycles to keep the float constant precise in long sessions; at that
+        // period every texture offset jumps by a whole number for scroll values with one decimal,
+        // which covers the stock levels. The 2D arm below stays retail: it uses the constant as a
+        // 0..1 frame blend.
+        const double cycle = dx9rend::g_waterClock / getWaterAnimSpeed();             // vslot +0x90
+        constantF(412) = static_cast<float>(std::fmod(cycle, kWater3DCyclePeriod));  // WaterCycleTime
     }
     else
     {

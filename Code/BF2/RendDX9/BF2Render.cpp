@@ -288,6 +288,10 @@ void effectManagerResetEffects();
 }
 extern void* g_renderEntryPool;
 extern void* g_raShaderConstants;
+// [CHOSEN, not recovered] The 3D water clock (B2BF/OpenBF2 issue 69): GlobalTime (+0x94) kept in
+// double precision. Every GlobalTime accumulation in this file adds the same frame time to it, so
+// Terrain::updateWaterConstants runs the 3D water at the retail rate without the float's rounding.
+double g_waterClock = 0.0;
 extern void* g_renderTargetSystem;
 // QueryManager.cpp - the GPU-throttle fences.
 void queryIssueEnd(void* query);
@@ -2177,6 +2181,7 @@ void Renderer::roadQueuePass()
     IRenderView* const view = rendererGetRenderViewDup();                                   // +0x50
     // The Ra constants block by retail offset (raShaderConstantsAt maps it on x64, issue #7).
     *reinterpret_cast<float*>(raShaderConstantsAt(0x94)) += static_cast<float>(m_frameTime);
+    g_waterClock += static_cast<float>(m_frameTime);
 
     {
         const float* const m = view->getViewMatrixPtr()->m;                                  // +0x64
@@ -2529,9 +2534,12 @@ bool Renderer::renderFrame(double time, float deltaTime)
 
             // sub_100383D0 - GlobalTime accumulate on the withheld constants block.
             if (g_raShaderConstants)
+            {
                 *reinterpret_cast<float*>(
                     raShaderConstantsAt(148)) +=
                     static_cast<float>(m_frameTime);
+                g_waterClock += static_cast<float>(m_frameTime);
+            }
 
             // The constants block is still unpublished in this
             // reconstruction, so retain its existing guard while using the exact LightManager
@@ -4772,6 +4780,7 @@ void raConstantsSetViewMatrix(const float* m)
 void raConstantsAddGlobalTime(float dt)
 {
     *reinterpret_cast<float*>(raShaderConstantsAt(0x94)) += dt;
+    g_waterClock += dt;
 }
 
 // sub_100387E0 - the three dwords of the sun colour at +0x11C.
