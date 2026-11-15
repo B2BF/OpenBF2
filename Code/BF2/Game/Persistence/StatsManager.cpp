@@ -1,5 +1,6 @@
 // Path: [INFERRED]. See StatsManager.h for the paired evidence.
 #include "StatsManager.h"
+#include "../MatchMaking/OnlineProvider.h"   // [CHOSEN, not recovered] the services' domain
 #include "../../Core/Ids.h"
 #include "../../Core/StringUtil.h"
 #include "../IGame.h"
@@ -37,7 +38,10 @@ bool StatsManager::connect()
     const int port = serverSettings->m_gameSpyPort;
     std::strcpy(gcd_gamename, gamespy::g_gameName);
     std::strcpy(gcd_secret_key, gamespy::getSecretKey());
-    std::strcpy(StatsServerHostname, "gamestats.bf2hub.p.bf2.org"); // gamespy.com|openspy.net
+    // Retail copies "gamestats.gamespy.com" (ELF 0x82F8F50, bf2_w32ded.exe 0x5C7E50, BF2.exe the
+    // reference at 0x46C7CE). [CHOSEN, not recovered] The domain is onlineProvider's: gamespy.com
+    // unless +gamespy replaced it.
+    std::strcpy(StatsServerHostname, onlineProvider::gameStatsServerName().c_str());
     return InitStatsConnection(port) == 0;
 }
 void StatsManager::disconnect()

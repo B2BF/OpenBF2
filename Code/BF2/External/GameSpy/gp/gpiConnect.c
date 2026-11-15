@@ -192,7 +192,9 @@ gpiStartConnect(
 	{
 		host = gethostbyname(GPConnectionManagerHostname);
 		if(host == NULL)
-			CallbackFatalError(connection, GP_NETWORK_ERROR, GP_NETWORK, "Could not resolve connection mananger host name.");
+			// [CHOSEN, not recovered] OpenBF2 local change (LOCAL_CHANGES.md): "manager", as in the SDK
+			// revision BF2 shipped with; ProfileManager::reportError compares this text.
+			CallbackFatalError(connection, GP_NETWORK_ERROR, GP_NETWORK, "Could not resolve connection manager host name.");
 		address.sin_addr.s_addr = *(unsigned int *)host->h_addr_list[0];
 		//printf("Resolved Hostname and copied address:  %s\n", inet_ntoa(address.sin_addr));
 	}

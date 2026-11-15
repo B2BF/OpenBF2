@@ -15,7 +15,7 @@ set TASK_FLAGS=/nologo /O2 /EHsc /DPy_NO_ENABLE_SHARED /I"%TASK_PY%\Include" /I"
 set TASK_CFLAGS=/nologo /O2 /MD /Z7 /W0 /DDEDICATED=0 /D_CRT_SECURE_NO_WARNINGS /FI"%TASK_ROOT%\Core\BuildConfig.h"
 type nul >"%BF2_BUILD_OUT%\compile.log"
 set TASK_OBJS=
-for %%F in ("Menu\SwiffHost.cpp" "Game\Persistence\LeaderBoard.cpp" "Game\Persistence\PlayerAwards.cpp" "Game\Persistence\HTTPRequest.cpp" "Game\Persistence\KeyParser.cpp" "Core\StringUtil.cpp") do (
+for %%F in ("Menu\SwiffHost.cpp" "Game\Persistence\LeaderBoard.cpp" "Game\Persistence\PlayerAwards.cpp" "Game\Persistence\HTTPRequest.cpp" "Game\MatchMaking\OnlineProvider.cpp" "Game\Persistence\KeyParser.cpp" "Core\StringUtil.cpp") do (
   cl %TASK_FLAGS% /c "%TASK_ROOT%\%%~F" /Fo"%BF2_BUILD_OUT%\%%~nF.obj" >>"%BF2_BUILD_OUT%\compile.log" 2>&1
   if errorlevel 1 goto :compilefail
   set TASK_OBJS=!TASK_OBJS! "%BF2_BUILD_OUT%\%%~nF.obj"

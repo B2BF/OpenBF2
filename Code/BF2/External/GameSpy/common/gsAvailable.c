@@ -27,6 +27,11 @@ static struct
 	int retryCount;
 } AC;
 
+// [CHOSEN, not recovered] OpenBF2 local change (LOCAL_CHANGES.md): set once a check has ended
+// without an answer, because the host name did not resolve or every try timed out. Later checks
+// then end at once with the same result instead of repeating the lookup and the wait.
+static int ACUnanswered = 0;
+
 static int get_sockaddrin(const char * hostname, int port, SOCKADDR_IN * saddr)
 {
 	GS_ASSERT(hostname)
@@ -68,6 +73,10 @@ void GSIStartAvailableCheckA(const char * gamename)
 	// clear the sock
 	AC.sock = INVALID_SOCKET;
 
+	// [CHOSEN, not recovered] OpenBF2 local change: see ACUnanswered
+	if(ACUnanswered)
+		return;
+
 	// startup sockets
 	SocketStartUp();
 
@@ -79,7 +88,10 @@ void GSIStartAvailableCheckA(const char * gamename)
 	// get the master address
 	rcode = get_sockaddrin(override?GSIACHostname:hostname, MASTER_PORT, &AC.address);
 	if(!rcode)
+	{
+		ACUnanswered = 1; // [CHOSEN, not recovered] OpenBF2 local change
 		return;
+	}
 
 	// create the socket
 	AC.sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -192,6 +204,7 @@ GSIACResult GSIAvailableCheckThink(void)
 		{
 			// default to available
 			closesocket(AC.sock);
+			ACUnanswered = 1; // [CHOSEN, not recovered] OpenBF2 local change
 			__GSIACResult = GSIACAvailable;
 			return __GSIACResult;
 		}

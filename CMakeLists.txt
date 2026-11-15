@@ -2723,6 +2723,34 @@ if(APPLE)
     endif()
 endif()
 
+# [TEMP] The online services' domain (Code/Tests/online_provider_runtime.cpp): the host names formed
+# for the retail domain and for a +gamespy value, looked up by the linked GameSpy SDK and by
+# the persistence classes. The fixture replaces the resolver, so no name leaves the process, and
+# listens on the services' own loopback ports. Built on request; the client image (DEDICATED=0),
+# which links every service.
+if(APPLE)
+    add_executable(bf2_online_provider_check EXCLUDE_FROM_ALL
+        Code/Tests/online_provider_runtime.cpp
+        "${BF2_ROOT}/Game/MatchMaking/OnlineProvider.cpp"
+        "${BF2_ROOT}/Game/MatchMaking/OnlineProviderGameSpy.cpp"
+        "${BF2_ROOT}/Game/Persistence/HTTPRequest.cpp"
+        "${BF2_ROOT}/Game/Persistence/StatsManager.cpp"
+        "${BF2_ROOT}/Game/Persistence/PlayerStatsManager.cpp"
+        "${BF2_ROOT}/Core/StringUtil.cpp"
+        $<TARGET_OBJECTS:bf2_gamespy_objects>
+        $<TARGET_OBJECTS:bf2_gamespy_sb_objects>
+        $<TARGET_OBJECTS:bf2_gamespy_gp_objects>)
+    bf2_configure_cpp_target(bf2_online_provider_check)
+    bf2_set_platform_compat(bf2_online_provider_check)
+    bf2_set_image(bf2_online_provider_check 0)
+    target_compile_definitions(bf2_online_provider_check PRIVATE BF2_PLATFORM_POSIX _MACOSX)
+    find_package(Threads REQUIRED)
+    target_link_libraries(bf2_online_provider_check PRIVATE Threads::Threads)
+    if(BUILD_TESTING)
+        add_test(NAME bf2_online_provider_check COMMAND bf2_online_provider_check)
+    endif()
+endif()
+
 # bf2_memory - the rebuilt Memory.dll (Code/BF2/Memory). Built on request only (EXCLUDE_FROM_ALL)
 # and linked into no game image (issue #7). Its tests join CTest when BF2_MEMORY_TESTS is ON.
 add_subdirectory(Code/BF2/Memory)
