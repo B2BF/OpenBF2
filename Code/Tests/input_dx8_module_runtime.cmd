@@ -11,10 +11,8 @@ set "TASK_FLAGS=/nologo /EHsc /std:c++14 /permissive /MD /Z7 /Gy /DDEDICATED=%BF
 set "TASK_SOURCES=Core\ModuleRegistry"
 set "TASK_LIBS=user32.lib"
 if "%BF2_TEST_DEDICATED%"=="0" (
-  set "TASK_SOURCES=%TASK_SOURCES% IO\Input\DX8InputDeviceManager IO\Input\InputManager IO\Input\KeyboardDevice IO\Input\MouseDevice IO\Input\GameControllerDevice IO\Input\FalconDevice Core\Debug Core\StringUtil"
-  lib /nologo /machine:x86 /def:"%TASK_ROOT%\External\NovintHFX\NovintHFX.def" /out:"%BF2_BUILD_OUT%\NovintHFX.lib" >"%BF2_BUILD_OUT%\imports.log" 2>&1
-  if errorlevel 1 exit /b 1
-  set "TASK_LIBS=%TASK_LIBS% "%BF2_BUILD_OUT%\NovintHFX.lib" dinput8.lib dxguid.lib"
+  set "TASK_SOURCES=%TASK_SOURCES% IO\Input\DX8InputDeviceManager IO\Input\InputManager IO\Input\KeyboardDevice IO\Input\MouseDevice IO\Input\GameControllerDevice Core\Debug Core\StringUtil"
+  set "TASK_LIBS=%TASK_LIBS% dinput8.lib dxguid.lib"
 )
 set "TASK_OBJECTS="
 type nul >"%BF2_BUILD_OUT%\compile.log"

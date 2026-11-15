@@ -23,7 +23,6 @@
 #include "../Game/Main/BF2Console.h"
 #include "../Game/Main/BF2ClientSeams.h"    // g_controlSettings
 #include "../IO/Input/Input.h"
-#include "../IO/Input/FalconDevice.h"       // io::g_falconMouseMode
 
 namespace dice { namespace hfe {
 
@@ -155,7 +154,8 @@ bool BetweenRoundsLogic::init()
     ShowCursor(TRUE);
     SetCursor(static_cast<HCURSOR>(m_host->getCursor(0)));                    // +0x6C
 #endif
-    io::g_falconMouseMode = 1;                                                // ds:0x978FC4
+    // Retail also sets the Falcon's mouse mode here (ds:0x978FC4); it is archived with the device
+    // (Code/Archive/NovintFalcon).
     return true;
 }
 

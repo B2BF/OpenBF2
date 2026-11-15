@@ -11,7 +11,6 @@
 #include "IFSMoviePlayer.h"                 // [INFERRED] path; the renderer plugin's movie player (checkMovie, the mainLoop movie arm)
 #include "../../Menu/ISwiffHost.h"          // the typed front-end host and MenuEvent
 #include "../../IO/Input/Input.h"           // io::IKeyboardDevice - the movie arm's escape poll
-#include "../../IO/Input/FalconDevice.h"    // client PE978FC4, the menu's mouse-mode global
 #include "../../Core/System.h"              // [INFERRED] path; Core/System.cpp attested (anon-ns)
 #include "../../Core/EventManager.h"        // [INFERRED] path; Core/EventManager.cpp attested
 #include "../../Core/IProfilerClient.h"     // [INFERRED] path
@@ -3078,9 +3077,8 @@ void BF2Engine::renderMenu(int renderTicks, float renderDt, double wallDelta, bo
 #if !DEDICATED
     if (!menuLogic)
         return;
-    // PE40BD44..40BD57 addresses global978FC4 directly, not an OldConsole field.
-    if (io::g_falconMouseMode != 2)
-        io::g_falconMouseMode = 1;
+    // PE40BD44..40BD57 sets the Falcon's mouse mode (ds:0x978FC4); it is archived with the device
+    // (Code/Archive/NovintFalcon).
     menuLogic->update(wallDelta);                           // +0x28
     if (draw && menuLogic->beginFrame())                    // +0x2C
     {

@@ -394,7 +394,6 @@ set(bf2_client_only_sources
     "${BF2_ROOT}/IO/Input/KeyboardDevice.cpp"
     "${BF2_ROOT}/IO/Input/MouseDevice.cpp"
     "${BF2_ROOT}/IO/Input/GameControllerDevice.cpp"
-    "${BF2_ROOT}/IO/Input/FalconDevice.cpp"
     "${BF2_ROOT}/IO/Input/DX8InputDeviceManager.cpp"
     "${BF2_ROOT}/Sound/BfSound/MusicPlayer.cpp"    # attested client-only TU (2026-09-02); body #if !DEDICATED as well
     "${BF2_ROOT}/Menu/MenuTeamManager.cpp"
@@ -657,9 +656,8 @@ list(REMOVE_DUPLICATES bf2_client_sources)
 list(SORT bf2_client_sources)
 if(BF2_BUILD_MACOS)
     # [CHOSEN, not recovered] The macOS client replaces the DirectInput 8 devices with
-    # MacInputDeviceManager and the Mac*Device TUs (docs/macos-s2-4.md). The Novint Falcon stays
-    # disabled: FalconDevice.cpp is kept, and outside _WIN32 it defines only the menu's
-    # g_falconMouseMode (docs/macos-port.md, S2.8). The Linux and MSVC client manifests are unchanged.
+    # MacInputDeviceManager and the Mac*Device TUs (docs/macos-s2-4.md). The Linux and MSVC client
+    # manifests are unchanged.
     list(REMOVE_ITEM bf2_client_sources
         "${BF2_ROOT}/IO/Input/DX8InputDeviceManager.cpp"
         "${BF2_ROOT}/IO/Input/KeyboardDevice.cpp"
@@ -1564,33 +1562,8 @@ if(EXISTS "${BF2_DICE_PY_DLL}")
     )
 endif()
 
-# The bounded Novint SDK surface contains no cross-compiler STL objects. Import
-# names and the 32-byte ApplicationData carrier are read from the original client;
-# the matching DLL supplies third-party bodies.
-# [CHOSEN, not recovered] x86 only: NovintHFX.dll is a 32-bit DLL, so the x64 client imports nothing
-# from it and IO/Input/FalconDevice.cpp reports the device as not connected (issue #7).
-if(NOT BF2_BUILD_X64)
-set(BF2_NOVINT_IMPORT_LIB "${CMAKE_BINARY_DIR}/novint_hfx/NovintHFX.lib")
-add_custom_command(OUTPUT "${BF2_NOVINT_IMPORT_LIB}"
-    COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_BINARY_DIR}/novint_hfx"
-    COMMAND "${CMAKE_AR}" /nologo /machine:x86
-            "/def:${BF2_EXTERNAL_ROOT}/NovintHFX/NovintHFX.def"
-            "/out:${BF2_NOVINT_IMPORT_LIB}"
-    DEPENDS "${BF2_EXTERNAL_ROOT}/NovintHFX/NovintHFX.def"
-    VERBATIM
-)
-add_custom_target(bf2_novint_imports DEPENDS "${BF2_NOVINT_IMPORT_LIB}")
-add_dependencies(bf2_client bf2_novint_imports)
-target_link_libraries(bf2_client PRIVATE "${BF2_NOVINT_IMPORT_LIB}")
-if(EXISTS "${BF2_GAME_DIR}/NovintHFX.dll")
-    add_custom_command(TARGET bf2_client POST_BUILD
-        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                "${BF2_GAME_DIR}/NovintHFX.dll" "${BF2_CLIENT_OUTPUT_DIR}/NovintHFX.dll"
-        COMMENT "Staging the original Novint SDK companion beside BF2.exe"
-        VERBATIM
-    )
-endif()
-endif() # NOT BF2_BUILD_X64 (Novint)
+# [CHOSEN, not recovered] The Novint Falcon is archived (Code/Archive/NovintFalcon, issue #17): no image
+# imports or stages NovintHFX.dll.
 
 # [CHOSEN, not recovered] Build and stage one native client/plugin set:
 # https://github.com/B2BF/OpenBF2/issues/7. These DLLs target the rebuilt host only;
@@ -2490,39 +2463,6 @@ if(APPLE)
     endif()
 endif()
 
-# [TEMP] Falcon frame update (Code/Tests/falcon_update_runtime.cpp): the actual FalconDevice and
-# HapticSettings against a fake NovintHFX SDK, fake Win32 clock and fake control map/settings
-# (BF2_NOVINT_FAKE_SDK, Code/Tests/novint_fake/windows.h). Built on request. The Windows twin
-# falcon_device_runtime.cmd links the stock DLL with no device.
-if(APPLE)
-    add_executable(bf2_falcon_update_check EXCLUDE_FROM_ALL
-        Code/Tests/falcon_update_runtime.cpp
-        "${BF2_ROOT}/IO/Input/FalconDevice.cpp"
-        "${BF2_ROOT}/Game/HapticSettings.cpp"
-        "${BF2_ROOT}/Game/Objects/IObjectTemplate.cpp"
-        "${BF2_ROOT}/Scene/Object/ObjectTypes/Game/IPlayerControlObject.cpp"
-        "${BF2_ROOT}/Core/ClassManager.cpp"
-        "${BF2_ROOT}/Core/EventManager.cpp"
-        "${BF2_ROOT}/Core/Debug.cpp"
-        "${BF2_ROOT}/Core/StringUtil.cpp")
-    bf2_configure_cpp_target(bf2_falcon_update_check)
-    bf2_set_platform_compat(bf2_falcon_update_check)
-    bf2_set_image(bf2_falcon_update_check 0)
-    target_compile_definitions(bf2_falcon_update_check PRIVATE BF2_NOVINT_FAKE_SDK=1)
-    target_include_directories(bf2_falcon_update_check BEFORE PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/Code/Tests/novint_fake")
-    if(BUILD_TESTING)
-        add_test(NAME bf2_falcon_update_check COMMAND bf2_falcon_update_check)
-    endif()
-    # NovintHFX.h for the MSVC x86 ABI: the header's layout asserts and the vtable it implies.
-    if(BUILD_TESTING AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-        add_test(NAME bf2_novint_msvc_x86_layout
-            COMMAND "${CMAKE_CXX_COMPILER}" -target i686-pc-windows-msvc -fsyntax-only -std=c++14 -Wno-invalid-offsetof -Wno-unused-command-line-argument
-                -nostdinc -nostdinc++ -I "${CMAKE_CURRENT_SOURCE_DIR}/Code/Tests/msvc_x86_layout/include"
-                -D_M_IX86=600 "${CMAKE_CURRENT_SOURCE_DIR}/Code/Tests/msvc_x86_layout/novint_x86_layout.cpp")
-    endif()
-endif()
-
 # [TEMP] The PunkBuster glue objects at the 32-bit x86 ABI (Code/Tests/msvc_x86_layout/punkbuster_x86_layout.cpp).
 if(BUILD_TESTING AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     foreach(pb_abi IN ITEMS msvc elf)
@@ -2639,14 +2579,12 @@ if(APPLE)
     endif()
 endif()
 
-# [TEMP] The Soldier's Novint control-box profile switch (Code/Tests/soldier_haptic_profile_runtime.cpp,
+# [TEMP] The Soldier's control-box profile switch (Code/Tests/soldier_haptic_profile_runtime.cpp,
 # ledger N2 17a) against a generated fake HapticSettings and fake player-control templates. Built on request.
 if(APPLE OR UNIX)
     add_executable(bf2_soldier_haptic_profile_check EXCLUDE_FROM_ALL
         Code/Tests/soldier_haptic_profile_runtime.cpp
         "${BF2_ROOT}/Game/Objects/Game/SoldierHapticProfile.cpp"
-        "${BF2_ROOT}/Game/Objects/IPlayer.cpp"
-        "${BF2_ROOT}/Math/Mat4.cpp"
         "${BF2_ROOT}/Math/Vec3.cpp")
     bf2_configure_cpp_target(bf2_soldier_haptic_profile_check)
     bf2_set_platform_compat(bf2_soldier_haptic_profile_check)

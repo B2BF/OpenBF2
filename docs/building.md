@@ -318,11 +318,11 @@ do not depend on `Memory.dll`, `msvcr71.dll`, or `msvcp71.dll`.
 `bin_memory_native` (`bin_memory_x64` for x64); no game image links it.
 The renderer and atlas DLLs compile and link against the installed DirectX SDK described
 below, and at run time need the matching `d3dx9_25.dll`. Client runtime dependencies also
-include the game's Bink and Novint components, TextureAtlasBuilder, and an OpenAL provider for audio.
+include the game's Bink component, TextureAtlasBuilder, and an OpenAL provider for audio.
 The audio build always compiles the vendored Ogg/Vorbis decoder in, as the shipped DLL links its own.
 
 The CMake client target stages all four rebuilt DLLs above. It also stages Python
-and `NovintHFX.dll` when present at configuration time. Keep runtime testing in a separate
+when present at configuration time. Keep runtime testing in a separate
 directory and preserve the original images as references. Original-binary differential
 fixtures are isolated validation tools, not a supported retail plugin build.
 
@@ -348,8 +348,9 @@ build tree, and can be mixed only with each other.
 - **Movies.** `binkw32.dll` exists only as a 32-bit DLL, so the x64 `RendDX9.dll` has no Bink
   import. Each movie is skipped with one log line per movie name (`Video::open(...): movie
   skipped`), through the same failure return the x86 renderer uses when a `.bik` is missing.
-- **Novint Falcon.** `NovintHFX.dll` is 32-bit only. The x64 client neither links nor stages it;
-  `FalconDevice::init` writes one line to stderr and reports the device as not connected.
+- **Novint Falcon.** Archived on every platform (`Code/Archive/NovintFalcon`,
+  [issue #17](https://github.com/kr4uzi/OpenBF2/issues/17)): no image imports or stages
+  `NovintHFX.dll`, and the game takes retail's no-Falcon path.
 - **Audio.** The default providers load the game directory's 32-bit `BF2OpenAL.dll`, which an
   x64 process cannot load, so sound stays off with a `Could not find BF2OpenAL.dll` warning.
   Select the **System OpenAL** provider with a 64-bit `OpenAL32.dll` installed on the system, or
@@ -508,8 +509,7 @@ Use a new build directory when checking a different checkout, and retain verbose
 link commands and Ninja response files when investigating unresolved symbols.
 
 Each editor build normally rebuilds its native renderer and TextureAtlasBuilder under
-`<build>/editor_renddx9/` and stages them into `<build>/bin_editor/`. Python and the
-available Novint companion are also staged. These renderer outputs are separate from
+`<build>/editor_renddx9/` and stages them into `<build>/bin_editor/`. Python is also staged. These renderer outputs are separate from
 the client's shared plugin directories. Leave `BF2_EDITOR_KEEP_RENDDX9` unset for a
 fresh build; setting it to `1` can retain previously built renderer and atlas DLLs.
 The editor currently runs with sound disabled and does not load SwiffPlayer.

@@ -3,11 +3,6 @@
 // and cross-checked against PE 0x5A8770..0x5A9166.
 
 #include "WeaponBasedRecoilComp.h"
-#if !DEDICATED
-#include "../../../../IO/Input/FalconHaptics.h"            // weaponRecoilPunch (ledger N2)
-#include "../../../../Scene/Object/PlayerManager.h"
-#include "../../Game/SoldierHapticProfile.h"              // HapticWeaponAccess
-#endif
 
 #include <cmath>
 #include <sstream>
@@ -269,22 +264,8 @@ void WeaponBasedRecoilComp::postFire(WeaponFireEvent& event)
         m_savedRelativePosition.z = transform.m[14];
     }
 
-#if !DEDICATED
-    // BF2.exe 0x60A077..0x60A4FE (ledger N2 17b): the local occupant's Novint "RecoilPunch", between the
-    // snapshot and the timers. 0x440060 is the same control-object walk as below.
-    if (io::hapticDeviceConnected() && m_weaponTemplate->getCameraRecoilSize() != 0.0f
-        && m_weaponTemplate->getCameraRecoilSpeed() != 0.0f)
-    {
-        IPlayerControlObject* hapticPco = 0;
-        for (IObject* object = m_initObject; object && !hapticPco; object = object->getParent())
-            hapticPco = static_cast<IPlayerControlObject*>(object->queryInterface(IID_IPlayerControlObject));
-        IPlayer* const occupant = hapticPco ? hapticPco->getOccupingPlayer() : 0;    // +0x10
-        if (occupant && occupant == playerManager->getLocalHumanPlayer())
-            io::weaponRecoilPunch(HapticWeaponAccess::weaponType(m_initObject), m_initObject->getTemplate()->getName(),
-                                  m_weaponTemplate->getCameraRecoilSpeed(), m_weaponTemplate->getCameraRecoilSize(),
-                                  event.fireStrength);
-    }
-#endif
+    // BF2.exe 0x60A077..0x60A4FE (ledger N2 17b) gives the local occupant's Falcon a "RecoilPunch" here,
+    // between the snapshot and the timers; it needs a device (archived, Code/Archive/NovintFalcon).
 
     const unsigned int tick = static_cast<unsigned int>(WorldPref::getTickCount());
     const int recoilTicks = static_cast<int>(

@@ -14,7 +14,6 @@
 #include <vector>
 
 namespace renddx9abi { struct HostDisplayMode; }
-class IHapticEffect;                // NovintHFX.h (global namespace, as the SDK mangles it)
 
 namespace dice {
 namespace hfe {
@@ -122,10 +121,6 @@ extern IBase* g_serverLogoManager;                   // ds:0x987340  "ServerLogo
 // [UNRESOLVED]. Slot comments describe the PE ABI; typed interfaces own other services.
 bool        modInfo_vslot0x30(IBase* modInfo, const std::string& modName);      // IModInfo +0x30   startGame join result 8: getModFromPath != null
 bool        unresolvedGlobalA33C08_vslot0x18();                                 // +0x18   mainLoop (ragdoll viewer), 0x40D227: IAIInstance::isInitialized
-// The six haptic force effects (ds:0x9EBEC8, 0x9EBECC, 0x9EBF00, 0x9EBF04, 0x9EBF08, 0x9EBF0C): NovintHFX
-// effects the haptic-effect code creates (Stack::CreateNewEffect, e.g. "CONSTANT"/"ShakeForce" at
-// 0x5A415C; ledger N2). Defined in IO/Input/FalconDevice.cpp; null until a Falcon effect exists.
-extern ::IHapticEffect* g_hapticForceTargets[6];
 
 } // namespace hfe
 } // namespace dice

@@ -106,7 +106,7 @@ their existing vendored code for binary distribution.
 
 These packages require compatible Battlefield 2 1.50 content and game Python scripts.
 Windows also needs the matching Visual C++ runtime and, for client/editor use,
-separately supplied Bink, Novint, D3DX25 and OpenAL components where applicable.
+separately supplied Bink, D3DX25 and OpenAL components where applicable.
 Do not mix the rebuilt host's engine plugins with retail engine plugins. Follow
 [the build guide](building.md) for runtime setup and preserve original game images.
 
@@ -162,8 +162,9 @@ A shortcut uses that command as **Target** and the game/server installation root
 CI does not package it. `+modPath` selects the mod; it does not relocate the root Python
 files. These steps replace no original EXE or DLL. To return to retail, launch the
 original executable or shortcut. Do not copy retail engine plugins into the package.
-For the x86 editor, the original game folder supplies `binkw32.dll`, `d3dx9_25.dll`,
-`NovintHFX.dll` and the OpenAL DLLs through the working directory where required. The x64
+For the x86 editor, the original game folder supplies `binkw32.dll`, `d3dx9_25.dll`
+and the OpenAL DLLs through the working directory where required. No package needs
+`NovintHFX.dll`: the Novint Falcon is archived (`Code/Archive/NovintFalcon`). The x64
 client uses none of the game folder's 32-bit DLLs. It needs the 64-bit `d3dx9_25.dll`
 from the DirectX End-User Runtime and a 64-bit OpenAL provider for sound
 ([Native x64 client](building.md#native-x64-client)).

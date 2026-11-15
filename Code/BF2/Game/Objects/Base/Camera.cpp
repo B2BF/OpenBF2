@@ -19,9 +19,6 @@
 #include "../IPlayer.h"
 #include "../../../Scene/Object/ObjectManager.h"      // updateCloseVehicleShake's grid query
 #include "../../../Scene/Object/ObjectPredicator.h"   // its two heavy-engine filters
-#if !DEDICATED
-#include "../../../IO/Input/FalconHaptics.h"           // updateShakeForce (ledger N2)
-#endif
 #include <cmath>
 #include <vector>
 #include "../ObjectLayoutAccess.h"      // geometry(IObject*) - +0x38
@@ -431,8 +428,9 @@ public:
 };
 } // namespace
 
-// ELF 0x81DBA90 / BF2.exe 0x5A3EA0. BF2.exe also drives the Novint "ShakeForce" effects from the
-// shake values here (io::updateShakeForce, ledger N2); the ELF has that block compiled out.
+// ELF 0x81DBA90 / BF2.exe 0x5A3EA0. BF2.exe also drives the Falcon's "ShakeForce" effects from the
+// shake values here (0x5A3F4F..0x5A41D7, ledger N2); like the ELF, this has no such block (the device
+// is archived, Code/Archive/NovintFalcon).
 void Camera::handleUpdate(float deltaTime, unsigned int flags)
 {
     typedef object_detail::LayoutAccess L;
@@ -458,10 +456,6 @@ void Camera::handleUpdate(float deltaTime, unsigned int flags)
     {
         updateCameraRecoil(deltaTime);
         updateCameraShake(deltaTime);
-#if !DEDICATED
-        // BF2.exe 0x5A3F4F..0x5A41D7 (ledger N2): the Novint ShakeForce effects follow the shake.
-        io::updateShakeForce(pco, m_explosionShakeRoll, m_speedShakeRoll, m_soldierShakePitch, m_cameraRecoilY);
-#endif
     }
 
     m_frameTime += deltaTime;

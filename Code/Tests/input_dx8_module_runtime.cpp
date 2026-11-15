@@ -12,9 +12,6 @@
 #if !DEDICATED
 #include "../BF2/IO/Input/DX8InputDeviceManager.h"
 #include "../BF2/IO/Input/InputManager.h"
-#define private public
-#include "../BF2/IO/Input/FalconDevice.h"
-#undef private
 #endif
 using namespace dice::hfe;
 using namespace dice::hfe::io;
@@ -27,16 +24,6 @@ static void check(bool good,const char* label){++checks;if(!good){++failures;std
 int main(int argc,char** argv){
     SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX);
     _set_abort_behavior(0,_WRITE_ABORT_MSG|_CALL_REPORTFAULT);
-#if !DEDICATED
-    if(argc>1&&std::strcmp(argv[1],"--falcon-frontier")==0){
-        auto* falcon=new FalconDevice;
-        // This sentinel only satisfies the recovered presence guard. Neither
-        // it nor any hardware/SDK device is touched before the diagnostic stop.
-        falcon->m_active=true;falcon->m_device=reinterpret_cast<NovintHFX::Device*>(1);
-        static_cast<IInputDevice*>(falcon)->update(1.0f);
-        return 9; // A returning frontier is a fixture failure.
-    }
-#endif
     auto* module=new InputDX8Module;IModule* api=module;
     auto* base=static_cast<IBase*>(api->queryInterface(IID_IBase));
     check(sizeof(InputDX8Module)==8&&api->getRef()==1,"native module storage and initial reference");

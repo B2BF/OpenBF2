@@ -213,7 +213,7 @@ def package(args):
         if args.platform.startswith("windows-"):
             requirements = "Windows requires the matching x86/x64 Microsoft Visual C++ runtime.\n"
             if role.startswith("editor"):
-                requirements += ("Editor dependencies such as Bink, NovintHFX, d3dx9_25 and an\n"
+                requirements += ("Editor dependencies such as Bink, d3dx9_25 and an\n"
                                  "OpenAL provider must be supplied separately where required.\n")
             elif role.startswith("client"):
                 requirements += "The client's own dependencies are listed in the install steps below.\n"

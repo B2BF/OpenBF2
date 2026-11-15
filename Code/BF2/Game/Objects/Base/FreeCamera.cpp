@@ -23,9 +23,6 @@
 #include "../../GameLogic/Player.h"            // the concrete player handleUpdate follows
 #include "../IObject.h"
 #include "../ObjectLayoutAccess.h"     // createdOnLoad - init's +0x78 store
-#if !DEDICATED
-#include "../../../IO/Input/FalconHaptics.h"  // zeroHapticForceTargets (ledger N2)
-#endif
 
 namespace dice {
 namespace hfe {
@@ -524,11 +521,8 @@ void FreeCamera::handlePlayerInput(IPlayer* player, const io::PlayerInput& input
     if (object_detail::LayoutAccess::parent(this))                     // +0x28
         return;
 
-#if !DEDICATED
-    // BF2.exe 0x63EC73..0x63ED26 (ledger N2): the local player's free camera zeroes the force effects.
-    if (player == playerManager->getLocalHumanPlayer())                 // +0x30
-        io::zeroHapticForceTargets();
-#endif
+    // BF2.exe 0x63EC73..0x63ED26 (ledger N2): the local player's free camera zeroes the Falcon's force
+    // effects; none exists without the archived device (Code/Archive/NovintFalcon).
 
     IBase* gameServer = static_cast<IBase*>(game->queryInterface(IID_IGameServer));
 
