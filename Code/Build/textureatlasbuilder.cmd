@@ -151,6 +151,8 @@ rem ---------------------------------------------------------------------------
 rem STEP 3 - link. /DEF pins the twelve exports to the shipped ordinals and marks the vftables DATA.
 rem legacy_stdio_float_rounding.obj - VC7.1's round-half-up for %g ties (see the header).
 rem No d3d9.lib: the shipped image has no d3d9 import; the device arrives through create().
+rem [CHOSEN, not recovered] d3dx9_25.dll is delay-loaded, as in renddx9.cmd (the host checks it first,
+rem Game\Main\BF2Render.cpp); the shipped image imports it directly.
 rem ---------------------------------------------------------------------------
 echo [3/4] linking
 rem x64: no /BASE (the shipped x86 base) and no ordinal-pinning .def (its names are the x86
@@ -165,7 +167,8 @@ link /nologo /DLL /MACHINE:%ARCH% %LINK_BASE% /DEBUG /OPT:REF /OPT:ICF ^
      /PDB:"%BIN%\TextureAtlasBuilder.pdb" ^
      /IMPLIB:"%OUT%\TextureAtlasBuilder.lib" ^
      /MAP:"%OUT%\TextureAtlasBuilder.map" ^
-     "%OUT%\*.obj" legacy_stdio_float_rounding.obj "%D3DX25_LIB%" %DXERR_LIBS% kernel32.lib > "%OUT%\link.log" 2>&1
+     "%OUT%\*.obj" legacy_stdio_float_rounding.obj "%D3DX25_LIB%" %DXERR_LIBS% kernel32.lib ^
+     /DELAYLOAD:d3dx9_25.dll delayimp.lib > "%OUT%\link.log" 2>&1
 if not errorlevel 1 goto :link_ok
 echo   LINK FAILED - see "%OUT%\link.log"
 type "%OUT%\link.log"
@@ -229,6 +232,11 @@ for /f "usebackq eol=; tokens=1" %%A in ("%ABI%\TextureAtlasBuilder_x64.def") do
 findstr /i /c:"d3dx9_25.dll" "%OUT%\dependents.txt" >nul
 if errorlevel 1 (
     echo   imports:      d3dx9_25.dll MISSING
+    set /a ABI_BAD+=1
+)
+findstr /i /c:"delay load dependencies" "%OUT%\dependents.txt" >nul
+if errorlevel 1 (
+    echo   imports:      d3dx9_25.dll NOT delay-loaded
     set /a ABI_BAD+=1
 )
 findstr /i /c:"d3d9.dll" "%OUT%\dependents.txt" >nul

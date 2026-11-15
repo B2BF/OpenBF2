@@ -358,6 +358,12 @@ build tree, and can be mixed only with each other.
   before the game directory).
 - **D3DX.** The x64 renderer and atlas DLLs import the 64-bit `d3dx9_25.dll`, which the DirectX
   End-User Runtime installs in `System32`. The copy in the game directory is 32-bit.
+  `[CHOSEN, not recovered]` On Windows (x86 and x64), both DLLs delay-load it (`/DELAYLOAD`
+  in `renddx9.cmd` and `textureatlasbuilder.cmd`). `BF2Render::init` loads it before the
+  window and the renderer. If it is missing, the client shows one message box ("The DirectX 9
+  runtime (d3dx9_25.dll, 64-bit) is missing; run the OpenBF2 installer or the Microsoft
+  DirectX End-User Runtime") and exits with code 1, instead of failing to load
+  `RendDX9.dll` with a system error.
 - **AI.** The native `aidll.dll` builds with the client and dedicated server and is packaged
   with both. It shares the host's native ABI; retail x86 AI DLLs cannot be used.
   Windows compilation, exports, strict linking and bot execution await coordinator validation.
