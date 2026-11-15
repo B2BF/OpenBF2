@@ -15,6 +15,7 @@
 #include "../External/BFMeme/TypeDescriptor.h"
 #include "../IO/File/FileManager.h"
 #include "Font.h"
+#include "HudWidescreen.h"
 #include <cstdlib>
 #include <cstring>
 #include <new>
@@ -106,6 +107,7 @@ Ref2System::Ref2System(float width, float height)
 // not its Font* payloads. Fonts/textures/renderView belong to separate close.
 Ref2System::~Ref2System()
 {
+    hud::widescreen::detach(this);
     if (m_field684)
         m_field684->release();
 }
@@ -136,6 +138,7 @@ bool Ref2System::init() // 7AD030, retain the base result without early-out
 }
 bool Ref2System::close()
 {
+    hud::widescreen::detach(this);
     const bool result = System::close();
     m_renderView->release();
     if (m_textureList) m_textureList->release(); // Only the head; no chain walk here.
@@ -167,8 +170,21 @@ void Ref2System::sizeChanged(const float* oldSize, const float* newSize)
         m_renderHeight = newSize[1];
     }
 }
+void Ref2System::refreshHudLayout()
+{
+    // [CHOSEN, not recovered] Issue #33: sample the active pixel viewport before HUD input/layout.
+    if (hud::widescreen::enabled(this)) {
+        dx9rend::IRenderView* view = static_cast<dx9rend::IRenderer*>(m_renderer)->getRenderView();
+        if (view) {
+            const float* viewport = view->getViewport();
+            hud::widescreen::updateViewport(this, viewport[2], viewport[3]);
+        }
+        static_cast<dx9rend::IRenderView*>(m_renderView)->setOrthoWidth(hud::widescreen::width(this));
+    }
+}
 bool Ref2System::update(float delta) // only strictly greater than one resets
 {
+    refreshHudLayout();
     if (delta > 1.0f) delta = 0.0f;
     return System::update(delta);
 }
@@ -367,13 +383,13 @@ float Ref2System::getTextureHeight(meme::TextureHandle handle)
     return handle ? static_cast<float>(reinterpret_cast<geom::IMemeTexture*>(handle)->getPixelHeight()) : 0.0f;
 }
 
-// repeated object reads/calls and fixed 800x600 size are intentional.
+// Repeated retail calls retained; issue #33 optionally widens the 800x600 projection.
 void Ref2System::prepareRenderView()
 {
     static_cast<dx9rend::IRenderView*>(m_renderView)->setProjectionMode(1);
     static_cast<dx9rend::IRenderView*>(m_renderView)->setNearPlane(0.01f);
     static_cast<dx9rend::IRenderView*>(m_renderView)->setFarPlane(1.0f);
-    static_cast<dx9rend::IRenderView*>(m_renderView)->setOrthoWidth(800.0f);
+    static_cast<dx9rend::IRenderView*>(m_renderView)->setOrthoWidth(hud::widescreen::width(this));
     static_cast<dx9rend::IRenderView*>(m_renderView)->setOrthoHeight(600.0f);
     m_previousRenderView = static_cast<dx9rend::IRenderer*>(m_renderer)->getRenderView();
 }
@@ -391,6 +407,7 @@ void Ref2System::prepareViewMatrix()
 
 void Ref2System::beginPaint()
 {
+    refreshHudLayout();
     prepareRenderView();
     prepareViewMatrix();
     static_cast<dx9rend::IRenderer*>(m_renderer)->setRenderView(m_renderView);

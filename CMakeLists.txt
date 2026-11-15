@@ -328,6 +328,7 @@ set(bf2_client_only_sources
     "${BF2_ROOT}/Menu/BfNewListBoxNode.cpp" # recovered list-node storage; publication withheld
     "${BF2_ROOT}/Menu/BfListBoxData.cpp"    # descriptor-attested shared chat/list data; node hooks open
     "${BF2_ROOT}/Menu/Ref2System.cpp"       # recovered UI root construction; publication still gated
+    "${BF2_ROOT}/Menu/HudWidescreen.cpp"    # issue #33: opt-in native vanilla HUD policy
     "${BF2_ROOT}/Menu/Font.cpp"
     "${BF2_ROOT}/Menu/DifFontMetadata.cpp"
     "${BF2_ROOT}/Menu/FontLoader.cpp"
@@ -2282,6 +2283,17 @@ endif()
 
 include(CTest)
 
+# [TEMP] Issue #33: content-free policy checks, with no renderer or gameplay claim.
+add_executable(bf2_hud_widescreen_check EXCLUDE_FROM_ALL
+    Code/Tests/hud_widescreen_policy.cpp
+    "${BF2_ROOT}/Menu/HudWidescreen.cpp")
+bf2_configure_cpp_target(bf2_hud_widescreen_check)
+bf2_set_platform_compat(bf2_hud_widescreen_check)
+bf2_set_image(bf2_hud_widescreen_check 0)
+if(BUILD_TESTING)
+    add_test(NAME bf2_hud_widescreen_check COMMAND bf2_hud_widescreen_check)
+endif()
+
 if(BF2_BUILD_MACOS AND TARGET bf2_swiffplayer_static)
     # [TEMP] [CHOSEN, not recovered] Content-free offline popup VM regression.
     add_executable(bf2_swiff_offline_connect_popup_check EXCLUDE_FROM_ALL
@@ -2947,6 +2959,7 @@ if(BUILD_TESTING AND MSVC)
             bf2_bundle_serialization
             bf2_runtime_pair
             bf2_registry_dat_check
+            bf2_hud_widescreen_check
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
         USES_TERMINAL
         VERBATIM

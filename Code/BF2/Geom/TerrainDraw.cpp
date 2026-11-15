@@ -1745,6 +1745,10 @@ void Terrain::drawWaterGrid(float seaLevel)
 void Terrain::drawWaterCell(float x0, float z0, float x1, float z1, void* lightmap)
 {
     namespace Ra = dx9rend::Ra;
+    // [CHOSEN, not recovered] Skip excess cells instead of overrunning the ring
+    // (issue #33), following marekzajac97/BF2-HUD-fix. Those cells remain undrawn.
+    if (m_waterObjectRingCursor >= 256)
+        return;
     if (!m_waterGridGeometry)
     {
         // sub_1005F340(140292): a count word, then 256 RaObjectParameters (retail 548 bytes each).

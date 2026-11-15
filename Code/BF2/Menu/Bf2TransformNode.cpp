@@ -1,6 +1,7 @@
 // HUD transform-node position and bounds. [INFERRED] Source placement.
 // Higher accessors use the documented native interface where original Node slots remain incomplete.
 #include "Bf2TransformNode.h"
+#include "../External/BFMeme/TransformLayout.h"
 #if !defined(_MSC_VER) || !defined(_M_IX86)
 #include "../Math/PortableX87.h"
 #endif
@@ -206,8 +207,7 @@ bool Bf2TransformNode::update(System* system, const NodeState* state,
         target = target->getChild(0);
     }
 
-    const Rect transformed = {bounds->x + position.x, bounds->y + position.y,
-        size.x, size.y, bounds->z};
+    const Rect transformed = layoutTransformBounds(system, this, *bounds, position, size);
     bool inside = false;
     if (state->target < 0.0f) {
         const float* pointer = system->getPointerPosition();

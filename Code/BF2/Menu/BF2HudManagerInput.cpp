@@ -1,6 +1,7 @@
 // [INFERRED] split in the attested BF2HudManager.cpp family. Complete653-byte
 // PE752B00 and its helpers read. Filters stay separate.
 #include "BF2HudManager.h"
+#include "HudWidescreen.h"
 #if !defined(_MSC_VER) || !defined(_M_IX86)
 #include "../Math/PortableX87.h"
 #endif
@@ -149,12 +150,16 @@ void clampInputCoordinate(float& value, float origin, float extent)
 void BF2HudManager::handleGameInput(float /*delta*/, io::GameInput& input)
 {
     if (!ref2System) return;
+    ref2System->refreshHudLayout();
     ref2System->setInput(input, 0);
     if (!m_field258) return;
     int sensitivity = m_field180;
     const float y = (input.mappingFlags & 0x200000u) ? input.inputs[21] : 0.0f;
     const float x = (input.mappingFlags & 0x100000u) ? input.inputs[20] : 0.0f;
     meme::Rect bounds = {-400.0f, -300.0f, 800.0f, 600.0f, 0.0f};
+    // [CHOSEN, not recovered] Issue #33: the pointer may reach both widened screen edges.
+    bounds.width = widescreen::width(ref2System);
+    bounds.x = -0.5f * bounds.width;
     // Do not cache getMode: every comparison is a separate retail virtual call.
     if (getMode() == 3 || getMode() == 4 || getMode() == 5 || getMode() == 7
             || getMode() == 8 || getMode() == 30 || getMode() == 31) {

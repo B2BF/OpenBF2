@@ -57,6 +57,8 @@ public:
     IBase* getRenderView() { return m_renderView; } // nonvirtual7AD390, complete MOV EAX,[ECX+678];RET
     IBase* getPreviousRenderView() { return m_previousRenderView; } // nonvirtual7AD3A0, complete MOV EAX,[ECX+67C];RET
     void setInput(const io::GameInput& input, int user); // nonvirtual7AD360, complete320-byte copy
+    // [CHOSEN, not recovered] Issue #33: refresh optional HUD projection before input and animation.
+    void refreshHudLayout();
 
 private:
     // [INFERRED] nonvirtual helper names, read complete at 0x7AD450/0x7AD6D0.

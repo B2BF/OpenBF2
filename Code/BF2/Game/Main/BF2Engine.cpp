@@ -64,6 +64,7 @@
 #include "../Objects/ICameraObject.h"       // mainLoop's held camera: getCamera / setInterpolatedMode
 #if !DEDICATED
 #include "../VoipClient/BF2VoipClient.h"     // the "Bf2VoipClient" singleton (ds:0x9A4DA0)
+#include "../../Menu/HudWidescreen.h"
 #endif
 
 #include <list>
@@ -1191,6 +1192,10 @@ bool BF2Engine::parseParameters(const std::string& commandLine)
         // [CHOSEN, not recovered] Port addition, every image (OnlineProvider.h): retail has no
         // such option and always uses gamespy.com.
         parser.add( 75, "gamespy",                "Use this domain instead of gamespy.com for all online services");
+#if !DEDICATED
+        // [CHOSEN, not recovered] https://github.com/kr4uzi/OpenBF2/issues/33
+        parser.add( 76, "widescreenHud",          "Use the optional vanilla widescreen HUD (0 or 1; default 0)");
+#endif
 
         // Only registered parser IDs reach these sparse switch cases.
         std::list<std::pair<int, std::string> > keyList;        // var_C8
@@ -1417,6 +1422,16 @@ bool BF2Engine::parseParameters(const std::string& commandLine)
                     break;
                 }
 
+#if !DEDICATED
+                case 76: // [CHOSEN, not recovered] Process option, never a menu-script override.
+                    if (!s_parsingProcessArguments) break;
+                    if (!hud::widescreen::setRequested(value)) {
+                        std::fprintf(stderr, "+widescreenHud: expected 0 or 1\n");
+                        std::fflush(stderr);
+                        return false;
+                    }
+                    break;
+#endif
                 // 6 (+checkForAvailablePatch), 7 (+checkForPatch) and 10 (+lowPriority) are
                 // registered but share the default target 0x8133400 - they parse and do nothing.
                 default:
@@ -1431,6 +1446,9 @@ bool BF2Engine::parseParameters(const std::string& commandLine)
     // report the names in use once. This runs before the status monitor takes the terminal.
     if (s_parsingProcessArguments)
     {
+#if !DEDICATED
+        hud::widescreen::configureMod(settings->stringGet("GSModDirectory", "mods/bf2"));
+#endif
         onlineProvider::prepareGameSpySdk();
         std::fprintf(stderr, "%s\n", onlineProvider::describe(DEDICATED == 0).c_str());
         std::fflush(stderr);
@@ -3347,6 +3365,8 @@ void BF2Engine::buildRestartCommandLine(const std::string& modPath, const std::s
     // [CHOSEN, not recovered] Not in retail: the restarted client logs in with the profile below,
     // so it must keep the online domain this one was started with.
     commandLine += onlineProvider::commandLineArguments();
+    // [CHOSEN, not recovered] Keep the request across mod restarts; unsupported mods disable it.
+    if (hud::widescreen::requested()) commandLine += " +widescreenHud 1";
     if (!settings->boolGet("GSFullScreen", false))
         commandLine += " +fullscreen 0";
     if (joinAddress)

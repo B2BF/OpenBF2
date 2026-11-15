@@ -1,5 +1,6 @@
 // Weapon status and ammunition display.
 #include "HudAmmo.h"
+#include "HudWidescreen.h"
 #if !defined(_MSC_VER) || !defined(_M_IX86)
 #include "../Math/PortableX87.h"
 #endif
@@ -383,7 +384,9 @@ void HudAmmo::updateCrosshairPositions(world::IWeaponObject* weapon)
         static_cast<menu::Ref2System*>(m_system)->getRenderView());
     const int deviation  = static_cast<int>(std::ceil(
         static_cast<double>(weapon->getDeviation()) * m_field100));
-    const int halfWidth  = static_cast<int>(std::ceil(
+    // [CHOSEN, not recovered] Issue #33: crosshair bindings remain on the authored 800x600
+    // canvas, including the maximum-deviation branch. Preserve the deviation clamp.
+    const int halfWidth  = widescreen::enabled(m_system) ? 400 : static_cast<int>(std::ceil(
         static_cast<double>(view->getOrthoWidth()) * 0.5));
     const int halfHeight = static_cast<int>(std::ceil(
         static_cast<double>(view->getOrthoHeight()) * 0.5));
