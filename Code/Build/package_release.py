@@ -19,9 +19,10 @@ PACKAGES = {
         "server": ("bin", (
             "bf2_w32ded.exe", "dice_py.dll", "AIDLL_w32ded.dll", "BF2VoipServer_w32ded.dll",
         )),
+        # BF2OpenAL.dll: OpenAL Soft, built by Code/Build/build_openal_soft.py ([CHOSEN, not recovered]).
         "client": ("bin_client", (
             "BF2.exe", "dice_py.dll", "RendDX9.dll", "SwiffPlayer.dll",
-            "BF2Audio.dll", "TextureAtlasBuilder.dll", "BF2VoipServer.dll",
+            "BF2Audio.dll", "TextureAtlasBuilder.dll", "BF2VoipServer.dll", "BF2OpenAL.dll",
         )),
         "editor": ("bin_editor", (
             "BF2Editor.exe", "dice_py.dll", "RendDX9.dll", "TextureAtlasBuilder.dll", "BF2VoipServer.dll",
@@ -70,8 +71,8 @@ def leading_notice(path):
     return match.group().rstrip() + "\n"
 
 
-def openal_notice(build_info):
-    """[CHOSEN, not recovered] The LGPL notice for the x64 client's bundled BF2OpenAL.dll."""
+def openal_notice(build_info, bits):
+    """[CHOSEN, not recovered] The LGPL notice for a Windows client's bundled BF2OpenAL.dll."""
     return (
         "BF2OpenAL.dll in this package is OpenAL Soft (https://openal-soft.org), unmodified,\n"
         "licensed under the GNU Library General Public License version 2 or later; see\n"
@@ -80,9 +81,9 @@ def openal_notice(build_info):
         "from the source URL below.\n\n"
         + build_info +
         "\nReplacing it: BF2.exe loads BF2OpenAL.dll from its own folder first. Put any other\n"
-        "64-bit OpenAL Soft build (or OpenAL implementation with the standard exports) there\n"
+        "{bits} OpenAL Soft build (or OpenAL implementation with the standard exports) there\n"
         "under that name. Alternatively choose \"System OpenAL\" in the audio settings to use\n"
-        "an installed 64-bit OpenAL32.dll.\n"
+        "an installed {bits} OpenAL32.dll.\n".format(bits=bits)
     )
 
 
@@ -105,9 +106,12 @@ def installation(platform, role, name, executable, macos_signing="adhoc"):
                  name=name, exe=executable, root="Battlefield 2 Server" if server else "Battlefield 2")
         command = '"C:\\OpenBF2\\{}\\{}" {}'.format(name, executable, options)
         if role.startswith("client") and platform == "windows-x86":
-            text += ("   The original folder supplies binkw32.dll, d3dx9_25.dll, BF2OpenAL.dll\n"
-                     "   and PunkBuster's pb\\ folder through this working directory where\n"
-                     "   required. Checked against the code; not runtime-tested here.\n")
+            text += ("   The original folder supplies binkw32.dll, d3dx9_25.dll and PunkBuster's\n"
+                     "   pb\\ folder through this working directory where required. Sound uses\n"
+                     "   the bundled BF2OpenAL.dll (OpenAL Soft; see OpenAL-Soft-NOTICE.txt), not\n"
+                     "   the game folder's retail copy: BF2.exe runs from this package's folder,\n"
+                     "   and Windows searches the application folder first.\n"
+                     "   Checked against the code; not runtime-tested here.\n")
         elif role.startswith("client"):
             text += ("   This x64 client does not use the game folder's 32-bit DLLs. It needs the\n"
                      "   64-bit d3dx9_25.dll that the DirectX End-User Runtime installs in System32.\n"
@@ -212,15 +216,17 @@ def package(args):
             files["licenses/MojoShader-LICENSE.txt"] = deps / "mojoshader/LICENSE.txt"
             files["licenses/meshoptimizer-LICENSE.md"] = external / "meshoptimizer/LICENSE.md"
             files["licenses/FFmpeg-COPYING.LGPLv2.1.txt"] = external / "ffmpeg-bink/COPYING.LGPLv2.1"
-        if role.startswith("client") and args.platform == "windows-x64":
-            # [CHOSEN, not recovered] The bundled OpenAL Soft (LGPL): its licence, a notice and the
-            # exact source tarball (written beside the ZIP; release.yml attaches it).
+        if role.startswith("client") and args.platform.startswith("windows-"):
+            # [CHOSEN, not recovered] The bundled OpenAL Soft (LGPL), in both Windows clients: its
+            # licence, a notice and the exact source tarball (written beside the ZIP; release.yml
+            # attaches one copy).
             openal = args.build_dir / "openal-soft"
             files["licenses/OpenAL-Soft-COPYING.txt"] = openal / "COPYING"
             build_info = openal / "BUILD.txt"
             if not build_info.is_file():
                 raise ValueError("Required package input is missing or empty: {} (OpenAL Soft)".format(build_info))
-            package_notices["OpenAL-Soft-NOTICE.txt"] = openal_notice(build_info.read_text(encoding="utf-8"))
+            package_notices["OpenAL-Soft-NOTICE.txt"] = openal_notice(
+                build_info.read_text(encoding="utf-8"), "64-bit" if args.platform == "windows-x64" else "32-bit")
             sources = sorted(openal.glob("openal-soft-*.tar.bz2"))
             if len(sources) != 1:
                 raise ValueError("Expected one OpenAL Soft source tarball in {}".format(openal))

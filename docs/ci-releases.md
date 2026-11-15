@@ -14,7 +14,7 @@ it does not recover or change engine behavior, ABI, protocols, or file formats.
 
 | Runner | Configuration | Targets and checks |
 | --- | --- | --- |
-| Windows 2022, MSVC x86 | `msvc-x86` / `Reconstruction` | Python interpreter check; `bf2_run_checks`; `bf2_editor_run_checks`; `bf2_w32ded`; `bf2_aidll`; with a usable D3DX source: `bf2_client` and plugins, `bf2_editor` and plugins, then `dumpbin /dependents /imports` of the client's and the editor's `BF2.exe`/`BF2Editor.exe`, `RendDX9.dll` and `TextureAtlasBuilder.dll`, and the embedded manifests of `BF2.exe` and `BF2Editor.exe` (`mt.exe`), in the log |
+| Windows 2022, MSVC x86 | `msvc-x86` / `Reconstruction` | Python interpreter check; `bf2_run_checks`; `bf2_editor_run_checks`; `bf2_w32ded`; `bf2_aidll`; with a usable D3DX source: `bf2_client` and plugins, OpenAL Soft, `bf2_editor` and plugins, then `dumpbin /dependents /imports` of the client's `BF2.exe`, `RendDX9.dll`, `TextureAtlasBuilder.dll` and `BF2OpenAL.dll` and of the editor's `BF2Editor.exe`, `RendDX9.dll` and `TextureAtlasBuilder.dll`, and the embedded manifests of `BF2.exe` and `BF2Editor.exe` (`mt.exe`), in the log |
 | Windows 2022, MSVC x64 | `msvc-x64` / `Release` | Python interpreter check; strict `bf2_w64ded` and `bf2_aidll` links; AI export listing and staged-copy comparison; with a usable D3DX source: `bf2_client` and plugins, OpenAL Soft, then `dumpbin /dependents /imports` of `BF2.exe`, `RendDX9.dll`, `TextureAtlasBuilder.dll` and `BF2OpenAL.dll`, and the embedded manifest of `BF2.exe` (`mt.exe`), in the log |
 | Ubuntu 22.04, GCC x64 | `linux-x64` / `RelWithDebInfo` | Strict `bf2` link; `dice_py_check_run` |
 
@@ -30,13 +30,14 @@ Both Windows jobs probe with `Code\Build\dxsdk.cmd <arch> fallback`. When neithe
 source is usable, the job posts a notice, skips the client (and the editor on x86),
 and packages only its server. Otherwise it builds and packages those images.
 
-Windows ships both clients. The x86 client uses retail's 32-bit companions from the game
-folder (D3DX, OpenAL, PunkBuster). The x64 client bundles OpenAL Soft and has **no
-PunkBuster support**. PunkBuster exists only as 32-bit DLLs, so the x64 client cannot join
+Windows ships both clients. Both bundle OpenAL Soft as `BF2OpenAL.dll` (see below). The x86
+client takes retail's other 32-bit companions from the game folder (D3DX, Bink, PunkBuster).
+The x64 client has **no PunkBuster support**. PunkBuster exists only as 32-bit DLLs, so the x64 client cannot join
 servers that require PunkBuster; use the x86 client for those. An x64 editor package is a
 future goal.
 
-The import listing fails the job if any of those images imports `NovintHFX.dll`. The
+The import listing fails the job if any of those images imports `NovintHFX.dll`, or if
+`BF2OpenAL.dll` imports the shared MSVC runtime. The
 manifests are only printed. Any `requestedExecutionLevel` turns off UAC file virtualization,
 which retail's manifest-less `BF2.exe` gets, so write access to the game folder is the
 installer's job.
@@ -78,7 +79,7 @@ required. CI passes it for the client and editor only when neither D3DX source i
 | ZIP filename | Runtime contents |
 | --- | --- |
 | `openbf2-windows-x86-server.zip` | `bf2_w32ded.exe`, `dice_py.dll`, `AIDLL_w32ded.dll`, `BF2VoipServer_w32ded.dll` |
-| `openbf2-windows-x86-client.zip` | `BF2.exe`, `dice_py.dll`, `RendDX9.dll`, `SwiffPlayer.dll`, `BF2Audio.dll`, `TextureAtlasBuilder.dll`, `BF2VoipServer.dll` |
+| `openbf2-windows-x86-client.zip` | `BF2.exe`, `dice_py.dll`, `RendDX9.dll`, `SwiffPlayer.dll`, `BF2Audio.dll`, `TextureAtlasBuilder.dll`, `BF2VoipServer.dll`, `BF2OpenAL.dll` (OpenAL Soft) |
 | `openbf2-windows-x86-editor.zip` | `BF2Editor.exe`, `dice_py.dll`, editor `RendDX9.dll`, `TextureAtlasBuilder.dll`, `BF2VoipServer.dll` |
 | `openbf2-windows-x64-server.zip` | `bf2_w64ded.exe`, `dice_py.dll`, `aidll.dll`; CI artifact only, not attached to releases (PunkBuster's server library exists only as 32-bit `pbsv.dll`, so Windows releases ship the x86 server) |
 | `openbf2-windows-x64-client.zip` | `BF2.exe`, `dice_py.dll`, `RendDX9.dll`, `SwiffPlayer.dll`, `BF2Audio.dll`, `TextureAtlasBuilder.dll`, `aidll.dll`, `BF2OpenAL.dll` (OpenAL Soft); no PunkBuster, so it cannot join servers that require it |
@@ -94,11 +95,14 @@ is strict; MSVC and runtime results await coordinator validation documented in
 The x64 renderer statically links the FFmpeg-based Bink replacement; its package
 includes `FFmpeg-COPYING.LGPLv2.1.txt` alongside the other dependency notices.
 
-### OpenAL Soft in the x64 client
+### OpenAL Soft in the Windows clients
 
-`[CHOSEN, not recovered]` Retail's `BF2OpenAL.dll` is 32-bit, and an x64 process cannot load
-it. The x64 client package therefore carries an unmodified
-[OpenAL Soft](https://openal-soft.org) build under that name, beside `BF2.exe`. The default
+`[CHOSEN, not recovered]` Retail's `BF2OpenAL.dll` is Creative's 32-bit OpenAL wrapper, renamed.
+An x64 process cannot load it. Both Windows client packages, x86 and x64, therefore carry an
+unmodified [OpenAL Soft](https://openal-soft.org) build under that name, beside `BF2.exe`, so
+both clients use the same provider. `BF2.exe` runs from the package folder and Windows searches
+the application folder first, so the x86 client takes the bundled DLL, not the game folder's
+retail copy. The default
 audio providers ("Software Audio", "Hardware Audio", "+ EAX") load it. OpenAL Soft maps
 their legacy device names to its default device and implements the EAX extensions. The
 "System OpenAL" rows still load an installed `OpenAL32.dll`.
@@ -107,18 +111,20 @@ their legacy device names to its default device and implements the EAX extension
   URL (`openal-soft.org/openal-releases`) and its SHA-256. The tarball's contents match the
   upstream `1.25.2` tag. The script refuses any other download. Changing the pin means editing
   those three constants.
-- **Build.** CMake/Ninja with MSVC x64: `LIBTYPE=SHARED`, `ALSOFT_EAX=ON`, the static MSVC
+- **Build.** CMake/Ninja with MSVC, in each leg for its architecture: `LIBTYPE=SHARED`, `ALSOFT_EAX=ON`, the static MSVC
   runtime (`FORCE_STATIC_VCRT=ON`, `CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`; the script checks
   that the DLL has no VC++ runtime imports), with `ALSOFT_UTILS`, `ALSOFT_EXAMPLES`, `ALSOFT_TESTS`,
   `ALSOFT_INSTALL` and C++20 modules off. `OpenAL32.dll` is copied as `BF2OpenAL.dll`. CI caches
-  the result (`out/build/ci-x64/openal-soft`), keyed on the script.
-- **LGPL.** The package contains `licenses/OpenAL-Soft-COPYING.txt` and
+  the result per architecture (`out/build/ci-<arch>/openal-soft`), keyed on the script.
+- **LGPL.** Each client package contains `licenses/OpenAL-Soft-COPYING.txt` and
   `OpenAL-Soft-NOTICE.txt` (version, source URL and SHA-256, build options, how to replace the
-  DLL). The packager writes the exact source tarball and its `.sha256` beside the ZIP, and
-  releases attach both.
-- **Local builds.** In an x64 developer prompt, run `python Code/Build/build_openal_soft.py
-  --stage-dir <build>/openal-soft --work-dir <scratch> --client-dir <build>/bin_client` before
-  packaging `windows-x64`. Packaging the x64 client requires that stage.
+  DLL). The packager writes the exact source tarball and its `.sha256` beside the ZIP. Both legs
+  build from the same pinned file, so only the x64 leg uploads it, and releases attach that one
+  copy.
+- **Local builds.** In the developer prompt of the target architecture, run
+  `python Code/Build/build_openal_soft.py --arch <x86|x64> --stage-dir <build>/openal-soft
+  --work-dir <scratch> --client-dir <build>/bin_client` before packaging that client. Packaging
+  a Windows client requires that stage.
 
 Every ZIP has a matching `.zip.sha256` checksum written with LF line endings on all
 platforms, so Linux `sha256sum --check` can verify Windows-built packages too.
@@ -196,9 +202,10 @@ A shortcut uses that command as **Target** and the game/server installation root
 CI does not package it. `+modPath` selects the mod; it does not relocate the root Python
 files. These steps replace no original EXE or DLL. To return to retail, launch the
 original executable or shortcut. Do not copy retail engine plugins into the package.
-For the x86 client and editor, the original game folder supplies `binkw32.dll`,
-`d3dx9_25.dll`, `BF2OpenAL.dll` (and the x86 client's PunkBuster `pb\` folder) through the
-working directory where required. No package needs
+For the x86 client and editor, the original game folder supplies `binkw32.dll` and
+`d3dx9_25.dll` (and the x86 client's PunkBuster `pb\` folder) through the working directory
+where required. The editor also takes `BF2OpenAL.dll` from there. The x86 client uses its
+bundled OpenAL Soft `BF2OpenAL.dll`. No package needs
 `NovintHFX.dll`: the Novint Falcon is archived (`Code/Archive/NovintFalcon`). The x64
 client uses none of the game folder's 32-bit DLLs. It needs the 64-bit `d3dx9_25.dll`
 from the DirectX End-User Runtime ([Native x64 client](building.md#native-x64-client)). Sound
@@ -283,8 +290,8 @@ This setup was checked against the code, without a runtime test here.
 3. The workflow rebuilds that tagged commit, then attaches the ZIP/checksum pairs
    only after every platform succeeds: the Windows and Linux server packages and the macOS
    client packages always,
-   and the Windows x86 client, x86 editor and x64 client packages when D3DX was usable. With the x64
-   client it also attaches the OpenAL Soft source tarball and its checksum. A missing
+   and the Windows x86 client, x86 editor and x64 client packages when D3DX was usable. With
+   either Windows client it also attaches the OpenAL Soft source tarball and its checksum. A missing
    client or editor package is reported as a notice. Re-running the release workflow replaces the
    same named assets on that release; it never creates or edits a release's notes.
 

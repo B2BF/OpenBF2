@@ -36,7 +36,7 @@ class PackageReleaseTests(unittest.TestCase):
                 path = self.args.build_dir / directory / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(b"synthetic fixture: " + name.encode("ascii"))
-        if self.args.platform == "windows-x64":
+        if self.args.platform.startswith("windows-"):
             # A synthetic OpenAL Soft stage (Code/Build/build_openal_soft.py writes the real one).
             openal = self.args.build_dir / "openal-soft"
             openal.mkdir(parents=True, exist_ok=True)
@@ -160,9 +160,21 @@ class PackageReleaseTests(unittest.TestCase):
     def test_windows_ships_both_clients(self):
         self.assertIn("client", PACKAGER.PACKAGES["windows-x86"])
         self.assertIn("client", PACKAGER.PACKAGES["windows-x64"])
-        # The x86 client takes OpenAL and D3DX from the game folder; only x64 bundles OpenAL Soft.
-        self.assertNotIn("BF2OpenAL.dll", PACKAGER.PACKAGES["windows-x86"]["client"][1])
-        self.assertIn("BF2OpenAL.dll", PACKAGER.PACKAGES["windows-x64"]["client"][1])
+        # Both bundle OpenAL Soft as BF2OpenAL.dll, with its licence, notice and source tarball.
+        for platform, bits in (("windows-x86", "32-bit"), ("windows-x64", "64-bit")):
+            with self.subTest(platform=platform):
+                self.assertIn("BF2OpenAL.dll", PACKAGER.PACKAGES[platform]["client"][1])
+                self.args.platform = platform
+                self.args.output_dir = self.args.output_dir.parent / platform
+                self.populate()
+                self.package()
+                name = "openbf2-{}-client".format(platform)
+                with zipfile.ZipFile(self.args.output_dir / (name + ".zip")) as archive:
+                    entries = archive.namelist()
+                    self.assertIn(name + "/licenses/OpenAL-Soft-COPYING.txt", entries)
+                    notice = archive.read(name + "/OpenAL-Soft-NOTICE.txt").decode()
+                self.assertIn("any other\n{} OpenAL Soft build".format(bits), notice)
+                self.assertTrue((self.args.output_dir / "openal-soft-0.0.0.tar.bz2").is_file())
 
     def test_install_instructions_for_every_package(self):
         for platform, roles in PACKAGER.PACKAGES.items():
@@ -196,12 +208,12 @@ class PackageReleaseTests(unittest.TestCase):
                         self.assertIn("Start in", readme)
                         self.assertIn("No original EXE or DLL is replaced", readme)
                         if role == "client" and platform == "windows-x86":
-                            for entry in ("binkw32.dll", "d3dx9_25.dll", "BF2OpenAL.dll", "pb\\",
+                            for entry in ("binkw32.dll", "d3dx9_25.dll", "bundled BF2OpenAL.dll",
+                                          "OpenAL-Soft-NOTICE.txt", "application folder first", "pb\\",
                                           "working directory", "Checked against the code",
                                           "not runtime-tested here"):
                                 self.assertIn(entry, readme)
                             self.assertNotIn("NovintHFX", readme)
-                            self.assertNotIn("OpenAL-Soft-NOTICE", readme)
                             self.assertNotIn("No PunkBuster", readme)
                         elif role == "client":
                             self.assertIn("cannot join servers that require PunkBuster", readme)
@@ -268,7 +280,9 @@ class OpenALSoftPinTests(unittest.TestCase):
         for option in ("-DLIBTYPE=SHARED", "-DALSOFT_EAX=ON", "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded",
                        "-DALSOFT_UTILS=OFF", "-DALSOFT_EXAMPLES=OFF", "-DALSOFT_TESTS=OFF"):
             self.assertIn(option, module.CMAKE_OPTIONS)
-        self.assertIn("Source SHA-256: " + module.SHA256, module.build_info())
+        for arch in ("x86", "x64"):
+            self.assertIn("Source SHA-256: " + module.SHA256, module.build_info(arch))
+            self.assertIn("MSVC " + arch, module.build_info(arch))
 
 
 if __name__ == "__main__":

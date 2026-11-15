@@ -356,7 +356,7 @@ build tree, and can be mixed only with each other.
 - **Audio.** The default providers load `BF2OpenAL.dll`. The game directory's copy is 32-bit and
   an x64 process cannot load it. The x64 client package carries OpenAL Soft built as a 64-bit
   `BF2OpenAL.dll` beside `BF2.exe`, and the application directory is searched first
-  ([OpenAL Soft in the x64 client](ci-releases.md#openal-soft-in-the-x64-client),
+  ([OpenAL Soft in the Windows clients](ci-releases.md#openal-soft-in-the-windows-clients),
   `Code/Build/build_openal_soft.py`). A local build without that DLL has no sound, with a
   `Could not find BF2OpenAL.dll` warning. Either run the script or select the **System OpenAL**
   provider with a 64-bit `OpenAL32.dll` installed.

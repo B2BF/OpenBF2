@@ -101,22 +101,22 @@ jobs:
           if errorlevel 1 exit /b 1
           cmake --build out/build/ci-${{ matrix.arch }} --target bf2_client
 
-      # [CHOSEN, not recovered] OpenAL Soft as the x64 client's BF2OpenAL.dll, built from the release
+      # [CHOSEN, not recovered] OpenAL Soft as both clients' BF2OpenAL.dll, built from the release
       # tarball pinned by URL and SHA-256 in Code/Build/build_openal_soft.py (docs/ci-releases.md).
-      # The cache key is that script, so a new pin rebuilds.
-      - name: Restore the OpenAL Soft build
-        if: matrix.arch == 'x64' && steps.dxsdk.outputs.found == 'true'
+      # The cache key is the architecture and that script, so a new pin rebuilds.
+      - name: Restore the ${{ matrix.arch }} OpenAL Soft build
+        if: steps.dxsdk.outputs.found == 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: out/build/ci-x64/openal-soft
-          key: openal-soft-x64-${{ hashFiles('Code/Build/build_openal_soft.py') }}
+          path: out/build/ci-${{ matrix.arch }}/openal-soft
+          key: openal-soft-${{ matrix.arch }}-${{ hashFiles('Code/Build/build_openal_soft.py') }}
 
-      - name: Build OpenAL Soft for the x64 client
-        if: matrix.arch == 'x64' && steps.dxsdk.outputs.found == 'true'
+      - name: Build OpenAL Soft for the ${{ matrix.arch }} client
+        if: steps.dxsdk.outputs.found == 'true'
         run: |
-          call Code\Build\vsdevcmd.cmd x64
+          call Code\Build\vsdevcmd.cmd ${{ matrix.arch }}
           if errorlevel 1 exit /b 1
-          python Code/Build/build_openal_soft.py --stage-dir out/build/ci-x64/openal-soft --work-dir out/openal-soft-work --client-dir out/build/ci-x64/bin_client
+          python Code/Build/build_openal_soft.py --arch ${{ matrix.arch }} --stage-dir out/build/ci-${{ matrix.arch }}/openal-soft --work-dir out/openal-soft-work --client-dir out/build/ci-${{ matrix.arch }}/bin_client
 
       - name: Build the x86 editor with its plugins
         if: matrix.arch == 'x86' && steps.dxsdk.outputs.found == 'true'
@@ -135,9 +135,8 @@ jobs:
           call Code\Build\vsdevcmd.cmd ${{ matrix.arch }}
           if errorlevel 1 exit /b 1
           set "OUT=out\build\ci-${{ matrix.arch }}"
-          set "IMAGES="%OUT%\bin_client\BF2.exe" "%OUT%\bin_client\RendDX9.dll" "%OUT%\bin_client\TextureAtlasBuilder.dll""
+          set "IMAGES="%OUT%\bin_client\BF2.exe" "%OUT%\bin_client\RendDX9.dll" "%OUT%\bin_client\TextureAtlasBuilder.dll" "%OUT%\bin_client\BF2OpenAL.dll""
           set "EXES="%OUT%\bin_client\BF2.exe""
-          if "${{ matrix.arch }}"=="x64" set IMAGES=%IMAGES% "%OUT%\bin_client\BF2OpenAL.dll"
           if "${{ matrix.arch }}"=="x86" set IMAGES=%IMAGES% "%OUT%\bin_editor\BF2Editor.exe" "%OUT%\bin_editor\RendDX9.dll" "%OUT%\bin_editor\TextureAtlasBuilder.dll"
           if "${{ matrix.arch }}"=="x86" set EXES=%EXES% "%OUT%\bin_editor\BF2Editor.exe"
           for %%I in (%IMAGES%) do (
@@ -146,6 +145,7 @@ jobs:
             if errorlevel 1 exit /b 1
             type "%%~dpnxI.imports.txt"
             findstr /i /c:"NovintHFX" "%%~dpnxI.imports.txt" >nul && (echo ::error title=NovintHFX import::%%~nxI imports NovintHFX.dll& exit /b 1)
+            if /i "%%~nxI"=="BF2OpenAL.dll" findstr /i /c:"VCRUNTIME" /c:"MSVCP" /c:"api-ms-win-crt-" /c:"ucrtbase" "%%~dpnxI.imports.txt" >nul && (echo ::error title=OpenAL runtime::BF2OpenAL.dll imports the shared MSVC runtime& exit /b 1)
           )
           for %%E in (%EXES%) do (
             echo ===== manifest: %%E
@@ -161,6 +161,12 @@ jobs:
 
       - name: Package Windows binaries
         run: python Code/Build/package_release.py --platform windows-${{ matrix.arch }} --build-dir out/build/ci-${{ matrix.arch }} --output-dir out/packages --revision "%GITHUB_SHA%" --repository "%GITHUB_REPOSITORY%" ${{ steps.dxsdk.outputs.found != 'true' && (matrix.arch == 'x86' && '--omit client --omit editor' || '--omit client') || '' }}
+
+      # Both legs write the same pinned OpenAL Soft tarball beside their client ZIP; only the x64 leg
+      # uploads it, so a release gets one copy.
+      - name: Keep one OpenAL Soft source tarball
+        if: matrix.arch == 'x86'
+        run: del /q out\packages\openal-soft-*.tar.bz2 out\packages\openal-soft-*.tar.bz2.sha256 2>nul & exit /b 0
 
       - name: Upload Windows packages
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

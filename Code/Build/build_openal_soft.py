@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Build OpenAL Soft as the Windows x64 client's BF2OpenAL.dll from a pinned release.
+"""Build OpenAL Soft as the Windows clients' BF2OpenAL.dll from a pinned release.
 
-[CHOSEN, not recovered] Retail BF2 ships a 32-bit BF2OpenAL.dll, which an x64 process cannot load
-(docs/building.md, "Native x64 client"). The x64 client package carries an unmodified OpenAL Soft
-build under that name instead (docs/ci-releases.md). Run inside an MSVC x64 developer environment
-(Code/Build/vsdevcmd.cmd x64) with CMake and Ninja on PATH.
+[CHOSEN, not recovered] Retail BF2 ships Creative's 32-bit OpenAL wrapper renamed BF2OpenAL.dll,
+which an x64 process cannot load (docs/building.md, "Native x64 client"). Both Windows client
+packages (x86 and x64) carry an unmodified OpenAL Soft build under that name instead, so both use
+the same provider (docs/ci-releases.md). Run inside the MSVC developer environment of the target
+architecture (Code/Build/vsdevcmd.cmd x86|x64) with CMake and Ninja on PATH, and pass --arch.
 
 Outputs in --stage-dir: BF2OpenAL.dll, COPYING, BUILD.txt (version, source, options) and the exact
 source tarball. With --client-dir the DLL is also copied there. A stage directory whose BUILD.txt
@@ -46,13 +47,13 @@ CMAKE_OPTIONS = [
 ]
 
 
-def build_info():
+def build_info(arch):
     return ("OpenAL Soft {version}\n"
             "Source: {url}\n"
             "Source SHA-256: {sha}\n"
             "Source changes: none\n"
-            "Built with: MSVC x64, CMake/Ninja, target OpenAL (OpenAL32.dll renamed BF2OpenAL.dll)\n"
-            "CMake options: {options}\n").format(version=VERSION, url=URL, sha=SHA256,
+            "Built with: MSVC {arch}, CMake/Ninja, target OpenAL (OpenAL32.dll renamed BF2OpenAL.dll)\n"
+            "CMake options: {options}\n").format(version=VERSION, url=URL, sha=SHA256, arch=arch,
                                                  options=" ".join(CMAKE_OPTIONS))
 
 
@@ -103,13 +104,15 @@ def check_runtime(dll):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--arch", choices=("x86", "x64"), required=True,
+                        help="the architecture of the developer environment this runs in")
     parser.add_argument("--stage-dir", type=Path, required=True)
     parser.add_argument("--work-dir", type=Path, required=True)
     parser.add_argument("--client-dir", type=Path)
     args = parser.parse_args()
 
     stage = args.stage_dir
-    info = build_info()
+    info = build_info(args.arch)
     staged = all((stage / name).is_file() for name in ("BF2OpenAL.dll", "COPYING", "BUILD.txt", TARBALL))
     if staged and (stage / "BUILD.txt").read_text() == info and sha256(stage / TARBALL) == SHA256:
         print("Reusing", stage)

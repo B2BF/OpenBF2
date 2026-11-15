@@ -61,9 +61,10 @@ jobs:
               echo "::notice title=Package not attached::$package was not built (no usable D3DX source on the build runner)."
             fi
           done
-          # The x64 client bundles OpenAL Soft (LGPL): attach the exact source it was built from.
+          # Both Windows clients bundle OpenAL Soft (LGPL): attach the exact source they were built from.
+          # The x64 leg uploads the tarball; both legs build from the same pinned file.
           sources=()
-          if [ -e openbf2-windows-x64-client.zip ]; then
+          if [ -e openbf2-windows-x86-client.zip ] || [ -e openbf2-windows-x64-client.zip ]; then
             shopt -s nullglob
             sources=(openal-soft-*.tar.bz2)
             shopt -u nullglob
