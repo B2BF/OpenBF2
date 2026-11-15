@@ -123,7 +123,7 @@ class PackageReleaseTests(unittest.TestCase):
                 for directory in ("bin_client", "bin_editor"):
                     for path in (self.args.build_dir / directory).glob("*"):
                         path.unlink()
-                self.args.omit = ["editor"] if platform == "windows-x86" else ["client"]
+                self.args.omit = ["client", "editor"] if platform == "windows-x86" else ["client"]
                 self.package()
                 server = "server"
                 self.assertEqual({p.name for p in self.args.output_dir.glob("*.zip")},
@@ -153,16 +153,16 @@ class PackageReleaseTests(unittest.TestCase):
         self.populate()
         self.package()
         self.assertEqual({p.stem for p in self.args.output_dir.glob("*.zip")}, {
-            "openbf2-windows-x86-server", "openbf2-windows-x86-editor",
+            "openbf2-windows-x86-server", "openbf2-windows-x86-client",
+            "openbf2-windows-x86-editor",
         })
 
-    def test_windows_client_is_x64_only(self):
-        self.assertNotIn("client", PACKAGER.PACKAGES["windows-x86"])
+    def test_windows_ships_both_clients(self):
+        self.assertIn("client", PACKAGER.PACKAGES["windows-x86"])
         self.assertIn("client", PACKAGER.PACKAGES["windows-x64"])
-        self.args.platform = "windows-x86"
-        with self.assertRaisesRegex(ValueError, "Cannot omit client"):
-            self.args.omit = ["client"]
-            self.package()
+        # The x86 client takes OpenAL and D3DX from the game folder; only x64 bundles OpenAL Soft.
+        self.assertNotIn("BF2OpenAL.dll", PACKAGER.PACKAGES["windows-x86"]["client"][1])
+        self.assertIn("BF2OpenAL.dll", PACKAGER.PACKAGES["windows-x64"]["client"][1])
 
     def test_install_instructions_for_every_package(self):
         for platform, roles in PACKAGER.PACKAGES.items():
@@ -195,7 +195,14 @@ class PackageReleaseTests(unittest.TestCase):
                         self.assertIn('"C:\\OpenBF2\\{}\\{}"'.format(name, runtime[0]), readme)
                         self.assertIn("Start in", readme)
                         self.assertIn("No original EXE or DLL is replaced", readme)
-                        if role == "client":
+                        if role == "client" and platform == "windows-x86":
+                            for entry in ("binkw32.dll", "d3dx9_25.dll", "BF2OpenAL.dll", "pb\\",
+                                          "working directory", "Checked against the code",
+                                          "not runtime-tested here"):
+                                self.assertIn(entry, readme)
+                            self.assertNotIn("NovintHFX", readme)
+                            self.assertNotIn("OpenAL-Soft-NOTICE", readme)
+                        elif role == "client":
                             for entry in ("64-bit d3dx9_25.dll", "bundled 64-bit BF2OpenAL.dll", "OpenAL-Soft-NOTICE.txt",
                                           "Checked against the code",
                                           "not runtime-tested here"):

@@ -50,6 +50,7 @@ jobs:
           # build.yml leaves these out, with a notice, when neither the April 2005
           # DirectX SDK nor the D3DX fallback is usable.
           sdk_packages=(
+            openbf2-windows-x86-client
             openbf2-windows-x86-editor
             openbf2-windows-x64-client
           )

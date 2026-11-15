@@ -30,10 +30,8 @@ Paths below are relative to the selected CMake build directory.
 | `msvc-x64` | `bf2_aidll` | `bin_client/aidll.dll`; staged into `bin_w64ded/` | Strict; native AI image, pending MSVC validation |
 | `msvc-x64` | `bf2_editor` | `bin_editor/BF2Editor.exe` | Strict; voice dependency fix awaits VM verification |
 
-`[CHOSEN, not recovered]` Release packages ship the Windows client for x64 only. The
-`msvc-x86` `bf2_client` target stays buildable as the retail-fidelity reference, but CI
-neither builds nor packages it. The x86 editor, which links the x86 client objects, and the
-x86 dedicated server are still built and packaged. An x64 editor package is a future goal.
+Release packages ship both Windows clients, x86 and x64, plus the x86 editor and the x86
+dedicated server. An x64 editor package is a future goal.
 
 The x86 preset uses `Reconstruction` with `BUILD_TESTING=ON`. Windows x64 uses `Release`;
 Linux uses `RelWithDebInfo`; both default to `BUILD_TESTING=OFF`. The client and editor

@@ -13,12 +13,15 @@ import zipfile
 
 # Keep these manifests aligned with the image targets in CMakeLists.txt.
 PACKAGES = {
-    # [CHOSEN, not recovered] Windows ships the client for x64 only. The x86 build keeps the
-    # dedicated server and the editor (which links the x86 client objects); an x64 editor package
-    # is a future goal.
+    # Windows ships both clients: the x86 one uses retail's 32-bit PunkBuster, D3DX and OpenAL DLLs
+    # from the game folder; the x64 one has no PunkBuster. An x64 editor package is a future goal.
     "windows-x86": {
         "server": ("bin", (
             "bf2_w32ded.exe", "dice_py.dll", "AIDLL_w32ded.dll", "BF2VoipServer_w32ded.dll",
+        )),
+        "client": ("bin_client", (
+            "BF2.exe", "dice_py.dll", "RendDX9.dll", "SwiffPlayer.dll",
+            "BF2Audio.dll", "TextureAtlasBuilder.dll", "BF2VoipServer.dll",
         )),
         "editor": ("bin_editor", (
             "BF2Editor.exe", "dice_py.dll", "RendDX9.dll", "TextureAtlasBuilder.dll", "BF2VoipServer.dll",
@@ -101,7 +104,11 @@ def installation(platform, role, name, executable, macos_signing="adhoc"):
         ).format(content="dedicated-server" if server else "retail game",
                  name=name, exe=executable, root="Battlefield 2 Server" if server else "Battlefield 2")
         command = '"C:\\OpenBF2\\{}\\{}" {}'.format(name, executable, options)
-        if role.startswith("client"):
+        if role.startswith("client") and platform == "windows-x86":
+            text += ("   The original folder supplies binkw32.dll, d3dx9_25.dll, BF2OpenAL.dll\n"
+                     "   and PunkBuster's pb\\ folder through this working directory where\n"
+                     "   required. Checked against the code; not runtime-tested here.\n")
+        elif role.startswith("client"):
             text += ("   This x64 client does not use the game folder's 32-bit DLLs. It needs the\n"
                      "   64-bit d3dx9_25.dll that the DirectX End-User Runtime installs in System32.\n"
                      "   Sound uses the bundled 64-bit BF2OpenAL.dll (OpenAL Soft; see\n"

@@ -14,7 +14,7 @@ it does not recover or change engine behavior, ABI, protocols, or file formats.
 
 | Runner | Configuration | Targets and checks |
 | --- | --- | --- |
-| Windows 2022, MSVC x86 | `msvc-x86` / `Reconstruction` | Python interpreter check; `bf2_run_checks`; `bf2_editor_run_checks`; `bf2_w32ded`; `bf2_aidll`; with a usable D3DX source: `bf2_editor` and plugins (compiling the x86 client object set), then `dumpbin /dependents /imports` of `BF2Editor.exe`, `RendDX9.dll` and `TextureAtlasBuilder.dll` in the log |
+| Windows 2022, MSVC x86 | `msvc-x86` / `Reconstruction` | Python interpreter check; `bf2_run_checks`; `bf2_editor_run_checks`; `bf2_w32ded`; `bf2_aidll`; with a usable D3DX source: `bf2_client` and plugins, `bf2_editor` and plugins, then `dumpbin /dependents /imports` of `BF2Editor.exe`, `RendDX9.dll` and `TextureAtlasBuilder.dll` in the log |
 | Windows 2022, MSVC x64 | `msvc-x64` / `Release` | Python interpreter check; strict `bf2_w64ded` and `bf2_aidll` links; AI export listing and staged-copy comparison; with a usable D3DX source: `bf2_client` and plugins, then `dumpbin /dependents /imports` of `BF2.exe`, `RendDX9.dll` and `TextureAtlasBuilder.dll` in the log |
 | Ubuntu 22.04, GCC x64 | `linux-x64` / `RelWithDebInfo` | Strict `bf2` link; `dice_py_check_run` |
 
@@ -27,17 +27,18 @@ retail binaries are required for compilation.
 The client and editor renderer plugins need the
 [April 2005 DirectX SDK or the D3DX fallback](building.md#d3dx-without-the-directx-sdk).
 Both Windows jobs probe with `Code\Build\dxsdk.cmd <arch> fallback`. When neither
-source is usable, the job posts a notice, skips the x64 client or the x86 editor,
+source is usable, the job posts a notice, skips the client (and the editor on x86),
 and packages only its server. Otherwise it builds and packages those images.
 
-`[CHOSEN, not recovered]` Windows ships the client for x64 only. The x86 `bf2_client`
-target stays buildable locally as the retail-fidelity reference, but CI neither builds nor
-packages it. The x86 editor links the same client object set, so those objects still
-compile in the x86 job. An x64 editor package is a future goal.
+Windows ships both clients. The x86 client uses retail's 32-bit companions from the game
+folder (D3DX, OpenAL, PunkBuster). The x64 client bundles OpenAL Soft. An x64 editor package
+is a future goal.
 
 The import listing fails the job if any of those images imports `NovintHFX.dll`.
 
-Each hosted job has its own checkout. Compilation uses two parallel jobs to limit memory usage. CI does not run a game server,
+Each hosted job has its own checkout. Client/plugin and editor builds run sequentially
+inside the x86 job because the client's plugin outputs use shared source-tree paths.
+Compilation uses two parallel jobs to limit memory usage. CI does not run a game server,
 client or editor, and does not exercise gameplay. The Python fixture uses an ephemeral
 loopback UDP port; automated server sessions must never use reserved port 16567.
 
@@ -57,8 +58,8 @@ the executable's strict link does not prove their completeness.
 Existing engine frontiers, including `swiff-native-as-host`,
 `swiff-host-bodies` and `RW-88`, remain. Green CI establishes only the builds and focused
 checks above, not complete symbol recovery, production startup, loading, joining or
-playability. CI builds and packages the Windows x64 client when D3DX is usable;
-the x64 editor target exists but is not built by CI, and the x86 client is not built by CI. Linux client/editor targets do not exist.
+playability. CI builds and packages both Windows clients when D3DX is usable;
+the x64 editor target exists but is not built by CI. Linux client/editor targets do not exist.
 
 ## Packages
 
@@ -67,12 +68,12 @@ file to exist and be nonempty. It uses explicit manifests rather than copying ou
 directories, so test executables, import libraries, maps, PDBs, and any locally staged
 retail companions are excluded. `--omit ROLE` (repeatable) skips one package of the
 selected platform, for example `--omit client`; every other role stays
-required. CI passes it for the x64 client and the x86 editor only when neither D3DX source
-is usable. `windows-x86` has no client role.
+required. CI passes it for the client and editor only when neither D3DX source is usable.
 
 | ZIP filename | Runtime contents |
 | --- | --- |
 | `openbf2-windows-x86-server.zip` | `bf2_w32ded.exe`, `dice_py.dll`, `AIDLL_w32ded.dll`, `BF2VoipServer_w32ded.dll` |
+| `openbf2-windows-x86-client.zip` | `BF2.exe`, `dice_py.dll`, `RendDX9.dll`, `SwiffPlayer.dll`, `BF2Audio.dll`, `TextureAtlasBuilder.dll`, `BF2VoipServer.dll` |
 | `openbf2-windows-x86-editor.zip` | `BF2Editor.exe`, `dice_py.dll`, editor `RendDX9.dll`, `TextureAtlasBuilder.dll`, `BF2VoipServer.dll` |
 | `openbf2-windows-x64-server.zip` | `bf2_w64ded.exe`, `dice_py.dll`, `aidll.dll`; CI artifact only, not attached to releases (PunkBuster's server library exists only as 32-bit `pbsv.dll`, so Windows releases ship the x86 server) |
 | `openbf2-windows-x64-client.zip` | `BF2.exe`, `dice_py.dll`, `RendDX9.dll`, `SwiffPlayer.dll`, `BF2Audio.dll`, `TextureAtlasBuilder.dll`, `aidll.dll`, `BF2OpenAL.dll` (OpenAL Soft) |
@@ -162,7 +163,7 @@ and do not download any. Each archive's `README.txt` has commands for that speci
 platform and role. The procedures below are intentional packaging policy
 `[CHOSEN, not recovered]`.
 
-### Windows client (x64), server (x86 and x64) and editor (x86)
+### Windows client (x86 and x64), server (x86 and x64) and editor (x86)
 
 1. Extract the package to `C:\OpenBF2\<package-name>`, keeping every packaged DLL
    beside its EXE. Keep each architecture and role in its own folder. Supply the
@@ -179,6 +180,7 @@ platform and role. The procedures below are intentional packaging policy
    paths with your own. Servers use their stock settings as described below.
 
    ```bat
+   "C:\OpenBF2\openbf2-windows-x86-client\BF2.exe" +modPath mods/bf2 +fullscreen 0
    "C:\OpenBF2\openbf2-windows-x64-client\BF2.exe" +modPath mods/bf2 +fullscreen 0
    "C:\OpenBF2\openbf2-windows-x86-editor\BF2Editor.exe" +loadMod bf2
    "C:\OpenBF2\openbf2-windows-x86-server\bf2_w32ded.exe" +modPath mods/bf2
@@ -189,8 +191,9 @@ A shortcut uses that command as **Target** and the game/server installation root
 CI does not package it. `+modPath` selects the mod; it does not relocate the root Python
 files. These steps replace no original EXE or DLL. To return to retail, launch the
 original executable or shortcut. Do not copy retail engine plugins into the package.
-For the x86 editor, the original game folder supplies `binkw32.dll`, `d3dx9_25.dll`
-and the OpenAL DLLs through the working directory where required. No package needs
+For the x86 client and editor, the original game folder supplies `binkw32.dll`,
+`d3dx9_25.dll`, `BF2OpenAL.dll` (and the x86 client's PunkBuster `pb\` folder) through the
+working directory where required. No package needs
 `NovintHFX.dll`: the Novint Falcon is archived (`Code/Archive/NovintFalcon`). The x64
 client uses none of the game folder's 32-bit DLLs. It needs the 64-bit `d3dx9_25.dll`
 from the DirectX End-User Runtime ([Native x64 client](building.md#native-x64-client)). Sound
@@ -274,7 +277,7 @@ This setup was checked against the code, without a runtime test here.
 3. The workflow rebuilds that tagged commit, then attaches the ZIP/checksum pairs
    only after every platform succeeds: the Windows and Linux server packages and the macOS
    client packages always,
-   and the Windows x86 editor and x64 client packages when D3DX was usable. With the x64
+   and the Windows x86 client, x86 editor and x64 client packages when D3DX was usable. With the x64
    client it also attaches the OpenAL Soft source tarball and its checksum. A missing
    client or editor package is reported as a notice. Re-running the release workflow replaces the
    same named assets on that release; it never creates or edits a release's notes.

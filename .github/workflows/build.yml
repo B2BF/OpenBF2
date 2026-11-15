@@ -76,8 +76,8 @@ jobs:
 
       # RendDX9.dll and TextureAtlasBuilder.dll, and so the client and the editor, build against the
       # April 2005 DirectX SDK or, on hosted runners without it, the D3DX fallback (Code/Build/dxsdk.cmd).
-      # Only when neither is usable are the x64 client (or on x86 the editor) skipped with a notice and
-      # left out of the packages.
+      # Only when neither is usable are the client (and on x86 the editor) skipped with a notice and left
+      # out of the packages.
       - name: Locate the D3DX headers and import library
         id: dxsdk
         run: |
@@ -85,21 +85,21 @@ jobs:
           rem without it the D3DX fallback (BF2_D3DX=auto, Code/Build/dxsdk.cmd).
           call Code\Build\dxsdk.cmd ${{ matrix.arch }} fallback
           if errorlevel 1 (
-            echo ::notice title=No D3DX source::Neither the April 2005 DirectX SDK nor the D3DX fallback is usable; the ${{ matrix.arch == 'x86' && 'x86 editor' || 'x64 client' }} is not built on this runner.
+            echo ::notice title=No D3DX source::Neither the April 2005 DirectX SDK nor the D3DX fallback is usable; the ${{ matrix.arch == 'x86' && 'x86 client and editor are' || 'x64 client is' }} not built on this runner.
             echo found=false>> "%GITHUB_OUTPUT%"
           ) else (
             echo found=true>> "%GITHUB_OUTPUT%"
           )
           exit /b 0
 
-      # [CHOSEN, not recovered] Windows ships the client for x64 only. The x86 configuration still
-      # compiles the client object set, which the x86 editor links.
-      - name: Build the x64 client with plugins
-        if: matrix.arch == 'x64' && steps.dxsdk.outputs.found == 'true'
+      # Windows ships both clients: x86 (retail's PunkBuster, D3DX and OpenAL from the game folder) and
+      # x64 (no PunkBuster). Keep the client/plugin and editor builds sequential within this checkout.
+      - name: Build the ${{ matrix.arch }} client with plugins
+        if: steps.dxsdk.outputs.found == 'true'
         run: |
-          call Code\Build\vsdevcmd.cmd x64
+          call Code\Build\vsdevcmd.cmd ${{ matrix.arch }}
           if errorlevel 1 exit /b 1
-          cmake --build out/build/ci-x64 --target bf2_client
+          cmake --build out/build/ci-${{ matrix.arch }} --target bf2_client
 
       # [CHOSEN, not recovered] OpenAL Soft as the x64 client's BF2OpenAL.dll, built from the release
       # tarball pinned by URL and SHA-256 in Code/Build/build_openal_soft.py (docs/ci-releases.md).
@@ -151,7 +151,7 @@ jobs:
         run: python Code/Tests/test_package_release.py
 
       - name: Package Windows binaries
-        run: python Code/Build/package_release.py --platform windows-${{ matrix.arch }} --build-dir out/build/ci-${{ matrix.arch }} --output-dir out/packages --revision "%GITHUB_SHA%" --repository "%GITHUB_REPOSITORY%" ${{ steps.dxsdk.outputs.found != 'true' && (matrix.arch == 'x86' && '--omit editor' || '--omit client') || '' }}
+        run: python Code/Build/package_release.py --platform windows-${{ matrix.arch }} --build-dir out/build/ci-${{ matrix.arch }} --output-dir out/packages --revision "%GITHUB_SHA%" --repository "%GITHUB_REPOSITORY%" ${{ steps.dxsdk.outputs.found != 'true' && (matrix.arch == 'x86' && '--omit client --omit editor' || '--omit client') || '' }}
 
       - name: Upload Windows packages
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

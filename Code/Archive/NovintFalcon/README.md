@@ -1,9 +1,11 @@
 # Novint Falcon (archived)
 
 `[CHOSEN, not recovered]` This directory keeps the reconstructed Novint Falcon support. No
-image builds it. The owner decided to drop Falcon support together with the x86 Windows
-client ([issue #17](https://github.com/kr4uzi/OpenBF2/issues/17)). The code is kept as a
-reference here, not deleted.
+image builds it. The owner decided to drop Falcon support
+([issue #17](https://github.com/kr4uzi/OpenBF2/issues/17)). The code is kept as a reference
+here, not deleted. Windows later shipped the x86 client again, for PunkBuster. The Falcon
+stays archived there too, and the x86 client could load the 32-bit DLL again if restored (see
+"Restoring").
 
 ## What it was
 
