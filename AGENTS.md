@@ -4,6 +4,27 @@ This is the canonical policy for every coding agent working in this repository. 
 instruction files must import or point here instead of copying these rules. If guidance conflicts,
 the user's current request wins, followed by this file, then the subsystem documentation.
 
+## Code Review Rules
+
+For code review and regression investigation, also read [docs/reviewing.md](docs/reviewing.md).
+This file remains the canonical policy. Review alone does not authorize source changes;
+explicit user authorization to implement fixes still applies.
+
+- **Report concrete regressions.** Review the PR diff and affected callers for memory/lifetime
+  errors, initialization and teardown failures, malformed-input handling, and broken builds.
+  Explain the reachable trigger and consequence; distinguish pre-existing defects from changes
+  introduced by the PR. Legacy style, raw pointers, lack of Asio, and opportunities to adopt
+  newer C++ are not defects by themselves.
+- **Preserve the applicable compatibility contract.** Check ABI, protocols, serialized data,
+  and reconstructed behavior for each affected image and architecture. Respect the documented,
+  issue-backed native ABI and editor exceptions; do not restore retired compatibility adapters
+  or infer unknown signatures and layouts. State missing binary evidence and continue checks
+  that do not depend on it.
+- **Account for parallel upstream work.** Where accessible, inspect relevant B2BF/OpenBF2 PRs
+  and branches at their current SHAs. Identify semantic conflicts and existing fixes with
+  evidence; upstream code is not automatically proof of correctness. State unavailable context
+  and continue the scoped review instead of assuming that another branch was checked.
+
 ## Agent prerequisites and human ownership
 
 - Before implementing behavior as recovered engine code, the agent must have **IDA or Ghidra
