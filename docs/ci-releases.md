@@ -1,6 +1,6 @@
 # CI and release packages
 
-[CI](../.github/workflows/ci.yml) runs on every branch/tag push, pull request update,
+[CI](../.github/workflows/ci.yml) runs on pushes to `main`, pull request updates
 and manual dispatch. Superseded runs of the same event/ref are cancelled. Fork pull
 requests use read-only permissions and require no secrets. Repository settings may
 require a maintainer to approve a first-time contributor's workflow run.
@@ -237,7 +237,7 @@ are x86 only). This setup was checked against the code, without a runtime test h
 1. Commit and push the workflows and packaging helper along with the intended source.
 2. Create a release tag containing those files and publish a GitHub Release for it.
    Publishing either a regular release or a prerelease triggers the workflow; merely
-   saving a draft does not. A tag push by itself runs CI without attaching release assets.
+   saving a draft does not. A tag push by itself starts no workflow.
 3. The workflow rebuilds that tagged commit, then attaches the ZIP/checksum pairs
    only after every platform succeeds: the server and macOS client packages always,
    and the Windows x86 client/editor and x64 client packages when D3DX was usable. A missing
@@ -271,6 +271,11 @@ event is a published release or the ref is a `v*` tag (`BF2_RELEASE_SIGNING` in
 jobs use the protected environment `release`; pull requests, branch pushes and forks
 run without an environment and never see its secrets. A release run with missing
 secrets fails instead of shipping ad-hoc binaries.
+
+`build.yml` is a reusable workflow, and a reusable workflow only receives environment
+secrets when its caller passes secrets on, so `ci.yml` and `release.yml` call it with
+`secrets: inherit`. A v* tag is signed in CI only through a manual dispatch on that tag;
+publishing a release or prerelease is the normal way.
 
 Secrets of the `release` environment (Settings > Environments > release):
 
