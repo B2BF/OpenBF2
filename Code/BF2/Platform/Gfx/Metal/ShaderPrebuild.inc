@@ -107,9 +107,8 @@ static bool depthHasStencil(MTLPixelFormat f)
     return f == MTLPixelFormatDepth24Unorm_Stencil8 || f == MTLPixelFormatDepth32Float_Stencil8;
 }
 
-// MSL -> library and, for the source of one shader, its entry function. Runs on the render thread
-// or a worker, without the mutex.
-static void compileLibrary(id<MTLDevice> device, LibraryEntry& e, bool entry)
+// MSL -> library. Runs on the render thread or a worker, without the mutex.
+static void compileLibrary(id<MTLDevice> device, LibraryEntry& e)
 {
     @autoreleasepool {
         NSError* error = nil;
@@ -132,10 +131,6 @@ static void compileLibrary(id<MTLDevice> device, LibraryEntry& e, bool entry)
             e.error = std::string("MSL compile failed: ") + (error ? error.localizedDescription.UTF8String : "invalid source");
             return;
         }
-        if (!entry) return;
-        NSString* name = e.library.functionNames.firstObject;
-        e.function = name ? [e.library newFunctionWithName:name] : nil;
-        if (!e.function) e.error = "MSL library has no entry point";
     }
 }
 
@@ -198,16 +193,6 @@ static void settle(Prebuild* p, std::unique_lock<std::mutex>& lock, Entry& e, bo
         if (boost) pthread_override_qos_class_end_np(boost);
     }
 }
-static void settleLibrary(Prebuild* p, std::unique_lock<std::mutex>& lock, LibraryEntry& e, bool urgent)
-{
-    settle(p, lock, e, urgent, [&](std::unique_lock<std::mutex>& held) {
-        held.unlock();
-        compileLibrary(p->device, e, true);
-        held.lock();
-        e.msl.clear(); e.msl.shrink_to_fit();
-    });
-}
-
 // The includes of a shader's MSL, and the rest of it. A batch hoists the includes and wraps the rest
 // in a namespace, so that equal struct and function names of different shaders do not collide.
 static void splitIncludes(const std::string& msl, std::vector<std::string>& includes, std::string& body)
@@ -223,6 +208,50 @@ static void splitIncludes(const std::string& msl, std::vector<std::string>& incl
         at = end;
     }
 }
+// Compiles shaders as one source, each in the namespace l<hash> and numbered from line 1 of a file
+// "l<hash>": a shader's functions get the same name and source positions, and so the same compiled
+// code and system shader cache entry for their pipeline states, whether it is compiled alone (at a
+// draw) or anywhere in a batch with any other shaders (in the background). A shader compiled bare
+// in one start, or at another line of another batch, missed the pipeline cache on the next start.
+// False when the compiler refuses the source (each member keeps the error).
+static bool compileGroup(id<MTLDevice> device, const std::vector<LibraryEntry*>& group)
+{
+    @autoreleasepool {
+        std::vector<std::string> includes;
+        std::string bodies;
+        for (LibraryEntry* e : group) {
+            bodies += "namespace l" + e->hash + " {\n#line 1 \"l" + e->hash + "\"\n";
+            splitIncludes(e->msl, includes, bodies);
+            bodies += "\n}\n";
+        }
+        LibraryEntry all;
+        for (const auto& line : includes) { all.msl += line; if (all.msl.back() != '\n') all.msl += '\n'; }
+        all.msl += bodies;
+        compileLibrary(device, all);
+        if (!all.library) { for (LibraryEntry* e : group) e->error = all.error; return false; }
+        std::unordered_map<std::string, LibraryEntry*> byName;
+        for (LibraryEntry* e : group) byName["l" + e->hash] = e;
+        for (NSString* name in all.library.functionNames) {
+            const std::string full = name.UTF8String;
+            const auto it = byName.find(full.substr(0, full.find("::")));
+            if (it == byName.end() || it->second->function) continue;
+            it->second->library = all.library;
+            it->second->function = [all.library newFunctionWithName:name];
+        }
+        for (LibraryEntry* e : group) if (!e->function) e->error = "MSL library has no entry point";
+        return true;
+    }
+}
+static void settleLibrary(Prebuild* p, std::unique_lock<std::mutex>& lock, LibraryEntry& e, bool urgent)
+{
+    settle(p, lock, e, urgent, [&](std::unique_lock<std::mutex>& held) {
+        held.unlock();
+        compileGroup(p->device, {&e});
+        held.lock();
+        e.msl.clear(); e.msl.shrink_to_fit();
+    });
+}
+
 // Compiles the batch's members that no thread has started. The lock is held on entry and on return.
 static void buildBatch(Prebuild* p, std::unique_lock<std::mutex>& lock, Prebuild::Batch& batch)
 {
@@ -232,39 +261,11 @@ static void buildBatch(Prebuild* p, std::unique_lock<std::mutex>& lock, Prebuild
     if (todo.empty()) return;
     lock.unlock();
     const auto started = std::chrono::steady_clock::now();
-    bool together = todo.size() > 1;
-    if (together) {
-        @autoreleasepool {
-            std::vector<std::string> includes;
-            std::string bodies;
-            for (const auto& e : todo) {
-                bodies += "namespace l" + e->hash + " {\n";
-                splitIncludes(e->msl, includes, bodies);
-                bodies += "\n}\n";
-            }
-            std::string source;
-            for (const auto& line : includes) { source += line; if (source.back() != '\n') source += '\n'; }
-            source += bodies;
-            LibraryEntry all;
-            all.msl = std::move(source);
-            compileLibrary(p->device, all, false);
-            together = all.library != nil;
-            if (together) {
-                std::unordered_map<std::string, LibraryEntry*> byName;
-                for (const auto& e : todo) byName["l" + e->hash] = e.get();
-                for (NSString* name in all.library.functionNames) {
-                    const std::string full = name.UTF8String;
-                    const auto it = byName.find(full.substr(0, full.find("::")));
-                    if (it == byName.end() || it->second->function) continue;
-                    it->second->library = all.library;
-                    it->second->function = [all.library newFunctionWithName:name];
-                }
-                for (const auto& e : todo) if (!e->function) e->error = "MSL library has no entry point";
-            }
-        }
-    }
-    // One shader, or a batch the compiler refused: each on its own, as a draw compiles it.
-    if (!together) for (const auto& e : todo) compileLibrary(p->device, *e, true);
+    std::vector<LibraryEntry*> group;
+    for (const auto& e : todo) group.push_back(e.get());
+    const bool together = compileGroup(p->device, group);
+    // A batch the compiler refused: each shader on its own (one of them is the faulty one).
+    if (!together && group.size() > 1) for (LibraryEntry* e : group) { e->error.clear(); compileGroup(p->device, {e}); }
     const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
     if (bf2hitch::enabled()) {
         const std::string detail = "background batch of " + std::to_string(todo.size()) + (together || todo.size() == 1 ? "" : " (one by one)");
