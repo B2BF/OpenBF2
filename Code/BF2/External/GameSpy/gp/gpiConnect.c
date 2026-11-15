@@ -222,6 +222,7 @@ gpiStartConnect(
 	/////////////////////////////////////////////
 	operation->state = GPI_CONNECTING;
 	iconnection->connectState = GPI_CONNECTING;
+	iconnection->connectStartTime = current_time(); // [CHOSEN, not recovered] GPI_CONNECT_TIMEOUT
 
 	return GP_NO_ERROR;
 }
@@ -833,7 +834,13 @@ gpiCheckConnect(
 	// Check if not finished connecting.
 	////////////////////////////////////
 	if(state == GPI_NOT_CONNECTED)
+	{
+		// [CHOSEN, not recovered] OpenBF2 local change (LOCAL_CHANGES.md): give up after
+		// GPI_CONNECT_TIMEOUT, reported like a refused connection.
+		if((current_time() - iconnection->connectStartTime) > GPI_CONNECT_TIMEOUT)
+			CallbackFatalError(connection, GP_SERVER_ERROR, GP_LOGIN_CONNECTION_FAILED, "The server has not answered the connection.");
 		return GP_NO_ERROR;
+	}
 	
 	// We're now negotiating the connection.
 	////////////////////////////////////////

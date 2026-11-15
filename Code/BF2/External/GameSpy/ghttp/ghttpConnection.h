@@ -153,6 +153,7 @@ typedef struct GHIConnection
 	GHIPostingState postingState; // If posting, the state of the upload.
 	
 	gsi_time maxRecvTime;         // Max time spent receiving per call to "Think" - Prevents blocking on ultrafast connections
+	gsi_time connectStartTime;    // [CHOSEN, not recovered] OpenBF2 local change, see GHI_CONNECT_TIMEOUT
 	char * proxyOverrideServer;	  // Allows use of a different proxy than the global proxy
 	unsigned short proxyOverridePort;
 

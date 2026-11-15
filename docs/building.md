@@ -565,9 +565,15 @@ the host of every service (`online services: domain ...`). Retail's hosts-file c
 `BF2Web.gamespy.com` (Windows) runs for the retail domain only. The implementation is in
 `Code/BF2/Game/MatchMaking/OnlineProvider.h`.
 
+Connections to the server list, the presence managers and the stats web service give up after
+5 seconds (`[CHOSEN, not recovered]`, see `Code/BF2/External/GameSpy/LOCAL_CHANGES.md`); retail
+waited for the operating system's TCP timeout when a name resolved to an address that never
+answers.
+
 `bf2_online_provider_check` (macOS, built on request) checks the names for the retail
-domain and for another one against the linked SDK. It replaces the resolver inside the
-test process and uses loopback listeners, so it contacts no other machine.
+domain and for another one against the linked SDK, and the connect timeouts against a
+loopback listener that never accepts. It replaces the resolver inside the test process and
+uses loopback listeners only, so it contacts no other machine.
 
 For the x86 focused suite, use `bf2_run_checks`. The existing batch gates remain
 available through `bf2_syntaxcheck` and `bf2_gap_report`. The latter invokes the full

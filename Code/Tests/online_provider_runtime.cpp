@@ -10,6 +10,9 @@
 // reported as skipped and the name checks still run. The web requests go to port 80, which an
 // unprivileged process cannot bind on loopback: connect below sends them to 127.0.0.1:18080.
 //
+// The "silent-tcp" scenario checks the local connect timeouts (GameSpy/LOCAL_CHANGES.md) against
+// loopback listeners whose backlog is full, so connects to them are never answered.
+//
 // Each scenario runs in its own child process, because the SDK keeps its state in statics.
 #include "../BF2/Game/MatchMaking/OnlineProvider.h"
 #include "../BF2/Game/Persistence/HTTPRequest.h"
@@ -816,6 +819,133 @@ void scenarioRefused()
     takeLookups();
 }
 
+// Every name resolves to this machine and every TCP service port has a listener that never
+// accepts: its one-entry backlog is filled first, so further connects get no answer, as from an
+// address that drops them. The local connect timeouts (LOCAL_CHANGES.md: 5 seconds for the server
+// list, the presence managers and web requests) must end each operation; the operating system's
+// own TCP timeout is 75 s on macOS.
+struct SilentPort
+{
+    const char* name;
+    int port;
+    int listener;
+    int filler;
+};
+
+bool openSilent(SilentPort& p)
+{
+    p.listener = socket(AF_INET, SOCK_STREAM, 0);
+    p.filler = -1;
+    int on = 1;
+    setsockopt(p.listener, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+    struct sockaddr_in address;
+    std::memset(&address, 0, sizeof(address));
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    address.sin_port = htons(static_cast<unsigned short>(p.port));
+    if (bind(p.listener, reinterpret_cast<struct sockaddr*>(&address), sizeof(address)) != 0 || listen(p.listener, 1) != 0)
+    {
+        close(p.listener);
+        p.listener = -1;
+        return false;
+    }
+    // Fill the backlog; a second pending connect must then stay unanswered.
+    p.filler = socket(AF_INET, SOCK_STREAM, 0);
+    fcntl(p.filler, F_SETFL, fcntl(p.filler, F_GETFL, 0) | O_NONBLOCK);
+    connect(p.filler, reinterpret_cast<struct sockaddr*>(&address), sizeof(address));
+    usleep(50000);
+    int probe = socket(AF_INET, SOCK_STREAM, 0);
+    fcntl(probe, F_SETFL, fcntl(probe, F_GETFL, 0) | O_NONBLOCK);
+    connect(probe, reinterpret_cast<struct sockaddr*>(&address), sizeof(address));
+    fd_set writable;
+    FD_ZERO(&writable);
+    FD_SET(probe, &writable);
+    struct timeval wait = { 0, 300000 };
+    const bool silent = select(probe + 1, 0, &writable, 0, &wait) == 0;
+    close(probe);
+    return silent;
+}
+
+void scenarioSilentTcp()
+{
+    using namespace onlineProvider;
+    std::string error;
+    check(setDomain("example.test", error), "+gamespy example.test");
+    prepareGameSpySdk();
+    g_resolve = true;
+    SilentPort ports[] = { { "server list", 28910, -1, -1 }, { "gpcm", 29900, -1, -1 },
+                           { "gpsp", 29901, -1, -1 }, { "web", 18080, -1, -1 } };
+    bool ready = true;
+    for (unsigned i = 0; i < sizeof(ports) / sizeof(ports[0]); ++i)
+        if (!openSilent(ports[i]))
+        {
+            std::printf("  skip: 127.0.0.1:%d could not be made silent\n", ports[i].port);
+            ready = false;
+        }
+    if (!ready)
+    {
+        for (unsigned i = 0; i < sizeof(ports) / sizeof(ports[0]); ++i)
+        {
+            if (ports[i].filler >= 0) close(ports[i].filler);
+            if (ports[i].listener >= 0) close(ports[i].listener);
+        }
+        return;
+    }
+    // The SDK's services require a completed availability check (no answer: available after 4 s).
+    check(availabilityCheck() == GSIACAvailable, "availability check: available");
+    char text[64];
+    double mark = now();
+    #define STEP_TIME(what) do { const double t = now() - mark; std::snprintf(text, sizeof(text), "%.2f s", t); \
+                                 check(t > 4.5 && t < 7.0, std::string(what) + " gave up after the 5 s limit: " + text); mark = now(); } while (0)
+
+    ServerBrowser browser = 0;
+    check(startServerList(&browser) == sbe_connecterror, "server list: the update reports a connect error");
+    ServerBrowserFree(browser);
+    STEP_TIME("server list");
+
+    GPConnection connection;
+    gpInitialize(&connection, 10493, 12, GP_PARTNERID_GAMESPY);
+    gpDisable(&connection, GP_INFO_CACHING);
+    gpSetCallback(&connection, GP_ERROR, &gpIgnore, 0);
+    check(gpConnectUniqueNickA(&connection, "nobody", "nothing", GP_NO_FIREWALL, GP_BLOCKING, &gpIgnore, 0) != GP_NO_ERROR,
+          "login failed: " + gpError(&connection));
+    STEP_TIME("login");
+    gpDestroy(&connection);
+    gpInitialize(&connection, 10493, 12, GP_PARTNERID_GAMESPY);
+    gpDisable(&connection, GP_INFO_CACHING);
+    gpSetCallback(&connection, GP_ERROR, &gpIgnore, 0);
+    gpGetUserNicksA(&connection, "nobody@example.invalid", "nothing", GP_BLOCKING, &gpIgnore, 0);
+    check(!gpError(&connection).empty(), "account search failed: " + gpError(&connection));
+    gpDestroy(&connection);
+    STEP_TIME("account search");
+
+    {
+        WebRequest request;                       // blocking, as most persistence requests are
+        request.get(request.getGameSpyUrl() + "getbackendinfo.aspx", false);
+        check(request.failed && !request.isUpdating(), "stats web request failed");
+    }
+    STEP_TIME("stats web request (blocking)");
+    {
+        WebRequest request;                       // asynchronous, pumped like the menu does
+        request.get(request.getGameSpyUrl() + "getleaderboard.aspx", true);
+        const double end = now() + 10.0;
+        while (request.isUpdating() && now() < end)
+        {
+            request.update();
+            msleep(5);
+        }
+        check(request.failed, "asynchronous stats web request failed");
+    }
+    STEP_TIME("stats web request (asynchronous)");
+    #undef STEP_TIME
+    takeLookups();
+    for (unsigned i = 0; i < sizeof(ports) / sizeof(ports[0]); ++i)
+    {
+        close(ports[i].filler);
+        close(ports[i].listener);
+    }
+}
+
 int runScenario(const std::string& name)
 {
     if (name == "names")
@@ -830,6 +960,8 @@ int runScenario(const std::string& name)
         scenarioSilentHost();
     else if (name == "refused")
         scenarioRefused();
+    else if (name == "silent-tcp")
+        scenarioSilentTcp();
     else
     {
         std::fprintf(stderr, "unknown scenario %s\n", name.c_str());
@@ -847,7 +979,7 @@ int main(int argc, char** argv)
     if (argc > 1)
         return runScenario(argv[1]);
 
-    const char* scenarios[] = { "names", "retail-domain", "other-domain", "other-domain-unresolved", "silent-host", "refused" };
+    const char* scenarios[] = { "names", "retail-domain", "other-domain", "other-domain-unresolved", "silent-host", "refused", "silent-tcp" };
     int failed = 0;
     for (unsigned i = 0; i < sizeof(scenarios) / sizeof(scenarios[0]); ++i)
     {
