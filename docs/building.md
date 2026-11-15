@@ -131,6 +131,10 @@ the check executable; `dice_py_check_run` builds and runs it.
 glibc and the other system dependencies remain dynamic. Pass
 `-DBF2_LINUX_STATIC_RUNTIME=OFF` if you need dynamic compiler runtimes instead.
 
+The client-only `bf2_gamespy_voice_objects` target is excluded from the default build;
+Linux has no Voice2 hardware backend. Windows/macOS client and voice-test dependencies
+still request it explicitly.
+
 ## macOS
 
 The macOS dedicated server is a native port of the Linux one: the same `bf2` sources
@@ -249,6 +253,13 @@ These `[CHOSEN, not recovered]` port additions exist only in the macOS client:
 | `+warmupLevel <level>` | Hosts `<level>` locally through the non-menu start path, logs in the `+playerName` profile (else the default user) so its video settings apply, builds every shader of the level load, presses JOIN GAME through the button's own action (`dice.bf2.Logic.readyToPlay`) so the first world frame builds its effects too, waits for the background effect builds and exits. Runs windowed whatever `+fullscreen` says (a fullscreen client started behind another app is deactivated, and the deactivated main loop draws neither the menu nor the world). Without a logged-in profile the menu that loads after JOIN GAME asks to log out (renderMenu type 13), which would end the hosted game; the warm-up drops the game-ending menu events (8, 13, 14, 17) and prints `warmup: menu event N dropped`. `warmup: effects N/M` is printed at most once a second whenever N or M changes, during the level load too. Option id 74 (ids up to 73 are retail). For the setup assistant: one run per shader set fills the native effect cache. stdout lines `warmup: start`, `warmup: profile`, `warmup: effects N/M`, `warmup: level loaded`, `warmup: player joined`, `warmup: join game`, `warmup: world frame`, `warmup: done ...`; exit status 0 done, 2 the start failed, 3 timeout (`BF2_WARMUP_TIMEOUT`, default 3600 s), 4 done with native build failures. Check: `tools/macos/rendergate/warmup.sh`. |
 
 ## Client and plugins
+
+Incoming VoIP packets with truncated trailers, empty payloads, or partial codec frames
+are rejected before playback or sender notification. This is intentional hardening
+(`[CHOSEN, not recovered]`, [issue #26](https://github.com/kr4uzi/OpenBF2/issues/26));
+valid wire formats and sender/mute handling are unchanged. The macOS
+`bf2_voip_client_check` target covers malformed lengths, valid frames and loopback UDP
+using synthetic audio and game objects. It does not establish real peer audio or gameplay.
 
 Use the x86 or x64 configuration and the matching Python runtime above:
 
