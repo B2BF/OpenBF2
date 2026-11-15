@@ -8,8 +8,9 @@ compiler into x86 mode. In an IDE, select the matching Visual Studio architectur
 
 ## Targets and outputs
 
-GitHub Actions builds the supported Windows and Linux images on pushes and pull requests,
-and attaches ZIP packages when a release is published. See [CI and release packages](ci-releases.md)
+GitHub Actions builds the supported Windows, Linux and macOS images on pushes and pull requests,
+and attaches one package per platform when a release is published (`openbf2-windows.zip`,
+`openbf2-linux.zip`, `openbf2-macos.dmg`). See [CI and release packages](ci-releases.md)
 for the matrix, archive contents, checks and current runtime limitations.
 
 Paths below are relative to the selected CMake build directory.
@@ -30,8 +31,9 @@ Paths below are relative to the selected CMake build directory.
 | `msvc-x64` | `bf2_aidll` | `bin_client/aidll.dll`; staged into `bin_w64ded/` | Strict; native AI image, pending MSVC validation |
 | `msvc-x64` | `bf2_editor` | `bin_editor/BF2Editor.exe` | Strict; voice dependency fix awaits VM verification |
 
-Release packages ship both Windows clients, x86 and x64, plus the x86 editor and the x86
-dedicated server. An x64 editor package is a future goal.
+The Windows release package, `openbf2-windows.zip`, ships both Windows clients (`x64\`,
+`x86\`), the x86 dedicated server (`server\`) and the x86 editor (`editor\`). An x64 editor
+package is a future goal.
 
 The x86 preset uses `Reconstruction` with `BUILD_TESTING=ON`. Windows x64 uses `Release`;
 Linux uses `RelWithDebInfo`; both default to `BUILD_TESTING=OFF`. The client and editor
@@ -354,8 +356,9 @@ build tree, and can be mixed only with each other.
   [issue #17](https://github.com/kr4uzi/OpenBF2/issues/17)): no image imports or stages
   `NovintHFX.dll`, and the game takes retail's no-Falcon path.
 - **Audio.** The default providers load `BF2OpenAL.dll`. The game directory's copy is 32-bit and
-  an x64 process cannot load it. The x64 client package carries OpenAL Soft built as a 64-bit
-  `BF2OpenAL.dll` beside `BF2.exe`, and the application directory is searched first
+  an x64 process cannot load it. The x64 client (`x64\` in `openbf2-windows.zip`) carries
+  OpenAL Soft built as a 64-bit `BF2OpenAL.dll` beside `BF2.exe`, and the application
+  directory is searched first
   ([OpenAL Soft in the Windows clients](ci-releases.md#openal-soft-in-the-windows-clients),
   `Code/Build/build_openal_soft.py`). A local build without that DLL has no sound, with a
   `Could not find BF2OpenAL.dll` warning. Either run the script or select the **System OpenAL**
