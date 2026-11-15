@@ -125,23 +125,32 @@ jobs:
           if errorlevel 1 exit /b 1
           cmake --build out/build/ci-x86 --target bf2_editor
 
-      # The real import lists of the packaged client (x64) and editor (x86) images, for the job log.
-      # No image may import NovintHFX.dll (the Falcon is archived, Code/Archive/NovintFalcon).
-      - name: List the ${{ matrix.arch }} image imports
+      # The real import lists of the packaged client images (both architectures) and of the x86 editor,
+      # for the job log; no image may import NovintHFX.dll (the Falcon is archived,
+      # Code/Archive/NovintFalcon). Also the executables' embedded manifests: any requestedExecutionLevel
+      # disables UAC file virtualization (retail's BF2.exe has no manifest). Printed only, not changed.
+      - name: List the ${{ matrix.arch }} image imports and manifests
         if: steps.dxsdk.outputs.found == 'true'
         run: |
           call Code\Build\vsdevcmd.cmd ${{ matrix.arch }}
           if errorlevel 1 exit /b 1
-          set "BIN=out\build\ci-${{ matrix.arch }}\bin_${{ matrix.arch == 'x64' && 'client' || 'editor' }}"
-          set "EXE=${{ matrix.arch == 'x64' && 'BF2.exe' || 'BF2Editor.exe' }}"
-          set "EXTRA="
-          if "${{ matrix.arch }}"=="x64" set "EXTRA="%BIN%\BF2OpenAL.dll""
-          for %%I in ("%BIN%\%EXE%" "%BIN%\RendDX9.dll" "%BIN%\TextureAtlasBuilder.dll" %EXTRA%) do (
-            echo ===== %%~nxI
-            dumpbin /nologo /dependents /imports %%I > "%%~dpnI.imports.txt"
+          set "OUT=out\build\ci-${{ matrix.arch }}"
+          set "IMAGES="%OUT%\bin_client\BF2.exe" "%OUT%\bin_client\RendDX9.dll" "%OUT%\bin_client\TextureAtlasBuilder.dll""
+          set "EXES="%OUT%\bin_client\BF2.exe""
+          if "${{ matrix.arch }}"=="x64" set IMAGES=%IMAGES% "%OUT%\bin_client\BF2OpenAL.dll"
+          if "${{ matrix.arch }}"=="x86" set IMAGES=%IMAGES% "%OUT%\bin_editor\BF2Editor.exe" "%OUT%\bin_editor\RendDX9.dll" "%OUT%\bin_editor\TextureAtlasBuilder.dll"
+          if "${{ matrix.arch }}"=="x86" set EXES=%EXES% "%OUT%\bin_editor\BF2Editor.exe"
+          for %%I in (%IMAGES%) do (
+            echo ===== imports: %%I
+            dumpbin /nologo /dependents /imports %%I > "%%~dpnxI.imports.txt"
             if errorlevel 1 exit /b 1
-            type "%%~dpnI.imports.txt"
-            findstr /i /c:"NovintHFX" "%%~dpnI.imports.txt" >nul && (echo ::error title=NovintHFX import::%%~nxI imports NovintHFX.dll& exit /b 1)
+            type "%%~dpnxI.imports.txt"
+            findstr /i /c:"NovintHFX" "%%~dpnxI.imports.txt" >nul && (echo ::error title=NovintHFX import::%%~nxI imports NovintHFX.dll& exit /b 1)
+          )
+          for %%E in (%EXES%) do (
+            echo ===== manifest: %%E
+            mt.exe -nologo "-inputresource:%%~fE;#1" -out:con
+            if errorlevel 1 echo   no embedded manifest resource 1, or mt.exe could not read it
           )
           exit /b 0
 

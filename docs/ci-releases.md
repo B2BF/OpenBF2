@@ -14,8 +14,8 @@ it does not recover or change engine behavior, ABI, protocols, or file formats.
 
 | Runner | Configuration | Targets and checks |
 | --- | --- | --- |
-| Windows 2022, MSVC x86 | `msvc-x86` / `Reconstruction` | Python interpreter check; `bf2_run_checks`; `bf2_editor_run_checks`; `bf2_w32ded`; `bf2_aidll`; with a usable D3DX source: `bf2_client` and plugins, `bf2_editor` and plugins, then `dumpbin /dependents /imports` of `BF2Editor.exe`, `RendDX9.dll` and `TextureAtlasBuilder.dll` in the log |
-| Windows 2022, MSVC x64 | `msvc-x64` / `Release` | Python interpreter check; strict `bf2_w64ded` and `bf2_aidll` links; AI export listing and staged-copy comparison; with a usable D3DX source: `bf2_client` and plugins, then `dumpbin /dependents /imports` of `BF2.exe`, `RendDX9.dll` and `TextureAtlasBuilder.dll` in the log |
+| Windows 2022, MSVC x86 | `msvc-x86` / `Reconstruction` | Python interpreter check; `bf2_run_checks`; `bf2_editor_run_checks`; `bf2_w32ded`; `bf2_aidll`; with a usable D3DX source: `bf2_client` and plugins, `bf2_editor` and plugins, then `dumpbin /dependents /imports` of the client's and the editor's `BF2.exe`/`BF2Editor.exe`, `RendDX9.dll` and `TextureAtlasBuilder.dll`, and the embedded manifests of `BF2.exe` and `BF2Editor.exe` (`mt.exe`), in the log |
+| Windows 2022, MSVC x64 | `msvc-x64` / `Release` | Python interpreter check; strict `bf2_w64ded` and `bf2_aidll` links; AI export listing and staged-copy comparison; with a usable D3DX source: `bf2_client` and plugins, OpenAL Soft, then `dumpbin /dependents /imports` of `BF2.exe`, `RendDX9.dll`, `TextureAtlasBuilder.dll` and `BF2OpenAL.dll`, and the embedded manifest of `BF2.exe` (`mt.exe`), in the log |
 | Ubuntu 22.04, GCC x64 | `linux-x64` / `RelWithDebInfo` | Strict `bf2` link; `dice_py_check_run` |
 
 Windows builds initialize MSVC through the repository's `vsdevcmd.cmd`. They build
@@ -36,7 +36,10 @@ PunkBuster support**. PunkBuster exists only as 32-bit DLLs, so the x64 client c
 servers that require PunkBuster; use the x86 client for those. An x64 editor package is a
 future goal.
 
-The import listing fails the job if any of those images imports `NovintHFX.dll`.
+The import listing fails the job if any of those images imports `NovintHFX.dll`. The
+manifests are only printed. Any `requestedExecutionLevel` turns off UAC file virtualization,
+which retail's manifest-less `BF2.exe` gets, so write access to the game folder is the
+installer's job.
 
 Each hosted job has its own checkout. Client/plugin and editor builds run sequentially
 inside the x86 job because the client's plugin outputs use shared source-tree paths.
