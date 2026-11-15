@@ -155,6 +155,14 @@ p.add_argument('--hitch-trace', action='store_true',
                     'effect builds, Metal compiles and texture loads (hitch_report.py summarises it)')
 p.add_argument('--client-env', action='append', default=[], metavar='KEY=VALUE',
                help='extra client environment (repeatable), e.g. BF2_METAL_SKIP_REFUSED_DRAWS=1 (debug aid)')
+p.add_argument('--name-redirect', metavar='DOMAIN',
+               help='[TEMP] test-only: load <build>/test_tools/libbf2_test_name_redirect.dylib (build target '
+                    'bf2_test_name_redirect first) into server and client, so DOMAIN and *.DOMAIN resolve to '
+                    '127.0.0.1, and add +gamespy DOMAIN to both command lines. The sandbox profiles then also '
+                    'allow the GameSpy service ports on loopback (Code/Tests/name_redirect/README.md)')
+p.add_argument('--name-redirect-http-port', type=int, metavar='PORT',
+               help='[TEMP] with --name-redirect: TCP connections to 127.0.0.1:80 (the stats web host) go to '
+                    '127.0.0.1:PORT instead')
 p.add_argument('--pose', metavar='X/Y/Z[/YAW[/PITCH[/ROLL]]]',
                help='[TEMP] play-test fixture (pose/playtest_pose.py): every spawn of a human player is moved to '
                     'this world position and rotation (degrees), so scripted runs start from the same place; '
@@ -224,6 +232,22 @@ server_bin, client_bin = build / 'bf2', build / 'bf2_client'
 for b in (() if args.no_server else (server_bin,)) + (() if args.no_client else (client_bin,)):
     if not b.is_file():
         sys.exit('missing ' + str(b))
+
+# [TEMP] --name-redirect: sandbox-exec is a protected system binary, so the system drops DYLD_* from
+# its environment; /usr/bin/env sets them again for the game image it starts.
+redirect_wrap = []
+if args.name_redirect_http_port and not args.name_redirect:
+    p.error('--name-redirect-http-port requires --name-redirect')
+if args.name_redirect:
+    if args.lldb:
+        p.error('--name-redirect cannot be combined with --lldb')
+    redirect_lib = build.parent / 'test_tools' / 'libbf2_test_name_redirect.dylib'
+    if not redirect_lib.is_file():
+        sys.exit('missing ' + str(redirect_lib) + ' (build the bf2_test_name_redirect target)')
+    redirect_wrap = ['/usr/bin/env', 'DYLD_INSERT_LIBRARIES=' + str(redirect_lib),
+                     'OPENBF2_TEST_REDIRECT_DOMAIN=' + args.name_redirect, 'OPENBF2_TEST_REDIRECT_LOG=1']
+    if args.name_redirect_http_port:
+        redirect_wrap.append('OPENBF2_TEST_REDIRECT_HTTP_PORT=%d' % args.name_redirect_http_port)
 if content == REPO or REPO in content.parents or content in REPO.parents:
     sys.exit('Content must be a separate read-only reference installation.')
 
@@ -290,6 +314,14 @@ if args.interface_ip:
     # The game and query sockets stay bound to --interface-ip (a host-only bridge), see SETTINGS.
     profile = run / 'server.sb'
     profile.write_text(profile.read_text() + '(allow network-outbound (remote ip "*:*"))\n')
+if args.name_redirect:
+    # The GameSpy services' fixed ports and the stats web port, on loopback only (the server profile
+    # already allows every loopback peer).
+    ports = [80, 27900, 27901, 28910, 29900, 29901, 29910, 29920] + (
+        [args.name_redirect_http_port] if args.name_redirect_http_port else [])
+    profile = run / 'client.sb'
+    profile.write_text(profile.read_text() + ''.join(
+        '(allow network-outbound (remote ip "localhost:%d"))\n' % port for port in ports))
 for profile in (('client.sb',) if args.no_server else ('server.sb', 'client.sb')):
     check = subprocess.run(sandbox(run / profile) + ['/usr/bin/true'], capture_output=True, text=True)
     if check.returncode:
@@ -378,8 +410,12 @@ def stamp(msg):
     print('[%7.1fs] %s' % (time.monotonic() - t0, msg), flush=True)
 
 server_extra = (['+ai', '1'] if args.ai else []) + shlex.split(args.server_extra)
+if args.name_redirect:
+    server_extra = ['+gamespy', args.name_redirect] + server_extra
 senv = dict(os.environ, LB_OWNER_HOME=str(OWNER_HOME), LB_RUN_OUT=str(OUT), LB_GAME_ROOT=str(content),
             TERM='xterm')
+if redirect_wrap:
+    senv['LB_WRAP'] = '\n'.join(redirect_wrap)   # server.tcl: the words before the server binary
 if args.mod != 'bf2':
     senv['LB_MOD'] = args.mod   # server.tcl: +modPath mods/$LB_MOD (default bf2)
 if args.ai_trace:
@@ -576,7 +612,8 @@ if (args.no_server or (run / 'server.playing').exists()) and not args.no_client 
                 + [x for c in args.lldb_cmd for x in ('-o', c)] + ['-o', 'run', '-k', 'thread backtrace all'] + [x for c in args.lldb_post for x in ('-k', c)]
                 + ['-k', 'quit 1', '--']
                 if args.lldb else [])
-    command = sandbox(run / 'client.sb') + debugger + [str(client_bin), '+modPath', 'mods/' + args.mod, '+fullscreen', '1' if args.fullscreen else '0'] + ([] if args.profile_resolution else
+    command = sandbox(run / 'client.sb') + debugger + redirect_wrap + [str(client_bin)] + (
+        ['+gamespy', args.name_redirect] if args.name_redirect else []) + ['+modPath', 'mods/' + args.mod, '+fullscreen', '1' if args.fullscreen else '0'] + ([] if args.profile_resolution else
         ['+szx', '800', '+szy', '600']) + ([] if args.movies else ['+restart', '1']) + [
         ] + ([] if args.no_join else ['+joinServer', '127.0.0.1', '+port', '16890']) + (
         ['+password', args.client_password if args.client_password is not None else args.server_password]

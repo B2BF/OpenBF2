@@ -2708,6 +2708,17 @@ if(APPLE)
     endif()
 endif()
 
+# [TEMP] Test-only host-name redirect (Code/Tests/name_redirect): a DYLD_INSERT_LIBRARIES library that
+# resolves the names of one test domain to 127.0.0.1 for locally built images. Built on request, into
+# its own directory outside bin_macos; no game image links it and no package contains it.
+if(APPLE)
+    add_library(bf2_test_name_redirect SHARED EXCLUDE_FROM_ALL Code/Tests/name_redirect/name_redirect.c)
+    set_target_properties(bf2_test_name_redirect PROPERTIES
+        OUTPUT_NAME bf2_test_name_redirect
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/test_tools"
+        C_VISIBILITY_PRESET hidden)
+endif()
+
 # bf2_memory - the rebuilt Memory.dll (Code/BF2/Memory). Built on request only (EXCLUDE_FROM_ALL)
 # and linked into no game image (issue #7). Its tests join CTest when BF2_MEMORY_TESTS is ON.
 add_subdirectory(Code/BF2/Memory)
