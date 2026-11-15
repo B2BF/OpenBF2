@@ -14,8 +14,11 @@ set env(COLUMNS) 120
 cd "$run/server-root"
 log_file -noappend "$run/server.pty.log"
 log_user 1
+# loopback.py --name-redirect: LB_WRAP holds the words placed before the binary, one per line.
+set wrap {}
+if {[info exists env(LB_WRAP)]} { set wrap [split $env(LB_WRAP) "\n"] }
 spawn /usr/bin/sandbox-exec -D OWNER_HOME=$env(LB_OWNER_HOME) -D RUN_OUT=$env(LB_RUN_OUT) \
-    -D GAME_ROOT=$env(LB_GAME_ROOT) -f "$run/server.sb" $binary +modPath mods/$mod \
+    -D GAME_ROOT=$env(LB_GAME_ROOT) -f "$run/server.sb" {*}$wrap $binary +modPath mods/$mod \
     +config smoke_cfg/ServerSettings.con +mapList smoke_cfg/maplist.con +port 16890 {*}$extra
 set child [exp_pid]
 proc stopFailed {message} {

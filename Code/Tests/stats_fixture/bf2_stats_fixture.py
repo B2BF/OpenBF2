@@ -2,12 +2,13 @@
 """SCAFFOLDING [TEMP] (Code/Tests, 2026-09-28) - a LOCAL stand-in for BF2's stats web service.
 
 It exists so the rebuilt client's stats LOADING (BFHQ, the end-of-round rank, ...) can be tested with
-chosen numbers while no ranked server feeds the real service. It listens on 127.0.0.1 only, keeps no
-state, writes nothing, and talks to no other host.
+chosen numbers while no ranked server feeds the real service. It listens on 127.0.0.1 only, keeps
+only in-memory state (unlock selections, a cleared rank notification), writes nothing, and talks to
+no other host.
 
-Point the rebuilt client at it by starting the client with
-    BF2_STATS_URL=http://127.0.0.1:<port>/ASP/
-(the [TEMP] seam in HTTPRequest::getGameSpyUrl; unset, the client keeps the shipped URL).
+Point a locally built client (or dedicated server) at it with +gamespy <test domain> and the
+test-only name redirect (Code/Tests/name_redirect): the stats host BF2Web.<test domain> resolves to
+127.0.0.1, and OPENBF2_TEST_REDIRECT_HTTP_PORT=<port> moves its port 80 to this fixture.
 
 What it answers - the three getplayerinfo.aspx queries SwiffHost::fetchPlayerStats (BF2.exe 0x49D450)
 makes, in the layout KeyParser::parse (0x61DAF0) reads:
@@ -28,8 +29,12 @@ Since 2026-09-29 also getawardsinfo.aspx (a veteran's medals, badges and ribbons
 awards.con; --no-awards for none) and getleaderboard.aspx (every board, --lb-size players, the fixture's
 own player at --lb-position), for the BFHQ awards and leaderboard pages.
 
-Every other endpoint gets what BF2Web.openspy.net answers today ("E 404"), so the client behaves as it
-does against the real service for them.
+Also getunlocksinfo.aspx, getbackendinfo.aspx (--ranked adds "rnk" to its header), getrankinfo.aspx
+and ranknotification.aspx (--promoted / --demoted), searchforplayers.aspx, VerifyPlayer.aspx
+(--verify-result) and the POSTs selectunlock.aspx and createplayer.aspx. Their layouts are written
+from what the client's parsers read; every name and number in them is invented.
+
+Every other endpoint gets "E 404".
 
 ⚠ The client's tokenizer skips RUNS of tabs, so an EMPTY value would shift every later value onto the
 wrong key. A key whose value would be empty is left out instead (the client reads a missing key as "").
@@ -178,6 +183,86 @@ def leaderboard_answer(a, q):
     return table(["size", "asof"], [a.lb_size, now - 1800], names, rows)
 
 
+# ---- unlocks, backend info, rank, search, name validation (added 2026-11-15) ---------------------------
+# The engine's own unlock table (PlayerUnlocks.cpp unlockItems / unlockKits): the ids the server grants
+# and the kit each one belongs to.
+UNLOCK_IDS = [11, 22, 33, 44, 55, 66, 77, 88, 99, 111, 222, 333, 444, 555]
+UNLOCK_KITS = [0, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 0, 6]
+
+
+class State:
+    """What the POSTs and ranknotification change, for this process only."""
+    def __init__(self, a):
+        self.selected = set(a.selected_unlock)
+        self.promotion_cleared = False
+
+
+def unlocks_answer(a, state, pid):
+    """PlayerUnlocks parses with KeyParser type Unlocks: 13 tokens after "O" are skipped
+    (H pid nick asof / D <3 values> / H enlisted officer / D), the next two are the available
+    (enlisted) and selected (officer) counts, then the "id state" table: s = selected, n = not
+    selected, anything else is not available."""
+    now = int(time.time())
+    available = len(UNLOCK_IDS[:a.unlocks_available])
+    lines = ["O",
+             "H\tpid\tnick\tasof",
+             "D\t%s\t%s\t%d" % (pid, a.nick, now),
+             "H\tenlisted\tofficer",
+             "D\t%d\t%d" % (max(0, available - len(state.selected)), len(state.selected)),
+             "H\tid\tstate"]
+    for i, unlock in enumerate(UNLOCK_IDS):
+        state_code = "s" if unlock in state.selected else ("n" if i < a.unlocks_available else "x")
+        lines.append("D\t%d\t%s" % (unlock, state_code))
+    text = "\n".join(lines) + "\n"
+    return text + "$\t%d\t$\n" % len(text.replace("\t", "").replace("\n", ""))
+
+
+def backendinfo_answer(a):
+    """PlayerUnlockInfo parses with KeyParser type Search: "H ver [rnk] now" - the server counts as
+    authorised for ranking when the header has "rnk" (its value is not read) - then the
+    "id kit name descr" table, read by position."""
+    now = int(time.time())
+    head_keys = ["ver", "rnk", "now"] if a.ranked else ["ver", "now"]
+    head_values = ["0.1", 1, now] if a.ranked else ["0.1", now]
+    rows = [(unlock, kit, "Fixture unlock %d" % unlock, "Invented test unlock for kit %d" % kit)
+            for unlock, kit in zip(UNLOCK_IDS, UNLOCK_KITS)]
+    return table(head_keys, head_values, ["id", "kit", "name", "descr"], rows)
+
+
+def rankinfo_answer(a, state):
+    """PlayerRankInfo reads from "O" to the first "H": "rank chng decr"."""
+    cleared = state.promotion_cleared
+    return ("O\nH\trank\tchng\tdecr\nD\t%d\t%d\t%d\n$\t0\t$\n"
+            % (a.rank, 0 if cleared else int(a.promoted), 0 if cleared else int(a.demoted)))
+
+
+def search_answer(a, q):
+    """SearchForPlayer parses with KeyParser type Stats (H asof / D skipped) and reads pid, nick and
+    score by name. where=x is an exact match, where=a a partial one."""
+    wanted = q.get("nick", "")
+    exact = q.get("where", "a") == "x"
+    players = [(a.lb_pid, a.nick, a.score)] + [(40000000 + n, "Player%03d" % n, 100000 - n * 997)
+                                                for n in range(1, a.lb_size + 1)]
+    found = [p for p in players if (p[1].lower() == wanted.lower() if exact else wanted.lower() in p[1].lower())]
+    rows = [(i + 1, pid, nick, score) for i, (pid, nick, score) in enumerate(found[:20])]
+    if not rows:
+        return "O\nH\tasof\nD\t%d\nH\tn\tpid\tnick\tscore\n$\t0\t$\n" % int(time.time())
+    return table(["asof"], [int(time.time())], ["n", "pid", "nick", "score"], rows)
+
+
+def verify_answer(a, q):
+    """GSServerSideNameValidation parses with KeyParser type Validation, by token position after "O":
+    7 = profile id, 8 = verified nick, 14 = result (Ok, InvalidReportedNick, InvalidReportedProfileID,
+    InvalidAuthProfileID). The retail layout is not confirmed; this one satisfies those positions."""
+    pid = q.get("pid", "0")
+    now = int(time.time())
+    return ("O\nH\tpid\tnick\tspid\tasof\nD\t%s\t%s\t%s\t%d\nH\tresult\nD\t%s\n$\t0\t$\n"
+            % (pid, a.nick, pid, now, a.verify_result))
+
+
+OK_ANSWER = "O\nH\tresponse\nD\tOK\n$\t3\t$\n"
+
+
 class Profile:
     def __init__(self, a):
         self.a = a
@@ -266,9 +351,25 @@ class Profile:
         return body(keys, values)
 
 
-def make_handler(profile):
+def make_handler(profile, state):
     class Handler(http.server.BaseHTTPRequestHandler):
         server_version = "BF2StatsFixture/1"
+
+        def do_POST(self):
+            url = urllib.parse.urlsplit(self.path)
+            name = url.path.rsplit("/", 1)[-1].lower()
+            q = {k: v[0] for k, v in urllib.parse.parse_qs(url.query, keep_blank_values=True).items()}
+            length = int(self.headers.get("Content-Length", "0") or 0)
+            form = self.rfile.read(length).decode("ascii", "replace") if length else ""
+            answer = NOT_FOUND
+            if name == "selectunlock.aspx":
+                unlock = int(q.get("id", "0") or 0)
+                if unlock in UNLOCK_IDS:
+                    state.selected.add(unlock)
+                answer = OK_ANSWER
+            elif name == "createplayer.aspx":
+                answer = OK_ANSWER
+            self.answer(answer, " POST form %r" % form)
 
         def do_GET(self):
             url = urllib.parse.urlsplit(self.path)
@@ -289,14 +390,30 @@ def make_handler(profile):
                 answer = awards_answer(profile.a, q.get("pid", "0"))
             elif name == "getleaderboard.aspx":
                 answer = leaderboard_answer(profile.a, q)
+            elif name == "getunlocksinfo.aspx":
+                answer = unlocks_answer(profile.a, state, q.get("pid", "0"))
+            elif name == "getbackendinfo.aspx":
+                answer = backendinfo_answer(profile.a)
+            elif name == "getrankinfo.aspx":
+                answer = rankinfo_answer(profile.a, state)
+            elif name == "ranknotification.aspx":
+                state.promotion_cleared = True
+                answer = OK_ANSWER
+            elif name == "searchforplayers.aspx":
+                answer = search_answer(profile.a, q)
+            elif name == "verifyplayer.aspx":
+                answer = verify_answer(profile.a, q)
+            self.answer(answer, "")
+
+        def answer(self, answer, note):
             data = answer.encode("ascii")
             self.send_response(200)
             self.send_header("Content-Type", "text/plain")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
-            print("[fixture] %s -> %s" % (self.path[:160], "404" if answer is NOT_FOUND else "%d bytes" % len(data)),
-                  flush=True)
+            print("[fixture] %s%s -> %s" % (self.path[:160], note,
+                                            "404" if answer is NOT_FOUND else "%d bytes" % len(data)), flush=True)
 
         def log_message(self, fmt, *args):    # the one line above is enough
             pass
@@ -325,9 +442,23 @@ def main():
     p.add_argument("--lb-size", type=int, default=57, help="players on every leaderboard")
     p.add_argument("--lb-position", type=int, default=42, help="the fixture player's position on every board")
     p.add_argument("--lb-pid", type=int, default=1, help="the fixture player's id on the global boards")
+    p.add_argument("--unlocks-available", type=int, default=2,
+                   help="how many of the 14 unlocks (in id order) are available to pick")
+    p.add_argument("--selected-unlock", type=int, action="append", default=[],
+                   help="an unlock id that starts selected (repeatable)")
+    p.add_argument("--ranked", action="store_true", help="getbackendinfo reports rnk (ranking authorised)")
+    p.add_argument("--promoted", action="store_true", help="getrankinfo reports a promotion (chng 1)")
+    p.add_argument("--demoted", action="store_true", help="getrankinfo reports a demotion (decr 1)")
+    p.add_argument("--verify-result", default="Ok",
+                   choices=["Ok", "InvalidReportedNick", "InvalidReportedProfileID", "InvalidAuthProfileID"],
+                   help="VerifyPlayer's result")
     p.add_argument("--selftest", action="store_true", help="print the answers and exit")
     a = p.parse_args()
+    for unlock in a.selected_unlock:
+        if unlock not in UNLOCK_IDS:
+            p.error("--selected-unlock %d is not one of %s" % (unlock, UNLOCK_IDS))
     profile = Profile(a)
+    state = State(a)
     if a.selftest:
         print(profile.main_query("1"))
         print(profile.favourites_query("1", a.kit, a.vehicle, a.weapon, a.map))
@@ -335,12 +466,17 @@ def main():
         print(awards_answer(a, "1"))
         print(leaderboard_answer(a, {"type": "kit", "id": "2", "pos": "41", "before": "0", "after": "19"}))
         print(leaderboard_answer(a, {"pid": "1", "type": "risingstar"}))
+        print(unlocks_answer(a, state, "1"))
+        print(backendinfo_answer(a))
+        print(rankinfo_answer(a, state))
+        print(search_answer(a, {"nick": a.nick, "where": "x"}))
+        print(verify_answer(a, {"pid": "1"}))
         return
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(profile))
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(profile, state))
     print("[fixture] BF2 stats fixture on http://127.0.0.1:%d/ASP/  (score %d, weapon %d: %d kills / %d deaths)"
           % (a.port, a.score, a.weapon, a.kills, a.deaths), flush=True)
-    print("[fixture] start the client with BF2_STATS_URL=http://127.0.0.1:%d/ASP/  - Ctrl+C stops" % a.port,
-          flush=True)
+    print("[fixture] start the client with +gamespy test.openbf2 and the test name redirect "
+          "(OPENBF2_TEST_REDIRECT_HTTP_PORT=%d)  - Ctrl+C stops" % a.port, flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

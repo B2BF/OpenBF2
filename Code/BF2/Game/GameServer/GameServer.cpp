@@ -272,9 +272,13 @@ bool GameServer::init()
         Debug(DEBUGTYPE_6, "Game/GameServer/GameServer.cpp", 669)
             << "failed to initialize python host";
 
+    // Ranking authorisation (ELF 0x80A6D16..0x80A6F24, bf2_w32ded.exe 0x44B087..0x44B1B2). Uses the
+    // ranked flag read before Python initialization. getPlayerUnlockInfo performs the blocking
+    // getbackendinfo.aspx request; its getRanked (+0x28) is true only when that response's header
+    // carries the `rnk` key.
     if (ranked)
     {
-        IPlayerUnlockInfo* unlockInfo = getPlayerUnlockInfo();
+        IPlayerUnlockInfo* unlockInfo = getPlayerUnlockInfo(); // ELF 0x80A6D21 / PE 0x44B09F
         if (unlockInfo)
         {
             // Both script probes execute, but only providerID.sec's result participates in the
@@ -283,13 +287,16 @@ bool GameServer::init()
             io::fileManager->fileExists(std::string("python/bf2/stats/snapshot.py"));
             const bool providerExists =
                 io::fileManager->fileExists(std::string("python/bf2/stats/providerID.sec"));
-            const bool authorized = unlockInfo->getRanked();
-            const bool pythonValid = isPythonValid();
+            const bool authorized = unlockInfo->getRanked(); // ELF 0x80A6E31 / PE 0x44B128
+            const bool pythonValid = isPythonValid();        // ELF 0x80A6E41 / PE 0x44B131
             if (!authorized || !pythonValid || !providerExists)
             {
-                //Debug(DEBUGTYPE_7, "Game/GameServer/GameServer.cpp", 691)
-                //    << "Server trying to use unauthorized ranking services";
-                //return false;// FIX/TODO: tell CHC that openspy must support this
+                // ELF 0x80A6ED0 / PE 0x44B176: Debug type 7 at line 691 (0x2B3), then init returns
+                // false (ELF 0x80A6F22, PE 0x44B1AA). Type 7 is fatal under normal logging; the
+                // return is reached only when that diagnostic is suppressed.
+                Debug(DEBUGTYPE_7, "Game/GameServer/GameServer.cpp", 691)
+                    << "Server trying to use unauthorized ranking services";
+                return false;
             }
         }
     }
