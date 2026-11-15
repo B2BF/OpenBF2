@@ -8,6 +8,15 @@
 #import <QuartzCore/CAMetalLayer.h>
 #import <Metal/Metal.h>
 #include <IOKit/IOKitLib.h>
+#include <CommonCrypto/CommonDigest.h>
+#include <pthread.h>
+#include <pthread/qos.h>
+#include <atomic>
+#include <chrono>
+#include <deque>
+#include <sstream>
+#include <thread>
+#include <unordered_map>
 #include <cstdio>
 #include <cstdlib>
 #include <new>
@@ -65,6 +74,7 @@ struct Frame {
 #endif
     Texture colorResource, depthResource;
     struct DrawCaches* draws = nullptr; // G4 open render pass and pipeline caches (DrawBridge.inc)
+    struct Prebuild* prebuild = nullptr; // shader libraries and pipelines built ahead of draws (ShaderPrebuild.inc)
 };
 Adapter* createAdapter()
 {
@@ -234,6 +244,7 @@ static bool commands(Frame* f)
 }
 #include "StateMapping.inc"
 #include "ResourceBridge.inc"
+#include "ShaderPrebuild.inc"
 #include "DrawBridge.inc"
 #include "MenuBridge.inc"
 bool reset(Frame* f, unsigned width, unsigned height, bool vsync, bool depth, unsigned samples)
@@ -315,7 +326,7 @@ Frame* createFrame(Adapter* a, void* view, unsigned width, unsigned height, bool
 void destroyFrame(Frame* f)
 {
     mainThread("IDirect3DDevice9::Release");
-    @autoreleasepool { finish(f); destroyDraws(f); delete f; }
+    @autoreleasepool { finish(f); destroyDraws(f); destroyPrebuild(f); delete f; }
 }
 void dimensions(Frame* f, unsigned& width, unsigned& height)
 {
@@ -501,6 +512,8 @@ PresentResult present(Frame* f,void* window,bool doNotWait)
             [e setFragmentTexture:f->color atIndex:0];
             [e drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4]; [e endEncoding];
         }
+        static unsigned long presents=0;
+        if(++presents%1200==0) prebuildSummary(f);       // traced runs only
         PresentCapture* capture=presentCaptureBegin(f);  // [TEMP] BF2_PRESENT_PNG
         [f->commands presentDrawable:drawable];
         if(doNotWait) {

@@ -949,6 +949,11 @@ struct Validator final : bf2fx::Callbacks {
     }
 };
 
+class Effect;
+// Effects whose native build was still running when they were created and whose device shaders
+// do not exist yet (render thread only).
+std::set<Effect*>& unsettledEffects() { static std::set<Effect*> effects; return effects; }
+
 class Effect final : public EffectBase<ID3DXEffect> {
 public:
     IDirect3DDevice9* device;
@@ -993,11 +998,17 @@ public:
         bf2metal::reftrace::born(this, "ID3DXEffect", [](const void*) { return 1ul; });
         shaderOwner = shared;
         if (!runtime.description().techniques.empty()) current = 0;
+        if (deferred) unsettledEffects().insert(this);
+    }
+    // The background build has finished: ensureShaders() will not wait.
+    bool buildFinished() const {
+        return deferred && deferred.future.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
     }
     // [CHOSEN, not recovered] A deferred native effect gets its shader records from the
     // background build at first use; the structure (parameters, techniques, objects) is the same.
     void ensureShaders() override {
         if (!deferred) return;
+        unsettledEffects().erase(this);
         bf2fx::Entry full;
         {
             bf2hitch::Scope timed(bf2hitch::FxWait, deferred.key.c_str());
@@ -1015,6 +1026,7 @@ public:
         if (FAILED(createShaders())) { broken = true; refuse("D3DXCreateEffect", "device shader creation failed for a native build"); }
     }
     ~Effect() override {
+        unsettledEffects().erase(this);
         saved.reset();
         if (poolObject) poolObject->Release();
         for (auto& s : shaders) if (s.second) s.second->Release();
@@ -1525,6 +1537,14 @@ extern "C" HRESULT WINAPI D3DXCreateEffectCompiler(LPCSTR pSrcData, UINT SrcData
 }
 
 namespace bf2metal {
+void createFinishedEffectShaders()
+{
+    auto& effects = unsettledEffects();
+    if (effects.empty()) return;
+    std::vector<Effect*> finished;
+    for (Effect* e : effects) if (e->buildFinished()) { finished.push_back(e); if (finished.size() == 16) break; }
+    for (Effect* e : finished) e->ensureShaders();
+}
 std::shared_ptr<const bf2fx::Shader> translateRuntimeShader(const std::uint32_t* tokens, std::size_t bytes, bool vertex)
 {
 #if defined(BF2_FX_NATIVE)

@@ -26,7 +26,34 @@
         for(const auto& s:record->samplers) desc.samplers.push_back({s.index,s.kind});
         auto* object=new Object(this,native,vertex,record);
         object->program=bf2metal::createProgram(native,desc);
+        createVariants(*object);
         *out=object; object->AddRef(); return D3D_OK;
+    }
+    // [CHOSEN, not recovered] The vertex-fog variant (fog 1) of a new pixel shader below ps_3_0 is
+    // created with it, so its library is compiled ahead of the first draw like the shader's own
+    // program (ShaderPrebuild.inc). BF2's effects draw with D3DRS_FOGENABLE and a vertex shader that
+    // writes oFog nearly everywhere, so this variant, not the shader's own program, is what most
+    // draws use (all 63 variants of a combat session on Dalian Plant). A patch that does not apply
+    // is left to the draw that needs the variant.
+    void createVariants(VertexShaderObject&) {}
+    void createVariants(PixelShaderObject& ps) {
+        if(ps.record->major>=3 || !bf2metal::backgroundBuilds(native)) return;
+        FragmentVariant fog; fog.fog=1;
+        const std::string key=fog.key();
+        bf2metal::ProgramDesc desc; std::string error;
+        if(!ps.variants.count(key) && variantDesc(ps,fog,desc,error)) ps.variants[key]=bf2metal::createProgram(native,desc);
+    }
+    // The program description of a pixel shader variant: its MSL patched for the variant, its
+    // sampler kinds with the variant's retyped slots. False with the reason when the patch does not
+    // apply.
+    bool variantDesc(PixelShaderObject& ps,const FragmentVariant& v,bf2metal::ProgramDesc& desc,std::string& error) {
+        desc.vertex=false; desc.variant=true;
+        for(const auto& s:ps.record->samplers) {
+            unsigned kind=s.kind;
+            for(const auto& retyped:v.samplers) if(retyped.first==s.index) kind=retyped.second;
+            desc.samplers.push_back({s.index,kind});
+        }
+        return patchMsl(ps.record->msl,false,desc.msl,error,&v);
     }
     HRESULT STDMETHODCALLTYPE CreateVertexShader(const DWORD* f,IDirect3DVertexShader9** out) override {
         return createShader<VertexShaderObject>(f,out,true,"IDirect3DDevice9::CreateVertexShader");
@@ -109,21 +136,18 @@
     // samplers bound to cube/volume textures (FragmentVariant, Shaders.inc).
     bf2metal::Program* fragmentProgram(PixelShaderObject& ps,unsigned fog,const bf2metal::StateMapping& m) {
         FragmentVariant v; v.fog=fog; v.flat=state.raw.render[9]==1; // D3DRS_SHADEMODE = D3DSHADE_FLAT
-        bf2metal::ProgramDesc desc; desc.vertex=false;
         for(const auto& s:ps.record->samplers) {
             if(s.index<16 && m.sampler[s.index].lodBias!=0) v.bias.push_back({s.index,m.sampler[s.index].lodBias});
-            unsigned kind=s.kind;
-            if(ps.record->major==1 && kind==0 && s.index<16) if(auto* t=state.textures[s.index].ptr) {
+            if(ps.record->major==1 && s.kind==0 && s.index<16) if(auto* t=state.textures[s.index].ptr) {
                 const unsigned bound=dynamic_cast<CubeTexture*>(t)?1:dynamic_cast<VolumeTexture*>(t)?2:0;
-                if(bound) { v.samplers.push_back({s.index,bound}); kind=bound; }
+                if(bound) v.samplers.push_back({s.index,bound});
             }
-            desc.samplers.push_back({s.index,kind});
         }
         if(!v.fog && !v.flat && v.samplers.empty() && v.bias.empty()) return ps.program;
         auto& cached=ps.variants[v.key()];
         if(!cached) {
-            std::string error;
-            if(!patchMsl(ps.record->msl,false,desc.msl,error,&v)) {
+            bf2metal::ProgramDesc desc; std::string error;
+            if(!variantDesc(ps,v,desc,error)) {
                 const std::string name="IDirect3DDevice9::Draw pixel shader variant ("+error+")"; frontier(name.c_str());
             }
             cached=bf2metal::createProgram(native,desc);

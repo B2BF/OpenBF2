@@ -3,8 +3,9 @@
 // Included by MetalBridge.mm after ResourceBridge.inc.
 
 struct Program {
-    ProgramDesc desc;
+    ProgramDesc desc;                      // without its MSL, which the library entry holds
     std::uint64_t serial = 0;
+    std::shared_ptr<LibraryEntry> library; // shared by every program with the same MSL (ShaderPrebuild.inc)
     id<MTLFunction> function;
     bool compiled = false;
     std::string error;
@@ -43,50 +44,43 @@ static void endDraws(Frame* f)
 }
 static void destroyDraws(Frame* f) { endDraws(f); delete f->draws; f->draws = nullptr; }
 
-Program* createProgram(Frame*, const ProgramDesc& desc)
+Program* createProgram(Frame* f, const ProgramDesc& desc)
 {
     mainThread("IDirect3DDevice9::CreateShader");
     auto* p = new Program;
     p->desc = desc; p->serial = ++programSerial;
+    p->library = internLibrary(f, desc);
+    p->desc.msl.clear(); p->desc.msl.shrink_to_fit();
     return p;
 }
-void destroyProgram(Program* p) { mainThread("IDirect3DShader9::Release"); delete p; }
+void destroyProgram(Program* p) { mainThread("IDirect3DShader9::Release"); releaseLibrary(p->library); delete p; }
+bool backgroundBuilds(Frame* f) { mainThread("IDirect3DDevice9::CreatePixelShader"); return prebuild(f)->background; }
 
 template<class T> static void keyAppend(std::string& k, const T& v) { k.append(reinterpret_cast<const char*>(&v), sizeof(v)); }
 
+// The program's entry function for a draw: its library is ready (compiled in the background), or
+// is compiled now, or another thread is compiling it and the draw waits.
 static bool compileProgram(Frame* f, Program* p)
 {
     if (p->compiled) return p->error.empty();
     p->compiled = true;
-    auto& cache = f->draws->libraries[p->desc.msl];
-    if (!cache) {
-        const std::string traced = bf2hitch::enabled() ? std::string(p->desc.vertex ? "vs " : "ps ") + std::to_string(p->desc.msl.size()) + " " + drawTraceLabel() : std::string();
+    Prebuild* pb = prebuild(f);
+    LibraryEntry& e = *p->library;
+    std::unique_lock<std::mutex> lock(pb->mutex);
+    if (e.state == BuildState::Queued || e.state == BuildState::Building) {
+        const bool queued = e.state == BuildState::Queued;
+        const std::string traced = bf2hitch::enabled() ? std::string(queued ? "" : "wait ") + (p->desc.vertex ? "vs " : "ps ") +
+            std::to_string(e.msl.size()) + " " + drawTraceLabel() : std::string();
         bf2hitch::Scope timed(bf2hitch::MetalLibrary, traced.c_str());
-        NSError* error = nil;
-        NSString* source = [[NSString alloc] initWithBytes:p->desc.msl.data() length:p->desc.msl.size() encoding:NSUTF8StringEncoding];
-        // [CHOSEN, not recovered] D3D9 multipass rendering relies on position invariance: two
-        // vertex shaders that compute the position with the same instructions give bit-identical
-        // depth, so a later pass with D3DCMP_LESSEQUAL/EQUAL hits the depth the first pass wrote
-        // (Hi_Terrain: ZFillLightmap writes depth, LowDiffuse/FullDetail test LESSEQUAL with
-        // ZWRITE off). Metal's fast-math compiler may contract the position math differently per
-        // shader, so the colour pass failed the depth test and the cleared target showed
-        // through (black terrain). Vertex positions are [[invariant]]
-        // (Shaders.inc patchMsl), which needs preserveInvariance.
-        static MTLCompileOptions* const options = [] {
-            MTLCompileOptions* o = [MTLCompileOptions new];
-            o.preserveInvariance = !std::getenv("BF2_METAL_NO_INVARIANCE"); // [TEMP] c-shadows A/B
-            return o;
-        }();
-        cache = source ? [f->device newLibraryWithSource:source options:options error:&error] : nil;
-        if (!cache) {
-            p->error = std::string("MSL compile failed: ") + (error ? error.localizedDescription.UTF8String : "invalid source");
-            f->draws->libraries.erase(p->desc.msl);
-            return false;
-        }
+        ++(queued ? pb->libraryNow : pb->libraryWaited);
+        e.used = true;
+        settleLibrary(pb, lock, e, true);
+    } else if (!e.used) {
+        e.used = true; ++pb->libraryReady;
+        bf2hitch::add(bf2hitch::MetalLibraryReady, 0);
     }
-    NSString* name = cache.functionNames.firstObject;
-    p->function = name ? [cache newFunctionWithName:name] : nil;
-    if (!p->function) { p->error = "MSL library has no entry point"; return false; }
+    if (e.state != BuildState::Ready) { p->error = e.error; return false; }
+    p->function = e.function;
     return true;
 }
 // D3D9 samples an unbound stage as opaque black; Metal requires a texture of the shader's type.
@@ -104,10 +98,9 @@ static id<MTLTexture> unboundTexture(Frame* f, unsigned kind)
         [t replaceRegion:MTLRegionMake3D(0, 0, 0, 1, 1, 1) mipmapLevel:0 slice:s withBytes:black bytesPerRow:4 bytesPerImage:4];
     return t;
 }
-static bool depthHasStencil(MTLPixelFormat f)
-{
-    return f == MTLPixelFormatDepth24Unorm_Stencil8 || f == MTLPixelFormatDepth32Float_Stencil8;
-}
+// The pipeline state of a draw. The per-device cache is keyed by the draw's own objects; a miss
+// describes the pipeline as a recipe (ShaderPrebuild.inc), which finds the state an equal pair of
+// programs already built, or builds it now.
 static id<MTLRenderPipelineState> pipeline(Frame* f, const DrawCall& c, std::string& error)
 {
     const MTLPixelFormat color = c.color->object.pixelFormat;
@@ -124,7 +117,16 @@ static id<MTLRenderPipelineState> pipeline(Frame* f, const DrawCall& c, std::str
     for (const auto& st : c.streams) keyAppend(key, st.stride);
     auto& cached = f->draws->pipelines[key];
     if (cached) return cached;
-    MTLVertexDescriptor* vd = [MTLVertexDescriptor vertexDescriptor];
+    PipelineRecipe r;
+    r.vs = c.vertex->library->hash;
+    if (writes) r.fs = c.fragment->library->hash;
+    r.color = unsigned(color); r.depth = unsigned(depth); r.samples = samples;
+    r.writeMask = writes ? s.colorMask : 0;
+    r.blend = writes && s.blend;
+    if (r.blend) {
+        const unsigned factors[6] = {s.srcRGB, s.dstRGB, s.srcAlpha, s.dstAlpha, s.blendRGB, s.blendAlpha};
+        std::memcpy(r.factors, factors, sizeof factors);
+    }
     for (const auto& in : c.vertex->desc.inputs) {
         const VertexElement* match = nullptr;
         for (const auto& e : c.layout->elements) if (e.usage == in.usage && e.index == in.index) { match = &e; break; }
@@ -138,34 +140,24 @@ static id<MTLRenderPipelineState> pipeline(Frame* f, const DrawCall& c, std::str
             error = "stream " + std::to_string(match->stream) + " stride " + std::to_string(stride) + " is not a positive multiple of 4";
             f->draws->pipelines.erase(key); return nil;
         }
-        auto* a = vd.attributes[in.reg];
-        a.format = vertexFormat(match->type); a.offset = match->offset; a.bufferIndex = match->stream + 1;
-        vd.layouts[match->stream + 1].stride = stride;
-        vd.layouts[match->stream + 1].stepFunction = MTLVertexStepFunctionPerVertex;
+        r.attributes.push_back({in.reg, unsigned(vertexFormat(match->type)), match->offset, match->stream});
+        bool listed = false;
+        for (const auto& st : r.strides) listed = listed || st.first == match->stream;
+        if (!listed) r.strides.push_back({match->stream, stride});
     }
-    MTLRenderPipelineDescriptor* d = [MTLRenderPipelineDescriptor new];
-    d.rasterSampleCount = samples;
-    d.vertexFunction = c.vertex->function;
-    d.fragmentFunction = writes ? c.fragment->function : nil;
-    d.vertexDescriptor = vd;
-    auto* a = d.colorAttachments[0];
-    a.pixelFormat = color;
-    a.writeMask = writes ? MTLColorWriteMask(s.colorMask) : MTLColorWriteMaskNone;
-    a.blendingEnabled = writes && s.blend;
-    if (a.blendingEnabled) {
-        a.sourceRGBBlendFactor = MTLBlendFactor(s.srcRGB); a.destinationRGBBlendFactor = MTLBlendFactor(s.dstRGB);
-        a.sourceAlphaBlendFactor = MTLBlendFactor(s.srcAlpha); a.destinationAlphaBlendFactor = MTLBlendFactor(s.dstAlpha);
-        a.rgbBlendOperation = MTLBlendOperation(s.blendRGB); a.alphaBlendOperation = MTLBlendOperation(s.blendAlpha);
+    // draw() compiled both programs (the fragment one only with colour writes).
+    Prebuild* pb = prebuild(f);
+    auto& shared = pb->pipelines[r.text()];
+    if (shared) {
+        ++pb->pipelineShared;
+        bf2hitch::add(bf2hitch::MetalPipelineReady, 0);
+    } else {
+        bf2hitch::Scope timed(bf2hitch::MetalPipeline, drawTraceLabel());
+        ++pb->pipelineNow;
+        shared = makePipeline(pb->device, r, c.vertex->function, writes ? c.fragment->function : nil, error);
+        if (!shared) { pb->pipelines.erase(r.text()); f->draws->pipelines.erase(key); return nil; }
     }
-    d.depthAttachmentPixelFormat = depth;
-    d.stencilAttachmentPixelFormat = depthHasStencil(depth) ? depth : MTLPixelFormatInvalid;
-    NSError* err = nil;
-    bf2hitch::Scope timed(bf2hitch::MetalPipeline, drawTraceLabel());
-    cached = [f->device newRenderPipelineStateWithDescriptor:d error:&err];
-    if (!cached) {
-        error = std::string("render pipeline: ") + (err ? err.localizedDescription.UTF8String : "unknown error");
-        f->draws->pipelines.erase(key); return nil;
-    }
+    cached = shared;
     return cached;
 }
 static id<MTLDepthStencilState> depthState(Frame* f, const DrawCall& c)
@@ -312,7 +304,8 @@ bool draw(Frame* f, const DrawCall& call, std::string& error)
     if (drop) { unmatched = call; unmatched.depth = nullptr; }
     const DrawCall& c = drop ? unmatched : call;
     if (!compileProgram(f, c.vertex)) { error = "vertex shader " + c.vertex->error; return false; }
-    if (c.fragment && !compileProgram(f, c.fragment)) { error = "pixel shader " + c.fragment->error; return false; }
+    // Without colour writes the pipeline has no fragment function (pipeline()), so none is compiled.
+    if (c.fragment && c.state.colorMask && !compileProgram(f, c.fragment)) { error = "pixel shader " + c.fragment->error; return false; }
     id<MTLRenderPipelineState> state = pipeline(f, c, error);
     if (!state) return false;
     id<MTLRenderCommandEncoder> e = passFor(f, c);

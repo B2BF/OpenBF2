@@ -417,6 +417,7 @@ public:
         mainThread("IDirect3DDevice9::Present");
         if (scene) return D3DERR_INVALIDCALL;
         flushDrawTrace();
+        bf2metal::createFinishedEffectShaders();
         const auto hr=bf2metal::presentParameters(pp.SwapEffect,source,dest,dirty,flags);
         if(FAILED(hr)) return hr;
         // Present never answers DEVICENOTRESET in D3D9 (TestCooperativeLevel does), and the

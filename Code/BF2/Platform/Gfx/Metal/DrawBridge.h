@@ -15,11 +15,16 @@ struct ProgramInput { unsigned reg, usage, index; };
 struct ProgramSampler { unsigned slot, kind; };
 struct ProgramDesc {
     bool vertex = true;
+    bool variant = false; // a pixel shader variant (Shaders.inc FragmentVariant), not the shader's own program
     std::string msl;
     std::vector<ProgramInput> inputs;
     std::vector<ProgramSampler> samplers;
 };
 Program* createProgram(Frame*, const ProgramDesc&);
+// [CHOSEN, not recovered] Shader builds ahead of the first draw (ShaderPrebuild.inc). A pixel shader
+// is drawn through variants of its program (Shaders.inc FragmentVariant) that depend on the draw's
+// state. backgroundBuilds: programs created now are compiled ahead of their first draw.
+bool backgroundBuilds(Frame*);
 // One D3D9 occlusion query: the visibility-result slots its draws counted into (one per render
 // pass it spanned). Draws carry it while the query is between Issue(BEGIN) and Issue(END).
 struct Occlusion;
