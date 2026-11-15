@@ -389,10 +389,13 @@ float* RenderView::getViewport() { return &m_viewportX; }
 // PE 0x101C24B0
 void RenderView::setAdjustedFov(float radians)
 {
+    // [CHOSEN, not recovered] Extend the wide-screen cap to 2560:1080 (issue #33),
+    // following marekzajac97/BF2-HUD-fix. Keep the existing narrow-screen behavior.
+    constexpr float wideAspect = 2560.0f / 1080.0f;
 #if defined(_WIN32)
     float scale;
-    if (m_aspect <= 0.5625f)
-        scale = 1.7777778f;
+    if (m_aspect <= 1.0f / wideAspect)
+        scale = wideAspect;
     else if (m_aspect >= 0.80000001f)
         scale = 1.3333334f;
     else {
@@ -417,8 +420,8 @@ void RenderView::setAdjustedFov(float radians)
 #else
 // [CHOSEN, not recovered] Preserve the S2.1 POSIX numeric arm (docs/macos-port.md).
     float scale;
-    if (m_aspect <= 0.5625f)
-        scale = 1.7777778f;
+    if (m_aspect <= 1.0f / wideAspect)
+        scale = wideAspect;
     else if (m_aspect >= 0.80000001f)
         scale = 1.3333334f;
     else {

@@ -1,5 +1,6 @@
 // Transform-node state updates and metadata; unsupported Node suffix calls retain diagnostic stops.
 #include "TransformNode.h"
+#include "TransformLayout.h"
 #if !defined(_MSC_VER) || !defined(_M_IX86)
 #include "../../Math/PortableX87.h"
 #endif
@@ -10,6 +11,15 @@
 #include "System.h"
 #include "TypeDescriptor.h"
 namespace dice { namespace meme {
+// [CHOSEN, not recovered] Issue #33: clients may supply a layout policy for their own System.
+TransformBoundsFilter transformBoundsFilter = nullptr;
+Rect layoutTransformBounds(System* system, Node* node, const Rect& parent,
+                           const hfe::Vec2& position, const hfe::Vec2& size)
+{
+    Rect result = {parent.x + position.x, parent.y + position.y, size.x, size.y, parent.z};
+    if (transformBoundsFilter) transformBoundsFilter(system, node, result);
+    return result;
+}
 namespace {
 // [INFERRED] descriptor class name. Table94AE90 is a complete eight-slot
 // interface; its independent counterA398D4 is not adjusted by construction.
@@ -145,16 +155,14 @@ bool TransformNode::streamProperties(System* system, Stream* stream)
 void TransformNode::visitChildren(System* system, NodeState* state,
                                  const Rect* bounds, NodeVisitor* visitor)
 {
-    const Rect transformed = {bounds->x + m_position.x, bounds->y + m_position.y,
-        m_size.x, m_size.y, bounds->z};
+    const Rect transformed = layoutTransformBounds(system, this, *bounds, m_position, m_size);
     visitor->traverse0x08(system, m_child, &transformed, &m_state);
     visitor->visit(system, m_next, bounds, state);
 }
 void TransformNode::paint(System* system, const NodeState* state, const Rect* bounds,
                           const Rect* clip, RenderContext* context)
 {
-    const Rect transformed = {bounds->x + m_position.x, bounds->y + m_position.y,
-        m_size.x, m_size.y, bounds->z};
+    const Rect transformed = layoutTransformBounds(system, this, *bounds, m_position, m_size);
     paintSelf(system, state, &transformed, clip, context);
     if (m_child) {
         if (context->effect) {
@@ -169,8 +177,7 @@ void TransformNode::paint(System* system, const NodeState* state, const Rect* bo
 bool TransformNode::update(System* system, const NodeState* state,
                            const Rect* bounds, float delta)
 {
-    const Rect transformed = {bounds->x + m_position.x, bounds->y + m_position.y,
-        m_size.x, m_size.y, bounds->z};
+    const Rect transformed = layoutTransformBounds(system, this, *bounds, m_position, m_size);
     bool inside = false;
     if (state->target < 0.0f) {
         const float* position = system->getPointerPosition();

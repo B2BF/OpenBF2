@@ -743,7 +743,7 @@ public:
     unsigned char  m_water3D;               // +0x728  0; setupWater: 1 for the 3D water styles
     unsigned char  m_pad729[3];
     float          m_waterCullHeightOffset; // +0x72C  0; drawWaterGrid: a cell is skipped when sea + this lies below the patch's minimum height [INFERRED]
-    int            m_waterObjectRingCursor; // +0x730  0; drawWaterGrid resets it, drawWaterCell takes ring entry cursor++ (no bound, as shipped)
+    int            m_waterObjectRingCursor; // +0x730  0; drawWaterGrid resets it, drawWaterCell takes ring entry cursor++ up to 256 (issue #33)
     unsigned char* m_waterObjectRing;       // +0x734  0; drawWaterCell: 256 RaObjectParameters behind a count word (kWaterObjectRingHeader bytes)
     float          m_waterAlphaHeightMul;   // +0x738  0; applyFrameConstants: WaterColor.w = (20 - camera.y + sea) * 0.05 * this + m_waterAlphaAdd
     float          m_waterAlphaAdd;         // +0x73C  0.32f

@@ -1413,6 +1413,8 @@ cl %FLAGS0% "%~dp0..\BF2\Menu\BfListBoxData.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS0% "%~dp0..\BF2\Menu\Ref2System.cpp"
 if errorlevel 1 set /a RC+=1
+cl %FLAGS0% "%~dp0..\BF2\Menu\HudWidescreen.cpp"
+if errorlevel 1 set /a RC+=1
 cl %FLAGS0% "%~dp0..\BF2\Menu\Font.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS0% "%~dp0..\BF2\Menu\DifFontMetadata.cpp"

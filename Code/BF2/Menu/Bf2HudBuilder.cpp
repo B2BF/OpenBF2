@@ -1,5 +1,6 @@
 // Builds HUD nodes and binds their properties to game data. Some Node descriptor operations remain unresolved.
 #include "Bf2HudBuilder.h"
+#include "HudWidescreen.h"
 #if !DEDICATED
 #include "Bf2SplitNode.h"
 #include "Bf2CullNode.h"
@@ -163,6 +164,12 @@ void Bf2HudBuilder::setSystem(meme::System* system)
 // allocation. The allocation-null arm still calls registerNode with null.
 bool Bf2HudBuilder::createSplitNode(std::string parent, std::string name)
 {
+    // [CHOSEN, not recovered] Issue #33: named edge groups need a movable transform.
+    if (widescreen::enabled(m_system)) {
+        if (const char* replacement = widescreen::parentFor(name)) parent = replacement;
+        if (widescreen::makeMovable(name))
+            return createTransformNode(parent, name, 0, 0, 800, 600);
+    }
     if (findNodePredecessor(parent, name)) {
         Debug(DebugTypeError, builderSource, 667, "")
             << "Node: " << name << ", already exists!!";
@@ -194,6 +201,8 @@ bool Bf2HudBuilder::createMapNode(std::string parent, std::string name)
 bool Bf2HudBuilder::createPictureNode(std::string parent, std::string name,
                                      int x, int y, int width, int height)
 {
+    if (widescreen::enabled(m_system))
+        if (const char* replacement = widescreen::parentFor(name)) parent = replacement;
     if (findNodePredecessor(parent, name)) {
         Debug(DebugTypeError, builderSource, 1091, "")
             << "Node: " << name << ", already exists!!";
@@ -1309,10 +1318,19 @@ bool Bf2HudBuilder::setTileNodeOptions(int count, int thickness, int horizontal)
 bool Bf2HudBuilder::createTransformNode(std::string parent, std::string name,
                                        int x, int y, int width, int height)
 {
+    if (widescreen::enabled(m_system))
+        if (const char* replacement = widescreen::parentFor(name)) parent = replacement;
     if (findNodePredecessor(parent, name)) {
         Debug(DebugTypeError, builderSource, 655, "")
             << "Node: " << name << ", already exists!!";
         return false;
+    }
+    // [CHOSEN, not recovered] BF2-HUD-fix creates these siblings at the vanilla Chat anchor.
+    // Keep all authored geometry intact; the bounds policy applies offsets at traversal time.
+    if (widescreen::enabled(m_system) && name == "Chat") {
+        if (!createTransformNode(parent, "IngameHudLeft", x, y, width, height)
+            || !createTransformNode(parent, "IngameHudRight", x, y, width, height))
+            return false;
     }
     void* allocation = ::operator new(sizeof(meme::Bf2TransformNode));
     meme::Bf2TransformNode* transform = allocation

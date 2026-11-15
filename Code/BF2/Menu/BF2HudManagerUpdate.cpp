@@ -132,6 +132,8 @@ std::string requestInUseMessage(int type)
 bool BF2HudManager::update(float delta, world::IPlayer* player, Vec3 direction)
 {
     if (menuLogic) return false;
+    // [CHOSEN, not recovered] Issue #33: map/crosshair updates see the current projection.
+    if (ref2System) ref2System->refreshHudLayout();
     // Retail maps m_field15c to the Falcon's mouse mode here (ds:0x978FC4); it is archived with the
     // device (Code/Archive/NovintFalcon).
 

@@ -1,5 +1,6 @@
 // HUD map rendering, interaction and event handling.
 #include "Bf2MenuMapNode.h"
+#include "HudWidescreen.h"
 #include <list>
 #if !DEDICATED
 #include "../Game/IGameLogic.h"
@@ -6022,7 +6023,11 @@ void Bf2MenuMapNode::update(float delta)
         // the offsets are half an 800x600 screen. getPosition()/getSize() are re-called at
         // every step rather than cached, as shipped.
         easeToward(getPosition().y, m_field780.y + 300.0f, 0.1f, delta, -6.0f, false);
-        easeToward(getPosition().x, m_field780.x + 400.0f, 0.1f, delta, -6.0f, false);
+        // [CHOSEN, not recovered] Issue #33: move only the collapsed map to the right edge.
+        // Its authored reset position stays unchanged across resolution/mode switches.
+        easeToward(getPosition().x, m_field780.x + 400.0f
+            + (m_expandedMap ? 0.0f : hfe::hud::widescreen::edgeOffset(m_system)),
+            0.1f, delta, -6.0f, false);
         easeToward(getSize().y,     m_field778.y,          0.1f, delta, -6.0f, false);
         easeToward(getSize().x,     m_field778.x,          0.1f, delta, -6.0f, false);
 

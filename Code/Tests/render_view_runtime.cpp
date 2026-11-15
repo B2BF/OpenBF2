@@ -140,7 +140,9 @@ static void viewRuntime() {
     v->setOrthoHeight(nan); CHECK(std::isnan(v->getOrthoHeight()) && v->getProjectionMatrixPtr()->m[0]!=123);
     v->setOrthoWidth(20); v->setOrthoHeight(10);
 
-    v->setAspect(0.5f); v->setAdjustedFov(1); CHECK(near(v->getFov(),0.8888889f));
+    v->setAspect(0.28125f); v->setAdjustedFov(1); CHECK(near(v->getFov(),0.6666667f));
+    v->setAspect(0.421875f); v->setAdjustedFov(1); CHECK(near(v->getFov(),1));
+    v->setAspect(0.5f); v->setAdjustedFov(1); CHECK(v->getFov()==1);
     v->setAspect(0.5625f); v->setAdjustedFov(1); CHECK(near(v->getFov(),1));
     v->setAspect(0.6f); v->setAdjustedFov(1); CHECK(v->getFov()==1);
     v->setAspect(0.8f); v->setAdjustedFov(1); CHECK(near(v->getFov(),1.0666667f));

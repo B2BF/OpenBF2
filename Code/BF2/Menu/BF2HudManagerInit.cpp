@@ -4,6 +4,7 @@
 #if !DEDICATED
 #include "HudVoip.h"
 #include "Ref2System.h"
+#include "HudWidescreen.h"
 #include "Bf2HudBuilder.h"
 #include "BfListBoxData.h"
 #include "BfEditData.h"
@@ -60,6 +61,8 @@ bool BF2HudManager::init()
         Debug(DEBUGTYPE_6, "C:\\dice\\Projects\\BF2Branches\\Patch_1_50\\Code\\BF2\\Menu\\BF2HudManager.cpp", 918, "") << "BF2HudManager init fails";
         return false;
     }
+    // [CHOSEN, not recovered] Issue #33: attach only the in-game HUD, before its scripts run.
+    widescreen::attach(ref2System);
     runHudScript("Menu/Atlas/AtlasList.con");
     if (m_field33c.empty()) addTextureAtlas("MemeAtlas.tai");
 
