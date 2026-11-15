@@ -8,8 +8,11 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <memory>
+#include <mutex>
 #include <set>
 #include <sstream>
+#include <unordered_map>
 #include <fcntl.h>
 #include <sys/file.h>
 #include <unistd.h>
@@ -80,6 +83,35 @@ static bool includeOperand(const std::string& line,std::string& operand) {
     operand=line.substr(i,end-i);
     return operand.find('\r')==std::string::npos && operand.find('\n')==std::string::npos;
 }
+// One #include directive of a file: its kind and name, or the error capture() reports at that line
+// (the last entry then).
+struct Directive { uint32_t kind=0; std::string name,error; };
+// The #include directives of a file, by the SHA-256 of its bytes: a pure function of them, kept for
+// the process because nearly every effect request includes the same few files again.
+static std::shared_ptr<const std::vector<Directive>> directives(const std::string& hash,const Bytes& bytes) {
+    static std::mutex mutex;
+    static std::unordered_map<std::string,std::shared_ptr<const std::vector<Directive>>> memo;
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        auto it=memo.find(hash); if(it!=memo.end()) return it->second;
+    }
+    auto list=std::make_shared<std::vector<Directive>>();
+    std::istringstream lines(stripComments(bytes)); std::string line,operand;
+    while(std::getline(lines,line)) if(includeOperand(line,operand)) {
+        Directive d;
+        if(operand.size()<2 || (operand[0]!='"' && operand[0]!='<')) d.error="BF2FX_UNSUPPORTED_MACRO_INCLUDE: "+operand;
+        else {
+            char end=operand[0]=='"'?'"':'>'; auto endpos=operand.find(end,1);
+            if(endpos==std::string::npos || operand.find_first_not_of(" \t\r",endpos+1)!=std::string::npos)
+                d.error="Invalid literal include";
+            else { d.kind=operand[0]=='<'?1:0; d.name=operand.substr(1,endpos-1); }
+        }
+        list->push_back(d);
+        if(!d.error.empty()) break;
+    }
+    std::lock_guard<std::mutex> lock(mutex);
+    return memo.emplace(hash,std::move(list)).first->second;
+}
 Result capture(const void* source,size_t size,const std::vector<Define>& defines,uint32_t flags,
                const std::string& dllHash,const std::string& translator,IncludeResolver* resolver,Request& out) {
     try {
@@ -95,15 +127,10 @@ Result capture(const void* source,size_t size,const std::vector<Define>& defines
         visit=[&](const Bytes& bytes,const void* parent,uint32_t id) {
             if(ancestors.size()>64 || r.includes.size()>8192) throw std::runtime_error("Include closure limit");
             auto hash=sha256(bytes); if(!ancestors.insert(hash).second) return;
-            std::istringstream lines(stripComments(bytes)); std::string line;
-            std::string operand;
-            while(std::getline(lines,line)) if(includeOperand(line,operand)) {
-                if(operand.size()<2 || (operand[0]!='"' && operand[0]!='<'))
-                    throw std::runtime_error("BF2FX_UNSUPPORTED_MACRO_INCLUDE: "+operand);
-                char end=operand[0]=='"'?'"':'>'; auto endpos=operand.find(end,1);
-                if(endpos==std::string::npos || operand.find_first_not_of(" \t\r",endpos+1)!=std::string::npos)
-                    throw std::runtime_error("Invalid literal include");
-                Include inc; inc.parent=id;inc.kind=operand[0]=='<'?1:0;inc.name=operand.substr(1,endpos-1);
+            const auto list=directives(hash,bytes);
+            for(const Directive& d:*list) {
+                if(!d.error.empty()) throw std::runtime_error(d.error);
+                Include inc; inc.parent=id;inc.kind=d.kind;inc.name=d.name;
                 const void* data=nullptr; size_t n=0;
                 bool opened=resolver && resolver->open(inc.kind,inc.name,parent,data,n);
                 try {
