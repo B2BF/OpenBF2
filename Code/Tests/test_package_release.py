@@ -205,10 +205,14 @@ class PackageReleaseTests(unittest.TestCase):
                     with zipfile.ZipFile(self.args.output_dir / (name + ".zip")) as archive:
                         readme = archive.read(name + "/README.txt").decode()
                         metadata = json.loads(archive.read(name + "/build-info.json"))
-                    self.assertEqual(metadata["macos_signing"], signing)
-                    notarized = signing == "developer-id"
+                    # Release CI notarizes only the client; a Developer ID server stays un-notarized.
+                    notarized = signing == "developer-id" and role == "client"
+                    expected = signing
+                    if signing == "developer-id" and role == "server":
+                        expected = "developer-id-not-notarized"
+                    self.assertEqual(metadata["macos_signing"], expected)
                     self.assertEqual("this archive is notarized" in readme, notarized)
-                    self.assertEqual("ad-hoc signed, not notarized" in readme, not notarized)
+                    self.assertEqual("ad-hoc signed, not notarized" in readme, signing == "adhoc")
                     self.assertEqual("xattr -dr com.apple.quarantine ." in readme, not notarized)
 
 
