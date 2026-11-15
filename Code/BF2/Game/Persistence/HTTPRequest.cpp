@@ -147,7 +147,8 @@ bool HTTPRequest::validateUrlNotSpoofed(std::string host) const
 {
     // [PLATFORM] ELF 0x82BE8A0 returns true. BF2.exe 0x59C670 and bf2_w32ded.exe 0x561500 scan
     // the hosts file and emit a type-7 diagnostic (which ends the process) for a line that names
-    // the host without an address in 212.77.171.x; they return true.
+    // the host without an address in 212.77.171.x; they return true. Recovered but not called:
+    // see getGameSpyUrl.
 #if defined(_WIN32)
     char path[260] = {};
     GetSystemDirectoryA(path, 260);
@@ -177,15 +178,14 @@ std::string HTTPRequest::getGameSpyUrl() const
     // 0x82BE800).
     // The ELF this file was first read from had BF2Web.game.bf2.us in the same two places.
     // [CHOSEN, not recovered] The domain is onlineProvider's: gamespy.com unless +gamespy
-    // replaced it. The hosts-file check accepts only GameSpy's own address block and ends the
-    // process otherwise (Debug type 7), so it runs for the retail domain only: a user who names
-    // another provider may also name its hosts in the hosts file.
+    // replaced it. The validateUrlNotSpoofed call is skipped on every platform: retail's Windows
+    // hosts-file check (BF2.exe 0x59C670, bf2_w32ded.exe 0x561500) accepts only GameSpy's own
+    // address block 212.77.171.x and otherwise ends the process (Debug type 7), and the hosts file
+    // is a normal way to point these names at a replacement service.
     std::string url(onlineProvider::statsWebUrl());
-    if (!onlineProvider::isOverridden())
-        validateUrlNotSpoofed(onlineProvider::statsWebHost());
     // [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: local-stats-fixture]
-    // BF2_STATS_URL overrides persistence URLs for local fixtures after validating the
-    // original URL. Inactive when unset; announces activation once on stderr.
+    // BF2_STATS_URL overrides persistence URLs for local fixtures. Inactive when unset; announces
+    // activation once on stderr.
     if (const char* fixture = std::getenv("BF2_STATS_URL"))
     {
         if (*fixture)

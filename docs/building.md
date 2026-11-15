@@ -561,8 +561,9 @@ servers) replaces the domain for all services of a provider that serves the same
 The value must be a domain name; an address or an unusable value ends start-up with a
 message. The option is read from the command line only, and a client that restarts itself
 to change mods passes it on. At start-up each image prints one line to stderr that names
-the host of every service (`online services: domain ...`). Retail's hosts-file check for
-`BF2Web.gamespy.com` (Windows) runs for the retail domain only. The implementation is in
+the host of every service (`online services: domain ...`). Retail's Windows hosts-file check
+for `BF2Web.gamespy.com`, which ended the game when the hosts file named that host, is skipped,
+so the hosts file can point the names at a replacement service. The implementation is in
 `Code/BF2/Game/MatchMaking/OnlineProvider.h`.
 
 Connections to the server list, the presence managers and the stats web service give up after
