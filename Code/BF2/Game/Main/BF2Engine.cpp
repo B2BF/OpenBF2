@@ -753,6 +753,11 @@ BF2Engine::BF2Engine(BF2* bf2Ptr)
 #endif
 }
 
+// [CHOSEN, not recovered] True only while init parses the process command line. Client images
+// parse again later (menu event 5, SwiffHost::setCommandLineFile), and that text can come from menu
+// content; the online provider must only ever be chosen by the user's own process arguments.
+static bool s_parsingProcessArguments = false;
+
 bool BF2Engine::init(const std::string& commandLine)
 {
     bf2Log = new BF2Log();                              // operator new(0x20) == 32 bytes
@@ -760,7 +765,10 @@ bool BF2Engine::init(const std::string& commandLine)
     ISettingsRepostitory::createSingleton();
     initDefaultSettings();
 
-    if (!parseParameters(commandLine))
+    s_parsingProcessArguments = true;
+    const bool parsed = parseParameters(commandLine);
+    s_parsingProcessArguments = false;
+    if (!parsed)
         return false;
 
 #if !DEDICATED
@@ -1387,6 +1395,13 @@ bool BF2Engine::parseParameters(const std::string& commandLine)
                             // be used ends start-up like +help does; continuing would send logins
                             // and heartbeats to a domain the user did not ask for.
                 {
+                    if (!s_parsingProcessArguments)
+                    {
+                        // A later parse (menu-supplied command line) never changes the provider.
+                        std::fprintf(stderr, "+gamespy: ignored outside the process command line\n");
+                        std::fflush(stderr);
+                        break;
+                    }
                     std::string error;
                     if (!onlineProvider::setDomain(value, error))
                     {
@@ -1409,9 +1424,12 @@ bool BF2Engine::parseParameters(const std::string& commandLine)
     // [CHOSEN, not recovered] Not in retail: give the GameSpy SDK the service names of the domain
     // +gamespy selected (nothing to do for the retail domain), before any service starts, and
     // report the names in use once. This runs before the status monitor takes the terminal.
-    onlineProvider::prepareGameSpySdk();
-    std::fprintf(stderr, "%s\n", onlineProvider::describe(DEDICATED == 0).c_str());
-    std::fflush(stderr);
+    if (s_parsingProcessArguments)
+    {
+        onlineProvider::prepareGameSpySdk();
+        std::fprintf(stderr, "%s\n", onlineProvider::describe(DEDICATED == 0).c_str());
+        std::fflush(stderr);
+    }
 
     // Default missing config paths under GSModDirectory. Command-line maxPlayers and
     // gameMode also set their GSCommandLine counterparts to preserve precedence.
