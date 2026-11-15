@@ -14,6 +14,7 @@ contribution workflow and validation requirements.
 | Recovery prerequisites, contribution rules and validation | [Development guide](development.md) |
 | Editor console commands and script undo | [Editor console guide](editor-console.md) |
 | macOS port status, port rules and the client/Metal frontier | [macOS port](macos-port.md) |
+| CD keys without the registry: `Registry.con` and the Windows `Registry.dat` contract | [Client registry file](registry-file.md) |
 
 ## macOS port
 

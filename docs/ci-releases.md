@@ -211,6 +211,8 @@ client uses none of the game folder's 32-bit DLLs. It needs the 64-bit `d3dx9_25
 from the DirectX End-User Runtime ([Native x64 client](building.md#native-x64-client)). Sound
 uses the packaged `BF2OpenAL.dll` (OpenAL Soft, see above). The x64 client has no
 PunkBuster: for servers that require it, use the x86 client.
+Both clients read CD keys from the retail registry (all-users installs) or from a per-user
+`%LOCALAPPDATA%\OpenBF2\Registry.dat` ([client registry file](registry-file.md)).
 This setup was checked against the code, without a runtime test here.
 
 ### macOS client and server (arm64 and x86_64)

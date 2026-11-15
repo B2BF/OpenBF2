@@ -111,6 +111,8 @@ def installation(platform, role, name, executable, macos_signing="adhoc"):
                      "   the bundled BF2OpenAL.dll (OpenAL Soft; see OpenAL-Soft-NOTICE.txt), not\n"
                      "   the game folder's retail copy: BF2.exe runs from this package's folder,\n"
                      "   and Windows searches the application folder first.\n"
+                     "   CD keys: the retail registry, or a per-user\n"
+                     "   %LOCALAPPDATA%\\OpenBF2\\Registry.dat (docs/registry-file.md).\n"
                      "   Checked against the code; not runtime-tested here.\n")
         elif role.startswith("client"):
             text += ("   This x64 client does not use the game folder's 32-bit DLLs. It needs the\n"
@@ -120,6 +122,8 @@ def installation(platform, role, name, executable, macos_signing="adhoc"):
                      "   No PunkBuster: PunkBuster exists only as 32-bit DLLs, so this x64\n"
                      "   client cannot join servers that require PunkBuster. Use the x86\n"
                      "   client for those.\n"
+                     "   CD keys: the retail registry, or a per-user\n"
+                     "   %LOCALAPPDATA%\\OpenBF2\\Registry.dat (docs/registry-file.md).\n"
                      "   Checked against the code; not runtime-tested here.\n")
     else:
         macos = platform.startswith("macos-")

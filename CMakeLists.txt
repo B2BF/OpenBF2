@@ -2787,6 +2787,25 @@ if(BUILD_TESTING AND MSVC)
     target_compile_options(bf2_runtime_pair PRIVATE /Gy)
     target_link_options(bf2_runtime_pair PRIVATE /OPT:REF)
 
+    # [CHOSEN, not recovered] The client's Registry.dat (docs/registry-file.md): fake CD keys
+    # round-trip through CryptProtectData and the production reader, and through the dev script.
+    # A client image (DEDICATED=0), so it is not a bf2_add_check.
+    add_executable(bf2_registry_dat_check EXCLUDE_FROM_ALL
+        "${BF2_STUB_ROOT}/registry_dat_check.cpp"
+        "${BF2_ROOT}/Core/Registry.cpp"
+    )
+    target_compile_features(bf2_registry_dat_check PRIVATE cxx_std_14)
+    target_compile_options(bf2_registry_dat_check PRIVATE /EHsc /O2 /permissive)
+    bf2_use_static_msvc_runtime(bf2_registry_dat_check)
+    bf2_set_image(bf2_registry_dat_check 0)
+    set_property(TARGET bf2_registry_dat_check PROPERTY FOLDER "Checks")
+    add_test(NAME bf2_registry_dat_check COMMAND $<TARGET_FILE:bf2_registry_dat_check>)
+    add_test(NAME bf2_registry_dat_script
+        COMMAND powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command
+            "& '${CMAKE_CURRENT_SOURCE_DIR}/tools/windows/new-registry-dat.ps1' -CdKey FAKE-SCRIPT-0000-1111 -Path '${CMAKE_BINARY_DIR}/registry_dat_script/Registry.dat'; if (-not $?) { exit 1 }; & '$<TARGET_FILE:bf2_registry_dat_check>' '${CMAKE_BINARY_DIR}/registry_dat_script/Registry.dat' FAKE-SCRIPT-0000-1111; exit $LASTEXITCODE"
+    )
+    set_tests_properties(bf2_registry_dat_check bf2_registry_dat_script PROPERTIES RUN_SERIAL TRUE)
+
     add_custom_target(bf2_run_checks
         COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure -C $<CONFIG>
         DEPENDS
@@ -2795,6 +2814,7 @@ if(BUILD_TESTING AND MSVC)
             bf2_bundle_template_core
             bf2_bundle_serialization
             bf2_runtime_pair
+            bf2_registry_dat_check
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
         USES_TERMINAL
         VERBATIM

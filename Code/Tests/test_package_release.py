@@ -207,6 +207,8 @@ class PackageReleaseTests(unittest.TestCase):
                         self.assertIn('"C:\\OpenBF2\\{}\\{}"'.format(name, runtime[0]), readme)
                         self.assertIn("Start in", readme)
                         self.assertIn("No original EXE or DLL is replaced", readme)
+                        if role == "client":
+                            self.assertIn(r"%LOCALAPPDATA%\OpenBF2\Registry.dat", readme)
                         if role == "client" and platform == "windows-x86":
                             for entry in ("binkw32.dll", "d3dx9_25.dll", "bundled BF2OpenAL.dll",
                                           "OpenAL-Soft-NOTICE.txt", "application folder first", "pb\\",
