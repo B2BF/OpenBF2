@@ -517,6 +517,8 @@ PresentCapture* presentCaptureBegin(Frame* f)
 void presentCaptureWrite(PresentCapture* c, id<MTLCommandBuffer> done)
 {
     if(!c) return;
+    // Owned before the trace scope, so the scope (which reads the label) ends first.
+    const std::unique_ptr<PresentCapture> owned(c);
     bf2hitch::Scope timed(bf2hitch::Capture, c->label);
     if(done) [done waitUntilCompleted];
     const char* dir=std::getenv("BF2_PRESENT_PNG");
@@ -534,7 +536,6 @@ void presentCaptureWrite(PresentCapture* c, id<MTLCommandBuffer> done)
     else std::snprintf(path,sizeof(path),"%s/present_%05u.png",dir,c->index);
     const bool ok=png && [png writeToFile:[NSString stringWithUTF8String:path] atomically:YES];
     std::fprintf(stderr,"[TEMP] BF2_PRESENT_PNG: %s %s (%ux%u)\n",ok?"wrote":"FAILED to write",path,c->width,c->height);
-    delete c;
 }
 }
 PresentResult present(Frame* f,void* window,bool doNotWait)
