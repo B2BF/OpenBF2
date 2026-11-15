@@ -542,7 +542,7 @@ Every image forms the GameSpy service names as retail does, with `gamespy.com` a
 domain. Those services no longer exist, so an unconfigured client or server finds no online
 service. When the names do not resolve, logins report the connection failure, the internet
 server list stays empty, LAN play is unaffected, and a server with `sv.internet 1` stops at
-start-up with retail's fatal "cannot communicate with the required internet backends"
+start-up with the fatal "cannot communicate with the required internet backends"
 diagnostic.
 
 `+gamespy <domain>` (`[CHOSEN, not recovered]`, option id 75, client and dedicated
