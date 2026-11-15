@@ -14,8 +14,8 @@ it does not recover or change engine behavior, ABI, protocols, or file formats.
 
 | Runner | Configuration | Targets and checks |
 | --- | --- | --- |
-| Windows 2022, MSVC x86 | `msvc-x86` / `Reconstruction` | Python interpreter check; `bf2_run_checks`; `bf2_editor_run_checks`; `bf2_w32ded`; `bf2_aidll`; with a usable D3DX source: `bf2_editor` and plugins (compiling the x86 client object set) |
-| Windows 2022, MSVC x64 | `msvc-x64` / `Release` | Python interpreter check; strict `bf2_w64ded` and `bf2_aidll` links; AI export listing and staged-copy comparison; with a usable D3DX source: `bf2_client` and plugins |
+| Windows 2022, MSVC x86 | `msvc-x86` / `Reconstruction` | Python interpreter check; `bf2_run_checks`; `bf2_editor_run_checks`; `bf2_w32ded`; `bf2_aidll`; with a usable D3DX source: `bf2_editor` and plugins (compiling the x86 client object set), then `dumpbin /dependents /imports` of `BF2Editor.exe`, `RendDX9.dll` and `TextureAtlasBuilder.dll` in the log |
+| Windows 2022, MSVC x64 | `msvc-x64` / `Release` | Python interpreter check; strict `bf2_w64ded` and `bf2_aidll` links; AI export listing and staged-copy comparison; with a usable D3DX source: `bf2_client` and plugins, then `dumpbin /dependents /imports` of `BF2.exe`, `RendDX9.dll` and `TextureAtlasBuilder.dll` in the log |
 | Ubuntu 22.04, GCC x64 | `linux-x64` / `RelWithDebInfo` | Strict `bf2` link; `dice_py_check_run` |
 
 Windows builds initialize MSVC through the repository's `vsdevcmd.cmd`. They build
@@ -34,6 +34,8 @@ and packages only its server. Otherwise it builds and packages those images.
 target stays buildable locally as the retail-fidelity reference, but CI neither builds nor
 packages it. The x86 editor links the same client object set, so those objects still
 compile in the x86 job. An x64 editor package is a future goal.
+
+The import listing fails the job if any of those images imports `NovintHFX.dll`.
 
 Each hosted job has its own checkout. Compilation uses two parallel jobs to limit memory usage. CI does not run a game server,
 client or editor, and does not exercise gameplay. The Python fixture uses an ephemeral

@@ -108,6 +108,24 @@ jobs:
           if errorlevel 1 exit /b 1
           cmake --build out/build/ci-x86 --target bf2_editor
 
+      # The real import lists of the packaged client (x64) and editor (x86) images, for the job log.
+      # No image may import NovintHFX.dll (the Falcon is archived, Code/Archive/NovintFalcon).
+      - name: List the ${{ matrix.arch }} image imports
+        if: steps.dxsdk.outputs.found == 'true'
+        run: |
+          call Code\Build\vsdevcmd.cmd ${{ matrix.arch }}
+          if errorlevel 1 exit /b 1
+          set "BIN=out\build\ci-${{ matrix.arch }}\bin_${{ matrix.arch == 'x64' && 'client' || 'editor' }}"
+          set "EXE=${{ matrix.arch == 'x64' && 'BF2.exe' || 'BF2Editor.exe' }}"
+          for %%I in ("%BIN%\%EXE%" "%BIN%\RendDX9.dll" "%BIN%\TextureAtlasBuilder.dll") do (
+            echo ===== %%~nxI
+            dumpbin /nologo /dependents /imports %%I > "%%~dpnI.imports.txt"
+            if errorlevel 1 exit /b 1
+            type "%%~dpnI.imports.txt"
+            findstr /i /c:"NovintHFX" "%%~dpnI.imports.txt" >nul && (echo ::error title=NovintHFX import::%%~nxI imports NovintHFX.dll& exit /b 1)
+          )
+          exit /b 0
+
       # Future Windows signing belongs here, before packaging and checksums.
       # No signing credentials or signing step are configured yet.
       - name: Check packaging fixtures
