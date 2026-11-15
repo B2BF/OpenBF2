@@ -7,6 +7,8 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -252,6 +254,7 @@ class PackageReleaseTests(unittest.TestCase):
 
     def test_macos_signing_notes(self):
         # Release CI packages Developer ID signed binaries; every other run packages ad-hoc ones.
+        # The per-architecture ZIPs are CI artifacts and never notarized (the release ships the DMG).
         for signing in ("adhoc", "developer-id"):
             self.args.platform = "macos-arm64"
             self.args.macos_signing = signing
@@ -265,10 +268,295 @@ class PackageReleaseTests(unittest.TestCase):
                         readme = archive.read(name + "/README.txt").decode()
                         metadata = json.loads(archive.read(name + "/build-info.json"))
                     self.assertEqual(metadata["macos_signing"], signing)
-                    notarized = signing == "developer-id"
-                    self.assertEqual("this archive is notarized" in readme, notarized)
-                    self.assertEqual("ad-hoc signed, not notarized" in readme, not notarized)
-                    self.assertEqual("xattr -dr com.apple.quarantine ." in readme, not notarized)
+                    developer_id = signing == "developer-id"
+                    self.assertEqual("signed with a Developer ID" in readme, developer_id)
+                    self.assertEqual("ad-hoc signed" in readme, not developer_id)
+                    self.assertIn("CI artifact and not notarized", readme)
+                    self.assertIn("openbf2-macos.dmg", readme)
+                    self.assertNotIn("this archive is notarized", readme)
+                    self.assertIn("xattr -dr com.apple.quarantine .", readme)
+
+
+WINDOWS_RUNTIME = {
+    "x64": {"BF2.exe", "dice_py.dll", "RendDX9.dll", "SwiffPlayer.dll", "BF2Audio.dll",
+            "TextureAtlasBuilder.dll", "aidll.dll", "BF2OpenAL.dll"},
+    "x86": {"BF2.exe", "dice_py.dll", "RendDX9.dll", "SwiffPlayer.dll", "BF2Audio.dll",
+            "TextureAtlasBuilder.dll", "BF2VoipServer.dll", "BF2OpenAL.dll"},
+    "server": {"bf2_w32ded.exe", "dice_py.dll", "AIDLL_w32ded.dll", "BF2VoipServer_w32ded.dll"},
+    "editor": {"BF2Editor.exe", "dice_py.dll", "RendDX9.dll", "TextureAtlasBuilder.dll", "BF2VoipServer.dll"},
+}
+WINDOWS_LICENCES = {
+    "LICENSE", "licenses/Python-LICENSE.txt", "licenses/zlib.txt", "licenses/Minizip.txt",
+    "licenses/TinyXML.txt", "licenses/RSA-MD5.txt", "licenses/GameSpy.txt",
+    "licenses/Ogg-COPYING.txt", "licenses/Vorbis-COPYING.txt", "licenses/gameswf.txt",
+    "licenses/gameswf-base.txt", "licenses/FFmpeg-COPYING.LGPLv2.1.txt",
+    "licenses/OpenAL-Soft-COPYING.txt", "licenses/ImGui-LICENSE.txt", "licenses/ImGuizmo-LICENSE.txt",
+}
+
+
+class ReleasePackageTests(unittest.TestCase):
+    """The one-package-per-platform release assets, assembled from the per-role CI ZIPs."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.packages = self.root / "artifacts"
+        self.output = self.root / "release"
+
+    def build(self, platform, omit=()):
+        """One CI leg: synthetic build outputs, packaged into that leg's artifact folder."""
+        build_dir = self.root / ("build-" + platform)
+        for directory, names in PACKAGER.PACKAGES[platform].values():
+            for name in names:
+                path = build_dir / directory / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"synthetic fixture: " + platform.encode("ascii") + b" " + name.encode("ascii"))
+        if platform.startswith("windows-"):
+            openal = build_dir / "openal-soft"
+            openal.mkdir(parents=True, exist_ok=True)
+            (openal / "COPYING").write_text("Synthetic LGPL text\n")
+            tarball = openal / "openal-soft-0.0.0.tar.bz2"
+            tarball.write_bytes(b"synthetic source tarball")
+            (openal / "BUILD.txt").write_text("OpenAL Soft 0.0.0 (MSVC {})\nSource SHA-256: {}\n".format(
+                platform, hashlib.sha256(tarball.read_bytes()).hexdigest()))
+        args = SimpleNamespace(
+            source_dir=SOURCE, build_dir=build_dir, output_dir=self.packages / ("packages-" + platform),
+            native_sources=self.root / "native", platform=platform, omit=list(omit),
+            revision="a" * 40, repository="kr4uzi/OpenBF2",
+        )
+        with contextlib.redirect_stdout(io.StringIO()):
+            PACKAGER.package(args)
+
+    def assemble(self, release, allow_missing=False):
+        args = SimpleNamespace(release=release, packages_dir=self.packages, output_dir=self.output,
+                               allow_missing=allow_missing, revision="a" * 40, repository="kr4uzi/OpenBF2")
+        with contextlib.redirect_stdout(io.StringIO()):
+            PACKAGER.assemble_release(args)
+
+    def read(self, name):
+        path = self.output / (name + ".zip")
+        self.assertEqual(path.with_name(path.name + ".sha256").read_bytes(),
+                         (hashlib.sha256(path.read_bytes()).hexdigest() + "  " + path.name + "\n").encode("ascii"))
+        with zipfile.ZipFile(path) as archive:
+            contents = {info.filename: (info, archive.read(info)) for info in archive.infolist()}
+        for entry in contents:
+            self.assertTrue(entry.startswith(name + "/"), entry)
+        contents = {entry[len(name) + 1:]: value for entry, value in contents.items()}
+        return contents, json.loads(contents["build-info.json"][1]), contents["README.txt"][1].decode()
+
+    def test_windows_release_layout(self):
+        self.build("windows-x86")
+        self.build("windows-x64")
+        self.assemble("windows")
+        self.assertEqual({path.name for path in self.output.iterdir()}, {
+            "openbf2-windows.zip", "openbf2-windows.zip.sha256",
+            "openal-soft-0.0.0.tar.bz2", "openal-soft-0.0.0.tar.bz2.sha256",
+        })
+        source = self.output / "openal-soft-0.0.0.tar.bz2"
+        self.assertEqual(source.read_bytes(), b"synthetic source tarball")
+        self.assertEqual(source.with_name(source.name + ".sha256").read_bytes(),
+                         (hashlib.sha256(source.read_bytes()).hexdigest() + "  " + source.name + "\n").encode("ascii"))
+        contents, metadata, readme = self.read("openbf2-windows")
+        runtime = {folder + "/" + name for folder, names in WINDOWS_RUNTIME.items() for name in names}
+        notices = {"x64/OpenAL-Soft-NOTICE.txt", "x86/OpenAL-Soft-NOTICE.txt"}
+        self.assertEqual(set(contents), runtime | notices | WINDOWS_LICENCES | {"README.txt", "build-info.json"})
+        # Each folder holds its own leg's binaries, byte for byte.
+        self.assertEqual(contents["x64/BF2.exe"][1], b"synthetic fixture: windows-x64 BF2.exe")
+        self.assertEqual(contents["x86/BF2.exe"][1], b"synthetic fixture: windows-x86 BF2.exe")
+        self.assertEqual(contents["server/dice_py.dll"][1], b"synthetic fixture: windows-x86 dice_py.dll")
+        self.assertIn("any other\n64-bit OpenAL Soft build", contents["x64/OpenAL-Soft-NOTICE.txt"][1].decode())
+        self.assertIn("any other\n32-bit OpenAL Soft build", contents["x86/OpenAL-Soft-NOTICE.txt"][1].decode())
+        for notice in notices:
+            self.assertIn("OpenAL-Soft-COPYING.txt in the package's licenses folder", contents[notice][1].decode())
+        self.assertEqual(metadata["package"], "openbf2-windows")
+        self.assertEqual(metadata["revision"], "a" * 40)
+        self.assertEqual(metadata["source"], "https://github.com/kr4uzi/OpenBF2/tree/" + "a" * 40)
+        self.assertEqual(metadata["windows_signing"], "not configured")
+        self.assertNotIn("omitted", metadata)
+        self.assertEqual(set(metadata["runtime_files"]), runtime)
+        for entry, digest in metadata["runtime_files"].items():
+            self.assertEqual(hashlib.sha256(contents[entry][1]).hexdigest(), digest)
+        self.assertEqual([(c["folder"], c["package"], c["link_contract"]) for c in metadata["components"]], [
+            ("x64", "openbf2-windows-x64-client", "strict"), ("x86", "openbf2-windows-x86-client", "strict"),
+            ("server", "openbf2-windows-x86-server", "strict"), ("editor", "openbf2-windows-x86-editor", "strict"),
+        ])
+        # The facts of the four per-role READMEs, merged.
+        for text in (
+            "OpenBF2: openbf2-windows", "Source revision: " + "a" * 40, "does not contain a\nBattlefield 2 installation",
+            "Do not mix rebuilt client/editor engine plugins with retail engine plugins",
+            "x64\\", "x86\\", "server\\", "editor\\", "licenses\\", "build-info.json",
+            "Microsoft Visual C++ runtime", "x64 for x64\\", "x86 for x86\\, server\\ and editor\\",
+            "not code-signed", "PunkBuster works only with the x86 client",
+            "64-bit d3dx9_25.dll", "%LOCALAPPDATA%\\OpenBF2\\Registry.dat", "docs/registry-file.md",
+            "other than 16567", "do not establish loading, joining or gameplay",
+            'cd /d "C:\\Games\\Battlefield 2"', 'cd /d "C:\\Games\\Battlefield 2 Server"',
+            'x64 client:\n      "C:\\OpenBF2\\openbf2-windows\\x64\\BF2.exe" +modPath mods/bf2 +fullscreen 0',
+            '"C:\\OpenBF2\\openbf2-windows\\x86\\BF2.exe" +modPath mods/bf2 +fullscreen 0',
+            '"C:\\OpenBF2\\openbf2-windows\\server\\bf2_w32ded.exe" +modPath mods/bf2',
+            '"C:\\OpenBF2\\openbf2-windows\\editor\\BF2Editor.exe" +loadMod bf2',
+            "+help 0", "Start in", "No original EXE or DLL is replaced", "+modPath selects a mod",
+            "pylib-2.3.4.zip",
+            # x64 client
+            "does not use the game folder's 32-bit DLLs", "bundled 64-bit BF2OpenAL.dll",
+            "x64\\OpenAL-Soft-NOTICE.txt", "cannot join servers that require PunkBuster", "Use the x86\n   client for those",
+            # x86 client
+            "binkw32.dll, d3dx9_25.dll and PunkBuster's\n   pb\\ folder", "x86\\OpenAL-Soft-NOTICE.txt",
+            "application folder first", "the x86 folder",
+            "Checked against the code; not runtime-tested here",
+            # server
+            "stock mods/bf2/Settings/ServerSettings.con", "mods/bf2/Settings/maplist.con",
+            "Optional overrides: +config", "+mapList", "relative to the content root",
+            # editor
+            "Bink, d3dx9_25 and an\n   OpenAL provider", "BF2OpenAL.dll\n   through the working directory",
+            # link contracts
+            "Every executable links strictly", "x86\\BF2VoipServer.dll", "server\\BF2VoipServer_w32ded.dll",
+            "editor\\BF2VoipServer.dll", "independent diagnostic /FORCE\n   links",
+            "server\\AIDLL_w32ded.dll) also retains\n   its diagnostic /FORCE link",
+            "does not establish side-DLL completeness",
+            # licences and notices
+            "licenses\\Python-LICENSE.txt", "licenses\\FFmpeg-COPYING.LGPLv2.1.txt", "x64 client's RendDX9.dll",
+            "licenses\\ImGui-LICENSE.txt", "licenses\\ImGuizmo-LICENSE.txt", "licenses\\OpenAL-Soft-COPYING.txt",
+            "openal-soft-<version>.tar.bz2", "LICENSE",
+        ):
+            self.assertIn(text, readme)
+        for text in ("NovintHFX", "This CI build lacks", "diagnostic /FORCE package", "macOS"):
+            self.assertNotIn(text, readme)
+        for entry in WINDOWS_LICENCES:
+            self.assertIn(entry.replace("/", "\\"), readme)
+
+    def test_windows_release_without_d3dx(self):
+        # Without a usable D3DX source the legs package their servers only.
+        self.build("windows-x86", omit=("client", "editor"))
+        self.build("windows-x64", omit=("client",))
+        # A release needs every component and writes nothing otherwise.
+        with self.assertRaisesRegex(ValueError, "a windows release needs every component"):
+            self.assemble("windows")
+        self.assertFalse(self.output.exists())
+        # CI runs package what was built and say what is missing.
+        self.assemble("windows", allow_missing=True)
+        self.assertEqual({path.name for path in self.output.iterdir()},
+                         {"openbf2-windows.zip", "openbf2-windows.zip.sha256"})
+        contents, metadata, readme = self.read("openbf2-windows")
+        self.assertEqual(metadata["omitted"], ["x64", "x86", "editor"])
+        self.assertEqual(set(metadata["runtime_files"]), {"server/" + name for name in WINDOWS_RUNTIME["server"]})
+        self.assertEqual({entry for entry in contents if "/" in entry and not entry.startswith("licenses/")},
+                         {"server/" + name for name in WINDOWS_RUNTIME["server"]})
+        self.assertIn("This CI build lacks x64\\, x86\\, editor\\", readme)
+        self.assertIn("Release packages always contain all four folders", readme)
+        for text in ("x64\\BF2.exe", "editor\\BF2Editor.exe", "OpenAL-Soft-NOTICE.txt", "openal-soft-"):
+            self.assertNotIn(text, readme)
+        self.assertNotIn("licenses/OpenAL-Soft-COPYING.txt", contents)
+
+    def test_windows_release_with_one_client_missing(self):
+        # The legs are independent runners: only the x64 one may lack D3DX.
+        self.build("windows-x86")
+        self.build("windows-x64", omit=("client",))
+        self.assemble("windows", allow_missing=True)
+        contents, metadata, readme = self.read("openbf2-windows")
+        self.assertEqual(metadata["omitted"], ["x64"])
+        self.assertIn("x86/OpenAL-Soft-NOTICE.txt", contents)
+        self.assertNotIn("licenses/FFmpeg-COPYING.LGPLv2.1.txt", contents)
+        # The x86 leg's copy of the OpenAL Soft source serves the release.
+        self.assertTrue((self.output / "openal-soft-0.0.0.tar.bz2").is_file())
+
+    def test_release_inputs_are_verified(self):
+        self.build("windows-x86")
+        self.build("windows-x64")
+        artifacts = self.packages / "packages-windows-x86"
+        checksum = artifacts / "openbf2-windows-x86-server.zip.sha256"
+        original = checksum.read_bytes()
+        checksum.write_bytes(b"0" * 64 + b"  openbf2-windows-x86-server.zip\n")
+        with self.assertRaisesRegex(ValueError, "does not match openbf2-windows-x86-server.zip.sha256"):
+            self.assemble("windows")
+        checksum.write_bytes(original)
+        # The two legs' OpenAL Soft tarballs must be the same pinned file.
+        (artifacts / "openal-soft-0.0.0.tar.bz2").write_bytes(b"other")
+        with self.assertRaisesRegex(ValueError, "Conflicting inputs"):
+            self.assemble("windows")
+        self.assertFalse(self.output.exists())
+
+    def test_release_rejects_another_revision(self):
+        self.build("linux-x64")
+        args = SimpleNamespace(release="linux", packages_dir=self.packages, output_dir=self.output,
+                               allow_missing=False, revision="b" * 40, repository="kr4uzi/OpenBF2")
+        with self.assertRaisesRegex(ValueError, "expected openbf2-linux-x64-server at b{40}"):
+            PACKAGER.assemble_release(args)
+        self.assertFalse(self.output.exists())
+
+    def test_linux_release_layout(self):
+        self.build("linux-x64")
+        self.assemble("linux")
+        self.assertEqual({path.name for path in self.output.iterdir()},
+                         {"openbf2-linux.zip", "openbf2-linux.zip.sha256"})
+        contents, metadata, readme = self.read("openbf2-linux")
+        licences = {"LICENSE", "licenses/Python-LICENSE.txt", "licenses/zlib.txt", "licenses/Minizip.txt",
+                    "licenses/TinyXML.txt", "licenses/RSA-MD5.txt", "licenses/GameSpy.txt"}
+        self.assertEqual(set(contents), {"bf2", "libdice_py.so", "README.txt", "build-info.json"} | licences)
+        for entry in ("bf2", "libdice_py.so"):
+            self.assertEqual(contents[entry][0].external_attr >> 16 & 0o777, 0o755)
+        self.assertEqual(contents["LICENSE"][0].external_attr >> 16 & 0o777, 0o644)
+        self.assertEqual(metadata["package"], "openbf2-linux")
+        self.assertEqual(set(metadata["runtime_files"]), {"bf2", "libdice_py.so"})
+        for entry, digest in metadata["runtime_files"].items():
+            self.assertEqual(hashlib.sha256(contents[entry][1]).hexdigest(), digest)
+        self.assertEqual(metadata["components"], [{"folder": ".", "package": "openbf2-linux-x64-server",
+                                                   "platform": "linux-x64", "role": "server",
+                                                   "link_contract": "strict"}])
+        self.assertNotIn("windows_signing", metadata)
+        for text in ("OpenBF2: openbf2-linux", "x64 dedicated server", "Ubuntu 22.04", "Keep libdice_py.so beside bf2",
+                     'cd "$HOME/Games/openbf2-linux"', "chmod +x bf2", "./bf2 +modPath mods/bf2",
+                     "stock mods/bf2/Settings/ServerSettings.con", "other than 16567",
+                     "Linux server content with lowercase game paths", "licenses/Python-LICENSE.txt",
+                     "licenses/GameSpy.txt", "build-info.json"):
+            self.assertIn(text, readme)
+        for text in ("(clients)", "OpenAL", "xattr", "Windows requires"):
+            self.assertNotIn(text, readme)
+
+    def test_release_command_line(self):
+        self.build("linux-x64")
+        command = [sys.executable, str(SOURCE / "Code/Build/package_release.py"), "--release", "linux",
+                   "--output-dir", str(self.output), "--revision", "a" * 40, "--repository", "kr4uzi/OpenBF2"]
+        missing = subprocess.run(command, capture_output=True, text=True)
+        self.assertNotEqual(missing.returncode, 0)
+        self.assertIn("--packages-dir is required", missing.stderr)
+        result = subprocess.run(command + ["--packages-dir", str(self.packages)], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.output / "openbf2-linux.zip").is_file())
+        failed = subprocess.run(command[:3] + ["windows"] + command[4:] + ["--packages-dir", str(self.packages)],
+                                capture_output=True, text=True)
+        self.assertEqual(failed.returncode, 1)
+        self.assertIn("a windows release needs every component", failed.stderr)
+
+    def test_macos_build_info(self):
+        client = self.root / "client-universal"
+        client.mkdir()
+        for item in PACKAGER.MACOS_CLIENT_FILES:
+            (client / item).write_bytes(b"universal " + item.encode("ascii"))
+        dmg = self.root / "openbf2-macos.dmg"
+        dmg.write_bytes(b"synthetic disk image")
+        for signing in ("developer-id", "adhoc"):
+            with self.subTest(signing=signing):
+                args = SimpleNamespace(client_dir=client, dmg=dmg, setup_repository="kr4uzi/openbf2-setup",
+                                       setup_revision="c" * 40, macos_signing=signing, output_dir=self.output / signing,
+                                       revision="a" * 40, repository="kr4uzi/OpenBF2")
+                with contextlib.redirect_stdout(io.StringIO()):
+                    PACKAGER.macos_build_info(args)
+                metadata = json.loads((args.output_dir / "openbf2-macos.build-info.json").read_text())
+                self.assertEqual(metadata["package"], "openbf2-macos")
+                self.assertEqual(metadata["revision"], "a" * 40)
+                self.assertEqual(metadata["setup_app"]["revision"], "c" * 40)
+                self.assertEqual(metadata["macos_signing"], signing)
+                self.assertEqual(metadata["notarized"], signing == "developer-id")
+                self.assertEqual(metadata["stapled"], signing == "developer-id")
+                self.assertEqual(metadata["disk_image"], {"file": "openbf2-macos.dmg",
+                                                          "sha256": hashlib.sha256(dmg.read_bytes()).hexdigest()})
+                self.assertEqual(metadata["runtime_files"], {
+                    item: hashlib.sha256((client / item).read_bytes()).hexdigest()
+                    for item in PACKAGER.MACOS_CLIENT_FILES})
+        (client / "libaidll.dylib").unlink()
+        with self.assertRaisesRegex(ValueError, "missing or empty"):
+            PACKAGER.macos_build_info(args)
 
 
 class OpenALSoftPinTests(unittest.TestCase):

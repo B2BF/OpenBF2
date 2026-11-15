@@ -22,6 +22,7 @@ jobs:
     env:
       BF2_PYTHON_OUT: ${{ github.workspace }}/out/ci-python/${{ matrix.arch }}
       CMAKE_BUILD_PARALLEL_LEVEL: 2
+      BF2_RELEASE_RUN: ${{ (github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')) && 'true' || 'false' }}
     defaults:
       run:
         shell: cmd
@@ -76,8 +77,9 @@ jobs:
 
       # RendDX9.dll and TextureAtlasBuilder.dll, and so the client and the editor, build against the
       # April 2005 DirectX SDK or, on hosted runners without it, the D3DX fallback (Code/Build/dxsdk.cmd).
-      # Only when neither is usable are the client (and on x86 the editor) skipped with a notice and left
-      # out of the packages.
+      # When neither is usable, other runs skip the client (and on x86 the editor) with a notice and leave
+      # them out of the packages. Release runs fail here instead: the Windows release package carries
+      # both clients and the editor, and a package without them is no release (docs/ci-releases.md).
       - name: Locate the D3DX headers and import library
         id: dxsdk
         run: |
@@ -85,6 +87,10 @@ jobs:
           rem without it the D3DX fallback (BF2_D3DX=auto, Code/Build/dxsdk.cmd).
           call Code\Build\dxsdk.cmd ${{ matrix.arch }} fallback
           if errorlevel 1 (
+            if "%BF2_RELEASE_RUN%"=="true" (
+              echo ::error title=No D3DX source::Neither the April 2005 DirectX SDK nor the D3DX fallback is usable; the Windows release package needs the ${{ matrix.arch == 'x86' && 'x86 client and editor' || 'x64 client' }}; see docs/ci-releases.md.
+              exit /b 1
+            )
             echo ::notice title=No D3DX source::Neither the April 2005 DirectX SDK nor the D3DX fallback is usable; the ${{ matrix.arch == 'x86' && 'x86 client and editor are' || 'x64 client is' }} not built on this runner.
             echo found=false>> "%GITHUB_OUTPUT%"
           ) else (
@@ -162,12 +168,8 @@ jobs:
       - name: Package Windows binaries
         run: python Code/Build/package_release.py --platform windows-${{ matrix.arch }} --build-dir out/build/ci-${{ matrix.arch }} --output-dir out/packages --revision "%GITHUB_SHA%" --repository "%GITHUB_REPOSITORY%" ${{ steps.dxsdk.outputs.found != 'true' && (matrix.arch == 'x86' && '--omit client --omit editor' || '--omit client') || '' }}
 
-      # Both legs write the same pinned OpenAL Soft tarball beside their client ZIP; only the x64 leg
-      # uploads it, so a release gets one copy.
-      - name: Keep one OpenAL Soft source tarball
-        if: matrix.arch == 'x86'
-        run: del /q out\packages\openal-soft-*.tar.bz2 out\packages\openal-soft-*.tar.bz2.sha256 2>nul & exit /b 0
-
+      # The per-role ZIPs (and, with a client, the pinned OpenAL Soft tarball) are CI artifacts; the
+      # windows-package job assembles the release package from both legs' artifacts.
       - name: Upload Windows packages
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -193,6 +195,54 @@ jobs:
             Code/Build/obj_*_native/*.log
           if-no-files-found: ignore
           retention-days: 7
+
+  # [CHOSEN, not recovered] The Windows release package, openbf2-windows.zip: both clients (x64\, x86\),
+  # the x86 dedicated server (server\) and the x86 editor (editor\), assembled from the two legs'
+  # per-role ZIPs after checking their checksums and build-info hashes (Code/Build/package_release.py
+  # --release windows). Release runs need every component; other runs package what was built, so CI
+  # stays green without D3DX, and the README and build-info.json name what is missing.
+  windows-package:
+    name: Windows package
+    needs: windows
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    env:
+      BF2_RELEASE_RUN: ${{ (github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')) && 'true' || 'false' }}
+    steps:
+      - name: Check out the event commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Check packaging fixtures
+        run: python3 Code/Tests/test_package_release.py
+
+      # One folder per artifact: both legs carry the same pinned OpenAL Soft tarball, and the
+      # packager checks that the copies are identical.
+      - name: Download the Windows per-role packages
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: packages-windows-*
+          path: out/packages
+
+      - name: Assemble the Windows package
+        run: |
+          allow_missing=--allow-missing
+          if [ "$BF2_RELEASE_RUN" = true ]; then allow_missing=; fi
+          python3 Code/Build/package_release.py --release windows --packages-dir out/packages --output-dir out/release --revision "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY" $allow_missing
+
+      - name: Upload the Windows release package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-windows
+          path: |
+            out/release/*.zip
+            out/release/*.sha256
+            out/release/*.tar.bz2
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
 
   linux:
     name: Linux x64
@@ -232,6 +282,21 @@ jobs:
           compression-level: 0
           retention-days: 14
 
+      # The Linux release package, openbf2-linux.zip: the same files in a platform-named archive.
+      - name: Assemble the Linux package
+        run: python3 Code/Build/package_release.py --release linux --packages-dir out/packages --output-dir out/release --revision "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY"
+
+      - name: Upload the Linux release package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-linux
+          path: |
+            out/release/openbf2-linux.zip
+            out/release/openbf2-linux.zip.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
       - name: Upload Linux build diagnostics
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -249,8 +314,9 @@ jobs:
   # from pinned vkd3d-shader 2.1 and MojoShader sources with the repository's patches
   # (tools/macos/nativefx/build.sh, tools/macos/vkd3d-patches).
   # Release runs (a published release, or a v* tag) sign the binaries with the Developer ID from
-  # the protected `release` environment and notarize the ZIPs; every other run (pull requests,
-  # branch pushes, forks) stays ad-hoc and uses no secrets (docs/ci-releases.md).
+  # the protected `release` environment; every other run (pull requests, branch pushes, forks)
+  # stays ad-hoc and uses no secrets (docs/ci-releases.md). The per-architecture ZIPs are CI
+  # artifacts only and not notarized: releases ship the notarized disk image (macos-app).
   macos:
     name: macOS ${{ matrix.arch }}
     runs-on: macos-15
@@ -319,16 +385,13 @@ jobs:
           fi
 
       # Release only, after every build step, so the keychain exists only for signing and packaging.
+      # No notary key here: this job notarizes nothing.
       - name: Import the Developer ID certificate (release)
         if: env.BF2_RELEASE_SIGNING == 'true'
         env:
           MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
-          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
-          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
-        run: |
-          bash tools/macos/ci/release-signing.sh import
-          bash tools/macos/ci/release-signing.sh notary-key
+        run: bash tools/macos/ci/release-signing.sh import
 
       - name: Sign the macOS binaries (release)
         if: env.BF2_RELEASE_SIGNING == 'true'
@@ -339,16 +402,6 @@ jobs:
           signing=adhoc
           if [ "$BF2_RELEASE_SIGNING" = true ]; then signing=developer-id; fi
           python3 Code/Build/package_release.py --platform macos-${{ matrix.arch }} --build-dir out/build/ci-macos-${{ matrix.arch }} --output-dir out/packages --revision "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY" --macos-signing "$signing"
-
-      # ZIPs cannot be stapled; Gatekeeper looks the ticket up online on first launch.
-      - name: Notarize the macOS packages (release)
-        if: env.BF2_RELEASE_SIGNING == 'true'
-        env:
-          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
-          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
-        # Only the client is notarized: releases don't ship the macOS dedicated server, whose
-        # package stays a CI artifact for development.
-        run: bash tools/macos/ci/release-signing.sh notarize "out/packages/openbf2-macos-${{ matrix.arch }}-client.zip"
 
       - name: Remove the signing keychain and key (release)
         if: always() && env.BF2_RELEASE_SIGNING == 'true'
@@ -377,7 +430,8 @@ jobs:
           retention-days: 7
 
   # [CHOSEN, not recovered] The macOS app: the separate MIT setup app (kr4uzi/openbf2-setup, pinned
-  # below) with the universal client embedded, as a drag-and-drop disk image. The two macOS legs are
+  # below) with the universal client embedded, as a drag-and-drop disk image, openbf2-macos.dmg: the
+  # macOS release package. The two macOS legs are
   # merged with lipo; the setup app's own release script builds, tests and verifies the image. Its
   # contract for the client directory is docs/client-artifact.md in that repository.
   # Release runs sign the app with the Developer ID (hardened runtime, timestamp, entitlements),
@@ -393,7 +447,8 @@ jobs:
       SETUP_REVISION: fb6dc8fe8d7b81e41d0b737925891e92568cb61c # v0.3.1
       BF2_RELEASE_SIGNING: ${{ (github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')) && 'true' || 'false' }}
     steps:
-      # The client entitlements and the signing helper; the app is built from the setup repository.
+      # The client entitlements, the signing helper and the packager (for the build-info); the app
+      # is built from the setup repository.
       - name: Check out the signing files
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -401,7 +456,7 @@ jobs:
           path: out/openbf2
           persist-credentials: false
           sparse-checkout: |
-            Code/Build/macos
+            Code/Build
             tools/macos/ci
           sparse-checkout-cone-mode: true
 
@@ -468,7 +523,7 @@ jobs:
             export SETUP_ENTITLEMENTS_CLIENT="$GITHUB_WORKSPACE/out/openbf2/Code/Build/macos/bf2_client.entitlements"
             export SETUP_ENTITLEMENTS_APP="$GITHUB_WORKSPACE/out/openbf2-setup/macos/OpenBF2.entitlements"
           fi
-          bash out/openbf2-setup/macos/build-release.sh "$GITHUB_WORKSPACE/out/client-universal" "$GITHUB_WORKSPACE/out/packages-app/openbf2-macos-app.dmg" "$GITHUB_WORKSPACE/out/setup-build"
+          bash out/openbf2-setup/macos/build-release.sh "$GITHUB_WORKSPACE/out/client-universal" "$GITHUB_WORKSPACE/out/packages-app/openbf2-macos.dmg" "$GITHUB_WORKSPACE/out/setup-build"
 
       - name: Sign, check and notarize the disk image (release)
         if: env.BF2_RELEASE_SIGNING == 'true'
@@ -476,7 +531,7 @@ jobs:
           NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
           NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
         run: |
-          dmg=out/packages-app/openbf2-macos-app.dmg
+          dmg=out/packages-app/openbf2-macos.dmg
           bash out/openbf2/tools/macos/ci/release-signing.sh verify-dmg "$dmg"
           bash out/openbf2/tools/macos/ci/release-signing.sh sign-dmg "$dmg"
           bash out/openbf2/tools/macos/ci/release-signing.sh notarize "$dmg"
@@ -490,16 +545,33 @@ jobs:
       - name: Write the disk image checksum
         working-directory: out/packages-app
         run: |
-          rm -f openbf2-macos-app.dmg.sha256
-          shasum -a 256 openbf2-macos-app.dmg > openbf2-macos-app.dmg.sha256
+          rm -f openbf2-macos.dmg.sha256
+          shasum -a 256 openbf2-macos.dmg > openbf2-macos.dmg.sha256
+
+      # The disk image cannot hold it (the setup build copies only the client's three files), so the
+      # build-info is a CI artifact beside the image: revision, setup app revision, the client's
+      # SHA-256s, the image's SHA-256 and the signing and notarization state.
+      - name: Write the disk image build-info
+        run: |
+          signing=adhoc
+          if [ "$BF2_RELEASE_SIGNING" = true ]; then signing=developer-id; fi
+          python3 out/openbf2/Code/Build/package_release.py --release macos --client-dir out/client-universal --dmg out/packages-app/openbf2-macos.dmg --setup-repository "$SETUP_REPOSITORY" --setup-revision "$SETUP_REVISION" --macos-signing "$signing" --output-dir out/build-info --revision "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY"
 
       - name: Upload the macOS app
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: packages-macos-app
+          name: release-macos
           path: |
-            out/packages-app/openbf2-macos-app.dmg
-            out/packages-app/openbf2-macos-app.dmg.sha256
+            out/packages-app/openbf2-macos.dmg
+            out/packages-app/openbf2-macos.dmg.sha256
           if-no-files-found: error
           compression-level: 0
+          retention-days: 14
+
+      - name: Upload the disk image build-info
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: build-info-macos
+          path: out/build-info/openbf2-macos.build-info.json
+          if-no-files-found: error
           retention-days: 14

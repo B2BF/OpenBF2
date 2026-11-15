@@ -16,7 +16,8 @@ it does not recover or change engine behavior, ABI, protocols, or file formats.
 | --- | --- | --- |
 | Windows 2022, MSVC x86 | `msvc-x86` / `Reconstruction` | Python interpreter check; `bf2_run_checks`; `bf2_editor_run_checks`; `bf2_w32ded`; `bf2_aidll`; with a usable D3DX source: `bf2_client` and plugins, OpenAL Soft, `bf2_editor` and plugins, then `dumpbin /dependents /imports` of the client's `BF2.exe`, `RendDX9.dll`, `TextureAtlasBuilder.dll` and `BF2OpenAL.dll` and of the editor's `BF2Editor.exe`, `RendDX9.dll` and `TextureAtlasBuilder.dll`, and the embedded manifests of `BF2.exe` and `BF2Editor.exe` (`mt.exe`), in the log |
 | Windows 2022, MSVC x64 | `msvc-x64` / `Release` | Python interpreter check; strict `bf2_w64ded` and `bf2_aidll` links; AI export listing and staged-copy comparison; with a usable D3DX source: `bf2_client` and plugins, OpenAL Soft, then `dumpbin /dependents /imports` of `BF2.exe`, `RendDX9.dll`, `TextureAtlasBuilder.dll` and `BF2OpenAL.dll`, and the embedded manifest of `BF2.exe` (`mt.exe`), in the log |
-| Ubuntu 22.04, GCC x64 | `linux-x64` / `RelWithDebInfo` | Strict `bf2` link; `dice_py_check_run` |
+| Ubuntu 22.04, GCC x64 | `linux-x64` / `RelWithDebInfo` | Strict `bf2` link; `dice_py_check_run`; the Linux release package |
+| Ubuntu 22.04 (Windows package) | none | Packaging fixtures; assembles the Windows release package from both Windows jobs' per-role ZIPs |
 
 Windows builds initialize MSVC through the repository's `vsdevcmd.cmd`. They build
 Python into an architecture-specific output directory before CMake configuration,
@@ -28,7 +29,9 @@ The client and editor renderer plugins need the
 [April 2005 DirectX SDK or the D3DX fallback](building.md#d3dx-without-the-directx-sdk).
 Both Windows jobs probe with `Code\Build\dxsdk.cmd <arch> fallback`. When neither
 source is usable, the job posts a notice, skips the client (and the editor on x86),
-and packages only its server. Otherwise it builds and packages those images.
+and packages only its server. Otherwise it builds and packages those images. In a
+release run a missing D3DX source fails the job instead
+([D3DX in release runs](#d3dx-in-release-runs)).
 
 Windows ships both clients. Both bundle OpenAL Soft as `BF2OpenAL.dll` (see below). The x86
 client takes retail's other 32-bit companions from the game folder (D3DX, Bink, PunkBuster).
@@ -69,6 +72,79 @@ the x64 editor target exists but is not built by CI. Linux client/editor targets
 
 ## Packages
 
+`[CHOSEN, not recovered]` A release carries one package per platform, named by the platform
+only (owner decision 2026-11-15). The build jobs package each platform's roles separately;
+those per-role ZIPs stay CI artifacts for development, and the release packages are assembled
+from them.
+
+### Release assets
+
+| Asset | Contents |
+| --- | --- |
+| `openbf2-macos.dmg` | `OpenBF2.app`: the setup assistant and launcher with the universal (arm64 + x86_64) client; the app carries its own instructions |
+| `openbf2-windows.zip` | `x64\` the x64 client, `x86\` the x86 client, `server\` the x86 dedicated server, `editor\` the x86 editor, `licenses\`, `LICENSE`, `README.txt`, `build-info.json` |
+| `openbf2-linux.zip` | the x64 dedicated server: `bf2`, `libdice_py.so`, `licenses/`, `LICENSE`, `README.txt`, `build-info.json` |
+| `openal-soft-1.25.2.tar.bz2` | the LGPL source of both Windows clients' `BF2OpenAL.dll` ([OpenAL Soft](#openal-soft-in-the-windows-clients)) |
+
+Each asset has a `.sha256` beside it. Releases do not carry the per-architecture Windows ZIPs,
+the x64 Windows server (PunkBuster's server library exists only as 32-bit `pbsv.dll`), the
+macOS ZIPs or the macOS server. The Windows package's tree:
+
+```text
+openbf2-windows/
+  x64/       BF2.exe, dice_py.dll, RendDX9.dll, SwiffPlayer.dll, BF2Audio.dll,
+             TextureAtlasBuilder.dll, aidll.dll, BF2OpenAL.dll, OpenAL-Soft-NOTICE.txt
+  x86/       BF2.exe, dice_py.dll, RendDX9.dll, SwiffPlayer.dll, BF2Audio.dll,
+             TextureAtlasBuilder.dll, BF2VoipServer.dll, BF2OpenAL.dll, OpenAL-Soft-NOTICE.txt
+  server/    bf2_w32ded.exe, dice_py.dll, AIDLL_w32ded.dll, BF2VoipServer_w32ded.dll
+  editor/    BF2Editor.exe, dice_py.dll, RendDX9.dll, TextureAtlasBuilder.dll, BF2VoipServer.dll
+  licenses/  Python, zlib, Minizip, TinyXML, RSA MD5, GameSpy; libogg, libvorbis, gameswf
+             (clients); FFmpeg (x64 client); OpenAL Soft (clients); ImGui, ImGuizmo (editor)
+  LICENSE  README.txt  build-info.json
+```
+
+`package_release.py --release windows --packages-dir <dir>` builds it from the four per-role
+ZIPs below `<dir>` (searched recursively, so each CI artifact can keep its own folder). It
+checks each ZIP against its `.sha256`, its `build-info.json` revision and the SHA-256 of every
+runtime file, and refuses unknown entries. Runtime files go to the component's folder. Licence
+files are merged into one `licenses/` and must be identical wherever two components carry the
+same one. Each client's `OpenAL-Soft-NOTICE.txt` stays beside its `BF2OpenAL.dll`. The OpenAL
+Soft tarball must match the SHA-256 in those notices; when both legs supply a copy, the copies
+must be identical. The combined `README.txt` merges the per-role READMEs: contents, Visual C++
+runtime per architecture, the x64 client's 64-bit `d3dx9_25.dll`, PunkBuster only with the x86
+client, CD keys, install commands per folder, the server settings, the editor's dependencies,
+the link contracts and the licence list. `build-info.json` records the revision, the source
+URL, `windows_signing`, each component (folder, per-role package, link contract) and the
+SHA-256 of every runtime file under its folder path. Every input is verified before anything is
+written. The `Windows package` job runs it on Ubuntu after both Windows jobs and uploads the
+`release-windows` artifact.
+
+`--release linux` does the same for the Linux server in the Linux job (`release-linux`). The
+macOS release package is the `macos-app` job's disk image (`release-macos`). The setup build
+copies only the client's three files into the app, so the image cannot hold a build-info file;
+`--release macos` writes `openbf2-macos.build-info.json` beside it instead (revision, the setup
+app's repository and revision, the universal client files' SHA-256, the image's SHA-256, the
+signing mode and whether it is notarized and stapled). It is the `build-info-macos` artifact
+and is not attached to releases.
+
+#### D3DX in release runs
+
+The Windows release package needs both clients and the editor, so a release run fails at the
+D3DX probe when neither D3DX source is usable, with an error annotation, and nothing is
+attached. The packager without `--allow-missing` refuses a missing component too, and the
+release job checks that `openbf2-windows.zip` holds all four executables and no `omitted` list.
+A server-only archive under the same name would quietly ship a different product. The D3DX
+fallback lives in the repository (`Code/RendDX9Abi`), so a release run without a D3DX source
+points to a repository or configuration fault (for example `BF2_D3DX=sdk`). Fix it and publish
+a new tag: a rerun uses the same commit.
+
+Other runs (pull requests, branch pushes, manual dispatch) stay green without D3DX. The
+`Windows package` job passes `--allow-missing`: `openbf2-windows.zip` holds the folders that
+were built, its README names the missing ones, and `build-info.json` lists them under
+`omitted`. Without a client the OpenAL Soft tarball is left out.
+
+### Per-role packages (CI artifacts)
+
 The [packaging helper](../Code/Build/package_release.py) requires every listed runtime
 file to exist and be nonempty. It uses explicit manifests rather than copying output
 directories, so test executables, import libraries, maps, PDBs, and any locally staged
@@ -76,16 +152,19 @@ retail companions are excluded. `--omit ROLE` (repeatable) skips one package of 
 selected platform, for example `--omit client`; every other role stays
 required. CI passes it for the client and editor only when neither D3DX source is usable.
 
-| ZIP filename | Runtime contents |
-| --- | --- |
-| `openbf2-windows-x86-server.zip` | `bf2_w32ded.exe`, `dice_py.dll`, `AIDLL_w32ded.dll`, `BF2VoipServer_w32ded.dll` |
-| `openbf2-windows-x86-client.zip` | `BF2.exe`, `dice_py.dll`, `RendDX9.dll`, `SwiffPlayer.dll`, `BF2Audio.dll`, `TextureAtlasBuilder.dll`, `BF2VoipServer.dll`, `BF2OpenAL.dll` (OpenAL Soft) |
-| `openbf2-windows-x86-editor.zip` | `BF2Editor.exe`, `dice_py.dll`, editor `RendDX9.dll`, `TextureAtlasBuilder.dll`, `BF2VoipServer.dll` |
-| `openbf2-windows-x64-server.zip` | `bf2_w64ded.exe`, `dice_py.dll`, `aidll.dll`; CI artifact only, not attached to releases (PunkBuster's server library exists only as 32-bit `pbsv.dll`, so Windows releases ship the x86 server) |
-| `openbf2-windows-x64-client.zip` | `BF2.exe`, `dice_py.dll`, `RendDX9.dll`, `SwiffPlayer.dll`, `BF2Audio.dll`, `TextureAtlasBuilder.dll`, `aidll.dll`, `BF2OpenAL.dll` (OpenAL Soft); no PunkBuster, so it cannot join servers that require it |
-| `openbf2-linux-x64-server.zip` | `bf2`, `libdice_py.so` |
-| `openbf2-macos-arm64-client.zip`, `openbf2-macos-x86_64-client.zip` | `bf2_client`, `libdice_py.dylib`, `libaidll.dylib` |
-| `openbf2-macos-arm64-server.zip`, `openbf2-macos-x86_64-server.zip` | `bf2`, `libdice_py.dylib`, `libaidll.dylib`; CI artifact only, not attached to releases and not notarized |
+| ZIP filename | Runtime contents | Release package |
+| --- | --- | --- |
+| `openbf2-windows-x86-server.zip` | `bf2_w32ded.exe`, `dice_py.dll`, `AIDLL_w32ded.dll`, `BF2VoipServer_w32ded.dll` | `openbf2-windows.zip`, `server\` |
+| `openbf2-windows-x86-client.zip` | `BF2.exe`, `dice_py.dll`, `RendDX9.dll`, `SwiffPlayer.dll`, `BF2Audio.dll`, `TextureAtlasBuilder.dll`, `BF2VoipServer.dll`, `BF2OpenAL.dll` (OpenAL Soft) | `openbf2-windows.zip`, `x86\` |
+| `openbf2-windows-x86-editor.zip` | `BF2Editor.exe`, `dice_py.dll`, editor `RendDX9.dll`, `TextureAtlasBuilder.dll`, `BF2VoipServer.dll` | `openbf2-windows.zip`, `editor\` |
+| `openbf2-windows-x64-server.zip` | `bf2_w64ded.exe`, `dice_py.dll`, `aidll.dll` | none |
+| `openbf2-windows-x64-client.zip` | `BF2.exe`, `dice_py.dll`, `RendDX9.dll`, `SwiffPlayer.dll`, `BF2Audio.dll`, `TextureAtlasBuilder.dll`, `aidll.dll`, `BF2OpenAL.dll` (OpenAL Soft); no PunkBuster, so it cannot join servers that require it | `openbf2-windows.zip`, `x64\` |
+| `openbf2-linux-x64-server.zip` | `bf2`, `libdice_py.so` | `openbf2-linux.zip` |
+| `openbf2-macos-arm64-client.zip`, `openbf2-macos-x86_64-client.zip` | `bf2_client`, `libdice_py.dylib`, `libaidll.dylib` | merged into the app in `openbf2-macos.dmg` |
+| `openbf2-macos-arm64-server.zip`, `openbf2-macos-x86_64-server.zip` | `bf2`, `libdice_py.dylib`, `libaidll.dylib` | none |
+
+None of these ZIPs is notarized; release runs sign the macOS binaries with the Developer ID
+before packaging, other runs sign them ad hoc.
 
 The Windows x64 client files are staged by CMake into `bin_client`. Both x64
 packages require the native `aidll.dll`; the dedicated build stages the same DLL
@@ -118,26 +197,29 @@ their legacy device names to its default device and implements the EAX extension
   the result per architecture (`out/build/ci-<arch>/openal-soft`), keyed on the script.
 - **LGPL.** Each client package contains `licenses/OpenAL-Soft-COPYING.txt` and
   `OpenAL-Soft-NOTICE.txt` (version, source URL and SHA-256, build options, how to replace the
-  DLL). The packager writes the exact source tarball and its `.sha256` beside the ZIP. Both legs
-  build from the same pinned file, so only the x64 leg uploads it, and releases attach that one
-  copy.
+  DLL); in `openbf2-windows.zip` the notices are `x64\OpenAL-Soft-NOTICE.txt` and
+  `x86\OpenAL-Soft-NOTICE.txt`. The packager writes the exact source tarball and its `.sha256`
+  beside the ZIP. Both legs build from the same pinned file; the Windows package job checks that
+  the copies match and releases attach one.
 - **Local builds.** In the developer prompt of the target architecture, run
   `python Code/Build/build_openal_soft.py --arch <x86|x64> --stage-dir <build>/openal-soft
   --work-dir <scratch> --client-dir <build>/bin_client` before packaging that client. Packaging
   a Windows client requires that stage.
 
-Every ZIP has a matching `.zip.sha256` checksum written with LF line endings on all
+Every ZIP and release asset has a matching `.sha256` checksum written with LF line endings on all
 platforms, so Linux `sha256sum --check` can verify Windows-built packages too.
 Inside a package-named directory are
 the binaries, license notices, a runtime README and `build-info.json` recording the
-source commit, source URL, link contract and hashes of the runtime files. Linux ZIP
+source commit, source URL, link contract and hashes of the runtime files (in the Windows
+release package, per component folder). Linux ZIP
 entries retain executable permission bits; an extractor that ignores these may need
 `chmod +x bf2` after extraction. Linux binaries target the Ubuntu 22.04 system-library
 baseline; compiler runtimes use the preset's static-runtime default.
 
 `link_contract` describes the executable. Each x86 README separately identifies the
 voice-server DLL's diagnostic link, and the server README identifies the AI DLL's
-diagnostic link. The voice DLLs are rebuilt artifacts, not retail redistributions.
+diagnostic link; the Windows release README lists all of them. The voice DLLs are rebuilt
+artifacts, not retail redistributions.
 
 The packaging helper preserves dependency notices from the vendored source. The client
 also includes the unchanged upstream COPYING files for [libogg 1.3.6](https://github.com/xiph/ogg/blob/v1.3.6/COPYING)
@@ -150,10 +232,12 @@ separately supplied Bink, D3DX25 and OpenAL components where applicable.
 Do not mix the rebuilt host's engine plugins with retail engine plugins. Follow
 [the build guide](building.md) for runtime setup and preserve original game images.
 
-Successful CI uploads `packages-windows-x86`, `packages-windows-x64` and
-`packages-linux-x64` artifacts for 14 days. Download these from the Actions run to get
-the ZIP/checksum pairs. Available failure diagnostics are retained for seven days;
-compiler console output remains in the job log. Failed jobs do not upload packages.
+Successful CI keeps these artifacts for 14 days: the per-role ZIPs as `packages-windows-x86`,
+`packages-windows-x64`, `packages-linux-x64`, `packages-macos-arm64` and `packages-macos-x86_64`;
+the release packages as `release-windows`, `release-linux` and `release-macos`; and
+`build-info-macos`. Download these from the Actions run. Available failure diagnostics are
+retained for seven days; compiler console output remains in the job log. Failed jobs do not
+upload packages.
 
 For local packaging after building the matching targets:
 
@@ -165,22 +249,32 @@ python Code/Build/package_release.py --platform windows-x86 `
 
 Use `windows-x64` or `linux-x64` with the corresponding build directory; on Linux use
 `python3`. Run from the repository root and use a fresh output directory when changing
-platforms or source revisions.
+platforms or source revisions. To assemble a release package from per-role ZIPs (both Windows
+legs' outputs below one directory for Windows):
+
+```sh
+python3 Code/Build/package_release.py --release windows --packages-dir out/packages \
+  --output-dir out/release --revision "$(git rev-parse HEAD)" --repository B2BF/OpenBF2
+```
+
+Add `--allow-missing` to package an incomplete set for testing; releases never use it.
 
 ## Installing a package
 
 Use your own Battlefield 2 **1.50** installation. Packages contain no game content
 and do not download any. Each archive's `README.txt` has commands for that specific
-platform and role. The procedures below are intentional packaging policy
+platform and its folders. The procedures below are intentional packaging policy
 `[CHOSEN, not recovered]`.
 
-### Windows client (x86 and x64), server (x86 and x64) and editor (x86)
+### Windows: `openbf2-windows.zip`
 
-1. Extract the package to `C:\OpenBF2\<package-name>`, keeping every packaged DLL
-   beside its EXE. Keep each architecture and role in its own folder. Supply the
-   matching Visual C++ runtime and applicable client/editor dependencies listed above.
+1. Extract the archive to `C:\OpenBF2`, which gives `C:\OpenBF2\openbf2-windows` with the
+   `x64\`, `x86\`, `server\` and `editor\` folders. Keep every DLL beside its EXE and do not
+   move files between folders. Supply the Visual C++ runtime of the folder's architecture
+   (x64 for `x64\`; x86 for `x86\`, `server\` and `editor\`) and the client/editor
+   dependencies listed below.
 2. In Command Prompt, change to your retail game installation, or your 1.50
-   dedicated-server installation for a server. This is the folder containing
+   dedicated-server installation for the server. This is the folder containing
    `mods\`, `python\` and `pylib-2.3.4.zip`, **not** `mods\bf2`:
 
    ```bat
@@ -191,12 +285,14 @@ platform and role. The procedures below are intentional packaging policy
    paths with your own. Servers use their stock settings as described below.
 
    ```bat
-   "C:\OpenBF2\openbf2-windows-x86-client\BF2.exe" +modPath mods/bf2 +fullscreen 0
-   "C:\OpenBF2\openbf2-windows-x64-client\BF2.exe" +modPath mods/bf2 +fullscreen 0
-   "C:\OpenBF2\openbf2-windows-x86-editor\BF2Editor.exe" +loadMod bf2
-   "C:\OpenBF2\openbf2-windows-x86-server\bf2_w32ded.exe" +modPath mods/bf2
+   "C:\OpenBF2\openbf2-windows\x64\BF2.exe" +modPath mods/bf2 +fullscreen 0
+   "C:\OpenBF2\openbf2-windows\x86\BF2.exe" +modPath mods/bf2 +fullscreen 0
+   "C:\OpenBF2\openbf2-windows\editor\BF2Editor.exe" +loadMod bf2
+   "C:\OpenBF2\openbf2-windows\server\bf2_w32ded.exe" +modPath mods/bf2
    ```
 
+The per-role CI artifacts install the same way from `C:\OpenBF2\<package-name>`; the x64
+server artifact's executable is `bf2_w64ded.exe`.
 A shortcut uses that command as **Target** and the game/server installation root as
 **Start in**. An independently built x64 editor uses the same `+loadMod bf2` procedure;
 CI does not package it. `+modPath` selects the mod; it does not relocate the root Python
@@ -215,7 +311,15 @@ Both clients read CD keys from the retail registry (all-users installs) or from 
 `%LOCALAPPDATA%\OpenBF2\Registry.dat` ([client registry file](registry-file.md)).
 This setup was checked against the code, without a runtime test here.
 
-### macOS client and server (arm64 and x86_64)
+### macOS: `openbf2-macos.dmg`
+
+Open the disk image and drag `OpenBF2.app` to Applications. Its setup assistant guides the
+rest and launches the embedded universal client; the app carries its own instructions.
+Release images are Developer ID signed, notarized and stapled.
+
+### macOS per-architecture ZIPs (CI artifacts)
+
+The macOS client and server ZIPs are development artifacts, not release assets.
 
 1. On macOS 11 or later, extract the matching package to
    `~/Games/<package-name>`: `arm64` for Apple silicon, `x86_64` for Intel.
@@ -233,10 +337,10 @@ This setup was checked against the code, without a runtime test here.
    chmod +x bf2_client
    ```
 
-   For a server (a CI artifact, for development) use `openbf2-macos-arm64-server` and
-   `chmod +x bf2`; substitute `x86_64` for `arm64` on Intel. Release client packages are
-   Developer ID signed and notarized, so the `xattr` line is only needed for CI
-   artifacts, which are ad-hoc signed (the package README says which applies).
+   For a server use `openbf2-macos-arm64-server` and `chmod +x bf2`; substitute `x86_64`
+   for `arm64` on Intel. These ZIPs are never notarized (release runs sign their binaries
+   with the Developer ID, other runs ad hoc; the package README says which applies), so
+   keep the `xattr` line.
 4. Start the client with `./bf2_client +modPath mods/bf2 +fullscreen 0`.
    New user profiles are stored separately in
    `~/Library/Application Support/OpenBF2/Profiles/`; copying the installation's
@@ -272,13 +376,14 @@ This setup was checked against the code, without a runtime test here.
    maps and ports for your own server. Automated server tests must never use port
    16567; this restriction applies to our tests, not end-user servers. macOS agent tests
    must also use the [offline sandbox](macos-port.md#smoke-configuration).
-2. For Linux, extract to `~/Games/openbf2-linux-x64-server`. Copy your 1.50 server's
-   `mods/`, `python/`, `pylib-2.3.4.zip`, and any `Settings/`, `Profiles/` and used
-   `admin/` into it. Use Linux server content with lowercase game paths.
+2. For Linux, extract `openbf2-linux.zip` to `~/Games`, which gives `~/Games/openbf2-linux`
+   (the CI artifact `openbf2-linux-x64-server.zip` installs the same way under its own name).
+   Copy your 1.50 server's `mods/`, `python/`, `pylib-2.3.4.zip`, and any `Settings/`,
+   `Profiles/` and used `admin/` into it. Use Linux server content with lowercase game paths.
    Keep `libdice_py.so` beside `bf2` and run:
 
    ```sh
-   cd "$HOME/Games/openbf2-linux-x64-server"
+   cd "$HOME/Games/openbf2-linux"
    chmod +x bf2
    ./bf2 +modPath mods/bf2
    ```
@@ -289,19 +394,21 @@ This setup was checked against the code, without a runtime test here.
 2. Create a release tag containing those files and publish a GitHub Release for it.
    Publishing either a regular release or a prerelease triggers the workflow; merely
    saving a draft does not. A tag push by itself starts no workflow.
-3. The workflow rebuilds that tagged commit, then attaches the ZIP/checksum pairs
-   only after every platform succeeds: the Windows and Linux server packages and the macOS
-   client packages always,
-   and the Windows x86 client, x86 editor and x64 client packages when D3DX was usable. With
-   either Windows client it also attaches the OpenAL Soft source tarball and its checksum. A missing
-   client or editor package is reported as a notice. Re-running the release workflow replaces the
-   same named assets on that release; it never creates or edits a release's notes.
+3. The workflow rebuilds that tagged commit, then, only after every platform succeeds,
+   attaches exactly the [release assets](#release-assets): `openbf2-macos.dmg`,
+   `openbf2-windows.zip`, `openbf2-linux.zip` and the OpenAL Soft source tarball, each with
+   its `.sha256`. It downloads only the `release-*` artifacts, checks every checksum, refuses
+   any other file, and checks that the Windows package holds both clients, the server and the
+   editor ([D3DX in release runs](#d3dx-in-release-runs)). Re-running the release workflow
+   replaces the same named assets on that release; it never creates or edits a release's notes.
+   Assets of earlier releases under other names (per-role ZIPs, `openbf2-macos-app.dmg`) stay
+   until deleted by hand.
 
 [Workflow reruns](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs)
 use the original commit. Pushing a packaging fix to the default branch does not change
 an existing release run; a new release tag must include the fix. For manual recovery of
 older artifacts with CRLF checksums, convert only the checksum files to LF, verify every
-ZIP with `sha256sum --check`, then upload the ZIP/checksum pairs to the existing release.
+asset with `sha256sum --check`, then upload the asset/checksum pairs to the existing release.
 
 The build jobs have `contents: read`. Only the asset-upload job has `contents: write`,
 using the built-in `GITHUB_TOKEN`; no personal token is needed. The macOS signing
@@ -317,8 +424,8 @@ and [immutable releases](https://docs.github.com/en/code-security/concepts/suppl
 
 ## macOS signing and notarization
 
-Release runs sign the macOS binaries with a Developer ID and notarize them; every other
-run keeps the ad-hoc signature and uses no secrets. A run is a release run when the
+Release runs sign the macOS binaries with a Developer ID and notarize the disk image;
+every other run keeps the ad-hoc signature and uses no secrets. A run is a release run when the
 event is a published release or the ref is a `v*` tag (`BF2_RELEASE_SIGNING` in
 [build.yml](../.github/workflows/build.yml)). Only then do the `macos` and `macos-app`
 jobs use the protected environment `release`; pull requests, branch pushes and forks
@@ -336,9 +443,9 @@ Secrets of the `release` environment (Settings > Environments > release):
 | --- | --- |
 | `MACOS_CERT_P12` | base64 of the exported "Developer ID Application" certificate with its private key (.p12) |
 | `MACOS_CERT_PASSWORD` | password of that .p12 |
-| `NOTARY_KEY_P8` | base64 of an App Store Connect API key (.p8, Developer access or higher) |
-| `NOTARY_KEY_ID` | that key's ID |
-| `NOTARY_ISSUER_ID` | the issuer ID shown with the App Store Connect API keys |
+| `NOTARY_KEY_P8` | base64 of an App Store Connect API key (.p8, Developer access or higher); `macos-app` only |
+| `NOTARY_KEY_ID` | that key's ID; `macos-app` only |
+| `NOTARY_ISSUER_ID` | the issuer ID shown with the App Store Connect API keys; `macos-app` only |
 
 Restrict the environment's deployment branches and tags to the tag pattern `v*`.
 Required reviewers are optional; with them, each release run waits for an approval
@@ -353,9 +460,10 @@ step deletes both. Secret values are passed to the steps that need them only.
   `libaidll.dylib`, `bf2` and `bf2_client` are signed with the hardened runtime and a
   secure timestamp, `bf2_client` with
   [bf2_client.entitlements](../Code/Build/macos/bf2_client.entitlements). The ZIPs are
-  packaged with `--macos-signing developer-id` (README and `build-info.json` say so)
-  and each is submitted with `notarytool --wait`. A ZIP cannot carry a stapled ticket;
-  Gatekeeper fetches it online on first launch.
+  packaged with `--macos-signing developer-id` (README and `build-info.json` say so).
+  They are CI artifacts, not release assets, so they are not notarized: the job imports
+  only the certificate, no notary key, and makes no Apple submission. The signed client
+  files are what the `macos-app` job merges into the app.
 - **App** (`macos-app` job): the setup repository's `build-release.sh` gets
   `SETUP_SIGN_IDENTITY` (the certificate's SHA-1), `SETUP_ENTITLEMENTS_CLIENT` (the
   file above) and `SETUP_ENTITLEMENTS_APP` (the setup repository's own file) and signs
@@ -363,7 +471,9 @@ step deletes both. Secret values are passed to the steps that need them only.
   job then checks the image's app (Developer ID, one Team ID, runtime, timestamp,
   audio-input entitlement), signs the disk image, notarizes it, staples and validates
   the ticket, runs `spctl -a -t open --context context:primary-signature` and writes
-  the `.sha256` last, after stapling.
+  the `.sha256` last, after stapling. It then writes `openbf2-macos.build-info.json`
+  (`--macos-signing developer-id`: notarized and stapled) as the `build-info-macos`
+  artifact.
 
 Any notarization status other than `Accepted` fails the job and prints `notarytool log`.
 
