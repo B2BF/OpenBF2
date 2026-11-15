@@ -113,6 +113,9 @@ def installation(platform, role, name, executable, macos_signing="adhoc"):
                      "   64-bit d3dx9_25.dll that the DirectX End-User Runtime installs in System32.\n"
                      "   Sound uses the bundled 64-bit BF2OpenAL.dll (OpenAL Soft; see\n"
                      "   OpenAL-Soft-NOTICE.txt), so the default audio providers work.\n"
+                     "   No PunkBuster: PunkBuster exists only as 32-bit DLLs, so this x64\n"
+                     "   client cannot join servers that require PunkBuster. Use the x86\n"
+                     "   client for those.\n"
                      "   Checked against the code; not runtime-tested here.\n")
     else:
         macos = platform.startswith("macos-")

@@ -202,7 +202,10 @@ class PackageReleaseTests(unittest.TestCase):
                                 self.assertIn(entry, readme)
                             self.assertNotIn("NovintHFX", readme)
                             self.assertNotIn("OpenAL-Soft-NOTICE", readme)
+                            self.assertNotIn("No PunkBuster", readme)
                         elif role == "client":
+                            self.assertIn("cannot join servers that require PunkBuster", readme)
+                            self.assertIn("Use the x86\n   client for those", readme)
                             for entry in ("64-bit d3dx9_25.dll", "bundled 64-bit BF2OpenAL.dll", "OpenAL-Soft-NOTICE.txt",
                                           "Checked against the code",
                                           "not runtime-tested here"):

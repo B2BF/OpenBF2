@@ -343,6 +343,10 @@ build remains the retail-fidelity reference; the x64 images are native ports wit
 pointer-sized layouts. They keep the shipped file names, are written only inside the x64
 build tree, and can be mixed only with each other.
 
+- **PunkBuster.** Not supported. PunkBuster exists only as 32-bit DLLs (`pbcl.dll`,
+  `pbsv.dll`), and an x64 process cannot load them, so the x64 client takes the
+  "PunkBuster Client Not Installed" path. It **cannot join servers that require PunkBuster**;
+  use the x86 client for those.
 - **Movies.** `binkw32.dll` exists only as a 32-bit DLL, so the x64 `RendDX9.dll` has no Bink
   import. Each movie is skipped with one log line per movie name (`Video::open(...): movie
   skipped`), through the same failure return the x86 renderer uses when a `.bik` is missing.

@@ -31,8 +31,10 @@ source is usable, the job posts a notice, skips the client (and the editor on x8
 and packages only its server. Otherwise it builds and packages those images.
 
 Windows ships both clients. The x86 client uses retail's 32-bit companions from the game
-folder (D3DX, OpenAL, PunkBuster). The x64 client bundles OpenAL Soft. An x64 editor package
-is a future goal.
+folder (D3DX, OpenAL, PunkBuster). The x64 client bundles OpenAL Soft and has **no
+PunkBuster support**. PunkBuster exists only as 32-bit DLLs, so the x64 client cannot join
+servers that require PunkBuster; use the x86 client for those. An x64 editor package is a
+future goal.
 
 The import listing fails the job if any of those images imports `NovintHFX.dll`.
 
@@ -76,7 +78,7 @@ required. CI passes it for the client and editor only when neither D3DX source i
 | `openbf2-windows-x86-client.zip` | `BF2.exe`, `dice_py.dll`, `RendDX9.dll`, `SwiffPlayer.dll`, `BF2Audio.dll`, `TextureAtlasBuilder.dll`, `BF2VoipServer.dll` |
 | `openbf2-windows-x86-editor.zip` | `BF2Editor.exe`, `dice_py.dll`, editor `RendDX9.dll`, `TextureAtlasBuilder.dll`, `BF2VoipServer.dll` |
 | `openbf2-windows-x64-server.zip` | `bf2_w64ded.exe`, `dice_py.dll`, `aidll.dll`; CI artifact only, not attached to releases (PunkBuster's server library exists only as 32-bit `pbsv.dll`, so Windows releases ship the x86 server) |
-| `openbf2-windows-x64-client.zip` | `BF2.exe`, `dice_py.dll`, `RendDX9.dll`, `SwiffPlayer.dll`, `BF2Audio.dll`, `TextureAtlasBuilder.dll`, `aidll.dll`, `BF2OpenAL.dll` (OpenAL Soft) |
+| `openbf2-windows-x64-client.zip` | `BF2.exe`, `dice_py.dll`, `RendDX9.dll`, `SwiffPlayer.dll`, `BF2Audio.dll`, `TextureAtlasBuilder.dll`, `aidll.dll`, `BF2OpenAL.dll` (OpenAL Soft); no PunkBuster, so it cannot join servers that require it |
 | `openbf2-linux-x64-server.zip` | `bf2`, `libdice_py.so` |
 | `openbf2-macos-arm64-client.zip`, `openbf2-macos-x86_64-client.zip` | `bf2_client`, `libdice_py.dylib`, `libaidll.dylib` |
 | `openbf2-macos-arm64-server.zip`, `openbf2-macos-x86_64-server.zip` | `bf2`, `libdice_py.dylib`, `libaidll.dylib`; CI artifact only, not attached to releases and not notarized |
@@ -197,7 +199,8 @@ working directory where required. No package needs
 `NovintHFX.dll`: the Novint Falcon is archived (`Code/Archive/NovintFalcon`). The x64
 client uses none of the game folder's 32-bit DLLs. It needs the 64-bit `d3dx9_25.dll`
 from the DirectX End-User Runtime ([Native x64 client](building.md#native-x64-client)). Sound
-uses the packaged `BF2OpenAL.dll` (OpenAL Soft, see above).
+uses the packaged `BF2OpenAL.dll` (OpenAL Soft, see above). The x64 client has no
+PunkBuster: for servers that require it, use the x86 client.
 This setup was checked against the code, without a runtime test here.
 
 ### macOS client and server (arm64 and x86_64)
