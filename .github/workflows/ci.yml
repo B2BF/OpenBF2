@@ -21,3 +21,6 @@ concurrency:
 jobs:
   build:
     uses: ./.github/workflows/build.yml
+    # A reusable workflow only receives the `release` environment's secrets when the caller
+    # passes secrets on; without this they resolve to empty strings.
+    secrets: inherit
