@@ -74,7 +74,7 @@ is usable. `windows-x86` has no client role.
 | --- | --- |
 | `openbf2-windows-x86-server.zip` | `bf2_w32ded.exe`, `dice_py.dll`, `AIDLL_w32ded.dll`, `BF2VoipServer_w32ded.dll` |
 | `openbf2-windows-x86-editor.zip` | `BF2Editor.exe`, `dice_py.dll`, editor `RendDX9.dll`, `TextureAtlasBuilder.dll`, `BF2VoipServer.dll` |
-| `openbf2-windows-x64-server.zip` | `bf2_w64ded.exe`, `dice_py.dll`, `aidll.dll` |
+| `openbf2-windows-x64-server.zip` | `bf2_w64ded.exe`, `dice_py.dll`, `aidll.dll`; CI artifact only, not attached to releases (PunkBuster's server library exists only as 32-bit `pbsv.dll`, so Windows releases ship the x86 server) |
 | `openbf2-windows-x64-client.zip` | `BF2.exe`, `dice_py.dll`, `RendDX9.dll`, `SwiffPlayer.dll`, `BF2Audio.dll`, `TextureAtlasBuilder.dll`, `aidll.dll`, `BF2OpenAL.dll` (OpenAL Soft) |
 | `openbf2-linux-x64-server.zip` | `bf2`, `libdice_py.so` |
 | `openbf2-macos-arm64-client.zip`, `openbf2-macos-x86_64-client.zip` | `bf2_client`, `libdice_py.dylib`, `libaidll.dylib` |
@@ -182,7 +182,6 @@ platform and role. The procedures below are intentional packaging policy
    "C:\OpenBF2\openbf2-windows-x64-client\BF2.exe" +modPath mods/bf2 +fullscreen 0
    "C:\OpenBF2\openbf2-windows-x86-editor\BF2Editor.exe" +loadMod bf2
    "C:\OpenBF2\openbf2-windows-x86-server\bf2_w32ded.exe" +modPath mods/bf2
-   "C:\OpenBF2\openbf2-windows-x64-server\bf2_w64ded.exe" +modPath mods/bf2
    ```
 
 A shortcut uses that command as **Target** and the game/server installation root as
