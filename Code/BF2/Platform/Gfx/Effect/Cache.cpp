@@ -8,7 +8,6 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <regex>
 #include <set>
 #include <sstream>
 #include <fcntl.h>
@@ -59,6 +58,28 @@ static std::string stripComments(const Bytes& bytes) {
         }
     } return s;
 }
+// The operand of an #include line as std::regex R"(^\s*#\s*include\s+(.+?)\s*$)" (ECMAScript:
+// '.' does not match '\r') captures it; false when the line is no include directive. Hand-written
+// because the regex cost about 1.7 ms per effect request (it ran on every line of the source and
+// its includes, thousands of requests per level load).
+static bool includeOperand(const std::string& line,std::string& operand) {
+    auto ws=[](char c){return c==' '||c=='\t'||c=='\n'||c=='\v'||c=='\f'||c=='\r';};
+    const size_t n=line.size(); size_t i=0;
+    while(i<n && ws(line[i])) ++i;
+    if(i==n || line[i]!='#') return false;
+    ++i; while(i<n && ws(line[i])) ++i;
+    if(line.compare(i,7,"include")!=0) return false;
+    i+=7; const size_t spaces=i;
+    while(i<n && ws(line[i])) ++i;
+    if(i==spaces) return false;
+    size_t end=n; while(end>i && ws(line[end-1])) --end;
+    if(end==i) { // only whitespace follows: the group takes back one of it that is not '\r'
+        for(size_t j=n;j-->spaces+1;) if(line[j]!='\r' && line[j]!='\n') { operand=line.substr(j,1); return true; }
+        return false;
+    }
+    operand=line.substr(i,end-i);
+    return operand.find('\r')==std::string::npos && operand.find('\n')==std::string::npos;
+}
 Result capture(const void* source,size_t size,const std::vector<Define>& defines,uint32_t flags,
                const std::string& dllHash,const std::string& translator,IncludeResolver* resolver,Request& out) {
     try {
@@ -75,9 +96,9 @@ Result capture(const void* source,size_t size,const std::vector<Define>& defines
             if(ancestors.size()>64 || r.includes.size()>8192) throw std::runtime_error("Include closure limit");
             auto hash=sha256(bytes); if(!ancestors.insert(hash).second) return;
             std::istringstream lines(stripComments(bytes)); std::string line;
-            std::regex directive(R"(^\s*#\s*include\s+(.+?)\s*$)"); std::smatch match;
-            while(std::getline(lines,line)) if(std::regex_match(line,match,directive)) {
-                std::string operand=match[1]; if(operand.size()<2 || (operand[0]!='"' && operand[0]!='<'))
+            std::string operand;
+            while(std::getline(lines,line)) if(includeOperand(line,operand)) {
+                if(operand.size()<2 || (operand[0]!='"' && operand[0]!='<'))
                     throw std::runtime_error("BF2FX_UNSUPPORTED_MACRO_INCLUDE: "+operand);
                 char end=operand[0]=='"'?'"':'>'; auto endpos=operand.find(end,1);
                 if(endpos==std::string::npos || operand.find_first_not_of(" \t\r",endpos+1)!=std::string::npos)
