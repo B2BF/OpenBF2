@@ -351,11 +351,13 @@ build tree, and can be mixed only with each other.
 - **Novint Falcon.** Archived on every platform (`Code/Archive/NovintFalcon`,
   [issue #17](https://github.com/kr4uzi/OpenBF2/issues/17)): no image imports or stages
   `NovintHFX.dll`, and the game takes retail's no-Falcon path.
-- **Audio.** The default providers load the game directory's 32-bit `BF2OpenAL.dll`, which an
-  x64 process cannot load, so sound stays off with a `Could not find BF2OpenAL.dll` warning.
-  Select the **System OpenAL** provider with a 64-bit `OpenAL32.dll` installed on the system, or
-  place a 64-bit `BF2OpenAL.dll` beside the x64 `BF2.exe` (the application directory is searched
-  before the game directory).
+- **Audio.** The default providers load `BF2OpenAL.dll`. The game directory's copy is 32-bit and
+  an x64 process cannot load it. The x64 client package carries OpenAL Soft built as a 64-bit
+  `BF2OpenAL.dll` beside `BF2.exe`, and the application directory is searched first
+  ([OpenAL Soft in the x64 client](ci-releases.md#openal-soft-in-the-x64-client),
+  `Code/Build/build_openal_soft.py`). A local build without that DLL has no sound, with a
+  `Could not find BF2OpenAL.dll` warning. Either run the script or select the **System OpenAL**
+  provider with a 64-bit `OpenAL32.dll` installed.
 - **D3DX.** The x64 renderer and atlas DLLs import the 64-bit `d3dx9_25.dll`, which the DirectX
   End-User Runtime installs in `System32`. The copy in the game directory is 32-bit.
   `[CHOSEN, not recovered]` On Windows (x86 and x64), both DLLs delay-load it (`/DELAYLOAD`

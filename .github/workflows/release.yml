@@ -61,6 +61,14 @@ jobs:
               echo "::notice title=Package not attached::$package was not built (no usable D3DX source on the build runner)."
             fi
           done
+          # The x64 client bundles OpenAL Soft (LGPL): attach the exact source it was built from.
+          sources=()
+          if [ -e openbf2-windows-x64-client.zip ]; then
+            shopt -s nullglob
+            sources=(openal-soft-*.tar.bz2)
+            shopt -u nullglob
+            test "${#sources[@]}" -eq 1
+          fi
           test -s openbf2-macos-app.dmg
           sha256sum --check openbf2-macos-app.dmg.sha256
           assets=(openbf2-macos-app.dmg openbf2-macos-app.dmg.sha256)
@@ -69,5 +77,10 @@ jobs:
             test -s "$package.zip.sha256"
             sha256sum --check "$package.zip.sha256"
             assets+=("$package.zip" "$package.zip.sha256")
+          done
+          for source in "${sources[@]}"; do
+            test -s "$source"
+            sha256sum --check "$source.sha256"
+            assets+=("$source" "$source.sha256")
           done
           gh release upload --repo "$GH_REPO" --clobber -- "$RELEASE_TAG" "${assets[@]}"

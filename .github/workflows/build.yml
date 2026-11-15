@@ -101,6 +101,23 @@ jobs:
           if errorlevel 1 exit /b 1
           cmake --build out/build/ci-x64 --target bf2_client
 
+      # [CHOSEN, not recovered] OpenAL Soft as the x64 client's BF2OpenAL.dll, built from the release
+      # tarball pinned by URL and SHA-256 in Code/Build/build_openal_soft.py (docs/ci-releases.md).
+      # The cache key is that script, so a new pin rebuilds.
+      - name: Restore the OpenAL Soft build
+        if: matrix.arch == 'x64' && steps.dxsdk.outputs.found == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: out/build/ci-x64/openal-soft
+          key: openal-soft-x64-${{ hashFiles('Code/Build/build_openal_soft.py') }}
+
+      - name: Build OpenAL Soft for the x64 client
+        if: matrix.arch == 'x64' && steps.dxsdk.outputs.found == 'true'
+        run: |
+          call Code\Build\vsdevcmd.cmd x64
+          if errorlevel 1 exit /b 1
+          python Code/Build/build_openal_soft.py --stage-dir out/build/ci-x64/openal-soft --work-dir out/openal-soft-work --client-dir out/build/ci-x64/bin_client
+
       - name: Build the x86 editor with its plugins
         if: matrix.arch == 'x86' && steps.dxsdk.outputs.found == 'true'
         run: |
@@ -117,7 +134,9 @@ jobs:
           if errorlevel 1 exit /b 1
           set "BIN=out\build\ci-${{ matrix.arch }}\bin_${{ matrix.arch == 'x64' && 'client' || 'editor' }}"
           set "EXE=${{ matrix.arch == 'x64' && 'BF2.exe' || 'BF2Editor.exe' }}"
-          for %%I in ("%BIN%\%EXE%" "%BIN%\RendDX9.dll" "%BIN%\TextureAtlasBuilder.dll") do (
+          set "EXTRA="
+          if "${{ matrix.arch }}"=="x64" set "EXTRA="%BIN%\BF2OpenAL.dll""
+          for %%I in ("%BIN%\%EXE%" "%BIN%\RendDX9.dll" "%BIN%\TextureAtlasBuilder.dll" %EXTRA%) do (
             echo ===== %%~nxI
             dumpbin /nologo /dependents /imports %%I > "%%~dpnI.imports.txt"
             if errorlevel 1 exit /b 1
@@ -141,6 +160,7 @@ jobs:
           path: |
             out/packages/*.zip
             out/packages/*.sha256
+            out/packages/*.tar.bz2
           if-no-files-found: error
           compression-level: 0
           retention-days: 14

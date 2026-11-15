@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import shutil
 import stat
 import zipfile
 
@@ -26,9 +27,10 @@ PACKAGES = {
     "windows-x64": {
         # [CHOSEN, not recovered] Native AI in both hosts (kr4uzi/OpenBF2 issue #11).
         "server": ("bin_w64ded", ("bf2_w64ded.exe", "dice_py.dll", "aidll.dll")),
+        # BF2OpenAL.dll: OpenAL Soft, built by Code/Build/build_openal_soft.py ([CHOSEN, not recovered]).
         "client": ("bin_client", (
             "BF2.exe", "dice_py.dll", "RendDX9.dll", "SwiffPlayer.dll",
-            "BF2Audio.dll", "TextureAtlasBuilder.dll", "aidll.dll",
+            "BF2Audio.dll", "TextureAtlasBuilder.dll", "aidll.dll", "BF2OpenAL.dll",
         )),
     },
     "linux-x64": {
@@ -65,6 +67,22 @@ def leading_notice(path):
     return match.group().rstrip() + "\n"
 
 
+def openal_notice(build_info):
+    """[CHOSEN, not recovered] The LGPL notice for the x64 client's bundled BF2OpenAL.dll."""
+    return (
+        "BF2OpenAL.dll in this package is OpenAL Soft (https://openal-soft.org), unmodified,\n"
+        "licensed under the GNU Library General Public License version 2 or later; see\n"
+        "licenses/OpenAL-Soft-COPYING.txt. The exact source tarball it was built from is\n"
+        "attached to the same release (openal-soft-<version>.tar.bz2) and can be downloaded\n"
+        "from the source URL below.\n\n"
+        + build_info +
+        "\nReplacing it: BF2.exe loads BF2OpenAL.dll from its own folder first. Put any other\n"
+        "64-bit OpenAL Soft build (or OpenAL implementation with the standard exports) there\n"
+        "under that name. Alternatively choose \"System OpenAL\" in the audio settings to use\n"
+        "an installed 64-bit OpenAL32.dll.\n"
+    )
+
+
 def installation(platform, role, name, executable, macos_signing="adhoc"):
     """[CHOSEN, not recovered] Owner-requested install policy."""
     server = role.startswith("server")
@@ -86,8 +104,8 @@ def installation(platform, role, name, executable, macos_signing="adhoc"):
         if role.startswith("client"):
             text += ("   This x64 client does not use the game folder's 32-bit DLLs. It needs the\n"
                      "   64-bit d3dx9_25.dll that the DirectX End-User Runtime installs in System32.\n"
-                     "   For sound, select System OpenAL with a 64-bit OpenAL32.dll installed, or\n"
-                     "   put a 64-bit BF2OpenAL.dll beside BF2.exe.\n"
+                     "   Sound uses the bundled 64-bit BF2OpenAL.dll (OpenAL Soft; see\n"
+                     "   OpenAL-Soft-NOTICE.txt), so the default audio providers work.\n"
                      "   Checked against the code; not runtime-tested here.\n")
     else:
         macos = platform.startswith("macos-")
@@ -162,6 +180,7 @@ def package(args):
         raise ValueError("Cannot omit {}: {} packages only {}".format(
             ", ".join(unknown), args.platform, ", ".join(roles)))
     plans = []
+    companions = []
     for role, (directory, names) in roles.items():
         if role in args.omit:
             print("Omitted by request: openbf2-{}-{}".format(args.platform, role))
@@ -184,6 +203,21 @@ def package(args):
             files["licenses/meshoptimizer-LICENSE.md"] = external / "meshoptimizer/LICENSE.md"
             files["licenses/FFmpeg-COPYING.LGPLv2.1.txt"] = external / "ffmpeg-bink/COPYING.LGPLv2.1"
         if role.startswith("client") and args.platform == "windows-x64":
+            # [CHOSEN, not recovered] The bundled OpenAL Soft (LGPL): its licence, a notice and the
+            # exact source tarball (written beside the ZIP; release.yml attaches it).
+            openal = args.build_dir / "openal-soft"
+            files["licenses/OpenAL-Soft-COPYING.txt"] = openal / "COPYING"
+            build_info = openal / "BUILD.txt"
+            if not build_info.is_file():
+                raise ValueError("Required package input is missing or empty: {} (OpenAL Soft)".format(build_info))
+            package_notices["OpenAL-Soft-NOTICE.txt"] = openal_notice(build_info.read_text(encoding="utf-8"))
+            sources = sorted(openal.glob("openal-soft-*.tar.bz2"))
+            if len(sources) != 1:
+                raise ValueError("Expected one OpenAL Soft source tarball in {}".format(openal))
+            pinned = re.search(r"^Source SHA-256: ([0-9a-f]{64})$", build_info.read_text(encoding="utf-8"), re.M)
+            if not pinned or pinned.group(1) != sha256(sources[0]):
+                raise ValueError("{} does not match the SHA-256 in {}".format(sources[0], build_info))
+            companions.append(sources[0])
             # renddx9.cmd x64 statically links the FFmpeg-based Bink replacement.
             files["licenses/FFmpeg-COPYING.LGPLv2.1.txt"] = external / "ffmpeg-bink/COPYING.LGPLv2.1"
         if role.startswith("editor"):
@@ -195,6 +229,12 @@ def package(args):
         plans.append((role, names, files, package_notices))
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    for source in companions:
+        target = args.output_dir / source.name
+        shutil.copyfile(source, target)
+        target.with_name(target.name + ".sha256").write_bytes(
+            "{}  {}\n".format(sha256(target), target.name).encode("ascii"))
+        print(target)
     for role, names, files, package_notices in plans:
         name = "openbf2-{}-{}".format(args.platform, role)
         archive_path = args.output_dir / (name + ".zip")

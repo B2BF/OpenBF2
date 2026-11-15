@@ -36,6 +36,15 @@ class PackageReleaseTests(unittest.TestCase):
                 path = self.args.build_dir / directory / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(b"synthetic fixture: " + name.encode("ascii"))
+        if self.args.platform == "windows-x64":
+            # A synthetic OpenAL Soft stage (Code/Build/build_openal_soft.py writes the real one).
+            openal = self.args.build_dir / "openal-soft"
+            openal.mkdir(parents=True, exist_ok=True)
+            (openal / "COPYING").write_text("Synthetic LGPL text\n")
+            tarball = openal / "openal-soft-0.0.0.tar.bz2"
+            tarball.write_bytes(b"synthetic source tarball")
+            (openal / "BUILD.txt").write_text("OpenAL Soft 0.0.0\nSource SHA-256: {}\nCMake options: -DALSOFT_EAX=ON\n".format(
+                hashlib.sha256(tarball.read_bytes()).hexdigest()))
         # Synthetic dependency notices let macOS archive fixtures stay offline.
         for name in ("vkd3d/COPYING", "vkd3d/LICENSE", "mojoshader/LICENSE.txt"):
             path = self.args.native_sources / name
@@ -57,11 +66,14 @@ class PackageReleaseTests(unittest.TestCase):
         with zipfile.ZipFile(path) as archive:
             entries = {entry.removeprefix(name + "/") for entry in archive.namelist()}
             runtime = {"BF2.exe", "dice_py.dll", "RendDX9.dll", "SwiffPlayer.dll",
-                       "BF2Audio.dll", "TextureAtlasBuilder.dll", "aidll.dll"}
+                       "BF2Audio.dll", "TextureAtlasBuilder.dll", "aidll.dll", "BF2OpenAL.dll"}
             self.assertEqual({entry for entry in entries if entry.endswith((".exe", ".dll"))}, runtime)
             for license_name in ("Ogg-COPYING.txt", "Vorbis-COPYING.txt", "gameswf.txt",
-                                 "gameswf-base.txt", "FFmpeg-COPYING.LGPLv2.1.txt"):
+                                 "gameswf-base.txt", "FFmpeg-COPYING.LGPLv2.1.txt", "OpenAL-Soft-COPYING.txt"):
                 self.assertIn("licenses/" + license_name, entries)
+            notice = archive.read(name + "/OpenAL-Soft-NOTICE.txt").decode()
+            for text in ("OpenAL Soft 0.0.0", "-DALSOFT_EAX=ON", "unmodified", "Replacing it", "System OpenAL"):
+                self.assertIn(text, notice)
             metadata = json.loads(archive.read(name + "/build-info.json"))
             self.assertEqual(set(metadata["runtime_files"]), runtime)
             for entry, digest in metadata["runtime_files"].items():
@@ -69,9 +81,24 @@ class PackageReleaseTests(unittest.TestCase):
             self.assertEqual(metadata["link_contract"], "strict")
             self.assertNotIn(b"diagnostic /FORCE package", archive.read(name + "/README.txt"))
             self.assertNotIn(b"No Windows x64 AI library", archive.read(name + "/README.txt"))
+        source = self.args.output_dir / "openal-soft-0.0.0.tar.bz2"
+        self.assertEqual(source.read_bytes(), b"synthetic source tarball")
+        self.assertEqual(source.with_name(source.name + ".sha256").read_bytes(),
+                         (hashlib.sha256(source.read_bytes()).hexdigest() + "  " + source.name + "\n").encode("ascii"))
         checksum = path.with_suffix(".zip.sha256").read_bytes()
         self.assertEqual(checksum, (hashlib.sha256(path.read_bytes()).hexdigest()
                                    + "  " + path.name + "\n").encode("ascii"))
+
+    def test_x64_client_requires_the_pinned_openal_source(self):
+        self.populate()
+        openal = self.args.build_dir / "openal-soft"
+        (openal / "openal-soft-0.0.0.tar.bz2").write_bytes(b"tampered")
+        with self.assertRaisesRegex(ValueError, "does not match the SHA-256"):
+            self.package()
+        (openal / "BUILD.txt").unlink()
+        with self.assertRaisesRegex(ValueError, "OpenAL Soft"):
+            self.package()
+        self.assertFalse(self.args.output_dir.exists())
 
     def test_x64_server_contents_and_contract(self):
         self.populate()
@@ -169,7 +196,7 @@ class PackageReleaseTests(unittest.TestCase):
                         self.assertIn("Start in", readme)
                         self.assertIn("No original EXE or DLL is replaced", readme)
                         if role == "client":
-                            for entry in ("64-bit d3dx9_25.dll", "System OpenAL", "64-bit BF2OpenAL.dll",
+                            for entry in ("64-bit d3dx9_25.dll", "bundled 64-bit BF2OpenAL.dll", "OpenAL-Soft-NOTICE.txt",
                                           "Checked against the code",
                                           "not runtime-tested here"):
                                 self.assertIn(entry, readme)
@@ -218,6 +245,20 @@ class PackageReleaseTests(unittest.TestCase):
                     self.assertEqual("this archive is notarized" in readme, notarized)
                     self.assertEqual("ad-hoc signed, not notarized" in readme, not notarized)
                     self.assertEqual("xattr -dr com.apple.quarantine ." in readme, not notarized)
+
+
+class OpenALSoftPinTests(unittest.TestCase):
+    def test_openal_soft_source_is_pinned(self):
+        spec = importlib.util.spec_from_file_location("build_openal_soft", SOURCE / "Code/Build/build_openal_soft.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.assertRegex(module.SHA256, r"^[0-9a-f]{64}$")
+        self.assertTrue(module.URL.startswith("https://openal-soft.org/openal-releases/"))
+        self.assertTrue(module.URL.endswith("/" + module.TARBALL))
+        for option in ("-DLIBTYPE=SHARED", "-DALSOFT_EAX=ON", "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded",
+                       "-DALSOFT_UTILS=OFF", "-DALSOFT_EXAMPLES=OFF", "-DALSOFT_TESTS=OFF"):
+            self.assertIn(option, module.CMAKE_OPTIONS)
+        self.assertIn("Source SHA-256: " + module.SHA256, module.build_info())
 
 
 if __name__ == "__main__":

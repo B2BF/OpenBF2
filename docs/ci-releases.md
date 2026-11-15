@@ -75,7 +75,7 @@ is usable. `windows-x86` has no client role.
 | `openbf2-windows-x86-server.zip` | `bf2_w32ded.exe`, `dice_py.dll`, `AIDLL_w32ded.dll`, `BF2VoipServer_w32ded.dll` |
 | `openbf2-windows-x86-editor.zip` | `BF2Editor.exe`, `dice_py.dll`, editor `RendDX9.dll`, `TextureAtlasBuilder.dll`, `BF2VoipServer.dll` |
 | `openbf2-windows-x64-server.zip` | `bf2_w64ded.exe`, `dice_py.dll`, `aidll.dll` |
-| `openbf2-windows-x64-client.zip` | `BF2.exe`, `dice_py.dll`, `RendDX9.dll`, `SwiffPlayer.dll`, `BF2Audio.dll`, `TextureAtlasBuilder.dll`, `aidll.dll` |
+| `openbf2-windows-x64-client.zip` | `BF2.exe`, `dice_py.dll`, `RendDX9.dll`, `SwiffPlayer.dll`, `BF2Audio.dll`, `TextureAtlasBuilder.dll`, `aidll.dll`, `BF2OpenAL.dll` (OpenAL Soft) |
 | `openbf2-linux-x64-server.zip` | `bf2`, `libdice_py.so` |
 | `openbf2-macos-arm64-client.zip`, `openbf2-macos-x86_64-client.zip` | `bf2_client`, `libdice_py.dylib`, `libaidll.dylib` |
 | `openbf2-macos-arm64-server.zip`, `openbf2-macos-x86_64-server.zip` | `bf2`, `libdice_py.dylib`, `libaidll.dylib`; CI artifact only, not attached to releases and not notarized |
@@ -87,6 +87,32 @@ is strict; MSVC and runtime results await coordinator validation documented in
 [Building](building.md). Never load retail x86 AI into an x64 host.
 The x64 renderer statically links the FFmpeg-based Bink replacement; its package
 includes `FFmpeg-COPYING.LGPLv2.1.txt` alongside the other dependency notices.
+
+### OpenAL Soft in the x64 client
+
+`[CHOSEN, not recovered]` Retail's `BF2OpenAL.dll` is 32-bit, and an x64 process cannot load
+it. The x64 client package therefore carries an unmodified
+[OpenAL Soft](https://openal-soft.org) build under that name, beside `BF2.exe`. The default
+audio providers ("Software Audio", "Hardware Audio", "+ EAX") load it. OpenAL Soft maps
+their legacy device names to its default device and implements the EAX extensions. The
+"System OpenAL" rows still load an installed `OpenAL32.dll`.
+
+- **Pin.** `Code/Build/build_openal_soft.py` holds the version (1.25.2), the release tarball
+  URL (`openal-soft.org/openal-releases`) and its SHA-256. The tarball's contents match the
+  upstream `1.25.2` tag. The script refuses any other download. Changing the pin means editing
+  those three constants.
+- **Build.** CMake/Ninja with MSVC x64: `LIBTYPE=SHARED`, `ALSOFT_EAX=ON`, the static MSVC
+  runtime (`FORCE_STATIC_VCRT=ON`, `CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`; the script checks
+  that the DLL has no VC++ runtime imports), with `ALSOFT_UTILS`, `ALSOFT_EXAMPLES`, `ALSOFT_TESTS`,
+  `ALSOFT_INSTALL` and C++20 modules off. `OpenAL32.dll` is copied as `BF2OpenAL.dll`. CI caches
+  the result (`out/build/ci-x64/openal-soft`), keyed on the script.
+- **LGPL.** The package contains `licenses/OpenAL-Soft-COPYING.txt` and
+  `OpenAL-Soft-NOTICE.txt` (version, source URL and SHA-256, build options, how to replace the
+  DLL). The packager writes the exact source tarball and its `.sha256` beside the ZIP, and
+  releases attach both.
+- **Local builds.** In an x64 developer prompt, run `python Code/Build/build_openal_soft.py
+  --stage-dir <build>/openal-soft --work-dir <scratch> --client-dir <build>/bin_client` before
+  packaging `windows-x64`. Packaging the x64 client requires that stage.
 
 Every ZIP has a matching `.zip.sha256` checksum written with LF line endings on all
 platforms, so Linux `sha256sum --check` can verify Windows-built packages too.
@@ -168,8 +194,8 @@ For the x86 editor, the original game folder supplies `binkw32.dll`, `d3dx9_25.d
 and the OpenAL DLLs through the working directory where required. No package needs
 `NovintHFX.dll`: the Novint Falcon is archived (`Code/Archive/NovintFalcon`). The x64
 client uses none of the game folder's 32-bit DLLs. It needs the 64-bit `d3dx9_25.dll`
-from the DirectX End-User Runtime and a 64-bit OpenAL provider for sound
-([Native x64 client](building.md#native-x64-client)).
+from the DirectX End-User Runtime ([Native x64 client](building.md#native-x64-client)). Sound
+uses the packaged `BF2OpenAL.dll` (OpenAL Soft, see above).
 This setup was checked against the code, without a runtime test here.
 
 ### macOS client and server (arm64 and x86_64)
@@ -249,7 +275,8 @@ This setup was checked against the code, without a runtime test here.
 3. The workflow rebuilds that tagged commit, then attaches the ZIP/checksum pairs
    only after every platform succeeds: the Windows and Linux server packages and the macOS
    client packages always,
-   and the Windows x86 editor and x64 client packages when D3DX was usable. A missing
+   and the Windows x86 editor and x64 client packages when D3DX was usable. With the x64
+   client it also attaches the OpenAL Soft source tarball and its checksum. A missing
    client or editor package is reported as a notice. Re-running the release workflow replaces the
    same named assets on that release; it never creates or edits a release's notes.
 
