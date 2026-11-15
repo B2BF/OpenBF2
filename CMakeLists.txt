@@ -2352,6 +2352,24 @@ if(APPLE)
     endif()
 endif()
 
+# [TEMP] [CHOSEN, not recovered] Receive-size limit of DataBlockManager (Code/Tests/datablock_cap_runtime.cpp):
+# the actual DataBlockManager/DataBlockEvent/BitStream with a recording GameEventManager.
+if(APPLE)
+    add_executable(bf2_datablock_cap_check EXCLUDE_FROM_ALL
+        Code/Tests/datablock_cap_runtime.cpp
+        "${BF2_ROOT}/Game/Common/DataBlockManager.cpp"
+        "${BF2_ROOT}/Game/GameEvents/DataBlockEvent.cpp"
+        "${BF2_ROOT}/Game/Common/GameEvent.cpp"
+        "${BF2_ROOT}/Core/EventManager.cpp"
+        "${BF2_ROOT}/IO/BitStream.cpp")
+    bf2_configure_cpp_target(bf2_datablock_cap_check)
+    bf2_set_platform_compat(bf2_datablock_cap_check)
+    bf2_set_image(bf2_datablock_cap_check 0)
+    if(BUILD_TESTING)
+        add_test(NAME bf2_datablock_cap_check COMMAND bf2_datablock_cap_check)
+    endif()
+endif()
+
 # [TEMP] Cumulative fixture for game frontier-closure sites no normal session reaches
 # (Code/Tests/game_frontier_check.cpp; docs/tracks/game/frontier-closure.md). Built on request; the
 # families it never calls stay unresolved, as /FORCE:UNRESOLVED leaves them in the Windows fixtures.

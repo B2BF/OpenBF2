@@ -316,6 +316,8 @@ void Bf2MiniMenuMapNode::paintMapIcon(hfe::Vec2 position, float rotation,
                                       const Rect* adjusted, const Rect* bounds,
                                       const Color* color, RenderContext* context)
 {
+    // Retail, not a deviation: BF2.exe 0x7CF02D tests the texture argument (test ebx,ebx) and
+    // returns on jle (0x7CF1AD), a signed <= 0 test of the 32-bit handle.
     if (texture == 0) return;
     position.x -= static_cast<float>(std::floor(position.x + 0.5f));
     position.y -= static_cast<float>(std::floor(position.y + 0.5f));

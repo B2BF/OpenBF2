@@ -47,6 +47,13 @@ public:
 class DataBlockManager
 {
 public:
+    // [CHOSEN, not recovered] Largest incoming block newDataBlock accepts (retail has no limit).
+    // The largest fixed-size senders are EndOfRoundInfo (7,166 bytes), ServerInfo (895) and
+    // MapInfo (369); the map list and remote-console text grow with their content but stay in
+    // the tens of kilobytes. 1 MiB leaves a wide margin and bounds the memory a peer can
+    // claim to one such buffer per connection.
+    enum { MAX_RECEIVE_SIZE = 0x100000 };
+
     DataBlockManager(GameEventManager* gameEvents, bool isRecording);
 
     // Keep these four methods before the virtual destructor to preserve interface order.

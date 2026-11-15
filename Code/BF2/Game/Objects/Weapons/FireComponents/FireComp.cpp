@@ -446,11 +446,15 @@ void FireComp::setFirebuttonLastHeldAtTick(io::PlayerInputMap input, unsigned in
         m_altFireButtonLastHeldAtTick = tick;
 }
 
+// ELF 0x82630C0 fetches the player (0x82630DE) and, when the template names an ignored fire
+// button, calls through it (0x82630F2/0x82630F7) without a null test.
+// [CHOSEN, not recovered] A firearm without a player skips the ignored-button test instead of
+// crashing; the rest is retail (the same path retail takes when no button is ignored).
 bool FireComp::requestFire(bool released, bool)
 {
     IPlayer* const player = firearm()->getPlayer();
     const io::PlayerInputMap ignored = m_template->getIgnoreFireButton();
-    if (ignored != io::PINone && ignored == player->getCurrentFiringButton())
+    if (ignored != io::PINone && player && ignored == player->getCurrentFiringButton())
         return false;
 
     if (m_fireRate == static_cast<FireRate>(2))
