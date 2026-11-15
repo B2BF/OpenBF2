@@ -53,6 +53,9 @@ static int reviewQueryChecks(IDirect3DDevice9* d) {
             DWORD pending=7; CHECK(q->GetData(&pending,4,0)==S_FALSE);
             CHECK(q->Issue(D3DISSUE_END)==D3D_OK && q->Issue(D3DISSUE_END)==D3D_OK);
         } else CHECK(q->Issue(D3DISSUE_END)==D3D_OK);
+        // An event query's Issue submits without waiting for the GPU (frames in flight): like
+        // RendDX9's queryWaitDone, poll until the GPU has reached it.
+        if(type==D3DQUERYTYPE_EVENT) while(q->GetData(nullptr,0,D3DGETDATA_FLUSH)==S_FALSE) {}
         DWORD data[2]={0xffffffffu,0xffffffffu};
         CHECK(q->GetData(data,2,D3DGETDATA_FLUSH)==S_OK && (data[0]>>16)==0xffffu);
         CHECK(q->GetData(data,sizeof(data),D3DGETDATA_FLUSH)==S_OK);

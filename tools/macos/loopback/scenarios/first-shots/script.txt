@@ -1,0 +1,117 @@
+# [TEMP] first-shots: first use of every weapon of four kits and of a tank gun, as labelled moments
+# for BF2_HITCH_TRACE. Server half: pose.cfg (the infantry-range plateau; the enemy bot stands 25 m
+# ahead). Kit buttons: SelectKit<N> at 10, 73 + 66 N, 246 x 69 (HudElementsSpawn.con); join-and-spawn
+# picks kit 0. Explosives are thrown or fired at the enemy 25 m away.
+include join-and-spawn
+log scenario: first-shots start
+wait-ms 2000
+log scenario: kit 0 special-forces
+aim -67.5/153.8/157.65 0.5 4000
+include fire-slots
+log capture kit-0
+capture kit-0
+wait-log kit-0.png
+log scenario: suicide
+key enter
+wait-ms 1500
+hud-click 604 546
+wait-log-else 6 dead-1 [PLAY] alive=0
+label dead-1
+wait-ms 1000
+log scenario: respawn as kit 2 assault
+hud-click 130 239
+wait-ms 500
+hud-click 432 282
+wait-ms 500
+hud-click 728 546
+wait-log-else 12 alive-1 [PLAY] alive=1
+label alive-1
+wait-ms 1500
+log scenario: kit 2 assault
+aim -67.5/153.8/157.65 0.5 4000
+include fire-slots
+log capture kit-2
+capture kit-2
+wait-log kit-2.png
+log scenario: suicide
+key enter
+wait-ms 1500
+hud-click 604 546
+wait-log-else 6 dead-2 [PLAY] alive=0
+label dead-2
+wait-ms 1000
+log scenario: respawn as kit 3 support
+hud-click 130 305
+wait-ms 500
+hud-click 432 282
+wait-ms 500
+hud-click 728 546
+wait-log-else 12 alive-2 [PLAY] alive=1
+label alive-2
+wait-ms 1500
+log scenario: kit 3 support
+aim -67.5/153.8/157.65 0.5 4000
+include fire-slots
+log capture kit-3
+capture kit-3
+wait-log kit-3.png
+log scenario: suicide
+key enter
+wait-ms 1500
+hud-click 604 546
+wait-log-else 6 dead-3 [PLAY] alive=0
+label dead-3
+wait-ms 1000
+log scenario: respawn as kit 6 anti-tank
+hud-click 130 503
+wait-ms 500
+hud-click 432 282
+wait-ms 500
+hud-click 728 546
+wait-log-else 12 alive-3 [PLAY] alive=1
+label alive-3
+wait-ms 1500
+log scenario: kit 6 anti-tank
+aim -67.5/153.8/157.65 0.5 4000
+include fire-slots
+log capture kit-6
+capture kit-6
+wait-log kit-6.png
+log scenario: vehicle: goto site
+key j
+wait-ms 500
+type goto site
+key enter
+wait-log-else 5 at-site pos=-167.
+label at-site
+wait-ms 1500
+log scenario: vehicle: walk to the tank
+walk-to tmpl:ustnk_m1a2 4 20000
+face tmpl:ustnk_m1a2 5 3000
+log shot: enter tank
+key e
+wait-ms 3000
+log shot: fire tank gun
+button-down 0
+wait-ms 300
+button-up 0
+wait-ms 3000
+log shot: fire tank machine gun
+button-down 1
+wait-ms 800
+button-up 1
+wait-ms 2000
+log shot: tank drive
+key-down w
+wait-ms 2500
+key-up w
+wait-ms 1000
+log capture tank
+capture tank
+wait-log tank.png
+log shot: exit tank
+key e
+wait-ms 2500
+log scenario: first-shots done
+wait-ms 1000
+quit

@@ -2154,17 +2154,45 @@ void* EffectManager::getEffect(const std::string& name)
 namespace {
 
 
+// [CHOSEN, not recovered] The pattern matched by hand when the file name holds no regex syntax but
+// '.' (any character except '\n' and '\r', as in the regex): std::regex cost about 2 ms per effect
+// request on macOS (every line of every include, thousands of requests per level load). Same
+// result as std::regex_match of the line against the pattern.
+bool raIncludeLineMatches(const char* line, const char* lineEnd, const char* fileName)
+{
+    static const char kDirective[] = "#include";
+    const std::size_t directive = sizeof(kDirective) - 1;
+    if (static_cast<std::size_t>(lineEnd - line) < directive || ::memcmp(line, kDirective, directive) != 0)
+        return false;
+    const char* p = line + directive;
+    const char* const spaces = p;
+    while (p < lineEnd && (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\v' || *p == '\f' || *p == '\r'))
+        ++p;
+    if (p == spaces || p == lineEnd || *p++ != '"')
+        return false;
+    for (const char* n = fileName; *n; ++n, ++p)
+        if (p == lineEnd || (*n == '.' ? (*p == '\n' || *p == '\r') : *p != *n))
+            return false;
+    if (p == lineEnd || *p++ != '"')
+        return false;
+    for (; p < lineEnd; ++p)
+        if (*p == '\n' || *p == '\r')
+            return false;
+    return true;
+}
+
 // PME("^#include\s+\"<name>\".*", "mg") driven one line at a time. Ra/RaShaderPermutator.cpp
 // records why PME itself is not here: it is a third-party pcre wrapper (?match@PME@@, ??apme@@,
 // ?getMarkers@PME@@) that this tree does not carry, so the pattern is transcribed verbatim and the
 // cursor is written out. `matchEnd` is where PME::getMarkers(0) would put the match's end - the
 // byte before the newline, because `.` does not match '\n' but does match the '\r' of a CRLF.
-
-bool raFindIncludeLine(const std::string& text, const std::string& pattern,
+bool raFindIncludeLine(const std::string& text, const char* fileName,
                        std::string::size_type& matchBegin, std::string::size_type& matchEnd)
 {
+    const bool literal = ::strpbrk(fileName, "\\^$*+?()[]{}|") == 0;
+    const std::string pattern = literal ? std::string() : "^#include\\s+\"" + std::string(fileName) + "\".*";
     std::regex re;
-    try
+    if (!literal) try
     {
         re.assign(pattern);
     }
@@ -2188,8 +2216,9 @@ bool raFindIncludeLine(const std::string& text, const std::string& pattern,
         while (lineEnd > from && text[lineEnd - 1] == '\r')
             --lineEnd;
 
-        if (std::regex_match(text.begin() + static_cast<std::ptrdiff_t>(from),
-                             text.begin() + static_cast<std::ptrdiff_t>(lineEnd), re))
+        if (literal ? raIncludeLineMatches(text.data() + from, text.data() + lineEnd, fileName)
+                    : std::regex_match(text.begin() + static_cast<std::ptrdiff_t>(from),
+                                       text.begin() + static_cast<std::ptrdiff_t>(lineEnd), re))
         {
             matchBegin = from;
             matchEnd   = rawEnd;
@@ -2293,17 +2322,13 @@ long __stdcall raIncludeOpen(void* self, int /*includeType*/, const char* fileNa
     // The splice. `"^#include\\s+\"" + fileName + "\".*"`, PME flags "mg", applied to the expanded
     // copy until no match remains.
     {
-        std::string pattern("^#include\\s+\"");
-        pattern += fileName;
-        pattern += "\".*";
-
         for (;;)
         {
             // PE 0x10037878: basic_string(const char*) from c_str(), so the copy stops at an embedded NUL.
             std::string text(sub->text.c_str());
             std::string::size_type begin = 0;
             std::string::size_type end   = 0;
-            if (!raFindIncludeLine(text, pattern, begin, end))
+            if (!raFindIncludeLine(text, fileName, begin, end))
                 break;
 
             const unsigned int bytes = *outBytes;

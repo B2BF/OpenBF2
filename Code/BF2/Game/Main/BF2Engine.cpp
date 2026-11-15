@@ -30,6 +30,7 @@
 #include "../IGameServer.h"
 #if defined(__APPLE__) && !DEDICATED
 #include "../../Platform/macOS/Warmup.h"   // [CHOSEN] +warmupLevel (port addition)
+#include "../../Platform/macOS/HitchTrace.h" // [CHOSEN] BF2_HITCH_TRACE (port addition, measurement)
 #endif                 // recovered secondary interface; startServer is +0x1C
 #include "../IGameClient.h"
 #include "../IGameLogic.h"                  // [INFERRED] path
@@ -421,6 +422,7 @@ void playTraceTick()
 // [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: macos-client-perf-understood]
 // BF2_FRAME_TRACE=1: once a second (wall clock), one stderr line with the frame count, the mean and
 // worst frame time, and the mean wall time of each mainLoop section.
+// BF2_HITCH_TRACE=<file>: every frame with its section times goes to the hitch trace (HitchTrace.h).
 // Measurement only: off by default, nothing in the loop changes.
 namespace frametrace {
 enum Section { Pre, Update, Script, Objects, Render, Tail, Count };
@@ -430,7 +432,7 @@ static double s_sum[Count], s_frameMax, s_frameSum;
 static int    s_frames, s_ticks;
 inline bool armed()
 {
-    if (s_armed < 0) s_armed = std::getenv("BF2_FRAME_TRACE") ? 1 : 0;
+    if (s_armed < 0) s_armed = (std::getenv("BF2_FRAME_TRACE") ? 1 : 0) | (bf2hitch::enabled() ? 2 : 0);
     return s_armed != 0;
 }
 inline void begin()
@@ -443,13 +445,17 @@ inline void mark(Section s)
 {
     if (!armed()) return;
     const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
-    s_sum[s] += std::chrono::duration<double, std::milli>(now - s_mark).count();
+    const double ms = std::chrono::duration<double, std::milli>(now - s_mark).count();
+    s_sum[s] += ms;
+    if (s_armed & 2) bf2hitch::section(s, ms);
     s_mark = now;
 }
 inline void end(int ticks, bool inGame)
 {
     if (!armed()) return;
     mark(Tail);
+    if (s_armed & 2) bf2hitch::frame(inGame);
+    if (!(s_armed & 1)) return;
     const double ms = std::chrono::duration<double, std::milli>(s_mark - s_frameStart).count();
     s_frameSum += ms;
     if (ms > s_frameMax) s_frameMax = ms;

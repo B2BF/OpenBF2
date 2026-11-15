@@ -3,6 +3,7 @@
 // Semantics follow the public D3DX9 API reference; nothing
 // here is recovered from the retail image and no D3DX/Wine implementation was copied.
 #if defined(__APPLE__) && defined(BF2_IMAGE_RENDDX9)
+#include "../../macOS/HitchTrace.h" // [CHOSEN] BF2_HITCH_TRACE (port addition, measurement)
 #include "../../macOS/Warmup.h"   // [CHOSEN] +warmupLevel progress (port addition)
 #include "../D3DX9Subset.h"
 #include "../Effect/Runtime.h"
@@ -19,6 +20,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -163,6 +165,20 @@ void nativeReport(const char* what)
                  what, s.hits, s.refusedTable, s.refusedRule, s.deferred, s.synchronous, s.unknown, bf2fx::native::pending(),
                  memoHits, memoHits + memoMisses);
 }
+// BF2_HITCH_TRACE: one record per effect request.
+struct RequestTrace {
+    const char* outcome = "failed";
+    std::string key;
+    const bool armed = bf2hitch::enabled();
+    std::chrono::steady_clock::time_point start;
+    RequestTrace() { if (armed) start = std::chrono::steady_clock::now(); }
+    ~RequestTrace() {
+        if (!armed) return;
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+        bf2hitch::add(bf2hitch::FxRequest, ms, outcome);
+        bf2hitch::request(outcome, ms, key.c_str());
+    }
+};
 // Keys whose skeleton was handed out while their full build is queued.
 std::mutex gPendingMutex;
 std::map<std::string, std::pair<std::shared_ptr<const bf2fx::Entry>, std::shared_future<bf2fx::Entry>>> gPending;
@@ -171,6 +187,7 @@ HRESULT nativeEntry(const char* api, LPCVOID source, UINT size, const std::vecto
                     ID3DXInclude* include, DWORD flags, bf2fx::Entry& entry, ID3DXBuffer** errors, Deferred& deferred)
 {
     namespace nt = bf2fx::native;
+    RequestTrace trace;
     // [CHOSEN, not recovered] Host failures (E17) do not end the run: without a cache directory
     // (no BF2_FX_NATIVE_CACHE or HOME) every effect is compiled in memory and nothing is cached;
     // an unreadable cache entry is rebuilt; a failed publish keeps the built entry for this run.
@@ -193,11 +210,13 @@ HRESULT nativeEntry(const char* api, LPCVOID source, UINT size, const std::vecto
     };
     const bool compiler = std::strcmp(api, "D3DXCreateEffectCompiler") == 0;
     const std::string key = bf2fx::cacheKey(request);
+    trace.key = key;
     {
         std::lock_guard<std::mutex> lock(gPendingMutex);
         auto it = gPending.find(key);
         if (it != gPending.end()) {
             entry = *it->second.first; deferred = {key, it->second.second}; ++nativeStats().deferred;
+            trace.outcome = "pending";
             return D3D_OK;
         }
     }
@@ -208,7 +227,11 @@ HRESULT nativeEntry(const char* api, LPCVOID source, UINT size, const std::vecto
     };
     if (!root.empty()) {
         bf2fx::Result result = bf2fx::load(root, request, entry);
-        if (result || result.error == bf2fx::Error::Refused) { ++nativeStats().hits; nativeReport("cache hit"); return finish(entry); }
+        if (result || result.error == bf2fx::Error::Refused) {
+            ++nativeStats().hits; nativeReport("cache hit");
+            trace.outcome = result ? "hit" : "hit-refused";
+            return finish(entry);
+        }
         if (result.error != bf2fx::Error::Miss) refuse(api, "native cache " + root + " (rebuilding the entry): " + result.detail);
     }
 
@@ -221,6 +244,7 @@ HRESULT nativeEntry(const char* api, LPCVOID source, UINT size, const std::vecto
                                                   : "BF2FX native: refused below ps_2_0 (Rule R, source unknown to the refusal table)\n";
         ++(known == nt::Known::Refused ? nativeStats().refusedTable : nativeStats().refusedRule);
         publish(refused);
+        trace.outcome = "refused";
         return finish(refused);
     }
     std::string text, log;
@@ -236,7 +260,11 @@ HRESULT nativeEntry(const char* api, LPCVOID source, UINT size, const std::vecto
             {
                 std::lock_guard<std::mutex> lock(gPendingMutex);
                 bf2warmup::effectStarted();                   // [CHOSEN] +warmupLevel progress
-                future = nt::submit(key, request, std::move(text), [root, request, key](const bf2fx::Entry& e) {
+                const auto queued = std::chrono::steady_clock::now();
+                future = nt::submit(key, request, std::move(text), [root, request, key, queued](const bf2fx::Entry& e) {
+                    // BF2_HITCH_TRACE: the build, from its submission (the queue wait included).
+                    if (bf2hitch::enabled())
+                        bf2hitch::build(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - queued).count(), key.c_str());
                     // [CHOSEN, not recovered] D3DX accepts this request, so a failed native build is a
                     // toolchain fault, not a D3DX refusal. Publishing it turned this run's working
                     // skeleton into a refused CreateEffect on the next run (an effect without
@@ -258,6 +286,7 @@ HRESULT nativeEntry(const char* api, LPCVOID source, UINT size, const std::vecto
             }
             entry = skeleton; deferred = {key, future}; ++nativeStats().deferred;
             nativeReport("deferred");
+            trace.outcome = "deferred";
             return D3D_OK;
         }
     }
@@ -269,6 +298,7 @@ HRESULT nativeEntry(const char* api, LPCVOID source, UINT size, const std::vecto
     bf2warmup::effectFinished(true);   // a synchronous build is the D3DX-like outcome either way
     if (built.kind == bf2fx::RefusedEntry) std::fprintf(stderr, "%s: %s", api, built.log.c_str());
     nativeReport("compiled");
+    trace.outcome = "compiled";
     return finish(built);
 }
 HRESULT loadEntry(const char* api, LPCVOID source, UINT size, const D3DXMACRO* macros, ID3DXInclude* include,
@@ -919,6 +949,11 @@ struct Validator final : bf2fx::Callbacks {
     }
 };
 
+class Effect;
+// Effects whose native build was still running when they were created and whose device shaders
+// do not exist yet (render thread only).
+std::set<Effect*>& unsettledEffects() { static std::set<Effect*> effects; return effects; }
+
 class Effect final : public EffectBase<ID3DXEffect> {
 public:
     IDirect3DDevice9* device;
@@ -929,6 +964,7 @@ public:
     int active = -1;
     std::uint64_t applied = 0;
     Deferred deferred;           // Native build still compiling (empty: shaders are ready).
+    std::string traceKey;        // BF2_HITCH_TRACE / draw trace: the start of the cache key
     std::shared_ptr<const bf2fx::Description> shaderOwner; // Owner of the shader records in use.
     // Device state a technique sets, saved by Begin without D3DXFX_DONOTSAVESTATE and reapplied
     // by End. The keys are recorded by applying every pass with the setters switched to
@@ -957,17 +993,27 @@ public:
     bool broken = false;
     ID3DXEffectPool* poolObject = nullptr; // the pool passed to D3DXCreateEffect, referenced
     Effect(IDirect3DDevice9* d, bf2fx::Entry& entry, DWORD f, Deferred pending = {})
-        : EffectBase(entry, f), device(d), deferred(std::move(pending)) {
+        : EffectBase(entry, f), device(d), deferred(std::move(pending)), traceKey(entry.key.substr(0, 12)) {
         { bf2metal::reftrace::Owned o; device->AddRef(); }
         bf2metal::reftrace::born(this, "ID3DXEffect", [](const void*) { return 1ul; });
         shaderOwner = shared;
         if (!runtime.description().techniques.empty()) current = 0;
+        if (deferred) unsettledEffects().insert(this);
+    }
+    // The background build has finished: ensureShaders() will not wait.
+    bool buildFinished() const {
+        return deferred && deferred.future.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
     }
     // [CHOSEN, not recovered] A deferred native effect gets its shader records from the
     // background build at first use; the structure (parameters, techniques, objects) is the same.
     void ensureShaders() override {
         if (!deferred) return;
-        bf2fx::Entry full = bf2fx::native::wait(deferred.key, deferred.future);
+        unsettledEffects().erase(this);
+        bf2fx::Entry full;
+        {
+            bf2hitch::Scope timed(bf2hitch::FxWait, deferred.key.c_str());
+            full = bf2fx::native::wait(deferred.key, deferred.future);
+        }
         deferred = {};
         if (full.kind != bf2fx::EffectEntry) {
             broken = true; refuse("D3DXCreateEffect", "native build failed for a request D3DX accepts: " + full.log); return;
@@ -980,6 +1026,7 @@ public:
         if (FAILED(createShaders())) { broken = true; refuse("D3DXCreateEffect", "device shader creation failed for a native build"); }
     }
     ~Effect() override {
+        unsettledEffects().erase(this);
         saved.reset();
         if (poolObject) poolObject->Release();
         for (auto& s : shaders) if (s.second) s.second->Release();
@@ -988,6 +1035,7 @@ public:
         bf2metal::reftrace::Owned o; device->Release();
     }
     HRESULT createShaders() {
+        bf2hitch::Scope timed(bf2hitch::ShaderCreate);
         for (const auto& s : shaderOwner->shaders) {
             if (s.selectorKind || s.bytecode.empty()) continue;
             std::shared_ptr<const bf2fx::Shader> record(shaderOwner, &s);
@@ -1349,8 +1397,8 @@ public:
         if (!begun || active >= 0 || pass >= runtime.description().techniques[std::size_t(current)].passes.size())
             return D3DERR_INVALIDCALL;
         active = int(pass);
-        if (bf2metal::drawTraceEnabled())
-            bf2metal::setDrawTraceLabel((runtime.description().techniques[std::size_t(current)].name + "#" +
+        if (bf2metal::drawTraceEnabled() || bf2hitch::enabled())
+            bf2metal::setDrawTraceLabel((traceKey + " " + runtime.description().techniques[std::size_t(current)].name + "#" +
                                          std::to_string(pass)).c_str());
         return apply(false);
     }
@@ -1489,6 +1537,14 @@ extern "C" HRESULT WINAPI D3DXCreateEffectCompiler(LPCSTR pSrcData, UINT SrcData
 }
 
 namespace bf2metal {
+void createFinishedEffectShaders()
+{
+    auto& effects = unsettledEffects();
+    if (effects.empty()) return;
+    std::vector<Effect*> finished;
+    for (Effect* e : effects) if (e->buildFinished()) { finished.push_back(e); if (finished.size() == 16) break; }
+    for (Effect* e : finished) e->ensureShaders();
+}
 std::shared_ptr<const bf2fx::Shader> translateRuntimeShader(const std::uint32_t* tokens, std::size_t bytes, bool vertex)
 {
 #if defined(BF2_FX_NATIVE)

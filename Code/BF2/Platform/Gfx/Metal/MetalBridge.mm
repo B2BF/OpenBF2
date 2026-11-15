@@ -2,10 +2,21 @@
 // The D3D subset stays in Device.cpp: its BOOL must never enter an Objective-C TU.
 #include "MetalBridge.h"
 #include "DrawBridge.h"
+#include "EffectShaders.h"          // drawTraceLabel: the effect pass a compile belongs to
+#include "../../macOS/HitchTrace.h" // [CHOSEN] BF2_HITCH_TRACE (port addition, measurement)
 #import <AppKit/AppKit.h>
 #import <QuartzCore/CAMetalLayer.h>
 #import <Metal/Metal.h>
 #include <IOKit/IOKitLib.h>
+#include <CommonCrypto/CommonDigest.h>
+#include <pthread.h>
+#include <pthread/qos.h>
+#include <atomic>
+#include <chrono>
+#include <deque>
+#include <sstream>
+#include <thread>
+#include <unordered_map>
 #include <cstdio>
 #include <cstdlib>
 #include <new>
@@ -56,6 +67,16 @@ struct Frame {
     bool unresolved = false; // colorMS holds samples color does not have yet (resolveBackBuffer)
     id<MTLCommandBuffer> commands;
     id<MTLCommandBuffer> presentation;
+    // [CHOSEN, not recovered] Frames in flight: the command buffers of presented frames that the GPU
+    // may still execute (submit). Any committed buffer that fails latches gpuFailed.
+    std::deque<id<MTLCommandBuffer>> inFlight;
+    std::shared_ptr<std::atomic<bool>> gpuFailed = std::make_shared<std::atomic<bool>>(false);
+    // Command buffers committed so far, and the highest one the GPU has completed (fences).
+    std::uint64_t committed = 0;
+    std::shared_ptr<std::atomic<std::uint64_t>> completed = std::make_shared<std::atomic<std::uint64_t>>(0);
+    // Traced runs: submissions by present and by mid-frame flushes, waits for a frame in flight.
+    unsigned long frameSubmits = 0, flushSubmits = 0, inFlightWaits = 0, inFlightAtSubmit = 0;
+    double inFlightWaitMs = 0;
     std::map<void*,std::shared_ptr<DrawableRequest>> drawableRequests;
     bool failed = false;
 #if defined(BF2_METAL_DEVICE_TESTING)
@@ -63,6 +84,8 @@ struct Frame {
 #endif
     Texture colorResource, depthResource;
     struct DrawCaches* draws = nullptr; // G4 open render pass and pipeline caches (DrawBridge.inc)
+    struct Prebuild* prebuild = nullptr; // shader libraries and pipelines built ahead of draws (ShaderPrebuild.inc)
+    unsigned long presents = 0;          // frames presented so far
 };
 Adapter* createAdapter()
 {
@@ -191,18 +214,98 @@ static bool resolveBackBuffer(Frame* f)
     f->unresolved = false;
     return true;
 }
+// Commits a command buffer. When it completes, a failure latches the frame's gpuFailed and its
+// serial advances the completed fence.
+static void commitTracked(Frame* f, id<MTLCommandBuffer> b)
+{
+    std::shared_ptr<std::atomic<bool>> failed = f->gpuFailed;
+    std::shared_ptr<std::atomic<std::uint64_t>> completed = f->completed;
+    const std::uint64_t serial = ++f->committed;
+    [b addCompletedHandler:^(id<MTLCommandBuffer> done) {
+        if (done.status == MTLCommandBufferStatusError) {
+            std::fprintf(stderr, "Metal command failed: %s\n", done.error.localizedDescription.UTF8String);
+            std::fflush(stderr);
+            failed->store(true);
+        }
+        std::uint64_t seen = completed->load();
+        while (seen < serial && !completed->compare_exchange_weak(seen, serial)) {}
+    }];
+    [b commit];
+}
+// Drops the frames in flight the GPU has completed and waits for the oldest while more than `keep`
+// remain (traced as GPU waits unless the caller traces them).
+static bool retire(Frame* f, std::size_t keep, bool traced = true)
+{
+    while (!f->inFlight.empty()) {
+        id<MTLCommandBuffer> oldest = f->inFlight.front();
+        if (oldest.status < MTLCommandBufferStatusCompleted) {
+            if (f->inFlight.size() <= keep) break;
+            const auto started = std::chrono::steady_clock::now();
+            if (traced) { bf2hitch::Scope timed(bf2hitch::GpuWait); [oldest waitUntilCompleted]; }
+            else [oldest waitUntilCompleted];
+            if (traced) {
+                ++f->inFlightWaits;
+                f->inFlightWaitMs += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+            }
+        }
+        f->inFlight.pop_front();
+    }
+    if (f->gpuFailed->load()) f->failed = true;
+    return !f->failed;
+}
+// [CHOSEN, not recovered] Present submits the frame without waiting for the GPU, as a D3D9 driver
+// queues frames, and waits only while kFramesInFlight earlier frames are still executing. What the
+// CPU writes is safe meanwhile: DISCARD locks rename the buffer (Resources.inc), other buffer locks
+// and readbacks wait for the GPU first (finish), texture uploads and constants go through copies
+// the command buffer retains, and the command buffers retain every resource they reference, so a
+// D3D9 Release while the GPU still reads it frees nothing early.
+static constexpr std::size_t kFramesInFlight = 2;
+static bool submit(Frame* f, bool frameEnd)
+{
+    endDraws(f);
+    if (f->failed) return false;
+    ++(frameEnd ? f->frameSubmits : f->flushSubmits);
+    if (f->commands) {
+        commitTracked(f, f->commands); f->inFlight.push_back(f->commands);
+#if defined(BF2_METAL_DEVICE_TESTING)
+        // [TEMP] [CHOSEN, not recovered] An injected failure latches at the submission it was armed
+        // for, as finish does (a real one latches when the GPU reports it).
+        if (f->failNextSubmission) {
+            f->failNextSubmission = false;
+            [f->commands waitUntilCompleted];
+            std::fprintf(stderr, "Metal command failed: injected command-buffer failure\n");
+            f->gpuFailed->store(true); // as the completion handler of a real failure does
+            f->failed = true;
+        }
+#endif
+        f->commands = nil;
+        if (frameEnd) f->inFlightAtSubmit += f->inFlight.size();
+    }
+    return retire(f, kFramesInFlight);
+}
+// BF2_FX_NATIVE_TRACE / BF2_HITCH_TRACE: the frames-in-flight counts so far, on stderr.
+static void framesSummary(Frame* f)
+{
+    if (!(std::getenv("BF2_FX_NATIVE_TRACE") || bf2hitch::enabled()) || !f->frameSubmits) return;
+    std::fprintf(stderr, "[metal] frames in flight: %lu frame submissions (%.2f command buffers in flight after each), "
+                 "%lu mid-frame flushes, %lu waits for a frame in flight (%.1f s)\n", f->frameSubmits,
+                 double(f->inFlightAtSubmit) / double(f->frameSubmits), f->flushSubmits, f->inFlightWaits, f->inFlightWaitMs / 1000.0);
+}
 static bool finish(Frame* f)
 {
     endDraws(f);
+    bf2hitch::Scope timed(bf2hitch::GpuWait);
     if(f->presentation) {
         [f->presentation waitUntilCompleted];
         if(f->presentation.status==MTLCommandBufferStatusError) f->failed=true;
         f->presentation=nil;
     }
+    // The frames in flight were committed earlier: they complete first.
+    retire(f, 0, false);
     if (!f->commands) return !f->failed;
-    [f->commands commit];
-    // G3 deliberately serializes submissions. This bounds resource lifetime and surfaces
-    // command errors to HRESULT callers; it is not a frame pacing/vsync policy.
+    commitTracked(f, f->commands);
+    // finish waits for the GPU (readbacks, locks that do not rename, Reset, teardown): it bounds
+    // resource lifetime and surfaces command errors to HRESULT callers. Present uses submit.
     [f->commands waitUntilCompleted];
     bool commandFailed = f->commands.status == MTLCommandBufferStatusError;
     const char* error = f->commands.error.localizedDescription.UTF8String;
@@ -212,11 +315,12 @@ static bool finish(Frame* f)
         f->failNextSubmission = false;
         commandFailed = true;
         error = "injected command-buffer failure";
+        f->gpuFailed->store(true); // as the completion handler of a real failure does
     }
 #endif
     if (commandFailed) {
-        std::fprintf(stderr, "Metal command failed: %s\n", error);
-        std::fflush(stderr);
+        // A GPU failure was reported by the completion handler (commitTracked) already.
+        if (f->commands.status != MTLCommandBufferStatusError) { std::fprintf(stderr, "Metal command failed: %s\n", error); std::fflush(stderr); }
         f->failed = true;
     }
     f->commands = nil;
@@ -231,6 +335,7 @@ static bool commands(Frame* f)
 }
 #include "StateMapping.inc"
 #include "ResourceBridge.inc"
+#include "ShaderPrebuild.inc"
 #include "DrawBridge.inc"
 #include "MenuBridge.inc"
 bool reset(Frame* f, unsigned width, unsigned height, bool vsync, bool depth, unsigned samples)
@@ -288,6 +393,9 @@ bool reset(Frame* f, unsigned width, unsigned height, bool vsync, bool depth, un
         f->depth = z;
         f->colorResource = {color,22};
         f->depthResource = {z,75};
+        // The old submissions were drained above (finish): a failure one of them reported to the
+        // asynchronous latch belongs to the replaced targets, so the reset device starts clean.
+        f->gpuFailed = std::make_shared<std::atomic<bool>>(false);
         f->failed = false;
         return true;
     }
@@ -312,7 +420,7 @@ Frame* createFrame(Adapter* a, void* view, unsigned width, unsigned height, bool
 void destroyFrame(Frame* f)
 {
     mainThread("IDirect3DDevice9::Release");
-    @autoreleasepool { finish(f); destroyDraws(f); delete f; }
+    @autoreleasepool { finish(f); framesSummary(f); destroyDraws(f); destroyPrebuild(f); delete f; }
 }
 void dimensions(Frame* f, unsigned& width, unsigned& height)
 {
@@ -409,6 +517,9 @@ PresentCapture* presentCaptureBegin(Frame* f)
 void presentCaptureWrite(PresentCapture* c, id<MTLCommandBuffer> done)
 {
     if(!c) return;
+    // Owned before the trace scope, so the scope (which reads the label) ends first.
+    const std::unique_ptr<PresentCapture> owned(c);
+    bf2hitch::Scope timed(bf2hitch::Capture, c->label);
     if(done) [done waitUntilCompleted];
     const char* dir=std::getenv("BF2_PRESENT_PNG");
     const unsigned char* bgra=static_cast<const unsigned char*>(c->buffer.contents);
@@ -425,7 +536,6 @@ void presentCaptureWrite(PresentCapture* c, id<MTLCommandBuffer> done)
     else std::snprintf(path,sizeof(path),"%s/present_%05u.png",dir,c->index);
     const bool ok=png && [png writeToFile:[NSString stringWithUTF8String:path] atomically:YES];
     std::fprintf(stderr,"[TEMP] BF2_PRESENT_PNG: %s %s (%ux%u)\n",ok?"wrote":"FAILED to write",path,c->width,c->height);
-    delete c;
 }
 }
 PresentResult present(Frame* f,void* window,bool doNotWait)
@@ -457,6 +567,7 @@ PresentResult present(Frame* f,void* window,bool doNotWait)
             if(!doNotWait) request->condition.wait(lock,[&]{return !request->acquiring;});
             drawable=request->drawable; request->drawable=nil;
             if(!drawable && !request->acquiring) {
+                bf2hitch::Scope timed(bf2hitch::Drawable);
                 if(!doNotWait) drawable=[layer nextDrawable];
                 else {
                     // nextDrawable can block on WindowServer/vsync. Only the worker waits;
@@ -496,15 +607,17 @@ PresentResult present(Frame* f,void* window,bool doNotWait)
             [e setFragmentTexture:f->color atIndex:0];
             [e drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4]; [e endEncoding];
         }
+        if(f->prebuild) f->prebuild->presents=f->presents+1;
+        if(++f->presents%1200==0) { prebuildSummary(f); framesSummary(f); } // traced runs only
         PresentCapture* capture=presentCaptureBegin(f);  // [TEMP] BF2_PRESENT_PNG
         [f->commands presentDrawable:drawable];
         if(doNotWait) {
-            [f->commands commit]; f->presentation=f->commands; f->commands=nil;
+            commitTracked(f,f->commands); f->presentation=f->commands; f->commands=nil;
             presentCaptureWrite(capture,f->presentation);
             return PresentResult::ok;
         }
         id<MTLCommandBuffer> submitted=f->commands;
-        const bool ok=finish(f);
+        const bool ok=submit(f,true);
         presentCaptureWrite(capture,submitted);
         return ok?PresentResult::ok:PresentResult::lost;
     }

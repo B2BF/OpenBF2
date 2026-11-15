@@ -145,6 +145,14 @@ p.add_argument('--server-password', metavar='TEXT',
                help='server sv.password; the client joins with +password TEXT (empty: the client passes none)')
 p.add_argument('--client-password', metavar='TEXT',
                help='[TEST] the client\'s +password when it differs from --server-password (wrong-password check)')
+p.add_argument('--bundle-id', default='', metavar='ID',
+               help='[TEMP] run the client from <run>/client.app (a clone of the build\'s binaries) with this '
+                    'CFBundleIdentifier, so Metal keeps its shader caches in $DARWIN_USER_CACHE_DIR/<ID>/ instead of '
+                    'the one every unbundled build shares: a new ID is a fresh install\'s cold cache, the same ID '
+                    'again its second start (remove that directory afterwards)')
+p.add_argument('--hitch-trace', action='store_true',
+               help='[TEMP] BF2_HITCH_TRACE=<run>/hitch.trace: per-frame times and what the main thread spent on '
+                    'effect builds, Metal compiles and texture loads (hitch_report.py summarises it)')
 p.add_argument('--client-env', action='append', default=[], metavar='KEY=VALUE',
                help='extra client environment (repeatable), e.g. BF2_METAL_SKIP_REFUSED_DRAWS=1 (debug aid)')
 p.add_argument('--pose', metavar='X/Y/Z[/YAW[/PITCH[/ROLL]]]',
@@ -252,6 +260,17 @@ run = OUT / 'loopback' / ('run-' + datetime.datetime.now().strftime('%Y%m%d-%H%M
 run.mkdir(parents=True)
 if scenario_dir:
     (run / 'scenario.txt').write_text(scenario_dir.name + '\n')   # compare_views.py picks the limits by it
+if args.bundle_id and not args.no_client:
+    macos = run / 'client.app/Contents/MacOS'
+    macos.parent.mkdir(parents=True)
+    subprocess.run(['/bin/cp', '-Rc', str(build), str(macos)], check=True)
+    (macos.parent / 'Info.plist').write_text(
+        '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
+        '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>'
+        '<key>CFBundleIdentifier</key><string>%s</string><key>CFBundleExecutable</key><string>bf2_client</string>'
+        '<key>CFBundleName</key><string>OpenBF2 loopback</string><key>CFBundlePackageType</key><string>APPL</string>'
+        '<key>NSHighResolutionCapable</key><true/></dict></plist>\n' % args.bundle_id)
+    client_bin = macos / 'bf2_client'
 for name in ('server.sb', 'client.sb'):
     (run / name).write_bytes((HERE / name).read_bytes())
 if args.no_server:
@@ -544,6 +563,8 @@ if (args.no_server or (run / 'server.playing').exists()) and not args.no_client 
         env['BF2_INPUT_SCRIPT_LOG'] = str(run / 'client.log')
         # [TEMP] read-only once-a-second '[PLAY]' lines (local player, teams, sound engine)
         env['BF2_PLAY_TRACE'] = '1'
+    if args.hitch_trace:
+        env['BF2_HITCH_TRACE'] = str(run / 'hitch.trace')
     for item in args.client_env:
         key, _, value = item.partition('=')
         env[key] = value
