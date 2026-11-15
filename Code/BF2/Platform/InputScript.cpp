@@ -126,6 +126,12 @@ InputScript& inputScript()
     return script;
 }
 
+#if defined(__APPLE__)
+// BF2_HITCH_TRACE (Platform/macOS/HitchTrace.cpp) records each report line as a labelled moment
+// of its frame trace. This weak default serves programs built without the trace.
+extern "C" __attribute__((weak)) void openbf2HitchNote(const char*) {}
+#endif
+
 void InputScript::report(const char* fmt, ...) const
 {
     char text[1024];
@@ -135,6 +141,9 @@ void InputScript::report(const char* fmt, ...) const
     va_end(args);
     std::fprintf(stderr, "[TEMP] [INPUT-SCRIPT] t=%.2fs frame=%lu %s\n",
                  nowSeconds() - m_startSeconds, m_frame, text);
+#if defined(__APPLE__)
+    openbf2HitchNote(text);
+#endif
 }
 
 void InputScript::finish(const char* why)

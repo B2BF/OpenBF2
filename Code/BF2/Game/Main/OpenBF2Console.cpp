@@ -27,8 +27,8 @@
 //     `host` module and imports `bf2`. This is why openbf2.con runs before Python init - load it
 //     afterward and the hooks are too late.
 //   - This loader does not itself reroute sockets. bf2hub's GameSpy/master redirection relied on an
-//     install-time patch of the host's import table that a runtime load does not reproduce; OpenBF2
-//     points the engine at the correct master-server address in source instead (see the issue).
+//     install-time patch of the host's import table that a runtime load does not reproduce; the
+//     online services' domain is selected with +gamespy (Game/MatchMaking/OnlineProvider.h).
 
 #include "../../Core/ConsoleObjectMacro.h"
 

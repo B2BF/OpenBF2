@@ -1,6 +1,7 @@
 // Path: attested by the Win32 __FILE__ at the URL-validation diagnostic.
 // Contents: ELF 0x82BDED0..0x82BE8B0 / PE 0x560F00..0x5617D0, read in both ports.
 #include "HTTPRequest.h"
+#include "../MatchMaking/OnlineProvider.h"   // [CHOSEN, not recovered] the services' domain
 #include "../../External/GameSpy/ghttp/ghttp.h"
 #include "../../Core/Debug.h"
 #include <cstdio>
@@ -144,8 +145,10 @@ void HTTPRequest::onProgress(float) {} // Shipped empty: ELF 0x82BE7F0 / PE 0x56
 int HTTPRequest::getRevision() { return m_revision; }
 bool HTTPRequest::validateUrlNotSpoofed(std::string host) const
 {
-    // [PLATFORM] ELF 0x82BE8A0 returns true. PE 0x561500 scans the hosts file,
-    // emits a type-7 diagnostic on a mismatch, and still returns true.
+    // [PLATFORM] ELF 0x82BE8A0 returns true. BF2.exe 0x59C670 and bf2_w32ded.exe 0x561500 scan
+    // the hosts file and emit a type-7 diagnostic (which ends the process) for a line that names
+    // the host without an address in 212.77.171.x; they return true. Recovered but not called:
+    // see getGameSpyUrl.
 #if defined(_WIN32)
     char path[260] = {};
     GetSystemDirectoryA(path, 260);
@@ -170,13 +173,19 @@ bool HTTPRequest::validateUrlNotSpoofed(std::string host) const
 }
 std::string HTTPRequest::getGameSpyUrl() const
 {
-    // [CHOSEN, not recovered] Cross-platform OpenSpy policy, see #21. The reference
-    // images used BF2Web.gamespy.com (PE) and BF2Web.game.bf2.us (ELF), not openspy.net.
-    std::string url("http://BF2Web.bf2hub.p.bf2.org/ASP/");
-    validateUrlNotSpoofed("BF2Web.bf2hub.p.bf2.org");
+    // Retail: "http://BF2Web.gamespy.com/ASP/" and validateUrlNotSpoofed("BF2Web.gamespy.com") in
+    // BF2.exe (0x59C8C0), bf2_w32ded.exe (0x561760) and the 1.5.3153.0 Linux ELFs (ia-32
+    // 0x82BE800).
+    // The ELF this file was first read from had BF2Web.game.bf2.us in the same two places.
+    // [CHOSEN, not recovered] The domain is onlineProvider's: gamespy.com unless +gamespy
+    // replaced it. The validateUrlNotSpoofed call is skipped on every platform: retail's Windows
+    // hosts-file check (BF2.exe 0x59C670, bf2_w32ded.exe 0x561500) accepts only GameSpy's own
+    // address block 212.77.171.x and otherwise ends the process (Debug type 7), and the hosts file
+    // is a normal way to point these names at a replacement service.
+    std::string url(onlineProvider::statsWebUrl());
     // [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: local-stats-fixture]
-    // BF2_STATS_URL overrides persistence URLs for local fixtures after validating the
-    // original URL. Inactive when unset; announces activation once on stderr.
+    // BF2_STATS_URL overrides persistence URLs for local fixtures. Inactive when unset; announces
+    // activation once on stderr.
     if (const char* fixture = std::getenv("BF2_STATS_URL"))
     {
         if (*fixture)

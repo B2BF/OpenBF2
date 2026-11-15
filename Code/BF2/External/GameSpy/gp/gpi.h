@@ -143,6 +143,7 @@ typedef struct
   char loginTicket[GP_LOGIN_TICKET_LEN];
   GPEnum quietModeFlags;
   gsi_time kaTransmit;
+  gsi_time connectStartTime; // [CHOSEN, not recovered] OpenBF2 local change, see GPI_CONNECT_TIMEOUT
   
 #ifdef GSI_UNICODE
   unsigned short errorString_W[GP_ERROR_STRING_LEN];
@@ -176,6 +177,12 @@ typedef struct
 #endif
 
 } GPIConnection;
+
+// [CHOSEN, not recovered] OpenBF2 local change (LOCAL_CHANGES.md): the connection and search
+// managers' TCP connects give up after this many milliseconds. The SDK waits for the operating
+// system's TCP timeout (75 s on macOS, about 21 s on Windows) when a host name resolves to an
+// address that never answers; BF2 runs these operations blocking, so the menu is frozen meanwhile.
+#define GPI_CONNECT_TIMEOUT 5000
 
 //FUNCTIONS
 ///////////

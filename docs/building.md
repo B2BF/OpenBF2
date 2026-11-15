@@ -136,6 +136,10 @@ the check executable; `dice_py_check_run` builds and runs it.
 glibc and the other system dependencies remain dynamic. Pass
 `-DBF2_LINUX_STATIC_RUNTIME=OFF` if you need dynamic compiler runtimes instead.
 
+The client-only `bf2_gamespy_voice_objects` target is excluded from the default build;
+Linux has no Voice2 hardware backend. Windows/macOS client and voice-test dependencies
+still request it explicitly.
+
 ## macOS
 
 The macOS dedicated server is a native port of the Linux one: the same `bf2` sources
@@ -254,6 +258,13 @@ These `[CHOSEN, not recovered]` port additions exist only in the macOS client:
 | `+warmupLevel <level>` | Hosts `<level>` locally through the non-menu start path, logs in the `+playerName` profile (else the default user) so its video settings apply, builds every shader of the level load, presses JOIN GAME through the button's own action (`dice.bf2.Logic.readyToPlay`) so the first world frame builds its effects too, waits for the background effect builds and exits. Runs windowed whatever `+fullscreen` says (a fullscreen client started behind another app is deactivated, and the deactivated main loop draws neither the menu nor the world). Without a logged-in profile the menu that loads after JOIN GAME asks to log out (renderMenu type 13), which would end the hosted game; the warm-up drops the game-ending menu events (8, 13, 14, 17) and prints `warmup: menu event N dropped`. `warmup: effects N/M` is printed at most once a second whenever N or M changes, during the level load too. Option id 74 (ids up to 73 are retail). For the setup assistant: one run per shader set fills the native effect cache. stdout lines `warmup: start`, `warmup: profile`, `warmup: effects N/M`, `warmup: level loaded`, `warmup: player joined`, `warmup: join game`, `warmup: world frame`, `warmup: done ...`; exit status 0 done, 2 the start failed, 3 timeout (`BF2_WARMUP_TIMEOUT`, default 3600 s), 4 done with native build failures. Check: `tools/macos/rendergate/warmup.sh`. |
 
 ## Client and plugins
+
+Incoming VoIP packets with truncated trailers, empty payloads, or partial codec frames
+are rejected before playback or sender notification. This is intentional hardening
+(`[CHOSEN, not recovered]`, [issue #26](https://github.com/kr4uzi/OpenBF2/issues/26));
+valid wire formats and sender/mute handling are unchanged. The macOS
+`bf2_voip_client_check` target covers malformed lengths, valid frames and loopback UDP
+using synthetic audio and game objects. It does not establish real peer audio or gameplay.
 
 Use the x86 or x64 configuration and the matching Python runtime above:
 
@@ -553,6 +564,46 @@ mode and AI settings for the scenario being tested. Set an unused game port expl
 The production executable runs until normal shutdown. `BF2_FRAMES` and other harness
 controls belong to `Code/Build/bootmain.cpp` and do not limit production run targets.
 `bf2_client_run` uses `BF2_GAME_DIR` and the `BF2_CLIENT_RUN_ARGS` semicolon list.
+
+### Online services
+
+Every image forms the GameSpy service names as retail does, with `gamespy.com` as the
+domain. Those services no longer exist, so an unconfigured client or server finds no online
+service. When the names do not resolve, logins report the connection failure, the internet
+server list stays empty, LAN play is unaffected, and a server with `sv.internet 1` stops at
+start-up with the fatal "cannot communicate with the required internet backends"
+diagnostic.
+
+`+gamespy <domain>` (`[CHOSEN, not recovered]`, option id 75, client and dedicated
+servers) replaces the domain for all services of a provider that serves the same names:
+
+| Service | Host |
+|---|---|
+| Availability check, UDP 27900 | `battlefield2.available.<domain>` |
+| Master: heartbeats UDP 27900, CD-key validation UDP 29910 | `battlefield2.master.<domain>` |
+| Server list, TCP 28910 | `battlefield2.ms14.<domain>` |
+| Presence login / search, TCP 29900 / 29901 | `gpcm.<domain>` / `gpsp.<domain>` |
+| Game statistics, TCP 29920 | `battlefield2.gamestats.<domain>` |
+| NAT negotiation, UDP 27901 | `battlefield2.natneg1.<domain>` to `natneg3` |
+| Stats web requests, HTTP | `BF2Web.<domain>/ASP/`, `stage-net.<domain>/bf2/` |
+
+The value must be a domain name; an address or an unusable value ends start-up with a
+message. The option is read from the command line only, and a client that restarts itself
+to change mods passes it on. At start-up each image prints one line to stderr that names
+the host of every service (`online services: domain ...`). Retail's Windows hosts-file check
+for `BF2Web.gamespy.com`, which ended the game when the hosts file named that host, is skipped,
+so the hosts file can point the names at a replacement service. The implementation is in
+`Code/BF2/Game/MatchMaking/OnlineProvider.h`.
+
+Connections to the server list, the presence managers and the stats web service give up after
+5 seconds (`[CHOSEN, not recovered]`, see `Code/BF2/External/GameSpy/LOCAL_CHANGES.md`); retail
+waited for the operating system's TCP timeout when a name resolved to an address that never
+answers.
+
+`bf2_online_provider_check` (macOS, built on request) checks the names for the retail
+domain and for another one against the linked SDK, and the connect timeouts against a
+loopback listener that never accepts. It replaces the resolver inside the test process and
+uses loopback listeners only, so it contacts no other machine.
 
 For the x86 focused suite, use `bf2_run_checks`. The existing batch gates remain
 available through `bf2_syntaxcheck` and `bf2_gap_report`. The latter invokes the full

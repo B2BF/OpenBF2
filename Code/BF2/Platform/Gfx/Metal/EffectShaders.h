@@ -29,6 +29,11 @@ std::shared_ptr<const bf2fx::Shader> translateRuntimeShader(const std::uint32_t*
                                                             bool vertex);
 // Length in bytes of a D3D9 shader token stream through its end token, or 0 when malformed.
 std::size_t shaderLength(const std::uint32_t* tokens);
+// [CHOSEN, not recovered] Creates the device shader objects of natively compiled effects whose
+// background build has finished but which no pass has used yet, a few per call (the device calls
+// it at every Present). Without it the shaders of an effect that is first drawn during play
+// (particles, trails) would only exist, and start to compile for Metal, at that draw.
+void createFinishedEffectShaders();
 // [CHOSEN, not recovered] Debug aid, off by default: BF2_METAL_DRAW_TRACE=1 counts draws per
 // effect technique and outcome and prints the table every 600 presents. The effect facade names
 // the technique of its active pass; draws outside an effect pass count under "(no effect)".

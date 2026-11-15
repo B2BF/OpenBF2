@@ -17,6 +17,7 @@ add_executable(macos_metal_device
     "${CMAKE_CURRENT_SOURCE_DIR}/../ff_reference/ff_cases.cpp"
     "${BF2_ROOT}/Platform/Gfx/Metal/Effect.cpp"
     "${BF2_ROOT}/Platform/macOS/Warmup.cpp"
+    "${BF2_ROOT}/Platform/macOS/HitchTrace.cpp"
     "${BF2_ROOT}/Platform/Gfx/Metal/D3DXMath.cpp"
     "${BF2_ROOT}/Platform/Gfx/Metal/D3DXGeometry.cpp"
     "${BF2_ROOT}/Platform/Gfx/Metal/D3DXPixels.cpp"

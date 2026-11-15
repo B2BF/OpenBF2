@@ -231,15 +231,15 @@ bool GameServer::init()
     {
         // Preserve both diagnostics and the subsequent demotion. Debug type 6 is fatal under
         // normal retail logging, despite the message saying "Changing server to unranked".
-        // Retail streams the ostringstream object (operator const void*), not its str().
+        // Retail (ELF GameServer::init 0x80A67F0) streams the ostringstream object itself into both
+        // diagnostics, through operator void*, so the user saw an address instead of the text.
+        // [CHOSEN, not recovered] Both diagnostics carry message.str().
         std::ostringstream message;
         message << "FATAL ERROR: Your server cannot communicate with the required internet backends.\n"
                 << "Please read the documentation for the dedicated server to find out what ports you\n"
                 << "need to open in your firewall and/or NAT products. Changing server to unranked.\n";
-        Debug(DEBUGTYPE_8, "Game/GameServer/GameServer.cpp", 646)
-            << (message.fail() ? nullptr : static_cast<const void*>(static_cast<std::ios*>(&message)));
-        Debug(DEBUGTYPE_6, "Game/GameServer/GameServer.cpp", 647)
-            << (message.fail() ? nullptr : static_cast<const void*>(static_cast<std::ios*>(&message)));
+        Debug(DEBUGTYPE_8, "Game/GameServer/GameServer.cpp", 646) << message.str();
+        Debug(DEBUGTYPE_6, "Game/GameServer/GameServer.cpp", 647) << message.str();
         serverSettings->setRanked(false);
     }
     // The failure arm rejoins here if its fatal diagnostic was suppressed. No null guard exists.
