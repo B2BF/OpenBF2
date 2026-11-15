@@ -2708,6 +2708,76 @@ if(APPLE)
     endif()
 endif()
 
+# [TEMP] The stats web requests and their parsers (Code/Tests/persistence_stats_runtime.cpp): every
+# endpoint the game requests, formed for +gamespy test.openbf2, against a loopback listener with
+# handwritten bodies. The fixture replaces the resolver, so no name leaves the process. Built on
+# request; the client image (DEDICATED=0), which holds the profile manager's createplayer post.
+if(APPLE)
+    add_executable(bf2_persistence_stats_check EXCLUDE_FROM_ALL
+        Code/Tests/persistence_stats_runtime.cpp
+        "${BF2_ROOT}/Game/MatchMaking/OnlineProvider.cpp"
+        "${BF2_ROOT}/Game/MatchMaking/OnlineProviderGameSpy.cpp"
+        "${BF2_ROOT}/Game/Persistence/HTTPRequest.cpp"
+        "${BF2_ROOT}/Game/Persistence/KeyParser.cpp"
+        "${BF2_ROOT}/Game/Persistence/PlayerStats.cpp"
+        "${BF2_ROOT}/Game/Persistence/PlayerAwards.cpp"
+        "${BF2_ROOT}/Game/Persistence/LeaderBoard.cpp"
+        "${BF2_ROOT}/Game/Persistence/PlayerUnlocks.cpp"
+        "${BF2_ROOT}/Game/Persistence/PlayerUnlockInfo.cpp"
+        "${BF2_ROOT}/Game/Persistence/PlayerRankInfo.cpp"
+        "${BF2_ROOT}/Game/Persistence/SearchForPlayer.cpp"
+        "${BF2_ROOT}/Game/Persistence/GSServerSideNameValidation.cpp"
+        "${BF2_ROOT}/Game/Persistence/StatsManager.cpp"
+        "${BF2_ROOT}/Game/Persistence/PlayerStatsManager.cpp"
+        "${BF2_ROOT}/Game/ProfileManager.cpp"
+        "${BF2_ROOT}/Game/Persistence/AntiHacks.cpp"
+        "${BF2_ROOT}/Core/System.cpp"
+        "${BF2_ROOT}/Core/SystemInfo.cpp"
+        "${BF2_ROOT}/Core/StringUtil.cpp"
+        $<TARGET_OBJECTS:bf2_gamespy_objects>
+        $<TARGET_OBJECTS:bf2_gamespy_sb_objects>
+        $<TARGET_OBJECTS:bf2_gamespy_gp_objects>)
+    bf2_configure_cpp_target(bf2_persistence_stats_check)
+    bf2_set_platform_compat(bf2_persistence_stats_check)
+    bf2_set_image(bf2_persistence_stats_check 0)
+    target_compile_definitions(bf2_persistence_stats_check PRIVATE BF2_PLATFORM_POSIX _MACOSX)
+    target_include_directories(bf2_persistence_stats_check PRIVATE ${BF2_PYTHON_INCLUDE_DIRS})
+    find_package(Threads REQUIRED)
+    target_link_libraries(bf2_persistence_stats_check PRIVATE Threads::Threads)
+    if(BUILD_TESTING)
+        add_test(NAME bf2_persistence_stats_check COMMAND bf2_persistence_stats_check)
+    endif()
+endif()
+
+# [TEMP] SwiffHost's leaderboard and awards caches (Code/Tests/swiff_leaderboard_runtime.cpp) through
+# the real persistence classes, against the local stats fixture (Code/Tests/stats_fixture) on
+# 127.0.0.1:18124, with the host formed for +gamespy test.openbf2. The fixture replaces the
+# resolver, so no name leaves the process. Built on request; needs Python 3 for the fixture.
+if(APPLE)
+    add_executable(bf2_swiff_leaderboard_check EXCLUDE_FROM_ALL
+        Code/Tests/swiff_leaderboard_runtime.cpp
+        "${BF2_ROOT}/Menu/SwiffHost.cpp"
+        "${BF2_ROOT}/Game/MatchMaking/OnlineProvider.cpp"
+        "${BF2_ROOT}/Game/Persistence/HTTPRequest.cpp"
+        "${BF2_ROOT}/Game/Persistence/KeyParser.cpp"
+        "${BF2_ROOT}/Game/Persistence/LeaderBoard.cpp"
+        "${BF2_ROOT}/Game/Persistence/PlayerAwards.cpp"
+        "${BF2_ROOT}/Core/StringUtil.cpp"
+        $<TARGET_OBJECTS:bf2_gamespy_objects>)
+    bf2_configure_cpp_target(bf2_swiff_leaderboard_check)
+    bf2_set_platform_compat(bf2_swiff_leaderboard_check)
+    bf2_set_image(bf2_swiff_leaderboard_check 0)
+    target_compile_definitions(bf2_swiff_leaderboard_check PRIVATE BF2_PLATFORM_POSIX _MACOSX)
+    target_include_directories(bf2_swiff_leaderboard_check PRIVATE ${BF2_PYTHON_INCLUDE_DIRS})
+    if(BUILD_TESTING)
+        find_package(Python3 COMPONENTS Interpreter)
+        if(Python3_Interpreter_FOUND)
+            add_test(NAME bf2_swiff_leaderboard_check
+                     COMMAND bf2_swiff_leaderboard_check "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/Code/Tests/stats_fixture")
+        endif()
+    endif()
+endif()
+
 # [TEMP] Test-only host-name redirect (Code/Tests/name_redirect): a DYLD_INSERT_LIBRARIES library that
 # resolves the names of one test domain to 127.0.0.1 for locally built images. Built on request, into
 # its own directory outside bin_macos; no game image links it and no package contains it.

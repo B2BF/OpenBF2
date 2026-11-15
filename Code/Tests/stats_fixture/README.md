@@ -30,6 +30,9 @@ to the fixture. Login, server browsing and joining use their own `*.test.openbf2
 which this fixture does not serve. Log in through the normal client flow. Player statistics
 are cached for an hour, so restart the client after changing fixture values.
 
+`bf2_swiff_leaderboard_check` (CMake, macOS) starts this fixture on port 18124 and checks the
+menu host's leaderboard and awards caches against it.
+
 ## Responses
 
 | Endpoint | Fixture data |

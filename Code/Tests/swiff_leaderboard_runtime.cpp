@@ -1,16 +1,106 @@
 // [TEMP] [CHOSEN, not recovered]
-// Tests SwiffHost leaderboard/awards caching through real HTTP and persistence code.
-// Starts the local stats fixture on 127.0.0.1:18124 and stops it before returning.
-// Injected cache objects avoid unrelated singleton/script paths; other force-linked dependencies stay uncalled.
-#include "../BF2/Core/Ids.h"
-#include "../BF2/Menu/SwiffHost.h"
-#include "../BF2/Game/Persistence/LeaderBoard.h"
-#include "../BF2/Game/Persistence/PlayerAwards.h"
-#include <windows.h>
+// Tests SwiffHost leaderboard/awards caching through real HTTP and persistence code, built on
+// request as bf2_swiff_leaderboard_check (POSIX). Starts the local stats fixture
+// (stats_fixture/bf2_stats_fixture.py) on 127.0.0.1:18124 and stops it before returning.
+// The stats host is formed as the game forms it with +gamespy test.openbf2. gethostbyname and
+// getaddrinfo below answer 127.0.0.1 for *.test.openbf2 and refuse every other name; connect
+// sends 127.0.0.1:80 to the fixture's port. No name leaves the process.
+// Injected cache objects avoid unrelated singleton/script paths; the collaborators the checks do
+// not reach are scaffolding stubs that end the process if called.
+#include <arpa/inet.h>
+#include <dlfcn.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <signal.h>
+#include <spawn.h>
+#include <strings.h>
+#include <sys/socket.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include "../BF2/Core/Ids.h"
+#include "../BF2/Menu/SwiffHost.h"
+#include "../BF2/Game/MatchMaking/OnlineProvider.h"
+#include "../BF2/Game/Persistence/LeaderBoard.h"
+#include "../BF2/Game/Persistence/PlayerAwards.h"
+
+#include "../BF2/Core/ClassManager.h"
+#include "../BF2/Core/LoadStat.h"
+#include "../BF2/Core/SettingsRepostitory.h"
+#include "../BF2/Core/SystemInfo.h"
+#include "../BF2/Game/IGame.h"
+#include "../BF2/Game/IGameLogic.h"
+#include "../BF2/Game/GeneralSettings.h"
+#include "../BF2/Game/MapList.h"
+#include "../BF2/Game/GameServer/ServerInfo.h"
+#include "../BF2/Game/GameServer/ServerSettings.h"
+#include "../BF2/Game/Main/BF2Engine.h"
+#include "../BF2/Game/Python/PythonHost.h"
+#include "../BF2/Game/Python/PyRef.h"
+#include "../BF2/Game/Utility/BuildNrUtil.h"
+#include "../BF2/IO/Console/Console.h"
+#include "../BF2/IO/File/FileManager.h"
+#include "../BF2/IO/Localization/ExcelLexicon.h"
+#include "../BF2/Platform/macOS/CocoaHost.h"
+#include "../BF2/Scene/Object/PlayerManager.h"
+#include "../BF2/Sound/BfSound.h"
+
+extern char** environ;
+
+// Engine scaffolding: SwiffHost.cpp refers to these, the leaderboard and awards paths do not reach
+// them. The globals stay null; the functions end the process if called.
+namespace dice { namespace hfe {
+ServerInfo* serverInfo = 0;
+ClassManager* classManager = 0;
+ServerSettings* serverSettings = 0;
+IGame* game = 0;
+IGameLogic* gameLogic = 0;
+MapList* mapList = 0;
+LoadStat* loadStat = 0;
+SettingsRepostitory* settings = 0;
+BF2Engine* bf2Engine = 0;
+IBfSound* g_bfSound = 0;
+namespace io {
+FileManager* fileManager = 0;
+OldConsole* mainConsole = 0;
+IBase* controlMapManager = 0;
+IBase* lexicon = 0;
+std::string Console::ignoredString_;
+}
+namespace world { PlayerManager* playerManager = 0; }
+
+[[noreturn]] void frontier(const char* name)
+{
+    std::fprintf(stderr, "[FRONTIER] leaderboard check reached %s\n", name);
+    std::abort();
+}
+ISystemInfo* systemInfo() { frontier("systemInfo"); }
+const char* BuildNrUtil::getBuildNrString() { frontier("BuildNrUtil::getBuildNrString"); }
+void GeneralSettings::addServerHistory(const std::string&, int, const std::string&, int) { frontier("GeneralSettings::addServerHistory"); }
+void* macos::CocoaHost::loadCursorFromFile(const char*) { frontier("CocoaHost::loadCursorFromFile"); }
+bool MapList::appendEntry(const std::string&, const std::string&, int, bool) { frontier("MapList::appendEntry"); }
+void MapList::setCurrentMap(int, bool) { frontier("MapList::setCurrentMap"); }
+bool MapList::clear(bool) { frontier("MapList::clear"); }
+int MapList::getMapCount() const { frontier("MapList::getMapCount"); }
+int MapList::getCurrentMap() const { frontier("MapList::getCurrentMap"); }
+bool MapList::save() const { frontier("MapList::save"); }
+const MapList::Entry* MapList::getEntry(int) const { frontier("MapList::getEntry"); }
+int ServerSettings::getMaxPlayers() const { frontier("ServerSettings::getMaxPlayers"); }
+bool SwiffHost::isLocalPlayerName(const std::string&) { frontier("SwiffHost::isLocalPlayerName"); }
+bool SwiffHost::setEndOfRoundInfo(const std::string&, float) { frontier("SwiffHost::setEndOfRoundInfo"); }
+bool SwiffHost::getEndOfRoundSummary(SwiffEndOfRoundSummary&) { frontier("SwiffHost::getEndOfRoundSummary"); }
+namespace python {
+PyRef::~PyRef() {}
+PythonHost* pythonHost() { frontier("pythonHost"); }
+void PythonHost::handleEvent(ScriptEvent, PyObject*) { frontier("PythonHost::handleEvent"); }
+PyRef buildArgs(const int&, world::IPlayer* const&, const std::string&) { frontier("buildArgs"); }
+PyRef buildArgs(const int&, world::IPlayer* const&, const std::vector<std::vector<int>>&) { frontier("buildArgs"); }
+}
+} }
 
 namespace dice { namespace hfe {
 struct SwiffHostFixture
@@ -27,6 +117,97 @@ struct SwiffHostFixture
 } }
 
 namespace {
+const int kPort = 18124;   // the fixture's port; never 16567
+const char kDomain[] = "test.openbf2";
+int refusedNames = 0;
+
+bool inTestDomain(const char* name)
+{
+    const size_t domain = sizeof(kDomain) - 1;
+    const size_t length = name ? std::strlen(name) : 0;
+    const bool ok = length > domain && name[length - domain - 1] == '.' && strcasecmp(name + length - domain, kDomain) == 0;
+    if (!ok)
+    {
+        ++refusedNames;
+        std::printf("FAIL: a name outside %s was looked up: %s\n", kDomain, name ? name : "(null)");
+    }
+    return ok;
+}
+} // namespace
+
+extern "C" struct hostent* gethostbyname(const char* name)
+{
+    if (!inTestDomain(name))
+    {
+        h_errno = HOST_NOT_FOUND;
+        return 0;
+    }
+    static struct in_addr address;
+    static char* addresses[2];
+    static char* noAliases[1];
+    static char canonical[256];
+    static struct hostent entry;
+    address.s_addr = htonl(INADDR_LOOPBACK);
+    addresses[0] = reinterpret_cast<char*>(&address);
+    addresses[1] = 0;
+    noAliases[0] = 0;
+    std::strncpy(canonical, name, sizeof(canonical) - 1);
+    entry.h_name = canonical;
+    entry.h_aliases = noAliases;
+    entry.h_addrtype = AF_INET;
+    entry.h_length = 4;
+    entry.h_addr_list = addresses;
+    return &entry;
+}
+
+extern "C" int getaddrinfo(const char* node, const char*, const struct addrinfo*, struct addrinfo** result)
+{
+    if (!inTestDomain(node))
+        return EAI_NONAME;
+    struct addrinfo* info = static_cast<struct addrinfo*>(std::calloc(1, sizeof(struct addrinfo)));
+    struct sockaddr_in* address = static_cast<struct sockaddr_in*>(std::calloc(1, sizeof(struct sockaddr_in)));
+    address->sin_family = AF_INET;
+    address->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    info->ai_family = AF_INET;
+    info->ai_socktype = SOCK_STREAM;
+    info->ai_addrlen = sizeof(struct sockaddr_in);
+    info->ai_addr = reinterpret_cast<struct sockaddr*>(address);
+    *result = info;
+    return 0;
+}
+
+extern "C" void freeaddrinfo(struct addrinfo* info)
+{
+    if (info)
+    {
+        std::free(info->ai_addr);
+        std::free(info);
+    }
+}
+
+// 127.0.0.1:80 goes to the fixture; any peer other than loopback is refused.
+extern "C" int connect(int fd, const struct sockaddr* address, socklen_t length)
+{
+    typedef int (*Connect)(int, const struct sockaddr*, socklen_t);
+    static Connect real = reinterpret_cast<Connect>(dlsym(RTLD_NEXT, "connect"));
+    struct sockaddr_in changed;
+    if (!address || address->sa_family != AF_INET || length < sizeof(changed))
+    {
+        errno = ECONNREFUSED;
+        return -1;
+    }
+    std::memcpy(&changed, address, sizeof(changed));
+    if (changed.sin_addr.s_addr != htonl(INADDR_LOOPBACK))
+    {
+        errno = ECONNREFUSED;
+        return -1;
+    }
+    if (changed.sin_port == htons(80))
+        changed.sin_port = htons(static_cast<unsigned short>(kPort));
+    return real(fd, reinterpret_cast<struct sockaddr*>(&changed), sizeof(changed));
+}
+
+namespace {
 int checks = 0, failures = 0;
 void check(bool ok, const char* what)
 {
@@ -38,46 +219,46 @@ void check(bool ok, const char* what)
     }
 }
 
-// The stats fixture, as a child process on its own port (never 16567, agents.md).
-PROCESS_INFORMATION g_server = {};
-const int kPort = 18124;
-bool startServer(const char* fixtureDir)
+// The stats fixture, as a child process on its own port.
+pid_t g_server = 0;
+bool startServer(const char* python, const char* fixtureDir)
 {
-    char command[1024];
-    std::snprintf(command, sizeof command,
-                  "python -u \"%s\\bf2_stats_fixture.py\" --port %d --lb-size 57 --lb-position 42 --lb-pid 1",
-                  fixtureDir, kPort);
-    STARTUPINFOA si = {};
-    si.cb = sizeof si;
-    if (!CreateProcessA(nullptr, command, nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &g_server))
+    const std::string script = std::string(fixtureDir) + "/bf2_stats_fixture.py";
+    char port[16];
+    std::snprintf(port, sizeof port, "%d", kPort);
+    const char* argv[] = { python, "-I", "-u", script.c_str(), "--port", port, "--lb-size", "57",
+                           "--lb-position", "42", "--lb-pid", "1", 0 };
+    if (posix_spawn(&g_server, python, 0, 0, const_cast<char* const*>(argv), environ) != 0)
+    {
+        g_server = 0;
         return false;
+    }
     // Wait for the listener (up to ten seconds).
-    WSADATA wsa;
-    WSAStartup(MAKEWORD(2, 2), &wsa);
+    typedef int (*Connect)(int, const struct sockaddr*, socklen_t);
+    static Connect real = reinterpret_cast<Connect>(dlsym(RTLD_NEXT, "connect"));
     for (int attempt = 0; attempt < 100; ++attempt)
     {
-        SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        const int s = socket(AF_INET, SOCK_STREAM, 0);
         sockaddr_in a = {};
         a.sin_family = AF_INET;
-        a.sin_port = htons(static_cast<u_short>(kPort));
+        a.sin_port = htons(static_cast<unsigned short>(kPort));
         a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-        const bool up = connect(s, reinterpret_cast<sockaddr*>(&a), sizeof a) == 0;
-        closesocket(s);
+        const bool up = real(s, reinterpret_cast<sockaddr*>(&a), sizeof a) == 0;
+        close(s);
         if (up)
             return true;
-        Sleep(100);
+        usleep(100000);
     }
     return false;
 }
 void stopServer()
 {
-    if (g_server.hProcess)
+    if (g_server > 0)
     {
-        TerminateProcess(g_server.hProcess, 0);
-        WaitForSingleObject(g_server.hProcess, 5000);
-        CloseHandle(g_server.hProcess);
-        CloseHandle(g_server.hThread);
-        g_server = PROCESS_INFORMATION();
+        kill(g_server, SIGTERM);
+        int status = 0;
+        waitpid(g_server, &status, 0);
+        g_server = 0;
     }
 }
 } // namespace
@@ -85,20 +266,23 @@ void stopServer()
 int main(int argc, char** argv)
 {
     using namespace dice::hfe;
-    if (argc != 2)
+    if (argc != 3)
     {
-        std::printf("usage: swiff_leaderboard_runtime <stats fixture directory>\n");
+        std::printf("usage: swiff_leaderboard_runtime <python3> <stats fixture directory>\n");
         return 2;
     }
-    if (!startServer(argv[1]))
+    std::string error;
+    if (!onlineProvider::setDomain(kDomain, error))
+    {
+        std::printf("FAIL: +gamespy %s refused: %s\n", kDomain, error.c_str());
+        return 1;
+    }
+    if (!startServer(argv[1], argv[2]))
     {
         std::printf("FAIL: the stats fixture did not come up on 127.0.0.1:%d\n", kPort);
         stopServer();
         return 1;
     }
-    char url[64];
-    std::snprintf(url, sizeof url, "BF2_STATS_URL=http://127.0.0.1:%d/ASP/", kPort);
-    _putenv(url);
 
     LeaderBoard* board = new LeaderBoard();
     PlayerAwards* awards = new PlayerAwards();
@@ -198,6 +382,7 @@ int main(int argc, char** argv)
 
     host->release();
     stopServer();
+    check(refusedNames == 0, "no name outside test.openbf2 was looked up");
     std::printf("swiff_leaderboard_runtime: %d/%d checks passed; %d failures\n", checks - failures, checks, failures);
     return failures ? 1 : 0;
 }

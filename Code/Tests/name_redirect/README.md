@@ -57,3 +57,6 @@ The loopback harness does this with `--name-redirect <domain>`
 `bf2_test_name_redirect` first. The option also adds `+gamespy <domain>` to both command
 lines. It lets the sandbox profiles reach the GameSpy service ports on loopback only, plus
 the HTTP port given by `--name-redirect-http-port`.
+
+The headless checks `bf2_persistence_stats_check` and `bf2_swiff_leaderboard_check` do not
+need this library. They replace the resolver inside their own process.
