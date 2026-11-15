@@ -470,11 +470,15 @@ int VoipClient::sendCaptured(std::uint8_t* packet, int* length)
     return sendPacket(packet, length);
 }
 
-// Incoming datagram: voice frames, then the frame stamp (the dword before the last word) and the
-// sender's session id (the last word). The base plays every sender.
+// Incoming datagram: voice frames, then the frame-stamp word and the sender's session-id dword.
+// The base plays every sender. Malformed lengths are rejected before reading the trailer.
 bool VoipClient::handleIncoming(std::uint8_t* packet, int length, std::uint16_t* sender)
 {
     if (!m_playbackDevice)
+        return false;
+    // [CHOSEN, not recovered] Reject truncated trailers and incomplete codec frames.
+    // https://github.com/kr4uzi/OpenBF2/issues/26
+    if (length <= 6 || m_encodedFrameSize <= 0 || (length - 6) % m_encodedFrameSize != 0)
         return false;
     std::uint32_t stamp = 0;
     std::memcpy(&stamp, packet + length - 4, 4);

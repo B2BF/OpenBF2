@@ -139,6 +139,35 @@ struct CountingClient : VoipClient
     void onVoiceEnded() override { ++ended; VoipClient::onVoiceEnded(); }
 };
 
+// [TEMP] Issue #26: each allocation ends at the supplied length, so ASan can also detect a read
+// before a truncated trailer. The virtual call exercises both production parsers.
+void malformedIncomingChecks(VoipClient& client, int trailerSize)
+{
+    const int frameSize = client.m_encodedFrameSize;
+    for (int length = -1; length <= trailerSize + 2 * frameSize + 1; ++length)
+    {
+        if (length == trailerSize + frameSize || length == trailerSize + 2 * frameSize)
+            continue;
+        std::uint8_t* packet = length > 0 ? new std::uint8_t[length]() : nullptr;
+        std::uint16_t sender[2] = { 0x1234, 0x5678 };
+        check(!client.handleIncoming(packet, length, sender), "malformed incoming length rejected");
+        check(sender[0] == 0x1234 && sender[1] == 0x5678, "malformed packet leaves sender untouched");
+        delete[] packet;
+    }
+    std::uint16_t sender[2] = { 0x1234, 0x5678 };
+    check(!client.handleIncoming(nullptr, std::numeric_limits<int>::min(), sender),
+          "minimum signed length rejected without subtraction overflow");
+    std::vector<std::uint8_t> packet(static_cast<std::size_t>(trailerSize + frameSize), 0);
+    for (int invalidSize : { 0, -1 })
+    {
+        client.m_encodedFrameSize = invalidSize;
+        check(!client.handleIncoming(packet.data(), static_cast<int>(packet.size()), sender),
+              "invalid codec frame size rejected");
+        check(sender[0] == 0x1234 && sender[1] == 0x5678, "invalid codec leaves sender untouched");
+    }
+    client.m_encodedFrameSize = frameSize;
+}
+
 // ---- part A: VoipBandPassFilter ---------------------------------------------------------------------
 void filterChecks()
 {
@@ -191,6 +220,7 @@ void clientChecks()
     gvGetCodecInfo(&spf, &efs, &bps);
     check(client.m_encodedFrameSize == efs && efs > 0 && spf == 160, "codec quality 3: Speex narrowband frame size");
     check(client.startSession(loopback, server.port, 0, 3, false), "a second startSession is a no-op success");
+    malformedIncomingChecks(client, 6);
 
     client.setPlayerId(0x1234);
     check(client.sendKeepAlive(), "keep-alive sent");
@@ -258,6 +288,11 @@ void clientChecks()
     incoming.push_back(9); incoming.push_back(0);               // frame stamp 9
     incoming.push_back(42); incoming.push_back(0); incoming.push_back(0); incoming.push_back(0);   // source 42
     const int playedBefore = VoipFakeDevice::playedFrames();
+    server.sendTo(localPortOf(client), std::vector<std::uint8_t>(1, 0));
+    server.sendTo(localPortOf(client), std::vector<std::uint8_t>(7, 0));
+    pause();
+    client.think(0, 0);
+    check(client.handled == 0, "short and partial-frame datagrams do not notify the base client");
     server.sendTo(localPortOf(client), incoming);
     pause();
     client.think(0, 0);
@@ -265,6 +300,12 @@ void clientChecks()
     g_now += 60;
     client.think(0, 0);
     check(VoipFakeDevice::playedFrames() > playedBefore, "the fake device drains playback on its clock");
+    std::vector<std::uint8_t> twoFrames(incoming.begin(), incoming.begin() + efs);
+    twoFrames.insert(twoFrames.end(), incoming.begin(), incoming.end());
+    std::uint16_t receivedSender[2] = { 0, 0 };
+    check(client.handleIncoming(twoFrames.data(), static_cast<int>(twoFrames.size()), receivedSender)
+          && receivedSender[0] == 42 && receivedSender[1] == 0,
+          "base client accepts multiple whole frames and preserves the source trailer");
     server.drain();
 
     // The burst ends once the silence is strictly longer than the 500 ms timeout (VoipClient times bursts
@@ -515,12 +556,30 @@ void bf2Checks()
     std::vector<std::uint8_t> packet(static_cast<std::size_t>(efs), 0);
     packet.push_back(3); packet.push_back(0);        // frame stamp
     packet.push_back(77); packet.push_back(0);       // sender session 77
+    // Rejection must happen before player lookup as well as before decoder submission.
+    world::PlayerManager* savedManager = world::playerManager;
+    world::playerManager = nullptr;
+    malformedIncomingChecks(client, 4);
+    world::playerManager = savedManager;
     W.senderMuted = true;
     std::uint16_t sender = 0;
     check(!client.handleIncoming(packet.data(), static_cast<int>(packet.size()), &sender) && sender == 77, "muted sender dropped");
     W.senderMuted = false;
     check(client.handleIncoming(packet.data(), static_cast<int>(packet.size()), &sender), "unmuted sender played");
+    packet[packet.size() - 2] = 78;
+    check(!client.handleIncoming(packet.data(), static_cast<int>(packet.size()), &sender) && sender == 78,
+          "unknown sender remains rejected");
+    packet[packet.size() - 2] = 77;
+    std::vector<std::uint8_t> twoFrames(static_cast<std::size_t>(efs), 0);
+    twoFrames.insert(twoFrames.end(), packet.begin(), packet.end());
+    check(client.handleIncoming(twoFrames.data(), static_cast<int>(twoFrames.size()), &sender) && sender == 77,
+          "game client accepts multiple whole frames and preserves the sender trailer");
     const int talkingBefore = W.senderTalking;
+    server.sendTo(clientPort, std::vector<std::uint8_t>(1, 0));
+    server.sendTo(clientPort, std::vector<std::uint8_t>(5, 0));
+    pause();
+    client.think(0, 0);
+    check(W.senderTalking == talkingBefore, "short and partial-frame datagrams do not mark the sender talking");
     server.sendTo(clientPort, packet);
     pause();
     W.squadId = 3;

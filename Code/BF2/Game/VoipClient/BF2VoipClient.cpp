@@ -378,10 +378,14 @@ bool BF2VoipClient::startSession(std::uint32_t address, std::uint16_t port, std:
 }
 
 // The local player's datagrams: frame stamp, then sender session id at the end. Muted senders are
-// dropped.
+// dropped. Malformed lengths are rejected before reading the trailer or looking up the sender.
 bool BF2VoipClient::handleIncoming(std::uint8_t* packet, int length, std::uint16_t* sender)
 {
     if (!m_active || !m_playbackDevice)
+        return false;
+    // [CHOSEN, not recovered] Reject truncated trailers and incomplete codec frames.
+    // https://github.com/kr4uzi/OpenBF2/issues/26
+    if (length <= 4 || m_encodedFrameSize <= 0 || (length - 4) % m_encodedFrameSize != 0)
         return false;
     std::memcpy(sender, packet + length - 2, 2);
     length -= 2;

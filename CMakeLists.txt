@@ -898,7 +898,8 @@ foreach(speex_unit bits cb_search exc_10_16_table exc_10_32_table exc_20_32_tabl
         vbr vq)
     list(APPEND bf2_gamespy_voice_sources "${BF2_EXTERNAL_ROOT}/speex-1.0.5/libspeex/${speex_unit}.c")
 endforeach()
-add_library(bf2_gamespy_voice_objects OBJECT ${bf2_gamespy_voice_sources})
+# Client/test dependencies opt in; Linux dedicated builds have no Voice2 hardware backend.
+add_library(bf2_gamespy_voice_objects OBJECT EXCLUDE_FROM_ALL ${bf2_gamespy_voice_sources})
 bf2_configure_c_target(bf2_gamespy_voice_objects)
 target_include_directories(bf2_gamespy_voice_objects PRIVATE
     "${BF2_EXTERNAL_ROOT}/speex-1.0.5/include"
