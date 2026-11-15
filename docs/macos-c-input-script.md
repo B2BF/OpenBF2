@@ -54,6 +54,11 @@ passes `+restart 1`, and are run with `BF2_AI_SPAWN_ONLY=1`:
   `BF2_REUSE_HOME` with an offline account).
 - `sp-leave-replay.txt`: leave the game and start a second one.
 - `sp-start.txt`: from a fresh offline profile through the SP page to a spawned Assault soldier.
+- `sp-quit-after-map.txt`, `sp-quit-in-map.txt`: Dalian Plant from a fresh profile, then the QUIT
+  dialog from the main menu after DISCONNECT, or from the in-game menu. `sp-quit-check.sh BUILD_DIR`
+  runs both with 4x antialiasing and fails unless the client exits with status 0 and without the
+  RendDX9Init.cpp:738 device release fatal (the quit runs the renderer deinit; the window close and
+  the application menu's Quit end the process with `exit(0)` before it, as on Win32).
 
 ## The input script (`BF2_INPUT_SCRIPT=<file>`)
 

@@ -1,0 +1,44 @@
+# [CHOSEN, not recovered] sp-quit-in-map: as sp-quit-after-map, but QUIT -> YES from the in-game
+# menu (Escape) while the level is still loaded. Run through sp-quit-check.sh. 800x600.
+timeout 400
+wait-log mods/bf2/Movies/menu.bik
+wait-ms 4000
+move 533 414
+wait-ms 300
+click 533 414
+wait-ms 4000
+move 333 15
+wait-ms 300
+click 333 15
+wait-ms 3000
+move 730 585
+wait-ms 300
+click 730 585
+wait-log ingameMap.tga
+wait-ms 5000
+click 745 583
+wait-ms 4000
+key enter
+wait-ms 1500
+key enter
+wait-ms 3000
+hud-click 130 240
+wait-ms 1000
+hud-click 517 422
+wait-ms 1000
+hud-click 728 546
+wait-ms 15000
+capture spawned
+key escape
+wait-ms 3000
+move 733 15
+wait-ms 300
+click 733 15
+wait-ms 2000
+capture quit-dialog
+move 440 305
+wait-ms 300
+# The quit ends the process before the next script step, so the marker comes first.
+log sp-quit: confirming the quit
+click 440 305
+wait-ms 60000
