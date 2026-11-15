@@ -75,6 +75,7 @@ struct Frame {
     Texture colorResource, depthResource;
     struct DrawCaches* draws = nullptr; // G4 open render pass and pipeline caches (DrawBridge.inc)
     struct Prebuild* prebuild = nullptr; // shader libraries and pipelines built ahead of draws (ShaderPrebuild.inc)
+    unsigned long presents = 0;          // frames presented so far
 };
 Adapter* createAdapter()
 {
@@ -512,8 +513,8 @@ PresentResult present(Frame* f,void* window,bool doNotWait)
             [e setFragmentTexture:f->color atIndex:0];
             [e drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4]; [e endEncoding];
         }
-        static unsigned long presents=0;
-        if(++presents%1200==0) prebuildSummary(f);       // traced runs only
+        if(f->prebuild) f->prebuild->presents=f->presents+1;
+        if(++f->presents%1200==0) prebuildSummary(f);    // traced runs only
         PresentCapture* capture=presentCaptureBegin(f);  // [TEMP] BF2_PRESENT_PNG
         [f->commands presentDrawable:drawable];
         if(doNotWait) {

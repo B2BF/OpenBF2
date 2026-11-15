@@ -21,8 +21,11 @@
 //  - Pipelines: a pipeline state is described by a recipe (the two libraries by the hash of their
 //    MSL, attachment formats, sample count, blend state, vertex attributes); equal recipes share one
 //    state. A draw builds the state of a recipe it is the first to use.
-//  - A draw that needs a library that is not ready compiles it at once (or waits for the thread
-//    that is compiling it). Nothing is drawn differently.
+//  - A draw that needs a library or state that is not ready builds it at once (or waits for the
+//    thread that is building it). Exception (DrawBridge.inc draw): a colour-only blended draw
+//    (particles, muzzle flashes, glows: blending on, no depth or stencil writes, no occlusion query)
+//    is skipped instead, a worker builds what it needs, and it is drawn from the first frame after
+//    that (~1-3 frames on an Intel GPU with an empty system shader cache).
 //
 // BF2_METAL_PREBUILD=0 turns the background work off (every build happens at the first draw);
 // BF2_METAL_PREBUILD_THREADS sets the worker count, BF2_METAL_PREBUILD_BATCH the shaders per batch.
@@ -67,13 +70,29 @@ struct PipelineRecipe {
 };
 
 
+// A pipeline state: built by the first draw that needs it, or by a worker for a draw that was
+// skipped meanwhile (DrawBridge.inc).
+struct PipelineEntry {
+    PipelineRecipe recipe;
+    std::shared_ptr<LibraryEntry> vs, fs;  // fs null without colour writes
+    BuildState state = BuildState::Queued; // guarded by Prebuild::mutex, like the fields below
+    pthread_t builder = nullptr;           // while Building
+    bool queued = false;                   // in Prebuild::jobs
+    id<MTLRenderPipelineState> object;
+    std::string error;
+    // The frame (Frame::presents) of the first draw skipped for it, 0 when none (render thread),
+    // and the frame in which a worker finished it (guarded by Prebuild::mutex).
+    unsigned long firstSkip = 0, readyFrame = 0;
+};
+
 struct Prebuild {
     id<MTLDevice> device;
     bool background = true;               // BF2_METAL_PREBUILD
     std::mutex mutex;
     std::condition_variable work, done;
     std::unordered_map<std::string, std::shared_ptr<LibraryEntry>> libraries;  // by hash
-    std::unordered_map<std::string, id<MTLRenderPipelineState>> pipelines;     // by recipe text, render thread only
+    std::unordered_map<std::string, std::shared_ptr<PipelineEntry>> pipelines; // by recipe text (the map: render thread only)
+    std::deque<std::shared_ptr<PipelineEntry>> jobs;           // states of skipped draws, before any batch
     // Libraries join the open batch of their stream (vertex, pixel, pixel variants) in creation
     // order; a full batch, or one that got no new member for a while, is compiled as one source.
     struct Batch {
@@ -88,7 +107,10 @@ struct Prebuild {
     unsigned waiting = 0;                 // the render thread waits for a build: no new batch starts
     // Counts for the summary line.
     unsigned libraryReady = 0, libraryWaited = 0, libraryNow = 0, libraryBackground = 0, batchCount = 0;
-    unsigned pipelineShared = 0, pipelineNow = 0;
+    unsigned pipelineShared = 0, pipelineNow = 0, pipelineWaited = 0, pipelineBackground = 0;
+    unsigned skippedDraws = 0;
+    std::vector<unsigned long> framesMissing;  // per state a skipped draw waited for: frames until it was built
+    std::atomic<unsigned long> presents{0};    // Frame::presents, for the workers
     double backgroundMs = 0;
 };
 
@@ -251,6 +273,19 @@ static void settleLibrary(Prebuild* p, std::unique_lock<std::mutex>& lock, Libra
         e.msl.clear(); e.msl.shrink_to_fit();
     });
 }
+static void settlePipeline(Prebuild* p, std::unique_lock<std::mutex>& lock, PipelineEntry& e, bool urgent)
+{
+    settle(p, lock, e, urgent, [&](std::unique_lock<std::mutex>& held) {
+        settleLibrary(p, held, *e.vs, urgent);
+        if (e.fs) settleLibrary(p, held, *e.fs, urgent);
+        if (e.vs->state != BuildState::Ready) { e.error = "vertex shader " + e.vs->error; return; }
+        if (e.fs && e.fs->state != BuildState::Ready) { e.error = "pixel shader " + e.fs->error; return; }
+        id<MTLFunction> vertex = e.vs->function, fragment = e.fs ? e.fs->function : nil;
+        held.unlock();
+        e.object = makePipeline(p->device, e.recipe, vertex, fragment, e.error);
+        held.lock();
+    });
+}
 
 // Compiles the batch's members that no thread has started. The lock is held on entry and on return.
 static void buildBatch(Prebuild* p, std::unique_lock<std::mutex>& lock, Prebuild::Batch& batch)
@@ -286,8 +321,26 @@ static void prebuildWorker(Prebuild* p)
     std::unique_lock<std::mutex> lock(p->mutex);
     for (;;) {
         // Wakes up for work, and at intervals to close a batch that stopped growing.
-        p->work.wait_for(lock, std::chrono::milliseconds(100), [&] { return p->stop || (!p->batches.empty() && !p->waiting); });
+        p->work.wait_for(lock, std::chrono::milliseconds(100), [&] { return p->stop || !p->jobs.empty() || (!p->batches.empty() && !p->waiting); });
         if (p->stop) return;
+        if (!p->jobs.empty()) {
+            const std::shared_ptr<PipelineEntry> job = p->jobs.front();
+            p->jobs.pop_front();
+            job->queued = false;
+            if (job->state != BuildState::Queued) continue;
+            // A draw is missing until this is built: ahead of the batches, at a higher priority.
+            pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0);
+            const auto started = std::chrono::steady_clock::now();
+            settlePipeline(p, lock, *job, false);
+            job->readyFrame = p->presents;
+            const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+            ++p->pipelineBackground; p->backgroundMs += ms;
+            pthread_set_qos_class_self_np(QOS_CLASS_UTILITY, 0);
+            lock.unlock();
+            bf2hitch::add(bf2hitch::MetalPipeline, ms, "background, for a skipped draw");
+            lock.lock();
+            continue;
+        }
         if (p->waiting) continue;
         std::shared_ptr<Prebuild::Batch> batch;
         if (!p->batches.empty()) { batch = p->batches.front(); p->batches.pop_front(); }
@@ -299,6 +352,10 @@ static void prebuildWorker(Prebuild* p)
         if (batch) buildBatch(p, lock, *batch);
     }
 }
+static void startWorkers(Prebuild* p)
+{
+    while (p->threads.size() < p->threadLimit) p->threads.emplace_back(prebuildWorker, p);
+}
 // A new library joins its stream's open batch. The lock is held.
 static void prebuildQueue(Prebuild* p, const std::shared_ptr<LibraryEntry>& e)
 {
@@ -308,7 +365,7 @@ static void prebuildQueue(Prebuild* p, const std::shared_ptr<LibraryEntry>& e)
     open->members.push_back(e);
     open->last = std::chrono::steady_clock::now();
     if (open->members.size() >= p->batchSize) { p->batches.push_back(open); open.reset(); p->work.notify_one(); }
-    while (p->threads.size() < p->threadLimit) p->threads.emplace_back(prebuildWorker, p);
+    startWorkers(p);
 }
 
 static Prebuild* prebuild(Frame* f)
@@ -332,11 +389,16 @@ static void prebuildSummary(Frame* f)
     std::lock_guard<std::mutex> lock(p->mutex);
     std::size_t waitingLibraries = 0;
     for (const auto& e : p->libraries) if (e.second->state == BuildState::Queued || e.second->state == BuildState::Building) ++waitingLibraries;
+    std::vector<unsigned long> missing = p->framesMissing;
+    std::sort(missing.begin(), missing.end());
     std::fprintf(stderr, "[metal] prebuild: libraries %zu (ready at first draw %u, waited for %u, built at the draw %u; "
-                 "background %u in %u batches, %zu not compiled), pipelines %zu (built at the draw %u, shared %u); "
+                 "background %u in %u batches, %zu not compiled), pipelines %zu (built at the draw %u, waited for %u, "
+                 "shared %u, built for skipped draws %u; skipped draws %u, frames missing median %lu max %lu); "
                  "background build time %.1f s\n",
                  p->libraries.size(), p->libraryReady, p->libraryWaited, p->libraryNow, p->libraryBackground, p->batchCount,
-                 waitingLibraries, p->pipelines.size(), p->pipelineNow, p->pipelineShared, p->backgroundMs / 1000.0);
+                 waitingLibraries, p->pipelines.size(), p->pipelineNow, p->pipelineWaited, p->pipelineShared, p->pipelineBackground,
+                 p->skippedDraws, missing.empty() ? 0ul : missing[missing.size() / 2], missing.empty() ? 0ul : missing.back(),
+                 p->backgroundMs / 1000.0);
 }
 static void destroyPrebuild(Frame* f)
 {

@@ -98,10 +98,18 @@ static id<MTLTexture> unboundTexture(Frame* f, unsigned kind)
         [t replaceRegion:MTLRegionMake3D(0, 0, 0, 1, 1, 1) mipmapLevel:0 slice:s withBytes:black bytesPerRow:4 bytesPerImage:4];
     return t;
 }
+// Whether the program's library is compiled (does not wait).
+static bool libraryReady(Frame* f, Program* p)
+{
+    Prebuild* pb = prebuild(f);
+    std::lock_guard<std::mutex> lock(pb->mutex);
+    return p->library->state == BuildState::Ready;
+}
 // The pipeline state of a draw. The per-device cache is keyed by the draw's own objects; a miss
 // describes the pipeline as a recipe (ShaderPrebuild.inc), which finds the state an equal pair of
-// programs already built, or builds it now.
-static id<MTLRenderPipelineState> pipeline(Frame* f, const DrawCall& c, std::string& error)
+// programs already built, or builds it now. With `defer` a state that is not built is left to a
+// worker instead: nil with `skipped` set, and the draw is skipped.
+static id<MTLRenderPipelineState> pipeline(Frame* f, const DrawCall& c, std::string& error, bool defer, bool& skipped)
 {
     const MTLPixelFormat color = c.color->object.pixelFormat;
     const MTLPixelFormat depth = c.depth ? c.depth->object.pixelFormat : MTLPixelFormatInvalid;
@@ -145,19 +153,46 @@ static id<MTLRenderPipelineState> pipeline(Frame* f, const DrawCall& c, std::str
         for (const auto& st : r.strides) listed = listed || st.first == match->stream;
         if (!listed) r.strides.push_back({match->stream, stride});
     }
-    // draw() compiled both programs (the fragment one only with colour writes).
     Prebuild* pb = prebuild(f);
-    auto& shared = pb->pipelines[r.text()];
-    if (shared) {
+    const std::string text = r.text();
+    auto& slot = pb->pipelines[text];
+    if (!slot) {
+        slot = std::make_shared<PipelineEntry>();
+        slot->recipe = r; slot->vs = c.vertex->library;
+        if (writes) slot->fs = c.fragment->library;
+    }
+    const std::shared_ptr<PipelineEntry> e = slot;
+    std::unique_lock<std::mutex> lock(pb->mutex);
+    if (e->state == BuildState::Ready) {
         ++pb->pipelineShared;
         bf2hitch::add(bf2hitch::MetalPipelineReady, 0);
-    } else {
-        bf2hitch::Scope timed(bf2hitch::MetalPipeline, drawTraceLabel());
-        ++pb->pipelineNow;
-        shared = makePipeline(pb->device, r, c.vertex->function, writes ? c.fragment->function : nil, error);
-        if (!shared) { pb->pipelines.erase(r.text()); f->draws->pipelines.erase(key); return nil; }
+    } else if (defer && e->state != BuildState::Failed) {
+        if (e->state == BuildState::Queued && !e->queued) {
+            e->queued = true; pb->jobs.push_back(e); pb->work.notify_all(); startWorkers(pb);
+        }
+        if (!e->firstSkip) e->firstSkip = f->presents + 1;
+        ++pb->skippedDraws; skipped = true;
+        f->draws->pipelines.erase(key); return nil;
+    } else if (e->state != BuildState::Failed) {
+        const bool queued = e->state == BuildState::Queued;
+        const std::string traced = bf2hitch::enabled() ? std::string(queued ? "" : "wait ") + drawTraceLabel() : std::string();
+        bf2hitch::Scope timed(bf2hitch::MetalPipeline, traced.c_str());
+        ++(queued ? pb->pipelineNow : pb->pipelineWaited);
+        settlePipeline(pb, lock, *e, true);
     }
-    cached = shared;
+    if (e->state != BuildState::Ready) {
+        error = e->error;
+        lock.unlock();
+        pb->pipelines.erase(text); f->draws->pipelines.erase(key); return nil;
+    }
+    // Frames the skipped draw was missing: from its first skip through the frame in which the worker
+    // finished the state (it is drawn from the next one on, when the game draws it again).
+    if (e->firstSkip) {
+        const unsigned long built = e->readyFrame ? e->readyFrame + 1 : f->presents + 1;
+        pb->framesMissing.push_back(built >= e->firstSkip ? built - e->firstSkip + 1 : 1);
+        e->firstSkip = 0;
+    }
+    cached = e->object;
     return cached;
 }
 static id<MTLDepthStencilState> depthState(Frame* f, const DrawCall& c)
@@ -303,10 +338,23 @@ bool draw(Frame* f, const DrawCall& call, std::string& error)
     const bool drop = call.depth && samplesMismatch(f, call.color->object, call.depth->object);
     if (drop) { unmatched = call; unmatched.depth = nullptr; }
     const DrawCall& c = drop ? unmatched : call;
-    if (!compileProgram(f, c.vertex)) { error = "vertex shader " + c.vertex->error; return false; }
-    // Without colour writes the pipeline has no fragment function (pipeline()), so none is compiled.
-    if (c.fragment && c.state.colorMask && !compileProgram(f, c.fragment)) { error = "pixel shader " + c.fragment->error; return false; }
-    id<MTLRenderPipelineState> state = pipeline(f, c, error);
+    // [CHOSEN, not recovered] A colour-only blended draw (blending on, no depth or stencil writes, no
+    // occlusion query: particles, muzzle flashes, glows) whose programs or pipeline state are not
+    // built yet is skipped while a worker builds them (ShaderPrebuild.inc), instead of stalling the
+    // frame; it is drawn from the first frame after that. Nothing later in the frame depends on
+    // what it would have written but the colour it blends into. Every other draw waits as before.
+    const auto& st = c.state;
+    const bool deferrable = c.fragment && st.colorMask && st.blend && !st.depthWrite && !st.stencil && !c.occlusion &&
+                            prebuild(f)->background;
+    const bool ready = !deferrable || (libraryReady(f, c.vertex) && libraryReady(f, c.fragment));
+    if (ready) {
+        if (!compileProgram(f, c.vertex)) { error = "vertex shader " + c.vertex->error; return false; }
+        // Without colour writes the pipeline has no fragment function (pipeline()), so none is compiled.
+        if (c.fragment && c.state.colorMask && !compileProgram(f, c.fragment)) { error = "pixel shader " + c.fragment->error; return false; }
+    }
+    bool skipped = false;
+    id<MTLRenderPipelineState> state = pipeline(f, c, error, deferrable, skipped);
+    if (skipped) return true;
     if (!state) return false;
     id<MTLRenderCommandEncoder> e = passFor(f, c);
     if (!e) { error = "render pass"; return false; }
