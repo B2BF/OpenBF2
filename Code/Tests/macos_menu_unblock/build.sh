@@ -17,7 +17,8 @@ c++ -arch x86_64 -std=gnu++14 -fms-extensions -DDEDICATED=0 -D_MACOSX=1 \
     -include "$ROOT/Code/BF2/Core/BuildConfig.h" \
     -include "$ROOT/Code/BF2/Core/PlatformCompat.h" \
     "$ROOT/Code/Tests/macos_menu_unblock/http_request_offline.cpp" \
-    "$ROOT/Code/BF2/Game/Persistence/HTTPRequest.cpp" -o "$OUT/http_request_offline"
+    "$ROOT/Code/BF2/Game/Persistence/HTTPRequest.cpp" \
+    "$ROOT/Code/BF2/Game/MatchMaking/OnlineProvider.cpp" -o "$OUT/http_request_offline"
 "$OUT/http_request_offline"
 # DemoLibrary on the production HTTPRequest base. Unreached
 # FileManager/StringUtil dependencies stay unbound (dynamic_lookup); vtable data is linked.
@@ -29,6 +30,7 @@ c++ -arch x86_64 -std=gnu++14 -fms-extensions -w -DDEDICATED=0 -D_MACOSX=1 -DBF2
     "$ROOT/Code/Tests/macos_menu_unblock/demo_library_offline.cpp" \
     "$ROOT/Code/BF2/Game/DemoRecorder/DemoLibrary.cpp" \
     "$ROOT/Code/BF2/Game/Persistence/HTTPRequest.cpp" \
+    "$ROOT/Code/BF2/Game/MatchMaking/OnlineProvider.cpp" \
     "$ROOT/Code/BF2/Core/ClassManager.cpp" \
     "$ROOT/Code/BF2/IO/File/FileManager.cpp" \
     "$ROOT/Code/BF2/IO/File/UnixFileSystem.cpp" \

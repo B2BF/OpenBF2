@@ -76,7 +76,9 @@ gpiStartProfileSearch(
 	///////////////////////
 	host = gethostbyname(GPSearchManagerHostname);
 	if(host == NULL)
-		CallbackFatalError(connection, GP_NETWORK_ERROR, GP_NETWORK, "Could not resolve search mananger host name.");
+		// [CHOSEN, not recovered] OpenBF2 local change (LOCAL_CHANGES.md): "manager", as in the SDK
+		// revision BF2 shipped with; ProfileManager::reportError compares this text.
+		CallbackFatalError(connection, GP_NETWORK_ERROR, GP_NETWORK, "Could not resolve search manager host name.");
 
 	// Connect the socket.
 	//////////////////////
@@ -568,6 +570,14 @@ gpiProcessSearch(
 			//////////////////////////////
 			if(state == GPI_DISCONNECTED)
 				CallbackError(connection, GP_SERVER_ERROR, GP_SEARCH_CONNECTION_FAILED, "Could not connect to the search manager.");
+
+			// [CHOSEN, not recovered] OpenBF2 local change (LOCAL_CHANGES.md): give up after
+			// GPI_CONNECT_TIMEOUT (searchStartTime is set when the connect starts).
+			if((state == GPI_NOT_CONNECTED) && ((current_time() - data->searchStartTime) > GPI_CONNECT_TIMEOUT))
+			{
+				data->remove = GPITrue;
+				CallbackError(connection, GP_NETWORK_ERROR, GP_SEARCH_TIMED_OUT, "Could not connect to the search manager.");
+			}
 
 			// Check if finished connecting.
 			////////////////////////////////

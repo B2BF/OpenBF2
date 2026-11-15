@@ -233,8 +233,8 @@ takes effect when the module is loaded **before** Python initialization — load
 `pythonHost()->initialize()`, not from a map script that runs afterward.
 
 This loader does not itself reroute sockets. bf2hub's GameSpy/master-server redirection relied on an
-install-time patch of the host's import table that a runtime load does not reproduce; point the
-engine at the correct master-server address in source instead.
+install-time patch of the host's import table that a runtime load does not reproduce; select the
+provider's domain with `+gamespy` instead (see [Online services](building.md#online-services)).
 
 ## The editor
 

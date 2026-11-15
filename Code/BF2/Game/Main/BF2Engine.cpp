@@ -52,6 +52,7 @@
 #include "../../Core/Registry.h"
 #include "../../IO/Localization/ExcelLexicon.h"
 #include "../Utility/SimpleParser.h"
+#include "../MatchMaking/OnlineProvider.h"  // [CHOSEN, not recovered] +gamespy
 #include "../Objects/Game/SupplyDropManager.h"   // shutdown: Instance() / Release()        // [INFERRED] path - promoted to its own header
 #include "../MapList.h"                     // mapList - region 1 owns its config-file default
 #include "../Utility/Vars.h"                // Vars::getFloat - the frame limiter's overhead var
@@ -752,6 +753,11 @@ BF2Engine::BF2Engine(BF2* bf2Ptr)
 #endif
 }
 
+// [CHOSEN, not recovered] True only while init parses the process command line. Client images
+// parse again later (menu event 5, SwiffHost::setCommandLineFile), and that text can come from menu
+// content; the online provider must only ever be chosen by the user's own process arguments.
+static bool s_parsingProcessArguments = false;
+
 bool BF2Engine::init(const std::string& commandLine)
 {
     bf2Log = new BF2Log();                              // operator new(0x20) == 32 bytes
@@ -759,7 +765,10 @@ bool BF2Engine::init(const std::string& commandLine)
     ISettingsRepostitory::createSingleton();
     initDefaultSettings();
 
-    if (!parseParameters(commandLine))
+    s_parsingProcessArguments = true;
+    const bool parsed = parseParameters(commandLine);
+    s_parsingProcessArguments = false;
+    if (!parsed)
         return false;
 
 #if !DEDICATED
@@ -1174,6 +1183,9 @@ bool BF2Engine::parseParameters(const std::string& commandLine)
         // Ids up to 73 are retail; 35 stays recovered-but-unregistered.
         parser.add( 74, "warmupLevel",            "Host the level locally, build its shaders, then quit (setup)");
 #endif
+        // [CHOSEN, not recovered] Port addition, every image (OnlineProvider.h): retail has no
+        // such option and always uses gamespy.com.
+        parser.add( 75, "gamespy",                "Use this domain instead of gamespy.com for all online services");
 
         // Only registered parser IDs reach these sparse switch cases.
         std::list<std::pair<int, std::string> > keyList;        // var_C8
@@ -1378,6 +1390,28 @@ bool BF2Engine::parseParameters(const std::string& commandLine)
                     break;
 #endif
 
+                case 75:    // +gamespy <domain> - [CHOSEN, not recovered] port addition: the
+                            // domain every online service name is formed with. A value that cannot
+                            // be used ends start-up like +help does; continuing would send logins
+                            // and heartbeats to a domain the user did not ask for.
+                {
+                    if (!s_parsingProcessArguments)
+                    {
+                        // A later parse (menu-supplied command line) never changes the provider.
+                        std::fprintf(stderr, "+gamespy: ignored outside the process command line\n");
+                        std::fflush(stderr);
+                        break;
+                    }
+                    std::string error;
+                    if (!onlineProvider::setDomain(value, error))
+                    {
+                        std::fprintf(stderr, "+gamespy: %s\n", error.c_str());
+                        std::fflush(stderr);
+                        return false;
+                    }
+                    break;
+                }
+
                 // 6 (+checkForAvailablePatch), 7 (+checkForPatch) and 10 (+lowPriority) are
                 // registered but share the default target 0x8133400 - they parse and do nothing.
                 default:
@@ -1385,6 +1419,16 @@ bool BF2Engine::parseParameters(const std::string& commandLine)
                 }
             }
         }
+    }
+
+    // [CHOSEN, not recovered] Not in retail: give the GameSpy SDK the service names of the domain
+    // +gamespy selected (nothing to do for the retail domain), before any service starts, and
+    // report the names in use once. This runs before the status monitor takes the terminal.
+    if (s_parsingProcessArguments)
+    {
+        onlineProvider::prepareGameSpySdk();
+        std::fprintf(stderr, "%s\n", onlineProvider::describe(DEDICATED == 0).c_str());
+        std::fflush(stderr);
     }
 
     // Default missing config paths under GSModDirectory. Command-line maxPlayers and
@@ -3296,6 +3340,9 @@ void BF2Engine::buildRestartCommandLine(const std::string& modPath, const std::s
     commandLine  = std::string("+modPath ") + modPath;
     commandLine += " +multi 1";
     commandLine += " +restart 1";
+    // [CHOSEN, not recovered] Not in retail: the restarted client logs in with the profile below,
+    // so it must keep the online domain this one was started with.
+    commandLine += onlineProvider::commandLineArguments();
     if (!settings->boolGet("GSFullScreen", false))
         commandLine += " +fullscreen 0";
     if (joinAddress)

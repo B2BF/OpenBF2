@@ -2,17 +2,17 @@
 
 // Preserve duplicated keys and the original spelling/type quirks.
 #include "PlayerStatsManager.h"
+#include "../MatchMaking/OnlineProvider.h"   // [CHOSEN, not recovered] the services' domain
 #include "../../Core/Ids.h"
 #include "../../Core/StringUtil.h"
 #include "../../External/GameSpy/ghttp/ghttp.h"
 #include <cstdlib>
 namespace dice { namespace hfe {
-namespace {
-// [CHOSEN, not recovered] Cross-platform OpenSpy policy, see #21. The reference images
-// (ELF static init 0x82F53D0 / PE 0x76F7B0) used stage-net.game.bf2.us (ELF) and
-// stage-net.gamespy.com (PE), not openspy.net.
-const std::string playerInfoUrl = "http://stage-net.bf2hub.p.bf2.org/bf2/getplayerinfo.aspx?pid=";
-}
+// Retail keeps "http://stage-net.gamespy.com/bf2/getplayerinfo.aspx?pid=" in a namespace-scope
+// string (ELF static init 0x82F53D0 / PE 0x76F7B0; BF2.exe, bf2_w32ded.exe and the 1.5.3153.0
+// Linux ELFs; the ELF this file was first read from had stage-net.game.bf2.us).
+// [CHOSEN, not recovered] update() asks onlineProvider for it instead, so that the domain
+// follows +gamespy; without the option the URL is retail's.
 GHTTPBool cbCompleted(GHTTPRequest, GHTTPResult result, char* body, GHTTPByteCount, void* data)
 {
     IPlayerStatsManager* manager = static_cast<IPlayerStatsManager*>(data);
@@ -249,7 +249,7 @@ bool PlayerStatsManager::isUpdating() { return m_updating; }
 bool PlayerStatsManager::update()
 {
     if (!isConnected() || isUpdating()) return false;
-    const std::string url = playerInfoUrl + m_profile + m_query;
+    const std::string url = onlineProvider::playerInfoUrl() + m_profile + m_query;
     if (ghttpGetA(url.c_str(), GHTTPFalse, cbCompleted, this) < 0) return false;
     m_updating = true;
     return true;

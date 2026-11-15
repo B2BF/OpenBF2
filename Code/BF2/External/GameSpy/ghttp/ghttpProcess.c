@@ -330,6 +330,12 @@ void ghiDoLookupPending
 /***************
 ** CONNECTING **
 ***************/
+// [CHOSEN, not recovered] OpenBF2 local change (LOCAL_CHANGES.md): a connect gives up after this
+// many milliseconds with GHTTPConnectFailed. The SDK waits for the operating system's TCP timeout
+// (75 s on macOS, about 21 s on Windows) when a host name resolves to an address that never
+// answers; BF2 sends most of its stats requests blocking, so the menu is frozen meanwhile.
+#define GHI_CONNECT_TIMEOUT 5000
+
 void ghiDoConnecting
 (
 	GHIConnection * connection
@@ -398,6 +404,7 @@ void ghiDoConnecting
 				return;
 			}
 		}
+		connection->connectStartTime = current_time(); // [CHOSEN, not recovered] GHI_CONNECT_TIMEOUT
 	}
 
 	// Check if the connect has completed.
@@ -425,6 +432,16 @@ void ghiDoConnecting
 		else
 			connection->state = GHTTPSecuringSession;
 		ghiCallProgressCallback(connection, NULL, 0);
+	}
+	// [CHOSEN, not recovered] OpenBF2 local change (LOCAL_CHANGES.md): see GHI_CONNECT_TIMEOUT. A
+	// socket handed in by ghttpSetRequestSocket starts its clock here.
+	else if(connection->connectStartTime == 0)
+		connection->connectStartTime = current_time();
+	else if((current_time() - connection->connectStartTime) > GHI_CONNECT_TIMEOUT)
+	{
+		connection->completed = GHTTPTrue;
+		connection->result = GHTTPConnectFailed;
+		connection->socketError = WSAETIMEDOUT;
 	}
 } 
 

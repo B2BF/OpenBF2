@@ -689,6 +689,10 @@ cl %FLAGS% "%~dp0..\BF2\Game\Persistence\PlayerUnlockInfo.cpp"
 if errorlevel 1 set RC=1
 cl %FLAGS% "%~dp0..\BF2\Game\Persistence\StatsManager.cpp"
 if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\Game\MatchMaking\OnlineProvider.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\Game\MatchMaking\OnlineProviderGameSpy.cpp"
+if errorlevel 1 set /a RC+=1
 cl %FLAGS% "%~dp0..\BF2\Game\Persistence\PlayerStatsManager.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS% "%~dp0..\BF2\Game\Persistence\PlayerUnlocks.cpp"
@@ -1624,6 +1628,8 @@ if errorlevel 1 set /a RC+=1
 cl %FLAGS0% "%~dp0..\BF2\IO\Network\ProtocolLayer\NetClient.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS0% "%~dp0..\BF2\Game\MatchMaking\Client\CdKeyStore.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS0% "%~dp0..\BF2\Game\MatchMaking\OnlineProviderGameSpy.cpp"
 if errorlevel 1 set /a RC+=1
 
 @rem RW-261 (2026-09-29): explosion debris and the light flash. The client compile carries what the

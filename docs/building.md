@@ -536,6 +536,46 @@ The production executable runs until normal shutdown. `BF2_FRAMES` and other har
 controls belong to `Code/Build/bootmain.cpp` and do not limit production run targets.
 `bf2_client_run` uses `BF2_GAME_DIR` and the `BF2_CLIENT_RUN_ARGS` semicolon list.
 
+### Online services
+
+Every image forms the GameSpy service names as retail does, with `gamespy.com` as the
+domain. Those services no longer exist, so an unconfigured client or server finds no online
+service. When the names do not resolve, logins report the connection failure, the internet
+server list stays empty, LAN play is unaffected, and a server with `sv.internet 1` stops at
+start-up with the fatal "cannot communicate with the required internet backends"
+diagnostic.
+
+`+gamespy <domain>` (`[CHOSEN, not recovered]`, option id 75, client and dedicated
+servers) replaces the domain for all services of a provider that serves the same names:
+
+| Service | Host |
+|---|---|
+| Availability check, UDP 27900 | `battlefield2.available.<domain>` |
+| Master: heartbeats UDP 27900, CD-key validation UDP 29910 | `battlefield2.master.<domain>` |
+| Server list, TCP 28910 | `battlefield2.ms14.<domain>` |
+| Presence login / search, TCP 29900 / 29901 | `gpcm.<domain>` / `gpsp.<domain>` |
+| Game statistics, TCP 29920 | `battlefield2.gamestats.<domain>` |
+| NAT negotiation, UDP 27901 | `battlefield2.natneg1.<domain>` to `natneg3` |
+| Stats web requests, HTTP | `BF2Web.<domain>/ASP/`, `stage-net.<domain>/bf2/` |
+
+The value must be a domain name; an address or an unusable value ends start-up with a
+message. The option is read from the command line only, and a client that restarts itself
+to change mods passes it on. At start-up each image prints one line to stderr that names
+the host of every service (`online services: domain ...`). Retail's Windows hosts-file check
+for `BF2Web.gamespy.com`, which ended the game when the hosts file named that host, is skipped,
+so the hosts file can point the names at a replacement service. The implementation is in
+`Code/BF2/Game/MatchMaking/OnlineProvider.h`.
+
+Connections to the server list, the presence managers and the stats web service give up after
+5 seconds (`[CHOSEN, not recovered]`, see `Code/BF2/External/GameSpy/LOCAL_CHANGES.md`); retail
+waited for the operating system's TCP timeout when a name resolved to an address that never
+answers.
+
+`bf2_online_provider_check` (macOS, built on request) checks the names for the retail
+domain and for another one against the linked SDK, and the connect timeouts against a
+loopback listener that never accepts. It replaces the resolver inside the test process and
+uses loopback listeners only, so it contacts no other machine.
+
 For the x86 focused suite, use `bf2_run_checks`. The existing batch gates remain
 available through `bf2_syntaxcheck` and `bf2_gap_report`. The latter invokes the full
 diagnostic build: set `BF2_BUILD_OUT` to a unique directory because that script cleans
