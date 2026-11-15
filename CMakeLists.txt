@@ -2762,6 +2762,10 @@ if(APPLE)
         "${BF2_ROOT}/Game/Persistence/KeyParser.cpp"
         "${BF2_ROOT}/Game/Persistence/LeaderBoard.cpp"
         "${BF2_ROOT}/Game/Persistence/PlayerAwards.cpp"
+        "${BF2_ROOT}/Game/Persistence/PlayerUnlocks.cpp"
+        "${BF2_ROOT}/Game/Persistence/PlayerUnlockInfo.cpp"
+        "${BF2_ROOT}/Game/Persistence/PlayerRankInfo.cpp"
+        "${BF2_ROOT}/Game/Persistence/SearchForPlayer.cpp"
         "${BF2_ROOT}/Core/StringUtil.cpp"
         $<TARGET_OBJECTS:bf2_gamespy_objects>)
     bf2_configure_cpp_target(bf2_swiff_leaderboard_check)

@@ -1,5 +1,6 @@
 // [TEMP] [CHOSEN, not recovered]
-// Tests SwiffHost leaderboard/awards caching through real HTTP and persistence code, built on
+// Tests SwiffHost leaderboard/awards caching, the unlocks record and the rank cache through real HTTP
+// and persistence code, plus the fixture's backend info, search and name validation answers, built on
 // request as bf2_swiff_leaderboard_check (POSIX). Starts the local stats fixture
 // (stats_fixture/bf2_stats_fixture.py) on 127.0.0.1:18124 and stops it before returning.
 // The stats host is formed as the game forms it with +gamespy test.openbf2. gethostbyname and
@@ -27,6 +28,12 @@
 #include "../BF2/Game/MatchMaking/OnlineProvider.h"
 #include "../BF2/Game/Persistence/LeaderBoard.h"
 #include "../BF2/Game/Persistence/PlayerAwards.h"
+#include "../BF2/Game/Persistence/PlayerUnlocks.h"
+#include "../BF2/Game/Persistence/PlayerUnlockInfo.h"
+#include "../BF2/Game/Persistence/PlayerRankInfo.h"
+#include "../BF2/Game/Persistence/SearchForPlayer.h"
+#include "../BF2/Game/Persistence/KeyParser.h"
+#include "../BF2/Game/GameLogic/ServerGameLogic.h"
 
 #include "../BF2/Core/ClassManager.h"
 #include "../BF2/Core/LoadStat.h"
@@ -99,7 +106,9 @@ PythonHost* pythonHost() { frontier("pythonHost"); }
 void PythonHost::handleEvent(ScriptEvent, PyObject*) { frontier("PythonHost::handleEvent"); }
 PyRef buildArgs(const int&, world::IPlayer* const&, const std::string&) { frontier("buildArgs"); }
 PyRef buildArgs(const int&, world::IPlayer* const&, const std::vector<std::vector<int>>&) { frontier("buildArgs"); }
+PyRef buildArgs(const int&, world::IPlayer* const&, const std::vector<int>&) { frontier("buildArgs"); }
 }
+void ServerGameLogic::setUnlocks(world::IPlayer*, std::map<int, int>*) { frontier("ServerGameLogic::setUnlocks"); }
 } }
 
 namespace dice { namespace hfe {
@@ -113,6 +122,18 @@ struct SwiffHostFixture
     static const SwiffLeaderboardCache& global(const SwiffHost& host) { return host.m_leaderboard; }
     static size_t players(const SwiffHost& host) { return host.m_leaderboardByPlayer.size(); }
     static size_t awardLists(const SwiffHost& host) { return host.m_awardCache.size(); }
+    static void injectUnlocksAndRank(SwiffHost& host, IBase* unlocks, IBase* rank)
+    {
+        host.m_playerUnlocks = unlocks;
+        host.m_playerRankInfo = rank;
+    }
+};
+
+// A plain GET, for the name validation answer that only the server's completion parses.
+struct WebRequest : HTTPRequest
+{
+    std::string body;
+    void onGetComplete(const std::string& text) override { body = text; HTTPRequest::onGetComplete(text); }
 };
 } }
 
@@ -227,7 +248,9 @@ bool startServer(const char* python, const char* fixtureDir)
     char port[16];
     std::snprintf(port, sizeof port, "%d", kPort);
     const char* argv[] = { python, "-I", "-u", script.c_str(), "--port", port, "--lb-size", "57",
-                           "--lb-position", "42", "--lb-pid", "1", 0 };
+                           "--lb-position", "42", "--lb-pid", "1", "--rank", "6", "--promoted", "--ranked",
+                           "--unlocks-available", "3", "--selected-unlock", "22",
+                           "--verify-result", "InvalidReportedNick", 0 };
     if (posix_spawn(&g_server, python, 0, 0, const_cast<char* const*>(argv), environ) != 0)
     {
         g_server = 0;
@@ -379,6 +402,63 @@ int main(int argc, char** argv)
     check(global.kits[2].numPlayers == 57 && global.position == 9, "but keeps their counts and the position");
     check(SwiffHostFixture::players(*host) == 0 && SwiffHostFixture::awardLists(*host) == 0,
           "and drops the player caches and the awards cache");
+
+    // 9. The unlocks record (the fixture's 14 engine unlock ids; 3 available, 22 selected).
+    PlayerUnlocks* unlocks = new PlayerUnlocks();
+    PlayerRankInfo* rank = new PlayerRankInfo();
+    SwiffHostFixture::injectUnlocksAndRank(*host, static_cast<IBase*>(static_cast<IPlayerUnlocks*>(unlocks)),
+                                           static_cast<IBase*>(static_cast<IPlayerRankInfo*>(rank)));
+    IPlayerUnlocks::UnlockCache record;
+    check(host->getUnlocks(77, &record), "getUnlocks(77) answers true");
+    check(record.field4 == 77 && record.items.size() == 14, "the record is stamped for 77 and holds 14 unlocks");
+    check(record.available == 2 && record.selected == 1, "enlisted 2 (3 available, 1 picked), officer 1");
+    if (record.items.size() == 14)
+        check(record.items[0].id == 11 && record.items[0].status == 0 && record.items[1].id == 22 && record.items[1].status == 1
+              && record.items[3].id == 44 && record.items[3].status == 2,
+              "11 n (0), 22 s (1), 44 not available (2)");
+    check(unlocks->setUnlocks(77, 33), "selectunlock 33 (the POST) answers true");
+    check(host->fetchUnlocks(77) && host->getUnlocks(77, &record) && record.items.size() == 14 && record.items[2].status == 1
+              && record.selected == 2 && record.available == 1,
+          "after the POST, a refetch shows 33 selected");
+
+    // 10. getbackendinfo through the unlock names object, with rnk.
+    PlayerUnlockInfo* info = new PlayerUnlockInfo();
+    check(info->init(), "getbackendinfo answers true");
+    std::vector<IPlayerUnlockInfo::Item> items;
+    info->getItemsByKit(1, items);
+    check(info->getRanked(), "the fixture's --ranked header carries rnk");
+    check(items.size() == 2 && items[0].id == 22 && items[1].id == 88, "kit 1 owns unlocks 22 and 88");
+    info->release();
+
+    // 11. The rank row and its notification.
+    IPlayerRankInfo::RankInfo row = {};
+    check(host->getRankInfo(77, &row) && row.rank == 6 && row.change == 1 && row.decrease == 0,
+          "getRankInfo(77): rank 6, a promotion pending");
+    check(host->clearRankNotification(77), "clearRankNotification(77) answers true");
+    check(host->getRankInfo(77, &row) && row.rank == 6 && row.change == 0, "a fresh fetch shows the promotion cleared");
+
+    // 12. Search, as the BFHQ search page asks.
+    SearchForPlayer* search = new SearchForPlayer();
+    std::vector<ISearchForPlayer::Player> found;
+    check(search->search("player00", false, false), "searchforplayers (partial) answers true");
+    search->getPlayers(found);
+    check(found.size() == 9 && found[0].nick == "Player001" && found[0].profileId == 40000001,
+          "a partial search finds Player001..Player009");
+    found.clear();
+    check(search->search("StatsFixture", true, false), "searchforplayers (exact) answers true");
+    search->getPlayers(found);
+    check(found.size() == 1 && found[0].profileId == 1 && found[0].score == 20, "an exact search finds the fixture's own player");
+    search->release();
+
+    // 13. VerifyPlayer: the validation positions the server's parse reads.
+    WebRequest verify;
+    check(verify.get(verify.getGameSpyUrl() + "VerifyPlayer.aspx?auth=abc&SoldierNick=Someone&pid=77", false),
+          "VerifyPlayer answers");
+    KeyParser parser;
+    std::string metadata[4];
+    check(parser.parse(verify.body, KeyParser::Validation, metadata) && metadata[0] == "77"
+              && metadata[1] == "StatsFixture" && metadata[3] == "InvalidReportedNick",
+          "the validation parse reads pid 77, the verified nick and the result");
 
     host->release();
     stopServer();
