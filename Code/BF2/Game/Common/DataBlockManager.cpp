@@ -1,6 +1,7 @@
 // Splits and assembles network data blocks, transferring completed payloads into events.
 #include "DataBlockManager.h"
 
+#include <cstdio>                               // fprintf - the oversized-announcement report
 #include <cstring>                              // memcpy - addDataChunk and enqueueDataBlock
 
 #include "GameEventManager.h"                   // addEvent / getConnectionId
@@ -118,10 +119,30 @@ void DataBlockManager::update()
 }
 
 // Starts assembling one incoming block. Returns false if another is in progress.
+// ELF 0x808C7E0 passes the announced size to operator new[] (0x808C837) unchecked; the size
+// comes straight off the wire (DataBlockEvent::deSerialize, ELF 0x806F9F0, 32 bits), so any
+// peer could make the receiver attempt a 4 GB allocation.
+// [CHOSEN, not recovered] Announcements above MAX_RECEIVE_SIZE are refused like a busy
+// manager: nothing is allocated, m_receiving stays empty, and the block's chunks are then
+// dropped by addDataChunk. The connection is kept. Logged once per process.
 bool DataBlockManager::newDataBlock(unsigned int blockEventId, unsigned int size)
 {
     if (m_receiving)
         return false;                           // already assembling one
+
+    if (size > MAX_RECEIVE_SIZE)
+    {
+        static bool reported = false;
+        if (!reported)
+        {
+            reported = true;
+            std::fprintf(stderr, "[CHOSEN, not recovered] DataBlockManager::newDataBlock: refused "
+                                 "block %u announcing %u bytes (limit %u); further refusals are "
+                                 "not logged\n", blockEventId, size,
+                         static_cast<unsigned int>(MAX_RECEIVE_SIZE));
+        }
+        return false;
+    }
 
     DataBlock* const block = new DataBlock;
     block->m_position     = 0;
