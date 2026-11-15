@@ -2874,6 +2874,7 @@ if(BUILD_TESTING AND MSVC)
             bf2_bundle_serialization
             bf2_runtime_pair
             bf2_registry_dat_check
+            bf2_hud_widescreen_check
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
         USES_TERMINAL
         VERBATIM
