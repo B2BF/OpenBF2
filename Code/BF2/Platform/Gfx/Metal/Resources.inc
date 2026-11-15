@@ -364,6 +364,7 @@ public:
     bf2metal::Occlusion* occlusion=nullptr; // occlusion queries: the draws' visibility slots
     bool ready=false, issued=false, pending=false;
     DWORD value=0;
+    std::uint64_t fence=0; // event queries: the submission Issue(END) waits for (MetalBridge.h)
     Query(IDirect3DDevice9* d,bf2metal::Frame* f,D3DQUERYTYPE t,Query** current)
         : Life(d,f,"IDirect3DQuery9"),type(t),active(current) {
         if(t==D3DQUERYTYPE_OCCLUSION) occlusion=bf2metal::createOcclusion(f);
@@ -390,7 +391,10 @@ public:
         if(flags!=D3DISSUE_END) return D3DERR_INVALIDCALL;
         ready=false; issued=true;
         if(type==D3DQUERYTYPE_EVENT) {
-            if(!bf2metal::waitIdle(frame)) return D3DERR_DEVICELOST; value=TRUE; ready=true;
+            // D3D9 drivers answer an event query once the GPU has reached it; games poll it to
+            // keep the CPU from running more than a frame or two ahead. Waiting for the GPU here
+            // made every frame wait for the previous one (no frames in flight).
+            fence=bf2metal::submitFence(frame); value=TRUE; pending=true;
         } else {
             // The draws issued since BEGIN counted samples passing the depth/stencil tests into
             // Metal visibility results (DrawBridge.inc); GetData reads them after completion.
@@ -405,6 +409,10 @@ public:
         // Windows answers S_OK for a never-issued query and copies at most GetDataSize bytes
         // (Wine test_occlusion_query). The data of a never-issued query is undefined: untouched.
         if(!issued) return D3D_OK;
+        if(pending && type==D3DQUERYTYPE_EVENT) {
+            if(!bf2metal::fenceReached(frame,fence)) return S_FALSE;
+            pending=false; ready=true;
+        }
         if(pending) {
             std::uint64_t samples=0;
             const int r=bf2metal::occlusionResult(frame,occlusion,(flags&D3DGETDATA_FLUSH)!=0,samples);

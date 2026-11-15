@@ -95,6 +95,11 @@ bool copyTextureRegion(Frame* f,Texture* s,unsigned sl,unsigned ss,unsigned x,un
 bool waitIdle(Frame* f) {
     mainThread("bf2metal::waitIdle"); @autoreleasepool { return finish(f); }
 }
+std::uint64_t submitFence(Frame* f) {
+    mainThread("IDirect3DQuery9::Issue");
+    @autoreleasepool { if (f->commands) submit(f, false); return f->committed; }
+}
+bool fenceReached(Frame* f, std::uint64_t fence) { mainThread("IDirect3DQuery9::GetData"); return f->completed->load() >= fence; }
 struct Buffer { id<MTLBuffer> object; };
 Buffer* createBuffer(Frame* f,unsigned bytes) {
     mainThread("IDirect3DDevice9::CreateVertexBuffer");
@@ -231,7 +236,9 @@ static bool blitBytes(Frame* f,Texture* t,unsigned level,unsigned slice,id<MTLBu
         [blit copyFromTexture:t->object sourceSlice:slice sourceLevel:level sourceOrigin:MTLOriginMake(0,0,0) sourceSize:size
             toBuffer:b destinationOffset:0 destinationBytesPerRow:row destinationBytesPerImage:image options:options];
     [blit endEncoding];
-    return finish(f);
+    // An upload stays in the frame's command buffer (it retains the staging buffer; encoder order
+    // keeps it between the draws before and after it); a readback waits for the GPU.
+    return upload || finish(f);
 }
 // [CHOSEN, not recovered] The single-sample resolve of a multisampled colour surface, in a
 // temporary texture: what StretchRect from a multisampled render target reads (D3D9 resolves).
@@ -273,7 +280,7 @@ bool transfer(Frame* f,Texture* t,unsigned level,unsigned slice,void* bytes,unsi
 }
 static bool transferSingle(Frame* f,Texture* t,unsigned level,unsigned slice,void* bytes,unsigned pitch,unsigned image,bool upload) {
     @autoreleasepool {
-        if (!finish(f) || !t || !t->object) return false;
+        if ((!upload && !finish(f)) || !t || !t->object) return false;
         const unsigned w=std::max(1u,unsigned(t->object.width)>>level);
         const unsigned h=std::max(1u,unsigned(t->object.height)>>level);
         const unsigned d=std::max(1u,unsigned(t->object.depth)>>level);

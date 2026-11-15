@@ -105,6 +105,10 @@ Buffer* createBuffer(Frame*, unsigned length);
 void destroyBuffer(Buffer*);
 void* bufferBytes(Buffer*);
 bool waitIdle(Frame*);
+// [CHOSEN, not recovered] D3D9 event queries: Issue(D3DISSUE_END) submits the work recorded so far
+// without waiting and returns a fence; GetData polls whether the GPU has completed it.
+std::uint64_t submitFence(Frame*);
+bool fenceReached(Frame*, std::uint64_t fence);
 bool resample(unsigned format,const void* source,unsigned sw,unsigned sh,unsigned sourcePitch,
     void* destination,unsigned dw,unsigned dh,unsigned destPitch,bool linear);
 }
