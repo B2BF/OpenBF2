@@ -274,6 +274,7 @@ static bool submit(Frame* f, bool frameEnd)
             f->failNextSubmission = false;
             [f->commands waitUntilCompleted];
             std::fprintf(stderr, "Metal command failed: injected command-buffer failure\n");
+            f->gpuFailed->store(true); // as the completion handler of a real failure does
             f->failed = true;
         }
 #endif
@@ -314,6 +315,7 @@ static bool finish(Frame* f)
         f->failNextSubmission = false;
         commandFailed = true;
         error = "injected command-buffer failure";
+        f->gpuFailed->store(true); // as the completion handler of a real failure does
     }
 #endif
     if (commandFailed) {
@@ -391,6 +393,9 @@ bool reset(Frame* f, unsigned width, unsigned height, bool vsync, bool depth, un
         f->depth = z;
         f->colorResource = {color,22};
         f->depthResource = {z,75};
+        // The old submissions were drained above (finish): a failure one of them reported to the
+        // asynchronous latch belongs to the replaced targets, so the reset device starts clean.
+        f->gpuFailed = std::make_shared<std::atomic<bool>>(false);
         f->failed = false;
         return true;
     }
