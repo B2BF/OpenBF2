@@ -407,11 +407,6 @@ function(bf2_editor_link_common target)
         target_link_libraries("${target}" PRIVATE bf2_voipserver_client)
         message(STATUS "${target}: voice provider = bf2_voipserver_client (x86 import library)")
     endif()
-    # x86 only: the x64 client objects import nothing from the 32-bit NovintHFX.dll.
-    if(TARGET bf2_novint_imports)
-        add_dependencies("${target}" bf2_novint_imports)
-        target_link_libraries("${target}" PRIVATE "${BF2_NOVINT_IMPORT_LIB}")
-    endif()
 endfunction()
 
 # ---- BF2Editor.exe ------------------------------------------------------------------------------
@@ -443,16 +438,6 @@ if(EXISTS "${BF2_DICE_PY_DLL}")
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                 "${BF2_DICE_PY_DLL}" "${BF2_EDITOR_OUTPUT_DIR}/dice_py.dll"
         COMMENT "Staging dice_py.dll beside BF2Editor.exe"
-        VERBATIM
-    )
-endif()
-# The x86 client objects import NovintHFX.dll; bf2_client stages the original the same way. Reading
-# the game directory is all this does.
-if(NOT BF2_BUILD_X64 AND EXISTS "${BF2_GAME_DIR}/NovintHFX.dll")
-    add_custom_command(TARGET bf2_editor POST_BUILD
-        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                "${BF2_GAME_DIR}/NovintHFX.dll" "${BF2_EDITOR_OUTPUT_DIR}/NovintHFX.dll"
-        COMMENT "Staging the original Novint SDK companion beside BF2Editor.exe"
         VERBATIM
     )
 endif()

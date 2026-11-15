@@ -44,9 +44,6 @@
 #include "../Projectiles/ProjectileCompTemplates.h"
 #include "../../../Scene/Object/ObjectTypes/Base/ObjectTemplateManager.h"
 #include "../../../Scene/Object/ObjectTypes/Game/IPlayerControlObject.h"
-#if !DEDICATED
-#include "../../../IO/Input/FalconHaptics.h"                            // kitRecoilPunch (ledger N2)
-#endif
 #include "../../../Scene/Object/ObjectManager.h"
 #include "../../../Scene/Object/ObjectPredicator.h"
 #include "../../../Scene/Object/PlayerManager.h"
@@ -1510,18 +1507,9 @@ void GenericFireArm::postFire(FireState requestedState,
                 {
                     if (m_recoilComp)
                         m_recoilComp->postFire(event);
-#if !DEDICATED
-                    else
-                    {
-                        // BF2.exe 0x5E2A98..0x5E2CDA (ledger N2 17b): a weapon without a recoil
-                        // component gives the local player's Novint a "RecoilPunch" (kits, wrench).
-                        IPlayer* const weaponPlayer = getPlayer();                   // +0x64
-                        if (io::hapticDeviceConnected() && weaponPlayer
-                            && weaponPlayer == playerManager->getLocalHumanPlayer())
-                            io::kitRecoilPunch(m_template->m_weaponType, m_template->getName(),
-                                               event.fireStrength);
-                    }
-#endif
+                    // BF2.exe 0x5E2A98..0x5E2CDA (ledger N2 17b): without a recoil component, retail
+                    // gives the local player's Falcon a "RecoilPunch" (kits, wrench); it needs a
+                    // device (archived, Code/Archive/NovintFalcon).
                     if (m_targetComp)
                         m_targetComp->postFire(event);
                     if (m_zoomComp)

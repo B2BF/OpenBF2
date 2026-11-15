@@ -61,8 +61,13 @@ rem themselves and bind d3d9.dll / d3dx9_25.dll at run time, so neither import l
 rem only the April 2005 SDK's dxguid.lib (the IID_ constants QueryInterface forwarding compares against).
 set GFX_LIBS="%D3DX25_LIB%"
 set GFX_LIBS_TAIL=d3d9.lib
+rem [CHOSEN, not recovered] d3dx9_25.dll is delay-loaded, so a missing (or, for x64, 32-bit only) D3DX
+rem runtime reaches BF2Render::init's message box instead of failing RendDX9.dll's load. The host
+rem loads the DLL before this one (Game\Main\BF2Render.cpp); retail imports it directly.
+set "D3DX_DELAY=/DELAYLOAD:d3dx9_25.dll delayimp.lib"
 if /i "%BF2_GFX_SEAM%"=="ON" set GFX_LIBS="%BF2_DXSDK_LIB%\dxguid.lib"
 if /i "%BF2_GFX_SEAM%"=="ON" set GFX_LIBS_TAIL=
+if /i "%BF2_GFX_SEAM%"=="ON" set "D3DX_DELAY="
 
 rem /MD - shares the rebuilt client's native CRT/STL ABI; BfMemory's native branch does
 rem   keep the global replacements, but routes them to that shared CRT and never references
@@ -427,7 +432,7 @@ link /nologo /DLL /MACHINE:%ARCH% %LINK_BASE% /DEBUG %D3DX_LINK% ^
      /PDB:"%BIN%\RendDX9.pdb" ^
      /IMPLIB:"%OUT%\RendDX9.lib" ^
      /MAP:"%OUT%\RendDX9.map" ^
-     "%OUT%\*.obj" %GFX_LIBS% %BINK_LIB% "%OUT%\TextureAtlasBuilder.lib" kernel32.lib user32.lib gdi32.lib %GFX_LIBS_TAIL% > "%OUT%\link.log" 2>&1
+     "%OUT%\*.obj" %GFX_LIBS% %BINK_LIB% "%OUT%\TextureAtlasBuilder.lib" kernel32.lib user32.lib gdi32.lib %GFX_LIBS_TAIL% %D3DX_DELAY% > "%OUT%\link.log" 2>&1
 if errorlevel 1 (
     echo   LINK FAILED - see "%OUT%\link.log"
     type "%OUT%\link.log"
@@ -485,6 +490,15 @@ if /i "%BF2_GFX_SEAM%"=="ON" (
 ) else if errorlevel 1 (
     echo   imports:      d3dx9_25.dll MISSING - D3DX must come from the April 2005 SDK
     set /a ABI_BAD+=1
+)
+if defined D3DX_DELAY (
+    findstr /i /c:"delay load dependencies" "%OUT%\dependents.txt" >nul
+    if errorlevel 1 (
+        echo   imports:      d3dx9_25.dll NOT delay-loaded
+        set /a ABI_BAD+=1
+    ) else (
+        echo   imports:      d3dx9_25.dll delay-loaded
+    )
 )
 rem [CHOSEN, not recovered] The D3DX fallback's import names must be d3dx9_25.dll's plain export names.
 rem A decorated name (Name@bytes) links cleanly and then fails to load with ERROR_PROC_NOT_FOUND.

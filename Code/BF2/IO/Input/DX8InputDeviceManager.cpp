@@ -1,10 +1,9 @@
-// DirectInput device-manager lifecycle. Verify Falcon update dependencies before production use.
+// DirectInput device-manager lifecycle.
 #include "DX8InputDeviceManager.h"
 #if !DEDICATED
 #include "KeyboardDevice.h"
 #include "MouseDevice.h"
 #include "GameControllerDevice.h"
-#include "FalconDevice.h"
 #include "../../Core/Ids.h"
 
 namespace dice { namespace hfe { namespace io {
@@ -72,13 +71,8 @@ bool DX8InputDeviceManager::initDevices(unsigned int* mask)
             opened |= IDFGameController_1;
         }
     }
-    if (*mask & IDFFalcon) {
-        FalconDevice* device = new FalconDevice;
-        if (device && device->init()) {
-            m_devices.insert(std::make_pair(IDFFalcon, device));
-            opened |= IDFFalcon;
-        }
-    }
+    // IDFFalcon: [CHOSEN, not recovered] the Novint Falcon is archived (Code/Archive/NovintFalcon).
+    // The bit stays clear, as when retail's FalconDevice::init finds no device.
     m_activeDevices = opened;
     if (opened == *mask) return true;
     *mask = opened;

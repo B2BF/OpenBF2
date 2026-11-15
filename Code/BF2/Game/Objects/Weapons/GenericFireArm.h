@@ -62,7 +62,6 @@ class GenericFireArm : public AnimatedBundle,
     // Soldier::handleFrameUpdate writes the prior weapon here directly when a gas-mask/NVG deploy
     // animation completes. Retail has no setter for this write.
     friend class Soldier;
-    friend struct HapticWeaponAccess;                // ledger N2: the Novint recoil's weaponType read
     friend class ArtilleryHandler;                   // server strike stamps/fire-arms the gun
     friend class ::dice::hfe::ArtilleryEvent;        // replicated strike mirrors the same sequence
 

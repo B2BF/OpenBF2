@@ -28,7 +28,6 @@
 #include "../Game/Main/BF2ClientSeams.h"
 #include "../IO/Console/Console.h"
 #include "../IO/Input/Input.h"
-#include "../IO/Input/FalconDevice.h"
 #include <new>
 
 namespace dice { namespace hfe { namespace io { extern IBase* inputManager; } } }
@@ -107,7 +106,8 @@ bool BF2HudManager::init()
     storage=::operator new(sizeof(HudAwardCatalogue));
     m_field14c = storage ? new(storage) HudAwardCatalogue : nullptr;
     disablePointer();
-    io::g_falconMouseMode = 1;
+    // Retail also sets the Falcon's mouse mode here (ds:0x978FC4); it is archived with the device
+    // (Code/Archive/NovintFalcon).
     static_cast<io::IInputManager*>(io::inputManager)->registerInputFilter(this);
     eventManager->registerEventHandler(static_cast<EventCategory>(2), this, 0);
     eventManager->registerEventHandler(static_cast<EventCategory>(1), this, 0);

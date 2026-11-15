@@ -38,7 +38,6 @@
 #include "../BF2/IO/Input/Input.h"
 #include "../BF2/IO/Input/ControlMapManager.h"
 #include "../BF2/IO/Input/GameInput.h"
-#include "../BF2/IO/Input/FalconDevice.h"
 #include "../BF2/IO/Console/Console.h"
 #include "../BF2/IO/File/FileManager.h"
 #include <windows.h>
@@ -137,12 +136,10 @@ struct MovieClassServer : IClassServer
 struct MenuUpdateReached {};
 struct TrapMenuLogic : MainMenuLogic
 {
-    int seenMode = 0;
     double seenDelta = 0;
     unsigned updates = 0;
     void update(double delta) override
     {
-        seenMode = io::g_falconMouseMode;
         seenDelta = delta;
         ++updates;
         throw MenuUpdateReached();
@@ -151,11 +148,9 @@ struct TrapMenuLogic : MainMenuLogic
 struct MenuFrameGlobalsRestore
 {
     IMenuLogic* previousLogic = menuLogic;
-    int previousMode = io::g_falconMouseMode;
     ~MenuFrameGlobalsRestore()
     {
         menuLogic = previousLogic;
-        io::g_falconMouseMode = previousMode;
     }
 };
 
@@ -927,20 +922,15 @@ int main()
             // rendering, input pumping and queued menu commands are outside this check.
             TrapMenuLogic trap;
             MenuFrameGlobalsRestore restore;
-            const int modes[] = { -1, 0, 1, 2, 7 };
-            for (unsigned i = 0; i < sizeof(modes) / sizeof(modes[0]); ++i) {
+            for (unsigned i = 0; i < 2; ++i) {
                 menuLogic = 0;
-                io::g_falconMouseMode = modes[i];
-                engine->renderMenu(3, 0.25f, 0.375, false);
-                check(io::g_falconMouseMode == modes[i], "renderMenu without a menu preserves Falcon mode");
+                engine->renderMenu(3, 0.25f, 0.375, false);   // returns before any menu call
                 menuLogic = &trap;
                 bool reachedUpdate = false;
                 try { engine->renderMenu(3, 0.25f, 0.375, (i & 1) != 0); }
                 catch (const MenuUpdateReached&) { reachedUpdate = true; }
-                check(reachedUpdate && trap.updates == i + 1 && trap.seenDelta == 0.375
-                      && trap.seenMode == (modes[i] == 2 ? 2 : 1)
-                      && io::g_falconMouseMode == trap.seenMode,
-                      "renderMenu preserves mode 2, otherwise writes 1 before update, forwarding wall delta");
+                check(reachedUpdate && trap.updates == i + 1 && trap.seenDelta == 0.375,
+                      "renderMenu forwards the wall delta to the menu's update");
             }
         }
     }

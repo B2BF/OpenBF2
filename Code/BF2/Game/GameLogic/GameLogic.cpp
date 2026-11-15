@@ -90,7 +90,6 @@
 #include "../../Core/Ids.h"                    // the five CIDs the conversion tests
 // the round-reset slice
 #include "../../Scene/Object/PlayerManager.h"  // playerManager - getPlayers / getLocalHumanPlayer
-#include "../../IO/Input/FalconDevice.h"      // io::zeroHapticForceTargets (killPlayer's tail)
 #include "../Objects/IPlayer.h"                // reset / getFreeCamera
 #include "../Objects/Game/ObjectSpawner.h"     // ObjectSpawner::reset (direct call, as shipped)
 #include "../Objects/Game/SupplyDepot.h"       // round-reset registry's direct SupplyDepot::reset
@@ -3044,17 +3043,11 @@ void GameLogic::handleExplosion(Vec3 position, float radius, int material, float
                                                canTK, includeSource);
 }
 
-// BF2.exe 0x4ED60B..0x4ED6C2 (client): every return after the kill latch passes here. The local human
-// player's death zeroes the six Novint force effects (as MainMenuLogic::activate does; see
-// io::zeroHapticForceTargets). The dedicated image compiles it out (ELF).
-static bool finishKillPlayer(world::IPlayer* player)
+// BF2.exe 0x4ED60B..0x4ED6C2 (client): every return after the kill latch passes here. Retail's client
+// zeroes the Falcon's force effects on the local human player's death; none exists without the archived
+// device (Code/Archive/NovintFalcon), so, as in the dedicated image (ELF), this only returns.
+static bool finishKillPlayer(world::IPlayer*)
 {
-#if !DEDICATED
-    if (player == world::playerManager->getLocalHumanPlayer())                 // +0x30
-        io::zeroHapticForceTargets();
-#else
-    (void) player;
-#endif
     return true;
 }
 

@@ -139,6 +139,9 @@ Progress:
 - Owner sign-off (2026-11-13, via main) on both boundaries: (a) PunkBuster as described above; (b) Novint,
   keeping retail's direct (static) import on Windows x86, and no-device on x64 and every non-Windows
   platform.
+- 2026-11-15 owner decision (issue #17): the Novint Falcon is archived on every platform
+  (`Code/Archive/NovintFalcon`). The N2 sites below and FalconDevice now take retail's no-device
+  branch at their call sites; the archive README lists each one.
 - Batch 17 (mac/game-frontier-17): GameLogic::killPlayer's force zeroing (N2) and the boundary sign-off
   record. The owner moved the rest of N2 to 0.3.0 and then back into v0.2.0 (2026-11-13); it was done in
   N2 batches 1-4 (see "N2 implementation").

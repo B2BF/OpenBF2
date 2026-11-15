@@ -85,14 +85,17 @@ fallback can also be written as
   trimmed; an empty right side is a present empty string. Quotes are literal; there are no
   escapes and no inline comments.
 - Blank lines and lines starting with `#` or `;` are ignored. LF, CRLF and a missing final
-  newline are accepted. Duplicate entries use the last valid value.
+  newline are accepted, and so is one leading UTF-8 byte-order mark. Duplicate entries use the
+  last valid value.
 - Lines without `=`, unknown hives, embedded NULs, empty value names or doubled backslashes are
   ignored with a line-number-only diagnostic on stderr; values never appear in diagnostics.
 - Each lookup reopens the file, so nothing is cached. A missing file or key keeps the Windows
   absent-key result (`Language` defaults to `English`, `ergc` to an empty string). Use the plain
   key text, not a DPAPI-protected `x9392` value.
 
-The file is data, not an engine console script, despite the `.con` extension.
+The file is data, not an engine console script, despite the `.con` extension. The Windows
+client reads the same text from a DPAPI-protected `Registry.dat`
+([client registry file](registry-file.md)).
 
 Never:
 - Delete `Profiles/`, `screenshots/`, `ProtectedData.key` or `Registry.con` during an

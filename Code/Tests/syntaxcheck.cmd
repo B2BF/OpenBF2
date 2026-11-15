@@ -1556,8 +1556,6 @@ cl %FLAGS0% "%~dp0..\BF2\IO\Input\ControlMapConsole.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS0% "%~dp0..\BF2\IO\Input\GameControllerDevice.cpp"
 if errorlevel 1 set /a RC+=1
-cl %FLAGS0% "%~dp0..\BF2\IO\Input\FalconDevice.cpp"
-if errorlevel 1 set /a RC+=1
 cl %FLAGS0% "%~dp0..\BF2\IO\Input\DX8InputDeviceManager.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS0% "%~dp0..\BF2\Core\StringUtil.cpp"
@@ -1618,7 +1616,7 @@ cl %FLAGS0% "%~dp0..\BF2\Game\PunkBuster\PbGame.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS0% "%~dp0..\BF2\Game\PunkBuster\PbServer.cpp"
 if errorlevel 1 set /a RC+=1
-@rem Ledger N2 17a: the Soldier's Novint control-box profile switch (client body only).
+@rem Ledger N2 17a: the Soldier's control-box profile switch (client body only).
 cl %FLAGS0% "%~dp0..\BF2\Game\Objects\Game\SoldierHapticProfile.cpp"
 if errorlevel 1 set /a RC+=1
 cl %FLAGS0% "%~dp0..\BF2\Game\PunkBuster\PbCommandHook.cpp"

@@ -334,8 +334,8 @@ code.
 
 Steps 1 to 3 are done (package S2.7's wiring, branch `mac/s2-7-vc71`). Step 5 is done for the
 client TUs on `mac/s2-58-platform` (packages S2.5/S2.8); the `RendDX9/VideoOptions.cpp` and
-`RendDX9/BF2Render.cpp` rows wait for the renderer (stage 3), and `FalconDevice.cpp` keeps only
-the menu's mouse-mode global on macOS.
+`RendDX9/BF2Render.cpp` rows wait for the renderer (stage 3). `FalconDevice.cpp` is archived
+(`Code/Archive/NovintFalcon`).
 
 1. **Sources.** The engine's recursive glob already picks up the new `.cpp` files
    (`Mac*.cpp`, `MacKeyMap.cpp`, `BF2Window_macos.cpp`); they compile to empty objects outside

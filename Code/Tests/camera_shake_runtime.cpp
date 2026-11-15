@@ -65,18 +65,6 @@ IObject* getRootParent(const IObject* object)
     return current;
 }
 } } }
-namespace dice { namespace hfe { namespace io {
-// The Novint ShakeForce block (FalconDevice.cpp, ledger N2) is checked in bf2_falcon_update_check;
-// here only that handleUpdate hands it the local occupant's shake terms.
-void updateShakeForce(world::IPlayerControlObject* pco, float explosionRoll, float speedRoll,
-                      float closeVehiclePitch, float recoilY)
-{
-    char b[128];
-    std::snprintf(b, sizeof(b), "shakeforce %p %.4f %.4f %.4f %.4f", static_cast<void*>(pco), explosionRoll,
-                  speedRoll, closeVehiclePitch, recoilY);
-    calls.push_back(b);
-}
-} } }
 namespace dice { namespace hfe { namespace world {
 void RotationalBundle::handleUpdate(float deltaTime, unsigned int flags)
 {
@@ -995,7 +983,7 @@ int main()
     cam->m_recoilImpulseSpeed = 12.0f;
     cam->m_recoilImpulseSize = 2.0f;
     cam->m_cameraRecoilX = 0.0f;
-    // Distinct non-zero shake terms, so the ShakeForce hand-off below pins each argument.
+    // Non-zero shake terms (retail also hands them to the archived Falcon's ShakeForce block).
     cam->m_speedShakeRoll = 0.0321f;                 // kept: the start speed is 0
     cam->m_explosionShakeTimeRemaining = 0.3f;
     cam->m_explosionShakeMagnitude = 0.5f;
@@ -1005,25 +993,12 @@ int main()
     cam->handleUpdate(0.02f, 0);
     check(near(cam->m_frameTime, 1.02f), "handleUpdate: the frame clock advances by dt");
     check(near(cam->m_cameraRecoilX, 0.24f), "handleUpdate: the local occupant's recoil runs");
-    check(near(cam->m_closeVehicleCheckTime, 0.52f) && calls.size() == 2 && calls[1] == "base 0.020 0",
+    check(near(cam->m_closeVehicleCheckTime, 0.52f) && calls.size() == 1 && calls[0] == "base 0.020 0",
           "handleUpdate: below the 1 s interval the scan clock advances, then RotationalBundle");
-    {
-        char expected[128];
-        std::snprintf(expected, sizeof(expected), "shakeforce %p %.4f %.4f %.4f %.4f", static_cast<void*>(&rootPco),
-                      cam->m_explosionShakeRoll, cam->m_speedShakeRoll, cam->m_soldierShakePitch, cam->m_cameraRecoilY);
-        const float terms[5] = { cam->m_explosionShakeRoll, cam->m_speedShakeRoll, cam->m_soldierShakePitch,
-                                 cam->m_cameraRecoilY, cam->m_soldierShakeRoll };
-        bool distinct = true;
-        for (int i = 0; i < 5; ++i)
-            for (int j = 0; j < 5; ++j)
-                distinct = distinct && terms[i] != 0.0f && (i == j || std::fabs(terms[i] - terms[j]) > 1e-3f);
-        check(distinct && calls[0] == expected,
-              "handleUpdate: the local occupant's shake terms go to the Novint ShakeForce block");
-    }
     cam->m_closeVehicleCheckTime = 1.01f;
     calls.clear();
     cam->handleUpdate(0.02f, 2);
-    check(cam->m_closeVehicleCheckTime == 0.0f && calls.size() == 4 && calls[3] == "base 0.020 2",
+    check(cam->m_closeVehicleCheckTime == 0.0f && calls.size() == 3 && calls[2] == "base 0.020 2",
           "handleUpdate: past 1 / g_checkCloseVehicleFreq it scans (two queries) and resets the clock");
     rootPco.occupant = &other;   // someone else occupies it
     const float recoilBefore = cam->m_cameraRecoilX;

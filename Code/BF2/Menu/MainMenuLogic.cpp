@@ -28,7 +28,6 @@
 #include "../IO/File/FileManager.h"
 #include "../IO/Console/Console.h"
 #include "../IO/Input/Input.h"
-#include "../IO/Input/FalconDevice.h"       // io::g_falconMouseMode
 #include <cstring>
 #include <ctime>
 
@@ -178,15 +177,16 @@ bool MainMenuLogic::init()
     ShowCursor(TRUE);
     SetCursor(static_cast<HCURSOR>(m_host->getCursor(0)));                    // +0x6C
 #endif
-    io::g_falconMouseMode = 1;                                                // ds:0x978FC4
+    // Retail also sets the Falcon's mouse mode here (ds:0x978FC4); it is archived with the device
+    // (Code/Archive/NovintFalcon).
     if (!s_firstInitDone)
     {
         runMenuScript("menu/external/flashmenu/precache.con");
         s_firstInitDone = true;
     }
     time(&m_activatedAt);
-    // 0x4A3490..0x4A3535: every haptic force effect gets a zero force (FalconDevice.cpp).
-    io::zeroHapticForceTargets();
+    // 0x4A3490..0x4A3535 zeroes the Falcon's force effects; none exists without the archived device
+    // (Code/Archive/NovintFalcon).
     return true;
 }
 

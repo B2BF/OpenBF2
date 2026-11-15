@@ -15,7 +15,7 @@ using dice::hfe::io::IInputFilter;
 namespace dice { namespace hfe {
 class IMenuLogic; IMenuLogic* menuLogic=nullptr;
 IBase* spawnManager=nullptr;
-namespace io { IBase* inputManager=nullptr; int g_falconMouseMode=1; }
+namespace io { IBase* inputManager=nullptr; }
 } }
 struct UpdatePlayer : Player {
     bool hasVehicle=true;
@@ -129,18 +129,12 @@ int main()
     HudQuestionManager questions;
     const Vec3 direction={0,0,1};
     // Menu pointer is read only for presence; it is never dereferenced.
-    menuLogic=reinterpret_cast<IMenuLogic*>(1);io::g_falconMouseMode=7;
-    check(!h->update(1,nullptr,direction)&&io::g_falconMouseMode==7,"menu early return precedes Falcon write");
-    menuLogic=nullptr;h->m_field15c=false;h->m_field248=false;
-    for(int initial:{-1,0,1,2,7}) {
-        io::g_falconMouseMode=initial;gameLogic=nullptr;
-        check(!h->update(1,nullptr,direction)&&io::g_falconMouseMode==(initial==-1?-1:0),"mouse inactive mode mapping");
-    }
+    menuLogic=reinterpret_cast<IMenuLogic*>(1);
+    check(!h->update(1,nullptr,direction),"menu early return");
+    menuLogic=nullptr;h->m_field15c=false;h->m_field248=false;gameLogic=nullptr;
+    check(!h->update(1,nullptr,direction),"mouse inactive, no game logic");
     h->m_field15c=true;
-    for(int initial:{-1,0,1,2,7}) {
-        io::g_falconMouseMode=initial;
-        check(!h->update(1,nullptr,direction)&&io::g_falconMouseMode==(initial==2?2:1),"mouse active mode mapping");
-    }
+    check(!h->update(1,nullptr,direction),"mouse active, no game logic");
     gameLogic=&logic;logic.status=3;trace.clear();
     check(!h->update(1,&player,direction)&&trace==std::vector<std::string>{"status","demo"},"status3 skips player access");
     logic.status=1;player.hasVehicle=false;

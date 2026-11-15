@@ -26,10 +26,12 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download this run's packages
+      # Only the release-* artifacts: one package per platform. The per-role and per-architecture
+      # packages-* artifacts stay CI artifacts (docs/ci-releases.md).
+      - name: Download this run's release packages
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: packages-*
+          pattern: release-*
           path: packages
           merge-multiple: true
 
@@ -41,34 +43,37 @@ jobs:
         working-directory: packages
         shell: bash
         run: |
-          packages=(
-            openbf2-windows-x86-server
-            openbf2-windows-x64-server
-            openbf2-linux-x64-server
-            openbf2-macos-arm64-client
-            openbf2-macos-x86_64-client
-          )
-          # build.yml leaves these out, with a notice, when neither the April 2005
-          # DirectX SDK nor the D3DX fallback is usable.
-          sdk_packages=(
-            openbf2-windows-x86-client
-            openbf2-windows-x86-editor
-            openbf2-windows-x64-client
-          )
-          for package in "${sdk_packages[@]}"; do
-            if [ -e "$package.zip" ]; then
-              packages+=("$package")
-            else
-              echo "::notice title=Package not attached::$package was not built (no usable D3DX source on the build runner)."
-            fi
+          # Both Windows clients bundle OpenAL Soft (LGPL): the release carries the exact source.
+          shopt -s nullglob
+          sources=(openal-soft-*.tar.bz2)
+          shopt -u nullglob
+          test "${#sources[@]}" -eq 1
+          files=(openbf2-macos.dmg openbf2-windows.zip openbf2-linux.zip "${sources[0]}")
+          assets=()
+          for file in "${files[@]}"; do
+            test -s "$file"
+            test -s "$file.sha256"
+            sha256sum --check "$file.sha256"
+            assets+=("$file" "$file.sha256")
           done
-          test -s openbf2-macos-app.dmg
-          sha256sum --check openbf2-macos-app.dmg.sha256
-          assets=(openbf2-macos-app.dmg openbf2-macos-app.dmg.sha256)
-          for package in "${packages[@]}"; do
-            test -s "$package.zip"
-            test -s "$package.zip.sha256"
-            sha256sum --check "$package.zip.sha256"
-            assets+=("$package.zip" "$package.zip.sha256")
-          done
+          # Exactly these assets: nothing else may reach the release page.
+          expected=$(printf '%s\n' "${assets[@]}" | sort)
+          actual=$(ls -A | sort)
+          if [ "$expected" != "$actual" ]; then
+            echo "::error title=Unexpected release files::expected only: ${assets[*]}"
+            diff <(echo "$expected") <(echo "$actual") || true
+            exit 1
+          fi
+          # build.yml fails release runs without D3DX; check the archive itself as well.
+          python3 - <<'EOF'
+          import json
+          import zipfile
+
+          with zipfile.ZipFile("openbf2-windows.zip") as archive:
+              names = set(archive.namelist())
+              info = json.loads(archive.read("openbf2-windows/build-info.json"))
+          for entry in ("x64/BF2.exe", "x86/BF2.exe", "server/bf2_w32ded.exe", "editor/BF2Editor.exe"):
+              assert "openbf2-windows/" + entry in names, "openbf2-windows.zip lacks " + entry
+          assert not info.get("omitted"), "openbf2-windows.zip omits " + ", ".join(info["omitted"])
+          EOF
           gh release upload --repo "$GH_REPO" --clobber -- "$RELEASE_TAG" "${assets[@]}"

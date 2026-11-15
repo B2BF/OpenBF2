@@ -19,7 +19,6 @@
 #include "HudChat.h"
 #include "HudBlinker.h"
 #include "HudQuestionManager.h"
-#include "../IO/Input/FalconDevice.h"
 #include "../Game/IGameLogic.h"
 #include "../Game/Objects/IPlayer.h"
 #include "../Game/Objects/ICameraObject.h"
@@ -133,9 +132,8 @@ std::string requestInUseMessage(int type)
 bool BF2HudManager::update(float delta, world::IPlayer* player, Vec3 direction)
 {
     if (menuLogic) return false;
-    if (!m_field15c) {
-        if (io::g_falconMouseMode != -1) io::g_falconMouseMode = 0;
-    } else if (io::g_falconMouseMode != 2) io::g_falconMouseMode = 1;
+    // Retail maps m_field15c to the Falcon's mouse mode here (ds:0x978FC4); it is archived with the
+    // device (Code/Archive/NovintFalcon).
 
     if (gameLogic && gameLogic->getGameStatus() != 3 && player && player->getVehicle()) {
         if (!player->getIsAlive() && hudMap) {
