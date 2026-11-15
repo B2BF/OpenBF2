@@ -376,6 +376,7 @@ set(bf2_editor_link_objects
     $<TARGET_OBJECTS:bf2_gamespy_sb_objects>
     $<TARGET_OBJECTS:bf2_gamespy_gp_objects>
     $<TARGET_OBJECTS:bf2_gamespy_cdkeyc_objects>
+    $<TARGET_OBJECTS:bf2_gamespy_voice_objects>    # the client objects' voice client (gv*, Speex)
 )
 # The system imports bf2_client links (the client objects need them).
 set(bf2_editor_system_libs
