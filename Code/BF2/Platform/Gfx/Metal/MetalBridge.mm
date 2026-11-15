@@ -2,6 +2,8 @@
 // The D3D subset stays in Device.cpp: its BOOL must never enter an Objective-C TU.
 #include "MetalBridge.h"
 #include "DrawBridge.h"
+#include "EffectShaders.h"          // drawTraceLabel: the effect pass a compile belongs to
+#include "../../macOS/HitchTrace.h" // [CHOSEN] BF2_HITCH_TRACE (port addition, measurement)
 #import <AppKit/AppKit.h>
 #import <QuartzCore/CAMetalLayer.h>
 #import <Metal/Metal.h>
@@ -194,6 +196,7 @@ static bool resolveBackBuffer(Frame* f)
 static bool finish(Frame* f)
 {
     endDraws(f);
+    bf2hitch::Scope timed(bf2hitch::GpuWait);
     if(f->presentation) {
         [f->presentation waitUntilCompleted];
         if(f->presentation.status==MTLCommandBufferStatusError) f->failed=true;
@@ -409,6 +412,7 @@ PresentCapture* presentCaptureBegin(Frame* f)
 void presentCaptureWrite(PresentCapture* c, id<MTLCommandBuffer> done)
 {
     if(!c) return;
+    bf2hitch::Scope timed(bf2hitch::Capture, c->label);
     if(done) [done waitUntilCompleted];
     const char* dir=std::getenv("BF2_PRESENT_PNG");
     const unsigned char* bgra=static_cast<const unsigned char*>(c->buffer.contents);
@@ -457,6 +461,7 @@ PresentResult present(Frame* f,void* window,bool doNotWait)
             if(!doNotWait) request->condition.wait(lock,[&]{return !request->acquiring;});
             drawable=request->drawable; request->drawable=nil;
             if(!drawable && !request->acquiring) {
+                bf2hitch::Scope timed(bf2hitch::Drawable);
                 if(!doNotWait) drawable=[layer nextDrawable];
                 else {
                     // nextDrawable can block on WindowServer/vsync. Only the worker waits;

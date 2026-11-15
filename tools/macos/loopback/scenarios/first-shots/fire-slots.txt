@@ -1,0 +1,52 @@
+# [TEMP] first-shots: draw and fire weapon slots 3 (primary), 2 (sidearm), 4, 5, 6 and 1 (knife).
+# "shot: draw N" and "shot: fire N" are the labelled moments.
+log shot: draw 3
+key 3
+wait-ms 1300
+log shot: fire 3
+button-down 0
+wait-ms 500
+button-up 0
+wait-ms 1200
+log shot: draw 2
+key 2
+wait-ms 1300
+log shot: fire 2
+button-down 0
+wait-ms 150
+button-up 0
+wait-ms 1200
+log shot: draw 4
+key 4
+wait-ms 1300
+log shot: fire 4
+button-down 0
+wait-ms 400
+button-up 0
+wait-ms 2500
+log shot: draw 5
+key 5
+wait-ms 1300
+log shot: fire 5
+button-down 0
+wait-ms 400
+button-up 0
+wait-ms 2000
+log shot: draw 6
+key 6
+wait-ms 1300
+log shot: fire 6
+button-down 0
+wait-ms 400
+button-up 0
+wait-ms 1500
+log shot: draw 1
+key 1
+wait-ms 1300
+log shot: fire 1
+button-down 0
+wait-ms 150
+button-up 0
+wait-ms 1200
+log shot: slots done
+wait-ms 2500

@@ -60,6 +60,8 @@ static bool compileProgram(Frame* f, Program* p)
     p->compiled = true;
     auto& cache = f->draws->libraries[p->desc.msl];
     if (!cache) {
+        const std::string traced = bf2hitch::enabled() ? std::string(p->desc.vertex ? "vs " : "ps ") + std::to_string(p->desc.msl.size()) + " " + drawTraceLabel() : std::string();
+        bf2hitch::Scope timed(bf2hitch::MetalLibrary, traced.c_str());
         NSError* error = nil;
         NSString* source = [[NSString alloc] initWithBytes:p->desc.msl.data() length:p->desc.msl.size() encoding:NSUTF8StringEncoding];
         // [CHOSEN, not recovered] D3D9 multipass rendering relies on position invariance: two
@@ -158,6 +160,7 @@ static id<MTLRenderPipelineState> pipeline(Frame* f, const DrawCall& c, std::str
     d.depthAttachmentPixelFormat = depth;
     d.stencilAttachmentPixelFormat = depthHasStencil(depth) ? depth : MTLPixelFormatInvalid;
     NSError* err = nil;
+    bf2hitch::Scope timed(bf2hitch::MetalPipeline, drawTraceLabel());
     cached = [f->device newRenderPipelineStateWithDescriptor:d error:&err];
     if (!cached) {
         error = std::string("render pipeline: ") + (err ? err.localizedDescription.UTF8String : "unknown error");
@@ -177,6 +180,7 @@ static id<MTLDepthStencilState> depthState(Frame* f, const DrawCall& c)
     if (stencil) { keyAppend(key, s.front); keyAppend(key, s.back); keyAppend(key, s.stencilReadMask); keyAppend(key, s.stencilWriteMask); }
     auto& cached = f->draws->depthStates[key];
     if (cached) return cached;
+    bf2hitch::Scope timed(bf2hitch::MetalState, "depth-stencil");
     MTLDepthStencilDescriptor* d = [MTLDepthStencilDescriptor new];
     d.depthCompareFunction = MTLCompareFunction(compare); d.depthWriteEnabled = write;
     if (stencil) {
@@ -198,6 +202,7 @@ static id<MTLSamplerState> samplerState(Frame* f, const SamplerMapping& m)
     keyAppend(key, m.mipFilter); keyAppend(key, m.anisotropy); keyAppend(key, m.border); keyAppend(key, m.minLod);
     auto& cached = f->draws->samplers[key];
     if (cached) return cached;
+    bf2hitch::Scope timed(bf2hitch::MetalState, "sampler");
     MTLSamplerDescriptor* d = [MTLSamplerDescriptor new];
     d.sAddressMode = MTLSamplerAddressMode(m.address[0]); d.tAddressMode = MTLSamplerAddressMode(m.address[1]);
     d.rAddressMode = MTLSamplerAddressMode(m.address[2]);

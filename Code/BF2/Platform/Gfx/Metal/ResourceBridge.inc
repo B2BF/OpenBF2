@@ -53,6 +53,7 @@ static unsigned nativeBytes(unsigned f) {
 }
 Texture* createTexture(Frame* frame,unsigned w,unsigned h,unsigned d,unsigned levels,unsigned kind,unsigned f,unsigned usage,unsigned samples) {
     mainThread("IDirect3DDevice9::CreateTexture");
+    bf2hitch::Scope timed(bf2hitch::TextureCreate, "create");
     @autoreleasepool {
         if (!formatSupported(f)) return nullptr;
         MTLTextureDescriptor* desc = [MTLTextureDescriptor new];
@@ -255,6 +256,7 @@ static bool seedBackBufferSamples(Frame* f); // MenuBridge.inc
 static bool transferSingle(Frame* f,Texture* t,unsigned level,unsigned slice,void* bytes,unsigned pitch,unsigned image,bool upload);
 bool transfer(Frame* f,Texture* t,unsigned level,unsigned slice,void* bytes,unsigned pitch,unsigned image,bool upload) {
     mainThread(upload?"IDirect3DResource9::Unlock upload":"IDirect3DResource9::Lock readback");
+    bf2hitch::Scope timed(bf2hitch::TextureCreate, upload?"upload":"readback");
     @autoreleasepool {
         if (t && t->object && t->object.sampleCount>1) {
             if (upload) frontier("IDirect3DDevice9 write into a multisampled render target");
