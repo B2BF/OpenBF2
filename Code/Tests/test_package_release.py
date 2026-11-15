@@ -87,7 +87,7 @@ class PackageReleaseTests(unittest.TestCase):
             for entry, digest in metadata["runtime_files"].items():
                 self.assertEqual(hashlib.sha256(archive.read(name + "/" + entry)).hexdigest(), digest)
 
-    def test_omit_unbuilt_windows_clients_and_editor(self):
+    def test_omit_unbuilt_windows_client_and_editor(self):
         for platform in ("windows-x86", "windows-x64"):
             with self.subTest(platform=platform):
                 self.args.platform = platform
@@ -96,7 +96,7 @@ class PackageReleaseTests(unittest.TestCase):
                 for directory in ("bin_client", "bin_editor"):
                     for path in (self.args.build_dir / directory).glob("*"):
                         path.unlink()
-                self.args.omit = ["client", "editor"] if platform == "windows-x86" else ["client"]
+                self.args.omit = ["editor"] if platform == "windows-x86" else ["client"]
                 self.package()
                 server = "server"
                 self.assertEqual({p.name for p in self.args.output_dir.glob("*.zip")},
@@ -126,9 +126,16 @@ class PackageReleaseTests(unittest.TestCase):
         self.populate()
         self.package()
         self.assertEqual({p.stem for p in self.args.output_dir.glob("*.zip")}, {
-            "openbf2-windows-x86-server", "openbf2-windows-x86-client",
-            "openbf2-windows-x86-editor",
+            "openbf2-windows-x86-server", "openbf2-windows-x86-editor",
         })
+
+    def test_windows_client_is_x64_only(self):
+        self.assertNotIn("client", PACKAGER.PACKAGES["windows-x86"])
+        self.assertIn("client", PACKAGER.PACKAGES["windows-x64"])
+        self.args.platform = "windows-x86"
+        with self.assertRaisesRegex(ValueError, "Cannot omit client"):
+            self.args.omit = ["client"]
+            self.package()
 
     def test_install_instructions_for_every_package(self):
         for platform, roles in PACKAGER.PACKAGES.items():
@@ -162,10 +169,11 @@ class PackageReleaseTests(unittest.TestCase):
                         self.assertIn("Start in", readme)
                         self.assertIn("No original EXE or DLL is replaced", readme)
                         if role == "client":
-                            for entry in ("binkw32.dll", "d3dx9_25.dll", "NovintHFX.dll",
-                                          "OpenAL DLLs", "working directory", "Checked against the code",
+                            for entry in ("64-bit d3dx9_25.dll", "System OpenAL", "64-bit BF2OpenAL.dll",
+                                          "Checked against the code",
                                           "not runtime-tested here"):
                                 self.assertIn(entry, readme)
+                            self.assertNotIn("NovintHFX", readme)
                     else:
                         self.assertIn('cd "$HOME/Games/{}"'.format(name), readme)
                         self.assertIn("./" + runtime[0], readme)

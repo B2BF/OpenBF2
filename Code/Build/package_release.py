@@ -12,13 +12,12 @@ import zipfile
 
 # Keep these manifests aligned with the image targets in CMakeLists.txt.
 PACKAGES = {
+    # [CHOSEN, not recovered] Windows ships the client for x64 only. The x86 build keeps the
+    # dedicated server and the editor (which links the x86 client objects); an x64 editor package
+    # is a future goal.
     "windows-x86": {
         "server": ("bin", (
             "bf2_w32ded.exe", "dice_py.dll", "AIDLL_w32ded.dll", "BF2VoipServer_w32ded.dll",
-        )),
-        "client": ("bin_client", (
-            "BF2.exe", "dice_py.dll", "RendDX9.dll", "SwiffPlayer.dll",
-            "BF2Audio.dll", "TextureAtlasBuilder.dll", "BF2VoipServer.dll",
         )),
         "editor": ("bin_editor", (
             "BF2Editor.exe", "dice_py.dll", "RendDX9.dll", "TextureAtlasBuilder.dll", "BF2VoipServer.dll",
@@ -85,9 +84,11 @@ def installation(platform, role, name, executable, macos_signing="adhoc"):
                  name=name, exe=executable, root="Battlefield 2 Server" if server else "Battlefield 2")
         command = '"C:\\OpenBF2\\{}\\{}" {}'.format(name, executable, options)
         if role.startswith("client"):
-            text += ("   The original folder supplies binkw32.dll, d3dx9_25.dll, NovintHFX.dll\n"
-                     "   and the OpenAL DLLs through this working directory where required\n"
-                     "   (x86-only Bink/Novint). Checked against the code; not runtime-tested here.\n")
+            text += ("   This x64 client does not use the game folder's 32-bit DLLs. It needs the\n"
+                     "   64-bit d3dx9_25.dll that the DirectX End-User Runtime installs in System32.\n"
+                     "   For sound, select System OpenAL with a 64-bit OpenAL32.dll installed, or\n"
+                     "   put a 64-bit BF2OpenAL.dll beside BF2.exe.\n"
+                     "   Checked against the code; not runtime-tested here.\n")
     else:
         macos = platform.startswith("macos-")
         text = (
@@ -210,12 +211,13 @@ def package(args):
             "runtime_files": {entry: sha256(files[entry]) for entry in names},
         }
         if args.platform.startswith("windows-"):
-            requirements = (
-                "Windows requires the matching x86/x64 Microsoft Visual C++ runtime.\n"
-                "Client/editor dependencies such as Bink, NovintHFX, d3dx9_25 and an\n"
-                "OpenAL provider must be supplied separately where required.\n"
-                "These Windows binaries are not code-signed.\n"
-            )
+            requirements = "Windows requires the matching x86/x64 Microsoft Visual C++ runtime.\n"
+            if role.startswith("editor"):
+                requirements += ("Editor dependencies such as Bink, NovintHFX, d3dx9_25 and an\n"
+                                 "OpenAL provider must be supplied separately where required.\n")
+            elif role.startswith("client"):
+                requirements += "The client's own dependencies are listed in the install steps below.\n"
+            requirements += "These Windows binaries are not code-signed.\n"
         elif args.platform.startswith("macos-"):
             requirements = ("macOS binaries are signed with a Developer ID (hardened runtime) and\n"
                             "this archive is notarized.\n" if macos_signing == "developer-id"
