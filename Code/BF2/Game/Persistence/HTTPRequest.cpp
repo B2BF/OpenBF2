@@ -182,24 +182,6 @@ std::string HTTPRequest::getGameSpyUrl() const
     // hosts-file check (BF2.exe 0x59C670, bf2_w32ded.exe 0x561500) accepts only GameSpy's own
     // address block 212.77.171.x and otherwise ends the process (Debug type 7), and the hosts file
     // is a normal way to point these names at a replacement service.
-    std::string url(onlineProvider::statsWebUrl());
-    // [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: local-stats-fixture]
-    // BF2_STATS_URL overrides persistence URLs for local fixtures. Inactive when unset; announces
-    // activation once on stderr.
-    if (const char* fixture = std::getenv("BF2_STATS_URL"))
-    {
-        if (*fixture)
-        {
-            static bool announced = false;
-            if (!announced)
-            {
-                announced = true;
-                std::fprintf(stderr, "[TEMP] BF2_STATS_URL: persistence requests go to %s\n", fixture);
-                std::fflush(stderr);
-            }
-            url = fixture;
-        }
-    }
-    return url;
+    return onlineProvider::statsWebUrl();
 }
 } }

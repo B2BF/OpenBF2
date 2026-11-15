@@ -15,17 +15,20 @@ Use `--help` for all options. `--selftest` prints sample player, awards, and
 leaderboard responses and exits. Weapon 0 is the assault rifle, kit 1 is Assault,
 and map 0 is Kubra Dam.
 
-Set this environment variable for the rebuilt client, retaining the trailing
-slash:
+Start a locally built client with `+gamespy test.openbf2` and the test-only name redirect
+library (`Code/Tests/name_redirect/README.md`), on macOS:
 
-```text
-BF2_STATS_URL=http://127.0.0.1:18123/ASP/
+```sh
+OPENBF2_TEST_REDIRECT_DOMAIN=test.openbf2 \
+OPENBF2_TEST_REDIRECT_HTTP_PORT=18123 \
+DYLD_INSERT_LIBRARIES=out/build/<tag>/test_tools/libbf2_test_name_redirect.dylib \
+out/build/<tag>/bin_macos/bf2_client +gamespy test.openbf2 +noSound 1
 ```
 
-The client logs the override once on stderr. Only persistence requests use this
-service; login, server browsing, and joining retain their normal paths. Log in
-through the normal client flow. Player statistics are cached for an hour, so
-restart the client after changing fixture values.
+The stats host `BF2Web.test.openbf2` then resolves to `127.0.0.1`, and its port 80 is moved
+to the fixture. Login, server browsing and joining use their own `*.test.openbf2` names,
+which this fixture does not serve. Log in through the normal client flow. Player statistics
+are cached for an hour, so restart the client after changing fixture values.
 
 ## Responses
 

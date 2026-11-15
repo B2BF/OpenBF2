@@ -5,9 +5,9 @@ It exists so the rebuilt client's stats LOADING (BFHQ, the end-of-round rank, ..
 chosen numbers while no ranked server feeds the real service. It listens on 127.0.0.1 only, keeps no
 state, writes nothing, and talks to no other host.
 
-Point the rebuilt client at it by starting the client with
-    BF2_STATS_URL=http://127.0.0.1:<port>/ASP/
-(the [TEMP] seam in HTTPRequest::getGameSpyUrl; unset, the client keeps the shipped URL).
+Point a locally built client (or dedicated server) at it with +gamespy <test domain> and the
+test-only name redirect (Code/Tests/name_redirect): the stats host BF2Web.<test domain> resolves to
+127.0.0.1, and OPENBF2_TEST_REDIRECT_HTTP_PORT=<port> moves its port 80 to this fixture.
 
 What it answers - the three getplayerinfo.aspx queries SwiffHost::fetchPlayerStats (BF2.exe 0x49D450)
 makes, in the layout KeyParser::parse (0x61DAF0) reads:
@@ -339,8 +339,8 @@ def main():
     server = http.server.ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(profile))
     print("[fixture] BF2 stats fixture on http://127.0.0.1:%d/ASP/  (score %d, weapon %d: %d kills / %d deaths)"
           % (a.port, a.score, a.weapon, a.kills, a.deaths), flush=True)
-    print("[fixture] start the client with BF2_STATS_URL=http://127.0.0.1:%d/ASP/  - Ctrl+C stops" % a.port,
-          flush=True)
+    print("[fixture] start the client with +gamespy test.openbf2 and the test name redirect "
+          "(OPENBF2_TEST_REDIRECT_HTTP_PORT=%d)  - Ctrl+C stops" % a.port, flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
