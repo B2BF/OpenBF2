@@ -4,6 +4,12 @@
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
 bf2_require wine:wine python3:python3 pgrep:procps
+# BF2.exe is 32-bit; Debian/Ubuntu ship the 32-bit Wine parts separately.
+if command -v dpkg >/dev/null && ! dpkg -s wine32:i386 >/dev/null 2>&1; then
+    echo "Missing 32-bit Wine. Install it with:" >&2
+    echo "  sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install wine32:i386" >&2
+    exit 1
+fi
 
 # BF2 allows one instance and a second start exits silently, so say so instead.
 if pid="$(pgrep -i -x bf2.exe)"; then

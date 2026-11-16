@@ -117,7 +117,8 @@ server from this checkout, prepare a game directory, and run the retail Windows 
 plain Wine (DXVK is optional):
 
 ```bash
-sudo apt install cmake ninja-build g++ libncurses-dev wine
+sudo dpkg --add-architecture i386 && sudo apt update   # BF2.exe is 32-bit
+sudo apt install git cmake ninja-build g++ libncurses-dev wine wine32:i386
 export BF2_INSTALL="/path/to/Battlefield 2"   # a BF2 1.5 install with original files
 Code/Tools/linux/play.sh                       # server + client, joins automatically
 ```
