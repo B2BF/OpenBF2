@@ -1,13 +1,21 @@
-// [CHOSEN, not recovered] Bounds-checked DDS, TGA, BMP, PNG and ImageIO JPEG codecs.
-// PNG uses the SDK's zlib for DEFLATE; JPEG uses the system ImageIO framework.
-#if defined(__APPLE__) && defined(BF2_IMAGE_RENDDX9)
+// [CHOSEN, not recovered] Portable D3DX image codecs; Linux port: issue #36.
+#if (defined(__APPLE__) || (defined(__linux__) && defined(BF2_GFX_DXVK))) && defined(BF2_IMAGE_RENDDX9)
 #include "D3DXHelpers.h"
 #include <algorithm>
 #include <cstring>
 #include <limits>
 #include <zlib.h>
+#if defined(__APPLE__)
 #include <ImageIO/ImageIO.h>
 #include <CoreGraphics/CoreGraphics.h>
+#else
+#include <cstdio>
+#include <cstdlib>
+#include <csetjmp>
+#include <memory>
+#include <jpeglib.h>
+#include <png.h>
+#endif
 namespace bf2d3dx {
 static unsigned u16(const unsigned char* p) { return p[0]|(unsigned(p[1])<<8); }
 static unsigned u32(const unsigned char* p) { return u16(p)|(u16(p+2)<<16); }
@@ -55,6 +63,7 @@ static bool completeJPEG(const unsigned char* p,std::size_t size) {
     }
     return false;
 }
+#if defined(__APPLE__)
 static CGImageSourceRef jpegSource(const unsigned char* p,std::size_t size) {
     if(!completeJPEG(p,size) || size>std::size_t(std::numeric_limits<CFIndex>::max())) return nullptr;
     CFDataRef data=CFDataCreateWithBytesNoCopy(kCFAllocatorDefault,p,CFIndex(size),kCFAllocatorNull);
@@ -113,13 +122,79 @@ static bool jpeg(const unsigned char* p,std::size_t size,Image& out) {
     }
     out.data.push_back(std::move(pixels)); return true;
 }
+#else
+struct JPEGError {
+    jpeg_error_mgr base;
+    std::jmp_buf jump;
+    bool warning=false;
+};
+static void jpegFailure(j_common_ptr codec) {
+    std::longjmp(reinterpret_cast<JPEGError*>(codec->err)->jump,1);
+}
+static void jpegMessage(j_common_ptr codec,int level) {
+    if(level<0) reinterpret_cast<JPEGError*>(codec->err)->warning=true;
+}
+struct JPEGReader {
+    jpeg_decompress_struct codec={};
+    JPEGError error={};
+    Bytes row;
+    ~JPEGReader() { if(codec.mem) jpeg_destroy_decompress(&codec); }
+};
+// Codec state lives on the heap so libjpeg's longjmp cannot invalidate changed
+// automatic variables. Owning C++ objects exist before the setjmp boundary.
+static bool readJPEG(const unsigned char* p,std::size_t size,D3DXIMAGE_INFO& info,Bytes* pixels) {
+    if(!completeJPEG(p,size) || size>std::numeric_limits<unsigned long>::max()) return false;
+    std::unique_ptr<JPEGReader> state(new JPEGReader);
+    auto& row=state->row;
+    auto& c=state->codec;
+    c.err=jpeg_std_error(&state->error.base);
+    state->error.base.error_exit=jpegFailure; state->error.base.emit_message=jpegMessage;
+    if(setjmp(state->error.jump)) return false;
+    jpeg_create_decompress(&c);
+    jpeg_mem_src(&c,p,static_cast<unsigned long>(size));
+    if(jpeg_read_header(&c,TRUE)!=JPEG_HEADER_OK || !dimensions(c.image_width,c.image_height)) return false;
+    const bool gray=c.jpeg_color_space==JCS_GRAYSCALE;
+    const bool cmyk=c.jpeg_color_space==JCS_CMYK || c.jpeg_color_space==JCS_YCCK;
+    info={c.image_width,c.image_height,1,1,gray?D3DFMT_L8:D3DFMT_X8R8G8B8,D3DRTYPE_TEXTURE,D3DXIFF_JPG};
+    if(!pixels) return !state->error.warning;
+    c.out_color_space=gray?JCS_GRAYSCALE:cmyk?JCS_CMYK:JCS_RGB;
+    if(!jpeg_start_decompress(&c)) return false;
+    row.resize(std::size_t(c.output_width)*c.output_components);
+    pixels->resize(std::size_t(info.Width)*info.Height*(gray?1:4));
+    while(c.output_scanline<c.output_height) {
+        const unsigned y=c.output_scanline; JSAMPROW next=row.data();
+        if(jpeg_read_scanlines(&c,&next,1)!=1) return false;
+        auto* dst=pixels->data()+std::size_t(y)*info.Width*(gray?1:4);
+        if(gray) std::memcpy(dst,row.data(),info.Width);
+        else for(unsigned x=0;x<info.Width;++x) {
+            const auto* src=row.data()+x*c.output_components;
+            for(unsigned channel=0;channel<3;++channel) {
+                unsigned value=src[2-channel];
+                if(cmyk) value=c.saw_Adobe_marker?(value*src[3]+127)/255:((255-value)*(255-src[3])+127)/255;
+                dst[x*4+channel]=static_cast<unsigned char>(value);
+            }
+            dst[x*4+3]=255;
+        }
+    }
+    return jpeg_finish_decompress(&c) && !state->error.warning;
+}
+static bool jpeg(const unsigned char* p,std::size_t size,Image& out) {
+    Bytes pixels;
+    if(!readJPEG(p,size,out.info,&pixels)) return false;
+    out.data.push_back(std::move(pixels)); return true;
+}
+#endif
 bool metadata(const void* bytes,std::size_t size,D3DXIMAGE_INFO& info) {
     if(!bytes || size<18) return false;
     const auto* p=static_cast<const unsigned char*>(bytes); D3DXIMAGE_INFO i={};
     i.Depth=i.MipLevels=1; i.ResourceType=D3DRTYPE_TEXTURE;
     if(p[0]==0xff && p[1]==0xd8) {
+#if defined(__APPLE__)
         CGImageSourceRef source=jpegSource(p,size); const bool ok=jpegInfo(source,i);
         if(source) CFRelease(source); if(!ok) return false;
+#else
+        if(!readJPEG(p,size,i,nullptr)) return false;
+#endif
     } else if(size>=124 && !std::memcmp(p,"DDS ",4)) {
         if(u32(p+4)!=124 || u32(p+76)!=32) return false;
         i.Width=u32(p+16); i.Height=u32(p+12); i.MipLevels=std::max(1u,u32(p+28)); i.ImageFileFormat=D3DXIFF_DDS;
@@ -282,10 +357,52 @@ bool parse(const void* bytes,std::size_t size,Image& out) {
     else ok=tga(p,size,temp);
     if(ok) { D3DXIMAGE_INFO source; temp.sourceFormat=metadata(bytes,size,source)?source.Format:temp.info.Format; out=std::move(temp); } return ok;
 }
-// [CHOSEN, not recovered] PNG and JPEG output through ImageIO, 8 bits per channel, untagged
+// [CHOSEN, not recovered] PNG and JPEG output via system codecs, 8 bits per channel, untagged
 // device RGB (the stored values, no colour-profile conversion). A source format with alpha bits
 // keeps them in the PNG; JPEG has no alpha. D3DX9's own encoder settings (JPEG quality, PNG
 // chunks) are not reproduced: only the file format is the contract.
+#if !defined(__APPLE__)
+struct JPEGWriter {
+    jpeg_compress_struct codec={};
+    JPEGError error={};
+    unsigned char* bytes=nullptr;
+    unsigned long size=0;
+    ~JPEGWriter() { if(codec.mem) jpeg_destroy_compress(&codec); std::free(bytes); }
+};
+static bool encodeLinuxRaster(const Bytes& rgba,unsigned width,unsigned height,bool alpha,D3DXIMAGE_FILEFORMAT format,Bytes& out) {
+    Bytes rgb;
+    const Bytes* source=&rgba;
+    if(!alpha) {
+        rgb.resize(std::size_t(width)*height*3);
+        for(std::size_t i=0;i<std::size_t(width)*height;++i) std::memcpy(rgb.data()+i*3,rgba.data()+i*4,3);
+        source=&rgb;
+    }
+    if(format==D3DXIFF_PNG) {
+        png_image image={}; image.version=PNG_IMAGE_VERSION;
+        image.width=width; image.height=height; image.format=alpha?PNG_FORMAT_RGBA:PNG_FORMAT_RGB;
+        png_alloc_size_t size=0;
+        if(!png_image_write_to_memory(&image,nullptr,&size,0,source->data(),0,nullptr)) { png_image_free(&image); return false; }
+        out.resize(size);
+        const bool ok=png_image_write_to_memory(&image,out.data(),&size,0,source->data(),0,nullptr)!=0;
+        png_image_free(&image); if(ok) out.resize(size); return ok;
+    }
+    std::unique_ptr<JPEGWriter> state(new JPEGWriter);
+    auto& c=state->codec;
+    c.err=jpeg_std_error(&state->error.base);
+    state->error.base.error_exit=jpegFailure; state->error.base.emit_message=jpegMessage;
+    if(setjmp(state->error.jump)) return false;
+    jpeg_create_compress(&c); jpeg_mem_dest(&c,&state->bytes,&state->size);
+    c.image_width=width; c.image_height=height; c.input_components=3; c.in_color_space=JCS_RGB;
+    jpeg_set_defaults(&c); jpeg_set_quality(&c,90,TRUE); jpeg_start_compress(&c,TRUE);
+    while(c.next_scanline<c.image_height) {
+        JSAMPROW row=const_cast<JSAMPROW>(source->data()+std::size_t(c.next_scanline)*width*3);
+        if(jpeg_write_scanlines(&c,&row,1)!=1) return false;
+    }
+    jpeg_finish_compress(&c);
+    if(state->error.warning) return false;
+    out.assign(state->bytes,state->bytes+state->size); return true;
+}
+#endif
 static bool encodeRaster(const Image& im,D3DXIMAGE_FILEFORMAT format,Bytes& out) {
     const auto& i=im.info;
     if(i.ResourceType!=D3DRTYPE_TEXTURE || i.Depth!=1 || im.data.empty() ||
@@ -298,6 +415,7 @@ static bool encodeRaster(const Image& im,D3DXIMAGE_FILEFORMAT format,Bytes& out)
     Bytes rgba(std::size_t(i.Width)*i.Height*4);
     if(!convert(im.data[0].data(),i.Format,i.Width,i.Height,rowBytes(i.Format,i.Width),rgba.data(),D3DFMT_A8B8G8R8,
         i.Width,i.Height,i.Width*4,D3DX_FILTER_NONE)) return false;
+#if defined(__APPLE__)
     CGColorSpaceRef rgb=CGColorSpaceCreateDeviceRGB();
     CFDataRef pixels=CFDataCreate(kCFAllocatorDefault,rgba.data(),CFIndex(rgba.size()));
     CGDataProviderRef provider=pixels?CGDataProviderCreateWithCFData(pixels):nullptr;
@@ -319,6 +437,9 @@ static bool encodeRaster(const Image& im,D3DXIMAGE_FILEFORMAT format,Bytes& out)
     if(ok) { const auto* p=CFDataGetBytePtr(data); out.assign(p,p+CFDataGetLength(data)); }
     if(data) CFRelease(data);
     return ok;
+#else
+    return encodeLinuxRaster(rgba,i.Width,i.Height,alpha,format,out);
+#endif
 }
 bool serialize(const Image& im,D3DXIMAGE_FILEFORMAT format,Bytes& out) {
     const auto& i=im.info;

@@ -5,7 +5,7 @@
 #include "TextureFormat.h"
 #include "../../../../RendDX9Abi/D3dx9Sdk.h"
 
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
 #include <cstdio>
 #else
 #include <dxerr9.h>         // DXGetErrorString9A, from the SDK's DxErr9.lib
@@ -60,8 +60,8 @@ int TextureAtlasD3D9::maxHeight()
 
 namespace {
 
-#if defined(__APPLE__)
-// [CHOSEN, not recovered] DxErr9 is unavailable on macOS; retain the failing HRESULT.
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
+// [CHOSEN, not recovered] Native builds have no DxErr9; retain the failing HRESULT.
 std::string nativeAtlasErrorString(HRESULT result)
 {
     char message[32];
@@ -153,7 +153,7 @@ bool TextureAtlasD3D9::buildTextures()
                 hr = texture->GetSurfaceLevel(srcLevel, &srcSurface);
                 if (FAILED(hr))
                 {
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
                     m_error(nativeAtlasErrorString(hr));
 #else
                     m_error(std::string(DXGetErrorString9A(hr)));
@@ -165,7 +165,7 @@ bool TextureAtlasD3D9::buildTextures()
                 hr = atlasTexture->GetSurfaceLevel(level, &dstSurface);
                 if (FAILED(hr))
                 {
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
                     m_error(nativeAtlasErrorString(hr));
 #else
                     m_error(std::string(DXGetErrorString9A(hr)));
@@ -179,7 +179,7 @@ bool TextureAtlasD3D9::buildTextures()
                                                 D3DX_FILTER_NONE, 0);
                 if (FAILED(hr))
                 {
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
                     m_error(nativeAtlasErrorString(hr));
 #else
                     m_error(std::string(DXGetErrorString9A(hr)));

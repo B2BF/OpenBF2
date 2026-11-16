@@ -1,8 +1,10 @@
 // [CHOSEN, not recovered] Native mesh utilities backed by G3b vertex/index buffers.
-#if defined(__APPLE__) && defined(BF2_IMAGE_RENDDX9)
+#if (defined(__APPLE__) || (defined(__linux__) && defined(BF2_GFX_DXVK))) && defined(BF2_IMAGE_RENDDX9)
 #include "D3DXHelpers.h"
 #include "D3DXMesh.h"
+#if defined(__APPLE__)
 #include "RefTrace.h" // [TEMP] [RETIRE-WHEN: rend-deinit-reftrace]
+#endif
 #include "../../../External/meshoptimizer/meshoptimizer.h"
 #include <algorithm>
 #include <array>
@@ -77,10 +79,17 @@ public:
     std::vector<D3DVERTEXELEMENT9> decl;
     std::vector<DWORD> attributes; bool attributeLock=false;
     Mesh(IDirect3DDevice9* d,DWORD f,DWORD v,DWORD o,DWORD vf):device(d),faces(f),vertices(v),options(o),fvf(vf),attributes(f,0) {
+#if defined(__APPLE__)
         { bf2metal::reftrace::Owned o; d->AddRef(); } bf2metal::reftrace::born(this,"ID3DXMesh",[](const void*) { return 1ul; });
+#else
+        d->AddRef();
+#endif
     }
     ~Mesh() { if(layout) layout->Release(); if(vb) vb->Release(); if(ib) ib->Release();
-        bf2metal::reftrace::died(this); bf2metal::reftrace::Owned o; device->Release(); }
+#if defined(__APPLE__)
+        bf2metal::reftrace::died(this); bf2metal::reftrace::Owned o;
+#endif
+        device->Release(); }
     HRESULT initialize(const D3DVERTEXELEMENT9* d) {
         if(!declaration(d,decl,stride) || !stride || faces>std::numeric_limits<UINT>::max()/12 || vertices>std::numeric_limits<UINT>::max()/stride || (!(options&1) && vertices>65535)) return D3DERR_INVALIDCALL;
         // The inventory uses SYSTEMMEM and MANAGED, optionally WRITEONLY.

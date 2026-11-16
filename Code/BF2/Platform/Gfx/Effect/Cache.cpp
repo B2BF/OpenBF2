@@ -1,8 +1,12 @@
-// [CHOSEN, not recovered] Owner-requested macOS CPU effect cache.
-#if defined(__APPLE__)
+// [CHOSEN, not recovered] Native CPU effect cache; Linux port: kr4uzi/OpenBF2#36.
+#if defined(__APPLE__) || (defined(__linux__) && defined(BF2_GFX_DXVK))
 #include "Cache.h"
 #include "Wire.h"
+#if defined(__APPLE__)
 #include <CommonCrypto/CommonDigest.h>
+#else
+#include <openssl/evp.h>
+#endif
 #include <algorithm>
 #include <cerrno>
 #include <cstring>
@@ -20,8 +24,15 @@
 namespace bf2fx {
 namespace fs=std::filesystem;
 std::string sha256(const Bytes& bytes) {
+#if defined(__APPLE__)
     unsigned char digest[CC_SHA256_DIGEST_LENGTH];
     CC_SHA256(bytes.data(),CC_LONG(bytes.size()),digest);
+#else
+    unsigned char digest[32];
+    unsigned size = 0;
+    if (EVP_Digest(bytes.data(), bytes.size(), digest, &size, EVP_sha256(), nullptr) != 1 || size != sizeof(digest))
+        throw std::runtime_error("Cannot compute effect-cache SHA-256");
+#endif
     const char* hex="0123456789abcdef"; std::string out;
     for(auto b:digest) { out+=hex[b>>4]; out+=hex[b&15]; } return out;
 }

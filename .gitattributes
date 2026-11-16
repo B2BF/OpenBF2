@@ -1,0 +1,2 @@
+# Unified diffs encode an empty context line with a single space.
+tools/macos/vkd3d-patches/*.patch whitespace=-blank-at-eol

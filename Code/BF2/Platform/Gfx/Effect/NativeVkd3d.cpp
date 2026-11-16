@@ -1,5 +1,5 @@
 // [CHOSEN, not recovered] vkd3d-shader (LGPL-2.1+) glue for native effect compilation.
-#if defined(__APPLE__)
+#if defined(__APPLE__) || (defined(__linux__) && defined(BF2_GFX_DXVK))
 #include "NativeVkd3d.h"
 #include <vkd3d_shader.h>
 #include <cstring>

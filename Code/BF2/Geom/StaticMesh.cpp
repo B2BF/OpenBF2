@@ -2812,7 +2812,15 @@ void staticMeshDrawExpansion(void* self)
     static std::vector<unsigned int> unused;              // ds:1025A9A8; [UNRESOLVED] word elements
     static std::vector<LightShadowRecord> unusedRecords;   // ds:1025A998
     unused.clear();
-    { LightShadowRecord fill; unusedRecords.resize(0, fill); }
+    { LightShadowRecord fill;
+#if defined(BF2_LINUX_CLIENT)
+        // [CHOSEN, not recovered] Shrink only: avoid libstdc++ instantiating an
+        // unused copy-assignment path, while retaining the fill object's lifetime.
+        unusedRecords.resize(0);
+#else
+        unusedRecords.resize(0, fill);
+#endif
+    }
 
     // 6. the sun direction in object space
     float sunDirection[3] = { 0.0f, 0.0f, 0.0f };

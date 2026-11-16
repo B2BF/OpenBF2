@@ -1,7 +1,7 @@
 // [CHOSEN, not recovered] Renderer-local host/CRT spellings for the macOS port.
 #ifndef BF2_GFX_MACSUPPORT_H
 #define BF2_GFX_MACSUPPORT_H
-#if defined(__APPLE__) && defined(BF2_IMAGE_RENDDX9)
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && defined(BF2_IMAGE_RENDDX9)
 #include "D3D9Subset.h"
 #include <chrono>
 #include <cstdarg>

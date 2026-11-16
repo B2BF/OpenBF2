@@ -150,10 +150,13 @@ static void expressions() {
     check(runtime.evaluate(state).words[0]==14,"Typed dynamic state output");
     p.instructions={{29,4,{{2,0,{}},{0,0,{}},{1,0,{}}}}};
     auto scalar=runtime.evaluate(p);check(scalar[0]==9 && scalar[1]==2,"Scalar-op replication");
-    // Unsupported executable work must abort with a qualified frontier, even in Release.
-    pid_t child=fork();if(child<0)throw std::runtime_error("fork failed");
-    if(!child) {rlimit limit{0,0};setrlimit(RLIMIT_CORE,&limit);p.instructions[0].opcode=24;p.instructions[0].elements=1;runtime.evaluate(p);_exit(99);}
-    int status;waitpid(child,&status,0);check(WIFSIGNALED(status) && WTERMSIG(status)==SIGABRT,"Unsupported IR aborts");
+    // Runtime.h's current contract reports unsupported IR and throws Refused to direct callers.
+    p.instructions[0].opcode=24;p.instructions[0].elements=1;
+    bool refused=false;
+    try {runtime.evaluate(p);} catch(const Refused& e) {
+        refused=std::string(e.what()).find("Runtime::evaluate: Unsupported preshader opcode 24")!=std::string::npos;
+    }
+    check(refused,"Unsupported IR throws a qualified refusal");
 }
 // D3DX9_25 struct semantics, from tools/macos/d3dxfx/oracle (run-oracle.sh on structs.fx).
 static Type member(const char* name,uint32_t type,uint32_t cls,uint32_t columns) {Type t;t.name=name;t.type=type;t.cls=cls;t.rows=1;t.columns=columns;return t;}

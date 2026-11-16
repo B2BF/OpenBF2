@@ -1,4 +1,4 @@
-# vkd3d-shader patches (macOS port)
+# vkd3d-shader patches (native clients)
 
 [CHOSEN, not recovered] Small patches to vkd3d-shader `vkd3d-2.1`
 (`fb7f9ff3c1f8d972ee6f1b8c6a92caf6c8ba1e10`), LGPL-2.1-or-later like vkd3d itself.
@@ -24,3 +24,4 @@ description.
 | 0013 | debug log channel macros compiled out |
 | 0014 | SM1/2 jump lowering: 0012 for every profile; flattened stores to undefined old values keep the new value (no read of an unwritten temp) |
 | 0015 | d3dbc legalisation for the D3D9 validator: unwritten temp reads, one c# per vs instruction, ps_2_0 swizzles, oC/oDepth by mov |
+| 0016 | CSE compares only initialized constant components, allowing identical relative bone-matrix loads to share registers |

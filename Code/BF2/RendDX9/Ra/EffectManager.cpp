@@ -1552,7 +1552,7 @@ bool rendererDeviceWasReset()
 // This local copy retains its module reference. Consolidate it with the permutator's
 // helper when that helper has a shared declaration and external linkage.
 
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
 // [CHOSEN, not recovered] Native compiler entry; no Win32 DLL recursion workaround.
 long raCreateEffectCompiler(const char* srcData, unsigned int srcDataLen,
     const D3DXMACRO* defines, LPD3DXINCLUDE include, unsigned long flags,

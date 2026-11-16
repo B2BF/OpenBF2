@@ -103,7 +103,7 @@ namespace world {
 // RendDX9 is a separate shipped image from BF2.exe. Both ABI builds now construct typed
 // BundledMesh collision filters and need this non-pure base slot. PE1012C350 / ELF8163FC0
 // are unconditional true; emit the recovered body locally as the original DLL did.
-#if !(defined(__APPLE__) && defined(BF2_STATIC_PLUGINS))
+#if !defined(BF2_STATIC_PLUGINS)
 bool ObjectPredicator::predicateSurface(int)
 {
     return true;
@@ -2164,7 +2164,7 @@ struct ShadowProjectionLayout
     static Mat4 yawPitchRoll(float yaw, float pitch, float roll)
     {
         Mat4 result = Mat4::getIdentity();
-#if defined(__APPLE__) || defined(RENDDX9ABI_D3DX9FALLBACK_H)
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT) || defined(RENDDX9ABI_D3DX9FALLBACK_H)
         // [CHOSEN, not recovered] These D3DX subsets omit D3DXMatrixRotationYawPitchRoll.
         const float sy = std::sin(yaw),   cy = std::cos(yaw);
         const float sp = std::sin(pitch), cp = std::cos(pitch);
@@ -3610,7 +3610,7 @@ void buildSpotProjection(void* manager, ShadowBuildContext& context,
 // PE 0x10079720.
 void makeFrustumPerspectiveMatrix(const Frustum& frustum, Mat4& output)
 {
-#if defined(__APPLE__) || defined(RENDDX9ABI_D3DX9FALLBACK_H)
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT) || defined(RENDDX9ABI_D3DX9FALLBACK_H)
     // [CHOSEN, not recovered] These D3DX subsets omit the perspective helper.
     const float aspect = 1.0f / frustum.m_aspect;
     const float halfFov = frustum.m_fov * 0.5f;
@@ -4128,7 +4128,7 @@ Mat4 multiplyShadowMatrices(const Mat4& lhs, const Mat4& rhs)
 
 Vec3 transformShadowCoord(const Vec3& point, const Mat4& matrix)
 {
-#if defined(__APPLE__) || defined(RENDDX9ABI_D3DX9FALLBACK_H)
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT) || defined(RENDDX9ABI_D3DX9FALLBACK_H)
     // [CHOSEN, not recovered] The native/no-SDK subsets omit this D3DX entry point.
     const float inverseW = 1.0f / (point.x * matrix.m[3] + point.y * matrix.m[7]
         + point.z * matrix.m[11] + matrix.m[15]);
@@ -4150,7 +4150,7 @@ Vec3 transformShadowCoord(const Vec3& point, const Mat4& matrix)
 
 Vec3 transformShadowNormal(const Vec3& value, const Mat4& matrix)
 {
-#if defined(__APPLE__) || defined(RENDDX9ABI_D3DX9FALLBACK_H)
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT) || defined(RENDDX9ABI_D3DX9FALLBACK_H)
     // [CHOSEN, not recovered] The native/no-SDK subsets omit this D3DX entry point.
     const Vec3 result = {
         value.x * matrix.m[0] + value.y * matrix.m[4] + value.z * matrix.m[8],
@@ -4621,7 +4621,7 @@ Mat4 calculateDirectionalShadowMatrix(void* manager)
     Vec3 axis = { shadowProductDifference(light.y, -1.0f, light.z, 0.0f),
                   shadowProductDifference(light.z, 0.0f, light.x, -1.0f),
                   shadowProductDifference(light.x, 0.0f, light.y, 0.0f) };
-#if defined(__APPLE__) || defined(RENDDX9ABI_D3DX9FALLBACK_H)
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT) || defined(RENDDX9ABI_D3DX9FALLBACK_H)
     // [CHOSEN, not recovered] The native/no-SDK subsets omit D3DXVec3Normalize.
     const float axisLength = std::sqrt(dot3(axis, axis));
     if (axisLength != 0.0f)

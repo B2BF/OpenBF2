@@ -7,7 +7,7 @@
 #include "../RendMisc/IRenderView.h"
 #include "../../RendDX9Abi/BfMemory.h"
 #include <d3dx9.h>
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
 #include "../Platform/Gfx/Metal/D3DXMesh.h"
 #endif
 #include <cstring>

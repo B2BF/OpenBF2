@@ -47,8 +47,10 @@ static int math() {
     std::memset(buffer->GetBufferPointer(),42,17); CHECK(buffer->AddRef()==2 && buffer->Release()==1 && buffer->Release()==0);
     const DWORD tokens[]={0xfffe0300,0xffff}; CHECK(D3DXGetShaderVersion(tokens)==0xfffe0300 && D3DXGetShaderVersion(nullptr)==0);
     ID3DXBuffer *shader=nullptr,*errors=nullptr; const char* vs="vs.1.1\ndcl_position0 v0\nmov oPos, v0";
-    CHECK(D3DXAssembleShader(vs,std::strlen(vs),nullptr,nullptr,0,&shader,&errors)==D3D_OK && !errors && shader->GetBufferSize()==20);
-    const DWORD golden[]={0xfffe0101,1,0xc00f0000,0x90e40000,0xffff}; CHECK(!std::memcmp(shader->GetBufferPointer(),golden,20)); shader->Release();
+    // Public D3DX9_25 assembly golden: POSITION0 declaration is present even in vs_1_1.
+    const DWORD golden[]={0xfffe0101,0x1f,0x80000000,0x900f0000,1,0xc00f0000,0x90e40000,0xffff};
+    CHECK(D3DXAssembleShader(vs,std::strlen(vs),nullptr,nullptr,0,&shader,&errors)==D3D_OK && !errors && shader->GetBufferSize()==sizeof golden);
+    CHECK(!std::memcmp(shader->GetBufferPointer(),golden,sizeof golden)); shader->Release();
     const char* ps="ps.1.1\ndef c0, 1,1,1,0.5\nmov r0,c0";
     CHECK(D3DXAssembleShader(ps,std::strlen(ps),nullptr,nullptr,0,&shader,&errors)==D3D_OK);
     CHECK(static_cast<DWORD*>(shader->GetBufferPointer())[6]==0x3f000000); shader->Release();

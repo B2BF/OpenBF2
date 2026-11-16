@@ -1,5 +1,5 @@
 // [CHOSEN, not recovered] Shape topology and normals, independent of GPU storage.
-#if defined(__APPLE__) && defined(BF2_IMAGE_RENDDX9)
+#if (defined(__APPLE__) || (defined(__linux__) && defined(BF2_GFX_DXVK))) && defined(BF2_IMAGE_RENDDX9)
 #include "D3DXHelpers.h"
 #include <cmath>
 #include <utility>

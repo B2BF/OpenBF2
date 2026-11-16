@@ -1512,7 +1512,7 @@ void TerrainEditable::importColorMap(TerrainEditableString tga)
 // number) into an 80-byte buffer by sprintf - unbounded, as shipped - and never reported.
 void TerrainEditable::runTool(std::string executable, std::string arguments)
 {
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
     // [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: macos-terrain-tools]
     // Requires native tgasplit/nvdxt execution, cancellation and output validation.
     bf2MacRendererStop("dice::hfe::geom::TerrainEditable::runTool");

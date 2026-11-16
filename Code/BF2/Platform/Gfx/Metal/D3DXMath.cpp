@@ -1,5 +1,5 @@
 // [CHOSEN, not recovered] Native D3DX math, row vectors and row-major matrices.
-#if defined(__APPLE__) && defined(BF2_IMAGE_RENDDX9)
+#if (defined(__APPLE__) || (defined(__linux__) && defined(BF2_GFX_DXVK))) && defined(BF2_IMAGE_RENDDX9)
 #include "D3DXHelpers.h"
 #include <algorithm>
 #include <cmath>
@@ -69,7 +69,9 @@ HRESULT WINAPI D3DXAssembleShader(LPCSTR source,UINT length,const D3DXMACRO* def
     std::string text;
     for(unsigned i=0;i<length;++i) if(!std::isspace(static_cast<unsigned char>(source[i]))) text+=char(std::tolower(static_cast<unsigned char>(source[i])));
     std::vector<DWORD> words;
-    if(text=="vs.1.1dcl_position0v0movopos,v0") words={0xfffe0101,1,0xc00f0000,0x90e40000,0x0000ffff};
+    // D3DX9_25 retains DCL_POSITION0 in SM1 bytecode. DXVK needs it to map v0
+    // to the vertex declaration; omitting it makes the renderer's AA probe draw no pixels.
+    if(text=="vs.1.1dcl_position0v0movopos,v0") words={0xfffe0101,0x1f,0x80000000,0x900f0000,1,0xc00f0000,0x90e40000,0x0000ffff};
     else if(text=="ps.1.1defc0,1,1,1,0movr0,c0" || text=="ps.1.1defc0,1,1,1,0.5movr0,c0") {
         const float alpha=text.find("0.5")!=std::string::npos?.5f:0.f; DWORD bits; std::memcpy(&bits,&alpha,4);
         words={0xffff0101,81,0xa00f0000,0x3f800000,0x3f800000,0x3f800000,bits,1,0x800f0000,0xa0e40000,0x0000ffff};

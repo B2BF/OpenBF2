@@ -1457,7 +1457,7 @@ bool RaShader::build()
     if (IDirect3DPixelShader9* const pixelShader =
             static_cast<IDirect3DPixelShader9*>(stateManagerCurrentPixelShader()))
     {
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
         // [CHOSEN, not recovered] D3D shader tokens are 32-bit even on LP64.
         DWORD function[16384 / sizeof(DWORD)];
 #else

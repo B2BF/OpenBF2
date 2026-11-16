@@ -2,7 +2,7 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87)) || defined(BF2_LINUX_CLIENT)
 #include "../Platform/X87Compat.h" // [CHOSEN, not recovered] x87 conversion results, including invalid inputs.
 #endif
 #include "../../RendDX9Abi/HfeAbi.h"
@@ -867,8 +867,8 @@ void buildPresentParameters(void* renderer)
     b->pp.Flags                  = 2;   // D3DPRESENTFLAG_DISCARD_DEPTHSTENCIL
     b->pp.EnableAutoDepthStencil = TRUE;
 
-#if defined(__APPLE__)
-    // [CHOSEN, not recovered] G3 native policy: the initial host carrier has no
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
+    // [CHOSEN, not recovered] Native policy (Linux: issue #36): the initial host carrier has no
     // depth candidates yet. Select only the backend's explicitly supported D24S8.
     // Other images require the caller to supply its depth candidates.
     if (b->depthFormats.empty() && b->d3d9 &&
@@ -932,12 +932,12 @@ bool createPrimaryD3DDevice(void* renderer)
     RendDX9Base* b = baseOf(renderer);
 
     // Keep the window-info query even though the result is unused.
-#if !defined(__APPLE__)
+#if defined(_WIN32)
     // shipped defect: cbSize is never initialized before GetWindowInfo.
     WINDOWINFO pwi;
     ::GetWindowInfo(reinterpret_cast<HWND>(b->windows[0]), &pwi);
 #else
-    // [CHOSEN, not recovered] Cocoa has no Win32 window-info query; no result is consumed.
+    // [CHOSEN, not recovered] Native hosts omit the unused Win32 window-info query.
 #endif
 
     HRESULT hr = b->d3d9->CreateDevice(b->adapter,

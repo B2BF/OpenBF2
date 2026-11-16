@@ -12,6 +12,9 @@
 #include "RendDX9Base.h"
 #include "../RendMisc/IRenderer.h"
 #include "../GeomMisc/Debug.h"
+#if defined(BF2_LINUX_CLIENT)
+#include "../Platform/Linux/FrameCapture.h"
+#endif
 #if defined(_WIN32)
 #include <dxerr9.h>
 #pragma comment(lib, "dxerr9.lib")
@@ -248,6 +251,9 @@ bool rendererPresent(unsigned int mode)
 
     IDirect3DSwapChain9* chain = b->swapChains[b->currentSwapChain];   // +0xE4[+0xF0]
 
+#if defined(BF2_LINUX_CLIENT)
+    bf2LinuxCaptureBeforePresent(chain);
+#endif
     HRESULT hr = chain->Present(0, 0, 0, 0, mode);
     while (hr)
     {
@@ -387,9 +393,16 @@ std::string screenDumpNextName(const std::string& directory)
 // file-manager open of the .png creates the directory. As shipped, no call's result is checked.
 void rendererCaptureScreen(RendDX9Base* b)
 {
+#if defined(BF2_LINUX_CLIENT)
+    // [CHOSEN, not recovered] Issue #36: display screenshots are opaque RGB;
+    // backbuffer alpha is render-pass data, not window transparency.
+    const D3DFORMAT captureFormat = D3DFMT_X8R8G8B8;
+#else
+    const D3DFORMAT captureFormat = D3DFMT_A8R8G8B8;
+#endif
     IDirect3DSurface9* capture = 0;
     b->device->CreateOffscreenPlainSurface(b->pp.BackBufferWidth, b->pp.BackBufferHeight,
-                                           D3DFMT_A8R8G8B8, D3DPOOL_SCRATCH, &capture, 0);   // +0x90
+                                           captureFormat, D3DPOOL_SCRATCH, &capture, 0);   // +0x90
     IDirect3DSurface9* backBuffer = 0;
     b->swapChains[0]->GetBackBuffer(0, D3DBACKBUFFER_TYPE_MONO, &backBuffer);               // +0x14
     D3DXLoadSurfaceFromSurface(capture, 0, 0, backBuffer, 0, 0, D3DX_FILTER_NONE, 0);

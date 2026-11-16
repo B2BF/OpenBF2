@@ -306,7 +306,7 @@ const char* fxGetElementString(ID3DXEffectCompiler* fx, D3DXHANDLE handle, unsig
 // Lazily uses d3dx9_24.dll to avoid compiler recursion in the April 2005 D3DX version.
 // The failure diagnostic retains its original debug-DLL spelling.
 
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
 // [CHOSEN, not recovered] Native compiler entry; no Win32 DLL recursion workaround.
 // PE 0x1003C610; platform D3DX entry selection below.
 long createEffectCompiler(const char* srcData, unsigned int srcDataLen,

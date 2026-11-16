@@ -2582,7 +2582,14 @@ bool LightmapGeneration::traceColour(OccluderRecord* record, int objectIndex, in
                 }
                 while (remainingInBlock > 0);
             }
+#if defined(BF2_LINUX_CLIENT)
+            // [CHOSEN, not recovered] gatherLights only appended to this vector.
+            // Keep the temporary's lifetime and shrink without requiring the
+            // unused libstdc++ fill-insertion copy-assignment path.
+            { LightInfo fill; m_lights.resize(persistentLights); }
+#else
             m_lights.resize(persistentLights, LightInfo());
+#endif
             if (g_traceAborted || m_onlyNearest)
                 break;
         nextBlock:
@@ -3334,7 +3341,12 @@ bool LightmapGeneration::traceIntensity(OccluderRecord* record, int objectIndex,
                 }
                 while (remainingInBlock > 0);
             }
+#if defined(BF2_LINUX_CLIENT)
+            // Same append-then-shrink lifetime contract as the color trace.
+            { LightInfo fill; m_lights.resize(persistentLights); }
+#else
             m_lights.resize(persistentLights, LightInfo());
+#endif
             if (g_traceAborted || m_onlyNearest)
                 break;
         nextBlock:

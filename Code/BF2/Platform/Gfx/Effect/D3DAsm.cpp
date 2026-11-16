@@ -1,5 +1,5 @@
 // [CHOSEN, not recovered] D3D9 shader assembler for BF2's asm blocks. See D3DAsm.h.
-#if defined(__APPLE__)
+#if defined(__APPLE__) || (defined(__linux__) && defined(BF2_GFX_DXVK))
 #include "D3DAsm.h"
 #include <cctype>
 #include <cstdlib>
