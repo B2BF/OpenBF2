@@ -112,9 +112,9 @@ glibc and the other system dependencies remain dynamic. Pass
 
 ### Playing on the Linux server with the retail client
 
-`Code/Tools/linux/` holds launchers tested on Zorin OS 18 (Ubuntu 24.04 base). They build the
-server from this checkout, prepare a game directory, and run the retail Windows client under
-plain Wine (DXVK is optional):
+`Code/Tools/linux/` holds launchers tested on Zorin OS 18 (Ubuntu 24.04 base); the server part also
+on a clean Ubuntu 26.04. They build the server from this checkout, prepare a game directory, and
+run the retail Windows client under plain Wine (DXVK is optional):
 
 ```bash
 sudo dpkg --add-architecture i386 && sudo apt update   # BF2.exe is 32-bit

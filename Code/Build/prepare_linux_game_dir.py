@@ -35,6 +35,8 @@ def main(src, dst):
     for root, _, files in os.walk(src):
         for name in files:
             source = os.path.join(root, name)
+            if os.path.islink(source):  # a stray link in a copied install may dangle
+                continue
             rel = os.path.relpath(source, src).replace(os.sep, "/")
             target = os.path.join(dst, linux_path(rel))
             os.makedirs(os.path.dirname(target), exist_ok=True)
