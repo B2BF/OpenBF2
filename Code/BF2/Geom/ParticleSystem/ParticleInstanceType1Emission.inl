@@ -15,7 +15,7 @@ float* psmType1EmissionSphere(float* output,void* descriptor,void* self,float* p
     const float phi=static_cast<float>(psmEmissionRandomInteger()*static_cast<double>(3.7450703871400037e-7f));
     const double theta=psmEmissionRandomInteger()*static_cast<double>(1.8725351935700019e-7f);
     const float savedTheta=static_cast<float>(theta);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Preserve FSIN on the retained angle before its float spill.
     const float sineTheta=bf2x87::store(bf2x87::sinValue(bf2x87::wide(theta)));
 #else
@@ -27,7 +27,7 @@ float* psmType1EmissionSphere(float* output,void* descriptor,void* self,float* p
         *0.000000059604644775390625;
     const double xRadius=static_cast<double>(xRandom)*psmDescriptor1<float>(descriptor,0x14);
     const double yRadius=static_cast<double>(yRandom)*psmDescriptor1<float>(descriptor,0x18);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Keep the trig results and products live until each float store.
     using bf2x87::wide;
     psmRuntimeField<float>(particle,0x44)=bf2x87::store(bf2x87::cosValue(wide(phi))*wide(xRadius)*wide(sineTheta));
@@ -110,7 +110,7 @@ void psmType1RotateZ(Mat4& matrix,float degrees)
 void psmType1TransformDirection(const Mat4& matrix,float* direction)
 {
     const float x=direction[0],y=direction[1],z=direction[2];
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain all three x87 sums before writing the input vector.
     using bf2x87::wide;
     const bf2x87::Real rz=wide(matrix.m[10])*wide(z)+wide(matrix.m[2])*wide(x)+wide(matrix.m[6])*wide(y);

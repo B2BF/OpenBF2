@@ -3,7 +3,7 @@
 // Keep the retail event order and unchecked assumptions at each call site.
 
 #include "ServerGameLogic.h"
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../../Platform/X87Compat.h" // [CHOSEN, not recovered]
 #endif
 
@@ -2510,7 +2510,7 @@ PyObject* sgl_setParam(PyObject*, PyObject* args)
     // four keys to the game logic, five to the score manager - and each narrows the double
     //    differently. See the note above.
     if (key.compare("tickets") == 0)
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] Keep the x86 wrap of a negative value (arm64 saturates): docs/macos-c-arm64-client.md.
         sgl->setNumberOfTickets(team, bf2x87::lowUInt32(value));
 #else

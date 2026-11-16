@@ -6,7 +6,7 @@
 #include "TerrainEditable.h"
 #include "../RendDX9/RendDX9Math.h"   // rendmath::normalize (sub_100777A0)
 #include "../Core/StringUtil.h"         // formatString (sub_10074AB0)
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h"
 #endif
 #include "QuadPatchEditable.h"
@@ -553,7 +553,7 @@ void TerrainEditable::applyEditorFrameConstants()
     if (m_lodSwitchDistanceCache != distance)
     {
         m_lodSwitchDistanceCache = m_lodSwitchDistance;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] The near limit spills; the far limit and reciprocal retain x87 width.
         const bf2x87::Real far0 = bf2x87::add(bf2x87::mul(bf2x87::sub(bf2x87::mul(
             bf2x87::Real(distance), bf2x87::Real(0.015625f)), bf2x87::Real(1)), bf2x87::Real(64)), bf2x87::Real(22.56f));
@@ -645,7 +645,7 @@ void TerrainEditable::drawPatches()
         param(m_hScaleTransY)->setValue(scaleTransY, 0);                      // +0x1BC
     }
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] FILD divides before either reciprocal store.
         const float invSize = bf2x87::store(bf2x87::div(bf2x87::Real(1), bf2x87::Real(m_patchSize)));
 #else
@@ -654,7 +654,7 @@ void TerrainEditable::drawPatches()
         float texScale[4];
         texScale[3] = 0.0f;
         texScale[0] = invSize;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         texScale[1] = bf2x87::store(bf2x87::mul(bf2x87::mul(bf2x87::Real(m_primaryWorldScale.y),
             bf2x87::Real(400.0f)), bf2x87::Real(1.5378700e-05f)));
 #else
@@ -1054,7 +1054,7 @@ void TerrainEditable::rebuildSurroundingInRect(const float* rect)
         const double maxX = static_cast<double>(patch->endX);
         const double minZ = static_cast<double>(patch->originZ);
         const double maxZ = static_cast<double>(patch->endZ);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] FCOM raises invalid for unordered inputs; only origin X spills.
         const auto inside = [&](float x, float z) {
             return bf2x87::greater(bf2x87::Real(x), bf2x87::Real(minX))

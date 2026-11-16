@@ -1,6 +1,6 @@
 // Frustum setup and intersection queries.
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h" // [CHOSEN, not recovered]
 #endif
 #include "Frustum.h"
@@ -220,7 +220,7 @@ void Frustum::setOrtho(float width, float height, float nearDist, float farDist,
         fstp dword ptr [edx+8]
     }
 #else
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain x87-width values on both Mac architectures.
     const bf2x87::Real midpoint = (static_cast<bf2x87::Real>(nearDist) + farDist) * 0.5L;
     m_boundingRadius = static_cast<float>(midpoint);

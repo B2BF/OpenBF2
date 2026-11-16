@@ -85,7 +85,7 @@ static_assert(offsetof(dx9rend::Ra::RaLightingParameters, overGrowthAmbient) == 
 // __ftol2 - truncation toward zero into 64 bits; each caller keeps the low word (ax) or byte (al).
 inline long long ftol2(float value)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     return bf2x87::toInt64Truncate(value);
 #else
     return static_cast<long long>(value);
@@ -348,7 +348,7 @@ void OverGrowthCell::draw(IRenderView* view, const Vec3* position, float fade)
 {
     (void)position;                                                              // arg_4 never read
     (void)fade;                                                                  // arg_8 never read
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] X uses the retained half size; Z reloads its float spill.
     const bf2x87::Real half = bf2x87::mul(bf2x87::Real(size), bf2x87::Real(0.5f));
     const float halfSpill = bf2x87::store(half);

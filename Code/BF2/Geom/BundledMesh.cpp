@@ -21,7 +21,7 @@
 #include "../Game/Objects/IObjectTemplate.h"
 #include "../Game/Objects/ObjectLayoutAccess.h"
 #include "../GeomMisc/Debug.h"
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h"
 #endif
 #include <cfloat>
@@ -63,7 +63,7 @@ void* objectGeometryField(void* object)
 // PE 0x100A6170
 int normalizeXZ(Vec2& value)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Keep the squared-length spill and retained x87 inverse.
     using namespace bf2x87;
     const float lengthSquared=store(add(mul(wide(value.x),wide(value.x)),mul(wide(value.y),wide(value.y))));
@@ -281,10 +281,10 @@ void BundledMesh::setUvRotation(int index,float angle)
     if (index>=0 || index<static_cast<int>(m_template->m_dword10C+1))
     {
         float c,s;
-#if defined(__APPLE__) && defined(__x86_64__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87)) && defined(__x86_64__)
         // [CHOSEN, not recovered] Use the shipped fsincos and its two float stores on Intel.
         __asm__ volatile("flds %2; fsincos; fstps %0; fstps %1" : "=m"(c),"=m"(s) : "m"(angle) : "st");
-#elif defined(__APPLE__)
+#elif (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] Shared native transcendental policy on Apple silicon.
         c=bf2x87::store(bf2x87::cosValue(bf2x87::wide(angle)));
         s=bf2x87::store(bf2x87::sinValue(bf2x87::wide(angle)));
@@ -336,7 +336,7 @@ void BundledMesh::initializeFromTemplate()
     if (m_template->m_maxPartCount==1 && m_ownerObject)
         dispatch<void>(this,0x50,&static_cast<world::IObject*>(m_ownerObject)->getAbsoluteTransformation());
 }
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 namespace {
 // [CHOSEN, not recovered] Carry the x87 return through the caller's multiply/FISTP.
 bf2x87::Real bundledAnimationPhaseNative(BundledMesh& mesh,const Vec3& camera)
@@ -357,7 +357,7 @@ bf2x87::Real bundledAnimationPhaseNative(BundledMesh& mesh,const Vec3& camera)
 // PE 0x10104840
 float BundledMesh::animationPhase(const Vec3& camera)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     return bf2x87::store(bundledAnimationPhaseNative(*this,camera));
 #else
     Vec2 direction={camera.x-m_partTransforms[0]->m[12],camera.z-m_partTransforms[0]->m[14]};
@@ -373,7 +373,7 @@ float BundledMesh::animationPhase(const Vec3& camera)
 unsigned int BundledMesh::animationIndex(const Vec3& camera)
 {
     const unsigned int count=m_template->m_u2;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const unsigned int index=static_cast<unsigned int>(bf2x87::toIntTruncate(
         bf2x87::mul(bf2x87::wide(count),bundledAnimationPhaseNative(*this,camera))));
 #else
@@ -411,7 +411,7 @@ void BundledMesh::updateLodSelection()
     MeshBounds& bounds=geom.lods.data()->bounds;
     if(bounds.dirty)meshBoundsFinalize(bounds);
     const float radius=bounds.radius;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Spill the threshold once, retaining each scaled comparison.
     using namespace bf2x87;
     const float threshold=store(sub(mul(wide(dispatch<float>(view,0x2C)),wide(m_distanceToCamera)),wide(radius)));
@@ -423,7 +423,7 @@ void BundledMesh::updateLodSelection()
     unsigned int selected=0;
     for(unsigned int i=0;i<count;++i)
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const Real a=wide(dx9rend::rendererTailFloat(0x84C));
         const Real b=wide(dx9rend::rendererTailFloat(0x8B4));
         // The third lane of each four-element batch multiplies the two scales first.

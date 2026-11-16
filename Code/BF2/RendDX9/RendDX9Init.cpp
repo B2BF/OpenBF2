@@ -2190,22 +2190,22 @@ bool rendererRenderProbe(void* renderer, const char* vertexShader, const char* p
     int lastRow     = static_cast<int>(desc.Height);                    // [ebp+14h]
     if (rect)
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         firstColumn = bf2x87::toIntTruncate(rect[0]);
 #else
         firstColumn = static_cast<int>(rect[0]);
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         row         = bf2x87::toIntTruncate(rect[1]);
 #else
         row         = static_cast<int>(rect[1]);
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         lastColumn  = bf2x87::toIntTruncate(rect[2]);
 #else
         lastColumn  = static_cast<int>(rect[2]);
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         lastRow     = bf2x87::toIntTruncate(rect[3]);
 #else
         lastRow     = static_cast<int>(rect[3]);

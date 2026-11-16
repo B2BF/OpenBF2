@@ -1,6 +1,6 @@
 // so and AIDLL_w32ded.dll .
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../../../../Platform/X87Compat.h" // [CHOSEN, not recovered]
 #endif
 #include "IPIMobileReal.h"
@@ -90,7 +90,7 @@ void IPIMobileReal::getPositionEstimate(double time, Vec3& position)
     position.y = static_cast<float>(static_cast<double>(scaledY) + position.y);
     position.z = static_cast<float>(static_cast<double>(scaledZ) + position.z);
 #else
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain x87-width values on both Mac architectures.
     // [PLATFORM] ELF calls the timer first and rounds the delta before calling speed.
     const float difference = static_cast<float>(

@@ -12,7 +12,7 @@
 #include "../RendMisc/IRenderView.h"
 #include "../../RendDX9Abi/ThunkAbi.h"
 #include "../../RendDX9Abi/BfMemory.h"
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h"
 #endif
 #include <d3dx9.h>
@@ -404,7 +404,7 @@ void DebugBoxMesh::setTransform(const Mat4& source)
     const float* size = &dimensions.x;
     for (int i = 0; i < 3; ++i)
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] Keep the x87 subtraction unspilled on native Apple.
         if (!bf2x87::lessEqual(bf2x87::abs(bf2x87::sub(bf2x87::wide(size[i]), bf2x87::wide(1.0f))),
                           bf2x87::wide(FLT_EPSILON))) { unit = false; break; }

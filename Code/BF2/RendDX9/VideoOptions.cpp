@@ -1612,7 +1612,7 @@ int __fastcall videoOptions_slot34(void* /*self*/, void*)
 #endif
 {
     const int          benchmark = cpuBenchmarkScore();
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(BF2_NATIVE_X87)
     // [CHOSEN, not recovered] Retain x87 multiply/truncate behavior with the native CPU probe.
     const int cpuScore = bf2x87::toIntTruncate(
         bf2x87::mul(bf2x87::wide(cpuFamilyMultiplier()), bf2x87::wide(benchmark)));

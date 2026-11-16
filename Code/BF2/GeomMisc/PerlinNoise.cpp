@@ -4,7 +4,7 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h" // [CHOSEN, not recovered] x87 conversion results, including invalid inputs.
 #endif
 #include "PerlinNoise.h"
@@ -388,7 +388,7 @@ float PerlinNoise::octaveSum(float x)
 #else
         // `shl edx, cl` - the hardware masks the count to five bits.
         const float scaled = static_cast<float>(static_cast<int>(1u << (i & 31))) * x;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const int whole = bf2x87::toIntTruncate(scaled);                          // fistp, truncating
 #else
         const int whole = static_cast<int>(scaled);                          // fistp, truncating

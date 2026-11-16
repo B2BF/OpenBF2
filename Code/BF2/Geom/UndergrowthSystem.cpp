@@ -5,7 +5,7 @@
 
 #include "UndergrowthSystem.h"
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h"
 #endif
 #include "../Physics/Heightmap.h"
@@ -49,7 +49,7 @@ namespace {
 float clampRange(float value, float low, float high)
 {
     float v = value;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] FCOMI signals invalid for quiet NaNs as well.
     if (bf2x87::greaterEqual(bf2x87::Real(v), bf2x87::Real(high)))
         v = high;
@@ -451,7 +451,7 @@ float UndergrowthSystem::getGrassHeightAbove(const Vec3& position, const Vec3& v
         }
     }
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] The x distance and first interpolation have float stores;
     // the y/z distances and the second interpolation remain in x87 registers.
     typedef bf2x87::Real Real;
@@ -582,7 +582,7 @@ void UndergrowthSystem::densityCornersAt(float x, float z, int ids[4], float* fr
     worldToDensityCell(x, z, &col, &row, fracX, fracZ);
 
     const bool colIn  = col >= 0 && col < width;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] LEA wraps at 32 bits even for an invalid conversion result.
     const int nextCol = bf2x87::lowWord(static_cast<std::int64_t>(col) + 1);
     const int nextRow = bf2x87::lowWord(static_cast<std::int64_t>(row) + 1);

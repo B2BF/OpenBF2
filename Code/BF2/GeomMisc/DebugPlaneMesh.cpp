@@ -104,7 +104,7 @@ struct DebugPlaneMeshTemplate
 // stack arguments (retn 8), and nothing can read eax; no caller exposes a name.
 void PlaneVertex::assignFromFractions(float latitudeFraction, float longitudeFraction)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Only cos(latitude) is spilled; both angles stay unspilled.
     using namespace bf2x87;
     const Real latitude = sub(mul(wide(latitudeFraction), wide(3.1415927410125732421875f)),
@@ -325,7 +325,7 @@ void DebugPlaneMeshTemplate::generate()
     for (unsigned int row = 0; row < height; ++row)
     {
         if (!width) continue;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] Retain unspilled fractions until the position stores.
         using namespace bf2x87;
         const float divisor = store(wide(width - 1u));
@@ -340,7 +340,7 @@ void DebugPlaneMeshTemplate::generate()
         for (unsigned int column = 0; column < width; ++column)
         {
             PlaneVertex vertex;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             const Real fraction = div(wide(column), wide(divisor));
             vertex.position.x = store(sub(add(fraction, fraction), wide(1.0f)));
             vertex.u = store(fraction);

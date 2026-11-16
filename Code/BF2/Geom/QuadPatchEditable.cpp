@@ -218,7 +218,7 @@ PatchDetailLayer::~PatchDetailLayer()
 void PatchDetailLayer::init(QuadPatchEditable* newOwner, int newWidth)
 {
     owner = newOwner;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] IMUL retains the low 32 bits.
     byteSize = static_cast<int>(static_cast<unsigned int>(newWidth) * static_cast<unsigned int>(newWidth));
 #else
@@ -307,7 +307,7 @@ void PatchDetailLayer::clearQuad(int x, int z)
 float PatchDetailLayer::averageWeight(int x, int z)
 {
     assertCreated();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] FIADD accumulates and divides without a float spill.
     bf2x87::Real sum(0);
 #else
@@ -319,18 +319,18 @@ float PatchDetailLayer::averageWeight(int x, int z)
     for (int col = 0; col < block; ++col)
     {
         for (int row = 0; row < block; ++row)
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             sum = bf2x87::add(sum, bf2x87::Real(data[x * block + col + w * (z * block + row)]));
 #else
             sum = sum + static_cast<float>(data[x * block + col + w * (z * block + row)]);
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         count = static_cast<int>(static_cast<unsigned int>(count) + static_cast<unsigned int>(block));
 #else
         count += block;
 #endif
     }
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     return bf2x87::store(bf2x87::div(sum, bf2x87::Real(count)));
 #else
     return sum / static_cast<float>(count);
@@ -422,7 +422,7 @@ unsigned char PatchDetailLayers::dominantLayer(int x, int z)
     for (int i = 0; i < 6; ++i)
     {
         const float weight = records[i].averageWeight(x, z);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         if (bf2x87::greater(bf2x87::Real(weight), bf2x87::Real(best)))
 #else
         if (weight > best)
@@ -668,7 +668,7 @@ QuadPatchEditable::~QuadPatchEditable()
 void QuadPatchEditable::getFileIndices(int* x, int* z)
 {
     const int patchSize = editableTerrain->getPatchSize();                   // E+0x4C
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] ADD wraps after the two signed divisions.
     *x = static_cast<int>(static_cast<unsigned int>(editableTerrain->m_heightmapSizeX / patchSize / 2)
         + static_cast<unsigned int>(gridX));
@@ -691,12 +691,12 @@ void QuadPatchEditable::init(int x, int z)
     gridZ = z;
     worldX = x * te->m_patchSize;
     worldZ = z * te->m_patchSize;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     scaledX = bf2x87::toIntTruncate(te->m_primaryWorldScale.x) * worldX;
 #else
     scaledX = static_cast<int>(te->m_primaryWorldScale.x) * worldX;
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     scaledZ = bf2x87::toIntTruncate(te->m_primaryWorldScale.z) * worldZ;
 #else
     scaledZ = static_cast<int>(te->m_primaryWorldScale.z) * worldZ;
@@ -908,7 +908,7 @@ void QuadPatchEditable::rebuildVertexBuffers()
         static_cast<unsigned int>(side * side), 4u, 8u, "QuadPatchEditable");
     float* const heights = static_cast<float*>(dx9rend::vertexBufferLock(heightVertexBuffer, 0, 0, 0));
     ::dice::hfe::world::IHeightmapCluster* const cluster = heightmapClusterByName();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int step = bf2x87::toIntTruncate(editableTerrain->getPrimaryWorldScale().x);   // E+0x34
 #else
     const int step = static_cast<int>(editableTerrain->getPrimaryWorldScale().x);   // E+0x34
@@ -1312,7 +1312,7 @@ inline int texelPitch(const D3DLOCKED_RECT& locked)
 // result left in st0 for the caller's chop (folded in here; every caller chops it at once).
 int ceilChop(float value)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] The caller's FISTP returns integer indefinite on invalid input.
     return bf2x87::toIntTruncate(std::ceil(static_cast<double>(value)));
 #else
@@ -1327,24 +1327,24 @@ int ceilChop(float value)
 // PE 0x1019AE50
 unsigned int terrainEditPackColor(float c0, float c1, float c2, float c3)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     unsigned int packed = static_cast<unsigned int>(bf2x87::toIntTruncate(bf2x87::mul(bf2x87::Real(c2), bf2x87::Real(255)))) & 0xFFu;
 #else
     unsigned int packed = static_cast<unsigned int>(static_cast<int>(c2 * 255.0f)) & 0xFFu;
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     packed |= static_cast<unsigned int>(bf2x87::toIntTruncate(bf2x87::mul(bf2x87::Real(c3), bf2x87::Real(255)))) << 8;
 #else
     packed |= static_cast<unsigned int>(static_cast<int>(c3 * 255.0f)) << 8;
 #endif
     packed <<= 8;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     packed |= static_cast<unsigned int>(bf2x87::toIntTruncate(bf2x87::mul(bf2x87::Real(c1), bf2x87::Real(255)))) & 0xFFu;
 #else
     packed |= static_cast<unsigned int>(static_cast<int>(c1 * 255.0f)) & 0xFFu;
 #endif
     packed <<= 8;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     packed |= static_cast<unsigned int>(bf2x87::toIntTruncate(bf2x87::mul(bf2x87::Real(c0), bf2x87::Real(255)))) & 0xFFu;
 #else
     packed |= static_cast<unsigned int>(static_cast<int>(c0 * 255.0f)) & 0xFFu;
@@ -1367,7 +1367,7 @@ void terrainEditUnpackColor(float out[4], unsigned int color)
 // PE 0x101A1DD0
 void terrainEditLerpColor(float dst[4], const float src[4], float t)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Keep and component zero retain x87 width; other components spill.
     const bf2x87::Real keep = bf2x87::sub(bf2x87::Real(1), bf2x87::Real(t));
     const bf2x87::Real first = bf2x87::mul(keep, bf2x87::Real(dst[0]));
@@ -1739,7 +1739,7 @@ void QuadPatchEditable::paintDetail(float x, float z, float radius, int strength
     const float zr = z - static_cast<float>(scaledZ);                         // +0x7C
     if (!(xr + radius > 0.0f))
         return;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const float extent = static_cast<float>(bf2x87::toIntTruncate(
         static_cast<float>(te->m_patchSize) * te->m_primaryWorldScale.x));
 #else
@@ -1757,7 +1757,7 @@ void QuadPatchEditable::paintDetail(float x, float z, float radius, int strength
     const float xs = xr * scale;
     const float zs = zr * scale;
     const float rs = scale * radius;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     int x0 = bf2x87::toIntTruncate(xs - rs);
 #else
     int x0 = static_cast<int>(xs - rs);
@@ -1770,7 +1770,7 @@ void QuadPatchEditable::paintDetail(float x, float z, float radius, int strength
         if (size >= top)
             xEnd = top;
     }
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     int z0 = bf2x87::toIntTruncate(zs - rs);
 #else
     int z0 = static_cast<int>(zs - rs);
@@ -1810,7 +1810,7 @@ void QuadPatchEditable::paintDetail(float x, float z, float radius, int strength
             double falloff = std::cos(static_cast<double>(distance * inverse * 1.5707964f));   // flt_1022106C
             if (!(0.0 < falloff))
                 falloff = 0.0;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             const int amount = bf2x87::toIntTruncate(static_cast<float>(static_cast<double>(strength) * falloff));
 #else
             const int amount = static_cast<int>(static_cast<float>(static_cast<double>(strength) * falloff));
@@ -1835,7 +1835,7 @@ void QuadPatchEditable::paintDetail(float x, float z, float radius, int strength
 // PE 0x1019FF40
 void QuadPatchEditable::paintColor(float x, float z, float radius, int strength, unsigned int color)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Match FILD inputs, retained arithmetic and attested spills.
     const float xr = bf2x87::store(bf2x87::sub(bf2x87::Real(x), bf2x87::Real(scaledX)));
     const float zr = bf2x87::store(bf2x87::sub(bf2x87::Real(z), bf2x87::Real(scaledZ)));
@@ -1843,19 +1843,19 @@ void QuadPatchEditable::paintColor(float x, float z, float radius, int strength,
     const float xr = x - static_cast<float>(scaledX);
     const float zr = z - static_cast<float>(scaledZ);
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int extentInt = bf2x87::toIntTruncate(bf2x87::mul(bf2x87::Real(editableTerrain->m_patchSize), bf2x87::Real(editableTerrain->m_primaryWorldScale.x)));
 #else
     const int extentInt = static_cast<int>(static_cast<float>(editableTerrain->m_patchSize) * editableTerrain->m_primaryWorldScale.x);
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     if (!bf2x87::greater(bf2x87::add(bf2x87::Real(xr), bf2x87::Real(radius)), bf2x87::Real(0)))
 #else
     if (!(xr + radius > 0.0f))
 #endif
         return;
     const float extent = static_cast<float>(extentInt);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     if (!bf2x87::less(bf2x87::sub(bf2x87::Real(xr), bf2x87::Real(radius)), bf2x87::Real(extent))
         || !bf2x87::greater(bf2x87::add(bf2x87::Real(zr), bf2x87::Real(radius)), bf2x87::Real(0))
         || !bf2x87::less(bf2x87::sub(bf2x87::Real(zr), bf2x87::Real(radius)), bf2x87::Real(extent))
@@ -1869,7 +1869,7 @@ void QuadPatchEditable::paintColor(float x, float z, float radius, int strength,
         makeColormapEditCopy();
 
     const int size = editableTerrain->m_patchColormapSize;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const bf2x87::Real scale = bf2x87::div(bf2x87::Real(size), bf2x87::Real(extent));
     const float xs = bf2x87::store(bf2x87::mul(bf2x87::Real(xr), scale));
     const float zs = bf2x87::store(bf2x87::mul(bf2x87::Real(zr), scale));
@@ -1882,7 +1882,7 @@ void QuadPatchEditable::paintColor(float x, float z, float radius, int strength,
     const float rs = scale * radius;
     const float inverse = 1.0f / rs;
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     int x0 = bf2x87::toIntTruncate(bf2x87::sub(bf2x87::Real(xs), bf2x87::Real(rs)));
 #else
     int x0 = static_cast<int>(xs - rs);
@@ -1891,7 +1891,7 @@ void QuadPatchEditable::paintColor(float x, float z, float radius, int strength,
         x0 = 0;
     int xEnd = size;
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const int top = ceilChop(bf2x87::store(bf2x87::add(bf2x87::Real(xs), bf2x87::Real(rs))));
 #else
         const int top = ceilChop(xs + rs);
@@ -1899,7 +1899,7 @@ void QuadPatchEditable::paintColor(float x, float z, float radius, int strength,
         if (size >= top)
             xEnd = top;
     }
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     int z0 = bf2x87::toIntTruncate(bf2x87::sub(bf2x87::Real(zs), bf2x87::Real(rs)));
 #else
     int z0 = static_cast<int>(zs - rs);
@@ -1908,7 +1908,7 @@ void QuadPatchEditable::paintColor(float x, float z, float radius, int strength,
         z0 = 0;
     int zEnd = size;
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const int top = ceilChop(bf2x87::store(bf2x87::add(bf2x87::Real(zs), bf2x87::Real(rs))));
 #else
         const int top = ceilChop(zs + rs);
@@ -1929,7 +1929,7 @@ void QuadPatchEditable::paintColor(float x, float z, float radius, int strength,
 
     for (int px = x0; px < xEnd; ++px)
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         if (z0 >= zEnd)
             continue;
         const bf2x87::Real dx = bf2x87::sub(bf2x87::Real(px), bf2x87::Real(xs));
@@ -1940,7 +1940,7 @@ void QuadPatchEditable::paintColor(float x, float z, float radius, int strength,
 #endif
         for (int pz = z0; pz < zEnd; ++pz)
         {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             const bf2x87::Real dz = bf2x87::sub(bf2x87::Real(pz), bf2x87::Real(zs));
             const bf2x87::Real distance = bf2x87::squareRoot(bf2x87::add(bf2x87::mul(dz, dz), bf2x87::Real(dxSquared)));
             const float sampledDistance = bf2x87::store(distance);
@@ -1955,7 +1955,7 @@ void QuadPatchEditable::paintColor(float x, float z, float radius, int strength,
             const unsigned int* const original = colormapBits + px + pz * texelPitch(colormapLocked);
             float colour[4];
             terrainEditUnpackColor(colour, color);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             bf2x87::Real falloff = bf2x87::cosValue(bf2x87::mul(bf2x87::mul(
                 bf2x87::Real(sampledDistance), bf2x87::Real(inverse)), bf2x87::Real(1.5707964f)));
             if (!bf2x87::less(bf2x87::Real(0), falloff))
@@ -1966,7 +1966,7 @@ void QuadPatchEditable::paintColor(float x, float z, float radius, int strength,
                 falloff = 0.0;
 #endif
             const float target[4] = { colour[2], colour[1], colour[0], colour[3] };
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             const float t = bf2x87::store(bf2x87::abs(bf2x87::mul(bf2x87::mul(falloff,
                 bf2x87::Real(strength)), bf2x87::Real(0.0039215689f))));
 #else
@@ -2010,7 +2010,7 @@ void QuadPatchEditable::paintLowDetailColor(float x, float z, float radius, int 
     const int size = terrain->m_patchDetailmapSize;
     const int patchSize = terrain->m_patchSize;
     const int texelsPerPatch = size / patchSize;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Match the FILD inputs, the retained x87 arithmetic and the attested spills.
     const int cx = bf2x87::toIntTruncate(bf2x87::mul(bf2x87::Real(x), bf2x87::Real(texelsPerPatch)));
     const int cz = bf2x87::toIntTruncate(bf2x87::mul(bf2x87::Real(z), bf2x87::Real(texelsPerPatch)));
@@ -2049,7 +2049,7 @@ void QuadPatchEditable::paintLowDetailColor(float x, float z, float radius, int 
     unsigned int* const bits = static_cast<unsigned int*>(locked.pBits);
     for (int px = xStart; px < xEnd; ++px)
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const bf2x87::Real dx = bf2x87::sub(bf2x87::Real(px), bf2x87::Real(cx));
         const float dxSquared = bf2x87::store(bf2x87::mul(dx, dx));
 #else
@@ -2058,7 +2058,7 @@ void QuadPatchEditable::paintLowDetailColor(float x, float z, float radius, int 
 #endif
         for (int pz = zStart; pz < zEnd; ++pz)
         {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             const bf2x87::Real dz = bf2x87::sub(bf2x87::Real(pz), bf2x87::Real(centreZ));
             const bf2x87::Real distance = bf2x87::squareRoot(
                 bf2x87::add(bf2x87::mul(dz, dz), bf2x87::Real(dxSquared)));
@@ -2117,7 +2117,7 @@ void QuadPatchEditable::paintColorFromTexture(float x, float z, float radius, in
     TerrainEditable* const te = editableTerrain;
     const float xr = x - static_cast<float>(scaledX);
     const float zr = z - static_cast<float>(scaledZ);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] the FILD * FMUL product is chopped unrounded (0x101A10FC..0x101A110F).
     const int extentInt = bf2x87::toIntTruncate(bf2x87::mul(bf2x87::Real(te->m_patchSize), bf2x87::Real(te->m_primaryWorldScale.x)));
 #else
@@ -2138,7 +2138,7 @@ void QuadPatchEditable::paintColorFromTexture(float x, float z, float radius, in
     const float zs = zr * scale;
     const float rs = scale * radius;
     const float inverse = 1.0f / rs;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     int x0 = bf2x87::toIntTruncate(xs - rs);
 #else
     int x0 = static_cast<int>(xs - rs);
@@ -2151,7 +2151,7 @@ void QuadPatchEditable::paintColorFromTexture(float x, float z, float radius, in
         if (size >= top)
             xEnd = top;
     }
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     int z0 = bf2x87::toIntTruncate(zs - rs);
 #else
     int z0 = static_cast<int>(zs - rs);
@@ -2196,7 +2196,7 @@ void QuadPatchEditable::paintColorFromTexture(float x, float z, float radius, in
             if (distance > rs)
                 continue;
             const float inverseScale = 1.0f / scale;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             int u = bf2x87::toIntTruncate(std::floor(static_cast<double>(
                 (inverseScale * pxF + static_cast<float>(scaledX)) * record->colorTextureTiling.x + 0.5f)));
 #else
@@ -2206,7 +2206,7 @@ void QuadPatchEditable::paintColorFromTexture(float x, float z, float radius, in
             u = u % textureWidth;
             if (u < 0)
                 u += textureWidth;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             int v = bf2x87::toIntTruncate(std::floor(static_cast<double>(
                 (inverseScale * pzF + static_cast<float>(scaledZ)) * record->colorTextureTiling.y + 0.5f)));
 #else
@@ -2473,7 +2473,7 @@ void QuadPatchEditable::getWorldBounds(TerrainAabb& bounds)
     bounds.min.y = 0.0f;
     bounds.min.x = static_cast<float>(originX);
     bounds.min.z = static_cast<float>(originZ);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Z retains the FILD size; X reloads its float spill.
     const float size = bf2x87::store(bf2x87::Real(patchSize));
     const bf2x87::Real maxZ = bf2x87::add(bf2x87::mul(bf2x87::Real(patchSize), bf2x87::Real(scaleZ)), bf2x87::Real(scaledZ));

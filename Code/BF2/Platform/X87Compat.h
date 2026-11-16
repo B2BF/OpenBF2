@@ -9,11 +9,12 @@
 #include <cstdlib>
 #include <limits>
 // The soft 80-bit Real (ExtendedFloat) replaces long double wherever long double is not the x87
-// extended format: Apple silicon, the BF2_TEST_SOFT_EXTENDED test builds, and any GCC/Clang target
-// whose long double has fewer than 64 mantissa bits (binary64 long-double ports). [CHOSEN, not
-// recovered] platform layer; retail is x87 throughout.
+// extended format: Apple silicon, BF2_TEST_SOFT_EXTENDED test builds, and GCC/Clang targets
+// whose long double has a different significand precision (binary64 or binary128). Linux
+// AArch64 uses binary128, which would retain bits the x87 discards. [CHOSEN, not recovered]
+// Native numeric selection follows issue #36; retail is x87 throughout.
 #if (defined(__APPLE__) && defined(__aarch64__)) || defined(BF2_TEST_SOFT_EXTENDED) \
-    || (defined(__LDBL_MANT_DIG__) && __LDBL_MANT_DIG__ < 64)
+    || (defined(__LDBL_MANT_DIG__) && __LDBL_MANT_DIG__ != 64)
 #define BF2X87_SOFT_EXTENDED 1
 #include "ExtendedFloat.h"
 #endif
@@ -46,8 +47,8 @@ template<class T> inline Real wide(T value)
 // the Windows arms never enter bf2x87 (inline x87 on x86, SSE2 on x64). MSVC defines no
 // __LDBL_MANT_DIG__, so it never selects the soft Real either - as before this check existed.
 #if !defined(BF2X87_SOFT_EXTENDED) && !defined(_MSC_VER)
-static_assert(std::numeric_limits<long double>::digits >= 64,
-              "bf2x87: a long double narrower than x87 extended must select BF2X87_SOFT_EXTENDED");
+static_assert(std::numeric_limits<long double>::digits == 64,
+              "bf2x87: a non-x87 long double must select BF2X87_SOFT_EXTENDED");
 #endif
 #if defined(BF2X87_SOFT_EXTENDED)
 inline Real add(Real a, Real b) { return a + b; }

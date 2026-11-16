@@ -1,5 +1,5 @@
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../../../../Platform/X87Compat.h" // [CHOSEN, not recovered]
 #endif
 #include "SquadFormation.h"
@@ -83,7 +83,7 @@ static bool formationLeaderWithinRange(const Vec3& leader, const Vec3& squad)
     }
     return within;
 #else
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain x87-width values on both Mac architectures.
     const bf2x87::Real deltaX = static_cast<bf2x87::Real>(leader.x) - squad.x;
     const bf2x87::Real deltaY = static_cast<bf2x87::Real>(leader.y) - squad.y;
@@ -130,7 +130,7 @@ static bool trailPointIsSet(const Vec3& point)
     }
     return set;
 #else
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain x87-width values on both Mac architectures.
     const bf2x87::Real x = point.x;
     const bf2x87::Real y = point.y;
@@ -143,7 +143,7 @@ static bool trailPointIsSet(const Vec3& point)
 #if defined(_WIN32)
     return (z * z + y * y) + x * x > static_cast<long double>(0.001f);
 #else
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain x87-width values on both Mac architectures.
     return (y * y + x * x) + z * z > static_cast<bf2x87::Real>(0.001f);
 #else
@@ -193,7 +193,7 @@ static float trailCrumbDistanceSq(const Vec3& anchor, const Vec3& crumb)
     const long double dz = static_cast<float>(static_cast<long double>(anchor.z) - crumb.z);
     return static_cast<float>((dx * dx + dy * dy) + dz * dz);
 #else
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain x87-width values on both Mac architectures.
     const bf2x87::Real dx = static_cast<bf2x87::Real>(crumb.x) - anchor.x;
     const bf2x87::Real dy = static_cast<bf2x87::Real>(crumb.y) - anchor.y;
@@ -242,14 +242,14 @@ static float trailMemberDistanceSq(const Vec3& position, const Vec3& anchor)
 #if defined(_WIN32)
     const long double dx = static_cast<float>(static_cast<long double>(position.x) - anchor.x);
 #else
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain x87-width values on both Mac architectures.
     const bf2x87::Real dx = static_cast<bf2x87::Real>(position.x) - anchor.x;
 #else
     const long double dx = static_cast<long double>(position.x) - anchor.x;
 #endif
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain x87-width values on both Mac architectures.
     const bf2x87::Real dy = static_cast<bf2x87::Real>(position.y) - anchor.y;
     const bf2x87::Real dz = static_cast<bf2x87::Real>(position.z) - anchor.z;
@@ -762,14 +762,14 @@ static bool nearerFormationMember(const Vec3& position, const Vec3& destination,
 #if defined(_WIN32)
     const long double dx = static_cast<float>(static_cast<long double>(position.x) - destination.x);
 #else
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain x87-width values on both Mac architectures.
     const bf2x87::Real dx = static_cast<bf2x87::Real>(position.x) - destination.x;
 #else
     const long double dx = static_cast<long double>(position.x) - destination.x;
 #endif
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain x87-width values on both Mac architectures.
     const bf2x87::Real dy = static_cast<bf2x87::Real>(position.y) - destination.y;
     const bf2x87::Real dz = static_cast<bf2x87::Real>(position.z) - destination.z;

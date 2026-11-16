@@ -13,7 +13,7 @@
 #include "../RendDX9/ShaderParameter.h"
 #include "../RendDX9/RendDX9Base.h"
 #include "../RendMisc/IRenderView.h"
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h"
 #endif
 #include <cfloat>
@@ -442,7 +442,7 @@ void DebugLineGraphD3D::setHistorySize(int n)
 // PE 0x100A2520. No ring/capacity guard; NaNs do not change either extremum.
 int DebugLineGraphD3D::addSample(float v)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const bool below = bf2x87::less(bf2x87::wide(v), bf2x87::wide(m_seenMin));
 #else
     const bool below = v < m_seenMin;
@@ -459,7 +459,7 @@ int DebugLineGraphD3D::addSample(float v)
     }
     else
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const bool above = bf2x87::greater(bf2x87::wide(v), bf2x87::wide(m_seenMax));
 #else
         const bool above = v > m_seenMax;
@@ -503,7 +503,7 @@ void DebugLineGraphD3D::setColors(unsigned a, unsigned b, unsigned c)
 
 bool DebugLineGraphD3D::setRange(float lo, float hi)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     if (bf2x87::greaterEqual(bf2x87::wide(lo), bf2x87::wide(hi)))
 #else
     if (lo >= hi)
@@ -554,7 +554,7 @@ int graphCoordinate(float value)
         fldcw saved
     }
     return result;
-#elif defined(__APPLE__)
+#elif (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     return bf2x87::integer<int>(bf2x87::wide(value));
 #else
     if (!std::isfinite(value) || value < -2147483648.0 || value >= 2147483648.0)
@@ -582,7 +582,7 @@ int graphRightCoordinate(float x, float width)
         fldcw saved
     }
     return result;
-#elif defined(__APPLE__)
+#elif (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     return bf2x87::integer<int>(bf2x87::add(
         bf2x87::add(bf2x87::wide(x), bf2x87::wide(width)), bf2x87::wide(10.0f)));
 #else
@@ -610,7 +610,7 @@ void DebugLineGraphD3D::draw()
     {
         const int index = (static_cast<int>(m_writeIndex) + m_capacity + count - 1) % m_capacity;
         const float value = m_samples[index];
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] Retain x87 intermediates through the final y store.
         using namespace bf2x87;
         vertices[count].x = store(wide(count));

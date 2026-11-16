@@ -6,7 +6,7 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h" // [CHOSEN, not recovered] x87 conversion results, including invalid inputs.
 #endif
 #include "UndergrowthSystem.h"
@@ -316,7 +316,7 @@ void UndergrowthSystem::initSwayTables()
     for (int i = 0; i < 16; ++i)
     {
         int r = (static_cast<int>(lcgrandStep(&m_random.m_seed) | 0x80u) >> 7) + 1;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] FILD products stay wide until the table-entry stores.
         m_windSpeed[i] = bf2x87::store(bf2x87::Real(r) * m_swaySpeedDiff
             * 5.96046448e-08f + m_swaySpeed);
@@ -324,7 +324,7 @@ void UndergrowthSystem::initSwayTables()
         m_windSpeed[i] = static_cast<float>(r) * m_swaySpeedDiff * 5.96046448e-08f + m_swaySpeed;
 #endif
         r = (static_cast<int>(lcgrandStep(&m_random.m_seed) | 0x80u) >> 7) + 1;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         m_windAmplitude[i] = bf2x87::store(bf2x87::Real(r) * m_swayScaleDiff
             * 5.96046448e-08f + m_swayScale);
 #else
@@ -693,7 +693,7 @@ void UndergrowthSystem::load(const std::string& levelPathArgument)
     const int patchSize = terrain->getPatchSize();                           // Terrain +0x34
     m_cellSize = static_cast<float>(patchSize) * worldScale->x / subdivideF; // +0xE8
     // `fdivr [esi+30h]`, ceil (the double CRT one), then fistp under a truncating control word.
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int radius = bf2x87::toIntTruncate(std::ceil(static_cast<double>(m_viewDistance / m_cellSize)));
 #else
     const int radius = static_cast<int>(std::ceil(static_cast<double>(m_viewDistance / m_cellSize)));
@@ -720,14 +720,14 @@ void UndergrowthSystem::load(const std::string& levelPathArgument)
             const UndergrowthType& each = current.types[t];
             // density * cellSize * cellSize, truncated (fistp under the truncating control word),
             // computed twice as shipped.
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             vertices += each.vertices.size() *
                         static_cast<unsigned int>(bf2x87::toIntTruncate(each.density * m_cellSize * m_cellSize));
 #else
             vertices += each.vertices.size() *
                         static_cast<unsigned int>(static_cast<int>(each.density * m_cellSize * m_cellSize));
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             indices += each.indices.size() *
                        static_cast<unsigned int>(bf2x87::toIntTruncate(each.density * m_cellSize * m_cellSize));
 #else
@@ -1066,24 +1066,24 @@ bool UndergrowthSystem::buildMeshes(bool /*secondPass - never read*/)
                 quad[7].position.x = 0.0f;      quad[7].position.y = height; quad[7].position.z = halfWidth;
 
                 // uv in 1/32767 atlas units (flt_10219558), each through __ftol2 and its low word.
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                 const short u0 = static_cast<short>(bf2x87::toIntTruncate(rect.uOffset * 32767.0f));
 #else
                 const short u0 = static_cast<short>(static_cast<int>(rect.uOffset * 32767.0f));
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                 const short v0 = static_cast<short>(bf2x87::toIntTruncate(rect.vOffset * 32767.0f));
 #else
                 const short v0 = static_cast<short>(static_cast<int>(rect.vOffset * 32767.0f));
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                 const short u1 = static_cast<short>(
                     bf2x87::toIntTruncate((rect.uOffset + rect.width) * 32767.0f));
 #else
                 const short u1 = static_cast<short>(
                     static_cast<int>((rect.uOffset + rect.width) * 32767.0f));
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                 const short v1 = static_cast<short>(
                     bf2x87::toIntTruncate((rect.vOffset + rect.height) * 32767.0f));
 #else
@@ -1112,7 +1112,7 @@ bool UndergrowthSystem::buildMeshes(bool /*secondPass - never read*/)
 
             for (unsigned int v = 0; v < type.vertices.size(); ++v)
             {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                 type.vertices[v].colorScale = static_cast<unsigned char>(
                     bf2x87::toIntTruncate((1.0f - type.terrainColorScale) * 255.0f));   // flt_101E14C0
 #else
@@ -1223,14 +1223,14 @@ void UndergrowthSystem::loadMesh(UndergrowthType& type, const UndergrowthAtlasRe
                     UndergrowthVertex vertex;
                     vertex.position = positions[face[0] - 1];
                     const Vec2& uv = texCoords[face[1] - 1];
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                     vertex.texCoord[0] = static_cast<short>(
                         bf2x87::toIntTruncate((uv.x * rect.width + rect.uOffset) * 32767.0f));
 #else
                     vertex.texCoord[0] = static_cast<short>(
                         static_cast<int>((uv.x * rect.width + rect.uOffset) * 32767.0f));
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                     vertex.texCoord[1] = static_cast<short>(
                         bf2x87::toIntTruncate((uv.y * rect.height + rect.vOffset) * 32767.0f));
 #else

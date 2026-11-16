@@ -5,7 +5,7 @@
 // conversion texture; storeResults uses the lock's width as the texel pitch.
 #ifdef BF2_IMAGE_RENDDX9
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h"   // [CHOSEN, not recovered] x87 intermediates and conversions.
 #endif
 #include "TerrainLightSampling.h"
@@ -104,7 +104,7 @@ inline void clearBlock(TerrainLightBlock& block)
 // A scaled box extent truncated to int: FISTP (truncating control word) of the unstored product.
 inline int scaledExtent(float extent, float resolution)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] The product stays on the x87 stack through the conversion.
     return bf2x87::toIntTruncate(bf2x87::mul(bf2x87::wide(extent), bf2x87::wide(resolution)));
 #else
@@ -115,7 +115,7 @@ inline int scaledExtent(float extent, float resolution)
 // One sample coordinate: cursor * step * extent + box minimum, rounded only at the float store.
 inline float sampleCoordinate(unsigned int cursor, float step, float extent, float minimum)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] FILD and the three operations stay unstored until the position store.
     return bf2x87::store(bf2x87::add(bf2x87::mul(bf2x87::mul(
         bf2x87::wide(static_cast<double>(cursor)), bf2x87::wide(step)), bf2x87::wide(extent)),
@@ -128,7 +128,7 @@ inline float sampleCoordinate(unsigned int cursor, float step, float extent, flo
 // One packed channel: __ftol2's 64-bit truncation of value * 255, its low byte kept.
 inline unsigned int channelByte(float value)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] The product reaches __ftol2 without a float store.
     return static_cast<unsigned int>(bf2x87::toInt64Truncate(
         bf2x87::mul(bf2x87::wide(value), bf2x87::wide(255.0f)))) & 0xFFu;

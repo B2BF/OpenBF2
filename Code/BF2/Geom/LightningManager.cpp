@@ -87,7 +87,7 @@ const D3DVERTEXELEMENT9 kLightningVertexElements[] =
 // x87 truncating conversions (fistp under a chop control word, and _ftol2).
 inline int truncateToInt(float value)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     return bf2x87::toIntTruncate(value);
 #else
     return static_cast<int>(value);
@@ -96,7 +96,7 @@ inline int truncateToInt(float value)
 
 inline long long truncateToInt64(float value)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     return bf2x87::toInt64Truncate(value);
 #else
     return static_cast<long long>(value);

@@ -7,7 +7,7 @@
 #include "../../RendDX9Abi/ThunkAbi.h"
 #include <cfloat>
 #include <cmath>
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h"
 #endif
 
@@ -46,7 +46,7 @@ inline void RD9_THUNK setName(GeometryInstanceData* s RD9_THUNK_EDX, const std::
 // PE 0x10037DC0. [INFERRED] Name; tolerance is inclusive and NaNs are rejected.
 inline bool equalVector(const Vec3& value, const Vec3& other)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Preserve the unspilled x87 subtractions on native Apple.
     using namespace bf2x87;
     return lessEqual(bf2x87::abs(sub(wide(value.x), wide(other.x))), wide(FLT_EPSILON)) &&

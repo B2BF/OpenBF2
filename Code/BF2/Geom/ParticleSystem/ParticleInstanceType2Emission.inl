@@ -15,7 +15,7 @@ float* psmType2EmissionSphere(float* output,void* descriptor,void* self,float* p
     const float phi=static_cast<float>(psmEmissionRandomInteger()*static_cast<double>(3.7450703871400037e-7f));
     const double theta=psmEmissionRandomInteger()*static_cast<double>(1.8725351935700019e-7f);
     const float savedTheta=static_cast<float>(theta);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const float sineTheta=bf2x87::store(bf2x87::sinValue(bf2x87::wide(theta)));
 #else
     const float sineTheta=static_cast<float>(::sin(theta));
@@ -25,7 +25,7 @@ float* psmType2EmissionSphere(float* output,void* descriptor,void* self,float* p
         *0.000000059604644775390625;
     const double xRadius=static_cast<double>(xRandom)*psmDescriptor2<float>(descriptor,0x14);
     const double yRadius=static_cast<double>(yRandom)*psmDescriptor2<float>(descriptor,0x18);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain FSIN/FCOS results through the final products.
     using bf2x87::wide;
     particle[1]=bf2x87::store(bf2x87::cosValue(wide(phi))*wide(xRadius)*wide(sineTheta));
@@ -42,7 +42,7 @@ float* psmType2EmissionSphere(float* output,void* descriptor,void* self,float* p
 // PE 0x1017C5C0
 float* psmType2EmissionCylinder(float* output,void* descriptor,void* self,float* particle)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] The angle has no float/double spill before FSIN/FCOS.
     using bf2x87::wide;
     const bf2x87::Real angle=(wide(psmEmissionSymmetric())*wide(psmDescriptor2<float>(descriptor,0x5C))
@@ -56,7 +56,7 @@ float* psmType2EmissionCylinder(float* output,void* descriptor,void* self,float*
     unsigned int axis=0;
     for(unsigned int i=0;i<3;++i)
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] Keep the first self-comparison's FCOM invalid exception too.
         if(bf2x87::greater(wide(psmDescriptor2<float>(descriptor,0x14+4*i)),
             wide(psmDescriptor2<float>(descriptor,0x14+4*axis))))axis=i;
@@ -191,7 +191,7 @@ float* psmType2NewParticle(void* self)
 // PE 0x1017B8E0: speed threshold, recently visible gate, timed emission and moving-emitter catch-up.
 void psmType2Emit(void* self,float dt)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Preserve x87 live arithmetic and integer conversion.
     using Real=bf2x87::Real;
 #else
@@ -249,7 +249,7 @@ void psmType2Emit(void* self,float dt)
             if(particle)
             {
                 particle[35]+=psmInstanceB<float>(self,0x1C);particle[36]+=psmInstanceB<float>(self,0x20);particle[37]+=psmInstanceB<float>(self,0x24);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                 const unsigned int steps=static_cast<unsigned int>(bf2x87::toIntTruncate(
                     (static_cast<Real>(psmInstanceB<float>(self,0xF0))-psmInstanceB<float>(self,0xF4))*100.0f));
 #else

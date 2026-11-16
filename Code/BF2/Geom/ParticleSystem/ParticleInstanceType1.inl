@@ -65,7 +65,7 @@ public:
         // NaN routing is retail's: an unordered lifetime is kept, an unordered emit time counts as
         // non-zero.
         const float emitTime=psmDescriptor1<float>(descriptor,0x194);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] Preserve the live x87 result and FISTP integer indefinite.
         using bf2x87::wide;
         bf2x87::Real capacityTime=wide(psmDescriptor1<float>(descriptor,0x9C))

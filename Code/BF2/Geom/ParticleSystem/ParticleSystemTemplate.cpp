@@ -455,7 +455,7 @@ void RD9_THUNK pt_s140(void* self RD9_THUNK_EDX, unsigned a)
 unsigned RD9_THUNK pt_s141(void* self RD9_THUNK_EDX)
 {
     void* atlas = psmDescriptor0<void*>(self, 0x25C);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Keep unsigned FILD and FMUL live through FISTP.
     if (atlas) return static_cast<unsigned>(bf2x87::toIntTruncate(
         bf2x87::wide(static_cast<dx9rend::EngineTexture*>(atlas)->width)*bf2x87::wide(F(self, 0xD8))));
@@ -468,7 +468,7 @@ unsigned RD9_THUNK pt_s141(void* self RD9_THUNK_EDX)
 void RD9_THUNK pt_s142(void* self RD9_THUNK_EDX, unsigned a)
 {
     void* atlas = psmDescriptor0<void*>(self, 0x25C);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] The numerator spills to float; the unsigned divisor stays live.
     if (atlas) F(self, 0xDC) = static_cast<float>(bf2x87::wide(static_cast<float>(a))
         /bf2x87::wide(static_cast<dx9rend::EngineTexture*>(atlas)->height));
@@ -481,7 +481,7 @@ void RD9_THUNK pt_s142(void* self RD9_THUNK_EDX, unsigned a)
 unsigned RD9_THUNK pt_s143(void* self RD9_THUNK_EDX)
 {
     void* atlas = psmDescriptor0<void*>(self, 0x25C);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Keep unsigned FILD and FMUL live through FISTP.
     if (atlas) return static_cast<unsigned>(bf2x87::toIntTruncate(
         bf2x87::wide(static_cast<dx9rend::EngineTexture*>(atlas)->height)*bf2x87::wide(F(self, 0xDC))));

@@ -343,7 +343,7 @@ void Particle::init()
             // [PLATFORM] BF2.exe multiplies the x87 sample by the count (fimul), floors it as a
             // double (msvcr71 floor) and truncates; the ELF uses floorf on the float product.
             const float sample = sampleDistribution(partDistribution);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             const int part = bf2x87::toIntTruncate(std::floor(static_cast<double>(sample)
                                                          * static_cast<double>(partCount)));
 #else
@@ -452,7 +452,7 @@ void Particle::handleUpdate(float deltaTime, unsigned int)
         if (clamped > 1.0f)                        // PE `test ah, 41h; jne` / ELF fcmovnbe
             clamped = 1.0f;
         const float scaled = clamped * 100.0f;     // 101 curve positions, 0..100
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         sample = bf2x87::toIntTruncate(scaled);         // truncation (PE fistp under a chop control word)
 #else
         sample = static_cast<int>(scaled);         // truncation (PE fistp under a chop control word)

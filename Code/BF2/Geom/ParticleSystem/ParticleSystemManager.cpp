@@ -9,7 +9,7 @@
 #endif
 
 #include "../../../RendDX9Abi/ThunkAbi.h"
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../../Platform/X87Compat.h" // [CHOSEN, not recovered] x87 conversion results, including invalid inputs.
 #endif
 #include "ParticleSystemManager.h"
@@ -231,7 +231,7 @@ void psmDestroyRendererList(unsigned char* renderer, unsigned int offset)
 // Invalid inputs retain FISTP integer indefinite.
 inline unsigned int psmScaledLimit(unsigned int capacity, float factor)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     return static_cast<unsigned int>(
         bf2x87::toIntTruncate(bf2x87::wide(capacity) * bf2x87::wide(factor)));
 #else
@@ -804,7 +804,7 @@ bool psmCreateTrailSide(unsigned char* renderer, unsigned int sides)
             233, "") << "Failed to craete originalVertices";
         return false;
     }
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Preserve the x87 division and live cosine argument.
     const float step = bf2x87::store(bf2x87::wide(360.0f) / bf2x87::wide(2u * sides));
 #else
@@ -812,7 +812,7 @@ bool psmCreateTrailSide(unsigned char* renderer, unsigned int sides)
 #endif
     for (unsigned int side = 0; side < sides; ++side)
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const bf2x87::Real angle = (bf2x87::wide(side) * bf2x87::wide(step) + bf2x87::wide(step)) *
             bf2x87::wide(0.01745329238474369049f);
         const float sine = bf2x87::store(bf2x87::sinValue(bf2x87::wide(bf2x87::store(angle))));
@@ -1826,7 +1826,7 @@ float ParticleSystemManager::getStartFadePercentageOfViewDistance() const { retu
 // PE 0x100D3120 / 0x100D3030: 200 is a minimum, including unordered comparisons.
 void ParticleSystemManager::setViewDistance(float value)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain the x87 FCOM invalid/unordered behavior.
     m_effectiveViewDistance = bf2x87::less(bf2x87::wide(200.0f), bf2x87::wide(value)) ? value : 200.0f;
 #else

@@ -2,7 +2,7 @@
 // factory82DB60, eager870360 and every differing body read before recovery.
 // The class is reachable from Bf2HudBuilder::setNodeLogicShowVariable, which
 // pairs it with IntRefData under an EqualData.
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../../Platform/X87Compat.h" // [CHOSEN, not recovered] x87 conversion results, including invalid inputs.
 #endif
 #include "IntData.h"
@@ -45,7 +45,7 @@ bool IntData::setFloat(System*, float value)
     // Round half away from zero, then the ordinary truncating x86 cast
     // (fnstcw / or 0C00h / fistp / fldcw). A NaN takes the negative arm.
     // Text/cache refresh is deferred until character access.
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     m_value = bf2x87::toIntTruncate(value < 0.0f ? value - 0.5f : value + 0.5f);
 #else
     m_value = static_cast<int>(value < 0.0f ? value - 0.5f : value + 0.5f);

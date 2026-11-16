@@ -3,7 +3,7 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h" // [CHOSEN, not recovered] x87 conversion results, including invalid inputs.
 #endif
 #include "WeatherManager.h"
@@ -28,7 +28,7 @@ const unsigned int kIID_IWeatherManager = 0xB801DD05u;   // dword_1021AEA0
 // fistp under a chop control word.
 inline int truncateToInt(float value)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     return bf2x87::toIntTruncate(value);
 #else
     return static_cast<int>(value);

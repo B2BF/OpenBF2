@@ -3,7 +3,7 @@
 // Per-frame drawing lives in TerrainDraw.cpp. Memory belongs to the engine heap.
 #ifdef BF2_IMAGE_RENDDX9
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h" // [CHOSEN, not recovered] x87 conversion results, including invalid inputs.
 #endif
 #include "../../RendDX9Abi/PluginAbi.h"
@@ -994,7 +994,7 @@ void Terrain::geometryStreamTick(const Frustum* scanFrustum)
         for (int i = 0; i < 8; ++i)
         {
             const Vec3& corner = frusta[f]->m_corners[i];
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             // [CHOSEN, not recovered] Keep FCOM's unordered outcome and invalid exception.
             if (bf2x87::less(corner.x, b[0])) b[0] = corner.x;
             if (bf2x87::notLess(corner.x, b[1])) b[1] = corner.x;
@@ -1011,7 +1011,7 @@ void Terrain::geometryStreamTick(const Frustum* scanFrustum)
 
     const int halfCount = m_patchCount / 2;
     int grid[8];
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] The PE stores inverseX and the converted patch size as floats;
     // inverseZ stays on the x87 stack. Convert by FISTP with truncation, including invalid input.
     const bf2x87::Real halfX = bf2x87::mul(bf2x87::wide(m_primaryWorldScale.x), bf2x87::wide(0.5f));
@@ -1737,7 +1737,7 @@ void Terrain::generateSurroundingGrid(int x0, int z0, int x1, int z1, int stepX,
                                       std::vector<int>& indices,
                                       std::vector<TerrainSurroundingVertex>& vertices)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int   spanInt = bf2x87::toIntTruncate(m_primaryWorldScale.x) * (m_heightmapSizeX - 1);
 #else
     const int   spanInt = static_cast<int>(m_primaryWorldScale.x) * (m_heightmapSizeX - 1);
@@ -1797,7 +1797,7 @@ void Terrain::buildSurroundingGeometry()
     if (m_sideIndexBuffer)    { dx9rend::indexBufferRelease(m_sideIndexBuffer);     m_sideIndexBuffer = 0; }
     if (m_cornerIndexBuffer)  { dx9rend::indexBufferRelease(m_cornerIndexBuffer);   m_cornerIndexBuffer = 0; }
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int span = bf2x87::toIntTruncate(
         static_cast<double>(m_heightmapSizeX - 1) * m_primaryWorldScale.x / m_secondaryWorldScale.x);
 #else
@@ -1862,7 +1862,7 @@ void Terrain::uploadSurroundingVertices(void* vertexBuffer,
         for (unsigned int i = 0; i < count; ++i)
         {
             const TerrainSurroundingVertex& src = vertices[i];
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             reinterpret_cast<short*>(dst)[0] = static_cast<short>(bf2x87::toInt64Truncate(src.x));
             reinterpret_cast<short*>(dst)[1] = static_cast<short>(bf2x87::toInt64Truncate(src.z));
 #else
@@ -2122,7 +2122,7 @@ bool TerrainWaterFrameList::load(std::string path)
 dx9rend::EngineTexture* TerrainWaterFrameList::currentFrame() const
 {
     const float scaled = static_cast<float>(frameCount) * phase;               // fild, fmul
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     return frames[bf2x87::toIntTruncate(scaled)];
 #else
     return frames[static_cast<int>(scaled)];
@@ -2135,7 +2135,7 @@ dx9rend::EngineTexture* TerrainWaterFrameList::nextFrame() const
 {
     const int count = frameCount;
     const float scaled = static_cast<float>(count) * phase;                    // fild, fmul
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     return frames[(bf2x87::toIntTruncate(scaled) + 1) % count];
 #else
     return frames[(static_cast<int>(scaled) + 1) % count];
@@ -2148,7 +2148,7 @@ dx9rend::EngineTexture* TerrainWaterFrameList::nextFrame() const
 float TerrainWaterFrameList::frameBlend() const
 {
     const float scaled = static_cast<float>(frameCount) * phase;               // fild, fmul
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     return scaled - static_cast<float>(bf2x87::toIntTruncate(scaled));              // fistp (chop), fisub
 #else
     return scaled - static_cast<float>(static_cast<int>(scaled));              // fistp (chop), fisub

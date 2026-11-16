@@ -87,7 +87,7 @@ int psmType4AdvanceParticle(void* self,float* particle,int index,float step,unsi
         // FCOM's carry branch also selects the history ring for an unordered age.
         if (!(difference>=0))
         {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             // [CHOSEN, not recovered] Preserve FISTP integer indefinite on native builds.
             const int elapsed=bf2x87::toIntTruncate(bf2x87::mul(bf2x87::wide(-3.0f),bf2x87::wide(difference)));
 #else

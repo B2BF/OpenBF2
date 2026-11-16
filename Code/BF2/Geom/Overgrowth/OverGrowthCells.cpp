@@ -3,7 +3,7 @@
 // Game instances come from level objects; procedural generation requires editorEnable.
 // Preserve float evaluation order and 24-bit precision.
 #ifdef BF2_IMAGE_RENDDX9
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../../Platform/X87Compat.h" // [CHOSEN, not recovered] x87 conversion results, including invalid inputs.
 #endif
 #include "OverGrowth.h"
@@ -1132,7 +1132,7 @@ void OverGrowth::populatePatch(OverGrowthPatch* patch)
         for (unsigned int j = 0; j < types.size(); ++j)
             expected = expected + types[j].density * m_cellSize * m_cellSize * 0.001f;
         const int value = static_cast<int>(material->id);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const int count = bf2x87::toIntTruncate(expected * patch->coverage[value]);    // __ftol2
 #else
         const int count = static_cast<int>(expected * patch->coverage[value]);    // __ftol2

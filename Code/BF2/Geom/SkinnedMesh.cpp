@@ -19,7 +19,7 @@
 #include "../RendDX9/RendDX9Base.h"           // rendererFrameOrdinal, the render view
 #include "../RendDX9/ShaderParameter.h"      // the shadow-state parameters' release
 #include "../RendDX9/QueueProfiler.h"
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h"
 #endif
 #include "../../RendDX9Abi/D3dx9Sdk.h"        // ID3DXEffect - the shadow draw's commit
@@ -400,7 +400,7 @@ float clampFloat(float value, float low, float high)
 // PE 0x100FB020
 void mat4TransformPointVec4(const Mat4& m, const float in[3], void* out, unsigned int w)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain all three x87 results until the w-first stores.
     using namespace bf2x87;
     const Real z = add(add(add(mul(wide(m.m[6]), wide(in[1])),
@@ -1132,7 +1132,7 @@ void SkinnedMesh::updateLodSelection()
     const float viewLodScale = reinterpret_cast<LodScaleFn>(
         (*reinterpret_cast<void***>(view))[0x2C / 4])(view);
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] The threshold is spilled; the two scaled distances are not.
     const float threshold = bf2x87::store(bf2x87::sub(bf2x87::mul(
         bf2x87::wide(viewLodScale), bf2x87::wide(m_distanceToCamera)), bf2x87::wide(radius)));
@@ -1148,7 +1148,7 @@ void SkinnedMesh::updateLodSelection()
     unsigned int chosen = 0;
     for (unsigned int i = 0; i < count; ++i)
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         if (bf2x87::less(bf2x87::mul(bf2x87::mul(bf2x87::wide(values[i]),
             bf2x87::wide(rendererLodScaleAt(0x84C))), bf2x87::wide(rendererLodScaleAt(0x8B8))),
             bf2x87::wide(threshold)))

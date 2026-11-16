@@ -6,7 +6,7 @@ void psmType2Emit(void*,float);
 // PE 0x1017A9D0: expiry always removes the oldest ring entry; the supplied index is unused.
 int psmType2AdvanceParticle(void* self,float* particle,int /*index*/,float step,unsigned int steps)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain x87 intermediates; explicit float locals are PE spills.
     using Real=bf2x87::Real;
 #else
@@ -59,7 +59,7 @@ int psmType2AdvanceParticle(void* self,float* particle,int /*index*/,float step,
             const Real negative=-static_cast<Real>(speedSquared);
             const float vy=static_cast<float>(dy*negative),vz=static_cast<float>(dz*negative);
             const float fy=vy*drag,fz=vz*drag;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             const float inverse=bf2x87::store(bf2x87::wide(1.0f)/bf2x87::squareRoot(bf2x87::wide(speedSquared)));
 #else
             const float inverse=static_cast<float>(1.0/::sqrt(speedSquared));

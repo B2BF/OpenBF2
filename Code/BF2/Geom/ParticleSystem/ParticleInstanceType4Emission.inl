@@ -17,7 +17,7 @@ float* psmType4EmissionSphere(float* output, void* descriptor, void* self, float
     const float phi = static_cast<float>(psmEmissionRandomInteger() * static_cast<double>(3.7450703871400037e-7f));
     const double theta = psmEmissionRandomInteger() * static_cast<double>(1.8725351935700019e-7f);
     const float savedTheta = static_cast<float>(theta);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const float sineTheta = bf2x87::store(bf2x87::sinValue(bf2x87::wide(theta)));
 #else
     const float sineTheta = static_cast<float>(::sin(theta));
@@ -28,7 +28,7 @@ float* psmType4EmissionSphere(float* output, void* descriptor, void* self, float
         * 0.000000059604644775390625;
     const double xRadius = static_cast<double>(xRandom) * psmDescriptor4<float>(descriptor,0x18);
     const double yRadius = static_cast<double>(yRandom) * psmDescriptor4<float>(descriptor,0x1C);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain FSIN/FCOS products until the output stores.
     using bf2x87::wide;
     particle[1]=bf2x87::store(bf2x87::cosValue(wide(phi))*wide(xRadius)*wide(sineTheta));

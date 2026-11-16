@@ -4,7 +4,7 @@
 // their diagnostic-only profiling brackets; those omissions are documented at their callers.
 #ifdef BF2_IMAGE_RENDDX9
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h" // [CHOSEN, not recovered]
 #endif
 #include "../../RendDX9Abi/PluginAbi.h"
@@ -287,7 +287,7 @@ void Terrain::updateWaterConstants()
         const float globalTime = constantF(148);                                      // GlobalTime
         const float cycleLength = getWaterAnimSpeed() * kWater2DCycleScale;           // vslot +0x90, fmul
         const float cycle = globalTime / cycleLength;                                 // fdivr
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         m_waterTextureList->phase = cycle - static_cast<float>(bf2x87::toIntTruncate(cycle));
 #else
         m_waterTextureList->phase = cycle - static_cast<float>(static_cast<int>(cycle));
@@ -790,7 +790,7 @@ void Terrain::drawDepthComplexity(int)
     const float* const b = projection->m;
     // PE 0x10077A30: each component has its own shipped association and store order.
     // [CHOSEN, not recovered] Native macOS retains the x87 intermediate width.
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     using DepthReal = bf2x87::Real;
 #else
     using DepthReal = double;
@@ -1114,7 +1114,7 @@ void terrainReceiverProjection(const LightShadowRecord& record, Mat4& output)
 
 float terrainInverseRangeSquared(float radius)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain the PE's x87 intermediates on the native port.
     return bf2x87::store(bf2x87::div(bf2x87::wide(1.0f),
         bf2x87::mul(bf2x87::wide(radius), bf2x87::wide(radius))));
@@ -1125,7 +1125,7 @@ float terrainInverseRangeSquared(float radius)
 
 float terrainScaledInverseRangeSquared(float radius, float scale)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] The scaled radius is not stored before squaring in the PE.
     const bf2x87::Real scaled = bf2x87::mul(bf2x87::wide(scale), bf2x87::wide(radius));
     return bf2x87::store(bf2x87::div(bf2x87::wide(1.0f), bf2x87::mul(scaled, scaled)));
@@ -1138,7 +1138,7 @@ float terrainScaledInverseRangeSquared(float radius, float scale)
 float terrainConeCosine(float degrees)
 {
     const float radians = 0.01745329238474369049f; // PE 0x1021A318
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain the multiply through the native x87 cosine policy.
     return bf2x87::store(bf2x87::cosValue(bf2x87::mul(bf2x87::wide(degrees), bf2x87::wide(radians))));
 #else

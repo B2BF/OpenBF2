@@ -2282,7 +2282,7 @@ void StaticMesh::drawVanilla()
                     meshBoundsFinalize(*bounds);
                 float waterDistance;
                 std::memcpy(&waterDistance, &m_dword288, sizeof(waterDistance));
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                 // [CHOSEN, not recovered] Retain the FSub intermediate through the comparison.
                 const bool farWater = bf2x87::greater(bf2x87::sub(bf2x87::wide(waterDistance),
                     bf2x87::wide(bounds->radius)), bf2x87::wide(threshold));
@@ -2466,7 +2466,7 @@ const unsigned int kDynamicPointLit = dx9rend::raHashString(std::string("Dynamic
 const unsigned int kDynamicSpotLit = dx9rend::raHashString(std::string("DynamicSpotLit"));
 const unsigned int kAfterLight = dx9rend::raHashString(std::string("AfterLight"));
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 // [CHOSEN, not recovered] Carry the PE's x87 arithmetic between explicit float stores.
 typedef bf2x87::Real ExpansionReal;
 #else
@@ -2703,7 +2703,7 @@ void staticMeshDrawExpansion(void* self)
     const ExpansionReal dy = ExpansionReal(camera->m[13]) - ExpansionReal(transform->m[13]);
     const ExpansionReal dz = ExpansionReal(camera->m[14]) - ExpansionReal(transform->m[14]);
     const ExpansionReal squared = (ExpansionReal(dx) * ExpansionReal(dx) + dz * dz) + dy * dy;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const float distance = bf2x87::store(bf2x87::squareRoot(squared));
 #else
     const float distance = std::sqrt(squared);
@@ -2937,7 +2937,7 @@ void staticMeshDrawExpansion(void* self)
                     meshBoundsFinalize(*bounds);
                 float waterDistance;
                 std::memcpy(&waterDistance, &mesh.m_dword288, sizeof(waterDistance));
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                 // [CHOSEN, not recovered] PE 0x100FB6D7 retains the subtraction through FCOM.
                 const bool farWater = bf2x87::greater(bf2x87::sub(bf2x87::wide(waterDistance),
                     bf2x87::wide(bounds->radius)), bf2x87::wide(threshold));

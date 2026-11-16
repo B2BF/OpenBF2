@@ -13,7 +13,7 @@
 #include "QuadPatch.h"
 #include "Terrain.h"
 #include "../GeomMisc/Debug.h"
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h"
 #endif
 #include "../Math/Frustum.h"
@@ -183,7 +183,7 @@ void SurroundingPatch::load(int slotIndex, TerrainRawReader& reader)
 void SurroundingPatch::setupPlacement()
 {
     Terrain* const t = terrain;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Native FISTP and x86 32-bit arithmetic results.
     const auto add32 = [](int a, int b) { return static_cast<int>(static_cast<unsigned int>(a) + static_cast<unsigned int>(b)); };
     secondaryScaleX = bf2x87::toIntTruncate(bf2x87::Real(t->m_secondaryWorldScale.x));
@@ -207,7 +207,7 @@ void SurroundingPatch::setupPlacement()
     const float row2[4] = { 0.0f, 0.0f, 1.0f, 0.0f };
     float row3[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int half = h / 2;
     const int left = static_cast<int>(0u - static_cast<unsigned int>(h) - static_cast<unsigned int>(half));
     const int right = static_cast<int>(static_cast<unsigned int>(h) - static_cast<unsigned int>(half));
@@ -371,7 +371,7 @@ void SurroundingPatch::setupPlacement()
     center.x = static_cast<float>(static_cast<double>(span) * 0.5 + center.x);
     center.z = static_cast<float>(static_cast<double>(span) * 0.5 + center.z);
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     endX = add32(originX, span);
     endZ = add32(originZ, span);
 #else
@@ -382,7 +382,7 @@ void SurroundingPatch::setupPlacement()
     const float z0 = static_cast<float>(originZ);
     const float x1 = static_cast<float>(endX);
     const float z1 = static_cast<float>(endZ);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Keep FILD originX and dy wide; reload dx/dz spills for the sphere.
     const bf2x87::Real dx = bf2x87::sub(bf2x87::Real(x1), bf2x87::Real(originX));
     const float storedDx = bf2x87::store(dx);

@@ -773,7 +773,7 @@ void as_logic_setDecimals(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_logic_setDecimals");
     const float value = static_cast<float>(fn.arg(0).to_number());
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int decimals = bf2x87::toIntTruncate(fn.arg(1).to_number());
 #else
     const int decimals = static_cast<int>(fn.arg(1).to_number());
@@ -1091,7 +1091,7 @@ void as_endofround_getTeamName(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_endofround_getTeamName");
     ISwiffHost* h = g_swiffPlayerInstance->getSwiffHost();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int team = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int team = (int) fn.arg(0).to_number();
@@ -1106,7 +1106,7 @@ void as_endofround_getNumVictories(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_endofround_getNumVictories");
     ISwiffHost* h = g_swiffPlayerInstance->getSwiffHost();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int team = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int team = (int) fn.arg(0).to_number();
@@ -1137,7 +1137,7 @@ void as_endofround_getTicketHistorySum(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_endofround_getTicketHistorySum");
     ISwiffHost* h = g_swiffPlayerInstance->getSwiffHost();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int team = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int team = (int) fn.arg(0).to_number();
@@ -1175,7 +1175,7 @@ void as_endofround_getPreviousTeamName(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_endofround_getPreviousTeamName");
     ISwiffHost* h = g_swiffPlayerInstance->getSwiffHost();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int team = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int team = (int) fn.arg(0).to_number();
@@ -1193,7 +1193,7 @@ void as_endofround_getSquadTeamName(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_endofround_getSquadTeamName");
     ISwiffHost* h = g_swiffPlayerInstance->getSwiffHost();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int team = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int team = (int) fn.arg(0).to_number();
@@ -1334,7 +1334,7 @@ void as_endofround_getPreviousMapGameModeName(const gameswf::fn_call& fn)
 void as_endofround_getKitNameFromId(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_endofround_getKitNameFromId");
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int id = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int id = (int) fn.arg(0).to_number();
@@ -1361,7 +1361,7 @@ void as_endofround_getTeamNameOfPlayerAtPosition(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_endofround_getTeamNameOfPlayerAtPosition");
     ISwiffHost* h = g_swiffPlayerInstance->getSwiffHost();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int position = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int position = (int) fn.arg(0).to_number();
@@ -2000,7 +2000,7 @@ static void markCustomVideoScheme()
 static void setVideoIntOwnerFirst(const gameswf::fn_call& fn, VsIntSetter setter)
 {
     IVideoSettings* vs = videoSettings();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int value = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int value = static_cast<int>(fn.arg(0).to_number());
@@ -2015,7 +2015,7 @@ static void setVideoIntOwnerFirst(const gameswf::fn_call& fn, VsIntSetter setter
 // kept per row. No result.
 static void setVideoIntArgumentFirst(const gameswf::fn_call& fn, VsIntSetter setter)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int value = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int value = static_cast<int>(fn.arg(0).to_number());
@@ -2305,12 +2305,12 @@ void as_general_getListEntries(const gameswf::fn_call& fn)
             tok[t++] = tu_string(b, (int)(c - b));
         }
     }
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int start = bf2x87::toIntTruncate(fn.arg(1).to_number());
 #else
     const int start = (int) fn.arg(1).to_number();
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int count = bf2x87::toIntTruncate(fn.arg(2).to_number());
 #else
     const int count = (int) fn.arg(2).to_number();
@@ -3790,7 +3790,7 @@ void as_videosettings_getViewDistanceScale(const gameswf::fn_call& fn)
 void as_videosettings_setVideoOptionScheme(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_videosettings_setVideoOptionScheme");
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int scheme = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int scheme = static_cast<int>(fn.arg(0).to_number());
@@ -4026,7 +4026,7 @@ void as_profile_loginOnlineAccount(const gameswf::fn_call& fn)
     bool result = false;
     if (h->checkDisc())
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const int         number   = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
         const int         number   = (int) fn.arg(0).to_number();
@@ -4131,7 +4131,7 @@ void as_profile_loginOfflineAccount(const gameswf::fn_call& fn)
     (void) g_swiffPlayerInstance->getSwiffHost();
     ILocalProfileManager* lpm = static_cast<ILocalProfileManager*>(
         classManager->getSingleton(renddx9abi::HostString("LocalProfileManager")));
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int number = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int number = (int) fn.arg(0).to_number();
@@ -4181,7 +4181,7 @@ void as_multiplay_setConnectToIpPort(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_multiplay_setConnectToIpPort");
     ISwiffHost* h = g_swiffPlayerInstance->getSwiffHost();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     h->setConnectToIpPort(bf2x87::toIntTruncate(fn.arg(0).to_number()));           // +0x308, truncated
 #else
     h->setConnectToIpPort(static_cast<int>(fn.arg(0).to_number()));           // +0x308, truncated
@@ -4275,7 +4275,7 @@ void as_playerstats_getNextPromotionRank(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_playerstats_getNextPromotionRank");
     void* h = asHost();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int rank = fn.nargs >= 1 ? bf2x87::toIntTruncate(fn.arg(0).to_number()) : 0;
 #else
     const int rank = fn.nargs >= 1 ? (int) fn.arg(0).to_number() : 0;
@@ -4286,7 +4286,7 @@ void as_playerstats_getNextDemomotionRank(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_playerstats_getNextDemomotionRank");
     void* h = asHost();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int rank = fn.nargs >= 1 ? bf2x87::toIntTruncate(fn.arg(0).to_number()) : 0;
 #else
     const int rank = fn.nargs >= 1 ? (int) fn.arg(0).to_number() : 0;
@@ -4301,7 +4301,7 @@ void as_playerstats_getRankString(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_playerstats_getRankString");
     void* h = asHost();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int rank = fn.nargs >= 1 ? bf2x87::toIntTruncate(fn.arg(0).to_number()) : 0;
 #else
     const int rank = fn.nargs >= 1 ? (int) fn.arg(0).to_number() : 0;
@@ -4531,17 +4531,17 @@ void as_profile_createOnlineAccount(const gameswf::fn_call& fn)
         const bool        remember   = fn.arg(4).to_bool();
         const std::string firstName  = fn.arg(5).to_string();
         const std::string lastName   = fn.arg(6).to_string();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const int         birthYear  = bf2x87::toIntTruncate(fn.arg(7).to_number());
 #else
         const int         birthYear  = (int) fn.arg(7).to_number();
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const int         birthMonth = bf2x87::toIntTruncate(fn.arg(8).to_number());
 #else
         const int         birthMonth = (int) fn.arg(8).to_number();
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const int         birthDay   = bf2x87::toIntTruncate(fn.arg(9).to_number());
 #else
         const int         birthDay   = (int) fn.arg(9).to_number();
@@ -4549,7 +4549,7 @@ void as_profile_createOnlineAccount(const gameswf::fn_call& fn)
         std::string       country    = fn.arg(10).to_string();
         if (country == "none")
             country = "US";
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const int         sex        = bf2x87::toIntTruncate(fn.arg(11).to_number());
 #else
         const int         sex        = (int) fn.arg(11).to_number();
@@ -4662,12 +4662,12 @@ void as_messagehandler_raiseMessage(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_messagehandler_raiseMessage");
     const std::string text(fn.arg(0).to_string());
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int type = bf2x87::toIntTruncate(fn.arg(1).to_number());
 #else
     const int type = static_cast<int>(fn.arg(1).to_number());
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int code = bf2x87::toIntTruncate(fn.arg(2).to_number());
 #else
     const int code = static_cast<int>(fn.arg(2).to_number());
@@ -4764,7 +4764,7 @@ void as_profile_setStatPlayer(const gameswf::fn_call& fn)
     if (pm && pmIsLoggedIn(pm))
     {
         if (fn.nargs < 1) return;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const int id = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
         const int id = (int) fn.arg(0).to_number();
@@ -4840,7 +4840,7 @@ void as_profile_isMyProfile(const gameswf::fn_call& fn)
     bool result = false;
     if (pm && pmIsLoggedIn(pm))
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const int id = fn.nargs >= 1 ? bf2x87::toIntTruncate(fn.arg(0).to_number()) : 0;
 #else
         const int id = fn.nargs >= 1 ? (int) fn.arg(0).to_number() : 0;
@@ -5057,7 +5057,7 @@ void as_playerstats_getFavouriteName(const gameswf::fn_call& fn)
     void* h = asHost();
     PlayerStatsRecord* rec = new PlayerStatsRecord();
     if (!fetchPlayerStats(h, *rec)) { fn.result->set_double(0.0); delete rec; return; }
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int kind = fn.nargs >= 1 ? bf2x87::toIntTruncate(fn.arg(0).to_number()) : -1;
 #else
     const int kind = fn.nargs >= 1 ? (int) fn.arg(0).to_number() : -1;
@@ -5094,7 +5094,7 @@ void as_playerstats_getFavouriteId(const gameswf::fn_call& fn)
     void* h = asHost();
     PlayerStatsRecord* rec = new PlayerStatsRecord();
     if (!fetchPlayerStats(h, *rec)) { fn.result->set_double(0.0); delete rec; return; }
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int kind = fn.nargs >= 1 ? bf2x87::toIntTruncate(fn.arg(0).to_number()) : -1;
 #else
     const int kind = fn.nargs >= 1 ? (int) fn.arg(0).to_number() : -1;
@@ -5121,7 +5121,7 @@ void as_playerstats_getFavouriteTime(const gameswf::fn_call& fn)
     void* h = asHost();
     PlayerStatsRecord* rec = new PlayerStatsRecord();
     if (!fetchPlayerStats(h, *rec)) { fn.result->set_double(0.0); delete rec; return; }
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int kind = fn.nargs >= 1 ? bf2x87::toIntTruncate(fn.arg(0).to_number()) : -1;
 #else
     const int kind = fn.nargs >= 1 ? (int) fn.arg(0).to_number() : -1;
@@ -5156,7 +5156,7 @@ static std::string s_selectedUnlockEquipment("");
 void as_general_setEquipmentIndex(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_general_setEquipmentIndex");
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     s_equipmentIndex = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     s_equipmentIndex = (int) fn.arg(0).to_number();
@@ -6217,7 +6217,7 @@ void as_playerstats_unlock(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_playerstats_unlock");
     void* h = asHost();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int unlockId = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int unlockId = (int) fn.arg(0).to_number();
@@ -6390,7 +6390,7 @@ static void setGeneralBoolArgumentFirst(const gameswf::fn_call& fn, GsBoolSetter
 static void setGeneralIntOwnerFirst(const gameswf::fn_call& fn, GsIntSetter setter)
 {
     IGeneralSettings* gs = generalSettingsOf(generalSettingsSingleton());
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int value = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int value = static_cast<int>(fn.arg(0).to_number());
@@ -6399,7 +6399,7 @@ static void setGeneralIntOwnerFirst(const gameswf::fn_call& fn, GsIntSetter sett
 }
 static void setGeneralIntArgumentFirst(const gameswf::fn_call& fn, GsIntSetter setter)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int value = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int value = static_cast<int>(fn.arg(0).to_number());
@@ -6496,22 +6496,22 @@ void as_generalsettings_setCrosshairColor(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_generalsettings_setCrosshairColor");
     IGeneralSettings* gs = generalSettingsOf(generalSettingsSingleton());
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int red = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int red = static_cast<int>(fn.arg(0).to_number());
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int green = bf2x87::toIntTruncate(fn.arg(1).to_number());
 #else
     const int green = static_cast<int>(fn.arg(1).to_number());
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int blue = bf2x87::toIntTruncate(fn.arg(2).to_number());
 #else
     const int blue = static_cast<int>(fn.arg(2).to_number());
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int alpha = bf2x87::toIntTruncate(fn.arg(3).to_number());
 #else
     const int alpha = static_cast<int>(fn.arg(3).to_number());
@@ -6539,17 +6539,17 @@ void as_generalsettings_getSquadtagColor(const gameswf::fn_call& fn) { SWF_AS_TR
 static void setGeneralRgb(const gameswf::fn_call& fn, int offset)
 {
     IGeneralSettings* gs = generalSettingsOf(generalSettingsSingleton());
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int red = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int red = static_cast<int>(fn.arg(0).to_number());
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int green = bf2x87::toIntTruncate(fn.arg(1).to_number());
 #else
     const int green = static_cast<int>(fn.arg(1).to_number());
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int blue = bf2x87::toIntTruncate(fn.arg(2).to_number());
 #else
     const int blue = static_cast<int>(fn.arg(2).to_number());
@@ -6771,7 +6771,7 @@ void as_controlsettings_setActiveControlMap(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_controlsettings_setActiveControlMap");
     (void) g_swiffPlayerInstance->getSwiffHost();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int index = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int index = static_cast<int>(fn.arg(0).to_number());
@@ -6813,7 +6813,7 @@ void as_controlsettings_resetDefault(const gameswf::fn_call& fn) { SWF_AS_TRACE(
 void as_controlsettings_getMappedString(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_controlsettings_getMappedString");
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int input = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int input = static_cast<int>(fn.arg(0).to_number());
@@ -7123,7 +7123,7 @@ static void publishServerInt(const gameswf::fn_call& fn, GssIntGetter getter)
 static void setServerInt(const gameswf::fn_call& fn, GssIntSetter setter)
 {
     IGameServerSettings* gss = gameServerSettings();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int value = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int value = static_cast<int>(fn.arg(0).to_number());
@@ -7170,7 +7170,7 @@ void as_serversettings_setMaxPlayers(const gameswf::fn_call& fn)
     SWF_AS_TRACE("as_serversettings_setMaxPlayers");
     (void) g_swiffPlayerInstance->getSwiffHost();
     IGameServerSettings* gss = gameServerSettings();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int value = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int value = static_cast<int>(fn.arg(0).to_number());
@@ -7217,7 +7217,7 @@ void as_serversettings_setCoopBotCount(const gameswf::fn_call& fn)
     IBase* gss = gameServerSettingsSingleton();
     if (gs)
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const int count = bf2x87::toIntTruncate(value);
 #else
         const int count = static_cast<int>(value);
@@ -7226,7 +7226,7 @@ void as_serversettings_setCoopBotCount(const gameswf::fn_call& fn)
         static_cast<IGeneralSettings*>(gs)->setCoopBotCount(count);                         // +0xF4
     }
     if (gss)
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         static_cast<IGameServerSettings*>(gss)->setCoopBotCount(bf2x87::toIntTruncate(value));   // +0x1A4
 #else
         static_cast<IGameServerSettings*>(gss)->setCoopBotCount(static_cast<int>(value));   // +0x1A4
@@ -7552,7 +7552,7 @@ void as_multiplay_addMapToMapList(const gameswf::fn_call& fn)
     if (!path.empty())
     {
         const std::string mode(fn.arg(1).to_string());
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const unsigned int size = (unsigned int) bf2x87::toIntTruncate(fn.arg(2).to_number());
 #else
         const unsigned int size = (unsigned int) (int) fn.arg(2).to_number();
@@ -7646,7 +7646,7 @@ void as_multiplay_removeMapfromMapList(const gameswf::fn_call& fn)
     BusyHost busy = busyOpen();
     ISwiffHost* h = g_swiffPlayerInstance->getSwiffHost();
     (void) classManager->getSingleton(renddx9abi::HostString("LocalProfileManager"));
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int index = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int index = static_cast<int>(fn.arg(0).to_number());
@@ -7664,7 +7664,7 @@ void as_multiplay_moveMapInList(const gameswf::fn_call& fn)
     SWF_AS_TRACE("as_multiplay_moveMapInList");
     ISwiffHost* h = g_swiffPlayerInstance->getSwiffHost();
     (void) classManager->getSingleton(renddx9abi::HostString("LocalProfileManager"));
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int index = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int index = static_cast<int>(fn.arg(0).to_number());
@@ -8046,7 +8046,7 @@ void as_multiplay_downloadServerLogo(const gameswf::fn_call& fn)
 void as_multiplay_getTeamName(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_multiplay_getTeamName");
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int index = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int index = (int) fn.arg(0).to_number();
@@ -8191,7 +8191,7 @@ void as_logic_beginWaitState(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_logic_beginWaitState");
     ISwiffHost* h = g_swiffPlayerInstance->getSwiffHost();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     (void) h->setBusy(bf2x87::toIntTruncate(fn.arg(0).to_number()));                   // +0x2B0
 #else
     (void) h->setBusy(static_cast<int>(fn.arg(0).to_number()));                   // +0x2B0
@@ -8222,7 +8222,7 @@ void as_logic_getTeamsConId(const gameswf::fn_call& fn)
     SWF_AS_TRACE("as_logic_getTeamsConId");
     ISwiffHost* h = g_swiffPlayerInstance->getSwiffHost();
     IMenuTeamManager* tm = static_cast<IMenuTeamManager*>(h->getMenuTeamManager());   // +0x50
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int id = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int id = (int) fn.arg(0).to_number();
@@ -8250,7 +8250,7 @@ void as_multiplay_getToggleFilter(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_multiplay_getToggleFilter");
     IBase* gs = classManager->getSingleton(renddx9abi::HostString("GeneralSettings"));
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int mask = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int mask = (int) fn.arg(0).to_number();
@@ -8265,7 +8265,7 @@ void as_multiplay_setToggleFilter(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_multiplay_setToggleFilter");
     IBase* gs = classManager->getSingleton(renddx9abi::HostString("GeneralSettings"));
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int   mask   = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int   mask   = (int) fn.arg(0).to_number();
@@ -9010,7 +9010,7 @@ void as_multiplay_setLeaderboardId(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_multiplay_setLeaderboardId");
     void* h = g_swiffPlayerInstance->getSwiffHost();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     hostSetLeaderboardId(h, bf2x87::toIntTruncate(fn.arg(0).to_number()));
 #else
     hostSetLeaderboardId(h, static_cast<int>(fn.arg(0).to_number()));
@@ -9092,7 +9092,7 @@ void as_multiplay_goLeaderboardPlayer(const gameswf::fn_call& fn)
     SWF_AS_TRACE("as_multiplay_goLeaderboardPlayer");
     BusyHost busy = busyOpen();
     void* h = g_swiffPlayerInstance->getSwiffHost();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     hostGoLeaderboardPlayer(h, bf2x87::toIntTruncate(fn.arg(0).to_number()));
 #else
     hostGoLeaderboardPlayer(h, static_cast<int>(fn.arg(0).to_number()));
@@ -9108,12 +9108,12 @@ void as_playerstats_getLeaderBoard(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_playerstats_getLeaderBoard");
     void* h = g_swiffPlayerInstance->getSwiffHost();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int id = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int id = static_cast<int>(fn.arg(0).to_number());
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int request = bf2x87::toIntTruncate(fn.arg(1).to_number());
 #else
     const int request = static_cast<int>(fn.arg(1).to_number());
@@ -9127,12 +9127,12 @@ void as_playerstats_refreshLeaderBoard(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_playerstats_refreshLeaderBoard");
     void* h = g_swiffPlayerInstance->getSwiffHost();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int id = bf2x87::toIntTruncate(fn.arg(0).to_number());
 #else
     const int id = static_cast<int>(fn.arg(0).to_number());
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int request = bf2x87::toIntTruncate(fn.arg(1).to_number());
 #else
     const int request = static_cast<int>(fn.arg(1).to_number());
@@ -9424,7 +9424,7 @@ void as_multiplay_setLeaderboardCategoryId(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_multiplay_setLeaderboardCategoryId");
     ISwiffHost* h = g_swiffPlayerInstance->getSwiffHost();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     h->setLeaderboardCategory(bf2x87::toIntTruncate(fn.arg(0).to_number()));            // +0x140
 #else
     h->setLeaderboardCategory(static_cast<int>(fn.arg(0).to_number()));            // +0x140

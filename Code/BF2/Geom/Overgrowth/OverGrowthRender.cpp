@@ -384,7 +384,7 @@ void shiftShadowFrustumTowardLight(Frustum& frustum, float distance)
     const float x = normal.x * distance;
     const float y = normal.y * distance;
     const float z = normal.z * distance;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] PE 0x10161642..0x10161678 (inlined twice in 0x10161610): the x
     // product stays on the x87 stack for the m[12] add; only y and z are stored first.
     transformation.m[12] = bf2x87::store(bf2x87::add(

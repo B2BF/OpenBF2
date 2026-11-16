@@ -5,7 +5,7 @@
 // Preserve float evaluation order and unordered-comparison behavior.
 #ifdef BF2_IMAGE_RENDDX9
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h" // [CHOSEN, not recovered] x87 conversion results, including invalid inputs.
 #endif
 #include "UndergrowthSystem.h"
@@ -75,7 +75,7 @@ extern LightManager* g_LightManager;                                         // 
 
 namespace {
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 // [CHOSEN, not recovered] Native helper returns retain x87 register values through their callers.
 typedef bf2x87::Real UndergrowthScalar;
 #else
@@ -210,7 +210,7 @@ struct UndergrowthCellDistanceLess
 {
     bool operator()(UndergrowthCellDistance a, UndergrowthCellDistance b) const
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] The inlined comparator uses FCOM, including quiet-NaN invalid.
         return bf2x87::less(UndergrowthScalar(a.key), UndergrowthScalar(b.key));
 #else
@@ -236,7 +236,7 @@ inline unsigned int packedTexCoord(const UndergrowthVertex& v)
 float clampFloat(float value, float low, float high)
 {
     float result = value;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] FCOMI also raises invalid for quiet NaNs.
     if (bf2x87::greaterEqual(bf2x87::Real(result), bf2x87::Real(high)))
         result = high;
@@ -253,7 +253,7 @@ float clampFloat(float value, float low, float high)
 
 bool undergrowthLess(float a, float b)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] These comparisons use FCOM rather than FUCOM.
     return bf2x87::less(UndergrowthScalar(a), UndergrowthScalar(b));
 #else
@@ -263,7 +263,7 @@ bool undergrowthLess(float a, float b)
 
 bool undergrowthGreater(float a, float b)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     return bf2x87::greater(UndergrowthScalar(a), UndergrowthScalar(b));
 #else
     return a > b;
@@ -295,7 +295,7 @@ unsigned int lcgNext(unsigned int& seed)
 // PE 0x1014DF30
 UndergrowthScalar distanceBetween(const Vec3& a, const Vec3& b)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Only the x difference is spilled before the squared sum.
     const float dx = bf2x87::store(UndergrowthScalar(b.x) - a.x);
     const UndergrowthScalar dy = UndergrowthScalar(b.y) - a.y;
@@ -314,7 +314,7 @@ UndergrowthScalar distanceBetween(const Vec3& a, const Vec3& b)
 // caller stores the answer to a float.
 float distanceSquaredBetween(const Vec3& a, const Vec3& b)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Only the x difference is spilled; the squared sum stays wide until
     // the caller's store.
     const float dx = bf2x87::store(UndergrowthScalar(b.x) - a.x);
@@ -338,7 +338,7 @@ float distanceSquaredBetween(const Vec3& a, const Vec3& b)
 UndergrowthScalar squaredDistanceToQuad(const Vec3& point, const Vec3& origin, const Vec3& edge1,
                             const Vec3& edge2)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Keep deltas and the result wide; lengths and dot products are spilled.
     const UndergrowthScalar dx = UndergrowthScalar(origin.x) - point.x;
     const UndergrowthScalar dy = UndergrowthScalar(origin.y) - point.y;
@@ -583,7 +583,7 @@ inline const unsigned char* dxt1BlockAt(const unsigned char* bits, unsigned int 
 void sampleDxt1(const unsigned char* bits, unsigned int width, unsigned int height,
                 const float uv[2], unsigned int* out)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Unsigned dimensions are exact until the final coordinate stores.
     const float u = bf2x87::store((UndergrowthScalar(width) - 1.0f)
         * clampFloat(uv[0], 0.0f, 1.0f));
@@ -640,7 +640,7 @@ void sampleDxt1(const unsigned char* bits, unsigned int width, unsigned int heig
 UndergrowthScalar distanceToQuad(const Vec3& point, const Vec3& origin, const Vec3& edge1,
                                  const Vec3& edge2)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] FSQRT keeps the wide result, as in the rebuildPatches reach test.
     return bf2x87::squareRoot(squaredDistanceToQuad(point, origin, edge1, edge2));
 #else
@@ -660,7 +660,7 @@ void UndergrowthSystem::cellBounds(const UndergrowthCell* cell, MeshBounds* boun
         return;
     const unsigned int index = static_cast<unsigned int>(cell - m_cells);  // imul 4EC4EC4Fh (/ 104)
     const int half = static_cast<int>(m_cellsPerSide) / 2;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] SUB wraps before FILD; the integer converts only at the product store.
     const int row = bf2x87::lowWord(static_cast<std::int64_t>(index / m_cellsPerSide) - half);
     const int column = bf2x87::lowWord(static_cast<std::int64_t>(index % m_cellsPerSide) - half);
@@ -703,17 +703,17 @@ void UndergrowthSystem::worldToDensityCell(float x, float z, int* col, int* row,
     const double floorZ = std::floor(static_cast<double>(scaledZ));
     *fracX = scaledX - floorX;
     *fracZ = static_cast<float>(static_cast<double>(scaledZ) - floorZ);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     *col = bf2x87::toIntTruncate(floorX);
 #else
     *col = static_cast<int>(floorX);
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     *row = bf2x87::toIntTruncate(floorZ);
 #else
     *row = static_cast<int>(floorZ);
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] ADD keeps its low 32 bits, including integer-indefinite input.
     *col = bf2x87::lowWord(static_cast<std::int64_t>(*col)
         + (static_cast<unsigned int>(m_densityWidth) >> 1));
@@ -748,7 +748,7 @@ void UndergrowthSystem::rebuildPatches(bool force, float viewDistance)
 
     // the camera's cell, x by division and z by the reciprocal.
     const Mat4* const cameraForX = view->getViewMatrixPtr();                         // +0x64
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int cameraColumn = bf2x87::toIntTruncate(
         (UndergrowthScalar(m_cellsPerSide >> 1) * m_cellSize + cameraForX->m[12]) / m_cellSize);
 #else
@@ -757,14 +757,14 @@ void UndergrowthSystem::rebuildPatches(bool force, float viewDistance)
 #endif
     const Mat4* const cameraForZ = view->getViewMatrixPtr();                         // +0x64 again
     const UndergrowthScalar inverseCellSize = UndergrowthScalar(1.0f) / m_cellSize;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int cameraRow = bf2x87::toIntTruncate(
         (UndergrowthScalar(m_cellsPerSide >> 1) * m_cellSize + cameraForZ->m[14]) * inverseCellSize);
 #else
     const int cameraRow = static_cast<int>(
         (static_cast<float>(m_cellsPerSide >> 1) * m_cellSize + cameraForZ->m[14]) * inverseCellSize);
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] The reciprocal stays retained, the ceil argument is a double,
     // and the integer LEA wraps at 32 bits after conversion.
     const int radius = bf2x87::toIntTruncate(UndergrowthScalar(
@@ -779,7 +779,7 @@ void UndergrowthSystem::rebuildPatches(bool force, float viewDistance)
     {
         for (int column = 0; column < span; ++column)
         {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             // [CHOSEN, not recovered] Each coordinate repeats its double-argument ceil/FISTP.
             const int xRadius = bf2x87::toIntTruncate(UndergrowthScalar(std::ceil(
                 bf2x87::storeDouble(UndergrowthScalar(viewDistance) / m_cellSize))));
@@ -905,7 +905,7 @@ void UndergrowthSystem::rebuildPatches(bool force, float viewDistance)
         edgeZ.y = 0.0f;
         edgeZ.z = bounds.max.z - bounds.min.z;
         const Mat4* const camera = view->getViewMatrixPtr();                         // +0x64
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] FSQRT and the reach comparison have no intervening float store.
         const UndergrowthScalar reach = bf2x87::squareRoot(squaredDistanceToQuad(
             *reinterpret_cast<const Vec3*>(&camera->m[12]), corner, edgeX, edgeZ));
@@ -920,7 +920,7 @@ void UndergrowthSystem::rebuildPatches(bool force, float viewDistance)
         const Mat4* const cameraAgain = view->getViewMatrixPtr();                    // +0x64 again
         if (bounds.dirty)
             meshBoundsFinalize(bounds);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] Only dx is spilled before the X/Z/Y squared sum.
         const float dx = bf2x87::store(UndergrowthScalar(cameraAgain->m[12]) - bounds.center.x);
         const UndergrowthScalar dy = UndergrowthScalar(cameraAgain->m[13]) - bounds.center.y;
@@ -1042,14 +1042,14 @@ void UndergrowthSystem::buildPatch(UndergrowthCell* cell, bool unusedFlag)
             if (type.density == 0.0f)
                 continue;
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             // [CHOSEN, not recovered] FSQRT stays retained through both the jitter and lattice uses.
             const UndergrowthScalar root = bf2x87::squareRoot(UndergrowthScalar(type.density));
 #else
             const UndergrowthScalar root = std::sqrt(type.density);
 #endif
             const float jitter = static_cast<float>(UndergrowthScalar(type.variation) / root);                      // [ebp-68h]
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             const unsigned int lattice = static_cast<unsigned int>(
                 bf2x87::toIntTruncate(root * m_cellSize));                        // [ebp-48h], fistp
 #else
@@ -1144,7 +1144,7 @@ void UndergrowthSystem::buildPatch(UndergrowthCell* cell, bool unusedFlag)
 
                     const unsigned char swayIndex =
                         static_cast<unsigned char>((random >> 22) & 0xFu);                     // [ebp-0Dh]
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                     const unsigned char heightByte = static_cast<unsigned char>(
                         bf2x87::toInt64Truncate(UndergrowthScalar(size) * type.size.y * kHeightByteScale));         // __ftol2
 #else
@@ -1176,28 +1176,28 @@ void UndergrowthSystem::buildPatch(UndergrowthCell* cell, bool unusedFlag)
                                            + UndergrowthScalar(basis.m[2]) * v.position.x;
                             const float px = static_cast<float>(tx + relativeX);                                   // [ebp-0D0h]
                             const float pz = static_cast<float>(tz + relativeZ);                                   // [ebp-0C8h]
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                             out->base.position[0] = static_cast<short>(
                                 bf2x87::toInt64Truncate(UndergrowthScalar(px) * kPositionScale));
 #else
                             out->base.position[0] = static_cast<short>(
                                 static_cast<long long>(px * kPositionScale));
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                             out->base.position[1] = static_cast<short>(
                                 bf2x87::toInt64Truncate(ty * kPositionScale));
 #else
                             out->base.position[1] = static_cast<short>(
                                 static_cast<long long>(ty * kPositionScale));
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                             out->base.position[2] = static_cast<short>(
                                 bf2x87::toInt64Truncate(UndergrowthScalar(pz) * kPositionScale));
 #else
                             out->base.position[2] = static_cast<short>(
                                 static_cast<long long>(pz * kPositionScale));
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                             out->base.position[3] = static_cast<short>(
                                 bf2x87::toInt64Truncate(UndergrowthScalar(relativeY) * kPositionScale));
 #else
@@ -1206,7 +1206,7 @@ void UndergrowthSystem::buildPatch(UndergrowthCell* cell, bool unusedFlag)
 #endif
                             out->base.texCoord = packedTexCoord(v);
                             out->base.swayIndex = swayIndex;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                             out->base.swayAmount = static_cast<unsigned char>(
                                 bf2x87::toInt64Truncate(UndergrowthScalar(heightF) * v.sway));
 #else
@@ -1233,12 +1233,12 @@ void UndergrowthSystem::buildPatch(UndergrowthCell* cell, bool unusedFlag)
                             std::memcpy(v[3].base.position, v[0].base.position, 6);
                             std::memcpy(v[6].base.position, v[5].base.position, 6);
                             std::memcpy(v[7].base.position, v[4].base.position, 6);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                             const int lift = bf2x87::toIntTruncate(UndergrowthScalar(size) * type.size.y * kPositionScale);  // fistp
 #else
                             const int lift = static_cast<int>(size * type.size.y * kPositionScale);  // fistp
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                             v[2].base.position[1] = bf2x87::lowShort(static_cast<std::int64_t>(v[2].base.position[1]) + lift);
                             v[3].base.position[1] = bf2x87::lowShort(static_cast<std::int64_t>(v[3].base.position[1]) + lift);
                             v[6].base.position[1] = bf2x87::lowShort(static_cast<std::int64_t>(v[6].base.position[1]) + lift);
@@ -1269,22 +1269,22 @@ void UndergrowthSystem::buildPatch(UndergrowthCell* cell, bool unusedFlag)
                                            + UndergrowthScalar(basis.m[10]) * v.position.z;
                             const UndergrowthScalar px = tx + relativeX;
                             const float pz = static_cast<float>(tz + relativeZ);                                   // [ebp-144h]
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                             out->position[0] = static_cast<short>(bf2x87::toInt64Truncate(UndergrowthScalar(px) * kPositionScale));
 #else
                             out->position[0] = static_cast<short>(static_cast<long long>(px * kPositionScale));
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                             out->position[1] = static_cast<short>(bf2x87::toInt64Truncate(ty * kPositionScale));
 #else
                             out->position[1] = static_cast<short>(static_cast<long long>(ty * kPositionScale));
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                             out->position[2] = static_cast<short>(bf2x87::toInt64Truncate(UndergrowthScalar(pz) * kPositionScale));
 #else
                             out->position[2] = static_cast<short>(static_cast<long long>(pz * kPositionScale));
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                             out->position[3] = static_cast<short>(
                                 bf2x87::toInt64Truncate(UndergrowthScalar(relativeY) * kPositionScale));
 #else
@@ -1293,7 +1293,7 @@ void UndergrowthSystem::buildPatch(UndergrowthCell* cell, bool unusedFlag)
 #endif
                             out->texCoord = packedTexCoord(v);
                             out->swayIndex = swayIndex;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                             out->swayAmount = static_cast<unsigned char>(
                                 bf2x87::toInt64Truncate(UndergrowthScalar(heightF) * v.sway));
 #else
@@ -1310,12 +1310,12 @@ void UndergrowthSystem::buildPatch(UndergrowthCell* cell, bool unusedFlag)
                             std::memcpy(v[3].position, v[0].position, 6);
                             std::memcpy(v[6].position, v[5].position, 6);
                             std::memcpy(v[7].position, v[4].position, 6);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                             const int lift = bf2x87::toIntTruncate(UndergrowthScalar(size) * type.size.y * kPositionScale);
 #else
                             const int lift = static_cast<int>(size * type.size.y * kPositionScale);
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                             v[2].position[1] = bf2x87::lowShort(static_cast<std::int64_t>(v[2].position[1]) + lift);
                             v[3].position[1] = bf2x87::lowShort(static_cast<std::int64_t>(v[3].position[1]) + lift);
                             v[6].position[1] = bf2x87::lowShort(static_cast<std::int64_t>(v[6].position[1]) + lift);
@@ -1386,7 +1386,7 @@ void UndergrowthSystem::render(float time)
 
     dx9rend::IRenderView* const view = dx9rend::rendererGetRenderViewDup();          // Renderer +0x50
     const float viewDistance = m_viewDistanceScale * m_viewDistance;                 // [ebp-1Ch]
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] FST stores viewDistance without popping its retained product.
     const float halfViewDistance = bf2x87::store(
         UndergrowthScalar(m_viewDistanceScale) * m_viewDistance * 0.5f);
@@ -1410,7 +1410,7 @@ void UndergrowthSystem::render(float time)
         statics.cameraPosition.z = camera->m[14];
     }
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] The caller compares the retained helper result with its float bound.
     if (bf2x87::greater(distanceBetween(statics.cameraPosition, m_lastRebuildPosition),
                         UndergrowthScalar(halfViewDistance)))
@@ -1542,7 +1542,7 @@ void UndergrowthSystem::render(float time)
 
     Vec4 fade;                                                               // [ebp-14Ch]
     fade.x = viewDistance;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] The product stays on the x87 stack for the fdivr.
     fade.y = bf2x87::store(UndergrowthScalar(1.0f)
         / (UndergrowthScalar(viewDistance) * m_viewDistanceFade));
@@ -1556,7 +1556,7 @@ void UndergrowthSystem::render(float time)
     m_paramSwayOffset->setValue(m_windWaves, 0);                             // +0x1CC, 16 float4
     m_paramCameraPos->setValue(&statics.cameraPosition, 0);                 // w = the guard word
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] fistp truncates the unrounded x87 product.
     int alphaRef = bf2x87::toIntTruncate(UndergrowthScalar(m_alphaRef) * kAlphaRefScale);  // [ebp-10Ch]
 #else
@@ -1571,7 +1571,7 @@ void UndergrowthSystem::render(float time)
         alphaRef = 0;
         transparencyScale = UndergrowthScalar(1.0f) / m_alphaRef;
     }
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const float transparencyX8 = bf2x87::store(transparencyScale * kTransparencyX8Scale);
 #else
     const float transparencyX8 = transparencyScale * kTransparencyX8Scale;
@@ -1706,7 +1706,7 @@ void UndergrowthSystem::render(float time)
                 range = g_LightManager->getDynamicLightRangeScale() * range; // +0x2E0
             const Mat4& transform = light->getAbsoluteTransformation();      // +0x80 (host)
             // The pack below is 0x1008DD80 inlined in retail, on the same static (dword_1024B100).
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             // [CHOSEN, not recovered] range * range stays on the x87 stack for the fdivr.
             const float attenuation = bf2x87::store(UndergrowthScalar(1.0f)
                 / (UndergrowthScalar(range) * range));

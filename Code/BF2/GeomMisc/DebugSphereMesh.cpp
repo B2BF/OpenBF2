@@ -101,7 +101,7 @@ struct DebugSphereMeshTemplate
 // stack arguments (retn 8), and nothing can read eax; no caller exposes a name.
 void SphereVertex::assignFromFractions(float latitudeFraction, float longitudeFraction)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Only cos(latitude) is spilled; both angles stay unspilled.
     using namespace bf2x87;
     const Real latitude = sub(mul(wide(latitudeFraction), wide(3.1415927410125732421875f)),
@@ -323,7 +323,7 @@ void DebugSphereMeshTemplate::generate()
     for (unsigned int row = 0; row < height; ++row)
     {
         if (!width) continue;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] Keep the original single stores and unspilled latitude.
         using namespace bf2x87;
         const float u = store(div(wide(row), wide(height - 1u)));
@@ -341,7 +341,7 @@ void DebugSphereMeshTemplate::generate()
         for (unsigned int column = 0; column < width; ++column)
         {
             SphereVertex vertex;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             const Real fraction = div(wide(column), wide(divisor));
             const float v = store(fraction);
             const Real latitude = sub(mul(fraction, wide(3.1415927410125732421875f)), wide(1.57079637050628662109375f));

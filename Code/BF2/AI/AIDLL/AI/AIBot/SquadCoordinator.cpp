@@ -1,7 +1,7 @@
 // [INFERRED] Source placement.
 // [RETIRE-WHEN: aidll-02-skeleton] Complete and validate the remaining SquadCoordinator operations.
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../../../../Platform/X87Compat.h" // [CHOSEN, not recovered]
 #endif
 #include "SquadCoordinator.h"
@@ -94,7 +94,7 @@ static bool maneuverMemberWithinRange(const Vec3& position, const Vec3& squadPos
     const long double dy = static_cast<float>(static_cast<long double>(squadPosition.y) - position.y);
     const long double dz = static_cast<float>(static_cast<long double>(squadPosition.z) - position.z);
 #else
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain x87-width values on both Mac architectures.
     const bf2x87::Real dx = static_cast<bf2x87::Real>(squadPosition.x) - position.x;
     const bf2x87::Real dy = static_cast<bf2x87::Real>(squadPosition.y) - position.y;
@@ -153,14 +153,14 @@ static bool shooterMovedAway(const Vec3& firePosition, const Vec3& position)
 #if defined(_WIN32)
     const long double dx = static_cast<float>(static_cast<long double>(firePosition.x) - position.x);
 #else
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain x87-width values on both Mac architectures.
     const bf2x87::Real dx = static_cast<bf2x87::Real>(firePosition.x) - position.x;
 #else
     const long double dx = static_cast<long double>(firePosition.x) - position.x;
 #endif
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain x87-width values on both Mac architectures.
     const bf2x87::Real dy = static_cast<bf2x87::Real>(firePosition.y) - position.y;
     const bf2x87::Real dz = static_cast<bf2x87::Real>(firePosition.z) - position.z;
@@ -214,7 +214,7 @@ static float leaderGotoDistanceSq(const Vec3& position, const Vec3& gotoPosition
     const long double dy = static_cast<float>(static_cast<long double>(position.y) - gotoPosition.y);
     const long double dz = static_cast<float>(static_cast<long double>(position.z) - gotoPosition.z);
 #else
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain x87-width values on both Mac architectures.
     const bf2x87::Real dx = static_cast<bf2x87::Real>(gotoPosition.x) - position.x;
     const bf2x87::Real dy = static_cast<bf2x87::Real>(gotoPosition.y) - position.y;
@@ -274,7 +274,7 @@ static bool insideControlPointRadius(const Vec3& controlPoint, const Vec3& posit
     const long double dz = static_cast<float>(static_cast<long double>(controlPoint.z) - position.z);
     return (dx * dx + dy * dy) + dz * dz < static_cast<long double>(radiusSq);
 #else
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain x87-width values on both Mac architectures.
     const bf2x87::Real dx = static_cast<bf2x87::Real>(position.x) - controlPoint.x;
     const bf2x87::Real dy = static_cast<bf2x87::Real>(position.y) - controlPoint.y;

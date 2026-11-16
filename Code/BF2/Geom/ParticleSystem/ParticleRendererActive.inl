@@ -80,7 +80,7 @@ static void psmUpdateParticleDrawState(unsigned char* renderer, unsigned char* p
     unsigned int& flags = psmDrawField<unsigned int>(particle, 0x54);
     if (!(flags & 0x80)) return;
     flags &= ~0x80u;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Keep x87 intermediates until the attested stores.
     using bf2x87::wide;
     const bf2x87::Real age = wide(psmDrawField<float>(particle, 0x24));
@@ -108,7 +108,7 @@ static void psmUpdateParticleDrawState(unsigned char* renderer, unsigned char* p
         const float* position = reinterpret_cast<float*>(particle + 0x18);
         const float* velocity = reinterpret_cast<float*>(particle + 0x60);
         const Mat4& matrix = psmSpriteField<Mat4>(renderer, 0x1C98);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] The previous Y/Z, current reciprocal and
         // projected Y remain live; previous X and its reciprocal are spilled.
         const float previousX = bf2x87::store(wide(position[0]) - wide(velocity[0]) * wide(0.001f));
@@ -194,7 +194,7 @@ static void psmUpdateParticleDrawState(unsigned char* renderer, unsigned char* p
             flags ^= (current ^ flags) & 0xF;
             const unsigned int next = (current + 1) % frameCount;
             const unsigned int columns = psmDescriptor0<unsigned int>(descriptor, 0xE4);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             // [CHOSEN, not recovered] PE 10172588 spills only the second row product.
             const unsigned int xs[2] = { current % columns, next % columns };
             const bf2x87::Real ys[2] = {
@@ -205,7 +205,7 @@ static void psmUpdateParticleDrawState(unsigned char* renderer, unsigned char* p
 #endif
             for (unsigned int i = 0; i < 2; ++i)
             {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                 const bf2x87::Real u = (wide(psmDescriptor0<short>(descriptor, 0x21E)) * wide(0.000030518509f)
                     + wide(xs[i]) * wide(psmDescriptor0<float>(descriptor, 0x13C))) * wide(32767.0f);
                 const bf2x87::Real v = (wide(psmDescriptor0<short>(descriptor, 0x220)) * wide(0.000030518509f)

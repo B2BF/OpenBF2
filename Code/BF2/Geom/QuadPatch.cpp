@@ -3,7 +3,7 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h" // [CHOSEN, not recovered] Retain x87 intermediates on native macOS.
 #endif
 
@@ -141,7 +141,7 @@ inline bool lod0n(const TerrainCullerNode* n) { return n && n->visible && n->lod
 inline bool lod1n(const TerrainCullerNode* n) { return n && n->visible && n->lod == 1; }
 
 // [CHOSEN, not recovered] Native arithmetic support for the retained x87 walk expressions.
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 using CullerWalkReal = bf2x87::Real;
 inline bool cullerWalkLess(CullerWalkReal a, CullerWalkReal b) { return bf2x87::less(a, b); }
 inline bool cullerWalkGreater(CullerWalkReal a, CullerWalkReal b) { return bf2x87::greater(a, b); }
@@ -282,7 +282,7 @@ void QuadPatchDetailLayer::buildLodTableTree(unsigned char* tableBytes, int quad
     (void)quadrant;
     size >>= 1;
     const int stride = terrain->m_patchSize + 1;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Preserve the retained FILD/FMUL value before the native comparison.
     if (bf2x87::greater(bf2x87::wide(terrain->m_culler->param10),
                        bf2x87::mul(bf2x87::wide(size), bf2x87::wide(terrain->m_primaryWorldScale.x))))
@@ -2325,7 +2325,7 @@ void TerrainCuller::assignLegacyGridIndices(TerrainCullerNode* node, int x, int 
 namespace {
 
     // [CHOSEN, not recovered] Native extended expressions preserve the PE's explicit stores.
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 typedef bf2x87::Real LegacyTerrainReal;
 inline LegacyTerrainReal legacyWide(float value) { return bf2x87::wide(value); }
 inline LegacyTerrainReal legacyInteger(int value) { return bf2x87::wide(value); }
@@ -2777,7 +2777,7 @@ void setShadowBatchMorph(Terrain* t, int lod)
 // PE 0x10188B80. Tangency and unordered distances both refuse the sphere.
 bool QuadPatch::intersectsLightSphere(const Vec3& position, float radius) const
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const bf2x87::Real x = bf2x87::sub(bf2x87::wide(sphereCentre.x), bf2x87::wide(position.x));
     const bf2x87::Real y = bf2x87::sub(bf2x87::wide(sphereCentre.y), bf2x87::wide(position.y));
     const bf2x87::Real z = bf2x87::sub(bf2x87::wide(sphereCentre.z), bf2x87::wide(position.z));
@@ -3481,7 +3481,7 @@ namespace {
 
 template<class A, class B> bool shadowRangeLess(A a, B b)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain FILD precision and FCOM's invalid exception.
     return bf2x87::less(bf2x87::wide(a), bf2x87::wide(b));
 #else
@@ -3491,7 +3491,7 @@ template<class A, class B> bool shadowRangeLess(A a, B b)
 
 template<class T> int shadowRangeInt(T value)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Masked invalid FISTP produces the integer indefinite.
     return bf2x87::toIntTruncate(bf2x87::wide(value));
 #else
@@ -3501,7 +3501,7 @@ template<class T> int shadowRangeInt(T value)
 
 int shadowRangeScaleInt(float value)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] _ftol2 leaves its low word in EAX, including overflow.
     return bf2x87::lowWord(bf2x87::toInt64Truncate(bf2x87::wide(value)));
 #else
@@ -3527,7 +3527,7 @@ void QuadPatch::gatherShadowRecord(unsigned short* indices, int* cursor, LightSh
         return;
 
     Frustum frustum(shadow->frustum);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] The argument is explicitly stored before setFarDist.
     rendmath::frustumSetFarDist(frustum, bf2x87::store(bf2x87::mul(
         bf2x87::wide(frustum.getFarDist()), bf2x87::wide(extrusionScale))));
@@ -3677,7 +3677,7 @@ rangeComplete:
             range.shadowRecord = reinterpret_cast<const unsigned char*>(shadow);
             range.node = node;
             const Mat4* const camera = dx9rend::rendererGetRenderViewDup()->getViewMatrixPtr();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             // [CHOSEN, not recovered] Keep both distances through FSQRT until the record store.
             bf2x87::Real dx = bf2x87::wide(0.0f), dz = bf2x87::wide(0.0f);
             if (shadowRangeLess(camera->m[12], minX))
@@ -3760,7 +3760,7 @@ void QuadPatch::drawWater(TerrainCullerNode**& it, std::vector<TerrainCullerNode
         lightRecord[8] = color[2];
     }
     RaMaterialParameters& material = *static_cast<RaMaterialParameters*>(materialParameters);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const bf2x87::Real unpackX = bf2x87::mul(
         bf2x87::wide(terrain->m_primaryWorldScale.x), bf2x87::wide(255.0f));
     const bf2x87::Real unpackZ = bf2x87::mul(
@@ -3777,7 +3777,7 @@ void QuadPatch::drawWater(TerrainCullerNode**& it, std::vector<TerrainCullerNode
 #endif
     material.normalUnpack.value[0] = terrain->m_primaryWorldScale.y;
     material.normalUnpack.value[1] = 1.0f;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     material.texUnpack.value = bf2x87::store(bf2x87::div(
         bf2x87::wide(255.0f), bf2x87::wide(terrain->m_patchSize)));
 #else
