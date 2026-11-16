@@ -46,7 +46,7 @@
 #include "../External/BFMeme/Pointer.h"
 #if defined(_WIN32)
 #include <windows.h>
-#elif defined(__APPLE__)
+#elif (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
 #include "../Platform/macOS/MacSystem.h"   // [CHOSEN, not recovered] MessageBoxA's counterpart
 #endif
 #include <cmath>
@@ -1272,7 +1272,7 @@ bool registerReference(meme::System* system, Value* value,
         return true; // The registration result is discarded.
     }
     const std::string caption = formatString("Failed to register: %s in %s", name.c_str(), container.c_str());
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
     macos::showMessageBox("Error RegisterData", caption.c_str());
 #else
     MessageBoxA(0, "Error RegisterData", caption.c_str(), 0); // Retail text/caption order.

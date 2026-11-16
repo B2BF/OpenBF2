@@ -1,7 +1,7 @@
-// [CHOSEN, not recovered] Native saved-table dispatch for the macOS port.
+// [CHOSEN, not recovered] Native saved-table dispatch; Linux port: issue #36.
 #ifndef BFMEME_NATIVE_SAVED_DISPATCH_H
 #define BFMEME_NATIVE_SAVED_DISPATCH_H
-#if defined(__APPLE__) && defined(__LP64__) && !defined(__arm64e__)
+#if (defined(__APPLE__) || (defined(__linux__) && (defined(BF2_LINUX_CLIENT) || defined(BF2_NATIVE_X87)))) && defined(__LP64__) && !defined(__arm64e__)
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
@@ -12,7 +12,7 @@
 namespace dice { namespace meme { namespace native_dispatch {
 
 /// Itanium virtual-member encoding; a non-virtual member is a programming error and asserts. x86-64 marks a virtual
-/// member by ptr = vtable byte offset + 1; the ARM variant of the C++ ABI (Apple arm64) keeps
+/// member by ptr = vtable byte offset + 1; the AArch64 C++ ABI keeps
 /// ptr = vtable byte offset and marks it in adj = 2 * this-adjustment + 1.
 struct VirtualMember
 {

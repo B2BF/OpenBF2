@@ -46,7 +46,7 @@ extern char consoleCharBuffer[256];
 extern int  consoleCharCount, consoleCharRead, consoleCharWrite;
 #endif
 // [CHOSEN, not recovered] The macOS client fills the menu ring too (BF2.cpp, __APPLE__ arm).
-#if (defined(_WIN32) || defined(__APPLE__)) && !DEDICATED
+#if (defined(_WIN32) || (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))) && !DEDICATED
 extern char menuKeyBuffer[256];
 extern int  menuKeyCount, menuKeyRead, menuKeyWrite;
 #endif

@@ -21,6 +21,8 @@ namespace macos {
 unsigned char dikFromMacKeyCode(unsigned short keyCode, bool isoLayout);
 
 // Returns the macOS virtual key code that produces dik, or 0xFFFF when no key does.
+// The Linux host reserves 0x100|dik for PC keys outside the Cocoa vocabulary; the forward
+// translation accepts these tokens only in the Linux client. This does not change DIK bindings.
 unsigned short macKeyCodeFromDik(unsigned char dik, bool isoLayout);
 
 // Returns the Win32 virtual-key code a US-layout Windows keyboard reports in WM_KEYDOWN for this

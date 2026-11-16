@@ -1,11 +1,15 @@
 // [TEMP] [CHOSEN, not recovered] macOS port addition, not retail. See HitchTrace.h.
-#if defined(__APPLE__)
+#if defined(__APPLE__) || (defined(__linux__) && defined(BF2_GFX_DXVK))
 #include "HitchTrace.h"
 #include <cstdio>
 #include <cstdlib>
 #include <mutex>
 #include <string>
 #include <pthread.h>
+#if defined(__linux__)
+#include <sys/syscall.h>
+#include <unistd.h>
+#endif
 
 namespace bf2hitch {
 namespace {
@@ -59,7 +63,11 @@ void add(Category category, double ms, const char* detail)
 {
     State* s = state();
     if (!s || category < 0 || category >= CategoryCount) return;
+#if defined(__APPLE__)
     const bool main = pthread_main_np() != 0;
+#else
+    const bool main = syscall(SYS_gettid) == getpid();
+#endif
     std::lock_guard<std::mutex> lock(s->mutex);
     if (main) { s->ms[category] += ms; ++s->count[category]; }
     if (ms < 0.2) return;

@@ -3,7 +3,7 @@
 // ignored duplicate inserts; only the device classes differ. See MacInputDeviceManager.h.
 
 #include "MacInputDeviceManager.h"
-#if !DEDICATED && defined(__APPLE__)
+#if !DEDICATED && (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
 #include "../../Core/Ids.h"
 
 namespace dice { namespace hfe { namespace io {

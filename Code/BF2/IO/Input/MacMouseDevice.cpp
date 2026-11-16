@@ -4,7 +4,7 @@
 // c_dfDIMouse2 data is replaced by host mouse events. See MacInputDeviceManager.h.
 
 #include "MacInputDeviceManager.h"
-#if !DEDICATED && defined(__APPLE__)
+#if !DEDICATED && (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
 #include "../../Core/Ids.h"
 #include <cmath>
 

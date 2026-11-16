@@ -80,7 +80,7 @@ const Export kBF2AudioExports[] = {
 // failed dlopen would; the null row keeps the array non-empty.
 const Image kImages[] = {
 #if defined(BF2_STATIC_RENDDX9)
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
     // [CHOSEN, not recovered] BF2.exe frees RendDX9.dll once, at engine shutdown: shutdownEngine
     // (0x408AB0) deletes BF2Render after the window, and ~BF2Render (0x4548B0) passes the handle
     // to FreeLibraryBf (0x54CD80: deinitDll, then FreeLibrary). The linked image gets the same

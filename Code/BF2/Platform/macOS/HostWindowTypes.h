@@ -16,7 +16,7 @@
 namespace dice {
 namespace hfe {
 
-typedef struct HostNativeView__* HWND;      // the content NSView*, borrowed from CocoaHost
+typedef struct HostNativeView__* HWND;      // borrowed NSView* on macOS, SDL_Window* on Linux
 typedef unsigned int             UINT;
 typedef std::uintptr_t           WPARAM;
 typedef std::intptr_t            LPARAM;

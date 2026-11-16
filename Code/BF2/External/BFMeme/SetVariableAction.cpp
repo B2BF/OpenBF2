@@ -5,7 +5,7 @@
 #include "Data.h"
 #include "Stream.h"
 #include "TypeDescriptor.h"
-#if defined(__APPLE__) && defined(__LP64__)
+#if (defined(__APPLE__) || (defined(__linux__) && (defined(BF2_LINUX_CLIENT) || defined(BF2_NATIVE_X87)))) && defined(__LP64__)
 #include "NativeSavedDispatch.h"
 #endif
 namespace dice { namespace meme {
@@ -13,7 +13,7 @@ namespace {
 // MSVC x86 dispatch captures the destination table before reading the source, then reloads the receiver.
 // Preserve the saved table: a normal virtual call could select a replacement receiver's implementation.
 // Helper names and isolation are [INFERRED].
-#if defined(__APPLE__) && defined(__LP64__)
+#if (defined(__APPLE__) || (defined(__linux__) && (defined(BF2_LINUX_CLIENT) || defined(BF2_NATIVE_X87)))) && defined(__LP64__)
 // [CHOSEN, not recovered] Select the compiler's native slot while retaining the saved table.
 using DataMethodTable = native_dispatch::SavedVirtual<decltype(&Data::setFloat)>;
 DataMethodTable captureDataMethods(Data* data)
@@ -27,7 +27,7 @@ DataMethodTable captureDataMethods(Data* data)
 // __thiscall spelling is ignored and the same table index is read.
 #endif
 void callCapturedSetFloat(DataMethodTable methods, Data* receiver, System* system, float value)
-#if defined(__APPLE__) && defined(__LP64__)
+#if (defined(__APPLE__) || (defined(__linux__) && (defined(BF2_LINUX_CLIENT) || defined(BF2_NATIVE_X87)))) && defined(__LP64__)
 // [CHOSEN, not recovered] Native ABI counterpart of the unchanged PE arm below.
 { methods(receiver, system, value); }
 #else

@@ -20,7 +20,7 @@
 #elif !DEDICATED
 #include "PosixRegistry.h"
 #include <fstream>
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
 #include "../Platform/macOS/ClientPaths.h"
 #else
 #include "../IO/File/FileManager.h"
@@ -254,7 +254,7 @@ namespace posixRegistry {
 // Each lookup reopens the file; nothing is cached.
 registryFile::Values readFile()
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
     const std::string home = macos::clientDataDirectory();
 #else
     // Use the filesystem's @HOME@ policy when a future POSIX client supplies it.

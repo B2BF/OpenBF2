@@ -5,7 +5,7 @@
 // has under DirectInput. See MacInputDeviceManager.h and docs/macos-s2-4.md.
 
 #include "MacInputDeviceManager.h"
-#if !DEDICATED && defined(__APPLE__)
+#if !DEDICATED && (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
 #include "../../Core/Ids.h"
 #include "../../Platform/macOS/MacGamepad.h"
 #include <cmath>

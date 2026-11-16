@@ -45,7 +45,7 @@ namespace memory { void memory_update_modules(const char*) { } }
 #    include "BF2Console.h"                          // IMenuLogic::getConsole()->getConsoleActive()
 #    include "../../Platform/Windows/WinInputScript.h" // [TEMP] BF2_INPUT_SCRIPT host
 #  endif
-#elif defined(__APPLE__) && !DEDICATED
+#elif (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
 // [CHOSEN, not recovered] macOS client: the Cocoa host stands in for the Win32 message pump and
 // entry chain (docs/macos-s2-4.md). The headers mirror the Win32 client list above.
 #  include <cstdlib>                                 // exit(0) on a posted quit
@@ -115,7 +115,7 @@ static BOOL CALLBACK lockLoadedModule(PCSTR moduleName, LoadedModuleBase moduleB
 static void trimOtherProcessesAndFileCache();
 static int  bf2MessageHandler(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 #  endif
-#elif defined(__APPLE__) && !DEDICATED
+#elif (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
 class IBase;
 namespace io { extern IBase* inputManager; }        // Core/Globals.cpp defines it as IBase*
 
@@ -190,7 +190,7 @@ bool BF2::init(const std::string& commandLine)
     // when BF2Engine::init ran with isDedicated() false; `+dedicated 1` leaves it null.
     if (Window* window = m_engine->getWindow())
         window->addMessageHandler(bf2MessageHandler);
-#elif defined(__APPLE__) && !DEDICATED
+#elif (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
     // [CHOSEN, not recovered] The same registration for the macOS window.
     if (Window* window = m_engine->getWindow())
         window->addMessageHandler(bf2MessageHandler);
@@ -267,7 +267,7 @@ void BF2::handleInGameWinMessages()
 #  endif
         }
     }
-#elif defined(__APPLE__) && !DEDICATED
+#elif (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
     // [CHOSEN, not recovered] The Cocoa pump in place of PeekMessage/DispatchMessage: it drains
     // every pending event and reports a posted quit as WM_QUIT does. The focus and mute logic
     // below repeats the Win32 arm above unchanged.
@@ -301,7 +301,7 @@ void BF2::handleInGameWinMessages()
 } // namespace dice
 
 
-#if defined(__APPLE__) && !DEDICATED
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
 
 // [CHOSEN, not recovered] macOS client: the desktop-state and window-message pieces of the
 // Win32 chain below, on the Cocoa host. There was no retail macOS image; see docs/macos-s2-4.md.
@@ -450,7 +450,8 @@ static int bf2MessageHandler(HWND /*hwnd*/, UINT message, WPARAM wParam, LPARAM 
 static int bf2MacMain(const std::string& commandLine)
 {
     macos::CocoaHost& host = macos::CocoaHost::instance();
-    host.initApplication();                         // NSApplication before any window exists
+    if (!host.initApplication())                    // native application before any window exists
+        return 42;
     host.preventDisplaySleep(true);                 // SPI_SETSCREENSAVEACTIVE 0 counterpart
 
     g_system->restoreFPUExceptions();
@@ -956,7 +957,7 @@ int main(int argc, char** argv)
 
 #endif // dedicated - the headless console entry
 
-#elif defined(__APPLE__) && !DEDICATED
+#elif (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
 #include <cstdio>
 #include <cstdlib>
 #include <execinfo.h>

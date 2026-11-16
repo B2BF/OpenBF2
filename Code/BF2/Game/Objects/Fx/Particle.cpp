@@ -3,12 +3,12 @@
 // Geometry setup is client-only. Preserve NaN lifetime handling and fatal checks for invalid lifetime,
 // unsupported light-source attachment, rejected mesh attachment and invalid geometry part.
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../../../Platform/X87Compat.h" // [CHOSEN, not recovered] x87 conversion results, including invalid inputs.
+#endif
 #if defined(BF2_STATIC_PLUGINS) && !defined(_MSC_VER)
 // [CHOSEN, not recovered] One native scale-interface declaration in every image.
 #include "../../../Geom/IScaleable.h"
-#endif
 #endif
 #include "Particle.h"
 #include "ParticleTemplate.h"

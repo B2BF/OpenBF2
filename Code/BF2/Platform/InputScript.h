@@ -6,6 +6,7 @@
 //   Win32   WinInputScript (Platform/Windows) sends window messages to the game window (menus,
 //           Swiff, console, chat) and feeds DirectInput device data to KeyboardDevice and
 //           MouseDevice (the in-game path).
+//   Linux   SDLHost uses the shared native host key/event contract and SDLInputScript names.
 // While a script is active the host ignores real input, reports focus, and leaves the real cursor
 // alone. Key codes are the host's own: kVK_ codes on macOS, DIK_ codes (scan codes) on Win32.
 // Client images only (!DEDICATED). [RETIRE-WHEN: client-test-automation-replaced]
@@ -60,6 +61,8 @@ public:
     // Capture requests (macOS: MetalBridge's present capture, BF2_PRESENT_PNG; Win32: the sink's
     // window capture). Returns true and the label once per request.
     bool takeCaptureRequest(std::string& label);
+    // Queues a capture for the renderer. A request is not proof that an image has been saved.
+    void requestCapture(const std::string& label);
 
 private:
     enum Op

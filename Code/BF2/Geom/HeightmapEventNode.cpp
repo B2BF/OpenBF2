@@ -2,9 +2,9 @@
 // Contents: the whole translation unit, (ELF 0x84A8900..0x84A8A5F, PE
 //           bf2_w32ded 0x756520 / 0x756550). Engine code: the dedicated server links it too.
 
-// [CHOSEN, not recovered] The macOS static renderer uses the host's identical
+// [CHOSEN, not recovered] The native static renderer uses the host's identical
 // implementation and RTTI for this shared event type. Windows DLLs keep their own copy.
-#if !(defined(__APPLE__) && defined(BF2_STATIC_PLUGINS) && defined(BF2_IMAGE_RENDDX9))
+#if !(defined(BF2_STATIC_PLUGINS) && defined(BF2_IMAGE_RENDDX9))
 #include "HeightmapEventNode.h"
 
 #include <iostream>     // the TU's static initialiser (ELF 0x84A89B0) is the <iostream> guard

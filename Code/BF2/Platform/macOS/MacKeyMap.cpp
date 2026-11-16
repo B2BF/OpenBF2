@@ -5,7 +5,7 @@
 #include "MacKeyMap.h"
 
 // Engine builds force-include Core/BuildConfig.h; the table is part of the macOS client only.
-#if defined(__APPLE__) && !(defined(DEDICATED) && DEDICATED)
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !(defined(DEDICATED) && DEDICATED)
 
 namespace dice {
 namespace hfe {
@@ -61,6 +61,12 @@ const unsigned char  kDikNumpadEnter    = 156;
 
 unsigned char dikFromMacKeyCode(unsigned short keyCode, bool isoLayout)
 {
+#if defined(BF2_LINUX_CLIENT)
+    // [CHOSEN, not recovered] SDL has PC keys absent from the Cocoa vocabulary. Preserve their
+    // DIK identity above that vocabulary instead of mapping F13-F15 to Print/Scroll/Pause.
+    if (keyCode >= 0x100 && keyCode <= 0x1FF)
+        return static_cast<unsigned char>(keyCode);
+#endif
     if (keyCode >= 128)
         return 0;
     if (isoLayout)
@@ -83,7 +89,11 @@ unsigned short macKeyCodeFromDik(unsigned char dik, bool isoLayout)
     for (unsigned short keyCode = 0; keyCode < 128; ++keyCode)
         if (dikFromMacKeyCode(keyCode, isoLayout) == dik)
             return keyCode;
+#if defined(BF2_LINUX_CLIENT)
+    return static_cast<unsigned short>(0x100 | dik);
+#else
     return 0xFFFF;
+#endif
 }
 
 unsigned int win32VirtualKeyFromDik(unsigned char dik)

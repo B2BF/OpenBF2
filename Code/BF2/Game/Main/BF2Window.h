@@ -8,7 +8,7 @@
 
 #if defined(_WIN32)
 #include <windows.h>
-#elif defined(__APPLE__)
+#elif (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
 // [CHOSEN, not recovered] macOS port: HWND/UINT/WPARAM/LPARAM/LRESULT in dice::hfe, and the
 // Win32 message ids BF2Window_macos.mm synthesizes from Cocoa events.
 #include "../../Platform/macOS/HostWindowTypes.h"

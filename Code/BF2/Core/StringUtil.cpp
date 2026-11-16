@@ -1,7 +1,7 @@
 // Shared string comparisons, hashing, formatting and path helpers.
 // Source path is attested by anonymous-namespace symbols.
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
 #include <sys/stat.h>
 #endif
 #include "StringUtil.h"
@@ -351,7 +351,7 @@ bool isPathAbsolute(const std::string& s)
 #endif
 }
 
-#if defined(__APPLE__) && !DEDICATED
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
 // [CHOSEN, not recovered] macOS client port. On Windows
 // isPathAbsolute only accepts drive paths, so game paths such as "/Levels/..." (SwiffPlayer) or
 // "/objects/..." (SF and booster mesh texture names) are relative. On a POSIX host every '/' path
@@ -559,7 +559,7 @@ void goUpInPath(std::string& path)
 #if defined(_WIN32)
     goUpInPath_worker(path);
 #else
-#if defined(__APPLE__) && !DEDICATED
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
     // [PLATFORM] the client keeps the Windows meaning for game paths; only host-absolute paths
     // (isHostAbsolutePath) get their '/' back.
     const bool absolute = isHostAbsolutePath(path);

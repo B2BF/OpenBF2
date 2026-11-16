@@ -23,7 +23,7 @@
 #include "SwiffBitmapCache.h"
 #include "OfflineConnectPopup.h"
 #include "../../../Core/MsvcCrtCompat.h"   // [CHOSEN, not recovered] sprintf_s, __time32_t/_time32, _time64 outside MSVC
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
 #include "../../../Platform/macOS/CocoaHost.h"
 // [CHOSEN, not recovered] macOS: the two user32 calls the ActionScript bindings make, on the Cocoa
 // host. SetCursor takes the host's cursor tokens (SwiffHost::getCursor) and answers the previous
@@ -356,9 +356,14 @@ private:
     template<gameswf::as_c_function_ptr Method>
     static void nativeMethodFrontier(const gameswf::fn_call&)
     {
+#if defined(_MSC_VER)
+        const char* signature = __FUNCSIG__;
+#else
+        const char* signature = __PRETTY_FUNCTION__;
+#endif
         // [TEMP] Also log through the windowed-client channel, where stderr may be unavailable.
-        ::renddx9abi::logf("[FRONTIER] dice::hfe::ui::SwiffAsNamespace::nativeMethodFrontier reached: %s (native host ABI unresolved)", __FUNCSIG__);
-        ::fprintf(stderr, "[FRONTIER] dice::hfe::ui::SwiffAsNamespace::nativeMethodFrontier reached: %s (native host ABI unresolved)\n", __FUNCSIG__);
+        ::renddx9abi::logf("[FRONTIER] dice::hfe::ui::SwiffAsNamespace::nativeMethodFrontier reached: %s (native host ABI unresolved)", signature);
+        ::fprintf(stderr, "[FRONTIER] dice::hfe::ui::SwiffAsNamespace::nativeMethodFrontier reached: %s (native host ABI unresolved)\n", signature);
         ::fflush(stderr);
         ::abort(); // deliberately independent of BF2_SWIFFPLAYER_FRONTIER=continue
     }
@@ -1649,7 +1654,7 @@ static const char* serverOsIcon(const char* os)
 // queries use separate caches; sponsors may issue a query on a cache miss. Joining clears
 // the separate in-game server-info keys.
 
-#if !defined(__APPLE__)
+#if !defined(__APPLE__) && !defined(BF2_LINUX_CLIENT)
 extern "C" __declspec(dllimport) void* __stdcall SetCursor(void* cursor);
 #endif
 typedef ServerBrowserRecord CachedRecord;
@@ -3414,7 +3419,7 @@ struct SwiffHostRequest
     int                       id;     // +0
     std::vector<std::string> args;   // +4 (retail: a VC7.1 vector of strings)
 };
-#if !defined(__APPLE__)
+#if !defined(__APPLE__) && !defined(BF2_LINUX_CLIENT)
 extern "C" __declspec(dllimport) void* __stdcall SetCursor(void* cursor);
 #endif
 void as_profile_logout(const gameswf::fn_call& fn)
@@ -3537,13 +3542,13 @@ void as_logic_joinCommandlineServer(const gameswf::fn_call& fn)
 }
 
 // sub_1004D450 - dice.bf2.Logic.isCapsLockPressed: GetKeyState(VK_CAPITAL) & 1, a boolean. No host.
-#if !defined(__APPLE__)
+#if !defined(__APPLE__) && !defined(BF2_LINUX_CLIENT)
 extern "C" __declspec(dllimport) short __stdcall GetKeyState(int vkey);
 #endif
 void as_logic_isCapsLockPressed(const gameswf::fn_call& fn)
 {
     SWF_AS_TRACE("as_logic_isCapsLockPressed");
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
     fn.result->set_bool((capsLockKeyState() & 1) != 0);
 #else
     fn.result->set_bool((GetKeyState(20) & 1) != 0);
@@ -4208,7 +4213,7 @@ static int hostPlayerId()
 // The 20-byte rank-change record SwiffHost +644(playerId, record&) fills: {time(now), 0, rank,
 // promoted, demoted} as sub_10059A80/sub_10059C40 lay it out on their stacks.
 struct RankChangeRecord { int now; int zero; int rank; int promoted; int demoted; };
-#if !defined(__APPLE__)
+#if !defined(__APPLE__) && !defined(BF2_LINUX_CLIENT)
 extern "C" __int64 __cdecl _time64(__int64*);
 #endif
 
@@ -10367,7 +10372,7 @@ SwiffPlayer::SwiffPlayer()
 
     initKeyTranslation();
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
     // [CHOSEN, not recovered] Cocoa asynchronous Enter state; independent of
     // notifyChar/modifier latches and the gameswf Key listener event table.
     gameswf::set_async_key_state_callback([](int) -> unsigned short {

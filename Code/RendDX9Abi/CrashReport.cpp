@@ -5,19 +5,29 @@
 
 #include "Frontier.h"
 
-#if defined(__APPLE__)
+#if defined(__APPLE__) || (defined(__linux__) && defined(BF2_LINUX_CLIENT))
 // [CHOSEN, not recovered] Win32 first-chance instrumentation is unavailable.
 // This is a diagnostic installation notice, not a graphics/backend success.
 #include <cstdio>
 namespace renddx9abi {
 void installCrashReporter()
 {
-    std::fprintf(stderr, "[CHOSEN, not recovered] renddx9abi::installCrashReporter: Win32 first-chance reporter unavailable on macOS; use system crash reports\n");
+#if defined(__APPLE__)
+    const char* platform = "macOS";
+#else
+    // [CHOSEN, not recovered] Linux uses native core dumps/debuggers (issue #36).
+    const char* platform = "Linux";
+#endif
+    std::fprintf(stderr, "[CHOSEN, not recovered] renddx9abi::installCrashReporter: Win32 first-chance reporter unavailable on %s; use system crash reports\n", platform);
     std::fflush(stderr);
 }
 void removeCrashReporter()
 {
+#if defined(__APPLE__)
     logf("renddx9abi::removeCrashReporter: no Win32 reporter installed on macOS");
+#else
+    logf("renddx9abi::removeCrashReporter: no Win32 reporter installed on Linux");
+#endif
 }
 }
 #else

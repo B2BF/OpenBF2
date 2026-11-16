@@ -13,7 +13,7 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <cstdint>
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
 #include "../Platform/macOS/CocoaHost.h"
 #endif
 #endif
@@ -453,7 +453,7 @@ void* SwiffHost::getCursor(int which)
     if (s_cursorsLoaded)
         return m_cursors[which];
     std::string arrow = io::fileManager->fileExistsEx(std::string("menu/external/flashmenu/cursor/cursor_arrow.ani"), true);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
     // [CHOSEN, not recovered] AppKit cannot load .ani cursors; the host decodes each file itself
     // (Platform/macOS/MacCursorFile.h) and answers a token with its frames, animation and hotspot.
     // Null, as LoadCursorFromFileA answers, when the file cannot be read; the arrow's token when
@@ -2145,7 +2145,7 @@ void SwiffHost::setFlagEA8(bool value)                        { m_flagEA8 = valu
 bool SwiffHost::setBusy(int busy)
 {
     m_busy = busy;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
     // [CHOSEN, not recovered] Nothing to repaint synchronously; UpdateWindow fails only without a window.
     return bf2Engine->window->getHwnd() != 0;
 #else

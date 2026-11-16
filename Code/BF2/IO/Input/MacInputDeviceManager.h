@@ -13,7 +13,7 @@
 #define IO_INPUT_MACINPUTDEVICEMANAGER_H
 
 #include "../../Core/BuildConfig.h"
-#if !DEDICATED && defined(__APPLE__)
+#if !DEDICATED && (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
 
 #include "Input.h"
 #include "../../Platform/macOS/CocoaHost.h"

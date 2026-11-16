@@ -41,7 +41,7 @@
 #include <cwchar>
 #if defined(_WIN32)
 #include <windows.h>
-#elif defined(__APPLE__)
+#elif (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
 #include "../Platform/macOS/MacSystem.h"   // [CHOSEN, not recovered] MessageBoxA's counterpart
 #endif
 #if !defined(_M_IX86)
@@ -551,7 +551,7 @@ bool registerVehicleFloat(meme::System* system, float* value,
         return true;
     }
     const std::string caption = formatString("Failed to register: %s in %s", name.c_str(), container.c_str());
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
     macos::showMessageBox("Error RegisterData", caption.c_str());
 #else
     MessageBoxA(nullptr, "Error RegisterData", caption.c_str(), 0); // 785860, retail text/caption

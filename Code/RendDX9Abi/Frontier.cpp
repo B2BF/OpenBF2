@@ -56,10 +56,15 @@ namespace {
 FILE*           s_log       = 0;
 #if defined(_WIN32)
 CRITICAL_SECTION s_lock;
+#elif defined(__linux__)
+pthread_mutex_t s_lock;
+pthread_once_t s_lockOnce = PTHREAD_ONCE_INIT;
 #else
 pthread_mutex_t s_lock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER;  // CRITICAL_SECTION is recursive too
 #endif
+#if !defined(__linux__)
 bool            s_lockReady = false;
+#endif
 int             s_trap      = -1;   // -1 unknown, 1 abort, 0 continue
 
 // Per-name call counts. A fixed table, not a map: this runs on the path where the allocator itself
@@ -94,8 +99,41 @@ void lockEnter() { ::pthread_mutex_lock(&s_lock); }
 void lockLeave() { ::pthread_mutex_unlock(&s_lock); }
 #endif
 
+#if defined(__linux__)
+// [CHOSEN, not recovered] Linux has no portable recursive static initializer. The once
+// operation publishes an initialized recursive mutex without using the engine allocator.
+// Keep the same recursion contract as CRITICAL_SECTION and the macOS mutex (issue #36).
+void initializeLock()
+{
+    pthread_mutexattr_t attributes;
+    int error = ::pthread_mutexattr_init(&attributes);
+    if (!error)
+    {
+        error = ::pthread_mutexattr_settype(&attributes, PTHREAD_MUTEX_RECURSIVE);
+        if (!error)
+            error = ::pthread_mutex_init(&s_lock, &attributes);
+        ::pthread_mutexattr_destroy(&attributes);
+    }
+    if (error)
+    {
+        ::fprintf(stderr, "renddx9abi::Frontier: recursive log mutex initialization failed (%d)\n", error);
+        ::fflush(stderr);
+        ::abort();
+    }
+}
+#endif
+
 void ensureLock()
 {
+#if defined(__linux__)
+    const int error = ::pthread_once(&s_lockOnce, initializeLock);
+    if (error)
+    {
+        ::fprintf(stderr, "renddx9abi::Frontier: log mutex once initialization failed (%d)\n", error);
+        ::fflush(stderr);
+        ::abort();
+    }
+#else
     if (!s_lockReady)
     {
 #if defined(_WIN32)
@@ -103,6 +141,7 @@ void ensureLock()
 #endif
         s_lockReady = true;
     }
+#endif
 }
 
 void writeLine(const char* text)
@@ -233,8 +272,12 @@ void logOpen()
 
 void logClose()
 {
+#if defined(__linux__)
+    ensureLock();
+#else
     if (!s_lockReady)
         return;
+#endif
     lockEnter();
     if (s_log)
     {

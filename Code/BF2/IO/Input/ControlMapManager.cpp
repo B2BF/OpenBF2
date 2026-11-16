@@ -5,7 +5,7 @@
 #include "../../Core/Ids.h"                // [INFERRED] header name; the constants are attested
 
 #include "../../Core/System.h"             // g_system - mapNextInput's 10 s limit
-#if defined(__APPLE__) && !DEDICATED
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
 #include "../../Platform/macOS/CocoaHost.h" // [CHOSEN, not recovered] mapNextInput's event pump
 #endif
 
@@ -236,7 +236,7 @@ int ControlMapManager::mapNextInput(IControlMap* map, int id, bool alternate, bo
         const float now = static_cast<float>(g_system->getWallClockTime());
         if (start + 10.0f <= now)
             return 2;
-#if defined(__APPLE__) && !DEDICATED
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
         // [CHOSEN, not recovered] DirectInput fills its device buffers without the message loop;
         // the macOS devices are fed by the Cocoa pump, so the capture loop pumps it. A quit
         // request stays latched for the main loop.

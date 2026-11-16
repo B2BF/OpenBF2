@@ -6,7 +6,7 @@
 // which keeps the Win32 wndProc's state rules and dispatches every message to the handler list.
 // Choices that differ from Win32 are listed in docs/macos-s2-4.md.
 
-#if !DEDICATED && defined(__APPLE__)
+#if !DEDICATED && (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
 
 #include "BF2Window.h"
 

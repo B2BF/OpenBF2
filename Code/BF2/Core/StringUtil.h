@@ -68,7 +68,7 @@ std::wstring getFixPathDelimiters(const std::wstring&, wchar_t);
 std::wstring getFixPath(const std::wstring&, wchar_t);
 
 bool        isPathAbsolute(const std::string&);
-#if defined(__APPLE__) && !DEDICATED
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
 // [CHOSEN, not recovered] macOS client: a '/' path whose first component exists at the host root
 // ("/Users", "/private", "/Volumes", ...). Game paths with a leading '/' keep the Windows meaning.
 bool        isHostAbsolutePath(const std::string&);
