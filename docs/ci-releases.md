@@ -17,6 +17,7 @@ it does not recover or change engine behavior, ABI, protocols, or file formats.
 | Windows 2022, MSVC x86 | `msvc-x86` / `Reconstruction` | Python interpreter check; `bf2_run_checks`; `bf2_editor_run_checks`; `bf2_w32ded`; `bf2_aidll`; with a usable D3DX source: `bf2_client` and plugins, OpenAL Soft, `bf2_editor` and plugins, then `dumpbin /dependents /imports` of the client's `BF2.exe`, `RendDX9.dll`, `TextureAtlasBuilder.dll` and `BF2OpenAL.dll` and of the editor's `BF2Editor.exe`, `RendDX9.dll` and `TextureAtlasBuilder.dll`, and the embedded manifests of `BF2.exe` and `BF2Editor.exe` (`mt.exe`), in the log |
 | Windows 2022, MSVC x64 | `msvc-x64` / `Release` | Python interpreter check; strict `bf2_w64ded` and `bf2_aidll` links; AI export listing and staged-copy comparison; with a usable D3DX source: `bf2_client` and plugins, OpenAL Soft, then `dumpbin /dependents /imports` of `BF2.exe`, `RendDX9.dll`, `TextureAtlasBuilder.dll` and `BF2OpenAL.dll`, and the embedded manifest of `BF2.exe` (`mt.exe`), in the log |
 | Ubuntu 22.04, GCC x64 | `linux-x64` / `RelWithDebInfo` | Strict `bf2` link; `dice_py_check_run`; the Linux release package |
+| Ubuntu 22.04 OCI SDK, GCC 15.2 x64 | `linux-client` / `Release` | Native client strict link and focused checks; runtime audit; Qt setup build/tests and packaged UI smoke; Linux client application archive |
 | Ubuntu 22.04 (Windows package) | none | Packaging fixtures; assembles the Windows release package from both Windows jobs' per-role ZIPs |
 
 Windows builds initialize MSVC through the repository's `vsdevcmd.cmd`. They build
@@ -68,12 +69,15 @@ Existing engine frontiers, including `swiff-native-as-host`,
 `swiff-host-bodies` and `RW-88`, remain. Green CI establishes only the builds and focused
 checks above, not complete symbol recovery, production startup, loading, joining or
 playability. CI builds and packages both Windows clients when D3DX is usable;
-the x64 editor target exists but is not built by CI. Linux client/editor targets do not exist.
+the x64 editor target exists but is not built by CI. The separate Linux client job
+builds the Vulkan client and graphical installer; there is no Linux editor job.
 
 ## Packages
 
-`[CHOSEN, not recovered]` A release carries one package per platform, named by the platform
-only (owner decision 2026-11-15). The build jobs package each platform's roles separately;
+`[CHOSEN, not recovered]` The existing platform packages retain their names. The
+[Linux distribution design](https://github.com/kr4uzi/OpenBF2/issues/36#issuecomment-6932201666)
+adds a separate client/installer archive while retaining the Linux server ZIP.
+The build jobs package each platform's roles separately;
 those per-role ZIPs stay CI artifacts for development, and the release packages are assembled
 from them.
 
@@ -84,6 +88,7 @@ from them.
 | `openbf2-macos.dmg` | `OpenBF2.app`: the setup assistant and launcher with the universal (arm64 + x86_64) client; the app carries its own instructions |
 | `openbf2-windows.zip` | `x64\` the x64 client, `x86\` the x86 client, `server\` the x86 dedicated server, `editor\` the x86 editor, `licenses\`, `LICENSE`, `README.txt`, `build-info.json` |
 | `openbf2-linux.zip` | the x64 dedicated server: `bf2`, `libdice_py.so`, `licenses/`, `LICENSE`, `README.txt`, `build-info.json` |
+| `openbf2-linux-x86_64-client.tar.gz` | `OpenBF2/`: the Qt installer/launcher, native Vulkan client, bundled runtime, setup manifests, licenses and checked provenance; no game media or user profiles |
 | `openal-soft-1.25.2.tar.bz2` | the LGPL source of both Windows clients' `BF2OpenAL.dll` ([OpenAL Soft](#openal-soft-in-the-windows-clients)) |
 
 Each asset has a `.sha256` beside it. Releases do not carry the per-architecture Windows ZIPs,
@@ -120,7 +125,9 @@ written. The `Windows package` job runs it on Ubuntu after both Windows jobs and
 `release-windows` artifact.
 
 `--release linux` does the same for the Linux server in the Linux job (`release-linux`). The
-macOS release package is the `macos-app` job's disk image (`release-macos`). The setup build
+Linux application's separate `release-linux-client` artifact comes from the pinned setup
+packager described in [Linux client distribution](linux-client-distribution.md).
+The macOS release package is the `macos-app` job's disk image (`release-macos`). The setup build
 copies only the client's three files into the app, so the image cannot hold a build-info file;
 `--release macos` writes `openbf2-macos.build-info.json` beside it instead (revision, the setup
 app's repository and revision, the universal client files' SHA-256, the image's SHA-256, the
@@ -234,7 +241,7 @@ Do not mix the rebuilt host's engine plugins with retail engine plugins. Follow
 
 Successful CI keeps these artifacts for 14 days: the per-role ZIPs as `packages-windows-x86`,
 `packages-windows-x64`, `packages-linux-x64`, `packages-macos-arm64` and `packages-macos-x86_64`;
-the release packages as `release-windows`, `release-linux` and `release-macos`; and
+the release packages as `release-windows`, `release-linux`, `release-linux-client` and `release-macos`; and
 `build-info-macos`. Download these from the Actions run. Available failure diagnostics are
 retained for seven days; compiler console output remains in the job log. Failed jobs do not
 upload packages.
@@ -396,7 +403,8 @@ The macOS client and server ZIPs are development artifacts, not release assets.
    saving a draft does not. A tag push by itself starts no workflow.
 3. The workflow rebuilds that tagged commit, then, only after every platform succeeds,
    attaches exactly the [release assets](#release-assets): `openbf2-macos.dmg`,
-   `openbf2-windows.zip`, `openbf2-linux.zip` and the OpenAL Soft source tarball, each with
+   `openbf2-windows.zip`, `openbf2-linux.zip`, `openbf2-linux-x86_64-client.tar.gz`
+   and the OpenAL Soft source tarball, each with
    its `.sha256`. It downloads only the `release-*` artifacts, checks every checksum, refuses
    any other file, and checks that the Windows package holds both clients, the server and the
    editor ([D3DX in release runs](#d3dx-in-release-runs)). Re-running the release workflow

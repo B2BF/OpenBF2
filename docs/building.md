@@ -120,8 +120,10 @@ when no architecture argument is supplied and also runs its interpreter check.
 ## Linux and WSL
 
 The native SDL3/DXVK client and its focused checks are documented in
-[Native Linux Vulkan client](linux-vulkan-client.md). Menu acceptance and full Linux ARM64
-graphics validation remain in progress under issue #36.
+[Native Linux Vulkan client](linux-vulkan-client.md). Its release build and setup
+integration are described in [Linux client distribution](linux-client-distribution.md).
+The recorded x86-64 local-bot playtest does not establish full Linux ARM64 graphics
+or broader platform acceptance under issue #36.
 
 Use Linux x86-64 with CMake 3.21 or newer, Ninja, GCC or Clang, and ncurses development
 headers (`libncurses-dev` on Debian). From the repository root:

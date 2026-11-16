@@ -308,6 +308,103 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # [CHOSEN, not recovered] Issue #36: the Linux application embeds the Vulkan
+  # client in the separately maintained setup/launcher. The server ZIP stays above.
+  linux-client:
+    name: Linux x64 installer and Vulkan client
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    env:
+      SETUP_REPOSITORY: kr4uzi/openbf2-setup
+      SETUP_REVISION: a846ffb0770b6631521ff34418ae06a161b0fa8d
+    steps:
+      - name: Check out the event commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Check out the Linux setup application
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.SETUP_REPOSITORY }}
+          ref: ${{ env.SETUP_REVISION }}
+          path: out/linux-setup
+          persist-credentials: false
+
+      - name: Install OCI and ELF inspection tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y podman binutils patchelf gcc
+
+      - name: Check Linux packaging fixtures
+        run: |
+          python3 Code/Tests/test_linux_release_sdk_image.py
+          python3 Code/Tests/test_linux_release_artifacts.py --setup-package out/linux-setup/linux/package.py
+
+      - name: Restore the pinned SDK image
+        id: sdk-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/openbf2-linux-sdk.oci
+          key: linux-sdk-x64-v1-${{ hashFiles('tools/linux/release/Containerfile', 'tools/linux/release/sdk*', 'tools/linux/release/build-sdk.py') }}
+
+      - name: Build and export the baseline SDK
+        if: steps.sdk-cache.outputs.cache-hit != 'true'
+        run: |
+          podman build --format oci --layers \
+            --build-arg "SDK_SOURCE_REVISION=$GITHUB_SHA" \
+            --tag localhost/openbf2-linux-sdk:ci \
+            --file tools/linux/release/Containerfile tools/linux/release
+          podman save --format oci-archive \
+            --output "$RUNNER_TEMP/openbf2-linux-sdk.oci" localhost/openbf2-linux-sdk:ci
+
+      - name: Load the cached SDK
+        if: steps.sdk-cache.outputs.cache-hit == 'true'
+        run: podman load --input "$RUNNER_TEMP/openbf2-linux-sdk.oci"
+
+      - name: Verify the SDK manifest identity
+        id: sdk
+        run: python3 tools/linux/release/sdk-image.py "$RUNNER_TEMP/openbf2-linux-sdk.oci" --github-output "$GITHUB_OUTPUT"
+
+      - name: Build, audit and package the Linux application
+        env:
+          SDK_IMAGE: ${{ steps.sdk.outputs.image_id }}
+          SDK_REFERENCE: ${{ steps.sdk.outputs.reference }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/linux-release"
+          podman run --rm \
+            --volume "$GITHUB_WORKSPACE:/work/engine:rw" \
+            --volume "$RUNNER_TEMP/linux-release:/work/release:rw" \
+            --env BF2_RELEASE_JOBS=2 \
+            "$SDK_IMAGE" bash /work/engine/tools/linux/release/build-client.sh \
+            /work/engine /work/engine/out/linux-setup /work/release/result "$SDK_REFERENCE"
+
+      - name: Upload the Linux client application
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-linux-client
+          path: |
+            ${{ runner.temp }}/linux-release/result/packages/openbf2-linux-x86_64-client.tar.gz
+            ${{ runner.temp }}/linux-release/result/packages/openbf2-linux-x86_64-client.tar.gz.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload Linux client build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: diagnostics-linux-client-x64
+          path: |
+            ${{ runner.temp }}/linux-release/result/nativefx/logs/*.log
+            ${{ runner.temp }}/linux-release/result/engine-build/CMakeFiles/CMakeConfigureLog.yaml
+            ${{ runner.temp }}/linux-release/result/engine-build/Testing/Temporary/*.log
+            ${{ runner.temp }}/linux-release/result/setup-build/compile/CMakeFiles/CMakeConfigureLog.yaml
+            ${{ runner.temp }}/linux-release/result/setup-build/compile/Testing/Temporary/*.log
+          if-no-files-found: ignore
+          retention-days: 7
+
   # [CHOSEN, not recovered] The macOS port: the renderer-on Metal client, the dedicated server and the
   # AI library, one leg per architecture on the Apple-silicon runner, macos-15 (x86_64 is cross-compiled, as the
   # local Intel builds cross-compile arm64). The client needs the native effect compiler, built here

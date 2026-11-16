@@ -1,0 +1,355 @@
+{
+  "schema": 1,
+  "issue": "https://github.com/kr4uzi/OpenBF2/issues/36#issuecomment-6932201666",
+  "base_image": "docker.io/library/ubuntu@sha256:45e9ddc6895604674618a409ca9f73d301da8fdb75fe330e8e9a27b3b219e4ad",
+  "toolchain": {
+    "baseline": "ubuntu-22.04",
+    "glibc": "2.35",
+    "architecture": "x86_64",
+    "cpu": "x86-64",
+    "gcc": "15.2.0",
+    "rust": "1.90.0",
+    "boost": "1.89.0"
+  },
+  "runtime_note": "Jammy PPA compiler packages are GCC 15.2.0; the pinned ABI-compatible libstdc++/libgcc provider packages are GCC 16 snapshot packages built for the same glibc 2.35 baseline. Both engine and setup use these exact shared providers.",
+  "debs": [
+    {
+      "name": "cpp-15",
+      "version": "15.2.0-15ubuntu1~22~ppa2",
+      "url": "https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu/pool/main/g/gcc-15/cpp-15_15.2.0-15ubuntu1~22~ppa2_amd64.deb",
+      "sha256": "038b75c40bb536e8b52684398a9272718d72ea90f35ed66b3d8c30a5854da8df",
+      "source_package": "gcc-15",
+      "source_version": "15.2.0-15ubuntu1~22~ppa2"
+    },
+    {
+      "name": "cpp-15-x86-64-linux-gnu",
+      "version": "15.2.0-15ubuntu1~22~ppa2",
+      "url": "https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu/pool/main/g/gcc-15/cpp-15-x86-64-linux-gnu_15.2.0-15ubuntu1~22~ppa2_amd64.deb",
+      "sha256": "3dc9aea67c62a70959eafd28e182b6695f585d3baf882cf363b33ff705ce93fb",
+      "source_package": "gcc-15",
+      "source_version": "15.2.0-15ubuntu1~22~ppa2"
+    },
+    {
+      "name": "gcc-15-base",
+      "version": "15.2.0-15ubuntu1~22~ppa2",
+      "url": "https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu/pool/main/g/gcc-15/gcc-15-base_15.2.0-15ubuntu1~22~ppa2_amd64.deb",
+      "sha256": "f77a88d0c31c53ac4e7cb3250b02c21d88ae608d0b97003ca9ffbd0f4a6da1fe",
+      "source_package": "gcc-15",
+      "source_version": "15.2.0-15ubuntu1~22~ppa2"
+    },
+    {
+      "name": "gcc-15",
+      "version": "15.2.0-15ubuntu1~22~ppa2",
+      "url": "https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu/pool/main/g/gcc-15/gcc-15_15.2.0-15ubuntu1~22~ppa2_amd64.deb",
+      "sha256": "07920e0368848d564fd230975fa798a442c876e37835ad0a308be124125b4a41",
+      "source_package": "gcc-15",
+      "source_version": "15.2.0-15ubuntu1~22~ppa2"
+    },
+    {
+      "name": "gcc-15-x86-64-linux-gnu",
+      "version": "15.2.0-15ubuntu1~22~ppa2",
+      "url": "https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu/pool/main/g/gcc-15/gcc-15-x86-64-linux-gnu_15.2.0-15ubuntu1~22~ppa2_amd64.deb",
+      "sha256": "7df331056de4a6c2cbb4509ea5ec9ea007536a115a77719cb99608692d3734b9",
+      "source_package": "gcc-15",
+      "source_version": "15.2.0-15ubuntu1~22~ppa2"
+    },
+    {
+      "name": "g++-15",
+      "version": "15.2.0-15ubuntu1~22~ppa2",
+      "url": "https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu/pool/main/g/gcc-15/g++-15_15.2.0-15ubuntu1~22~ppa2_amd64.deb",
+      "sha256": "fbba254a81fd1805b6de84ff89fe87b95b983387011aafa4d0e52aa41ef0631d",
+      "source_package": "gcc-15",
+      "source_version": "15.2.0-15ubuntu1~22~ppa2"
+    },
+    {
+      "name": "g++-15-x86-64-linux-gnu",
+      "version": "15.2.0-15ubuntu1~22~ppa2",
+      "url": "https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu/pool/main/g/gcc-15/g++-15-x86-64-linux-gnu_15.2.0-15ubuntu1~22~ppa2_amd64.deb",
+      "sha256": "e5c62162e258db491bd3a006839e950d9d7e53c90e651dd15eb0117f993229d6",
+      "source_package": "gcc-15",
+      "source_version": "15.2.0-15ubuntu1~22~ppa2"
+    },
+    {
+      "name": "libgcc-15-dev",
+      "version": "15.2.0-15ubuntu1~22~ppa2",
+      "url": "https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu/pool/main/g/gcc-15/libgcc-15-dev_15.2.0-15ubuntu1~22~ppa2_amd64.deb",
+      "sha256": "4791fb3dbf83ec3ad403518a9dce05c57c5276c733b389028253d9c891b79c35",
+      "source_package": "gcc-15",
+      "source_version": "15.2.0-15ubuntu1~22~ppa2"
+    },
+    {
+      "name": "libstdc++-15-dev",
+      "version": "15.2.0-15ubuntu1~22~ppa2",
+      "url": "https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu/pool/main/g/gcc-15/libstdc++-15-dev_15.2.0-15ubuntu1~22~ppa2_amd64.deb",
+      "sha256": "540d06c4f3fdd22b4cb96d1107fc6d930b9ab6f3cd5eafb1eee3ab7289eec54d",
+      "source_package": "gcc-15",
+      "source_version": "15.2.0-15ubuntu1~22~ppa2"
+    },
+    {
+      "name": "gcc-16-base",
+      "version": "16-20260315-1ubuntu1~22~ppa1",
+      "url": "https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu/pool/main/g/gcc-16/gcc-16-base_16-20260315-1ubuntu1~22~ppa1_amd64.deb",
+      "sha256": "0e7bf82489be880d880c5e8491c27d7432a6e5c4d8c62784ec16cd61681badf6",
+      "source_package": "gcc-16",
+      "source_version": "16-20260315-1ubuntu1~22~ppa1"
+    },
+    {
+      "name": "libgcc-s1",
+      "version": "16-20260315-1ubuntu1~22~ppa1",
+      "url": "https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu/pool/main/g/gcc-16/libgcc-s1_16-20260315-1ubuntu1~22~ppa1_amd64.deb",
+      "sha256": "05d1a80203e2f7b7f51b8ad9d686d7d234c4652d6378ce6b4c3d3dd68efecf32",
+      "source_package": "gcc-16",
+      "source_version": "16-20260315-1ubuntu1~22~ppa1"
+    },
+    {
+      "name": "libstdc++6",
+      "version": "16-20260315-1ubuntu1~22~ppa1",
+      "url": "https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu/pool/main/g/gcc-16/libstdc++6_16-20260315-1ubuntu1~22~ppa1_amd64.deb",
+      "sha256": "5f20f14daccdf4bcf6c409cac46e37e4571c1347b1a60ec8201e3f7f9482d756",
+      "source_package": "gcc-16",
+      "source_version": "16-20260315-1ubuntu1~22~ppa1"
+    },
+    {
+      "name": "libcc1-0",
+      "version": "16-20260315-1ubuntu1~22~ppa1",
+      "url": "https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu/pool/main/g/gcc-16/libcc1-0_16-20260315-1ubuntu1~22~ppa1_amd64.deb",
+      "sha256": "dffbc1d745ca7afaa484712eb77bceb802cba1d522e50e0c6eca35505ac435b7",
+      "source_package": "gcc-16",
+      "source_version": "16-20260315-1ubuntu1~22~ppa1"
+    },
+    {
+      "name": "libgomp1",
+      "version": "16-20260315-1ubuntu1~22~ppa1",
+      "url": "https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu/pool/main/g/gcc-16/libgomp1_16-20260315-1ubuntu1~22~ppa1_amd64.deb",
+      "sha256": "bc9dc8256b3d399e16cd8e0a8d2e08d3ff763deb4637344613565252f4d7d19b",
+      "source_package": "gcc-16",
+      "source_version": "16-20260315-1ubuntu1~22~ppa1"
+    },
+    {
+      "name": "libitm1",
+      "version": "16-20260315-1ubuntu1~22~ppa1",
+      "url": "https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu/pool/main/g/gcc-16/libitm1_16-20260315-1ubuntu1~22~ppa1_amd64.deb",
+      "sha256": "2f99b00986714b5269cc13347526fc730bc4814d4802e7c4f1745c8344883bf4",
+      "source_package": "gcc-16",
+      "source_version": "16-20260315-1ubuntu1~22~ppa1"
+    },
+    {
+      "name": "libatomic1",
+      "version": "16-20260315-1ubuntu1~22~ppa1",
+      "url": "https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu/pool/main/g/gcc-16/libatomic1_16-20260315-1ubuntu1~22~ppa1_amd64.deb",
+      "sha256": "e90aa8634a2caecfea9f24c358459b94fac132d5d8810931bf0cb2e0067d4d31",
+      "source_package": "gcc-16",
+      "source_version": "16-20260315-1ubuntu1~22~ppa1"
+    },
+    {
+      "name": "libasan8",
+      "version": "16-20260315-1ubuntu1~22~ppa1",
+      "url": "https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu/pool/main/g/gcc-16/libasan8_16-20260315-1ubuntu1~22~ppa1_amd64.deb",
+      "sha256": "375323f3b2b3b4a7788a9d0adc710557946c21d13bc435254fe604067910b76b",
+      "source_package": "gcc-16",
+      "source_version": "16-20260315-1ubuntu1~22~ppa1"
+    },
+    {
+      "name": "liblsan0",
+      "version": "16-20260315-1ubuntu1~22~ppa1",
+      "url": "https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu/pool/main/g/gcc-16/liblsan0_16-20260315-1ubuntu1~22~ppa1_amd64.deb",
+      "sha256": "6216dd384f8556ebec4f721cde7da2be884cf3c8223bc5008f4020c410203ffd",
+      "source_package": "gcc-16",
+      "source_version": "16-20260315-1ubuntu1~22~ppa1"
+    },
+    {
+      "name": "libtsan2",
+      "version": "16-20260315-1ubuntu1~22~ppa1",
+      "url": "https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu/pool/main/g/gcc-16/libtsan2_16-20260315-1ubuntu1~22~ppa1_amd64.deb",
+      "sha256": "a29dc9be5abb305987d7a3eb2f518c8f9e6f4dfa4dcb0f6685b1bc73f3496d2f",
+      "source_package": "gcc-16",
+      "source_version": "16-20260315-1ubuntu1~22~ppa1"
+    },
+    {
+      "name": "libubsan1",
+      "version": "16-20260315-1ubuntu1~22~ppa1",
+      "url": "https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu/pool/main/g/gcc-16/libubsan1_16-20260315-1ubuntu1~22~ppa1_amd64.deb",
+      "sha256": "ccdeb8313e47b39e62c68400c1eebe44f34bdb2e2190c52fcc324ab6ba670994",
+      "source_package": "gcc-16",
+      "source_version": "16-20260315-1ubuntu1~22~ppa1"
+    },
+    {
+      "name": "libhwasan0",
+      "version": "16-20260315-1ubuntu1~22~ppa1",
+      "url": "https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu/pool/main/g/gcc-16/libhwasan0_16-20260315-1ubuntu1~22~ppa1_amd64.deb",
+      "sha256": "baeba69c2af5df8ccbec83542b8b88df633cdd0a41730744b2a0577776a35bd2",
+      "source_package": "gcc-16",
+      "source_version": "16-20260315-1ubuntu1~22~ppa1"
+    },
+    {
+      "name": "libquadmath0",
+      "version": "16-20260315-1ubuntu1~22~ppa1",
+      "url": "https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu/pool/main/g/gcc-16/libquadmath0_16-20260315-1ubuntu1~22~ppa1_amd64.deb",
+      "sha256": "05f31c4197ff5bfdbf10757d80e42458bac5b114ea9b7d8e61e89d3b29d64dab",
+      "source_package": "gcc-16",
+      "source_version": "16-20260315-1ubuntu1~22~ppa1"
+    }
+  ],
+  "sources": [
+    {
+      "name": "CMake",
+      "version": "3.31.8",
+      "url": "https://github.com/Kitware/CMake/releases/download/v3.31.8/cmake-3.31.8-linux-x86_64.tar.gz",
+      "sha256": "630615d8e98ac33eba7fbe472626dff5c899c85af3c024585ae109166a6909d0",
+      "destination": "cmake",
+      "license": "doc/cmake/Copyright.txt",
+      "kind": "build-tool-binary"
+    },
+    {
+      "name": "Meson",
+      "version": "1.9.1",
+      "url": "https://github.com/mesonbuild/meson/releases/download/1.9.1/meson-1.9.1.tar.gz",
+      "sha256": "4e076606f2afff7881d195574bddcd8d89286f35a17b4977a216f535dc0c74ac",
+      "destination": "meson",
+      "license": "COPYING"
+    },
+    {
+      "name": "Rust",
+      "version": "1.90.0",
+      "url": "https://static.rust-lang.org/dist/rust-1.90.0-x86_64-unknown-linux-gnu.tar.xz",
+      "sha256": "bff8974f2d3ee6c0e6ac926b533f65bbdd3697d2c2b925bdae5f45b9eed10a67",
+      "destination": "rust",
+      "license": "LICENSE-MIT",
+      "kind": "build-tool-binary"
+    },
+    {
+      "name": "Boost",
+      "version": "1.89.0",
+      "url": "https://archives.boost.io/release/1.89.0/source/boost_1_89_0.tar.bz2",
+      "sha256": "85a33fa22621b4f314f8e85e1a5e2a9363d22e4f4992925d4bb3bc631b5a0c7a",
+      "destination": "boost",
+      "license": "LICENSE_1_0.txt"
+    },
+    {
+      "name": "QtBase",
+      "version": "6.9.3",
+      "url": "https://download.qt.io/archive/qt/6.9/6.9.3/submodules/qtbase-everywhere-src-6.9.3.tar.xz",
+      "sha256": "c5a1a2f660356ec081febfa782998ae5ddbc5925117e64f50e4be9cd45b8dc6e",
+      "destination": "qtbase",
+      "license": "LICENSES/LGPL-3.0-only.txt"
+    },
+    {
+      "name": "QtWayland",
+      "version": "6.9.3",
+      "url": "https://download.qt.io/archive/qt/6.9/6.9.3/submodules/qtwayland-everywhere-src-6.9.3.tar.xz",
+      "sha256": "e413d4bc9263e80a465761debf8cb8317aa6b01e814b20046a05258e6573dadd",
+      "destination": "qtwayland",
+      "license": "LICENSES/LGPL-3.0-only.txt",
+      "requires": [
+        "QtBase"
+      ]
+    },
+    {
+      "name": "SDL3",
+      "version": "3.4.20",
+      "url": "https://github.com/libsdl-org/SDL/releases/download/release-3.4.20/SDL3-3.4.20.tar.gz",
+      "sha256": "f3bb06f55bed9557227a700af2ea62e49497ebdf58037732a731a5fb3ef8581f",
+      "destination": "sdl",
+      "license": "LICENSE.txt"
+    },
+    {
+      "name": "OpenAL-Soft",
+      "version": "1.25.2",
+      "url": "https://openal-soft.org/openal-releases/openal-soft-1.25.2.tar.bz2",
+      "sha256": "1dbaac44e7579d5bc8847ca8db4b2e8b9fd3961041f35ee20def4958301e1089",
+      "destination": "openal",
+      "license": "COPYING"
+    },
+    {
+      "name": "DXVK",
+      "version": "3.1.1",
+      "url": "https://codeload.github.com/doitsujin/dxvk/tar.gz/b1a1c99ab52b687cf950d62c88bc2fa316b41663",
+      "sha256": "6aec835e60bc1af6102556a99f8e962068701b6051aaaffa5aa4c2aecc9aa4c3",
+      "destination": "dxvk",
+      "license": "LICENSE",
+      "requires": [
+        "libdisplay-info",
+        "dxbc-spirv",
+        "mingw-directx-headers",
+        "Vulkan-Headers",
+        "SPIRV-Headers",
+        "dxbc-SPIRV-Headers"
+      ]
+    },
+    {
+      "name": "mingw-directx-headers",
+      "version": "9df86f2341616ef1888ae59919feaa6d4fad693d",
+      "url": "https://codeload.github.com/Joshua-Ashton/mingw-directx-headers/tar.gz/9df86f2341616ef1888ae59919feaa6d4fad693d",
+      "sha256": "9c1b8bbfd2d6c758fac4d93c2808a46bc1eee429fe656b4f21b29e02615aa8aa",
+      "destination": "dxvk/include/native/directx",
+      "license": "COPYING.MinGW-w64.txt"
+    },
+    {
+      "name": "Vulkan-Headers",
+      "version": "8864cdc896bbc2a9b6eb36b3218fc9ef57908d77",
+      "url": "https://codeload.github.com/KhronosGroup/Vulkan-Headers/tar.gz/8864cdc896bbc2a9b6eb36b3218fc9ef57908d77",
+      "sha256": "35824117f649befc664a12622bc801eddbba036ac03d906db400ee1c1e7903e9",
+      "destination": "dxvk/include/vulkan",
+      "license": "LICENSE.md"
+    },
+    {
+      "name": "SPIRV-Headers",
+      "version": "04f10f650d514df88b76d25e83db360142c7b174",
+      "url": "https://codeload.github.com/KhronosGroup/SPIRV-Headers/tar.gz/04f10f650d514df88b76d25e83db360142c7b174",
+      "sha256": "1b220e3eec1714f0451b0e3652979bd280edf10893f617837b88e6359a804ded",
+      "destination": "dxvk/include/spirv",
+      "license": "LICENSE"
+    },
+    {
+      "name": "dxbc-spirv",
+      "version": "bf14419e5fa7eacb817b7b632f03cb61d61bbad7",
+      "url": "https://codeload.github.com/doitsujin/dxbc-spirv/tar.gz/bf14419e5fa7eacb817b7b632f03cb61d61bbad7",
+      "sha256": "7a2bd35d2a2186f5f77137c00302b0d9364ac01017e8ae41e30f61850d7cc2f4",
+      "destination": "dxvk/subprojects/dxbc-spirv",
+      "license": "LICENSE",
+      "requires": [
+        "dxbc-SPIRV-Headers"
+      ]
+    },
+    {
+      "name": "dxbc-SPIRV-Headers",
+      "version": "c8ad050fcb29e42a2f57d9f59e97488f465c436d",
+      "url": "https://codeload.github.com/KhronosGroup/SPIRV-Headers/tar.gz/c8ad050fcb29e42a2f57d9f59e97488f465c436d",
+      "sha256": "5b6f38b430f1c68c7395c570053403da14eb4cecc7fcb4040e7a5248c2f63874",
+      "destination": "dxvk/subprojects/dxbc-spirv/submodules/spirv_headers",
+      "license": "LICENSE"
+    },
+    {
+      "name": "libdisplay-info",
+      "version": "275e6459c7ab1ddd4b125f28d0440716e4888078",
+      "url": "https://codeload.github.com/doitsujin/libdisplay-info/tar.gz/275e6459c7ab1ddd4b125f28d0440716e4888078",
+      "sha256": "c83c3e600f90a3ac98932e9259de62ad8ad3a65dd5efb1d2abcb1e4d1c8f494a",
+      "destination": "dxvk/subprojects/libdisplay-info",
+      "license": "LICENSE"
+    },
+    {
+      "name": "glslang",
+      "version": "15.4.0",
+      "url": "https://codeload.github.com/KhronosGroup/glslang/tar.gz/refs/tags/15.4.0",
+      "sha256": "b16c78e7604b9be9f546ee35ad8b6db6f39bbbbfb19e8d038b6fe2ea5bba4ff4",
+      "destination": "glslang",
+      "license": "LICENSE.txt"
+    },
+    {
+      "name": "vkd3d",
+      "version": "2.1",
+      "url": "https://dl.winehq.org/vkd3d/source/vkd3d-2.1.tar.xz",
+      "sha256": "7510146aff2adfb4ae07ab890701a607e5ff7c66e57100cfc9f630ec92eeda6a",
+      "destination": "vkd3d-2.1",
+      "license": "COPYING"
+    },
+    {
+      "name": "MojoShader",
+      "version": "ad5dff84830c2863c841f4b1f4e3df78c705b383",
+      "url": "https://github.com/icculus/mojoshader/archive/ad5dff84830c2863c841f4b1f4e3df78c705b383.tar.gz",
+      "sha256": "728ff9098115059c4012895b7a85065688c857fdadf9fbc04484fec8c7be3081",
+      "destination": "mojoshader",
+      "license": "LICENSE.txt"
+    }
+  ]
+}
