@@ -34,6 +34,7 @@ def run(*args, cwd=None, capture=False, env=None):
 
 def download(item):
     """Never reuse a cached distribution without checking its locked digest."""
+    print(f"Verifying/downloading {item['url']}", flush=True)
     target = DOWNLOADS / (item["sha256"] + "-" + item["url"].rsplit("/", 1)[-1])
     for attempt in range(4):
         if target.exists() and file_hash(target) == item["sha256"]:
@@ -66,6 +67,7 @@ def file_hash(path):
 
 def unpack(archive, destination):
     """Strip the distribution's one top directory; reject escaping members."""
+    print(f"Extracting {archive.name} to {destination}", flush=True)
     if destination.exists() and any(destination.iterdir()):
         raise ValueError(f"Refusing to replace populated source directory: {destination}")
     destination.mkdir(parents=True, exist_ok=True)
