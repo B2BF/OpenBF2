@@ -192,6 +192,7 @@ list(REMOVE_ITEM bf2_engine_sources
     "${BF2_ROOT}/Platform/Gfx/Effect/FxParser.cpp"
     "${BF2_ROOT}/Platform/Gfx/Effect/FxStates.cpp"
     "${BF2_ROOT}/Platform/Gfx/Effect/Native.cpp"
+    "${BF2_ROOT}/Platform/Gfx/Effect/NativeEquivalence.cpp"
     "${BF2_ROOT}/Platform/Gfx/Effect/NativeMojo.cpp"
     "${BF2_ROOT}/Platform/Gfx/Effect/NativeVkd3d.cpp")
 list(SORT bf2_engine_headers)
