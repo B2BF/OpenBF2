@@ -226,7 +226,9 @@ def main():
           "-DSDL_WAYLAND_LIBDECOR=OFF", "-DSDL_X11=ON", "-DSDL_WAYLAND=ON",
           "-DSDL_X11_SHARED=OFF", "-DSDL_WAYLAND_SHARED=OFF",
           "-DSDL_LIBUDEV=ON", "-DSDL_HIDAPI_LIBUSB=OFF")
+    # OpenAL's optional C++20 modules require a newer Ninja than Jammy provides.
     cmake("OpenAL-Soft", "openal", "-DALSOFT_UTILS=OFF", "-DALSOFT_EXAMPLES=OFF",
+          "-DALSOFT_ENABLE_MODULES=OFF", "-DCMAKE_CXX_SCAN_FOR_MODULES=OFF",
           "-DALSOFT_TESTS=OFF", "-DALSOFT_BACKEND_PIPEWIRE=OFF",
           "-DALSOFT_BACKEND_JACK=OFF", "-DALSOFT_BACKEND_OSS=OFF",
           "-DALSOFT_BACKEND_SNDIO=OFF", "-DALSOFT_BACKEND_ALSA=ON",
