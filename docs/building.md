@@ -110,6 +110,28 @@ the check executable; `dice_py_check_run` builds and runs it.
 glibc and the other system dependencies remain dynamic. Pass
 `-DBF2_LINUX_STATIC_RUNTIME=OFF` if you need dynamic compiler runtimes instead.
 
+### Game directory for the Linux server
+
+The Linux file system lower-cases every engine path, as the retail Linux server did, so a
+Windows install with mixed-case names finds no mods or maps. Prepare a separate game
+directory once; it hard-links the files and leaves the install untouched:
+
+```bash
+python3 Code/Build/prepare_linux_game_dir.py "/path/to/Battlefield 2" ~/bf2-game
+cd ~/bf2-game
+~/bf2-linux-local/bin_linux/bf2 +modPath mods/bf2 +config mods/bf2/settings/serversettings.con
+```
+
+Python package trees (`python/`, `admin/`, `mods/<mod>/python/`) keep their original case
+because Python imports are case-sensitive. Pass `+config` and `+mapList` relative to the
+game directory. The server's ncurses console needs a terminal. The Windows client under
+Wine can run from the same directory, because Wine looks files up case-insensitively.
+
+On Ubuntu 24.04 based systems (for example Zorin OS 18), the launchers in
+`Code/Tests/run_server`, `run_game` and `run_game_join_server` do these steps for you:
+set `BF2_INSTALL` once, and each server picks the first free port set from 16568 unless
+`BF2_PORT` is given. Settings are listed in `Code/Tests/run_common`.
+
 ## Client and plugins
 
 Use the x86 configuration and Python runtime above:
