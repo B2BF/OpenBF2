@@ -36,7 +36,7 @@ namespace hfe {
 // Byte-packed as mmsystem.h is. The pointer-free structs keep their x86 sizes (MIXERLINEA 0xA8,
 // MIXERCONTROLA 0x94, MIXERCAPSA 0x30; retail writes those cbStruct values). DWORD_PTR fields are
 // DWORDs for that reason; the two structs that hold pointers are pointer-sized here. The names
-// live in dice::hfe, never at global scope (as Platform/macOS/HostWindowTypes.h does).
+// live in dice::hfe, never at global scope (as Platform/Host/HostWindowTypes.h does).
 typedef std::uint32_t        DWORD;
 typedef std::uint16_t        WORD;
 typedef std::int32_t         LONG;

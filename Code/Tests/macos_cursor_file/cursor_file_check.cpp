@@ -1,12 +1,12 @@
-// [TEMP] [CHOSEN, not recovered] Checks Platform/macOS/MacCursorFile.h on synthetic cursor files:
+// [TEMP] [CHOSEN, not recovered] Checks Platform/Host/CursorFile.h on synthetic cursor files:
 // a 32 bpp alpha .cur, a 1 bpp masked .cur, a 4 bpp .ico, an animated RIFF ACON with rate and
 // seq chunks, and truncated or foreign data. Everything is generated here.
-#include "../../BF2/Platform/macOS/MacCursorFile.h"
+#include "../../BF2/Platform/Host/CursorFile.h"
 #include <cstdio>
 #include <cstdlib>
 #include <string>
 
-using namespace dice::hfe::macos;
+using namespace dice::hfe::host;
 
 namespace {
 void require(bool condition, const char* description)

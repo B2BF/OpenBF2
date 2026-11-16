@@ -2627,6 +2627,22 @@ if errorlevel 1 set /a RC+=1
 cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\Core\Random.cpp"
 if errorlevel 1 set /a RC+=1
 
+rem Native host/input TUs must remain inert in the Windows image manifests.
+cl %FLAGS0% "%~dp0..\BF2\Platform\Host\KeyMap.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS0% "%~dp0..\BF2\Platform\macOS\MacKeyMap.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS0% "%~dp0..\BF2\Game\Main\BF2Window_native.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS0% "%~dp0..\BF2\IO\Input\NativeInputDeviceManager.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS0% "%~dp0..\BF2\IO\Input\NativeKeyboardDevice.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS0% "%~dp0..\BF2\IO\Input\NativeMouseDevice.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS0% "%~dp0..\BF2\IO\Input\NativeGameControllerDevice.cpp"
+if errorlevel 1 set /a RC+=1
+
 rem Linux-only backend TUs must remain inert in the Windows image manifests.
 cl %FLAGS0% "%~dp0..\BF2\Platform\Linux\FrameCapture.cpp"
 if errorlevel 1 set /a RC+=1

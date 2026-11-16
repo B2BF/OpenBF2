@@ -24,7 +24,7 @@
 #include "OfflineConnectPopup.h"
 #include "../../../Core/MsvcCrtCompat.h"   // [CHOSEN, not recovered] sprintf_s, __time32_t/_time32, _time64 outside MSVC
 #if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
-#include "../../../Platform/macOS/CocoaHost.h"
+#include "../../../Platform/Host/ClientHost.h"
 // [CHOSEN, not recovered] macOS: the two user32 calls the ActionScript bindings make, on the Cocoa
 // host. SetCursor takes the host's cursor tokens (SwiffHost::getCursor) and answers the previous
 // one; GetKeyState is called only for VK_CAPITAL (20), whose toggle bit is the Caps Lock state.
@@ -33,14 +33,14 @@ static void* SetCursor(void* cursor)
     static void* s_current = 0;
     void* const previous = s_current;
     s_current = cursor;
-    ::dice::hfe::macos::CocoaHost::instance().setCursor(cursor);
+    ::dice::hfe::host::ClientHost::instance().setCursor(cursor);
     return previous;
 }
 // SwiffPlayer.dll calls GetKeyState once, with VK_CAPITAL (0x1004D457 pushes 0x14), so the macOS
 // shim is that one query: the Caps Lock toggle bit.
 static short capsLockKeyState()
 {
-    return (::dice::hfe::macos::CocoaHost::instance().modifierFlags() & ::dice::hfe::macos::HostModCapsLock) ? 1 : 0;
+    return (::dice::hfe::host::ClientHost::instance().modifierFlags() & ::dice::hfe::host::HostModCapsLock) ? 1 : 0;
 }
 #endif
 
@@ -10376,7 +10376,7 @@ SwiffPlayer::SwiffPlayer()
     // [CHOSEN, not recovered] Cocoa asynchronous Enter state; independent of
     // notifyChar/modifier latches and the gameswf Key listener event table.
     gameswf::set_async_key_state_callback([](int) -> unsigned short {
-        return ::dice::hfe::macos::CocoaHost::instance().consumeAsyncEnterState();
+        return ::dice::hfe::host::ClientHost::instance().consumeAsyncEnterState();
     });
 #endif
 

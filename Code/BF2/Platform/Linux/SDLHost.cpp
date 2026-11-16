@@ -1,12 +1,11 @@
-// [CHOSEN, not recovered] Linux host for the existing native client adapter contract.
+// [CHOSEN, not recovered] SDL implementation of the shared native client host.
 // https://github.com/kr4uzi/OpenBF2/issues/36; docs/linux-vulkan-client.md.
-// The historical macos namespace keeps the engine's window/input adapters shared. Native
-// handles are SDL_Window pointers, as required by DXVK Native, never Cocoa objects.
+// Physical keys use BF2 DIK codes; renderer handles are borrowed SDL_Window pointers.
 #if defined(__linux__) && defined(BF2_LINUX_CLIENT) && !DEDICATED
-#include "../macOS/CocoaHost.h"
-#include "../macOS/MacKeyMap.h"
-#include "../macOS/MacGamepad.h"
-#include "../macOS/MacCursorFile.h"
+#include "../Host/ClientHost.h"
+#include "../Host/KeyMap.h"
+#include "../Host/Gamepad.h"
+#include "../Host/CursorFile.h"
 #include "../InputScript.h"
 #include "ClientFilePaths.h"
 #include <SDL3/SDL.h>
@@ -21,7 +20,7 @@
 #include <memory>
 #include <stdexcept>
 
-namespace dice { namespace hfe { namespace macos {
+namespace dice { namespace hfe { namespace host {
 namespace {
 struct PhysicalKey { SDL_Scancode scan; unsigned char dik; };
 const PhysicalKey keys[] = {
@@ -67,11 +66,11 @@ const PhysicalKey keys[] = {
     {SDL_SCANCODE_LANG1,112}, {SDL_SCANCODE_LANG2,123}, {SDL_SCANCODE_KP_COMMA,179}
 };
 
-unsigned short hostKey(SDL_Scancode scan)
+unsigned char dikFromScancode(SDL_Scancode scan)
 {
     for (const PhysicalKey& key : keys)
-        if (key.scan == scan) return macKeyCodeFromDik(key.dik, false);
-    return 0xFFFF;
+        if (key.scan == scan) return key.dik;
+    return 0;
 }
 
 unsigned modifiers(SDL_Keymod mod)
@@ -79,18 +78,18 @@ unsigned modifiers(SDL_Keymod mod)
     unsigned result = 0;
     if (mod & SDL_KMOD_SHIFT) result |= HostModShift;
     if (mod & SDL_KMOD_CTRL) result |= HostModControl;
-    if (mod & SDL_KMOD_ALT) result |= HostModOption;
-    if (mod & SDL_KMOD_GUI) result |= HostModCommand;
+    if (mod & SDL_KMOD_ALT) result |= HostModAlt;
+    if (mod & SDL_KMOD_GUI) result |= HostModSuper;
     if (mod & SDL_KMOD_CAPS) result |= HostModCapsLock;
     if (mod & SDL_KMOD_NUM) result |= HostModNumericPad;
     if (mod & SDL_KMOD_LSHIFT) result |= HostModLeftShift;
     if (mod & SDL_KMOD_RSHIFT) result |= HostModRightShift;
     if (mod & SDL_KMOD_LCTRL) result |= HostModLeftControl;
     if (mod & SDL_KMOD_RCTRL) result |= HostModRightControl;
-    if (mod & SDL_KMOD_LALT) result |= HostModLeftOption;
-    if (mod & SDL_KMOD_RALT) result |= HostModRightOption;
-    if (mod & SDL_KMOD_LGUI) result |= HostModLeftCommand;
-    if (mod & SDL_KMOD_RGUI) result |= HostModRightCommand;
+    if (mod & SDL_KMOD_LALT) result |= HostModLeftAlt;
+    if (mod & SDL_KMOD_RALT) result |= HostModRightAlt;
+    if (mod & SDL_KMOD_LGUI) result |= HostModLeftSuper;
+    if (mod & SDL_KMOD_RGUI) result |= HostModRightSuper;
     return result;
 }
 
@@ -145,7 +144,7 @@ void updatePads()
 }
 }
 
-struct CocoaHost::Impl : inputscript::IInputScriptSink
+struct ClientHost::Impl : inputscript::IInputScriptSink
 {
     SDL_Window* window = nullptr;
     int width = 0, height = 0, cursorCount = 0;
@@ -153,7 +152,7 @@ struct CocoaHost::Impl : inputscript::IInputScriptSink
     bool enter[2] = {}, enterPressed = false;
     unsigned deactivations = 0;
     float wheelRemainder = 0;
-    unsigned short lastKey = 0xFFFF;
+    unsigned char lastKey = 0;
     bool lastRepeat = false;
     std::vector<IHostEventListener*> listeners;
     std::vector<std::unique_ptr<Cursor>> cursors;
@@ -212,10 +211,10 @@ struct CocoaHost::Impl : inputscript::IInputScriptSink
             y *= static_cast<float>(height) / h;
         }
     }
-    void text(const std::u16string& chars, unsigned short key, bool repeat, unsigned mod)
+    void text(const std::u16string& chars, unsigned char dik, bool repeat, unsigned mod)
     {
         if (chars.empty()) return;
-        HostTextEvent event{key, mod, {}, repeat};
+        HostTextEvent event{dik, mod, {}, repeat};
         event.characters.assign(chars.begin(), chars.end());
         dispatch([&](IHostEventListener& listener) { listener.onText(event); });
     }
@@ -227,8 +226,8 @@ struct CocoaHost::Impl : inputscript::IInputScriptSink
             event.type == SDL_EVENT_MOUSE_WHEEL)) return;
         const unsigned time = static_cast<unsigned>(event.common.timestamp / 1000000);
         switch (event.type) {
-        case SDL_EVENT_QUIT: CocoaHost::instance().requestQuit(); break;
-        case SDL_EVENT_WINDOW_CLOSE_REQUESTED: CocoaHost::instance().requestQuit(); break;
+        case SDL_EVENT_QUIT: ClientHost::instance().requestQuit(); break;
+        case SDL_EVENT_WINDOW_CLOSE_REQUESTED: ClientHost::instance().requestQuit(); break;
         case SDL_EVENT_WINDOW_FOCUS_GAINED: focus(true); break;
         case SDL_EVENT_WINDOW_FOCUS_LOST: focus(false); break;
         case SDL_EVENT_WINDOW_MINIMIZED:
@@ -245,17 +244,17 @@ struct CocoaHost::Impl : inputscript::IInputScriptSink
                 const char* directory = std::getenv("BF2_CAPTURE_DIR");
                 if (directory && *directory) inputscript::inputScript().requestCapture("manual");
             }
-            const unsigned short code = hostKey(key.scancode);
+            const unsigned char dik = dikFromScancode(key.scancode);
             if (key.scancode == SDL_SCANCODE_RETURN || key.scancode == SDL_SCANCODE_KP_ENTER) {
                 enter[key.scancode == SDL_SCANCODE_KP_ENTER] = key.down;
                 if (key.down && !key.repeat) enterPressed = true;
             }
-            if (code != 0xFFFF) {
-                HostKeyEvent translated{code, key.down, key.repeat, false, modifiers(key.mod), time};
+            if (dik) {
+                HostKeyEvent translated{dik, key.down, key.repeat, modifiers(key.mod), time};
                 dispatch([&](IHostEventListener& listener) { listener.onKey(translated); });
             }
             if (!key.down) break;
-            lastKey = code;
+            lastKey = dik;
             lastRepeat = key.repeat;
             char16_t control = 0;
             if (key.scancode == SDL_SCANCODE_RETURN || key.scancode == SDL_SCANCODE_KP_ENTER) control = 13;
@@ -264,7 +263,7 @@ struct CocoaHost::Impl : inputscript::IInputScriptSink
             else if (key.scancode == SDL_SCANCODE_BACKSPACE) control = 8;
             else if ((key.mod & SDL_KMOD_CTRL) && !(key.mod & SDL_KMOD_ALT) && key.key >= SDLK_A && key.key <= SDLK_Z)
                 control = static_cast<char16_t>(key.key - SDLK_A + 1);
-            if (control) text(std::u16string(1, control), code, key.repeat, modifiers(key.mod));
+            if (control) text(std::u16string(1, control), dik, key.repeat, modifiers(key.mod));
             break;
         }
         case SDL_EVENT_TEXT_INPUT:
@@ -302,7 +301,8 @@ struct CocoaHost::Impl : inputscript::IInputScriptSink
     }
     void scriptKey(unsigned short keyCode, bool down, const std::u16string& characters) override
     {
-        const unsigned char dik = dikFromMacKeyCode(keyCode, false);
+        if (!keyCode || keyCode > 0xFF) return;
+        const unsigned char dik = static_cast<unsigned char>(keyCode);
         SDL_Keymod mask = SDL_KMOD_NONE;
         switch (dik) {
         case 42: mask = SDL_KMOD_LSHIFT; break; case 54: mask = SDL_KMOD_RSHIFT; break;
@@ -319,13 +319,13 @@ struct CocoaHost::Impl : inputscript::IInputScriptSink
             if (down) enterPressed = true;
         }
         const unsigned mod = modifiers(scriptModifiers);
-        const HostKeyEvent translated{keyCode, down, false, false, mod, CocoaHost::tickCountMs()};
+        const HostKeyEvent translated{dik, down, false, mod, ClientHost::tickCountMs()};
         dispatch([&](IHostEventListener& listener) { listener.onKey(translated); });
         if (down && !mask) {
             std::u16string chars = characters;
-            if ((mod & HostModControl) && !(mod & HostModOption))
+            if ((mod & HostModControl) && !(mod & HostModAlt))
                 for (char16_t& c : chars) if ((c | 0x20) >= 'a' && (c | 0x20) <= 'z') c &= 0x1F;
-            text(chars, keyCode, false, mod);
+            text(chars, dik, false, mod);
         }
     }
     void scriptPointerInit()
@@ -339,7 +339,7 @@ struct CocoaHost::Impl : inputscript::IInputScriptSink
     {
         const HostMouseMoveEvent translated{dx, dy, scriptX, scriptY,
             scriptX >= 0 && scriptY >= 0 && scriptX < width && scriptY < height,
-            captured(), CocoaHost::tickCountMs()};
+            captured(), ClientHost::tickCountMs()};
         dispatch([&](IHostEventListener& listener) { listener.onMouseMove(translated); });
     }
     void scriptMouseTo(float x, float y) override
@@ -362,24 +362,26 @@ struct CocoaHost::Impl : inputscript::IInputScriptSink
         const unsigned bit = 1u << button;
         if (down) scriptButtons |= bit;
         else { if (!(scriptButtons & bit)) return; scriptButtons &= ~bit; }
-        const HostMouseButtonEvent translated{button, down, 1, scriptX, scriptY, captured(), CocoaHost::tickCountMs()};
+        const HostMouseButtonEvent translated{button, down, 1, scriptX, scriptY, captured(), ClientHost::tickCountMs()};
         dispatch([&](IHostEventListener& listener) { listener.onMouseButton(translated); });
     }
     void scriptWheel(int delta) override
     {
-        const HostMouseWheelEvent translated{delta, captured(), CocoaHost::tickCountMs()};
+        const HostMouseWheelEvent translated{delta, captured(), ClientHost::tickCountMs()};
         dispatch([&](IHostEventListener& listener) { listener.onMouseWheel(translated); });
     }
     std::u16string scriptKeyCharacter(unsigned short code, bool shift) override
     {
-        return CocoaHost::instance().keyCharacter(code, shift ? HostModShift : 0u);
+        if (code > 0xFF) return {};
+        return ClientHost::instance().keyCharacter(static_cast<unsigned char>(code),
+                                                   shift ? static_cast<unsigned>(HostModShift) : 0u);
     }
-    void scriptQuit() override { CocoaHost::instance().requestQuit(); }
+    void scriptQuit() override { ClientHost::instance().requestQuit(); }
 };
 
-CocoaHost& CocoaHost::instance() { static CocoaHost host; return host; }
-CocoaHost::CocoaHost() : m_impl(new Impl) {}
-CocoaHost::~CocoaHost()
+ClientHost& ClientHost::instance() { static ClientHost host; return host; }
+ClientHost::ClientHost() : m_impl(new Impl) {}
+ClientHost::~ClientHost()
 {
     destroyWindow();
     for (const Pad& pad : pads) SDL_CloseGamepad(pad.handle);
@@ -388,7 +390,7 @@ CocoaHost::~CocoaHost()
     delete m_impl;
     if (initialized) SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD);
 }
-bool CocoaHost::initApplication()
+bool ClientHost::initApplication()
 {
     if (m_impl->initialized) return true;
     if (!SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) { report("initialize"); return false; }
@@ -399,7 +401,7 @@ bool CocoaHost::initApplication()
     if (m_impl->scriptedFocus) m_impl->focus(true);
     return true;
 }
-bool CocoaHost::createWindow(const HostWindowDesc& desc)
+bool ClientHost::createWindow(const HostWindowDesc& desc)
 {
     if (hasWindow() || !initApplication() || desc.width <= 0 || desc.height <= 0) return false;
     m_impl->window = SDL_CreateWindow(desc.title.c_str(), desc.width, desc.height,
@@ -416,7 +418,7 @@ bool CocoaHost::createWindow(const HostWindowDesc& desc)
     m_impl->focus((SDL_GetWindowFlags(m_impl->window) & SDL_WINDOW_INPUT_FOCUS) != 0);
     return true;
 }
-void CocoaHost::destroyWindow()
+void ClientHost::destroyWindow()
 {
     if (!m_impl->window) return;
     m_impl->scriptedFocus = false;
@@ -427,22 +429,20 @@ void CocoaHost::destroyWindow()
     m_impl->relative = false;
     m_impl->width = m_impl->height = 0;
 }
-bool CocoaHost::hasWindow() const { return m_impl->window != nullptr; }
-void* CocoaHost::nativeWindow() const { return m_impl->window; }
-void* CocoaHost::nativeView() const { return m_impl->window; }
-void* CocoaHost::metalLayer() const { return nullptr; } // Linux exposes a Vulkan surface through SDL_Window.
-int CocoaHost::clientWidth() const { return m_impl->width; }
-int CocoaHost::clientHeight() const { return m_impl->height; }
-void CocoaHost::show(bool visible)
+bool ClientHost::hasWindow() const { return m_impl->window != nullptr; }
+void* ClientHost::rendererWindowHandle() const { return m_impl->window; }
+int ClientHost::clientWidth() const { return m_impl->width; }
+int ClientHost::clientHeight() const { return m_impl->height; }
+void ClientHost::show(bool visible)
 {
     if (!hasWindow()) return;
     if (!(visible ? SDL_ShowWindow(m_impl->window) : SDL_HideWindow(m_impl->window))) report("show window");
     if (visible && !m_impl->scriptedFocus) SDL_RaiseWindow(m_impl->window);
 }
-bool CocoaHost::isVisible() const { return hasWindow() && !(SDL_GetWindowFlags(m_impl->window) & SDL_WINDOW_HIDDEN); }
-void CocoaHost::minimize() { if (hasWindow() && !SDL_MinimizeWindow(m_impl->window)) report("minimize"); }
-void CocoaHost::setTitle(const std::string& title) { if (hasWindow() && !SDL_SetWindowTitle(m_impl->window, title.c_str())) report("set title"); }
-void CocoaHost::resizeClient(int width, int height)
+bool ClientHost::isVisible() const { return hasWindow() && !(SDL_GetWindowFlags(m_impl->window) & SDL_WINDOW_HIDDEN); }
+void ClientHost::minimize() { if (hasWindow() && !SDL_MinimizeWindow(m_impl->window)) report("minimize"); }
+void ClientHost::setTitle(const std::string& title) { if (hasWindow() && !SDL_SetWindowTitle(m_impl->window, title.c_str())) report("set title"); }
+void ClientHost::resizeClient(int width, int height)
 {
     if (!hasWindow() || width <= 0 || height <= 0) return;
     if (!isFullscreen() && !SDL_SetWindowSize(m_impl->window, width, height)) { report("resize"); return; }
@@ -450,17 +450,17 @@ void CocoaHost::resizeClient(int width, int height)
     m_impl->height = height;
     m_impl->dispatch([=](IHostEventListener& listener) { listener.onResize(width, height, false); });
 }
-void CocoaHost::setFullscreen(bool fullscreen)
+void ClientHost::setFullscreen(bool fullscreen)
 {
     if (!hasWindow()) return;
     if (!SDL_SetWindowFullscreen(m_impl->window, fullscreen)) { report("fullscreen"); return; }
     if (!fullscreen && !SDL_SetWindowSize(m_impl->window, m_impl->width, m_impl->height)) report("restore window size");
 }
-bool CocoaHost::isFullscreen() const { return hasWindow() && (SDL_GetWindowFlags(m_impl->window) & SDL_WINDOW_FULLSCREEN); }
-bool CocoaHost::hasFocus() const { return m_impl->focused; }
-bool CocoaHost::isAppActive() const { return m_impl->focused; }
-unsigned CocoaHost::deactivationCount() const { return m_impl->deactivations; }
-bool CocoaHost::pumpEvents()
+bool ClientHost::isFullscreen() const { return hasWindow() && (SDL_GetWindowFlags(m_impl->window) & SDL_WINDOW_FULLSCREEN); }
+bool ClientHost::hasFocus() const { return m_impl->focused; }
+bool ClientHost::isAppActive() const { return m_impl->focused; }
+unsigned ClientHost::deactivationCount() const { return m_impl->deactivations; }
+bool ClientHost::pumpEvents()
 {
     SDL_Event event;
     while (SDL_PollEvent(&event)) m_impl->event(event);
@@ -468,37 +468,37 @@ bool CocoaHost::pumpEvents()
     m_impl->updateCursor();
     return m_impl->quit;
 }
-bool CocoaHost::waitEvents(double seconds)
+bool ClientHost::waitEvents(double seconds)
 {
     SDL_Event event;
     if (SDL_WaitEventTimeout(&event, static_cast<int>(std::max(0.0, std::min(seconds * 1000.0, 2147483647.0)))))
         m_impl->event(event);
     return pumpEvents();
 }
-void CocoaHost::requestQuit()
+void ClientHost::requestQuit()
 {
     if (m_impl->quit) return;
     m_impl->quit = true;
     m_impl->dispatch([](IHostEventListener& listener) { listener.onCloseRequested(); });
 }
-void CocoaHost::postQuitMessage() { m_impl->quit = true; }
-bool CocoaHost::quitRequested() const { return m_impl->quit; }
-void CocoaHost::addListener(IHostEventListener* listener)
+void ClientHost::postQuitMessage() { m_impl->quit = true; }
+bool ClientHost::quitRequested() const { return m_impl->quit; }
+void ClientHost::addListener(IHostEventListener* listener)
 {
     if (listener && std::find(m_impl->listeners.begin(), m_impl->listeners.end(), listener) == m_impl->listeners.end())
         m_impl->listeners.push_back(listener);
 }
-void CocoaHost::removeListener(IHostEventListener* listener)
+void ClientHost::removeListener(IHostEventListener* listener)
 {
     auto& listeners = m_impl->listeners;
     listeners.erase(std::remove(listeners.begin(), listeners.end(), listener), listeners.end());
 }
-int CocoaHost::showCursor(bool show) { m_impl->cursorCount += show ? 1 : -1; m_impl->updateCursor(); return m_impl->cursorCount; }
-void CocoaHost::setCursorHiddenInView(bool hidden) { m_impl->hidden = hidden; m_impl->updateCursor(); }
-void CocoaHost::setCursorShape(HostCursorShape shape) { setCursor(cursorHandle(shape)); }
-void* CocoaHost::cursorHandle(HostCursorShape shape)
+int ClientHost::showCursor(bool show) { m_impl->cursorCount += show ? 1 : -1; m_impl->updateCursor(); return m_impl->cursorCount; }
+void ClientHost::setCursorHiddenInView(bool hidden) { m_impl->hidden = hidden; m_impl->updateCursor(); }
+void ClientHost::setCursorShape(HostCursorShape shape) { setCursor(cursorHandle(shape)); }
+void* ClientHost::cursorHandle(HostCursorShape shape)
 {
-    CocoaHost& host = instance();
+    ClientHost& host = instance();
     if (!host.initApplication()) return nullptr;
     Cursor*& cursor = shape == HostCursorBusy ? host.m_impl->busy : host.m_impl->arrow;
     if (!cursor) {
@@ -511,7 +511,7 @@ void* CocoaHost::cursorHandle(HostCursorShape shape)
     }
     return cursor;
 }
-void* CocoaHost::loadCursorFromFile(const char* path)
+void* ClientHost::loadCursorFromFile(const char* path)
 {
     if (!path || !instance().initApplication()) return nullptr;
     // FileManager returns the requested spelling after its case-insensitive existence check.
@@ -542,7 +542,7 @@ void* CocoaHost::loadCursorFromFile(const char* path)
     instance().m_impl->cursors.push_back(std::move(cursor));
     return token;
 }
-void CocoaHost::setCursor(void* handle)
+void ClientHost::setCursor(void* handle)
 {
     m_impl->hidden = handle == nullptr;
     if (m_impl->cursor != handle) {
@@ -551,25 +551,25 @@ void CocoaHost::setCursor(void* handle)
     }
     m_impl->updateCursor();
 }
-void CocoaHost::setRelativeMouseMode(bool enabled)
+void ClientHost::setRelativeMouseMode(bool enabled)
 {
     m_impl->relative = enabled;
     if (hasWindow() && !m_impl->scripted && !SDL_SetWindowRelativeMouseMode(m_impl->window, enabled && hasFocus())) report("relative mouse");
     m_impl->updateCursor();
 }
-bool CocoaHost::relativeMouseMode() const { return m_impl->captured(); }
-bool CocoaHost::rawMouseAvailable() const { return false; } // SDL relative counts arrive through onMouseMove; no second source.
-unsigned CocoaHost::modifierFlags() const { return modifiers(m_impl->scripted ? m_impl->scriptModifiers : SDL_GetModState()); }
-unsigned short CocoaHost::consumeAsyncEnterState()
+bool ClientHost::relativeMouseMode() const { return m_impl->captured(); }
+bool ClientHost::rawMouseAvailable() const { return false; } // SDL relative counts arrive through onMouseMove; no second source.
+unsigned ClientHost::modifierFlags() const { return modifiers(m_impl->scripted ? m_impl->scriptModifiers : SDL_GetModState()); }
+unsigned short ClientHost::consumeAsyncEnterState()
 {
     const unsigned short result = (m_impl->enter[0] || m_impl->enter[1] ? 0x8000 : 0) | (m_impl->enterPressed ? 1 : 0);
     m_impl->enterPressed = false;
     return result;
 }
-bool CocoaHost::isISOKeyboard() const { return false; } // SDL scancodes already distinguish the ISO physical position.
-std::u16string CocoaHost::keyCharacter(unsigned short keyCode, unsigned mod) const
+bool ClientHost::controlShortcutDown() const { return (modifierFlags() & HostModControl) != 0; }
+const char* ClientHost::keyDisplayName(unsigned char dik) const { return dikDisplayName(dik); }
+std::u16string ClientHost::keyCharacter(unsigned char dik, unsigned mod) const
 {
-    const unsigned char dik = dikFromMacKeyCode(keyCode, false);
     for (const PhysicalKey& key : keys) {
         if (key.dik != dik) continue;
         SDL_Keymod translated = SDL_KMOD_NONE;
@@ -581,14 +581,14 @@ std::u16string CocoaHost::keyCharacter(unsigned short keyCode, unsigned mod) con
     }
     return {};
 }
-bool CocoaHost::setClipboardText(const std::string& text)
+bool ClientHost::setClipboardText(const std::string& text)
 {
     std::u16string wide;
     for (unsigned char c : text) wide += c >= 0x80 && c < 0xA0 ? cp1252High[c - 0x80] : c;
     const std::string encoded = std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t>().to_bytes(wide);
     return SDL_SetClipboardText(encoded.c_str());
 }
-bool CocoaHost::getClipboardText(std::string& text) const
+bool ClientHost::getClipboardText(std::string& text) const
 {
     if (!SDL_HasClipboardText()) return false;
     char* value = SDL_GetClipboardText();
@@ -605,7 +605,7 @@ bool CocoaHost::getClipboardText(std::string& text) const
     }
     return true;
 }
-std::vector<HostDisplayModeInfo> CocoaHost::displayModes() const
+std::vector<HostDisplayModeInfo> ClientHost::displayModes() const
 {
     std::vector<HostDisplayModeInfo> result;
     int count = 0;
@@ -619,18 +619,18 @@ std::vector<HostDisplayModeInfo> CocoaHost::displayModes() const
     SDL_free(modes);
     return result;
 }
-HostDisplayModeInfo CocoaHost::desktopMode() const
+HostDisplayModeInfo ClientHost::desktopMode() const
 {
     const SDL_DisplayMode* mode = SDL_GetDesktopDisplayMode(SDL_GetPrimaryDisplay());
     if (!mode) { report("desktop mode"); return {}; }
     return {mode->w, mode->h, static_cast<int>(std::lround(mode->refresh_rate)), 32};
 }
-void CocoaHost::preventDisplaySleep(bool prevent)
+void ClientHost::preventDisplaySleep(bool prevent)
 {
     if (m_impl->initialized && !(prevent ? SDL_DisableScreenSaver() : SDL_EnableScreenSaver())) report("screensaver");
 }
-bool CocoaHost::openURL(const std::string& url) { return SDL_OpenURL(url.c_str()); }
-unsigned CocoaHost::tickCountMs() { return static_cast<unsigned>(SDL_GetTicks()); }
+bool ClientHost::openURL(const std::string& url) { return SDL_OpenURL(url.c_str()); }
+unsigned ClientHost::tickCountMs() { return static_cast<unsigned>(SDL_GetTicks()); }
 
 int gamepadCount() { updatePads(); return static_cast<int>(pads.size()); }
 const void* gamepadIdentity(int index)

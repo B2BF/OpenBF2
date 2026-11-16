@@ -74,7 +74,7 @@ if(BF2_LINUX_CAPTURE_DEVICE_CHECK)
         "${BF2_SOURCE_ROOT}/Code/BF2/Platform/Linux/FrameCapture.cpp"
         "${BF2_SOURCE_ROOT}/Code/BF2/Platform/InputScript.cpp"
         "${BF2_SOURCE_ROOT}/Code/BF2/Platform/Linux/SDLInputScript.cpp"
-        "${BF2_SOURCE_ROOT}/Code/BF2/Platform/macOS/MacKeyMap.cpp"
+        "${BF2_SOURCE_ROOT}/Code/BF2/Platform/Host/KeyMap.cpp"
         "${BF2_SOURCE_ROOT}/Code/BF2/Platform/macOS/HitchTrace.cpp")
     target_compile_definitions(bf2_linux_capture PRIVATE DEDICATED=0 BF2_IMAGE_RENDDX9=1
         BF2_GFX_DXVK=1 BF2_LINUX_CLIENT=1)

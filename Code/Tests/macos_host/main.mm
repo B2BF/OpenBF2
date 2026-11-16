@@ -1,5 +1,5 @@
-// [TEMP] Scaffolding for package S2.4: opens the game window through CocoaHost, pumps events,
-// drives MacInputDeviceManager with the engine's update protocol (update(-1) to poll, then the
+// [TEMP] Scaffolding for package S2.4: opens the game window through ClientHost, pumps events,
+// drives NativeInputDeviceManager with the engine's update protocol (update(-1) to poll, then the
 // final positive pass InputManager::update makes) and logs DIK codes, mouse axes and buttons.
 // Synthetic NSEvents are posted to this application's own queue (never system-wide) so the whole
 // path is exercised without a person at the keyboard; real input is logged the same way.
@@ -19,9 +19,10 @@
 #import <QuartzCore/QuartzCore.h>
 #include <ApplicationServices/ApplicationServices.h>
 
-#include "../../BF2/IO/Input/MacInputDeviceManager.h"
-#include "../../BF2/Platform/macOS/CocoaHost.h"
-#include "../../BF2/Platform/macOS/MacGamepad.h"
+#include "../../BF2/IO/Input/NativeInputDeviceManager.h"
+#include "../../BF2/Platform/Host/ClientHost.h"
+#include "../../BF2/Platform/macOS/CocoaHostTestHooks.h"
+#include "../../BF2/Platform/Host/Gamepad.h"
 #include "../../BF2/Core/Ids.h"
 
 #include <cstdio>
@@ -34,7 +35,8 @@
 namespace dice { namespace hfe { namespace io { void installControlMapFixture(); extern IBase* inputDeviceManager; } } }
 
 using namespace dice::hfe;
-using macos::CocoaHost;
+using host::ClientHost;
+using macos::CocoaHostTestHooks;
 
 namespace {
 
@@ -48,24 +50,24 @@ std::string narrow(const std::wstring& w)
 }
 
 // Window-level listener: logs what the engine's BF2Window adapter would turn into messages.
-struct WindowLog : macos::IHostEventListener
+struct WindowLog : host::IHostEventListener
 {
     void onFocusChanged(bool key, bool active) override
     { std::printf("[window] focus key=%d appActive=%d\n", key, active); }
     void onResize(int w, int h, bool minimized) override
     { std::printf("[window] resize %dx%d minimized=%d\n", w, h, minimized); }
     void onCloseRequested() override { std::printf("[window] close requested\n"); }
-    void onText(const macos::HostTextEvent& e) override
+    void onText(const host::HostTextEvent& e) override
     {
-        std::printf("[window] text keyCode=0x%02X chars=", e.keyCode);
+        std::printf("[window] text dik=0x%02X chars=", e.dik);
         for (unsigned short c : e.characters) std::printf("U+%04X ", c);
         std::printf("\n");
     }
-    void onMouseButton(const macos::HostMouseButtonEvent& e) override
+    void onMouseButton(const host::HostMouseButtonEvent& e) override
     { std::printf("[window] button %d %s at (%.0f,%.0f) clicks=%d\n", e.button, e.down ? "down" : "up", e.x, e.y, e.clickCount); }
 };
 
-NSInteger windowNumber() { return ((__bridge NSWindow*)CocoaHost::instance().nativeWindow()).windowNumber; }
+NSInteger windowNumber() { return ((__bridge NSWindow*)CocoaHostTestHooks::nativeWindow(ClientHost::instance())).windowNumber; }
 
 // Key events go through CoreGraphics so they carry this machine's keyboard type, as real
 // keystrokes do; the host decides the ISO swap from that field.
@@ -116,7 +118,7 @@ void postCG(CGEventRef cg)
 
 NSPoint viewCentreInWindow()
 {
-    NSView* view = (__bridge NSView*)CocoaHost::instance().nativeView();
+    NSView* view = (__bridge NSView*)CocoaHostTestHooks::nativeView(ClientHost::instance());
     const NSRect b = [view convertRect:view.bounds toView:nil];
     return NSMakePoint(NSMidX(b), NSMidY(b));
 }
@@ -216,29 +218,29 @@ int main(int argc, char** argv)
     }
 
     g_keyboardType = static_cast<SInt16>(LMGetKbdType());
-    CocoaHost& host = CocoaHost::instance();
+    ClientHost& host = ClientHost::instance();
     if (!host.initApplication()) { std::printf("FAIL initApplication\n"); return 1; }
 
-    const macos::HostDisplayModeInfo desktop = host.desktopMode();
+    const host::HostDisplayModeInfo desktop = host.desktopMode();
     std::printf("[display] desktop %dx%d@%d, %zu modes, keyboard type %d ISO=%d, gamepads=%d\n",
                 desktop.width, desktop.height, desktop.refreshHz, host.displayModes().size(),
-                g_keyboardType, host.isISOKeyboard(), macos::gamepadCount());
+                g_keyboardType, CocoaHostTestHooks::isISOKeyboard(host), host::gamepadCount());
 
     WindowLog windowLog;
     host.addListener(&windowLog);
-    macos::HostWindowDesc desc;
+    host::HostWindowDesc desc;
     desc.title = "OpenBF2 S2.4 host test";
     desc.width = 800; desc.height = 600; desc.x = 50; desc.y = 50;
     desc.fullscreen = false; desc.hideCursor = false;
     if (!host.createWindow(desc)) { std::printf("FAIL createWindow\n"); return 1; }
-    CALayer* layer = (__bridge CALayer*)host.metalLayer();
-    std::printf("[window] created view=%p layer=%s drawable=%dx%d\n", host.nativeView(),
+    CALayer* layer = (__bridge CALayer*)CocoaHostTestHooks::metalLayer(host);
+    std::printf("[window] created view=%p layer=%s drawable=%dx%d\n", CocoaHostTestHooks::nativeView(host),
                 layer ? object_getClassName(layer) : "null", host.clientWidth(), host.clientHeight());
 
     // The engine's order: InputManager::init -> initDevices, with the globals already published.
     io::installControlMapFixture();
     io::IInputDeviceManager* manager = static_cast<io::IInputDeviceManager*>(
-        io::MacInputDeviceManager::create(io::IID_IInputDeviceManager, 0));
+        io::NativeInputDeviceManager::create(io::IID_IInputDeviceManager, 0));
     io::inputDeviceManager = manager;
     unsigned int mask = io::IDFMouse | io::IDFKeyboard | io::IDFGameController_0;
     const bool allOpened = manager->initDevices(&mask);
@@ -249,8 +251,8 @@ int main(int argc, char** argv)
     if (simulateFocus && !host.hasFocus())
     {
         std::printf("[test] AppKit focus key=%d active=%d; simulating focus (test seam)\n",
-                    ((__bridge NSWindow*)host.nativeWindow()).isKeyWindow ? 1 : 0, [NSApp isActive] ? 1 : 0);
-        host.overrideFocusForTest(true, true);
+                    ((__bridge NSWindow*)CocoaHostTestHooks::nativeWindow(host)).isKeyWindow ? 1 : 0, [NSApp isActive] ? 1 : 0);
+        CocoaHostTestHooks::overrideFocusForTest(host, true, true);
     }
     const double start = now();
     bool posted = false;
@@ -296,7 +298,7 @@ int main(int argc, char** argv)
     // Close the way a user would: the title-bar close button.
     if (!quit)
     {
-        [(__bridge NSWindow*)host.nativeWindow() performClose:nil];
+        [(__bridge NSWindow*)CocoaHostTestHooks::nativeWindow(host) performClose:nil];
         quit = host.pumpEvents();
     }
     std::printf("[test] quit requested=%d\n", quit);

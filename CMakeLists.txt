@@ -2420,6 +2420,7 @@ if(BF2_LINUX_CLIENT)
     set_property(TARGET bf2_client APPEND PROPERTY BUILD_RPATH "${BF2_CLIENT_DXVK_LIBDIR}")
     add_subdirectory(Code/Tests/linux_d3dx)
     add_subdirectory(Code/Tests/linux_host)
+    add_subdirectory(Code/Tests/native_host)
     add_subdirectory(Code/Tests/linux_audio)
     add_subdirectory(Code/Tests/linux_plugins)
     add_subdirectory(Code/Tests/linux_profiles)
@@ -2441,11 +2442,11 @@ if(BF2_LINUX_CLIENT)
     target_link_libraries(bf2_client_objects PRIVATE OpenSSL::Crypto)
     target_link_libraries(bf2_client PRIVATE OpenSSL::Crypto)
     add_custom_target(bf2_linux_client_checks
-        COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure -R "^linux_"
+        COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure -R "^(linux_|native_host_)"
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
         DEPENDS bf2_native_vtable_check bf2_meme_dispatch_check
             bf2_linux_forward_contract bf2_linux_fx_runtime bf2_linux_fx_compiler bf2_linux_fx_equivalence bf2_linux_fx_packed_colors
-            bf2_linux_d3dx_cpu bf2_linux_d3dx_assembly bf2_linux_host_check bf2_linux_cursor_check bf2_linux_audio_check
+            bf2_linux_d3dx_cpu bf2_linux_d3dx_assembly bf2_linux_host_check bf2_linux_cursor_check bf2_native_host_keymap bf2_linux_audio_check
             bf2_linux_openal_check bf2_linux_plugin_contract bf2_linux_profile_check bf2_linux_path_check
             bf2_linux_swiff_image_check
             ${BF2_LINUX_NUMERIC_CHECKS}
@@ -2467,7 +2468,7 @@ if(BF2_BUILD_MACOS AND TARGET bf2_swiffplayer_static)
     # [TEMP] [CHOSEN, not recovered] Content-free offline popup VM regression.
     add_executable(bf2_swiff_offline_connect_popup_check EXCLUDE_FROM_ALL
         Code/Tests/swiff_offline_connect_popup.cpp
-        Code/Tests/gameswf_xml/cocoa_host_unavailable.cpp)
+        Code/Tests/gameswf_xml/native_host_unavailable.cpp)
     bf2_configure_static_plugin(bf2_swiff_offline_connect_popup_check BF2_IMAGE_SWIFFPLAYER)
     target_include_directories(bf2_swiff_offline_connect_popup_check PRIVATE
         "${BF2_EXTERNAL_ROOT}" "${BF2_EXTERNAL_ROOT}/gameswf")
@@ -2478,7 +2479,7 @@ if(BF2_BUILD_MACOS AND TARGET bf2_swiffplayer_static)
     # native gameswf must show retail 1.50's squares (docs/tracks/game/swf-proto-retail-probe.md).
     add_executable(bf2_swf_proto_probe_check EXCLUDE_FROM_ALL
         Code/Tests/swf_proto_probe_runtime.cpp
-        Code/Tests/gameswf_xml/cocoa_host_unavailable.cpp)
+        Code/Tests/gameswf_xml/native_host_unavailable.cpp)
     bf2_configure_static_plugin(bf2_swf_proto_probe_check BF2_IMAGE_SWIFFPLAYER)
     target_include_directories(bf2_swf_proto_probe_check PRIVATE
         "${BF2_EXTERNAL_ROOT}" "${BF2_EXTERNAL_ROOT}/gameswf")
@@ -2498,7 +2499,7 @@ if(BF2_BUILD_MACOS AND TARGET bf2_swiffplayer_static)
     # [TEMP] [CHOSEN, not recovered] Production gameswf XML/string/file fixture.
     add_executable(bf2_gameswf_xml_check EXCLUDE_FROM_ALL
         Code/Tests/gameswf_xml/xml_check.cpp
-        Code/Tests/gameswf_xml/cocoa_host_unavailable.cpp)
+        Code/Tests/gameswf_xml/native_host_unavailable.cpp)
     bf2_configure_static_plugin(bf2_gameswf_xml_check BF2_IMAGE_SWIFFPLAYER)
     target_include_directories(bf2_gameswf_xml_check PRIVATE "${BF2_EXTERNAL_ROOT}")
     target_link_libraries(bf2_gameswf_xml_check PRIVATE bf2_swiffplayer_static bf2_plugin_kit_static)

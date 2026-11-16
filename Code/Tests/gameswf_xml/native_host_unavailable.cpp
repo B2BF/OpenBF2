@@ -5,41 +5,41 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include "../../BF2/Platform/macOS/CocoaHost.h"
+#include "../../BF2/Platform/Host/ClientHost.h"
 
 namespace dice {
 namespace hfe {
-namespace macos {
+namespace host {
 
 namespace {
 [[noreturn]] void unavailable(const char* method)
 {
-    std::fprintf(stderr, "[FRONTIER] dice::hfe::macos::CocoaHost::%s reached in CPU gameswf fixture\n", method);
+    std::fprintf(stderr, "[FRONTIER] dice::hfe::host::ClientHost::%s reached in CPU gameswf fixture\n", method);
     std::fflush(stderr);
     std::abort();
 }
 }
 
-CocoaHost& CocoaHost::instance()
+ClientHost& ClientHost::instance()
 {
     unavailable("instance");
 }
 
-void CocoaHost::setCursor(void*)
+void ClientHost::setCursor(void*)
 {
     unavailable("setCursor");
 }
 
-unsigned int CocoaHost::modifierFlags() const
+unsigned int ClientHost::modifierFlags() const
 {
     unavailable("modifierFlags");
 }
 
-unsigned short CocoaHost::consumeAsyncEnterState()
+unsigned short ClientHost::consumeAsyncEnterState()
 {
     unavailable("consumeAsyncEnterState");
 }
 
-} // namespace macos
+} // namespace host
 } // namespace hfe
 } // namespace dice

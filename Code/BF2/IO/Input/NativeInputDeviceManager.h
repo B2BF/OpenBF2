@@ -1,22 +1,21 @@
-// [CHOSEN, not recovered] macOS port: the input-device manager and devices that stand in for
-// DX8InputDeviceManager and its DirectInput keyboard, mouse and game-controller devices. There was
-// no retail macOS image. The devices keep the DX8 devices' interfaces, sampling algorithms and
-// quirks (buffered events consumed by timestamp, axis scaling through the active control map,
-// DIK_ scan codes, button numbering), with the event source replaced by the Cocoa host
-// (Platform/macOS/CocoaHost.h). Every behavioural choice is listed in docs/macos-s2-4.md.
+// [CHOSEN, not recovered] Native client input manager and devices shared by Cocoa and SDL.
+// They replace DX8InputDeviceManager and its DirectInput devices while keeping their interfaces,
+// sampling algorithms and quirks (buffered events consumed by timestamp, axis scaling through the active control map,
+// DIK_ scan codes, button numbering), with events supplied by Platform/Host/ClientHost.h.
+// Native host contracts: docs/linux-vulkan-client.md and docs/macos-s2-4.md (issue #36).
 //
 // The manager is registered under CID_DX8InputDeviceManager and the registry name
-// "dice.hfe.io.InputDeviceManager.DX8" on macOS, so BF2EngineSetup's singleton selection and
+// "dice.hfe.io.InputDeviceManager.DX8", so BF2EngineSetup's singleton selection and
 // every engine caller stay unchanged.
 
-#ifndef IO_INPUT_MACINPUTDEVICEMANAGER_H
-#define IO_INPUT_MACINPUTDEVICEMANAGER_H
+#ifndef IO_INPUT_NATIVEINPUTDEVICEMANAGER_H
+#define IO_INPUT_NATIVEINPUTDEVICEMANAGER_H
 
 #include "../../Core/BuildConfig.h"
 #if !DEDICATED && (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
 
 #include "Input.h"
-#include "../../Platform/macOS/CocoaHost.h"
+#include "../../Platform/Host/ClientHost.h"
 #include <list>
 #include <map>
 #include <string>
@@ -24,11 +23,11 @@
 
 namespace dice { namespace hfe { namespace io {
 
-// One buffered device event, the macOS counterpart of DIDEVICEOBJECTDATA: offset is the
+// One buffered device event, the native counterpart of DIDEVICEOBJECTDATA: offset is the
 // DirectInput data-format offset (DIK_ code, DIMOFS_*), data the DirectInput value (0x80 for a
-// press, a signed count for an axis), timeStamp milliseconds on CocoaHost::tickCountMs's clock,
+// press, a signed count for an axis), timeStamp milliseconds on ClientHost::tickCountMs's clock,
 // sequence a process-wide increasing number.
-struct MacInputEvent
+struct NativeInputEvent
 {
     unsigned int offset;
     unsigned int data;
@@ -37,15 +36,15 @@ struct MacInputEvent
 };
 
 // Returns the next event sequence number (shared by all devices, as DirectInput's is).
-unsigned int nextMacInputSequence();
+unsigned int nextNativeInputSequence();
 
 // Keyboard device: DIK_ key states sampled from host key events. Buffers up to 100 events between
 // polls, like the DirectInput keyboard's DIPROP_BUFFERSIZE.
-class MacKeyboardDevice final : public IKeyboardDevice, private macos::IHostEventListener
+class NativeKeyboardDevice final : public IKeyboardDevice, private host::IHostEventListener
 {
 public:
-    MacKeyboardDevice();
-    ~MacKeyboardDevice();
+    NativeKeyboardDevice();
+    ~NativeKeyboardDevice();
     void addRef() override;
     int getRef() override;
     int release() override;
@@ -65,7 +64,7 @@ public:
     virtual bool init();
 
 private:
-    void onKey(const macos::HostKeyEvent& event) override;
+    void onKey(const host::HostKeyEvent& event) override;
     void onFocusChanged(bool windowKey, bool appActive) override;
     void updateCurrentState(float dt);
 
@@ -75,18 +74,18 @@ private:
     bool m_active;
     bool m_inputLost;                           // focus left the window since the last poll
     bool m_overflow;
-    std::vector<MacInputEvent> m_pending;       // the DirectInput device buffer
-    std::list<MacInputEvent> m_events;
+    std::vector<NativeInputEvent> m_pending;       // the DirectInput device buffer
+    std::list<NativeInputEvent> m_events;
     unsigned char m_keys[256], m_previousKeys[256];
 };
 
 // Mouse device: relative X/Y/wheel and eight buttons from host mouse events, in DirectInput's
 // c_dfDIMouse2 layout. Buffers up to 128 events between polls.
-class MacMouseDevice final : public IAdvancedInputDevice, private macos::IHostEventListener
+class NativeMouseDevice final : public IAdvancedInputDevice, private host::IHostEventListener
 {
 public:
-    MacMouseDevice();
-    ~MacMouseDevice();
+    NativeMouseDevice();
+    ~NativeMouseDevice();
     void addRef() override;
     int getRef() override;
     int release() override;
@@ -116,11 +115,11 @@ public:
     virtual bool init();
 
 private:
-    void onMouseMove(const macos::HostMouseMoveEvent& event) override;
-    void onRawMouseMove(const macos::HostRawMouseEvent& event) override;
+    void onMouseMove(const host::HostMouseMoveEvent& event) override;
+    void onRawMouseMove(const host::HostRawMouseEvent& event) override;
     void addMotion(double dx, double dy, unsigned int timeMs);
-    void onMouseButton(const macos::HostMouseButtonEvent& event) override;
-    void onMouseWheel(const macos::HostMouseWheelEvent& event) override;
+    void onMouseButton(const host::HostMouseButtonEvent& event) override;
+    void onMouseWheel(const host::HostMouseWheelEvent& event) override;
     void onFocusChanged(bool windowKey, bool appActive) override;
     void push(unsigned int offset, unsigned int data, unsigned int timeStamp);
     void clearState();
@@ -143,20 +142,20 @@ private:
     float m_buttonLatency[32];
     unsigned int m_pollTime, m_sampleTime;
     double m_remainderX, m_remainderY;          // sub-count motion carried to the next event
-    std::vector<MacInputEvent> m_pending;
-    std::list<MacInputEvent> m_samples;
-    std::list<MacInputEvent> m_peakSamples;
+    std::vector<NativeInputEvent> m_pending;
+    std::list<NativeInputEvent> m_samples;
+    std::list<NativeInputEvent> m_peakSamples;
     unsigned int m_lastSequence;
 };
 
 // Game controller: an extended gamepad (GCController) presented as the DirectInput joystick an
 // Xbox controller reports: axes X, Y, Z (triggers), Rx, Ry; ten buttons; one POV hat whose four
 // cardinal directions also appear as buttons 10..13.
-class MacGameControllerDevice final : public IAdvancedInputDevice
+class NativeGameControllerDevice final : public IAdvancedInputDevice
 {
 public:
-    MacGameControllerDevice();
-    ~MacGameControllerDevice();
+    NativeGameControllerDevice();
+    ~NativeGameControllerDevice();
     void addRef() override;
     int getRef() override;
     int release() override;
@@ -210,12 +209,12 @@ private:
 };
 
 // Device manager. initDevices opens the keyboard, mouse and the first two game controllers;
-// the Falcon is not available on macOS and is reported as not opened.
-class MacInputDeviceManager final : public IInputDeviceManager
+// the Falcon is not available on these native backends and is reported as not opened.
+class NativeInputDeviceManager final : public IInputDeviceManager
 {
 public:
-    MacInputDeviceManager();
-    ~MacInputDeviceManager();
+    NativeInputDeviceManager();
+    ~NativeInputDeviceManager();
     void addRef() override;
     int getRef() override;
     int release() override;
@@ -238,4 +237,4 @@ private:
 } } }
 
 #endif // !DEDICATED && __APPLE__
-#endif // IO_INPUT_MACINPUTDEVICEMANAGER_H
+#endif // IO_INPUT_NATIVEINPUTDEVICEMANAGER_H

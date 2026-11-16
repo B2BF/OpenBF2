@@ -41,11 +41,15 @@ recovery or unknown ABI contract still needs direct original-image evidence.
 
 ## Local review scope
 
-The Linux port is organized into five commits on `linux/vulkan-client`, based on
+The Linux port starts with five commits on `linux/vulkan-client`, based on
 upstream `main` at `02cc5ac818582689efe3452755f40e5f55edc2c7`: numeric portability;
 SDL host, input, profiles and plugin integration; audio/video; DXVK and portable
 D3DX/effects; then build, launch and validation tooling. These are a dependency-ordered
 review series; full-client validation applies to the complete series.
+
+A separate host/input refactor follows those commits. It gives shared code neutral names and
+removes Linux's conversion through Mac key codes. The host architecture below describes its
+internal API changes and the intended platform-specific behavior.
 
 Use `git diff origin/main...HEAD` for the proposed changes and
 `git log --reverse --oneline origin/main..HEAD` for the review order. The worktree is
@@ -223,11 +227,61 @@ C++14; the existing isolated effect compiler/runtime targets use C++17. The exec
 `libdice_py.so` and `libaidll.so` are written to the build's `bin_linux` directory.
 `bf2_client.build.json` records the linked binary hash, compiler, architecture and source state.
 
-Linux uses the existing native host/input interfaces with an SDL implementation. Historical
-`macos` namespace and adapter filenames are retained where they describe shared C++ interfaces;
-Linux never defines `__APPLE__`. Native ELF plugins are prelinked with their own host-service
+Linux uses `host::ClientHost` with an SDL implementation. Cocoa implements the same contract
+on macOS; Linux never defines `__APPLE__`. Native ELF plugins are prelinked with their own host-service
 globals. Private COMDAT signatures are renamed too, so plugin destructors and RTTI cannot be
 coalesced across images. A host-plus-two-plugins runtime fixture checks that isolation.
+
+### Shared host and input
+
+`Platform/Host/ClientHost.h` defines the application, window, cursor, clipboard and input
+contract in `dice::hfe::host`. `CocoaHost.mm` and `SDLHost.cpp` provide its private backend
+implementation. `rendererWindowHandle()` borrows the content `NSView*` on macOS or the
+`SDL_Window*` on Linux. Cocoa-only test hooks and native inspection stay in the macOS backend.
+
+Host keyboard events carry BF2's existing DIK physical-key codes; UTF-16 text arrives separately.
+SDL scancodes map directly to DIK. `MacKeyMap` handles only Apple kVK/ISO/JIS conversions,
+including the existing Mac F13–F15 policy. Shared key metadata supplies Win32 message codes
+and fallback labels, with Option/Command/Clear overrides on macOS. Layout character lookup
+accepts DIK, so shared devices and menu code never translate through Apple key codes.
+
+`NativeInputDeviceManager`, `NativeKeyboardDevice`, `NativeMouseDevice` and
+`NativeGameControllerDevice` retain the engine interfaces, factory IDs and sampling behavior.
+The shared window-message adapter consumes normalized events. Cocoa normalizes its Backspace,
+keypad Enter and Command shortcuts before dispatch; Ctrl+C remains U+0003, not Enter. Linux
+uses Control for shortcuts; Super does not act as Command. Saved bindings and named input script
+commands keep their existing meanings. Numeric test-script keys are backend-specific: Linux
+`key 0xNN` now names DIK directly, while macOS retains kVK. Use named keys in portable scripts;
+none of the repository's Linux scripts relies on the former numeric Mac tokens. Linux text
+expansion searches all 256 DIKs, including printable extended keypad keys. These are intentional
+native host changes under issue #36; no recovered layouts, network protocols or content formats change.
+
+Host/input refactor validation:
+
+- GCC 14 client strict link and integrated checks: 33 passed, one existing binary128 check
+  skipped on x86-64. `linux_host_script_layout` exercises the real interpreter with a synthetic
+  keyboard layout whose printable characters exist only at DIK 141, 179 and Shift+181.
+- Native dedicated-server and `dice_py_check` targets build with the existing Distrobox
+  toolchain. This check does not claim a new dedicated-server runtime or Python runtime test.
+- The portable keymap/Cocoa-text/window-message fixture passes as an AArch64 binary under
+  QEMU (GCC 14.2, QEMU 10.0.13). This establishes CPU-boundary coverage, not ARM64 graphics.
+- Client run `20261116T181350Z-6e760c6c` loaded Operation Clean Sweep, spawned, typed and edited
+  a console command, used keypad Enter, walked and turned, disconnected and confirmed the
+  game menu's Quit. It exited 0 after 76.19 seconds, with 2,187 traced frames and 781,512 KiB
+  peak RSS. It used copied content on port 16698, 1280×800, `+restart 1`, the saved eight-sample
+  setting and opt-in scripted input. Console and movement captures were inspected. Concurrent
+  compilation makes this a functional check, not a performance comparison. The subsequent
+  extended-key search change is covered by the interpreter regression above.
+- macOS AppKit/Metal and MSVC x86/x64 builds remain pending. Live keyboard-layout variations,
+  UI rebinding, physical-controller behavior and a new human focus/capture review were not
+  exercised. Synthetic tests cover the shared focus and captured-mouse message rules.
+
+Logs are `out/linux-vulkan-client/host-refactor-final-checks.log` and
+`out/linux-vulkan-server-check/host-refactor-distrobox-build.log`; ARM64 fixture artifacts are
+under `out/linux-audio-agent/native-host-arm64/`. Host test hooks retain
+`macos-client-window`; scripted input retains `client-test-automation-replaced`, and Cocoa
+activation/fullscreen workarounds retain `macos-options-validated`. This refactor retires none
+of those boundaries.
 
 GCC builds disable devirtualization for the reconstructed native images. Their explicit-self
 tables are viewed through current C++ interfaces; GCC otherwise optimizes a fixture's call into

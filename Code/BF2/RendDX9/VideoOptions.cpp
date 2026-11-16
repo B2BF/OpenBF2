@@ -40,7 +40,7 @@
 #endif
 #if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
 #include "../Platform/X87Compat.h"
-#include "../Platform/macOS/CocoaHost.h"
+#include "../Platform/Host/ClientHost.h"
 #else
 #include <intrin.h>     // __rdtsc / __cpuid - the CPU-speed benchmark inside detectQualityLevel (+0x34)
 #endif
@@ -308,7 +308,7 @@ void videoOptionsChangeResolution(VideoOptions* vo, const Mode40* mode)
     //     SWP_NOZORDER, so the window is also raised - as shipped.
 #if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
     // [CHOSEN, not recovered] The native host accepts client dimensions and owns frame decoration.
-    macos::CocoaHost::instance().resizeClient(b->modeWidth, b->modeHeight);
+    host::ClientHost::instance().resizeClient(b->modeWidth, b->modeHeight);
 #else
     const int sizeFrameX = ::GetSystemMetrics(SM_CXSIZEFRAME);          // 0x20
     const int windowWidth = b->modeWidth + sizeFrameX * 2;

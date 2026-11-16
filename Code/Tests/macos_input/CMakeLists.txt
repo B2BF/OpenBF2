@@ -5,7 +5,7 @@
 #   cmake --build out/build/macos-input-test
 #   out/build/macos-input-test/macos_input_test
 #
-# It links the production host (Code/BF2/Platform/macOS) and input devices (Code/BF2/IO/Input/Mac*)
+# It links the production host (Code/BF2/Platform/macOS) and input devices (Code/BF2/IO/Input/Native*)
 # with the control-map fixture of macos_host, runs the host headless (no window, no Dock icon, the
 # real cursor untouched), feeds it NSEvents built from CoreGraphics events and checks what the
 # engine-facing device interfaces report. Exit status 0 when every check passes.
@@ -30,10 +30,11 @@ add_executable(macos_input_test
     "${BF2_ROOT}/Platform/macOS/MacInputScript.mm"
     "${BF2_ROOT}/Platform/InputScript.cpp"
     "${BF2_ROOT}/Platform/macOS/MacKeyMap.cpp"
-    "${BF2_ROOT}/IO/Input/MacInputDeviceManager.cpp"
-    "${BF2_ROOT}/IO/Input/MacKeyboardDevice.cpp"
-    "${BF2_ROOT}/IO/Input/MacMouseDevice.cpp"
-    "${BF2_ROOT}/IO/Input/MacGameControllerDevice.cpp")
+    "${BF2_ROOT}/Platform/Host/KeyMap.cpp"
+    "${BF2_ROOT}/IO/Input/NativeInputDeviceManager.cpp"
+    "${BF2_ROOT}/IO/Input/NativeKeyboardDevice.cpp"
+    "${BF2_ROOT}/IO/Input/NativeMouseDevice.cpp"
+    "${BF2_ROOT}/IO/Input/NativeGameControllerDevice.cpp")
 
 set_target_properties(macos_input_test PROPERTIES CXX_STANDARD 14 CXX_EXTENSIONS ON
                                                   OBJCXX_STANDARD 14 OBJCXX_EXTENSIONS ON)

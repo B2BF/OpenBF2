@@ -1,7 +1,7 @@
 // [CHOSEN, not recovered] macOS port: GCMouse raw motion. See MacRawMouse.h.
 
 #include "MacRawMouse.h"
-#include "CocoaHost.h"
+#include "../Host/ClientHost.h"
 
 #import <Foundation/Foundation.h>
 #import <GameController/GameController.h>
@@ -43,7 +43,7 @@ void attach(GCMouse* mouse)
     // GCMouseInput reports y up positive; DirectInput's Y grows downwards.
     mouse.mouseInput.mouseMovedHandler = ^(GCMouseInput* input, float deltaX, float deltaY) {
         (void)input;
-        rawMousePublish(deltaX, -deltaY, CocoaHost::tickCountMs());
+        rawMousePublish(deltaX, -deltaY, host::ClientHost::tickCountMs());
     };
 }
 

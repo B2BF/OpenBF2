@@ -1,14 +1,15 @@
 // [TEMP] [CHOSEN, not recovered] Client test tool: a scripted input source for unattended client
 // runs (docs/macos-c-input-script.md). Off unless BF2_INPUT_SCRIPT=<file> is set. The platform host
 // runs one script tick per pump and turns its actions into the input its real devices produce:
-//   macOS   CocoaHost (Platform/macOS) builds HostKeyEvent, HostTextEvent, HostMouse*Event and
+//   macOS   ClientHost (Platform/macOS) builds HostKeyEvent, HostTextEvent, HostMouse*Event and
 //           HostRawMouseEvent values for the window-message source and the Mac input devices.
 //   Win32   WinInputScript (Platform/Windows) sends window messages to the game window (menus,
 //           Swiff, console, chat) and feeds DirectInput device data to KeyboardDevice and
 //           MouseDevice (the in-game path).
 //   Linux   SDLHost uses the shared native host key/event contract and SDLInputScript names.
 // While a script is active the host ignores real input, reports focus, and leaves the real cursor
-// alone. Key codes are the host's own: kVK_ codes on macOS, DIK_ codes (scan codes) on Win32.
+// alone. Script key codes are backend-private: kVK_ on macOS, DIK_ on Windows and Linux.
+// Cocoa translates kVK_ to DIK_ before dispatching the shared native host events.
 // Client images only (!DEDICATED). [RETIRE-WHEN: client-test-automation-replaced]
 #ifndef PLATFORM_INPUTSCRIPT_H
 #define PLATFORM_INPUTSCRIPT_H
@@ -20,7 +21,7 @@ namespace dice {
 namespace hfe {
 namespace inputscript {
 
-// What the script needs from the host. Implemented by CocoaHost::Impl (macOS) and the Win32 sink
+// What the script needs from the host. Implemented by ClientHost::Impl (macOS) and the Win32 sink
 // in WinInputScript.cpp.
 class IInputScriptSink
 {
@@ -124,8 +125,8 @@ private:
 
 InputScript& inputScript();
 
-// Host key codes, implemented once per platform (MacInputScript.mm: kVK_; WinInputScript.cpp:
-// DIK_). lookup takes a lower-case IDKey_ name without the prefix ("escape", "leftshift"...).
+// Script key codes, implemented per backend (MacInputScript.mm: kVK_; WinInputScript.cpp and
+// SDLInputScript.cpp: DIK_). lookup takes a lower-case IDKey_ name without its prefix.
 namespace keys {
 bool lookup(const std::string& name, unsigned short& code);
 // The characters a press carries for keys the layout translation reports as control characters.

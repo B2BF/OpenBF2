@@ -4,8 +4,7 @@
 #if defined(_WIN32)
 #include <windows.h>
 #elif (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
-#include "../Platform/macOS/CocoaHost.h"   // [CHOSEN, not recovered] cursor and key characters
-#include "../Platform/macOS/MacKeyMap.h"
+#include "../Platform/Host/ClientHost.h"   // [CHOSEN, not recovered] cursor and key characters
 #endif
 #include "BetweenRoundsLogic.h"
 #include "IMenuTeamManager.h"
@@ -33,18 +32,14 @@ namespace io { extern IBase* inputDeviceManager; }    // Core/Globals.cpp; PE 0x
 // Translates a DirectInput scan code using the keyboard layout cached on first use.
 // Returns the number of characters written, or zero when keyboard-state retrieval fails.
 #if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
-// [CHOSEN, not recovered] macOS: the key code for the scan code, translated with the current
+// [CHOSEN, not recovered] Native host scan code translated with the current
 // layout and the Shift/Caps Lock state, as ToAsciiEx translates with GetKeyboardState. Writes one
 // character and returns 1, or returns 0 when the key produces none or one outside the 8-bit range
 // the ANSI call answers in.
 int menuScanCodeToChar(unsigned int scanCode, unsigned short* character)
 {
-    macos::CocoaHost& host = macos::CocoaHost::instance();
-    const unsigned short keyCode =
-        macos::macKeyCodeFromDik(static_cast<unsigned char>(scanCode), host.isISOKeyboard());
-    if (keyCode == 0xFFFF)
-        return 0;
-    const std::u16string text = host.keyCharacter(keyCode, host.modifierFlags());
+    host::ClientHost& host = host::ClientHost::instance();
+    const std::u16string text = host.keyCharacter(static_cast<unsigned char>(scanCode), host.modifierFlags());
     if (text.size() != 1 || text[0] > 0xFF)
         return 0;
     character[0] = static_cast<unsigned short>(text[0]);
@@ -148,8 +143,8 @@ bool BetweenRoundsLogic::init()
     io::IInputDevice* mouse = static_cast<io::IInputDeviceManager*>(io::inputDeviceManager)->getInputDevice(io::IDFMouse);
     mouse->deActivate();                                                      // +0x20, unguarded in the binary
 #if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
-    macos::CocoaHost::instance().showCursor(true);                            // [CHOSEN] ShowCursor(TRUE)
-    macos::CocoaHost::instance().setCursor(m_host->getCursor(0));             // +0x6C, SetCursor
+    host::ClientHost::instance().showCursor(true);                            // [CHOSEN] ShowCursor(TRUE)
+    host::ClientHost::instance().setCursor(m_host->getCursor(0));             // +0x6C, SetCursor
 #else
     ShowCursor(TRUE);
     SetCursor(static_cast<HCURSOR>(m_host->getCursor(0)));                    // +0x6C
@@ -177,8 +172,8 @@ void BetweenRoundsLogic::deactivate()
     m_swiffActive = false;
     m_frameActive = false;
 #if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
-    macos::CocoaHost::instance().setCursor(0);                                // [CHOSEN] SetCursor(0)
-    macos::CocoaHost::instance().showCursor(false);                           //   ShowCursor(FALSE)
+    host::ClientHost::instance().setCursor(0);                                // [CHOSEN] SetCursor(0)
+    host::ClientHost::instance().showCursor(false);                           //   ShowCursor(FALSE)
 #else
     SetCursor(0);
     ShowCursor(FALSE);
@@ -206,9 +201,9 @@ bool BetweenRoundsLogic::beginFrame()
     const bool pending = m_player->getSwiffHost()->getFlag7B8();              // +0x5C then +0xCC
     if (m_player->getSwiffHost()->getFlagEA8() || pending)                    // +0x5C then +0x2A8
 #if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
-        macos::CocoaHost::instance().setCursor(m_host->getCursor(1));         // +0x6C, the busy cursor
+        host::ClientHost::instance().setCursor(m_host->getCursor(1));         // +0x6C, the busy cursor
     else
-        macos::CocoaHost::instance().setCursor(m_host->getCursor(m_host->getBusy()));// +0x2B8 then +0x6C
+        host::ClientHost::instance().setCursor(m_host->getCursor(m_host->getBusy()));// +0x2B8 then +0x6C
 #else
         SetCursor(static_cast<HCURSOR>(m_host->getCursor(1)));                // +0x6C, the busy cursor
     else

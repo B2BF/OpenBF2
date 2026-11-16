@@ -1,9 +1,9 @@
-// [CHOSEN, not recovered] macOS port: mouse device. The sampling bodies (getNextInput,
+// [CHOSEN, not recovered] Native mouse device. The sampling bodies (getNextInput,
 // peakXYAxis, updateSamples, the -1/positive update protocol, the 256-entry queue limits and the
 // axis scaling through the active control map) follow MouseDevice.cpp; DirectInput's buffered
-// c_dfDIMouse2 data is replaced by host mouse events. See MacInputDeviceManager.h.
+// c_dfDIMouse2 data is replaced by host mouse events. See NativeInputDeviceManager.h.
 
-#include "MacInputDeviceManager.h"
+#include "NativeInputDeviceManager.h"
 #if !DEDICATED && (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
 #include "../../Core/Ids.h"
 #include <cmath>
@@ -20,10 +20,10 @@ const size_t kMouseBufferSize = 128;            // MouseDevice::init's DIPROP_BU
 const unsigned int kMouseButtons = 8;
 // [CHOSEN] X, Y and the wheel, as DirectInput reports for a wheel mouse.
 const int kMouseAxes = 3;
-macos::CocoaHost& host() { return macos::CocoaHost::instance(); }
+host::ClientHost& clientHost() { return host::ClientHost::instance(); }
 }
 
-MacMouseDevice::MacMouseDevice()
+NativeMouseDevice::NativeMouseDevice()
     : m_refCount(1), m_mode(IDM_EXCLUSIVE), m_numButtons(0), m_buttons(0), m_previousButtons(0),
       m_numAxes(0), m_initialized(false), m_active(false), m_inputLost(false), m_overflow(false),
       m_pollTime(0), m_sampleTime(0), m_remainderX(0.0), m_remainderY(0.0), m_lastSequence(0)
@@ -39,55 +39,55 @@ MacMouseDevice::MacMouseDevice()
         m_buttonLatency[i] = 0.0f;
 }
 
-MacMouseDevice::~MacMouseDevice()
+NativeMouseDevice::~NativeMouseDevice()
 {
     if (m_initialized) {
         if (m_active && m_mode == IDM_EXCLUSIVE)
-            host().setRelativeMouseMode(false);
-        host().removeListener(this);
+            clientHost().setRelativeMouseMode(false);
+        clientHost().removeListener(this);
     }
 }
 
-void MacMouseDevice::addRef() { ++m_refCount; }
-int MacMouseDevice::getRef() { return m_refCount; }
-int MacMouseDevice::release()
+void NativeMouseDevice::addRef() { ++m_refCount; }
+int NativeMouseDevice::getRef() { return m_refCount; }
+int NativeMouseDevice::release()
 {
     const int count = --m_refCount;
     if (count == 0)
         delete this;
     return count;
 }
-void* MacMouseDevice::queryInterface(unsigned int iid) const
+void* NativeMouseDevice::queryInterface(unsigned int iid) const
 {
     if (iid == IID_IBase || iid == IID_IInputDevice || iid == IID_IAdvancedInputDevice)
-        return const_cast<MacMouseDevice*>(this);
+        return const_cast<NativeMouseDevice*>(this);
     return 0;
 }
-InputDeviceTypes MacMouseDevice::getType() const { return static_cast<InputDeviceTypes>(1); }
-InputDeviceMode MacMouseDevice::getCooperativeMode() const { return m_mode; }
+InputDeviceTypes NativeMouseDevice::getType() const { return static_cast<InputDeviceTypes>(1); }
+InputDeviceMode NativeMouseDevice::getCooperativeMode() const { return m_mode; }
 
 // Exclusive is DirectInput's DISCL_EXCLUSIVE | DISCL_FOREGROUND: while acquired the cursor is
-// hidden and held. On macOS that is the host's relative mouse mode. Non-exclusive leaves the
+// hidden and held. That is the host's relative mouse mode. Non-exclusive leaves the
 // cursor alone and still delivers relative motion.
-bool MacMouseDevice::setCooperativeMode(InputDeviceMode mode)
+bool NativeMouseDevice::setCooperativeMode(InputDeviceMode mode)
 {
     m_mode = mode;
     applyRelativeMode();
     return true;
 }
 
-void MacMouseDevice::applyRelativeMode()
+void NativeMouseDevice::applyRelativeMode()
 {
     if (m_initialized)
-        host().setRelativeMouseMode(m_active && m_mode == IDM_EXCLUSIVE);
+        clientHost().setRelativeMouseMode(m_active && m_mode == IDM_EXCLUSIVE);
 }
 
-bool MacMouseDevice::activate()
+bool NativeMouseDevice::activate()
 {
     if (!m_initialized)
         return false;
     if (!m_active) {
-        m_active = host().hasFocus();
+        m_active = clientHost().hasFocus();
         m_pending.clear();
         m_overflow = false;
         m_inputLost = false;
@@ -97,7 +97,7 @@ bool MacMouseDevice::activate()
     return true;                                        // also when acquisition fails
 }
 
-bool MacMouseDevice::deActivate()
+bool NativeMouseDevice::deActivate()
 {
     if (!m_initialized)
         return false;
@@ -112,45 +112,45 @@ bool MacMouseDevice::deActivate()
     return true;
 }
 
-bool MacMouseDevice::isActive() const { return m_initialized && m_active; }
-int MacMouseDevice::getNumAxes() const { return m_numAxes; }
-int MacMouseDevice::getNumButtons() const { return m_numButtons; }
-float MacMouseDevice::readAxis(InputDeviceAxes axis, bool) const
+bool NativeMouseDevice::isActive() const { return m_initialized && m_active; }
+int NativeMouseDevice::getNumAxes() const { return m_numAxes; }
+int NativeMouseDevice::getNumButtons() const { return m_numButtons; }
+float NativeMouseDevice::readAxis(InputDeviceAxes axis, bool) const
 {
     return m_invertAxis[axis] ? -m_axes[axis] : m_axes[axis];
 }
-void MacMouseDevice::setInvertAxis(InputDeviceAxes axis, bool invert)
+void NativeMouseDevice::setInvertAxis(InputDeviceAxes axis, bool invert)
 {
     if (axis <= m_numAxes) m_invertAxis[axis] = invert;
 }
-bool MacMouseDevice::getInvertAxis(InputDeviceAxes axis) const
+bool NativeMouseDevice::getInvertAxis(InputDeviceAxes axis) const
 {
     return axis <= m_numAxes ? m_invertAxis[axis] : false;
 }
-void MacMouseDevice::setAxisScale(InputDeviceAxes axis, float scale)
+void NativeMouseDevice::setAxisScale(InputDeviceAxes axis, float scale)
 {
     if (axis <= m_numAxes) m_axisScale[axis] = scale;
 }
-float MacMouseDevice::getAxisScale(InputDeviceAxes axis) const
+float NativeMouseDevice::getAxisScale(InputDeviceAxes axis) const
 {
     return axis <= m_numAxes ? m_axisScale[axis] : 0.0f;
 }
-void MacMouseDevice::setAxisAdd(InputDeviceAxes, float) {}
-float MacMouseDevice::getAxisAdd(InputDeviceAxes) const { return 0.0f; }
+void NativeMouseDevice::setAxisAdd(InputDeviceAxes, float) {}
+float NativeMouseDevice::getAxisAdd(InputDeviceAxes) const { return 0.0f; }
 
-bool MacMouseDevice::buttonDown(InputDeviceButtons button) const
+bool NativeMouseDevice::buttonDown(InputDeviceButtons button) const
 {
     return (m_buttons & button) != 0;
 }
-bool MacMouseDevice::buttonPressed(InputDeviceButtons button) const
+bool NativeMouseDevice::buttonPressed(InputDeviceButtons button) const
 {
     return (m_previousButtons & button) == 0 && (m_buttons & button) != 0;
 }
-bool MacMouseDevice::buttonReleased(InputDeviceButtons button) const
+bool NativeMouseDevice::buttonReleased(InputDeviceButtons button) const
 {
     return (m_previousButtons & button) != 0 && (m_buttons & button) == 0;
 }
-float MacMouseDevice::buttonPressedSampleLatency(InputDeviceButtons button) const
+float NativeMouseDevice::buttonPressedSampleLatency(InputDeviceButtons button) const
 {
     for (unsigned int i = 0; i < 32; ++i)
         if ((1u << i) & button)
@@ -158,7 +158,7 @@ float MacMouseDevice::buttonPressedSampleLatency(InputDeviceButtons button) cons
     return 0.0f;
 }
 
-bool MacMouseDevice::getNextInput(InputDeviceAxes& axis, InputDeviceButtons& button,
+bool NativeMouseDevice::getNextInput(InputDeviceAxes& axis, InputDeviceButtons& button,
                                   InputDeviceKeys& key, bool& negative)
 {
     for (unsigned int i = 0; i < m_numButtons; ++i) {
@@ -186,12 +186,12 @@ bool MacMouseDevice::getNextInput(InputDeviceAxes& axis, InputDeviceButtons& but
     return false;
 }
 
-void MacMouseDevice::peakXYAxis(float& x, float& y)
+void NativeMouseDevice::peakXYAxis(float& x, float& y)
 {
     y = 0.0f;
     x = 0.0f;
     while (!m_peakSamples.empty()) {
-        const MacInputEvent& event = m_peakSamples.front();
+        const NativeInputEvent& event = m_peakSamples.front();
         if (event.sequence > m_lastSequence) {
             if (event.offset == kOffsetX)
                 x += static_cast<int>(event.data);
@@ -209,14 +209,14 @@ void MacMouseDevice::peakXYAxis(float& x, float& y)
         y = -y;
 }
 
-void MacMouseDevice::updateSamples(float deltaTime)
+void NativeMouseDevice::updateSamples(float deltaTime)
 {
     IControlMap* map = static_cast<IControlMapManager*>(controlMapManager)->getActive();
     m_axes[0] = m_axes[1] = m_axes[2] = 0.0f;
     m_previousButtons = m_buttons;
     m_sampleTime += static_cast<int>(static_cast<double>(deltaTime) * 1000.0);
     while (!m_samples.empty()) {
-        const MacInputEvent& event = m_samples.front();
+        const NativeInputEvent& event = m_samples.front();
         if (event.timeStamp >= m_sampleTime)
             break;
         const float age = static_cast<float>(m_pollTime - event.timeStamp) * 0.001f;
@@ -244,7 +244,7 @@ void MacMouseDevice::updateSamples(float deltaTime)
         m_axes[i] = map->getAxisScale(static_cast<InputDeviceAxes>(i)) * m_axes[i];
 }
 
-void MacMouseDevice::clearState()
+void NativeMouseDevice::clearState()
 {
     m_samples.clear();
     m_peakSamples.clear();
@@ -253,7 +253,7 @@ void MacMouseDevice::clearState()
     m_axes[0] = m_axes[1] = m_axes[2] = m_axes[3] = 0.0f;
 }
 
-void MacMouseDevice::update(float deltaTime)
+void NativeMouseDevice::update(float deltaTime)
 {
     if (!m_active || !m_initialized)
         return;
@@ -269,7 +269,7 @@ void MacMouseDevice::update(float deltaTime)
     }
     if (m_inputLost) {                                  // DIERR_INPUTLOST, then reacquire
         clearState();
-        if (!host().hasFocus())
+        if (!clientHost().hasFocus())
             return;
         m_inputLost = false;
     }
@@ -279,7 +279,7 @@ void MacMouseDevice::update(float deltaTime)
         return;
     }
     m_sampleTime = m_pollTime;
-    m_pollTime = macos::CocoaHost::tickCountMs();
+    m_pollTime = host::ClientHost::tickCountMs();
     for (size_t i = 0; i < m_pending.size(); ++i) {
         m_samples.push_back(m_pending[i]);
         m_peakSamples.push_back(m_pending[i]);
@@ -287,28 +287,28 @@ void MacMouseDevice::update(float deltaTime)
     m_pending.clear();
 }
 
-bool MacMouseDevice::init()
+bool NativeMouseDevice::init()
 {
     if (!inputDeviceManager)
         return false;
-    host().addListener(this);
+    clientHost().addListener(this);
     m_initialized = true;
     m_numButtons = kMouseButtons;
     m_numAxes = kMouseAxes;
     return setCooperativeMode(static_cast<InputDeviceMode>(0)) != false;
 }
 
-void MacMouseDevice::push(unsigned int offset, unsigned int data, unsigned int timeStamp)
+void NativeMouseDevice::push(unsigned int offset, unsigned int data, unsigned int timeStamp)
 {
     if (m_pending.size() >= kMouseBufferSize) {
         m_overflow = true;
         return;
     }
-    MacInputEvent record;
+    NativeInputEvent record;
     record.offset = offset;
     record.data = data;
     record.timeStamp = timeStamp;
-    record.sequence = nextMacInputSequence();
+    record.sequence = nextNativeInputSequence();
     m_pending.push_back(record);
 }
 
@@ -316,7 +316,7 @@ void MacMouseDevice::push(unsigned int offset, unsigned int data, unsigned int t
 // unaccelerated device deltas (onRawMouseMove). Without one (a
 // trackpad-only Mac) they fall back to NSEvent deltas, one point per count, which carry the
 // system pointer acceleration. Fractions are carried to the next report so slow motion is kept.
-void MacMouseDevice::addMotion(double dx, double dy, unsigned int timeMs)
+void NativeMouseDevice::addMotion(double dx, double dy, unsigned int timeMs)
 {
     m_remainderX += dx;
     m_remainderY += dy;
@@ -330,21 +330,21 @@ void MacMouseDevice::addMotion(double dx, double dy, unsigned int timeMs)
         push(kOffsetY, static_cast<unsigned int>(static_cast<int>(wholeY)), timeMs);
 }
 
-void MacMouseDevice::onMouseMove(const macos::HostMouseMoveEvent& event)
+void NativeMouseDevice::onMouseMove(const host::HostMouseMoveEvent& event)
 {
-    if (!m_active || host().rawMouseAvailable())
+    if (!m_active || clientHost().rawMouseAvailable())
         return;
     addMotion(event.dx, event.dy, event.timeMs);
 }
 
-void MacMouseDevice::onRawMouseMove(const macos::HostRawMouseEvent& event)
+void NativeMouseDevice::onRawMouseMove(const host::HostRawMouseEvent& event)
 {
-    if (!m_active || !host().rawMouseAvailable())
+    if (!m_active || !clientHost().rawMouseAvailable())
         return;
     addMotion(event.dx, event.dy, event.timeMs);
 }
 
-void MacMouseDevice::onMouseButton(const macos::HostMouseButtonEvent& event)
+void NativeMouseDevice::onMouseButton(const host::HostMouseButtonEvent& event)
 {
     if (!m_active || event.button < 0 || event.button >= static_cast<int>(kMouseButtons))
         return;
@@ -352,14 +352,14 @@ void MacMouseDevice::onMouseButton(const macos::HostMouseButtonEvent& event)
          event.timeMs);
 }
 
-void MacMouseDevice::onMouseWheel(const macos::HostMouseWheelEvent& event)
+void NativeMouseDevice::onMouseWheel(const host::HostMouseWheelEvent& event)
 {
     if (!m_active)
         return;
     push(kOffsetZ, static_cast<unsigned int>(event.delta), event.timeMs);
 }
 
-void MacMouseDevice::onFocusChanged(bool windowKey, bool appActive)
+void NativeMouseDevice::onFocusChanged(bool windowKey, bool appActive)
 {
     if (!(windowKey && appActive) && m_active)
         m_inputLost = true;

@@ -9,7 +9,7 @@ class IHapticEffect; // NovintHFX.h (global namespace); the haptic force effects
 #if !defined(_WIN32) && !defined(BF2_NOVINT_FAKE_SDK)
 // [CHOSEN, not recovered] Native POSIX clients: the Novint HFX SDK is a Windows-only DLL and no
 // Falcon is ever present, so neither the SDK header nor FalconDevice exists there; the device
-// manager reports IDFFalcon as not opened (MacInputDeviceManager). Only the menu's mouse-mode
+// manager reports IDFFalcon as not opened (NativeInputDeviceManager). Only the menu's mouse-mode
 // global, which the menu and HUD code write on every platform, is declared. See
 // docs/macos-port.md, "Bink, Novint and VoIP capture (S2.8)".
 namespace dice { namespace hfe { namespace io {

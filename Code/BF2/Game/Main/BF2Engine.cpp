@@ -116,7 +116,7 @@
 #include <shellapi.h>                       // ShellExecuteA - restartBF2 / activateMod / browseModHomepage
 #elif (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
 // [CHOSEN, not recovered] macOS: the cursor, minimize, URL and relaunch counterparts.
-#include "../../Platform/macOS/CocoaHost.h"
+#include "../../Platform/Host/ClientHost.h"
 #include "../../Platform/macOS/MacSystem.h"
 #include "../../Platform/macOS/ClientPaths.h"
 #include <unistd.h>
@@ -2270,7 +2270,7 @@ bool BF2Engine::mainLoop()
         if (s_cursorShown)
         {
 #if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
-            macos::CocoaHost::instance().showCursor(false);   // [CHOSEN, not recovered] ShowCursor(FALSE)
+            host::ClientHost::instance().showCursor(false);   // [CHOSEN, not recovered] ShowCursor(FALSE)
 #else
             ShowCursor(FALSE);
 #endif
@@ -2303,8 +2303,8 @@ bool BF2Engine::mainLoop()
             {
 #if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
                 // [CHOSEN, not recovered] the host's counter has ShowCursor's semantics.
-                if (macos::CocoaHost::instance().showCursor(true) == 1)
-                    macos::CocoaHost::instance().showCursor(false);
+                if (host::ClientHost::instance().showCursor(true) == 1)
+                    host::ClientHost::instance().showCursor(false);
 #else
                 if (ShowCursor(TRUE) == 1)
                     ShowCursor(FALSE);
@@ -3323,8 +3323,8 @@ void BF2Engine::browseModHomepage(const std::string& url)
 #if !DEDICATED
 #if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
     // [CHOSEN, not recovered] ShowWindow(SW_MINIMIZE) and ShellExecuteA("open", url).
-    macos::CocoaHost::instance().minimize();
-    if (!macos::CocoaHost::instance().openURL(url))
+    host::ClientHost::instance().minimize();
+    if (!host::ClientHost::instance().openURL(url))
         return;
 #else
     ShowWindow(window->getHwnd(), SW_MINIMIZE);             // Window vslot +0x2C

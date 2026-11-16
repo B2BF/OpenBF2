@@ -2,7 +2,6 @@
 // [RETIRE-WHEN: client-test-automation-replaced] Replace with equivalent engine input coverage.
 #include "../InputScript.h"
 #if defined(BF2_LINUX_CLIENT) && !DEDICATED
-#include "../macOS/MacKeyMap.h"
 
 namespace dice { namespace hfe { namespace inputscript { namespace keys {
 namespace {
@@ -23,17 +22,16 @@ const Key names[] = {
     {"leftctrl",29},{"ctrl",29},{"rightctrl",157},{"leftalt",56},{"alt",56},{"rightalt",184},
     {"capital",58},{"leftwin",219},{"rightwin",220},{"printscreen",183},{"scrolllock",70},{"pause",197}
 };
-unsigned short fromDik(unsigned char dik) { return macos::macKeyCodeFromDik(dik, false); }
 }
 bool lookup(const std::string& name, unsigned short& code)
 {
     for (const Key& key : names)
-        if (name == key.name) { code = fromDik(key.dik); return true; }
+        if (name == key.name) { code = key.dik; return true; }
     return false;
 }
 std::u16string controlCharacters(unsigned short code)
 {
-    switch (macos::dikFromMacKeyCode(code, false)) {
+    switch (code) {
     case 28: case 156: return std::u16string(1, u'\r');
     case 15: return std::u16string(1, u'\t');
     case 1: return std::u16string(1, u'\x1B');
@@ -43,15 +41,15 @@ std::u16string controlCharacters(unsigned short code)
 }
 bool isModifier(unsigned short code)
 {
-    switch (macos::dikFromMacKeyCode(code, false)) {
+    switch (code) {
     case 42: case 54: case 29: case 157: case 56: case 184: case 219: case 220: case 58: return true;
     default: return false;
     }
 }
-bool isShift(unsigned short code) { const auto dik = macos::dikFromMacKeyCode(code, false); return dik == 42 || dik == 54; }
-unsigned short leftShift() { return fromDik(42); }
-unsigned short grave() { return fromDik(41); }
-unsigned short enter() { return fromDik(28); }
-unsigned short w() { return fromDik(17); }
+bool isShift(unsigned short code) { return code == 42 || code == 54; }
+unsigned short leftShift() { return 42; }
+unsigned short grave() { return 41; }
+unsigned short enter() { return 28; }
+unsigned short w() { return 17; }
 } } } }
 #endif

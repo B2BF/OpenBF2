@@ -3,7 +3,7 @@
 [TEMP] [CHOSEN, not recovered] Native integration check using the production
 gameswf XML object, String implementation, file reader and Expat substitute.
 No game content, GPU or network is used. The macOS target supplies test-only
-CocoaHost symbols for links that also pull game UI natives from the SwiffPlayer
+ClientHost symbols for links that also pull game UI natives from the SwiffPlayer
 archive. Each symbol reports a qualified `[FRONTIER]`, flushes stderr
 and aborts if called; a passing XML run cannot exercise cursor or keyboard input.
 Production host and SwiffPlayer sources are unchanged. Remove this scaffolding

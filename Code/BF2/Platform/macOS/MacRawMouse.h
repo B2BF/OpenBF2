@@ -6,7 +6,7 @@
 //
 // Threading: the GCMouse handlers run on a private serial dispatch queue (the single producer).
 // Samples reach the engine thread through a lock-free single-producer/single-consumer ring with
-// sequentially consistent std::atomic indices; CocoaHost drains it
+// sequentially consistent std::atomic indices; ClientHost drains it
 // on the engine (main) thread in pumpEvents. Connection bookkeeping runs on the main thread.
 
 #ifndef PLATFORM_MACOS_MACRAWMOUSE_H
@@ -19,7 +19,7 @@ namespace hfe {
 namespace macos {
 
 // One motion report: device counts, x right, y down (DirectInput's directions), on the
-// CocoaHost::tickCountMs clock.
+// ClientHost::tickCountMs clock.
 struct RawMouseSample
 {
     float        dx, dy;

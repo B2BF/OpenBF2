@@ -423,7 +423,14 @@ bool InputScript::expandText(const std::u16string& text, int line)
     {
         unsigned short found = 0xFFFF;
         bool shift = false;
-        for (unsigned short code = 0; code < 0x80 && found == 0xFFFF; ++code)
+#if defined(BF2_LINUX_CLIENT)
+        // SDL scripts use DIK directly, including printable keypad keys above 0x7F. The former
+        // Cocoa-code scan reached those keys through MacKeyMap; preserve that layout coverage.
+        const unsigned short keyLimit = 0x100;
+#else
+        const unsigned short keyLimit = 0x80;
+#endif
+        for (unsigned short code = 0; code < keyLimit && found == 0xFFFF; ++code)
         {
             if (keys::isModifier(code))
                 continue;

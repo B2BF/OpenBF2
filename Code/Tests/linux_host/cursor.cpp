@@ -1,7 +1,7 @@
 // [TEMP] [CHOSEN, not recovered] Linux cursor file and visibility contract, issue #36.
 // SDL cursor calls are observed below; the dummy driver never changes a real cursor/window.
 // [RETIRE-WHEN: linux-host-contract-suite-replaced] Keep until equivalent native cursor coverage exists.
-#include "../../BF2/Platform/macOS/CocoaHost.h"
+#include "../../BF2/Platform/Host/ClientHost.h"
 #include <SDL3/SDL.h>
 #include <cstdio>
 #include <cstdlib>
@@ -66,7 +66,7 @@ extern "C" bool __wrap_SDL_HideCursor() { visible = false; return true; }
 
 int main()
 {
-    using dice::hfe::macos::CocoaHost;
+    using dice::hfe::host::ClientHost;
     char directory[] = "linux-cursor-XXXXXX";
     check(mkdtemp(directory) != nullptr, "create isolated cursor directory");
     const std::string root = directory;
@@ -76,7 +76,7 @@ int main()
     const std::string busyPath = root + "/FlashMenu/Cursor/cursor_busy.ani";
     write(arrowPath, 255);
     write(busyPath, 128);
-    CocoaHost& host = CocoaHost::instance();
+    ClientHost& host = ClientHost::instance();
     check(host.initApplication(), "initialize dummy SDL host");
     SDL_Event focus{}; focus.type = SDL_EVENT_WINDOW_FOCUS_GAINED;
     check(SDL_PushEvent(&focus), "queue synthetic focus");

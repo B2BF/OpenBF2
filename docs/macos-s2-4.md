@@ -26,44 +26,52 @@ does not link yet, so the host was developed against a standalone test app (see
 
 ## Files
 
+The host/input interfaces are now shared with Linux under
+[issue #36](https://github.com/kr4uzi/OpenBF2/issues/36). `host::ClientHost` retains the Cocoa
+implementation, while SDL implements it on Linux. Events carry DIK physical keys and normalized
+UTF-16 text; Apple key codes, ISO/JIS layout handling and Cocoa test hooks remain macOS-specific.
+The earlier milestone status above records the original package's validation, not a new macOS
+run of the shared-host refactor.
+
 | File | Role |
 | --- | --- |
-| `Code/BF2/Platform/macOS/CocoaHost.h`, `.mm` | The host. A plain C++ header (no Objective-C types) over an ARC Objective-C++ implementation. |
-| `Code/BF2/Platform/macOS/MacKeyMap.h`, `.cpp` | `kVK_` to `DIK_` table, reverse lookup, `DIK_` to Win32 virtual key, display names. |
-| `Code/BF2/Platform/macOS/MacGamepad.h`, `.mm` | Polled `GCController` extended-gamepad state. |
-| `Code/BF2/Platform/macOS/HostWindowTypes.h` | `HWND`/`UINT`/`WPARAM`/`LPARAM`/`LRESULT` and the Win32 message ids, scoped to `dice::hfe`, for `BF2Window.h` on macOS. |
-| `Code/BF2/IO/Input/MacInputDeviceManager.h`, `.cpp` | The device manager, beside `DX8InputDeviceManager` and `NullInputDeviceManager`. |
-| `Code/BF2/IO/Input/MacKeyboardDevice.cpp`, `MacMouseDevice.cpp`, `MacGameControllerDevice.cpp` | The three devices. |
-| `Code/BF2/Game/Main/BF2Window_macos.cpp` | `Window`/`BF2Window` on the host (beside the Win32 `BF2Window.cpp`, which is now `_WIN32`-only). |
+| `Code/BF2/Platform/Host/ClientHost.h`, `Platform/macOS/CocoaHost.mm` | Shared plain C++ host contract and its ARC Cocoa implementation. |
+| `Code/BF2/Platform/macOS/MacKeyMap.h`, `.cpp` | Apple `kVK_` to `DIK_` table and reverse lookup; shared virtual-key and label metadata lives in `Platform/Host/KeyMap`. |
+| `Code/BF2/Platform/Host/Gamepad.h`, `Platform/macOS/MacGamepad.mm` | Shared gamepad contract and polled `GCController` implementation. |
+| `Code/BF2/Platform/Host/HostWindowTypes.h` | `HWND`/`UINT`/`WPARAM`/`LPARAM`/`LRESULT` and the Win32 message ids, scoped to `dice::hfe`, for `BF2Window.h` on macOS. |
+| `Code/BF2/IO/Input/NativeInputDeviceManager.h`, `.cpp` | The device manager, beside `DX8InputDeviceManager` and `NullInputDeviceManager`. |
+| `Code/BF2/IO/Input/NativeKeyboardDevice.cpp`, `NativeMouseDevice.cpp`, `NativeGameControllerDevice.cpp` | The three devices. |
+| `Code/BF2/Game/Main/BF2Window_native.cpp` | `Window`/`BF2Window` on the host (beside the Win32 `BF2Window.cpp`, which is now `_WIN32`-only). |
 | `Code/BF2/Game/Main/BF2Window.h` | macOS arm of the includes and the `wndProc` declaration. |
 | `Code/BF2/Game/Main/BF2.cpp`, `BF2.h` | macOS arms: pump, message handler, key rings, client `main`. |
 | `Code/BF2/Game/Main/BF2Engine.cpp` | The menu key ring is flushed on macOS too (one `#if`). |
 | `Code/Tests/macos_host/` | `[TEMP]` standalone test app with its own `CMakeLists.txt` and `CMakePresets.json`. |
 
-### Why `Code/BF2/Platform/macOS`
+### Source placement
 
 The host has no retail counterpart and no attested source path, so placing it under
 `Game/Main` or `IO/Input` would suggest a recovered location. It is also shared: the window
 code (`Game/Main`) and the input devices (`IO/Input`) both use it, and it has no engine
-dependency, which lets the test app build it alone. A new top-level `Platform/macOS`
-directory keeps port code visibly separate from reconstructed code. The engine-facing classes
+dependency, which lets the test app build it alone. `Platform/Host` holds the shared native
+contract and helpers; `Platform/macOS` holds the Cocoa backend and Apple-specific mappings.
+These directories keep port code visibly separate from reconstructed code. The engine-facing classes
 stay beside their Win32 counterparts, following the tree's `_win32`/`_posix` suffix and
-`DX8`/`Null` sibling conventions: `BF2Window_macos.cpp` next to `BF2Window.cpp`,
-`MacInputDeviceManager` next to `DX8InputDeviceManager`.
+`DX8`/`Null` sibling conventions: `BF2Window_native.cpp` next to `BF2Window.cpp`,
+`NativeInputDeviceManager` next to `DX8InputDeviceManager`.
 
 ## Design
 
 ```
 NSApplication event queue
         |
-CocoaHost::pumpEvents()  -- called by BF2::handleInGameWinMessages, once per frame
+ClientHost::pumpEvents()  -- called by BF2::handleInGameWinMessages, once per frame
         |  route(): key / flags / mouse / wheel events, only while the window has focus
         |  then [NSApp sendEvent:] for AppKit (menus, window management)
         v
 IHostEventListener list
-   |-- BF2Window_macos.cpp: WindowMessageSource -> synthesized Win32 messages
+   |-- BF2Window_native.cpp: WindowMessageSource -> synthesized Win32 messages
    |        -> Window::wndProc (state rules) -> engine message handlers (bf2MessageHandler)
-   |-- MacKeyboardDevice / MacMouseDevice: buffered device events (the DirectInput buffer)
+   |-- NativeKeyboardDevice / NativeMouseDevice: buffered device events (the DirectInput buffer)
         v
 IInputDeviceManager::update(-1) polls, update(dt > 0) consumes  (InputManager::update)
 ```
@@ -82,7 +90,7 @@ IInputDeviceManager::update(-1) polls, update(dt > 0) consumes  (InputManager::u
   resized by the user either). The frame's top left is placed at (x, y) from the screen's top
   left, as Win32 positions do. The content view is layer-backed with a `CAMetalLayer`
   (`BGRA8Unorm`, `framebufferOnly`, opaque, black, no device). The layer stays empty until the
-  stage 3 renderer attaches through `CocoaHost::metalLayer()` (or `nativeView()`).
+  renderer attaches through the view borrowed from `ClientHost::rendererWindowHandle()`.
 - **Back-buffer size.** `contentsScale` is pinned to 1, so the drawable is one pixel per point
   and mouse coordinates in points equal back-buffer pixels. [CHOSEN] Rendering at 1x keeps the
   engine's "client size == back-buffer size" assumption; Retina output is an open item.
@@ -118,7 +126,7 @@ IInputDeviceManager::update(-1) polls, update(dt > 0) consumes  (InputManager::u
 `BF2Window.h` keeps its declarations, virtual order and members. On macOS it includes
 `HostWindowTypes.h`, which defines `HWND` (an opaque pointer to the content `NSView`),
 `UINT`, `WPARAM`, `LPARAM`, `LRESULT` and the Win32 message ids inside `dice::hfe`, never
-globally. `BF2Window_macos.cpp` implements each method with the host call that matches the
+globally. `BF2Window_native.cpp` implements each method with the host call that matches the
 Win32 body. A listener turns host events into the Win32 messages the engine inspects and runs
 them through `Window::wndProc`, which keeps the Win32 state rules (focus flags, `WM_SIZE`
 sizes, the `WM_ACTIVATEAPP` event in fullscreen, the in-game `WM_SETCURSOR` hide) and calls
@@ -141,7 +149,7 @@ acquired exclusive DirectInput mouse in-game): Win32 generates none then (c-inpu
 
 `BF2.cpp` gains `__APPLE__ && !DEDICATED` arms:
 
-- `handleInGameWinMessages`: `CocoaHost::pumpEvents()`; a posted quit restores the desktop
+- `handleInGameWinMessages`: `ClientHost::pumpEvents()`; a posted quit restores the desktop
   state and calls `exit(0)` without engine shutdown, as the Win32 `WM_QUIT` arm does. Then the
   unchanged focus logic: `IInputManager::setHasFocus(window->getHasFocus(), mask)` and the
   focus-loss mute.
@@ -156,7 +164,7 @@ acquired exclusive DirectInput mouse in-game): Win32 generates none then (c-inpu
 
 ### Input devices
 
-`MacInputDeviceManager` mirrors `DX8InputDeviceManager` line for line, including its leak of
+`NativeInputDeviceManager` mirrors `DX8InputDeviceManager` line for line, including its leak of
 devices whose `init` fails and its ignored duplicate inserts. The devices keep the DX8
 devices' interfaces and sampling bodies; only the event source differs. Each choice:
 
@@ -338,7 +346,7 @@ client TUs on `mac/s2-58-platform` (packages S2.5/S2.8); the `RendDX9/VideoOptio
 (`Code/Archive/NovintFalcon`).
 
 1. **Sources.** The engine's recursive glob already picks up the new `.cpp` files
-   (`Mac*.cpp`, `MacKeyMap.cpp`, `BF2Window_macos.cpp`); they compile to empty objects outside
+   (`Mac*.cpp`, `MacKeyMap.cpp`, `BF2Window_native.cpp`); they compile to empty objects outside
    the macOS client. Add the two Objective-C++ files to the macOS client target explicitly,
    compiled with ARC:
    ```cmake
@@ -363,16 +371,16 @@ client TUs on `mac/s2-58-platform` (packages S2.5/S2.8); the `RendDX9/VideoOptio
    ```cpp
    #if defined(__APPLE__)
        out.push_back(ClassRegInfo{CID_DX8InputDeviceManager, "dice.hfe.io.InputDeviceManager.DX8",
-                                  &MacInputDeviceManager::create});   // [CHOSEN, not recovered]
+                                  &NativeInputDeviceManager::create});   // [CHOSEN, not recovered]
    #else
        out.push_back(ClassRegInfo{CID_DX8InputDeviceManager, "dice.hfe.io.InputDeviceManager.DX8",
                                   &DX8InputDeviceManager::create});
    #endif
    ```
-   with `#include "../IO/Input/MacInputDeviceManager.h"` beside the DX8 include.
+   with `#include "../IO/Input/NativeInputDeviceManager.h"` beside the DX8 include.
 4. **Entry point.** Nothing to do: `BF2.cpp`'s macOS client `main` is selected by
    `__APPLE__ && !DEDICATED`.
-5. **Remaining Win32 calls in client TUs**, each with its host counterpart (all `CocoaHost::
+5. **Remaining Win32 calls in client TUs**, each with its host counterpart (all `ClientHost::
    instance()`):
 
    | Call site | Win32 | macOS |
@@ -382,10 +390,10 @@ client TUs on `mac/s2-58-platform` (packages S2.5/S2.8); the `RendDX9/VideoOptio
    | `BF2Engine::restartBF2`, `activateMod` | `GetModuleFileNameA`, `ShellExecuteA(exe, args)` | `_NSGetExecutablePath` + `posix_spawn`; not provided by the host |
    | `MainMenuLogic.cpp`, `BetweenRoundsLogic.cpp` | `ShowCursor`, `SetCursor(host->getCursor(i))`, `SetCursor(0)` | `showCursor`, `setCursorShape(HostCursorArrow/Busy)`, `setCursorHiddenInView(true)` |
    | `MainMenuLogic::handleClipboardShortcut` | `GetAsyncKeyState`, `OpenClipboard`/`GetClipboardData`/`SetClipboardData(CF_TEXT)` | `modifierFlags()` (Control or Command as Ctrl, Option as Alt), `getClipboardText`/`setClipboardText` |
-   | `BetweenRoundsLogic.cpp menuScanCodeToChar` | `ToAsciiEx(MapVirtualKeyEx(scan))` | `macKeyCodeFromDik` + `keyCharacter(keyCode)` (no modifiers; shift state is an open item) |
+   | `BetweenRoundsLogic.cpp menuScanCodeToChar` | `ToAsciiEx(MapVirtualKeyEx(scan))` | `ClientHost::keyCharacter(dik, modifierFlags())`; the Cocoa backend performs its own layout conversion |
    | `SwiffHost.cpp` | `UpdateWindow(hwnd)` | nothing to do (return true) |
-   | `Game/Main/BF2Render.cpp` | `GetCurrentProcessId`, `getHwnd()` into the display-mode carrier | `getpid()`; `getHwnd()` is the content `NSView*`, and the renderer finds the layer through `CocoaHost::metalLayer()` |
-   | `RendDX9/VideoOptions.cpp` | `SetWindowPos` with frame metrics | `BF2Window::resizeClient` / `CocoaHost::resizeClient` (client size, no frame metrics) |
+   | `Game/Main/BF2Render.cpp` | `GetCurrentProcessId`, `getHwnd()` into the display-mode carrier | `getpid()`; `getHwnd()` is the content `NSView*` supplied by `ClientHost::rendererWindowHandle()`; Metal reads its layer |
+   | `RendDX9/VideoOptions.cpp` | `SetWindowPos` with frame metrics | `BF2Window::resizeClient` / `ClientHost::resizeClient` (client size, no frame metrics) |
    | `RendDX9/BF2Render.cpp enumDevModes` | `EnumDisplaySettingsA` | `displayModes()` (all 32 bpp) |
    | `IO/Input/FalconDevice.cpp` | `GetForegroundWindow` | not built on macOS |
 
@@ -432,7 +440,7 @@ Result on macOS 15.7.7, Intel, ISO keyboard (type 83), no controller, runs of 2-
 reports. The exclusive run (`--exclusive`) produced the same log with the cursor in relative
 mode. Not exercised: real keystrokes and mouse motion from a person, a connected controller,
 clipboard, `openURL`, Retina scaling, multiple displays, and anything engine-side
-(`BF2Window_macos.cpp`, the `BF2.cpp` arms), which compiles but does not link until S2.0 links.
+(`BF2Window_native.cpp`, the `BF2.cpp` arms), which compiles but does not link until S2.0 links.
 
 Validation also run: the full `macos-x64` dedicated build and link of `bf2` in a separate
 build directory, and `-fsyntax-only` checks of every changed engine TU with `DEDICATED=0` and

@@ -1,12 +1,11 @@
-// [CHOSEN, not recovered] macOS port: keyboard device. The sampling bodies (getNextInput,
+// [CHOSEN, not recovered] Native keyboard device. The sampling bodies (getNextInput,
 // key queries, updateCurrentState, the -1/positive update protocol) follow KeyboardDevice.cpp;
-// the DirectInput device is replaced by host key events mapped to DIK_ codes
-// (Platform/macOS/MacKeyMap). See MacInputDeviceManager.h and docs/macos-s2-4.md.
+// the DirectInput device is replaced by normalized DIK key events from ClientHost.
+// See NativeInputDeviceManager.h for the shared native input contract.
 
-#include "MacInputDeviceManager.h"
+#include "NativeInputDeviceManager.h"
 #if !DEDICATED && (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
 #include "../../Core/Ids.h"
-#include "../../Platform/macOS/MacKeyMap.h"
 #include <cstring>
 #include <cwctype>
 
@@ -15,10 +14,10 @@ extern IBase* inputDeviceManager;
 
 namespace {
 const size_t kKeyboardBufferSize = 100;         // KeyboardDevice::init's DIPROP_BUFFERSIZE
-macos::CocoaHost& host() { return macos::CocoaHost::instance(); }
+host::ClientHost& clientHost() { return host::ClientHost::instance(); }
 }
 
-MacKeyboardDevice::MacKeyboardDevice()
+NativeKeyboardDevice::NativeKeyboardDevice()
     : m_refCount(1), m_mode(IDM_NONEXCLUSIVE), m_initialized(false), m_active(false),
       m_inputLost(false), m_overflow(false)
 {
@@ -27,43 +26,43 @@ MacKeyboardDevice::MacKeyboardDevice()
     std::memset(m_previousKeys, 0, sizeof(m_previousKeys));
 }
 
-MacKeyboardDevice::~MacKeyboardDevice()
+NativeKeyboardDevice::~NativeKeyboardDevice()
 {
     if (m_initialized)
-        host().removeListener(this);
+        clientHost().removeListener(this);
 }
 
-void MacKeyboardDevice::addRef() { ++m_refCount; }
-int MacKeyboardDevice::getRef() { return m_refCount; }
-int MacKeyboardDevice::release()
+void NativeKeyboardDevice::addRef() { ++m_refCount; }
+int NativeKeyboardDevice::getRef() { return m_refCount; }
+int NativeKeyboardDevice::release()
 {
     const int count = --m_refCount;
     if (count == 0) delete this;
     return count;
 }
-void* MacKeyboardDevice::queryInterface(unsigned int iid) const
+void* NativeKeyboardDevice::queryInterface(unsigned int iid) const
 {
     if (iid == IID_IBase || iid == IID_IInputDevice || iid == IID_IKeyboardDevice)
-        return const_cast<MacKeyboardDevice*>(this);
+        return const_cast<NativeKeyboardDevice*>(this);
     return 0;
 }
-InputDeviceTypes MacKeyboardDevice::getType() const { return IDTKeyboard; }
-InputDeviceMode MacKeyboardDevice::getCooperativeMode() const { return m_mode; }
+InputDeviceTypes NativeKeyboardDevice::getType() const { return IDTKeyboard; }
+InputDeviceMode NativeKeyboardDevice::getCooperativeMode() const { return m_mode; }
 
-// Both DirectInput levels are foreground levels; on macOS key events reach the device only while
+// Both DirectInput levels are foreground levels; host key events reach the device only while
 // the game window has focus in either mode, so the mode is recorded and changes nothing else.
-bool MacKeyboardDevice::setCooperativeMode(InputDeviceMode mode)
+bool NativeKeyboardDevice::setCooperativeMode(InputDeviceMode mode)
 {
     m_mode = mode;
     return true;
 }
 
 // Acquire succeeds only for the foreground window; success is reported either way, as in DX8.
-bool MacKeyboardDevice::activate()
+bool NativeKeyboardDevice::activate()
 {
     if (!m_initialized) return false;
     if (!m_active) {
-        m_active = host().hasFocus();
+        m_active = clientHost().hasFocus();
         m_pending.clear();
         m_overflow = false;
         m_inputLost = false;
@@ -71,7 +70,7 @@ bool MacKeyboardDevice::activate()
     return true;
 }
 
-bool MacKeyboardDevice::deActivate()
+bool NativeKeyboardDevice::deActivate()
 {
     if (!m_initialized) return false;
     if (m_active) {
@@ -83,9 +82,9 @@ bool MacKeyboardDevice::deActivate()
     return true;
 }
 
-bool MacKeyboardDevice::isActive() const { return m_initialized && m_active; }
+bool NativeKeyboardDevice::isActive() const { return m_initialized && m_active; }
 
-bool MacKeyboardDevice::getNextInput(InputDeviceAxes& axis, InputDeviceButtons& button,
+bool NativeKeyboardDevice::getNextInput(InputDeviceAxes& axis, InputDeviceButtons& button,
                                      InputDeviceKeys& key, bool&)
 {
     for (int i = 0; i < 255; ++i) {
@@ -99,14 +98,14 @@ bool MacKeyboardDevice::getNextInput(InputDeviceAxes& axis, InputDeviceButtons& 
     return false;
 }
 
-bool MacKeyboardDevice::keyDown(InputDeviceKeys key) const
+bool NativeKeyboardDevice::keyDown(InputDeviceKeys key) const
 { return m_keys[static_cast<unsigned char>(key)] != 0; }
-bool MacKeyboardDevice::keyPressed(InputDeviceKeys key) const
+bool NativeKeyboardDevice::keyPressed(InputDeviceKeys key) const
 {
     const unsigned char k = static_cast<unsigned char>(key);
     return !m_previousKeys[k] && m_keys[k];
 }
-bool MacKeyboardDevice::keyReleased(InputDeviceKeys key) const
+bool NativeKeyboardDevice::keyReleased(InputDeviceKeys key) const
 {
     const unsigned char k = static_cast<unsigned char>(key);
     return m_previousKeys[k] && !m_keys[k];
@@ -114,68 +113,66 @@ bool MacKeyboardDevice::keyReleased(InputDeviceKeys key) const
 
 // Printable keys are named by the character the current layout puts on them (so an AZERTY
 // keyboard names DIK_Q "A", as DirectInput does on Windows); other keys use the fixed English
-// names of MacKeyMap.
-std::wstring MacKeyboardDevice::getKeyName(InputDeviceKeys key) const
+// fallback names supplied by the host.
+std::wstring NativeKeyboardDevice::getKeyName(InputDeviceKeys key) const
 {
     const unsigned char dik = static_cast<unsigned char>(key);
-    const bool iso = host().isISOKeyboard();
-    const unsigned short keyCode = macos::macKeyCodeFromDik(dik, iso);
     const bool keypad = (dik >= 71 && dik <= 83) || dik == 55 || dik == 181 || dik == 141 || dik == 179;
-    if (keyCode != 0xFFFF && !keypad) {
-        const std::u16string chars = host().keyCharacter(keyCode);
+    if (!keypad) {
+        const std::u16string chars = clientHost().keyCharacter(dik);
         if (chars.size() == 1 && chars[0] > 0x20) {
             std::wstring name(1, static_cast<wchar_t>(std::towupper(static_cast<wint_t>(chars[0]))));
             return name;
         }
     }
-    const char* english = macos::dikDisplayName(dik);
+    const char* english = clientHost().keyDisplayName(dik);
     std::wstring name;
     for (const char* c = english; c && *c; ++c)
         name.push_back(static_cast<wchar_t>(static_cast<unsigned char>(*c)));
     return name;
 }
 
-bool MacKeyboardDevice::init()
+bool NativeKeyboardDevice::init()
 {
     if (!inputDeviceManager) return false;
-    host().addListener(this);
+    clientHost().addListener(this);
     m_initialized = true;
     if (!setCooperativeMode(IDM_NONEXCLUSIVE)) return false;
     std::memset(m_keys, 0, sizeof(m_keys));
     return true;
 }
 
-void MacKeyboardDevice::onKey(const macos::HostKeyEvent& event)
+void NativeKeyboardDevice::onKey(const host::HostKeyEvent& event)
 {
     if (!m_active || event.repeat)              // DirectInput reports transitions only
         return;
-    const unsigned char dik = macos::dikFromMacKeyCode(event.keyCode, event.isoLayout);
+    const unsigned char dik = event.dik;
     if (dik == 0)
         return;
     if (m_pending.size() >= kKeyboardBufferSize) {
         m_overflow = true;                      // DI_BUFFEROVERFLOW on the next poll
         return;
     }
-    MacInputEvent record;
+    NativeInputEvent record;
     record.offset = dik;
     record.data = event.down ? 0x80u : 0u;
     record.timeStamp = event.timeMs;
-    record.sequence = nextMacInputSequence();
+    record.sequence = nextNativeInputSequence();
     m_pending.push_back(record);
 }
 
-void MacKeyboardDevice::onFocusChanged(bool windowKey, bool appActive)
+void NativeKeyboardDevice::onFocusChanged(bool windowKey, bool appActive)
 {
     if (!(windowKey && appActive) && m_active)
         m_inputLost = true;                     // DIERR_INPUTLOST on the next poll
 }
 
-void MacKeyboardDevice::updateCurrentState(float dt)
+void NativeKeyboardDevice::updateCurrentState(float dt)
 {
     std::memcpy(m_previousKeys, m_keys, sizeof(m_keys));
     unsigned int firstTimestamp = 0, boundary = 0;
     while (!m_events.empty()) {
-        const MacInputEvent& event = m_events.front();
+        const NativeInputEvent& event = m_events.front();
         if (!firstTimestamp) {
             firstTimestamp = event.timeStamp;
             boundary = firstTimestamp - static_cast<int>(static_cast<double>(dt) * -1000.0);
@@ -186,7 +183,7 @@ void MacKeyboardDevice::updateCurrentState(float dt)
     }
 }
 
-void MacKeyboardDevice::update(float dt)
+void NativeKeyboardDevice::update(float dt)
 {
     if (!m_active || !m_initialized) return;
     if (dt > 0.0f) {
@@ -198,7 +195,7 @@ void MacKeyboardDevice::update(float dt)
         m_events.clear();
         m_pending.clear();
         std::memset(m_keys, 0, sizeof(m_keys));
-        if (!host().hasFocus()) return;         // reacquire fails without the foreground
+        if (!clientHost().hasFocus()) return;         // reacquire fails without the foreground
         m_inputLost = false;
     }
     if (m_overflow) {

@@ -52,7 +52,7 @@
 #include "../BF2/IO/Console/Console.h"
 #include "../BF2/IO/File/FileManager.h"
 #include "../BF2/IO/Localization/ExcelLexicon.h"
-#include "../BF2/Platform/macOS/CocoaHost.h"
+#include "../BF2/Platform/Host/ClientHost.h"
 #include "../BF2/Scene/Object/PlayerManager.h"
 #include "../BF2/Sound/BfSound.h"
 
@@ -88,7 +88,7 @@ namespace world { PlayerManager* playerManager = 0; }
 ISystemInfo* systemInfo() { frontier("systemInfo"); }
 const char* BuildNrUtil::getBuildNrString() { frontier("BuildNrUtil::getBuildNrString"); }
 void GeneralSettings::addServerHistory(const std::string&, int, const std::string&, int) { frontier("GeneralSettings::addServerHistory"); }
-void* macos::CocoaHost::loadCursorFromFile(const char*) { frontier("CocoaHost::loadCursorFromFile"); }
+void* host::ClientHost::loadCursorFromFile(const char*) { frontier("ClientHost::loadCursorFromFile"); }
 bool MapList::appendEntry(const std::string&, const std::string&, int, bool) { frontier("MapList::appendEntry"); }
 void MapList::setCurrentMap(int, bool) { frontier("MapList::setCurrentMap"); }
 bool MapList::clear(bool) { frontier("MapList::clear"); }

@@ -1,4 +1,4 @@
-// [CHOSEN, not recovered] macOS port: decoder for the Windows cursor files the menu loads.
+// [CHOSEN, not recovered] Native client decoder for the Windows cursor files the menu loads.
 //
 // Retail SwiffHost::getCursor (0x488960) loads menu/external/flashmenu/cursor/cursor_arrow.ani and
 // cursor_busy.ani with LoadCursorFromFileA (IAT 0x87F85C) and cursor_keybinding.ani with
@@ -7,7 +7,7 @@
 // cursor (RIFF "ACON": anih, optional rate and seq, LIST "fram" of icon chunks) or a single .cur /
 // .ico image. Each frame becomes non-premultiplied RGBA, top row first, with its hotspot.
 // Header-only and free of AppKit, so a standalone check can include it. Nothing here reads the
-// file system; CocoaHost.mm reads the user's own game file and hands the bytes over.
+// file system; the native host reads the user's own game file and hands the bytes over.
 #pragma once
 
 #include <cstddef>
@@ -17,7 +17,7 @@
 
 namespace dice {
 namespace hfe {
-namespace macos {
+namespace host {
 
 struct CursorFrame
 {
@@ -305,6 +305,6 @@ inline bool decodeCursorFile(const std::uint8_t* data, std::size_t size, CursorA
     return ok;
 }
 
-} // namespace macos
+} // namespace host
 } // namespace hfe
 } // namespace dice

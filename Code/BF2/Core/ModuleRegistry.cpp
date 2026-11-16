@@ -97,8 +97,8 @@ std::list<ConsoleObject*>& toolObjectConsoleObjects();      // Scene/Object/Tool
 #include "../Menu/ServerBrowserManager.h" // client factory410205, the lists' owner
 #include "../IO/Input/DX8InputDeviceManager.h" // client InputDX8Module factory rows
 #if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
-// [CHOSEN, not recovered] macOS port: MacInputDeviceManager answers the DX8 row (docs/macos-s2-4.md).
-#include "../IO/Input/MacInputDeviceManager.h"
+// [CHOSEN, not recovered] NativeInputDeviceManager answers the DX8 row (issue #36).
+#include "../IO/Input/NativeInputDeviceManager.h"
 #endif
 #include "../IO/Input/InputManager.h"
 #endif
@@ -598,10 +598,10 @@ void InputDX8Module::getClassList(std::vector<ClassRegInfo>& out) // PE6AC3E6, c
     // [PLATFORM] Client table89AE6C supplies these two rows in this order.
     // Use native ClassRegInfo/factory ABI, never the retail36-byte STL record.
 #if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
-    // [CHOSEN, not recovered] macOS port: the Cocoa-backed manager under the DX8 CID and name, so
+    // [CHOSEN, not recovered] Native host-backed manager under the DX8 CID and name, so
     // BF2EngineSetup's setSingletonClass("InputDeviceManager", CID_DX8InputDeviceManager) and every
     // caller stay unchanged (docs/macos-s2-4.md).
-    out.push_back(ClassRegInfo{CID_DX8InputDeviceManager, "dice.hfe.io.InputDeviceManager.DX8", &MacInputDeviceManager::create});
+    out.push_back(ClassRegInfo{CID_DX8InputDeviceManager, "dice.hfe.io.InputDeviceManager.DX8", &NativeInputDeviceManager::create});
 #else
     out.push_back(ClassRegInfo{CID_DX8InputDeviceManager, "dice.hfe.io.InputDeviceManager.DX8", &DX8InputDeviceManager::create});
 #endif

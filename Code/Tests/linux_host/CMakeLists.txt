@@ -9,9 +9,9 @@ set(BF2_HOST_TEST_SOURCES
     "${BF2_HOST_TEST_ROOT}/Platform/InputScript.cpp"
     "${BF2_HOST_TEST_ROOT}/Platform/Linux/SDLInputScript.cpp"
     "${BF2_HOST_TEST_ROOT}/Platform/Linux/SDLHost.cpp"
-    "${BF2_HOST_TEST_ROOT}/Platform/macOS/MacKeyMap.cpp"
+    "${BF2_HOST_TEST_ROOT}/Platform/Host/KeyMap.cpp"
     "${BF2_HOST_TEST_ROOT}/Platform/macOS/MacSystem.cpp")
-add_executable(bf2_linux_host_check main.cpp ${BF2_HOST_TEST_SOURCES})
+add_executable(bf2_linux_host_check main.cpp input_layout.cpp ${BF2_HOST_TEST_SOURCES})
 add_executable(bf2_linux_cursor_check cursor.cpp ${BF2_HOST_TEST_SOURCES})
 foreach(target bf2_linux_host_check bf2_linux_cursor_check)
     target_compile_features(${target} PRIVATE cxx_std_14)
@@ -32,3 +32,6 @@ set_tests_properties(linux_host_contract PROPERTIES ENVIRONMENT
 add_test(NAME linux_host_script COMMAND bf2_linux_host_check --script)
 set_tests_properties(linux_host_script PROPERTIES ENVIRONMENT
     "SDL_VIDEODRIVER=dummy;BF2_INPUT_SCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/script.input;BF2_INPUT_SCRIPT_REAL_FOCUS=")
+add_test(NAME linux_host_script_layout COMMAND bf2_linux_host_check --layout)
+set_tests_properties(linux_host_script_layout PROPERTIES TIMEOUT 10 ENVIRONMENT
+    "BF2_INPUT_SCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/layout.input;BF2_INPUT_SCRIPT_LOG=")

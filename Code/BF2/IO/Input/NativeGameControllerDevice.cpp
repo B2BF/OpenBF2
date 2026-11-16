@@ -1,13 +1,13 @@
-// [CHOSEN, not recovered] macOS port: game-controller device over GCController. The accessor
+// [CHOSEN, not recovered] Native game-controller device. The accessor
 // bodies, the getNextInput thresholds and the axis/POV/button scaling follow
 // GameControllerDevice.cpp; DirectInput's joystick is replaced by a polled extended gamepad
-// (Platform/macOS/MacGamepad) presented with the axis, button and POV layout an Xbox controller
-// has under DirectInput. See MacInputDeviceManager.h and docs/macos-s2-4.md.
+// (Platform/Host/Gamepad) presented with the axis, button and POV layout an Xbox controller
+// has under DirectInput. See NativeInputDeviceManager.h and docs/macos-s2-4.md.
 
-#include "MacInputDeviceManager.h"
+#include "NativeInputDeviceManager.h"
 #if !DEDICATED && (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
 #include "../../Core/Ids.h"
-#include "../../Platform/macOS/MacGamepad.h"
+#include "../../Platform/Host/Gamepad.h"
 #include <cmath>
 
 namespace dice { namespace hfe { namespace io {
@@ -38,7 +38,7 @@ long diAxis(float value)
 }
 } // namespace
 
-MacGameControllerDevice::MacGameControllerDevice()
+NativeGameControllerDevice::NativeGameControllerDevice()
 {
     m_refCount = 1;
     m_mode = IDM_EXCLUSIVE;
@@ -64,81 +64,81 @@ MacGameControllerDevice::MacGameControllerDevice()
     m_povsAsButtons = true;
 }
 
-MacGameControllerDevice::~MacGameControllerDevice() {}
+NativeGameControllerDevice::~NativeGameControllerDevice() {}
 
-void MacGameControllerDevice::addRef() { ++m_refCount; }
-int MacGameControllerDevice::getRef() { return m_refCount; }
-int MacGameControllerDevice::release()
+void NativeGameControllerDevice::addRef() { ++m_refCount; }
+int NativeGameControllerDevice::getRef() { return m_refCount; }
+int NativeGameControllerDevice::release()
 {
     const int refs = --m_refCount;
     if (!refs) delete this;
     return refs;
 }
-void* MacGameControllerDevice::queryInterface(unsigned int iid) const
+void* NativeGameControllerDevice::queryInterface(unsigned int iid) const
 {
     if (iid == IID_IBase || iid == IID_IInputDevice || iid == IID_IAdvancedInputDevice)
-        return const_cast<MacGameControllerDevice*>(this);
+        return const_cast<NativeGameControllerDevice*>(this);
     return nullptr;
 }
-InputDeviceTypes MacGameControllerDevice::getType() const { return IDTGameController; }
-InputDeviceMode MacGameControllerDevice::getCooperativeMode() const { return m_mode; }
-bool MacGameControllerDevice::setCooperativeMode(InputDeviceMode mode)
+InputDeviceTypes NativeGameControllerDevice::getType() const { return IDTGameController; }
+InputDeviceMode NativeGameControllerDevice::getCooperativeMode() const { return m_mode; }
+bool NativeGameControllerDevice::setCooperativeMode(InputDeviceMode mode)
 {
     m_mode = mode;
     return true;
 }
-bool MacGameControllerDevice::activate()
+bool NativeGameControllerDevice::activate()
 {
     if (!m_bound) return false;
-    m_active = macos::CocoaHost::instance().hasFocus();
+    m_active = host::ClientHost::instance().hasFocus();
     return true;
 }
-bool MacGameControllerDevice::deActivate()
+bool NativeGameControllerDevice::deActivate()
 {
     if (!m_bound) return false;
     m_active = false;
     return true;
 }
-bool MacGameControllerDevice::isActive() const { return m_bound && m_active; }
-int MacGameControllerDevice::getNumAxes() const { return m_numAxes; }
-void MacGameControllerDevice::peakXYAxis(float& x, float& y) { y = 0; x = 0; }
+bool NativeGameControllerDevice::isActive() const { return m_bound && m_active; }
+int NativeGameControllerDevice::getNumAxes() const { return m_numAxes; }
+void NativeGameControllerDevice::peakXYAxis(float& x, float& y) { y = 0; x = 0; }
 
-void MacGameControllerDevice::setInvertAxis(InputDeviceAxes axis, bool invert)
+void NativeGameControllerDevice::setInvertAxis(InputDeviceAxes axis, bool invert)
 { if (axis <= m_numAxes) m_invertAxis[axis] = invert; }
-bool MacGameControllerDevice::getInvertAxis(InputDeviceAxes axis) const
+bool NativeGameControllerDevice::getInvertAxis(InputDeviceAxes axis) const
 { return axis <= m_numAxes ? m_invertAxis[axis] : false; }
-void MacGameControllerDevice::setAxisScale(InputDeviceAxes axis, float scale)
+void NativeGameControllerDevice::setAxisScale(InputDeviceAxes axis, float scale)
 { if (axis <= m_numAxes) m_axisScale[axis] = scale; }
-float MacGameControllerDevice::getAxisScale(InputDeviceAxes axis) const
+float NativeGameControllerDevice::getAxisScale(InputDeviceAxes axis) const
 { return axis <= m_numAxes ? m_axisScale[axis] : 0.0f; }
-void MacGameControllerDevice::setAxisAdd(InputDeviceAxes axis, float add)
+void NativeGameControllerDevice::setAxisAdd(InputDeviceAxes axis, float add)
 { if (axis <= m_numAxes) m_axisAdd[axis] = add; }
-float MacGameControllerDevice::getAxisAdd(InputDeviceAxes axis) const
+float NativeGameControllerDevice::getAxisAdd(InputDeviceAxes axis) const
 { return axis <= m_numAxes ? m_axisAdd[axis] : 0.0f; }
-float MacGameControllerDevice::readAxis(InputDeviceAxes axis, bool) const
+float NativeGameControllerDevice::readAxis(InputDeviceAxes axis, bool) const
 { return m_invertAxis[axis] ? m_axisAdd[axis] - m_axes[axis] : m_axisAdd[axis] + m_axes[axis]; }
-int MacGameControllerDevice::getNumButtons() const
+int NativeGameControllerDevice::getNumButtons() const
 { return m_povsAsButtons ? int(m_numButtons + 4u * m_numPOVs) : int(m_numButtons); }
-bool MacGameControllerDevice::buttonDown(InputDeviceButtons button) const
+bool NativeGameControllerDevice::buttonDown(InputDeviceButtons button) const
 { return (static_cast<unsigned int>(button) & m_buttons) != 0; }
-bool MacGameControllerDevice::buttonPressed(InputDeviceButtons button) const
+bool NativeGameControllerDevice::buttonPressed(InputDeviceButtons button) const
 {
     const unsigned int bit = static_cast<unsigned int>(button);
     return !(bit & m_previousButtons) && (bit & m_buttons);
 }
-bool MacGameControllerDevice::buttonReleased(InputDeviceButtons button) const
+bool NativeGameControllerDevice::buttonReleased(InputDeviceButtons button) const
 {
     const unsigned int bit = static_cast<unsigned int>(button);
     return (bit & m_previousButtons) && !(bit & m_buttons);
 }
-float MacGameControllerDevice::buttonPressedSampleLatency(InputDeviceButtons) const { return 0.0f; }
-int MacGameControllerDevice::getNumPOVs() const { return m_numPOVs; }
-int MacGameControllerDevice::readPOV(InputDevicePOVs pov) const
+float NativeGameControllerDevice::buttonPressedSampleLatency(InputDeviceButtons) const { return 0.0f; }
+int NativeGameControllerDevice::getNumPOVs() const { return m_numPOVs; }
+int NativeGameControllerDevice::readPOV(InputDevicePOVs pov) const
 { return pov < m_numPOVs ? m_povs[pov] : -1; }
-bool MacGameControllerDevice::slot_0x70() const { return false; }
-int MacGameControllerDevice::getDeviceIndex() const { return m_deviceIndex; }
+bool NativeGameControllerDevice::slot_0x70() const { return false; }
+int NativeGameControllerDevice::getDeviceIndex() const { return m_deviceIndex; }
 
-bool MacGameControllerDevice::getNextInput(InputDeviceAxes& axis, InputDeviceButtons& button,
+bool NativeGameControllerDevice::getNextInput(InputDeviceAxes& axis, InputDeviceButtons& button,
                                            InputDeviceKeys& key, bool& negative)
 {
     for (int i = 0; i < getNumButtons(); ++i)
@@ -172,12 +172,12 @@ bool MacGameControllerDevice::getNextInput(InputDeviceAxes& axis, InputDeviceBut
 
 // Polled once per positive-dt pass, like DX8 (which skips only negative dt). A controller that
 // disappeared, or whose index now names another controller, yields no new state.
-void MacGameControllerDevice::update(float deltaTime)
+void NativeGameControllerDevice::update(float deltaTime)
 {
     if (deltaTime < 0.0f || !m_bound) return;
-    if (macos::gamepadIdentity(m_deviceIndex) != m_identity) return;
-    macos::GamepadState state;
-    if (!macos::readGamepad(m_deviceIndex, state)) return;
+    if (host::gamepadIdentity(m_deviceIndex) != m_identity) return;
+    host::GamepadState state;
+    if (!host::readGamepad(m_deviceIndex, state)) return;
 
     // X, Y, Z, Rx, Ry in DirectInput order; DirectInput Y axes grow downwards and Z is the
     // combined trigger axis (left trigger positive).
@@ -195,19 +195,19 @@ void MacGameControllerDevice::update(float deltaTime)
         addPovButton(m_buttons, m_povs[i], m_numButtons + 4u * i);
 }
 
-bool MacGameControllerDevice::init(int index)
+bool NativeGameControllerDevice::init(int index)
 {
     if (inputDeviceManager)
     {
-        if (index < 0 || index >= macos::gamepadCount())
+        if (index < 0 || index >= host::gamepadCount())
             return false;
         m_deviceIndex = index;
-        m_identity = macos::gamepadIdentity(index);
+        m_identity = host::gamepadIdentity(index);
         m_bound = m_identity != 0;
         if (!m_bound) return false;
         if (!setCooperativeMode(IDM_EXCLUSIVE)) return false;
         m_numAxes = 5;
-        m_numButtons = macos::GamepadButtonCount;
+        m_numButtons = host::GamepadButtonCount;
         m_numPOVs = 1;
     }
     return true;

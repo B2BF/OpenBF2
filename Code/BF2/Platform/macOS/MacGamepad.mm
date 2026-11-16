@@ -1,6 +1,6 @@
-// [CHOSEN, not recovered] macOS port: GameController polling. See MacGamepad.h.
+// [CHOSEN, not recovered] macOS port: GameController polling. See Platform/Host/Gamepad.h.
 
-#include "MacGamepad.h"
+#include "../Host/Gamepad.h"
 
 #import <GameController/GameController.h>
 
@@ -10,7 +10,7 @@
 
 namespace dice {
 namespace hfe {
-namespace macos {
+namespace host {
 
 namespace {
 
@@ -92,6 +92,6 @@ const void* gamepadIdentity(int index)
     return (__bridge const void*)extendedController(index);
 }
 
-} // namespace macos
+} // namespace host
 } // namespace hfe
 } // namespace dice

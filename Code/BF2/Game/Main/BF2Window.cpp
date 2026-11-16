@@ -2,7 +2,7 @@
 
 #include "BF2Window.h"
 
-// [CHOSEN, not recovered] The macOS client uses BF2Window_macos.cpp instead.
+// [CHOSEN, not recovered] The macOS client uses BF2Window_native.cpp instead.
 #if !DEDICATED && defined(_WIN32)
 
 #include "BF2Engine.h"                              // menuLogic - the active menu (Window::wndProc)

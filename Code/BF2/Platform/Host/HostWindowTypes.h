@@ -1,15 +1,14 @@
-// [CHOSEN, not recovered] macOS port: the window-message vocabulary BF2Window.h's declarations
-// use, for the macOS client. The Window class and its message handlers keep their Win32 shape
-// (a handle, a message id and two parameters), and Game/Main/BF2Window_macos.mm synthesizes the
-// Win32 messages the engine's handlers inspect from Cocoa events, with the Win32 numeric values.
+// [CHOSEN, not recovered] Window-message vocabulary for native client BF2Window declarations.
+// Window and its message handlers keep their Win32 shape (handle, message id, two parameters).
+// WindowMessageSource translates normalized host events using Win32 numeric message values.
 //
 // The names live in namespace dice::hfe only, never at global scope, so they cannot collide with
 // another platform header. They are window-messaging types, not serialized widths: HWND is an
-// opaque pointer to the game window's content NSView (CAMetalLayer-backed), and WPARAM/LPARAM are
+// opaque pointer to the game window's renderer handle, and WPARAM/LPARAM are
 // pointer-sized as on Win64. Only the constants the engine's window code reads are defined.
 
-#ifndef PLATFORM_MACOS_HOSTWINDOWTYPES_H
-#define PLATFORM_MACOS_HOSTWINDOWTYPES_H
+#ifndef PLATFORM_HOST_HOSTWINDOWTYPES_H
+#define PLATFORM_HOST_HOSTWINDOWTYPES_H
 
 #include <cstdint>
 
@@ -71,4 +70,4 @@ inline LPARAM makeLParam(int low, int high)
 } // namespace hfe
 } // namespace dice
 
-#endif // PLATFORM_MACOS_HOSTWINDOWTYPES_H
+#endif // PLATFORM_HOST_HOSTWINDOWTYPES_H

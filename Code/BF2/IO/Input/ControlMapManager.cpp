@@ -6,7 +6,7 @@
 
 #include "../../Core/System.h"             // g_system - mapNextInput's 10 s limit
 #if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
-#include "../../Platform/macOS/CocoaHost.h" // [CHOSEN, not recovered] mapNextInput's event pump
+#include "../../Platform/Host/ClientHost.h" // [CHOSEN, not recovered] mapNextInput's event pump
 #endif
 
 #include <utility>                         // std::make_pair - create()'s m_byId insert
@@ -240,7 +240,7 @@ int ControlMapManager::mapNextInput(IControlMap* map, int id, bool alternate, bo
         // [CHOSEN, not recovered] DirectInput fills its device buffers without the message loop;
         // the macOS devices are fed by the Cocoa pump, so the capture loop pumps it. A quit
         // request stays latched for the main loop.
-        (void) macos::CocoaHost::instance().pumpEvents();
+        (void) host::ClientHost::instance().pumpEvents();
 #endif
         devices->update(0.1f);                                                       // +0x24
         devices->update(-1.0f);

@@ -14,7 +14,7 @@
 #include <unistd.h>
 #include <cstdint>
 #if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
-#include "../Platform/macOS/CocoaHost.h"
+#include "../Platform/Host/ClientHost.h"
 #endif
 #endif
 #include "SwiffHost.h"
@@ -455,15 +455,15 @@ void* SwiffHost::getCursor(int which)
     std::string arrow = io::fileManager->fileExistsEx(std::string("menu/external/flashmenu/cursor/cursor_arrow.ani"), true);
 #if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
     // [CHOSEN, not recovered] AppKit cannot load .ani cursors; the host decodes each file itself
-    // (Platform/macOS/MacCursorFile.h) and answers a token with its frames, animation and hotspot.
+    // (Platform/Host/CursorFile.h) and answers a token with its frames, animation and hotspot.
     // Null, as LoadCursorFromFileA answers, when the file cannot be read; the arrow's token when
     // it cannot be decoded. LoadImageA's IMAGE_CURSOR/LR_LOADFROMFILE load of the keybinding
     // cursor reads the same format, so it shares the loader.
-    m_cursors[0] = macos::CocoaHost::loadCursorFromFile(arrow.c_str());
+    m_cursors[0] = host::ClientHost::loadCursorFromFile(arrow.c_str());
     std::string busy = io::fileManager->fileExistsEx(std::string("menu/external/flashmenu/cursor/cursor_busy.ani"), true);
-    m_cursors[1] = macos::CocoaHost::loadCursorFromFile(busy.c_str());
+    m_cursors[1] = host::ClientHost::loadCursorFromFile(busy.c_str());
     std::string keybinding = io::fileManager->fileExistsEx(std::string("menu/external/flashmenu/cursor/cursor_keybinding.ani"), true);
-    m_cursors[2] = macos::CocoaHost::loadCursorFromFile(keybinding.c_str());
+    m_cursors[2] = host::ClientHost::loadCursorFromFile(keybinding.c_str());
 #else
     m_cursors[0] = LoadCursorFromFileA(arrow.c_str());
     std::string busy = io::fileManager->fileExistsEx(std::string("menu/external/flashmenu/cursor/cursor_busy.ani"), true);

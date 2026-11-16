@@ -1,13 +1,12 @@
-// [CHOSEN, not recovered] macOS port: polled access to game controllers through the
-// GameController framework (GCController with an extended gamepad profile). Plain C++ header;
-// the implementation is MacGamepad.mm (ARC). Main thread only.
+// [CHOSEN, not recovered] Polled native gamepads, implemented by GameController or SDL.
+// Shared device contract under issue #36. Main thread only.
 
-#ifndef PLATFORM_MACOS_MACGAMEPAD_H
-#define PLATFORM_MACOS_MACGAMEPAD_H
+#ifndef PLATFORM_HOST_GAMEPAD_H
+#define PLATFORM_HOST_GAMEPAD_H
 
 namespace dice {
 namespace hfe {
-namespace macos {
+namespace host {
 
 // Button bits, in the order DirectInput enumerates an Xbox 360 / Xbox One controller.
 enum GamepadButton
@@ -36,7 +35,7 @@ struct GamepadState
 // Number of connected controllers with an extended gamepad profile.
 int gamepadCount();
 
-// Samples controller index (0-based, in GCController.controllers order among extended gamepads).
+// Samples controller index (0-based, in the backend's connected-controller order).
 // Returns false and clears state when that controller is not connected.
 bool readGamepad(int index, GamepadState& state);
 
@@ -44,8 +43,8 @@ bool readGamepad(int index, GamepadState& state);
 // device notice that its controller was unplugged and another took its index.
 const void* gamepadIdentity(int index);
 
-} // namespace macos
+} // namespace host
 } // namespace hfe
 } // namespace dice
 
-#endif // PLATFORM_MACOS_MACGAMEPAD_H
+#endif // PLATFORM_HOST_GAMEPAD_H
