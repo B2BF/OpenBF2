@@ -1,6 +1,6 @@
-# Shared settings for the run_* test launchers on Ubuntu 24.04 / Zorin OS 18. Source, do not run.
-# Every value can be overridden from the environment.
-# [TEMP] [CHOSEN, not recovered] local test tooling, not part of any shipped image.
+# Shared settings for the Linux launchers (server.sh, game.sh, play.sh). Source, do not run.
+# Tested on Zorin OS 18 (Ubuntu 24.04 base). Every value can be overridden from the environment.
+# [CHOSEN, not recovered] local tooling, not part of any shipped image.
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 BF2_INSTALL="${BF2_INSTALL:-}"                            # untouched Windows install, needed once
@@ -9,8 +9,20 @@ BF2_BUILD="${BF2_BUILD:-$HOME/bf2-linux-local}"           # linux-x64 CMake buil
 BF2_MAP="${BF2_MAP:-strike_at_karkand}"
 BF2_MODE="${BF2_MODE:-gpm_cq}"
 BF2_MAP_SIZE="${BF2_MAP_SIZE:-16}"
-WINEPREFIX="${WINEPREFIX:-$HOME/.wine-bf2}"               # prefix with DXVK installed
+WINEPREFIX="${WINEPREFIX:-$HOME/.wine-bf2}"               # created by Wine on first start
 export WINEPREFIX
+
+# Exits with an apt hint when a command is missing. Arguments are command:package pairs.
+bf2_require() {
+    local missing=() c
+    for c in "$@"; do
+        command -v "${c%%:*}" >/dev/null || missing+=("${c#*:}")
+    done
+    if [ ${#missing[@]} -gt 0 ]; then
+        echo "Missing programs. Install them with: sudo apt install ${missing[*]}" >&2
+        exit 1
+    fi
+}
 
 # All UDP ports a server on game port $1 binds: game, GameSpy, VoIP server/BF client/BF server.
 bf2_ports() {

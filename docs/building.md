@@ -110,27 +110,55 @@ the check executable; `dice_py_check_run` builds and runs it.
 glibc and the other system dependencies remain dynamic. Pass
 `-DBF2_LINUX_STATIC_RUNTIME=OFF` if you need dynamic compiler runtimes instead.
 
-### Game directory for the Linux server
+### Playing on the Linux server with the retail client
 
-The Linux file system lower-cases every engine path, as the retail Linux server did, so a
-Windows install with mixed-case names finds no mods or maps. Prepare a separate game
-directory once; it hard-links the files and leaves the install untouched:
+`Code/Tools/linux/` holds launchers tested on Zorin OS 18 (Ubuntu 24.04 base). They build the
+server from this checkout, prepare a game directory, and run the retail Windows client under
+plain Wine (DXVK is optional):
 
 ```bash
-python3 Code/Build/prepare_linux_game_dir.py "/path/to/Battlefield 2" ~/bf2-game
-cd ~/bf2-game
-~/bf2-linux-local/bin_linux/bf2 +modPath mods/bf2 +config mods/bf2/settings/serversettings.con
+sudo apt install cmake ninja-build g++ libncurses-dev wine
+export BF2_INSTALL="/path/to/Battlefield 2"   # a BF2 1.5 install with original files
+Code/Tools/linux/play.sh                       # server + client, joins automatically
 ```
 
-Python package trees (`python/`, `admin/`, `mods/<mod>/python/`) keep their original case
-because Python imports are case-sensitive. Pass `+config` and `+mapList` relative to the
-game directory. The server's ncurses console needs a terminal. The Windows client under
-Wine can run from the same directory, because Wine looks files up case-insensitively.
+| Script | Purpose |
+|---|---|
+| `server.sh` | Builds and runs the server in the foreground (needs a terminal). |
+| `game.sh` | Runs `BF2.exe` under Wine; extra arguments go to the game. |
+| `play.sh` | Starts `server.sh` in the background, joins it with `game.sh`, stops it afterwards. |
 
-On Ubuntu 24.04 based systems (for example Zorin OS 18), the launchers in
-`Code/Tests/run_server`, `run_game` and `run_game_join_server` do these steps for you:
-set `BF2_INSTALL` once, and each server picks the first free port set from 16568 unless
-`BF2_PORT` is given. Settings are listed in `Code/Tests/run_common`.
+Settings are environment variables listed in `common.sh`: `BF2_PORT` (default: the first free
+port set from 16568), `BF2_MAP`, `BF2_MODE`, `BF2_PLAYER_NAME`, `BF2_GAME_DIR` (default
+`~/bf2-game`), `BF2_BUILD` (default `~/bf2-linux-local`) and `WINEPREFIX` (default
+`~/.wine-bf2`). The first run builds the server, which takes several minutes.
+
+What the launchers handle, and why:
+
+- **Game directory.** The Linux file system lower-cases every engine path, as the retail
+  Linux server did, so a Windows install with mixed-case names finds no mods or maps.
+  `Code/Build/prepare_linux_game_dir.py` builds a separate directory once: engine paths
+  lower-case, Python trees (`python/`, `admin/`, `mods/<mod>/python/`) in their original case
+  because Python imports are case-sensitive. Files of 1 MiB and more are hard-linked; smaller
+  files are copied so the game never rewrites the install through a link. Wine looks files up
+  case-insensitively, so the client runs from the same directory.
+- **CD-key registry value.** A copied rather than installed game has no
+  `HKLM\SOFTWARE\Electronic Arts\EA Games\Battlefield 2\ergc` value. Retail `BF2.exe` then
+  crashes on join: it encrypts the empty key, ignores the failure and reads a null buffer.
+  `game.sh` adds a placeholder value to the 32-bit registry view when it is missing.
+- **Unmodified `.con` files.** The server kicks clients "for using modified data" when the MD5
+  of `ClientArchives.con`, `ServerArchives.con`, `Init.con` and `GameLogicInit.con` differs
+  from its own. `game.sh` therefore skips the intro movies by renaming them instead of
+  editing `Init.con`; `BF2_INTROS=1` restores them.
+- **Player name.** `game.sh` keeps a single local account. In a terminal it asks for the
+  name on every start; Enter keeps the current one. A new name replaces the account after a
+  confirmation: the profile keeps its settings, gets fresh stats, and every other profile is
+  deleted. `BF2_PLAYER_NAME` sets the name without asking. BF2 creates the first profile
+  itself, so a name can be chosen from the second start on.
+
+To run the server by hand, pass `+config` and `+mapList` relative to the game directory;
+absolute paths are ignored. Players outside the LAN join with Connect to IP; the retail
+server browser needed GameSpy, which is gone.
 
 ## Client and plugins
 

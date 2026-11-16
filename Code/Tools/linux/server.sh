@@ -1,8 +1,10 @@
 #!/bin/bash
 # Builds the native Linux server from this checkout and runs it in the foreground (needs a terminal).
-# Usage: Code/Tests/run_server/linux_ubuntu24.04_ZorinOS.sh [extra bf2 args]  (BF2_PORT optional, else first free)
+# Usage: Code/Tools/linux/server.sh [extra bf2 args]  (BF2_PORT optional, else first free)
 set -euo pipefail
-source "$(dirname "$0")/../run_common/linux_ubuntu24.04_ZorinOS.sh"
+source "$(dirname "$0")/common.sh"
+bf2_require cmake:cmake ninja:ninja-build g++:g++ python3:python3 ss:iproute2
+[ -e /usr/include/ncurses.h ] || { echo "Missing ncurses headers. Install them with: sudo apt install libncurses-dev" >&2; exit 1; }
 bf2_pick_port
 
 [ -d "$BF2_BUILD" ] || cmake --preset linux-x64 -S "$REPO" -B "$BF2_BUILD"
@@ -12,7 +14,8 @@ bf2_prepare_game_dir
 echo "Server ports (game, GameSpy, VoIP x3): $(bf2_ports "$BF2_PORT")"
 read -r game gamespy voip voipclient voipserver <<< "$(bf2_ports "$BF2_PORT")"
 settings="$BF2_GAME_DIR/mods/bf2/settings"
-sed -e "s/^sv.serverPort .*/sv.serverPort $game/" \
+sed -e "s/^sv.serverName .*/sv.serverName \"OpenBF2 Linux :$game\"/" \
+    -e "s/^sv.serverPort .*/sv.serverPort $game/" \
     -e "s/^sv.gameSpyPort .*/sv.gameSpyPort $gamespy/" \
     -e "s/^sv.voipServerPort .*/sv.voipServerPort $voip/" \
     -e "s/^sv.voipBFClientPort .*/sv.voipBFClientPort $voipclient/" \
