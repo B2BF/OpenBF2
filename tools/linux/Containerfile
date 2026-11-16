@@ -1,0 +1,8 @@
+# Native client build dependencies; build with podman on x86-64 or ARM64.
+FROM docker.io/library/debian:trixie-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    g++ cmake ninja-build make autoconf automake libtool bison flex mingw-w64-tools \
+    pkgconf libssl-dev libvulkan-dev libsdl3-dev libx11-dev libwayland-dev \
+    libxkbcommon-dev libpulse-dev libasound2-dev libncurses-dev libjpeg-dev \
+    libpng-dev libopenal1 libjson-perl spirv-headers git patch python3 rsync ca-certificates
+WORKDIR /workspace

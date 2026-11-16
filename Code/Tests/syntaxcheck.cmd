@@ -2627,5 +2627,27 @@ if errorlevel 1 set /a RC+=1
 cl %FLAGS% /DBF2_IMAGE_AIDLL=1 "%~dp0..\BF2\Core\Random.cpp"
 if errorlevel 1 set /a RC+=1
 
+rem Linux-only backend TUs must remain inert in the Windows image manifests.
+cl %FLAGS0% "%~dp0..\BF2\Platform\Linux\FrameCapture.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS0% "%~dp0..\BF2\Platform\Linux\SDLHost.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS0% "%~dp0..\BF2\Platform\Linux\SDLInputScript.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS0% "%~dp0..\RendDX9Abi\BinkAudioSDL.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS0% "%~dp0..\BF2\Platform\Gfx\D3D9Forward\Native\D3DXResources.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS0% "%~dp0..\BF2\Platform\Gfx\Effect\NativeEquivalence.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS% "%~dp0..\BF2\Platform\Gfx\Effect\NativeEquivalence.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS0% "%~dp0..\BF2\Platform\Gfx\D3D9Forward\Native\Loader.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS0% "%~dp0..\BF2\Platform\Gfx\D3D9Forward\GeneratedNative\ForwardFunctions.cpp"
+if errorlevel 1 set /a RC+=1
+cl %FLAGS0% "%~dp0..\BF2\Platform\Gfx\D3D9Forward\GeneratedNative\ForwardWrappers.cpp"
+if errorlevel 1 set /a RC+=1
+
 if %RC%==0 (echo ALL OK) else (echo *** %RC% FILE^(S^) FAILED ***)
 exit /b %RC%

@@ -10,6 +10,23 @@ endif()
 project(BF2Rebuilt LANGUAGES C CXX)
 # [CHOSEN, not recovered] Header-selection preparation for the G2w forwarding backend.
 option(BF2_GFX_SEAM "Compile the renderer against the D3D9/D3DX subset headers" OFF)
+# [CHOSEN, not recovered] https://github.com/kr4uzi/OpenBF2/issues/36.
+option(BF2_LINUX_VULKAN_CHECKS "Build the SDL3/DXVK Native presentation and ABI checks" OFF)
+option(BF2_LINUX_EFFECT_CHECKS "Build native Linux D3D9 effect compiler and CPU checks" OFF)
+option(BF2_LINUX_CLIENT "Build the native SDL3/DXVK Linux client (issue #36)" OFF)
+if(BF2_LINUX_CLIENT)
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+        message(FATAL_ERROR "BF2_LINUX_CLIENT requires a 64-bit Linux toolchain")
+    endif()
+    if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64|aarch64|arm64)$")
+        message(FATAL_ERROR "The Linux client supports x86-64 and ARM64 toolchains")
+    endif()
+    set(BF2_LINUX_VULKAN_CHECKS ON)
+    set(BF2_LINUX_EFFECT_CHECKS ON)
+    find_package(SDL3 3.2 REQUIRED CONFIG)
+    find_package(OpenSSL REQUIRED COMPONENTS Crypto)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+endif()
 # [CHOSEN, not recovered] Release packaging (owner decision 2026-11-14): CI's release configure steps
 # turn this ON so the plugin kit's frontier trap (Code/RendDX9Abi/Frontier.cpp) logs and continues
 # when its env var is unset. OFF - dev builds and every gate - keeps the armed (abort) default. An
@@ -70,9 +87,9 @@ elseif(CMAKE_SIZEOF_VOID_P EQUAL 8)
     # layouts while preserving the shipped wire/file widths.
     set(BF2_BUILD_X64 ON)
     if(BF2_BUILD_LINUX)
-        set(BF2_NATIVE_ARCH "linux-x64")
+        set(BF2_NATIVE_ARCH "linux-${CMAKE_SYSTEM_PROCESSOR}")
         message(STATUS
-            "Configuring the native Linux x86-64 dedicated-server port (bf2 + libdice_py.so). "
+            "Configuring the native Linux ${CMAKE_SYSTEM_PROCESSOR} port (bf2 + libdice_py.so). "
             "See docs/building.md for toolchain and runtime setup.")
     elseif(BF2_BUILD_MACOS)
         set(BF2_NATIVE_ARCH "macos-${CMAKE_SYSTEM_PROCESSOR}")
@@ -489,6 +506,11 @@ endfunction()
 #                                   churning a thousand recovered files - see the handoff.
 # =================================================================================================
 function(bf2_configure_cpp_target target)
+    if(BF2_LINUX_CLIENT AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        # Native explicit-self tables are viewed through the current C++ interfaces.
+        # GCC must retain virtual dispatch; the native vtable fixture checks this.
+        target_compile_options("${target}" PRIVATE -fno-devirtualize -fno-devirtualize-speculatively)
+    endif()
     target_compile_features("${target}" PRIVATE cxx_std_14)
     if(MSVC)
         target_compile_options("${target}" PRIVATE
@@ -655,15 +677,20 @@ set(bf2_client_sources
 )
 list(REMOVE_DUPLICATES bf2_client_sources)
 list(SORT bf2_client_sources)
-if(BF2_BUILD_MACOS)
-    # [CHOSEN, not recovered] The macOS client replaces the DirectInput 8 devices with
-    # MacInputDeviceManager and the Mac*Device TUs (docs/macos-s2-4.md). The Linux and MSVC client
-    # manifests are unchanged.
+if(BF2_BUILD_MACOS OR BF2_LINUX_CLIENT)
+    # [CHOSEN, not recovered] Native clients share the portable input adapters;
+    # Cocoa and SDL implement their host interface (Linux: issue #36).
     list(REMOVE_ITEM bf2_client_sources
         "${BF2_ROOT}/IO/Input/DX8InputDeviceManager.cpp"
         "${BF2_ROOT}/IO/Input/KeyboardDevice.cpp"
         "${BF2_ROOT}/IO/Input/MouseDevice.cpp"
         "${BF2_ROOT}/IO/Input/GameControllerDevice.cpp")
+endif()
+if(BF2_LINUX_CLIENT)
+    # These shared trace implementations arrive with the renderer effect archive.
+    list(REMOVE_ITEM bf2_client_sources
+        "${BF2_ROOT}/Platform/macOS/HitchTrace.cpp"
+        "${BF2_ROOT}/Platform/macOS/Warmup.cpp")
 endif()
 add_library(bf2_client_objects OBJECT EXCLUDE_FROM_ALL
     ${bf2_client_sources}
@@ -699,6 +726,12 @@ if(BF2_BUILD_MACOS)
     # (Code/StaticPlugins). The Linux and MSVC client objects are unchanged.
     target_include_directories(bf2_client_objects PRIVATE ${CURSES_INCLUDE_DIRS})
     target_compile_definitions(bf2_client_objects PRIVATE BF2_PLATFORM_POSIX _MACOSX BF2_STATIC_PLUGINS=1)
+endif()
+if(BF2_LINUX_CLIENT)
+    target_include_directories(bf2_client_objects PRIVATE ${CURSES_INCLUDE_DIRS})
+    target_compile_definitions(bf2_client_objects PRIVATE
+        BF2_PLATFORM_POSIX _LINUX BF2_LINUX_CLIENT=1 BF2_STATIC_PLUGINS=1 BF2_GFX_DXVK=1 BF2_NATIVE_X87=1)
+    target_link_libraries(bf2_client_objects PRIVATE SDL3::SDL3)
 endif()
 source_group(TREE "${BF2_ROOT}" PREFIX "BF2" FILES
     ${bf2_client_sources}
@@ -890,6 +923,8 @@ if(WIN32)
     list(APPEND bf2_gamespy_voice_sources "${BF2_EXTERNAL_ROOT}/GameSpy/Voice2/gvDirectSound.c")
 elseif(APPLE)
     list(APPEND bf2_gamespy_voice_sources "${BF2_EXTERNAL_ROOT}/GameSpy/Voice2/gvOSXAudio.c")
+elseif(BF2_LINUX_CLIENT)
+    list(APPEND bf2_gamespy_voice_sources "${BF2_EXTERNAL_ROOT}/GameSpy/Voice2/gvSDLAudio.c")
 endif()
 foreach(speex_unit bits cb_search exc_10_16_table exc_10_32_table exc_20_32_table exc_5_256_table
         exc_5_64_table exc_8_128_table filters gain_table gain_table_lbr hexc_10_32_table hexc_table
@@ -900,6 +935,11 @@ endforeach()
 # Client/test dependencies opt in; Linux dedicated builds have no Voice2 hardware backend.
 add_library(bf2_gamespy_voice_objects OBJECT EXCLUDE_FROM_ALL ${bf2_gamespy_voice_sources})
 bf2_configure_c_target(bf2_gamespy_voice_objects)
+bf2_set_image(bf2_gamespy_voice_objects 0)
+if(BF2_LINUX_CLIENT)
+    target_compile_definitions(bf2_gamespy_voice_objects PRIVATE BF2_LINUX_CLIENT=1)
+    target_link_libraries(bf2_gamespy_voice_objects PRIVATE SDL3::SDL3)
+endif()
 target_include_directories(bf2_gamespy_voice_objects PRIVATE
     "${BF2_EXTERNAL_ROOT}/speex-1.0.5/include"
     "${BF2_EXTERNAL_ROOT}/speex-1.0.5/include/speex")    # gvSpeex.c includes <speex.h>
@@ -1797,7 +1837,7 @@ endif() # NOT BF2_BUILD_POSIX (client and editor)
 # The link is strict (ld64 rejects undefined symbols). It does not complete yet: the compile triage
 # in docs/macos-port.md lists the blocked translation units by blocker class.
 # =================================================================================================
-if(BF2_BUILD_MACOS)
+if(BF2_BUILD_MACOS OR BF2_LINUX_CLIENT)
     set(BF2_RENDDX9_STATIC_SOURCES
         "${CMAKE_CURRENT_SOURCE_DIR}/Code/RendDX9Abi/CrashReport.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/Code/RendDX9Abi/EngineFile.cpp"
@@ -1806,8 +1846,12 @@ if(BF2_BUILD_MACOS)
         # [CHOSEN, not recovered] The binkw32 entry points on the vendored FFmpeg Bink decoders
         # (bf2_ffmpeg_bink below; Code/BF2/External/ffmpeg-bink/README.md) and their AudioQueue sound output.
         "${CMAKE_CURRENT_SOURCE_DIR}/Code/RendDX9Abi/BinkFFmpeg.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/Code/RendDX9Abi/BinkAudioCoreAudio.cpp"
     )
+    if(BF2_LINUX_CLIENT)
+        list(APPEND BF2_RENDDX9_STATIC_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/Code/RendDX9Abi/BinkAudioSDL.cpp")
+    else()
+        list(APPEND BF2_RENDDX9_STATIC_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/Code/RendDX9Abi/BinkAudioCoreAudio.cpp")
+    endif()
     # Code/Build/renddx9.cmd, STEP 2: SOURCES minus the kit, DllMain.cpp and the shared Math TUs,
     # then CONSOLE_SOURCES minus Core/ConsoleObjectBase.cpp.
     foreach(rel
@@ -1932,8 +1976,14 @@ if(BF2_BUILD_MACOS)
         bf2_set_image("${target}" 0)
         bf2_set_platform_compat("${target}")
         target_compile_definitions("${target}" PRIVATE
-            _ITERATOR_DEBUG_LEVEL=0 BF2_PLATFORM_POSIX _MACOSX
+            _ITERATOR_DEBUG_LEVEL=0 BF2_PLATFORM_POSIX
             BF2_STATIC_PLUGINS=1 ${image_define})
+        if(BF2_LINUX_CLIENT)
+            target_compile_definitions("${target}" PRIVATE _LINUX BF2_LINUX_CLIENT=1 BF2_GFX_DXVK=1 BF2_NATIVE_X87=1)
+            target_link_libraries("${target}" PRIVATE SDL3::SDL3)
+        else()
+            target_compile_definitions("${target}" PRIVATE _MACOSX)
+        endif()
         set_property(TARGET "${target}" PROPERTY FOLDER "BF2")
     endfunction()
 
@@ -1951,6 +2001,26 @@ if(BF2_BUILD_MACOS)
         "${CMAKE_CURRENT_SOURCE_DIR}/Code/StaticPlugins/image-private-symbols.txt")
     function(bf2_prelink_static_plugin consumer library symbols)
         set(prelinked "${CMAKE_CURRENT_BINARY_DIR}/StaticPlugins/${library}_prelinked.o")
+        if(BF2_LINUX_CLIENT)
+            find_package(Python3 REQUIRED COMPONENTS Interpreter)
+            set(extra_archives)
+            set(extra_targets)
+            if(library STREQUAL "bf2_renddx9_static")
+                list(APPEND extra_archives "$<TARGET_FILE:bf2_dxvk_d3dx>" "$<TARGET_FILE:bf2_dxvk_effect>")
+                list(APPEND extra_targets bf2_dxvk_d3dx bf2_dxvk_effect)
+            endif()
+            add_custom_command(OUTPUT "${prelinked}"
+                COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/linux/prelink-plugin.py"
+                    --linker "${CMAKE_LINKER}" --objcopy "${CMAKE_OBJCOPY}" --nm "${CMAKE_NM}"
+                    --symbols "${symbols}" --image "${library}" --output "${prelinked}"
+                    "$<TARGET_FILE:${library}>" ${extra_archives}
+                DEPENDS "${library}" ${extra_targets} "${symbols}" "tools/linux/prelink-plugin.py"
+                COMMENT "Prelinking ${library} with isolated ELF plugin globals"
+                VERBATIM)
+            target_sources("${consumer}" PRIVATE "${prelinked}")
+            set_source_files_properties("${prelinked}" PROPERTIES EXTERNAL_OBJECT TRUE GENERATED TRUE)
+            return()
+        endif()
         set(arch_flags "")
         foreach(arch IN LISTS CMAKE_OSX_ARCHITECTURES)
             list(APPEND arch_flags -arch "${arch}")
@@ -1994,8 +2064,8 @@ if(BF2_BUILD_MACOS)
     # [CHOSEN, not recovered] One renderer-only prefix selects the subset without TU switches.
     target_include_directories(bf2_renddx9_static BEFORE PRIVATE
         "${BF2_ROOT}/Platform/Gfx/MacInclude" "${BF2_ROOT}/Platform/Gfx/Include")
+    if(BF2_BUILD_MACOS)
     target_sources(bf2_renddx9_static PRIVATE
-        "${BF2_ROOT}/Platform/Gfx/Metal/Frontiers.cpp"
         "${BF2_ROOT}/Platform/Gfx/Metal/Effect.cpp"
         "${BF2_ROOT}/Platform/Gfx/Metal/D3DXMath.cpp"
         "${BF2_ROOT}/Platform/Gfx/Metal/D3DXGeometry.cpp"
@@ -2012,6 +2082,11 @@ if(BF2_BUILD_MACOS)
         "${BF2_EXTERNAL_ROOT}/meshoptimizer/stripifier.cpp")
     set_source_files_properties("${BF2_ROOT}/Platform/Gfx/Metal/MetalBridge.mm"
         PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+    endif()
+    target_sources(bf2_renddx9_static PRIVATE "${BF2_ROOT}/Platform/Gfx/Metal/Frontiers.cpp")
+    if(BF2_LINUX_CLIENT)
+        target_sources(bf2_renddx9_static PRIVATE "${BF2_ROOT}/Platform/Linux/FrameCapture.cpp")
+    endif()
     target_compile_options(bf2_renddx9_static PRIVATE
         "$<$<COMPILE_LANGUAGE:CXX>:-include${BF2_ROOT}/Platform/Gfx/MacSupport.h>")
     target_compile_definitions(bf2_renddx9_static PRIVATE
@@ -2038,6 +2113,7 @@ if(BF2_BUILD_MACOS)
 
     add_library(bf2_vorbis_static STATIC EXCLUDE_FROM_ALL ${BF2_VORBIS_STATIC_SOURCES})
     bf2_configure_c_target(bf2_vorbis_static)
+    bf2_set_image(bf2_vorbis_static 0)
     target_include_directories(bf2_vorbis_static PRIVATE
         "${BF2_EXTERNAL_ROOT}/libogg-1.3.6/include"
         "${BF2_EXTERNAL_ROOT}/libvorbis-1.3.7/include"
@@ -2055,12 +2131,14 @@ if(BF2_BUILD_MACOS)
         "${BF2_FFMPEG_BINK_DIR}/libavcodec/binkaudio.c"
         "${BF2_FFMPEG_BINK_DIR}/libavcodec/wma_freqs.c"
         "${BF2_FFMPEG_BINK_DIR}/shim/ffbink_shim.c")
+    bf2_set_image(bf2_ffmpeg_bink 0)
     target_include_directories(bf2_ffmpeg_bink PRIVATE "${BF2_FFMPEG_BINK_DIR}/shim")
     set_target_properties(bf2_ffmpeg_bink PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON
         C_EXTENSIONS ON)
     target_compile_options(bf2_ffmpeg_bink PRIVATE -O2 -fno-strict-aliasing -fno-math-errno
         -Wno-pointer-sign)
     set_property(TARGET bf2_ffmpeg_bink PROPERTY FOLDER "BF2")
+    if(BF2_BUILD_MACOS)
     # [CHOSEN, not recovered] CPU check of the Bink port against reference frames/samples that
     # the local ffmpeg CLI produces from the read-only game content (Code/BF2/External/ffmpeg-bink/README.md).
     add_executable(bf2_bink_decode_test EXCLUDE_FROM_ALL
@@ -2077,6 +2155,7 @@ if(BF2_BUILD_MACOS)
         "${CMAKE_CURRENT_SOURCE_DIR}/Code/RendDX9Abi/BinkAudioCoreAudio.cpp")
     target_compile_features(bf2_bink_harness PRIVATE cxx_std_17)
     target_link_libraries(bf2_bink_harness PRIVATE bf2_ffmpeg_bink "-framework AudioToolbox")
+    endif()
 
     add_library(bf2_bf2audio_static STATIC EXCLUDE_FROM_ALL ${BF2_BF2AUDIO_STATIC_SOURCES})
     bf2_configure_static_plugin(bf2_bf2audio_static "BF2_IMAGE_BF2AUDIO")
@@ -2089,7 +2168,12 @@ if(BF2_BUILD_MACOS)
     bf2_configure_cpp_target(bf2_voipserver_client_objects)
     bf2_set_image(bf2_voipserver_client_objects 0)
     bf2_set_platform_compat(bf2_voipserver_client_objects)
-    target_compile_definitions(bf2_voipserver_client_objects PRIVATE BF2_PLATFORM_POSIX _MACOSX)
+    target_compile_definitions(bf2_voipserver_client_objects PRIVATE BF2_PLATFORM_POSIX)
+    if(BF2_LINUX_CLIENT)
+        target_compile_definitions(bf2_voipserver_client_objects PRIVATE _LINUX BF2_LINUX_CLIENT=1)
+    else()
+        target_compile_definitions(bf2_voipserver_client_objects PRIVATE _MACOSX)
+    endif()
     set_property(TARGET bf2_voipserver_client_objects PROPERTY FOLDER "BF2")
 
     add_executable(bf2_client EXCLUDE_FROM_ALL
@@ -2115,6 +2199,17 @@ if(BF2_BUILD_MACOS)
         INSTALL_RPATH "@loader_path"
         BUILD_WITH_INSTALL_RPATH TRUE
     )
+    if(BF2_LINUX_CLIENT)
+        set_target_properties(bf2_client PROPERTIES BUILD_WITH_INSTALL_RPATH FALSE
+            BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
+        add_custom_command(TARGET bf2_client POST_BUILD
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/linux/build-info.py"
+                "$<TARGET_FILE:bf2_client>" --compiler "${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}"
+                --architecture "${CMAKE_SYSTEM_PROCESSOR}" VERBATIM)
+        set_property(TARGET bf2_client APPEND PROPERTY LINK_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/linux/build-info.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/linux/presentation.py")
+    endif()
     if(TARGET dice_py)
         target_link_libraries(bf2_client PRIVATE dice_py)
     endif()
@@ -2123,15 +2218,20 @@ if(BF2_BUILD_MACOS)
     # renderer-free client: StaticPlugins.cpp has no RendDX9 entry and BF2Render::init takes
     # its shipped failure return. ON links the image for coordinator device-creation checks.
     option(BF2_MACOS_LINK_RENDDX9 "Link the RendDX9 static library into the macOS client" OFF)
-    if(BF2_MACOS_LINK_RENDDX9)
+    if(BF2_MACOS_LINK_RENDDX9 OR BF2_LINUX_CLIENT)
         bf2_prelink_static_plugin(bf2_client bf2_renddx9_static "${BF2_STATIC_PLUGIN_PRIVATE_SYMBOLS}")
         target_compile_definitions(bf2_client PRIVATE BF2_STATIC_RENDDX9=1)
         # [CHOSEN, not recovered] The renderer's Bink port (BinkFFmpeg.cpp) and its audio output.
-        target_link_libraries(bf2_client PRIVATE bf2_ffmpeg_bink "-framework AudioToolbox")
+        target_link_libraries(bf2_client PRIVATE bf2_ffmpeg_bink)
+        if(BF2_BUILD_MACOS)
+        target_link_libraries(bf2_client PRIVATE "-framework AudioToolbox")
         # [CHOSEN, not recovered] The G4 effect facade (Metal/Effect.cpp) runs the s2 CPU runtime.
         target_link_libraries(bf2_client PRIVATE bf2_fx_runtime)
         # [CHOSEN, not recovered] System JPEG decoding in the prelinked renderer image.
         target_link_libraries(bf2_client PRIVATE "-framework ImageIO" "-framework CoreGraphics")
+        else()
+            target_link_libraries(bf2_client PRIVATE bf2_dxvk_forward bf2_dxvk_d3dx bf2_dxvk_effect bf2_fx_native_compiler)
+        endif()
     endif()
     target_compile_definitions(bf2_client PRIVATE BF2_STATIC_SWIFFPLAYER=1 BF2_STATIC_BF2AUDIO=1)
     bf2_prelink_static_plugin(bf2_client bf2_swiffplayer_static "${BF2_STATIC_PLUGIN_PRIVATE_SYMBOLS}")
@@ -2140,9 +2240,13 @@ if(BF2_BUILD_MACOS)
     target_link_libraries(bf2_client PRIVATE
         bf2_vorbis_static bf2_expat_static bf2_plugin_kit_static
         Threads::Threads ${CMAKE_DL_LIBS} ${CURSES_LIBRARIES})
-    target_link_options(bf2_client PRIVATE
-        "-Wl,-map,${BF2_DEDICATED_OUTPUT_DIR}/bf2_client.map")
+    if(BF2_LINUX_CLIENT)
+        target_link_options(bf2_client PRIVATE "-Wl,-Map,${BF2_DEDICATED_OUTPUT_DIR}/bf2_client.map")
+    else()
+        target_link_options(bf2_client PRIVATE "-Wl,-map,${BF2_DEDICATED_OUTPUT_DIR}/bf2_client.map")
+    endif()
 
+    if(BF2_BUILD_MACOS)
     # [CHOSEN, not recovered] The Cocoa host and the GCController poller (package S2.4,
     # docs/macos-s2-4.md): ARC Objective-C++ with the plain-C++ headers the engine includes.
     set(BF2_MACOS_HOST_OBJCXX_SOURCES
@@ -2216,6 +2320,29 @@ if(BF2_BUILD_MACOS)
     add_dependencies(bf2_renddx9_static bf2_vtable_audit)
     add_dependencies(bf2_swiffplayer_static bf2_vtable_audit)
     add_dependencies(bf2_bf2audio_static bf2_vtable_audit)
+    else()
+        if(TARGET bf2_aidll)
+            add_dependencies(bf2_client bf2_aidll)
+        endif()
+        # Exercise the existing Itanium adapters with Linux's actual compiler ABI.
+        add_executable(bf2_native_vtable_check EXCLUDE_FROM_ALL Code/Tests/macos_vtable_audit.cpp)
+        add_executable(bf2_meme_dispatch_check EXCLUDE_FROM_ALL Code/Tests/macos_meme_dispatch.cpp)
+        foreach(check bf2_native_vtable_check bf2_meme_dispatch_check)
+            bf2_configure_cpp_target(${check})
+            bf2_set_image(${check} 0)
+            target_compile_definitions(${check} PRIVATE BF2_STATIC_PLUGINS=1 BF2_LINUX_CLIENT=1 BF2_NATIVE_X87=1)
+        endforeach()
+        if(NOT CMAKE_CROSSCOMPILING)
+            add_custom_target(bf2_linux_abi_check
+                COMMAND "$<TARGET_FILE:bf2_native_vtable_check>"
+                COMMAND "$<TARGET_FILE:bf2_meme_dispatch_check>"
+                DEPENDS bf2_native_vtable_check bf2_meme_dispatch_check
+                VERBATIM)
+            add_dependencies(bf2_client bf2_linux_abi_check)
+        else()
+            add_dependencies(bf2_client bf2_native_vtable_check bf2_meme_dispatch_check)
+        endif()
+    endif()
 endif()
 
 # =================================================================================================
@@ -2282,6 +2409,48 @@ set_property(TARGET bf2_syntaxcheck PROPERTY FOLDER "Diagnostics")
 endif()
 
 include(CTest)
+if(BF2_LINUX_VULKAN_CHECKS)
+    add_subdirectory(Code/Tests/linux_vulkan)
+endif()
+if(BF2_LINUX_EFFECT_CHECKS)
+    add_subdirectory(Code/Tests/linux_fx)
+endif()
+if(BF2_LINUX_CLIENT)
+    get_filename_component(BF2_CLIENT_DXVK_LIBDIR "${BF2_DXVK_LIBRARY}" DIRECTORY)
+    set_property(TARGET bf2_client APPEND PROPERTY BUILD_RPATH "${BF2_CLIENT_DXVK_LIBDIR}")
+    add_subdirectory(Code/Tests/linux_d3dx)
+    add_subdirectory(Code/Tests/linux_host)
+    add_subdirectory(Code/Tests/linux_audio)
+    add_subdirectory(Code/Tests/linux_plugins)
+    add_subdirectory(Code/Tests/linux_profiles)
+    add_subdirectory(Code/Tests/linux_paths)
+    add_subdirectory(Code/Tests/linux_swiff)
+    add_subdirectory(Code/Tests/linux_arm64_numerics)
+    set(BF2_LINUX_NUMERIC_CHECKS bf2_binary128_check bf2_arm_numerics bf2_arm_portable_x87
+        bf2_arm_bitstream bf2_arm_saved_dispatch bf2_arm_vtable)
+    if(TARGET bf2_arm_numerics_soft)
+        list(APPEND BF2_LINUX_NUMERIC_CHECKS bf2_arm_numerics_soft)
+    endif()
+    add_test(NAME linux_native_vtable COMMAND bf2_native_vtable_check)
+    add_test(NAME linux_meme_dispatch COMMAND bf2_meme_dispatch_check)
+    add_test(NAME linux_client_launcher COMMAND "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/Code/Tests/linux_client_launcher.py"
+        --scratch "${CMAKE_CURRENT_BINARY_DIR}/launcher-fixtures" --edge-cases --profile-port-check)
+    set_tests_properties(linux_client_launcher PROPERTIES TIMEOUT 60)
+    target_compile_definitions(bf2_aidll PRIVATE BF2_NATIVE_X87=1)
+    target_link_libraries(bf2_client_objects PRIVATE OpenSSL::Crypto)
+    target_link_libraries(bf2_client PRIVATE OpenSSL::Crypto)
+    add_custom_target(bf2_linux_client_checks
+        COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure -R "^linux_"
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+        DEPENDS bf2_native_vtable_check bf2_meme_dispatch_check
+            bf2_linux_forward_contract bf2_linux_fx_runtime bf2_linux_fx_compiler bf2_linux_fx_equivalence bf2_linux_fx_packed_colors
+            bf2_linux_d3dx_cpu bf2_linux_d3dx_assembly bf2_linux_host_check bf2_linux_cursor_check bf2_linux_audio_check
+            bf2_linux_openal_check bf2_linux_plugin_contract bf2_linux_profile_check bf2_linux_path_check
+            bf2_linux_swiff_image_check
+            ${BF2_LINUX_NUMERIC_CHECKS}
+        USES_TERMINAL VERBATIM)
+endif()
 
 # [TEMP] Issue #33: content-free policy checks, with no renderer or gameplay claim.
 add_executable(bf2_hud_widescreen_check EXCLUDE_FROM_ALL
