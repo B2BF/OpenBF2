@@ -1,8 +1,8 @@
 # FFmpeg Bink decoders (vendored subset)
 
-The macOS client and the Windows x64 client play Battlefield 2's Bink 1 movies
+The macOS, Linux and Windows x64 clients play Battlefield 2's Bink 1 movies
 (`mods/*/Movies/*.bik`) with FFmpeg's Bink video and Bink audio (DCT) decoders, linked
-statically: into `bf2_client` on macOS, into `RendDX9.dll` on Windows x64
+statically: into `bf2_client` on macOS/Linux, into `RendDX9.dll` on Windows x64
 (`Code/Build/renddx9.cmd x64`). Windows x86 keeps RAD Game Tools' `binkw32.dll` and compiles
 nothing in this directory. Owner decisions 2026-11-01 (macOS) and 2026-11-07 (x64); the
 integration and the validation are summarised below.
@@ -93,6 +93,28 @@ Not included: the Bink audio RDFT variant (`binkaudio_rdft`). `av_tx_init` refus
 Battlefield 2 movie has one (all audio tracks are `binkaudio_dct`). Bink 2 (`KB2`) files are
 refused by `BinkOpen`, as FFmpeg's demuxer also does not decode them.
 
+## Linux output
+
+The native Linux client uses the same decoder through `BF2_LINUX_CLIENT`, with
+`RendDX9Abi/BinkAudioSDL.cpp` providing float PCM output through SDL3. This is
+[CHOSEN, not recovered] integration under
+[issue #36](https://github.com/kr4uzi/OpenBF2/issues/36), without changes to the FFmpeg sources
+or `.bik` format. SDL's consumed-frame count, minus one device buffer, estimates the playback
+position; SDL does not expose a precise DAC cursor. Pausing freezes that clock, and destroying
+the stream quiesces its callback before the movie's audio source is freed.
+
+Build the independent Linux checks with SDL3 development files installed:
+
+```sh
+cmake -S Code/Tests/linux_audio -B out/linux-audio-check -G Ninja
+cmake --build out/linux-audio-check
+ctest --test-dir out/linux-audio-check --output-on-failure
+```
+
+The lifecycle tests use SDL's dummy driver and OpenAL Soft's null backend; they do not establish
+audible playback. The same directory's `bf2_linux_bink_decode` accepts the video, loop and audio
+commands documented above. Real movie sound and synchronization still require a client run.
+
 ## Licence
 
 The FFmpeg files are licensed under the GNU Lesser General Public License, version 2.1 or (at
@@ -101,9 +123,9 @@ of each file. Copyright remains with the FFmpeg authors named there (Konstantin 
 Ross, Daniel Verkamp and others). None of the files is under one of FFmpeg's GPL-only parts.
 
 The OpenBF2 repository as a whole is GPL-3; LGPL-2.1-or-later code may be combined with it and
-linked statically (LGPL 2.1 section 3 lets the code be used under the GPL). This holds for both
-images that link these files: the macOS `bf2_client` and the Windows x64 `RendDX9.dll`. Anyone
-distributing either binary must also provide the corresponding source for these files (and,
+linked statically (LGPL 2.1 section 3 lets the code be used under the GPL). This holds for
+the images that link these files: the macOS/Linux `bf2_client` and the Windows x64 `RendDX9.dll`. Anyone
+distributing these binaries must also provide the corresponding source for these files (and,
 since the whole is then GPL-3, for the program), which this repository does; keep
 `COPYING.LGPLv2.1` and `LICENSE.md` with the distribution. The Windows x86 build does not
 contain them. The shim files are OpenBF2 code under the repository's licence.

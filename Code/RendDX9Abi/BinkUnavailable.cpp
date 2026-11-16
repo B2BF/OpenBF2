@@ -7,7 +7,7 @@
 
 #include "Bink.h"
 
-#if !defined(_WIN32) && !defined(__APPLE__)
+#if !defined(_WIN32) && !defined(__APPLE__) && !BF2_BINK_PORT
 
 #include <cstdio>
 #include <cstdlib>

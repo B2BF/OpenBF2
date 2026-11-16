@@ -127,6 +127,9 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved)
 #include <cerrno>
 #include <cstdio>
 #include <cstdint>
+#if defined(__linux__) && defined(BF2_LINUX_CLIENT)
+#include "BfOpenAL.h"
+#endif
 #if defined(__APPLE__)
 #include <CoreAudio/CoreAudio.h>
 #include <CoreFoundation/CoreFoundation.h>
@@ -148,6 +151,10 @@ const char* mapLibraryName(const char* fileName)
 #if defined(__APPLE__)
     if (fileName && (::strcasecmp(fileName, "OpenAL32.dll") == 0 || ::strcasecmp(fileName, "BF2OpenAL.dll") == 0))
         return "/System/Library/Frameworks/OpenAL.framework/OpenAL";
+#elif defined(__linux__) && defined(BF2_LINUX_CLIENT)
+    // [CHOSEN, not recovered] Native Linux OpenAL Soft, issue #36.
+    if (fileName && (::strcasecmp(fileName, "OpenAL32.dll") == 0 || ::strcasecmp(fileName, "BF2OpenAL.dll") == 0))
+        return "libopenal.so.1";
 #endif
     return fileName;
 }
@@ -258,6 +265,26 @@ bool hasSoundDevice()
     g_soundTrace->info(sndFormat("Found sound device %s (%s)", description, "CoreAudio"),
                        "C:\\dice\\Projects\\BF2Branches\\Patch_1_50\\Code\\BF2\\Sound\\SoundEngine\\Win32System.cpp", 141);
     return true;
+#elif defined(__linux__) && defined(BF2_LINUX_CLIENT)
+    // [CHOSEN, not recovered] Probe the real output rather than infer device availability
+    // from the presence of a library. This does not retain a device or change provider state.
+    void* module = loadLibrary("OpenAL32.dll");
+    typedef ALCdevice* (*OpenDevice)(const ALchar*);
+    typedef ALboolean (*CloseDevice)(ALCdevice*);
+    OpenDevice open = reinterpret_cast<OpenDevice>(getProcAddress(module, "alcOpenDevice"));
+    CloseDevice close = reinterpret_cast<CloseDevice>(getProcAddress(module, "alcCloseDevice"));
+    ALCdevice* device = open && close ? open(0) : 0;
+    const bool found = device != 0;
+    if (device)
+        close(device);
+    freeLibrary(module);
+    if (found)
+        g_soundTrace->info(sndFormat("Found sound device default (OpenAL Soft)"),
+                           "Sound/SoundEngine/Win32System.cpp", 0);
+    else
+        g_soundTrace->warning(sndFormat("OpenAL default sound device could not be opened. Sound will be disabled."),
+                              "Sound/SoundEngine/Win32System.cpp", 0);
+    return found;
 #else
     // Other POSIX ports have no device query yet; OpenAL's own device open decides.
     return true;

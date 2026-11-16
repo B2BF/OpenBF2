@@ -16,6 +16,24 @@ keep integration changes identifiable in the source.
 | `ghttp/ghttpConnection.h`, `ghttp/ghttpProcess.c`: `ghiDoConnecting` | `[CHOSEN, not recovered]` A connect that has not completed after 5 seconds (`GHI_CONNECT_TIMEOUT`) ends the request with `GHTTPConnectFailed`. | Same as above; most stats requests are blocking. |
 
 Both client and dedicated-server integrations can use these shared SDK files.
+
+The native Linux client adds `Voice2/gvSDLAudio.{c,h}`, selected by `BF2_LINUX_CLIENT` in
+`gvMain.c`, and appends `GVHardwareSDL` to `gv.h` without changing existing enum values.
+This is [CHOSEN, not recovered] platform integration under
+[issue #36](https://github.com/kr4uzi/OpenBF2/issues/36). It opens SDL3's default playback
+and recording devices and feeds the SDK's existing custom-device codec/source paths from
+`gvThink` and capture calls on the game thread. SDL handles device conversion on its own threads;
+SDK filters, mixing and encoding stay on the game thread. Playback queues about 100 ms and
+capture retains at most one second when pumped. Device failures report to stderr and refuse
+or unplug the device. Codec changes flush playback sources before replacing the codec's callbacks;
+voice-quality changes reuse the SDL streams. PCM frame-size/sample-rate changes require closing
+devices first. The original
+Windows/macOS backends and network packet formats are unchanged. Linux's system mixer controls
+remain unavailable; per-device voice volume uses the SDK's software gain.
+
+`Code/Tests/linux_audio` checks SDL dummy-device lifecycle, Raw and Speex packet buffers,
+filter receivers, unavailable-device failures and cleanup without microphone or network use.
+
 S2.10 adds these POSIX-only changes, all [CHOSEN, not recovered]:
 
 - `common/{linux,macosx}/gsThread*.c`: sequentially consistent atomic increment/decrement,

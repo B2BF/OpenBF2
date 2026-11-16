@@ -1,11 +1,12 @@
 // [CHOSEN, not recovered] The Bink 1 API subset Video.cpp calls (Bink.h), implemented for the macOS
-// client and Windows x64 on the vendored FFmpeg 7.1.1 Bink decoders (Code/BF2/External/ffmpeg-bink,
+// client, Windows x64 and Linux client on the vendored FFmpeg 7.1.1 Bink decoders (Code/BF2/External/ffmpeg-bink,
 // LGPL-2.1+). Owner decisions 2026-11-01 and 2026-11-07 (Code/BF2/External/ffmpeg-bink/README.md): play the shipped
 // .bik movies natively; Windows x86 keeps RAD's binkw32.dll, which is not recovered.
 //
 // This file is the platform-neutral part: the .bik container reader, decoding, the movie clock and
 // the colour conversion. The sound device is a BinkPortAudioOutput (BinkAudioCoreAudio.cpp on
-// macOS, BinkAudioDirectSound.cpp on Windows x64). It is port code: the clock and the conversion
+// macOS, BinkAudioDirectSound.cpp on Windows x64, BinkAudioSDL.cpp on Linux under issue #36).
+// It is port code: the clock and the conversion
 // reproduce what the black-box harness (Code/Tests/movies, Code/BF2/External/ffmpeg-bink/README.md) measured on
 // retail binkw32.dll through its exported API, not binkw32's internals.
 
@@ -25,6 +26,9 @@
 #include <mutex>
 #include <string>
 #include <vector>
+#if defined(__linux__) && defined(BF2_LINUX_CLIENT)
+#include "../BF2/Platform/Linux/ClientFilePaths.h"
+#endif
 
 namespace renddx9abi {
 
@@ -405,7 +409,11 @@ HBINK BinkOpen(const char* name, unsigned int flags)
     if (!name)
         return 0;
     std::string hostPath(name);
-#if !defined(_WIN32)
+#if defined(__linux__) && defined(BF2_LINUX_CLIENT)
+    // [CHOSEN, not recovered] Movies use the Linux client's physical asset spelling policy
+    // too: scripts request Movies\\dice.bik while the installed file is Movies/Dice.bik (#36).
+    ::dice::hfe::linuxclient::resolveClientPath(hostPath);
+#elif !defined(_WIN32)
     // binkw32 opens through the Win32 file API, where '\\' separates directories; the intro list
     // asks for "Movies\\EA.bik". POSIX needs '/'.
     std::replace(hostPath.begin(), hostPath.end(), '\\', '/');

@@ -58,10 +58,10 @@ const unsigned int BINK_SURFACE_32BGRA = 3u;
 const unsigned int BINK_COPYALL        = 0x80000000u;
 
 // [CHOSEN, not recovered] Only the x86 image imports binkw32.dll (issue #7). The macOS client and
-// Windows x64 implement the same ten entry points on the vendored FFmpeg Bink decoders
+// Windows x64 and Linux clients implement the same ten entry points on the vendored FFmpeg Bink decoders
 // (BinkFFmpeg.cpp, Code/BF2/External/ffmpeg-bink/README.md): BF2_BINK_PORT. Other images declare nothing, so any
 // reference fails to compile there.
-#if !defined(_M_IX86) && (defined(__APPLE__) || defined(_WIN64))
+#if !defined(_M_IX86) && (defined(__APPLE__) || defined(_WIN64) || (defined(__linux__) && defined(BF2_LINUX_CLIENT)))
 #define BF2_BINK_PORT 1
 #else
 #define BF2_BINK_PORT 0
