@@ -10,6 +10,11 @@ on:
       - synchronize
       - reopened
   workflow_dispatch:
+    inputs:
+      linux_only:
+        description: Build only Linux server/client packages
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -21,6 +26,8 @@ concurrency:
 jobs:
   build:
     uses: ./.github/workflows/build.yml
+    with:
+      linux_only: ${{ github.event_name == 'workflow_dispatch' && inputs.linux_only }}
     # A reusable workflow only receives the `release` environment's secrets when the caller
     # passes secrets on; without this they resolve to empty strings.
     secrets: inherit

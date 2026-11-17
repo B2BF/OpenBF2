@@ -4,6 +4,10 @@
 and manual dispatch. Superseded runs of the same event/ref are cancelled. Fork pull
 requests use read-only permissions and require no secrets. Repository settings may
 require a maintainer to approve a first-time contributor's workflow run.
+For Linux-only packaging changes, manual dispatch offers `linux_only`: it runs
+the Linux server/client matrix and Linux package job without rebuilding Windows
+or macOS. Its default is false; pull requests, `main` pushes and published
+releases retain all-platform coverage. Validate locally before dispatching.
 
 CI and [Release packages](../.github/workflows/release.yml) call the same
 [build workflow](../.github/workflows/build.yml). It builds the event's exact commit

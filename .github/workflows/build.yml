@@ -2,6 +2,11 @@ name: Build packages
 
 on:
   workflow_call:
+    inputs:
+      linux_only:
+        description: Skip Windows and macOS for a focused manual Linux validation
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -12,6 +17,7 @@ env:
 
 jobs:
   windows:
+    if: ${{ !inputs.linux_only }}
     name: Windows ${{ matrix.arch }}
     runs-on: windows-2022
     timeout-minutes: 120
@@ -494,6 +500,7 @@ jobs:
   # stays ad-hoc and uses no secrets (docs/ci-releases.md). The per-architecture ZIPs are CI
   # artifacts only and not notarized: releases ship the notarized disk image (macos-app).
   macos:
+    if: ${{ !inputs.linux_only }}
     name: macOS ${{ matrix.arch }}
     runs-on: macos-15
     timeout-minutes: 150
