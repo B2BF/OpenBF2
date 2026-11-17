@@ -295,9 +295,11 @@ BF2_CONSOLE_OBJECT("ObjectTemplate", 2, 1) // fullAccess, COCPhysics
 BF2_CONSOLE_PROPERTY(engineType, int, activeEngine(), setEngineType, getEngineType, kObjTemplVehicleConsoleTag)
 
 // Propeller rotation axis (EngineTemplate, dedicated PE executor writes the raw field via the
-// template's accessor pair) and the spring axis-fixation flag.
+// template's accessor pair).
 BF2_CONSOLE_PROPERTY(propRotAxis, int, activeEngine(), setPropRotAxis, getPropRotAxis,
                      kObjTemplVehicleConsoleTag)
+// The rotateUV executor (PE 0x57C48F) reads or writes the spring's flag byte directly.
+BF2_CONSOLE_FIELD(rotateUV, bool, activeSpring(), m_rotateUV, kObjTemplVehicleConsoleTag)
 BF2_CONSOLE_FIELD(fixAxisSpring, bool, activeSpring(), m_fixAxisSpring, kObjTemplVehicleConsoleTag)
 
 // The gear block - the three named dwords of the six-dword gap between the two
