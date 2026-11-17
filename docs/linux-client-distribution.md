@@ -36,6 +36,10 @@ versions and hashes; a compiler version does not imply the same package version
 for its dynamically linked runtime. All shared components come from the same
 baseline builder. GPU drivers, libc and the explicit host window-system boundary
 remain supplied by the supported host.
+The SDK builds GNU readelf 2.46 to inspect SDL's standardized FDO dependency
+notes, which the baseline OS's older reader rejects. The existing linker and
+strip tools continue to build and stage the libraries. SDK construction checks
+that every installed runtime ELF's notes can be inspected before packaging.
 The host also needs a functioning desktop and audio environment, including its
 ALSA configuration and device services; bundling the client libraries does not
 install those services.

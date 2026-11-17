@@ -192,6 +192,15 @@
   ],
   "sources": [
     {
+      "name": "GNU-readelf",
+      "version": "2.46",
+      "url": "https://ftp.gnu.org/gnu/binutils/binutils-with-gold-2.46.tar.xz",
+      "sha256": "a389850c2d3919f2cc96fb8b5e7711eacfc819259aaffb11615c9fb9756eaeae",
+      "destination": "binutils",
+      "license": "COPYING3",
+      "kind": "build-tool-source"
+    },
+    {
       "name": "CMake",
       "version": "3.31.8",
       "url": "https://github.com/Kitware/CMake/releases/download/v3.31.8/cmake-3.31.8-linux-x86_64.tar.gz",

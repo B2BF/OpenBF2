@@ -98,6 +98,23 @@ def snapshot():
     return {str(path.relative_to(PREFIX)) for path in PREFIX.rglob("*") if path.is_file()}
 
 
+def build_readelf(jobs):
+    """Install the note inspector without replacing Jammy's linker or strip."""
+    build = BUILD / "binutils"
+    build.mkdir(parents=True, exist_ok=True)
+    env = dict(os.environ, CFLAGS=os.environ["CFLAGS"] + " -O2")
+    run(SOURCES / "binutils/configure", "--prefix=/usr", "--disable-nls",
+        "--disable-werror", "--disable-shared", "--disable-gold", "--disable-ld",
+        "--disable-gas", "--disable-gdb", "--disable-gprof", "--disable-gprofng",
+        "--disable-sim", "--disable-libctf", "--without-debuginfod",
+        "--without-zstd", "--without-msgpack", cwd=build, env=env)
+    run("make", "-j", jobs, "all-binutils", cwd=build, env=env)
+    shutil.copy2(build / "binutils/readelf", PREFIX / "bin/readelf")
+    if not run(PREFIX / "bin/readelf", "--version", capture=True).startswith(
+            "GNU readelf (GNU Binutils) 2.46\n"):
+        raise ValueError("Unexpected GNU readelf version")
+
+
 def copy_notices(item):
     root = SOURCES / item["destination"]
     primary = root / item["license"]
@@ -272,6 +289,17 @@ def main():
         shutil.copytree(SOURCES / item["destination"] / "include", PREFIX / "include",
                         dirs_exist_ok=True)
         owners.update({path: name for path in snapshot() - before})
+
+    # SDL emits standardized FDO dlopen notes that Jammy's readelf 2.38 rejects.
+    # A current inspector preserves the strict note/ISA audit and leaves every
+    # compiler, linker, runtime library and ELF note unchanged.
+    build_readelf(args.jobs)
+    owners["bin/readelf"] = "GNU-readelf"
+    for path in sorted({path.resolve() for path in (PREFIX / "lib").rglob("*") if path.is_file()}):
+        with path.open("rb") as source:
+            if source.read(4) != b"\x7fELF":
+                continue
+        run(PREFIX / "bin/readelf", "-nW", path, capture=True)
 
     # A successful configure can silently omit a platform plugin. Fail at SDK
     # construction, before an unusable runtime reaches the release workflow.
