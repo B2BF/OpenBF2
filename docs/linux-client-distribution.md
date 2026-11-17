@@ -15,11 +15,11 @@ wrapper validation.
 
 The client leg of the `linux` matrix in [build.yml](../.github/workflows/build.yml) checks out
 the event's exact engine commit and pins setup to
-`20c0e2b47907975a197202c8a79ec065a52c3172`. That setup revision includes the Qt
+`3d3e6b4313f8ca52748b05391d87b6d7a6aa127d` (`v0.4.0`). That setup revision includes the Qt
 frontend, SDL microphone backend, explicit build-root audits and isolation of
 diagnostic scratch configuration from the production application, plus the
-GCC 15 text-reader lookup fix. Its
-[artifact contract](https://github.com/kr4uzi/openbf2-setup/blob/20c0e2b47907975a197202c8a79ec065a52c3172/docs/linux-distribution.md)
+GCC 15 text-reader lookup fix and Complete Edition support. Its
+[artifact contract](https://github.com/kr4uzi/openbf2-setup/blob/3d3e6b4313f8ca52748b05391d87b6d7a6aa127d/docs/linux-distribution.md)
 is checked by setup's own packager; this repository supplies its engine and
 runtime inputs rather than duplicating the installer.
 
@@ -142,8 +142,9 @@ game content or source directories.
 Extract the archive into a user-owned application directory and start
 `OpenBF2/bin/OpenBF2`. Its optional `--install-desktop` action installs a user
 menu entry. Users supply supported BF2 media and patches; neither the archive
-nor CI contains game content, profiles or keys. Complete Edition recognition
-is a separate setup task and is not enabled by this packaging change.
+nor CI contains game content, profiles or keys. Setup `v0.4.0` supports Complete
+Edition media and includes its content-verification manifest; the installer
+remains responsible for media recognition and patch validation.
 
 Application replacement preserves `$XDG_DATA_HOME/OpenBF2` (normally
 `~/.local/share/OpenBF2`). Profiles, keys, setup records and writable game-data

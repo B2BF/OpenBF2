@@ -13,7 +13,7 @@ permissions:
 
 env:
   LINUX_SETUP_REPOSITORY: kr4uzi/openbf2-setup
-  LINUX_SETUP_REVISION: 20c0e2b47907975a197202c8a79ec065a52c3172
+  LINUX_SETUP_REVISION: 3d3e6b4313f8ca52748b05391d87b6d7a6aa127d # v0.4.0
 
 jobs:
   windows:
@@ -627,7 +627,7 @@ jobs:
     environment: ${{ (github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')) && 'release' || '' }}
     env:
       SETUP_REPOSITORY: kr4uzi/openbf2-setup
-      SETUP_REVISION: fb6dc8fe8d7b81e41d0b737925891e92568cb61c # v0.3.1
+      SETUP_REVISION: 3d3e6b4313f8ca52748b05391d87b6d7a6aa127d # v0.4.0
       BF2_RELEASE_SIGNING: ${{ (github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')) && 'true' || 'false' }}
     steps:
       # The client entitlements, the signing helper and the packager (for the build-info); the app
