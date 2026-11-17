@@ -62,7 +62,7 @@ inputs using the SDK's provenance catalog:
 | Input | Ownership |
 | --- | --- |
 | Engine | `bin/bf2_client`, Python/AI libraries, DXVK Native, SDL3, OpenAL, dynamic audio roots and their non-host dependency closure; engine notices and provenance |
-| Setup runtime | Qt libraries/platform plugins, SDL and the corresponding non-host dependency closure; runtime notices and provenance |
+| Setup runtime | Qt libraries/platform plugins, SDL and the corresponding non-host dependency closure; runtime notices and provenance, including the statically used Boost and Rust SDK inputs |
 
 The stager inspects ELF metadata without executing the inputs or using `ldd`.
 It includes explicitly loaded libraries such as DXVK/OpenAL/PulseAudio/ALSA,

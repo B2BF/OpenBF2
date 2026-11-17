@@ -76,7 +76,9 @@ class Artifacts(unittest.TestCase):
         record = {"name": "fixture", "version": "1", "source": "https://example.invalid/fixture.tar.gz",
                   "sha256": "a" * 64, "license": "COPYING.fixture"}
         stage.write_json(sdk / "catalog.json", {
-            "schema": 1, "dependencies": [record] + [dict(record, name=name) for name in ("vkd3d", "MojoShader")],
+            "schema": 1, "dependencies": [record] + [dict(record, name=name) for name in ("vkd3d", "MojoShader")] + [
+                dict(record, name="Boost", version="1.89.0", source="https://example.invalid/boost.tar.bz2", sha256="b" * 64),
+                dict(record, name="Rust", version="1.90.0", source="https://example.invalid/rust-dist.tar.xz", sha256="c" * 64)],
             "files": {file.relative_to(sdk).as_posix(): "fixture" for file in sdk.rglob("*") if file.is_file()},
             "system_packages": {}})
 
@@ -115,6 +117,17 @@ class Artifacts(unittest.TestCase):
         self.assertFalse((engine / "lib/libfixture-leaf.so.1").is_symlink())
         self.assertTrue((engine / "lib/libfixture-dlopen.so.1").is_file())
         self.assertTrue((runtime / "lib/libudev.so.1").is_file())
+        runtime_info = self.auditor.metadata(runtime, "runtime-artifact.json")
+        engine_info = self.auditor.metadata(engine, "engine-artifact.json")
+        records = {record["name"]: record for record in runtime_info["dependencies"]}
+        catalog = json.loads(self.args.catalog.read_text())
+        for source in catalog["dependencies"]:
+            if source["name"] in ("Boost", "Rust"):
+                record = records[source["name"]]
+                for field in ("version", "source", "sha256"):
+                    self.assertEqual(record[field], source[field])
+                self.assertEqual(runtime_info["files"][record["license"]], stage.digest(self.sdk / source["license"]))
+                self.assertNotIn(source["name"], {item["name"] for item in engine_info["dependencies"]})
         engine_files = {file.relative_to(engine): stage.digest(file) for file in self.auditor.files(engine)}
         for file in self.auditor.files(runtime):
             if file.relative_to(runtime) in engine_files:
@@ -141,6 +154,25 @@ class Artifacts(unittest.TestCase):
         stage.write_json(self.args.catalog, data)
         with self.assertRaisesRegex(ValueError, "SDK file has no provenance"):
             self.build()
+
+    def test_missing_setup_static_input_provenance_refused(self):
+        original = json.loads(self.args.catalog.read_text())
+        for name in ("Boost", "Rust"):
+            with self.subTest(name=name):
+                changed = dict(original, dependencies=[record for record in original["dependencies"] if record["name"] != name])
+                stage.write_json(self.args.catalog, changed)
+                with self.assertRaisesRegex(ValueError, "Missing setup static input provenance: " + name):
+                    self.build()
+
+    def test_setup_static_input_version_mismatch_refused(self):
+        original = json.loads(self.args.catalog.read_text())
+        for name in ("Boost", "Rust"):
+            with self.subTest(name=name):
+                changed = dict(original, dependencies=[dict(record, version="incorrect") if record["name"] == name else record
+                                                       for record in original["dependencies"]])
+                stage.write_json(self.args.catalog, changed)
+                with self.assertRaisesRegex(ValueError, "Setup static input differs from pinned toolchain: " + name):
+                    self.build()
 
     def test_missing_qt_plugin_refused(self):
         (self.sdk / "lib/qt6/plugins/platformthemes/libqxdgdesktopportal.so").unlink()

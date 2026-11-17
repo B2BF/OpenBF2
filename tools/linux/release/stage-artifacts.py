@@ -291,6 +291,14 @@ def stage(args):
     auditor.toolchain_metadata({"toolchain": toolchain, "sdk": args.sdk})
     build_record = verify_engine_build(engine_bin, args.revision, toolchain)
     catalog = Catalog(args.catalog, prefix)
+    # Boost header code and Rust's statically linked runtime enter the setup
+    # executable without DT_NEEDED entries. Preserve their SDK input provenance
+    # and notices alongside Qt; the compiler/headers themselves are not shipped.
+    setup_static_inputs = (("Boost", "boost"), ("Rust", "rust"))
+    for name, version_key in setup_static_inputs:
+        require(name in catalog.dependencies, f"Missing setup static input provenance: {name}")
+        require(catalog.dependencies[name].get("version") == toolchain[version_key],
+                f"Setup static input differs from pinned toolchain: {name}")
     directories = [prefix / "lib", prefix / "lib64"] + args.library_dir + [
         Path("/usr/lib/x86_64-linux-gnu"), Path("/lib/x86_64-linux-gnu"),
         Path("/usr/lib/x86_64-linux-gnu/pulseaudio"), Path("/usr/lib"), Path("/lib")]
@@ -312,6 +320,8 @@ def stage(args):
         engine.add_record(catalog.dependencies[name])
     engine_notices(engine, args.engine_source.resolve())
     write_json(engine.root / "share/openbf2/engine-build.json", build_record)
+    for name, _ in setup_static_inputs:
+        runtime.add_record(catalog.dependencies[name])
     for name in ("libQt6Widgets.so.6", "libQt6Gui.so.6", "libQt6Core.so.6", "libQt6DBus.so.6", "libSDL3.so.0"):
         runtime.add_library(name)
     plugin_root = prefix / "lib/qt6/plugins"
