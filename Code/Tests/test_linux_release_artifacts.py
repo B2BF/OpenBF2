@@ -219,6 +219,42 @@ class Artifacts(unittest.TestCase):
             catalog.packages["fixture:amd64=1.2"] = record
             self.assertEqual(catalog.record_for(library), record)
 
+    def test_common_license_references_copy_texts_despite_sentence_punctuation(self):
+        common = self.root / "common-licenses"
+        common.mkdir()
+        for name in ("GPL", "GPL-3", "LGPL-2.1", "Local."):
+            (common / name).write_text("Complete fixture license: " + name + "\n")
+        (self.sdk / "COPYING.fixture").write_text(
+            "The complete text is in /usr/share/common-licenses/GPL.\n"
+            "Also see '/usr/share/common-licenses/LGPL-2.1', "
+            "/usr/share/common-licenses/LGPL-2.1.\n"
+            "Other terms (/usr/share/common-licenses/GPL-3); "
+            "literal filename /usr/share/common-licenses/Local.\n")
+        catalog = stage.Catalog(self.args.catalog, self.sdk)
+        artifact = stage.Artifact(self.root / "license-artifact", "runtime", catalog, None, self.auditor,
+                                  self.args.revision, self.args.sdk, json.loads(self.args.toolchain.read_text()), ())
+        with patch.object(stage, "COMMON_LICENSES", common):
+            artifact.add_record(catalog.dependencies["fixture"])
+        artifact.finish()
+        metadata = self.auditor.metadata(artifact.root, "runtime-artifact.json")
+        copied = artifact.root / "share/licenses/common"
+        self.assertEqual({path.name for path in copied.iterdir()}, {"GPL", "GPL-3", "LGPL-2.1", "Local."})
+        for original in common.iterdir():
+            target = copied / original.name
+            self.assertEqual(target.read_bytes(), original.read_bytes())
+            self.assertEqual(metadata["files"][target.relative_to(artifact.root).as_posix()], stage.digest(original))
+
+    def test_missing_common_license_is_not_silently_skipped(self):
+        common = self.root / "common-licenses"
+        common.mkdir()
+        (self.sdk / "COPYING.fixture").write_text("See /usr/share/common-licenses/Unavailable-2.1.\n")
+        catalog = stage.Catalog(self.args.catalog, self.sdk)
+        artifact = stage.Artifact(self.root / "license-artifact", "runtime", catalog, None, self.auditor,
+                                  self.args.revision, self.args.sdk, json.loads(self.args.toolchain.read_text()), ())
+        with patch.object(stage, "COMMON_LICENSES", common):
+            with self.assertRaisesRegex(ValueError, r"Missing referenced common license: .*Unavailable-2\.1$"):
+                artifact.add_record(catalog.dependencies["fixture"])
+
     def test_mislabeled_client_build_refused(self):
         filename = self.engine_bin / "bf2_client.build.json"
         record = json.loads(filename.read_text())

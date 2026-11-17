@@ -17,6 +17,9 @@ import subprocess
 import sys
 
 
+COMMON_LICENSES = Path("/usr/share/common-licenses")
+
+
 def require(condition, message):
     if not condition:
         raise ValueError(message)
@@ -51,6 +54,19 @@ def load_auditor(path):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def common_license_references(text):
+    references = set()
+    for name in re.findall(r"/usr/share/common-licenses/([A-Za-z0-9_.+-]+)", text):
+        path = COMMON_LICENSES / name
+        if not path.is_file():
+            # A full stop may end the surrounding sentence rather than the
+            # filename. Prefer a real exact name; keep version dots intact.
+            path = COMMON_LICENSES / name.rstrip(".")
+        require(path.is_file(), f"Missing referenced common license: {path}")
+        references.add(path)
+    return sorted(references)
 
 
 class Catalog:
@@ -162,9 +178,8 @@ class Artifact:
         # Debian copyright files often refer to the distribution's shared full
         # license texts. Preserve those texts too, rather than shipping dangling
         # references in an otherwise self-contained notices directory.
-        for common in sorted(set(re.findall(r"/usr/share/common-licenses/([A-Za-z0-9_.+-]+)",
-                                           license_file.read_text(errors="replace")))):
-            self.copy_data(Path("/usr/share/common-licenses") / common, "share/licenses/common/" + common)
+        for common in common_license_references(license_file.read_text(errors="replace")):
+            self.copy_data(common, "share/licenses/common/" + common.name)
         public = {key: value for key, value in record.items() if key != "license"}
         public["license"] = license_name
         self.dependencies[name] = public
