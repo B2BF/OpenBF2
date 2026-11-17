@@ -55,6 +55,10 @@ registry credential is required. A changed SDK recipe invalidates the cache.
 requires clean committed engine and setup checkouts and fresh output directories.
 It builds the patched native effect dependencies, configures `linux-client`,
 strictly links `bf2_client`, and runs `bf2_linux_client_checks` without game media.
+It enables `BF2_FRONTIER_DEFAULT_CONTINUE`, matching the existing Windows/macOS
+release packaging policy for the plugin kit's diagnostic trap. An explicit
+`BF2_RENDDX9_FRONTIER=abort` still arms that trap; ordinary development builds
+retain the abort default. This does not implement any remaining frontier.
 
 [stage-artifacts.py](../tools/linux/release/stage-artifacts.py) then creates two
 inputs using the SDK's provenance catalog:

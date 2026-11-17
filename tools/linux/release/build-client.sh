@@ -51,6 +51,7 @@ env CFLAGS="$flags" CXXFLAGS="$flags" CPPFLAGS="$flags" \
 # assigns the distributable $ORIGIN paths. No build directory enters the package.
 cmake --preset linux-client -S "$engine" -B "$output/engine-build" \
   -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=gcc-15 -DCMAKE_CXX_COMPILER=g++-15 \
+  -DBF2_FRONTIER_DEFAULT_CONTINUE=ON \
   -DCMAKE_C_FLAGS="$flags" -DCMAKE_CXX_FLAGS="$flags" \
   -DCMAKE_SKIP_RPATH=ON -DCMAKE_PREFIX_PATH="$sdk" \
   -DBF2_DXVK_ROOT="$sdk" -DBF2_FX_NATIVE_DEPS="$output/nativefx" \
