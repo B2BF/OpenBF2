@@ -336,7 +336,7 @@ jobs:
       - name: Restore the pinned SDK image
         if: matrix.role == 'client'
         id: sdk-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/openbf2-linux-sdk.oci
           key: linux-sdk-x64-v1-${{ hashFiles('tools/linux/release/Containerfile', 'tools/linux/release/sdk*', 'tools/linux/release/build-sdk.py') }}
@@ -359,6 +359,13 @@ jobs:
         if: matrix.role == 'client'
         id: sdk
         run: python3 tools/linux/release/sdk-image.py "$RUNNER_TEMP/openbf2-linux-sdk.oci" --github-output "$GITHUB_OUTPUT"
+
+      - name: Cache the completed SDK before building the client
+        if: matrix.role == 'client' && steps.sdk-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/openbf2-linux-sdk.oci
+          key: ${{ steps.sdk-cache.outputs.cache-primary-key }}
 
       - name: Build, audit and package the Linux application
         if: matrix.role == 'client'

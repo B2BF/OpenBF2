@@ -41,6 +41,8 @@ ALSA configuration and device services; bundling the client libraries does not
 install those services.
 
 CI caches the exported SDK OCI archive by its recipe and source pins. The
+completed SDK is saved before client compilation, so a later client/setup
+failure does not discard the successful dependency build. The
 [identity helper](../tools/linux/release/sdk-image.py) verifies the archive's
 manifest and image configuration and rejects ambiguous metadata. Both produced
 artifacts record the OCI manifest digest; the image configuration digest is used
