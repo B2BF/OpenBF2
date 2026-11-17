@@ -9,6 +9,10 @@ the Linux server/client matrix and Linux package job without rebuilding Windows
 or macOS. Its default is false; pull requests, `main` pushes and published
 releases retain all-platform coverage. Validate locally before dispatching.
 
+Use the [local CI tooling](local-ci.md) before a PR to run the Linux build,
+installer and package jobs with `act`. The optional pre-push guard checks saved
+results; it does not start local builds or hosted Actions.
+
 CI and [Release packages](../.github/workflows/release.yml) call the same
 [build workflow](../.github/workflows/build.yml). It builds the event's exact commit
 with the existing CMake image manifests and presets. This is build maintenance;

@@ -1,0 +1,16 @@
+#!/bin/sh
+# Local nesting adaptations only; SDK build/save/load remain real Podman commands.
+set -eu
+command=${1-}
+if [ "$command" = run ]; then
+    shift
+    exec /usr/bin/podman --runtime=/usr/bin/crun run --network=host --cgroups=disabled "$@"
+fi
+if [ "$command" = build ]; then
+    shift
+    if [ "${OPENBF2_CI_FRESH_SDK-}" = 1 ]; then
+        exec /usr/bin/podman --runtime=/usr/bin/crun build --isolation=chroot --network=host --no-cache "$@"
+    fi
+    exec /usr/bin/podman --runtime=/usr/bin/crun build --isolation=chroot --network=host "$@"
+fi
+exec /usr/bin/podman "$@"

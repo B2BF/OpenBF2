@@ -1,0 +1,12 @@
+# [CHOSEN, not recovered] Local workflow runner, https://github.com/kr4uzi/OpenBF2/issues/47.
+ARG RUNNER_BASE
+FROM ${RUNNER_BASE}
+USER root
+RUN apt-get update && apt-get install --no-install-recommends -y podman crun fuse-overlayfs gcc libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+COPY podman-local /usr/local/bin/podman
+RUN chmod 755 /usr/local/bin/podman
+# Nested Podman stays inside the disposable privileged job container. It has no
+# host daemon socket. vfs avoids overlay-on-overlay and FUSE device requirements.
+RUN mkdir -p /etc/containers && printf '[storage]\ndriver="vfs"\nrunroot="/run/containers/storage"\ngraphroot="/var/lib/containers/storage"\n' > /etc/containers/storage.conf
+ENV BUILDAH_ISOLATION=chroot

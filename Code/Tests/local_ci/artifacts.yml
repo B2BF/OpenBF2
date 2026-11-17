@@ -1,0 +1,84 @@
+# Synthetic local CI fixtures; no engine execution or game content.
+name: Local CI prerequisites
+on: workflow_dispatch
+jobs:
+  upload:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@@CHECKOUT@
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify frozen checkout
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          printf '%s\n' "$GITHUB_SHA" > proof.txt
+      - uses: actions/cache/restore@@CACHE_RESTORE@
+        id: initial-cache
+        with:
+          path: cache-proof
+          key: local-ci-probe-${{ github.run_id }}
+      - name: Verify a new cache key misses
+        run: |
+          test '${{ steps.initial-cache.outputs.cache-hit }}' != true
+          mkdir -p cache-proof
+          cp proof.txt cache-proof/proof.txt
+      - uses: actions/checkout@@CHECKOUT@
+        with:
+          repository: @SETUP_REPOSITORY@
+          ref: @SETUP_REVISION@
+          path: out/local-ci-setup-proof
+          persist-credentials: false
+      - name: Verify anonymous pinned setup checkout
+        run: test "$(git -C out/local-ci-setup-proof rev-parse HEAD)" = '@SETUP_REVISION@'
+      - name: Check packaging fixtures and signing script syntax
+        run: |
+          python3 Code/Tests/test_package_release.py
+          bash -n tools/macos/ci/release-signing.sh
+      - name: Exercise nested OCI build, save, load and run
+        run: |
+          mkdir -p "$RUNNER_TEMP/oci-probe"
+          cd "$RUNNER_TEMP/oci-probe"
+          printf '#include <stdio.h>\nint main(void) { puts("OpenBF2 OCI probe"); return 0; }\n' > probe.c
+          cc -static -o probe probe.c
+          printf 'FROM scratch\nCOPY probe /probe\nRUN ["/probe"]\nCMD ["/probe"]\n' > Containerfile
+          podman build --format oci --tag localhost/openbf2-ci-probe --file Containerfile .
+          OPENBF2_CI_FRESH_SDK=1 podman build --format oci --tag localhost/openbf2-ci-probe --file Containerfile .
+          podman save --format oci-archive --output probe.oci localhost/openbf2-ci-probe
+          podman load --input probe.oci
+          podman run --rm localhost/openbf2-ci-probe > actual.txt
+          printf 'OpenBF2 OCI probe\n' > expected.txt
+          cmp actual.txt expected.txt
+      - uses: actions/cache/save@@CACHE_SAVE@
+        with:
+          path: cache-proof
+          key: local-ci-probe-${{ github.run_id }}
+      - uses: actions/upload-artifact@@UPLOAD_ARTIFACT@
+        with:
+          name: local-ci-proof
+          path: proof.txt
+          if-no-files-found: error
+  download:
+    needs: upload
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/cache/restore@@CACHE_RESTORE@
+        id: restored-cache
+        with:
+          path: cache-proof
+          key: local-ci-probe-${{ github.run_id }}
+      - uses: actions/download-artifact@@DOWNLOAD_ARTIFACT@
+        with:
+          name: local-ci-proof
+          path: restored
+      - name: Verify transfer between jobs
+        run: |
+          test '${{ steps.restored-cache.outputs.cache-hit }}' = true
+          printf '%s\n' "$GITHUB_SHA" > expected.txt
+          cmp expected.txt restored/proof.txt
+          cmp expected.txt cache-proof/proof.txt
+      - uses: actions/upload-artifact@@UPLOAD_ARTIFACT@
+        with:
+          name: local-ci-roundtrip
+          path: restored/proof.txt
+          if-no-files-found: error
