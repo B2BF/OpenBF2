@@ -13,7 +13,7 @@ permissions:
 
 env:
   LINUX_SETUP_REPOSITORY: kr4uzi/openbf2-setup
-  LINUX_SETUP_REVISION: a846ffb0770b6631521ff34418ae06a161b0fa8d
+  LINUX_SETUP_REVISION: 20c0e2b47907975a197202c8a79ec065a52c3172
 
 jobs:
   windows:

@@ -15,10 +15,11 @@ wrapper validation.
 
 The client leg of the `linux` matrix in [build.yml](../.github/workflows/build.yml) checks out
 the event's exact engine commit and pins setup to
-`a846ffb0770b6631521ff34418ae06a161b0fa8d`. That setup revision includes the Qt
+`20c0e2b47907975a197202c8a79ec065a52c3172`. That setup revision includes the Qt
 frontend, SDL microphone backend, explicit build-root audits and isolation of
-diagnostic scratch configuration from the production application. Its
-[artifact contract](https://github.com/kr4uzi/openbf2-setup/blob/a846ffb0770b6631521ff34418ae06a161b0fa8d/docs/linux-distribution.md)
+diagnostic scratch configuration from the production application, plus the
+GCC 15 text-reader lookup fix. Its
+[artifact contract](https://github.com/kr4uzi/openbf2-setup/blob/20c0e2b47907975a197202c8a79ec065a52c3172/docs/linux-distribution.md)
 is checked by setup's own packager; this repository supplies its engine and
 runtime inputs rather than duplicating the installer.
 
