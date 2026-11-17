@@ -25,7 +25,7 @@
 #include <sstream>
 #include <string.h>
 #include <math.h>                        // loadOccluders' normalize (sub_100777A0)
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h"
 #endif
 
@@ -1274,7 +1274,7 @@ void StaticMeshTemplate::loadOccluders(::renddx9abi::HostStream* stream)
                         firstA  = &points[edge0.points[1]];
                         secondA = &points[edge0.points[0]];
                     }
-    #if defined(__APPLE__)
+    #if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                     // [CHOSEN, not recovered] Only the first tangent's z spills before the cross product.
                     using namespace bf2x87;
                     const Real ax = sub(wide(firstA->x), wide(secondA->x));
@@ -1302,7 +1302,7 @@ void StaticMeshTemplate::loadOccluders(::renddx9abi::HostStream* stream)
                         firstB  = &points[edge1.points[1]];
                         secondB = &points[edge1.points[0]];
                     }
-    #if defined(__APPLE__)
+    #if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                     const Real bx = sub(wide(firstB->x), wide(secondB->x));
                     const Real by = sub(wide(firstB->y), wide(secondB->y));
                     const Real bz = sub(wide(firstB->z), wide(secondB->z));
@@ -1315,7 +1315,7 @@ void StaticMeshTemplate::loadOccluders(::renddx9abi::HostStream* stream)
                     // cross(a, b), written in the shipped operand order so the rounding matches:
                     // 0x1011A50x emits y first (v51), then x, then z.
                     float normal[3];
-    #if defined(__APPLE__)
+    #if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                     normal[1] = store(sub(mul(wide(az), bx), mul(bz, ax)));
                     normal[0] = store(sub(mul(bz, ay), mul(by, wide(az))));
                     normal[2] = store(sub(mul(by, ax), mul(ay, bx)));
@@ -1332,7 +1332,7 @@ void StaticMeshTemplate::loadOccluders(::renddx9abi::HostStream* stream)
                     out[1] = normal[1];
                     out[2] = normal[2];
                     // The shipped grouping, z and y first: -((nz*p.z + ny*p.y) + nx*p.x).
-    #if defined(__APPLE__)
+    #if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                     out[3] = store(-add(add(mul(wide(normal[2]), wide(anchor[2])),
                         mul(wide(normal[1]), wide(anchor[1]))), mul(wide(normal[0]), wide(anchor[0]))));
     #else

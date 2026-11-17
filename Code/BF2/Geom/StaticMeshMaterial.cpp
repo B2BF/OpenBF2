@@ -1130,7 +1130,7 @@ unsigned int packNormal10(const float* n)
 // PE 0x10049E80 - the D3DCOLOR packed normal, truncating y, z, then x.
 unsigned int packNormalColor(const float* n)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const unsigned int y = 127u - static_cast<unsigned int>(bf2x87::integer<int>(
         bf2x87::mul(bf2x87::wide(n[1]), bf2x87::wide(-127.0f))));
     const unsigned int z = 127u - static_cast<unsigned int>(bf2x87::integer<int>(

@@ -55,7 +55,7 @@ public:
         at<void*>(0x10)=0; at<void*>(0xC)=0; at<unsigned char>(8)=0;
         const float emitTime=psmDescriptor2<float>(descriptor,0x168);
         const float lifeTime=psmDescriptor2<float>(descriptor,0x70);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] Preserve the live x87 result and FISTP integer indefinite.
         using bf2x87::wide;
         bf2x87::Real capacityTime=wide(lifeTime);

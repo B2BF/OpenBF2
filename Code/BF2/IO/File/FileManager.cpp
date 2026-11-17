@@ -50,7 +50,7 @@ void expandPath(std::string& path, const std::string& base, std::string* out,
     static const std::string rootPrefix = "@ROOT@";     // guard 0x8AC3D58
     static const std::string modPrefix  = "@MOD@";      // guard 0x8AC3D60
 
-#if defined(__APPLE__) && !DEDICATED
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
     if (isHostAbsolutePath(path))
 #else
     if (isPathAbsolute(path))
@@ -95,7 +95,7 @@ void expandPath(std::string& path, const std::string& base, std::string* out,
 }
 
 // Folds an expanded loose-file path before an existence or enumeration test.
-#if defined(__APPLE__) && !DEDICATED
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
 // [CHOSEN, not recovered] c-loopback: the macOS client's @HOME@ substitution is absolute
 // (Platform/macOS/ClientPaths), and goUpInPath turns "/Users/..." into the cwd-relative
 // "Users/...". fileExistsEx/getFileExists/findFiles then never see @HOME@ files (no local
@@ -151,7 +151,7 @@ void FileManager::getWritePath(const std::string& name, std::string& out)
     if (path.find("@ROOT@") == 0)
         out = m_fileSystem->getRootSubstitution() + path.substr(6);
     // 3. @home@ prefix
-#if defined(__APPLE__) && !DEDICATED
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
     // [CHOSEN, not recovered] The macOS client's @HOME@ is absolute; goUpInPath below drops a
     // leading '/' (harmless for Windows drive paths). Normalize only the part after the macro.
     else if (path.find("@HOME@") == 0)

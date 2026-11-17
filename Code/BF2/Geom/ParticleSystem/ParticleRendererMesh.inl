@@ -93,7 +93,7 @@ static dx9rend::ParameterOwner* psmMeshParameter(dx9rend::ShaderParameter* param
 static Vec3 psmMeshCross(const Vec3& a, const Vec3& b)
 {
     Vec3 result;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Preserve live x87 products and subtraction until each float store.
     using bf2x87::wide;
     result.x=static_cast<float>(wide(b.z)*wide(a.y)-wide(b.y)*wide(a.z));

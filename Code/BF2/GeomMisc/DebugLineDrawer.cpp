@@ -10,7 +10,7 @@
 #include "../RendDX9/ShaderParameter.h"
 #include "../../RendDX9Abi/BfMemory.h"
 #include <d3dx9.h>
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h"
 #endif
 #include <cfloat>
@@ -45,7 +45,7 @@ const unsigned int lineColours[] = {
     0xFF3F0000u, 0xFF003F00u, 0xFF00003Fu, 0xFF003F3Fu
 };
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 // [CHOSEN, not recovered] Keep the PE's extended intermediates on native processors.
 using LineReal = bf2x87::Real;
 LineReal real(float v) { return bf2x87::wide(v); }

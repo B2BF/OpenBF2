@@ -63,15 +63,21 @@ passes `+restart 1`, and are run with `BF2_AI_SPAWN_ONLY=1`:
 ## The input script (`BF2_INPUT_SCRIPT=<file>`)
 
 The engine is `Platform/InputScript.{h,cpp}` (shared with the Win32 host below; the macOS key
-table is `Platform/macOS/MacInputScript.mm`), hooked into `CocoaHost::Impl::pump`. One script tick runs
+table is `Platform/macOS/MacInputScript.mm`), hooked into `ClientHost::Impl::pump`. One script tick runs
 per host pump (one per main-loop frame, and during the loading screen). Actions become the same
 `HostKeyEvent` / `HostTextEvent` / `HostMouseMoveEvent` / `HostMouseButtonEvent` /
 `HostMouseWheelEvent` / `HostRawMouseEvent` values the NSEvent handlers build, delivered to the
-same listeners: the window-message source (`BF2Window_macos.cpp`: Swiff menu, console, chat;
-`WM_KEYDOWN`/`WM_CHAR`/`WM_MOUSEMOVE`...) and the input devices (`MacKeyboardDevice`,
-`MacMouseDevice`: control maps, HUD pointer, mouse look). `captured` follows the real rule
+same listeners: the window-message source (`BF2Window_native.cpp`: Swiff menu, console, chat;
+`WM_KEYDOWN`/`WM_CHAR`/`WM_MOUSEMOVE`...) and the input devices (`NativeKeyboardDevice`,
+`NativeMouseDevice`: control maps, HUD pointer, mouse look). `captured` follows the real rule
 (relative mode with focus), so menu and in-game paths split exactly as for real input; a relative
 move is also sent as raw (`GCMouse`) motion when a `GCMouse` is connected, as a real mouse does.
+
+The Cocoa script table keeps its internal kVK codes, but the backend converts them to DIK before
+dispatching shared events. Cocoa text normalization is shared with real key delivery, including
+keypad Enter, Backspace and Command shortcuts. The Linux script table uses DIK directly.
+Numeric `0xNN` script keys are backend-specific: kVK on macOS, DIK on Windows and Linux.
+Named keys retain their meaning across the native host refactor.
 
 While a script is active (only then): focus is reported as held, real keyboard/mouse/GCMouse
 input is ignored, the app is not activated (the user's focus is not taken), and the real cursor is

@@ -212,7 +212,7 @@ bool psmCoverageContainsPoint(const Vec3& low, const Vec3& high, const Vec3& poi
         && point.x<=high.x && point.y<=high.y && point.z<=high.z;
 }
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 // [CHOSEN, not recovered] Return the live x87 expression to the caller's float store.
 using PsmCoverageReal=bf2x87::Real;
 #else
@@ -232,7 +232,7 @@ PsmCoverageReal psmCoverage(IParticleSystemInstance* instance, const PsmViewCont
     const Vec3& p = context.position;
     if (psmCoverageContainsPoint(low,high,p))
         return 1.0;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     using bf2x87::wide;
 #else
     const auto wide=[](double value) { return value; };
@@ -245,7 +245,7 @@ PsmCoverageReal psmCoverage(IParticleSystemInstance* instance, const PsmViewCont
     const float dx=static_cast<float>(wide(p.x)-wide(center.x));
     const PsmCoverageReal dy=wide(p.y)-wide(center.y),dz=wide(p.z)-wide(center.z);
     const PsmCoverageReal squared=dz*dz+dy*dy+wide(dx)*wide(dx);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const float distance=static_cast<float>(bf2x87::squareRoot(squared));
 #else
     const float distance=static_cast<float>(::sqrt(squared));

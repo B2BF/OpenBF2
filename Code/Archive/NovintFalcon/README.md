@@ -85,7 +85,7 @@ gone too. Each site has a comment that points here.
 
 | Site | Now |
 | --- | --- |
-| `IO/Input/DX8InputDeviceManager.cpp` `open` | `IDFFalcon` is never opened; its bit stays clear (as in `MacInputDeviceManager`) |
+| `IO/Input/DX8InputDeviceManager.cpp` `open` | `IDFFalcon` is never opened; its bit stays clear (as in `NativeInputDeviceManager`) |
 | `Menu/MainMenuLogic.cpp` `activate` | no mouse-mode write, no force zeroing |
 | `Menu/BetweenRoundsLogic.cpp` `activate`, `Menu/BF2HudManagerInit.cpp`, `Menu/BF2HudManagerUpdate.cpp` `update`, `Game/Main/BF2Engine.cpp` `renderMenu` | no mouse-mode write |
 | `Game/Objects/Game/Soldier.cpp` ctor, `onExit`, `onEnter` | `applyHapticProfile` only (no dirty flag, no zeroing) |

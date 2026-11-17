@@ -4,7 +4,7 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h" // [CHOSEN, not recovered] x87 conversion results, including invalid inputs.
 #endif
 #include "NametagManager.h"
@@ -468,7 +468,7 @@ const Vec3& PlayerNametagItem::updatePosition()
             }
             offset.x = 0.0f;
             offset.z = 0.0f;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             // [CHOSEN, not recovered] Preserve the x87 intermediate across the multiply/add.
             offset.y = bf2x87::store(bf2x87::add(
                 bf2x87::mul(bf2x87::wide(radius),
@@ -489,7 +489,7 @@ const Vec3& PlayerNametagItem::updatePosition()
 
     const float partialY = offset.y + m_offset.y;
     const float partialZ = offset.z + m_offset.z;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] X stays in x87 until its final store; Y/Z spill above.
     m_position.x = bf2x87::store(bf2x87::add(
         bf2x87::add(bf2x87::wide(offset.x), bf2x87::wide(m_offset.x)), bf2x87::wide(base->x)));

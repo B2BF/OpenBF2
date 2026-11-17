@@ -559,7 +559,7 @@ void RoadCompiled::updateChunkVisibility(const Frustum* frustum)
             const float dy = frustum->m_transformation.m[13] - centre.y;
             const float dz = frustum->m_transformation.m[14] - centre.z;
             const float* const radius = &m_chunkRadii[i];
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             // [CHOSEN, not recovered] the shipped body keeps the differences, squares, root and the
             // radius subtraction on the x87 stack and compares that against the stored float.
             using namespace bf2x87;

@@ -1,8 +1,10 @@
 // [CHOSEN, not recovered] Native D3DX line subset over the device's programmable draw path.
-#if defined(__APPLE__) && defined(BF2_IMAGE_RENDDX9)
+#if (defined(__APPLE__) || (defined(__linux__) && defined(BF2_GFX_DXVK))) && defined(BF2_IMAGE_RENDDX9)
 #include "../D3DX9Subset.h"
 #include "../Effect/D3DAsm.h"
+#if defined(__APPLE__)
 #include "RefTrace.h"
+#endif
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -45,14 +47,22 @@ class Line final : public ID3DXLine {
     bool begun=false;
 public:
     explicit Line(IDirect3DDevice9* d):device(d) {
-        bf2metal::reftrace::Owned owned; device->AddRef();
+#if defined(__APPLE__)
+        bf2metal::reftrace::Owned owned;
+#endif
+        device->AddRef();
+#if defined(__APPLE__)
         bf2metal::reftrace::born(this,"ID3DXLine",[](const void* p) { return static_cast<unsigned long>(static_cast<const Line*>(p)->refs); });
+#endif
     }
     ~Line() {
         if(begun) End();
         release(vertexShader); release(pixelShader); release(declaration);
+#if defined(__APPLE__)
         bf2metal::reftrace::died(this);
-        bf2metal::reftrace::Owned owned; device->Release();
+        bf2metal::reftrace::Owned owned;
+#endif
+        device->Release();
     }
     HRESULT initialize() {
         const D3DVERTEXELEMENT9 elements[]={

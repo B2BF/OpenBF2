@@ -25,7 +25,7 @@ static unsigned int psmDrawPointerVectorSize(unsigned char* renderer, unsigned i
 static float psmParticleBoundsRadius(const float* bounds)
 {
     const float deltaZ = bounds[5] - bounds[2];
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Preserve the two float spills and retained half-Y value.
     using bf2x87::wide;
     const float halfX = bf2x87::store((wide(bounds[3]) - wide(bounds[0])) * wide(0.5f));
@@ -45,7 +45,7 @@ static Vec3 psmParticleBoundsCenter(const float* bounds)
 {
     const float sumZ = bounds[5] + bounds[2];
     Vec3 center;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] X/Y retain their sums through scaling; Z reloads its float spill.
     using bf2x87::wide;
     center.x = bf2x87::store((wide(bounds[3]) + wide(bounds[0])) * wide(0.5f));

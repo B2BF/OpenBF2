@@ -2,7 +2,7 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../../Platform/X87Compat.h" // [CHOSEN, not recovered] x87 conversion results, including invalid inputs.
 #endif
 #include "DecalTemplate.h"
@@ -249,14 +249,14 @@ const DecalTemplateString& DecalTemplate::getName() const
 // PE 0x101AFA10
 void DecalTemplate::refresh()
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] The unsigned count stays live in x87 until the reciprocal store.
     const bf2x87::Real count=bf2x87::wide(m_animationFrameCountX);
 #else
     const double count=static_cast<double>(m_animationFrameCountX);
 #endif
     if (count > 0.0f)
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         m_frameCountXReciprocal=static_cast<float>(bf2x87::wide(1)/count);
 #else
         m_frameCountXReciprocal=static_cast<float>(1.0/count);
@@ -377,7 +377,7 @@ void DecalTemplate::setAnimationFrameWidth(unsigned int width)
     if (m_texture)
     {
         const unsigned int* const dims = dx9rend::textureDims(m_texture);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] Neither unsigned conversion spills before division.
         m_animationFrameWidthRelative=static_cast<float>(bf2x87::wide(width)/bf2x87::wide(dims[0]));
 #else
@@ -394,7 +394,7 @@ unsigned int DecalTemplate::getAnimationFrameWidth() const
     if (!m_texture)
         return 0;
     const unsigned int* const dims = dx9rend::textureDims(m_texture);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     return static_cast<unsigned int>(bf2x87::toIntTruncate(bf2x87::wide(dims[0]) *
                                                       bf2x87::wide(m_animationFrameWidthRelative)));
 #else
@@ -412,7 +412,7 @@ void DecalTemplate::setAnimationFrameHeight(unsigned int height)
     {
         const float h = unsignedToFloat(height);
         const unsigned int* const dims = dx9rend::textureDims(m_texture);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] Only the numerator spills to float in this setter.
         m_animationFrameHeightRelative=static_cast<float>(bf2x87::wide(h)/bf2x87::wide(dims[1]));
 #else
@@ -428,7 +428,7 @@ unsigned int DecalTemplate::getAnimationFrameHeight() const
     if (!m_texture)
         return 0;
     const unsigned int* const dims = dx9rend::textureDims(m_texture);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     return static_cast<unsigned int>(bf2x87::toIntTruncate(bf2x87::wide(dims[1]) *
                                                       bf2x87::wide(m_animationFrameHeightRelative)));
 #else
@@ -451,7 +451,7 @@ void DecalTemplate::setAnimationFrameCountX(unsigned int count)
 {
     m_animationFrameCountX = count;
     if (count != 0)
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] FILD's unsigned correction stays in x87 until the reciprocal store.
         m_frameCountXReciprocal = bf2x87::store(bf2x87::wide(1.0f) / bf2x87::wide(count));
 #else

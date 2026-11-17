@@ -1,7 +1,9 @@
 // [CHOSEN, not recovered] D3DX texture operations over G3b resources.
-#if defined(__APPLE__) && defined(BF2_IMAGE_RENDDX9)
+#if (defined(__APPLE__) || (defined(__linux__) && defined(BF2_GFX_DXVK))) && defined(BF2_IMAGE_RENDDX9)
 #include "D3DXHelpers.h"
+#if defined(__APPLE__)
 #include "RefTrace.h" // [TEMP] [RETIRE-WHEN: rend-deinit-reftrace]
+#endif
 #include "../../../IO/File/IFileSystem.h"
 #include <algorithm>
 #include <cstring>
@@ -82,10 +84,12 @@ static HRESULT blit(const void* source,D3DFORMAT sf,unsigned sw,unsigned sh,unsi
 static HRESULT describe(IDirect3DBaseTexture9* t,unsigned level,D3DXIMAGE_INFO& i) {
     if(!t || level>=t->GetLevelCount()) return D3DERR_INVALIDCALL;
     i={}; i.Depth=1; i.MipLevels=t->GetLevelCount(); i.ResourceType=t->GetType(); i.ImageFileFormat=D3DXIFF_DDS;
-    if(auto* v=dynamic_cast<IDirect3DVolumeTexture9*>(t)) { D3DVOLUME_DESC d; HRESULT hr=v->GetLevelDesc(level,&d); if(FAILED(hr)) return hr; i.Width=d.Width; i.Height=d.Height; i.Depth=d.Depth; i.Format=d.Format; }
+    // Resource type is the public D3D9 discriminator. Forwarded COM objects implement
+    // namespaced subset interfaces, so their C++ RTTI is not the engine's interface RTTI.
+    if(i.ResourceType==D3DRTYPE_VOLUMETEXTURE) { auto* v=static_cast<IDirect3DVolumeTexture9*>(t); D3DVOLUME_DESC d; HRESULT hr=v->GetLevelDesc(level,&d); if(FAILED(hr)) return hr; i.Width=d.Width; i.Height=d.Height; i.Depth=d.Depth; i.Format=d.Format; }
     else { D3DSURFACE_DESC d; HRESULT hr;
-        if(auto* a=dynamic_cast<IDirect3DTexture9*>(t)) hr=a->GetLevelDesc(level,&d);
-        else if(auto* a=dynamic_cast<IDirect3DCubeTexture9*>(t)) hr=a->GetLevelDesc(level,&d); else return D3DERR_INVALIDCALL;
+        if(i.ResourceType==D3DRTYPE_TEXTURE) hr=static_cast<IDirect3DTexture9*>(t)->GetLevelDesc(level,&d);
+        else if(i.ResourceType==D3DRTYPE_CUBETEXTURE) hr=static_cast<IDirect3DCubeTexture9*>(t)->GetLevelDesc(level,&d); else return D3DERR_INVALIDCALL;
         if(FAILED(hr)) return hr; i.Width=d.Width; i.Height=d.Height; i.Format=d.Format;
     }
     return D3D_OK;
@@ -140,10 +144,17 @@ class RenderToSurface final : public ID3DXRenderToSurface {
     }
 public:
     RenderToSurface(IDirect3DDevice9* d,const D3DXRTS_DESC& v):device(d),desc(v) {
+#if defined(__APPLE__)
         { bf2metal::reftrace::Owned o; device->AddRef(); } bf2metal::reftrace::born(this,"ID3DXRenderToSurface",[](const void*) { return 1ul; });
+#else
+        device->AddRef();
+#endif
     }
     ~RenderToSurface() { if(active) { device->EndScene(); restore(); } if(depth) depth->Release(); if(target) target->Release();
-        bf2metal::reftrace::died(this); bf2metal::reftrace::Owned o; device->Release(); }
+#if defined(__APPLE__)
+        bf2metal::reftrace::died(this); bf2metal::reftrace::Owned o;
+#endif
+        device->Release(); }
     HRESULT initialize() {
         HRESULT hr=device->CreateRenderTarget(desc.Width,desc.Height,desc.Format,D3DMULTISAMPLE_NONE,0,FALSE,&target,nullptr);
         if(SUCCEEDED(hr) && desc.DepthStencil) hr=device->CreateDepthStencilSurface(desc.Width,desc.Height,desc.DepthStencilFormat,D3DMULTISAMPLE_NONE,0,TRUE,&depth,nullptr); return hr;

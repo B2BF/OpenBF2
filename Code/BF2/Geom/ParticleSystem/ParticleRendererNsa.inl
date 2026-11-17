@@ -118,7 +118,7 @@ static void psmUpdateNsaDrawState(unsigned char* renderer, unsigned char* partic
         float& frame = psmDrawField<float>(particle, 0x80);
         const double nextFrame = static_cast<double>(dt) * psmDescriptor4<float>(descriptor, 0xC0) + frame;
         frame = static_cast<float>(nextFrame);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] Preserve FISTP integer indefinite after floor.
         const unsigned int whole = static_cast<unsigned int>(bf2x87::toIntTruncate(bf2x87::wide(std::floor(nextFrame))));
 #else
@@ -132,7 +132,7 @@ static void psmUpdateNsaDrawState(unsigned char* renderer, unsigned char* partic
             const unsigned int next = (current + 1) % frameCount;
             const unsigned int columns = psmDescriptor4<unsigned int>(descriptor, 0xD4);
             const unsigned int xs[2] = { current % columns, next % columns };
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             // [CHOSEN, not recovered] Only the second row product has a float spill in the PE.
             using bf2x87::wide;
             const bf2x87::Real ys[2] = {
@@ -145,7 +145,7 @@ static void psmUpdateNsaDrawState(unsigned char* renderer, unsigned char* partic
 #endif
             for (unsigned int i = 0; i < 2; ++i)
             {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                 const bf2x87::Real u = (wide(xs[i]) * wide(psmDescriptor4<float>(descriptor, 0x12C))
                     + wide(psmDescriptor4<short>(descriptor, 0x212)) * wide(0.000030518509f)) * wide(32767.0f);
                 const bf2x87::Real v = (wide(psmDescriptor4<short>(descriptor, 0x214)) * wide(0.000030518509f)

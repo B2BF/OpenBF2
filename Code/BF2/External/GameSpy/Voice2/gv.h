@@ -66,7 +66,8 @@ typedef enum
 	GVHardwarePS3Headset,    // PS3 (USB)
 	GVHardwarePSPHeadset,    // PSP
 	GVHardwareMacOSX,        // MacOSX
-	GVHardwareCustom         // Any
+	GVHardwareCustom,        // Any
+	GVHardwareSDL            // Native Linux client (issue #36)
 } GVHardwareType;
 
 typedef enum

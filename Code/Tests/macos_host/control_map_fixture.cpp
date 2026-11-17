@@ -1,7 +1,7 @@
 // [TEMP] Scaffolding for macos_host_test. Supplies the two engine globals the macOS input
 // devices read (io::inputDeviceManager, io::controlMapManager; production definitions live in
 // Core/Globals.cpp) and a control-map manager whose active map answers only what
-// MacMouseDevice asks: per-axis scale 1, mouse sensitivity 1, no inversion. Every other method
+// NativeMouseDevice asks: per-axis scale 1, mouse sensitivity 1, no inversion. Every other method
 // reports itself and aborts; the fixture models nothing else.
 
 #include "../../BF2/IO/Input/Input.h"

@@ -36,7 +36,8 @@ struct Geometry { std::vector<MeshVertex> vertices; std::vector<DWORD> indices; 
 bool sphereGeometry(float radius,unsigned slices,unsigned stacks,Geometry&);
 bool boxGeometry(float width,float height,float depth,Geometry&);
 bool cylinderGeometry(float r1,float r2,float length,unsigned slices,unsigned stacks,Geometry&);
-// Native resource access also works for render targets which refuse public locks.
+// Packed resource access, including staging for non-lockable render targets.
+// Linux requires a lockable volume; public D3D9 has no volume readback operation.
 HRESULT surfaceBytes(IDirect3DSurface9*,Bytes&,bool upload);
 HRESULT textureBytes(IDirect3DBaseTexture9*,unsigned face,unsigned level,Bytes&,bool upload);
 }

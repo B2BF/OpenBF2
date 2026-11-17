@@ -9,7 +9,9 @@
 #if defined(_WIN32)
 #include <windows.h>
 #include <unknwn.h>
-#else
+#elif !defined(BF2_GFX_EXTERNAL_PLATFORM_TYPES)
+// The DXVK forwarding TU imports the public native SDK's platform types before
+// placing this subset in its own namespace (issue #36). Other TUs keep these types.
 using HRESULT = std::int32_t;
 using BOOL = std::int32_t;
 using LONG = std::int32_t;

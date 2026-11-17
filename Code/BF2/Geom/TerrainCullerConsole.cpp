@@ -7,7 +7,7 @@
 #include "../../RendDX9Abi/PluginEntry.h"
 #include "../Core/ConsoleObjectMacro.h"
 #include "../Core/ConsoleObjects.h"
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h"
 #endif
 
@@ -79,7 +79,7 @@ void RD9_THUNK updateCullerBaseCells(TerrainCuller* self RD9_THUNK_EDX, TerrainC
     {
         if (node->bounds.dirty)
             node->bounds.refresh();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] FUCOM compares the integer without a binary32 narrowing.
         node->fileByteEE = bf2x87::wide(node->bounds.extent.x) == bf2x87::wide(self->param14);
 #else
@@ -101,7 +101,7 @@ void RD9_THUNK setCullerBaseCellSize(TerrainCuller* self RD9_THUNK_EDX, int valu
     if (value == self->param14 || value < self->param10)
         return;
     Terrain* const owner = self->terrain;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Keep the retained x87 product and FCOM unordered result.
     const bf2x87::Real maximum = bf2x87::mul(bf2x87::wide(owner->m_patchSize),
                                            bf2x87::wide(owner->m_primaryWorldScale.x));

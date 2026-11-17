@@ -17,7 +17,10 @@
 #include "../../Core/Debug.h"
 #include "../../Core/Ids.h"
 #include "UnixFileStream.h"
-#if defined(__APPLE__) && !DEDICATED
+#if defined(BF2_LINUX_CLIENT) && !DEDICATED
+#include "../../Platform/Linux/ClientFilePaths.h"
+#endif
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
 #include "../../Platform/macOS/ClientPaths.h"
 #endif
 
@@ -63,7 +66,7 @@ void buildFileInfo(FileInfo* info, const struct stat* st)
 #endif
 }
 
-#if defined(__APPLE__) && !DEDICATED
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
 // [CHOSEN, not recovered] The client image's directory removal. BF2.exe's Win32FileSystem::deleteFile
 // (0x676440) removes a directory recursively through the shell (FO_DELETE); the dedicated ELF's
 // unlink cannot. LocalProfileManager::deleteProfile (PE 0x4AAF70) deletes a whole profile directory
@@ -168,9 +171,15 @@ IBase* UnixFileSystem::create(unsigned int iid, IBase* outer)
 // Normalizes a path in place by folding case and converting backslashes to forward slashes.
 void UnixFileSystem::fixUnixPath(std::string& path)
 {
+#if defined(BF2_LINUX_CLIENT) && !DEDICATED
+    // [CHOSEN, not recovered] Retail client assets retain Windows filename casing. Preserve
+    // their physical spelling on Linux instead of requiring a renamed installation (issue #36).
+    linuxclient::resolveClientPath(path);
+    return;
+#endif
     std::string::size_type first = 0;
     bool keepCase = false;
-#if defined(__APPLE__) && !DEDICATED
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
     // [CHOSEN, not recovered] The ELF lowercases whole paths, which are relative game paths there.
     // The macOS client's @HOME@ substitution is an absolute user path (clientDataDirectory):
     // lowercasing it named a different path on case-sensitive volumes and under the runner's
@@ -294,7 +303,7 @@ bool UnixFileSystem::deleteFile(const std::string& name)
     std::string path(name);
     fixUnixPath(path);
 
-#if defined(__APPLE__) && !DEDICATED
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
     struct stat st;
     if (lstat(path.c_str(), &st) == 0 && S_ISDIR(st.st_mode))
     {
@@ -397,7 +406,7 @@ bool UnixFileSystem::createDirectory(const std::string& path)
     {
         if (path[i] != '/')
             continue;
-#if defined(__APPLE__) && !DEDICATED
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
         // [CHOSEN, not recovered] The ELF only sees relative paths. The macOS client writes
         // under an absolute @HOME@, whose leading '/' made the first part "" and mkdir("")
         // fail with ENOENT, which aborted the walk: a fresh home never got Profiles/Default/.
@@ -481,7 +490,7 @@ int UnixFileSystem::findFiles_recursionHelper(const std::string& path, bool recu
 // then hands back "/tmp" anyway. Line 435 of this file, and the source of its attested path.
 const std::string& UnixFileSystem::getHomeSubstitution() const
 {
-#if defined(__APPLE__) && !DEDICATED
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
     // [CHOSEN, not recovered] Client data is independent of the read-only game installation.
     return macos::clientDataDirectory();
 #else

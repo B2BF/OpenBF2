@@ -1,5 +1,5 @@
 // [CHOSEN, not recovered] Native effect builder for the macOS port. See FxBuild.h.
-#if defined(__APPLE__)
+#if defined(__APPLE__) || (defined(__linux__) && defined(BF2_GFX_DXVK))
 #include "FxBuild.h"
 #include "FxStates.h"
 #include <algorithm>

@@ -1,14 +1,16 @@
-// [CHOSEN, not recovered] Native effect compilation for the macOS client. See Native.h.
-#if defined(__APPLE__)
+// [CHOSEN, not recovered] Native effect compilation for the native clients. See Native.h.
+#if defined(__APPLE__) || (defined(__linux__) && defined(BF2_GFX_DXVK))
 #include "Native.h"
 #include "D3DAsm.h"
 #include "FxBuild.h"
 #include "NativeMojo.h"
 #include "NativeVkd3d.h"
+#include "NativeEquivalence.h"
 #include "Wire.h"
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <deque>
@@ -20,6 +22,9 @@
 
 #ifndef BF2_FX_NATIVE_IDENTITY
 #define BF2_FX_NATIVE_IDENTITY "native-unpinned"
+#endif
+#ifndef BF2_FX_COMPILER_FINGERPRINT
+#define BF2_FX_COMPILER_FINGERPRINT "unconfigured"
 #endif
 
 namespace bf2fx {
@@ -130,6 +135,23 @@ std::atomic<unsigned> gMemoHits{0}, gMemoMisses{0};
 
 bool compileFull(const ShaderJob& job, const std::string& source, Bytes& bytecode, std::string& error);
 
+#if defined(__linux__) && defined(BF2_GFX_DXVK)
+const char kEquivalenceManifest[] =
+#include "equivalence.inc"
+;
+struct AuditedCompiler {
+    EquivalenceCache cache{kEquivalenceManifest, compilerFingerprint()};
+    AuditedCompiler() {
+        std::fprintf(stderr, "BF2FX native equivalence: %zu audited inputs\n", cache.auditedInputs());
+    }
+    ~AuditedCompiler() {
+        const auto s = cache.stats();
+        std::fprintf(stderr, "BF2FX native equivalence: eligible %zu, hits %zu, compiled %zu, fallbacks %zu, retained %zu bytes/%zu entries, peak %zu bytes\n",
+                     s.eligible, s.hits, s.compiled, s.fallbacks, s.bytes, s.entries, s.peakBytes);
+    }
+};
+#endif
+
 struct Backend final : ShaderBackend {
     bool memo = false; // the request is D3DX-accepted: compile the trimmed text, share outcomes
     bool compile(const ShaderJob& job, const std::string& text, Bytes& bytecode, std::string& error) override {
@@ -139,7 +161,20 @@ struct Backend final : ShaderBackend {
             return reflect(probe, {}, error);
         }
         std::string trimmed;
-        if (!memo || !trimSource(text + job.wrapper, job.entry, trimmed)) return compileFull(job, text + job.wrapper, bytecode, error);
+        if (!memo || !trimSource(text + job.wrapper, job.entry, trimmed)) {
+#if defined(__linux__) && defined(BF2_GFX_DXVK)
+            if (*kEquivalenceManifest) {
+                try {
+                    static AuditedCompiler audited;
+                    if (audited.cache.tryCompile(job, text + job.wrapper, compileFull, bytecode)) return true;
+                } catch (...) {
+                    // Even manifest/cache initialization is optional; preserve the full compiler
+                    // path and its original diagnostics when allocation or setup fails.
+                }
+            }
+#endif
+            return compileFull(job, text + job.wrapper, bytecode, error);
+        }
         Writer w;
         w(std::string("BF2FX-shader-memo"), uint32_t(1), job.profile, job.entry, job.function, sha256(Bytes(trimmed.begin(), trimmed.end())));
         const std::string key = sha256(w.bytes);
@@ -322,6 +357,10 @@ const std::string& identity() {
 const std::string& identityHash() {
     static const std::string h = sha256(Bytes(identity().begin(), identity().end()));
     return h;
+}
+const std::string& compilerFingerprint() {
+    static const std::string fingerprint = BF2_FX_COMPILER_FINGERPRINT;
+    return fingerprint;
 }
 
 std::string refusalKey(const Request& r) {

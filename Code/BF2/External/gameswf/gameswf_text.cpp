@@ -1004,7 +1004,7 @@ namespace gameswf
 				//else if (name == "textColor")
 			{	
 				// The arg is 0xRRGGBB format.
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 				// [CHOSEN, not recovered] Keep the x86 wrap of a negative number (arm64 saturates to 0).
 				Uint32	rgb = bf2x87::lowUInt32(val.to_number());
 #else

@@ -217,7 +217,7 @@ struct SingleInstanceGuard
 {
 #if defined(_WIN32) && !DEDICATED
     /* +0x00 */ void* handle; // Win32 handle without including windows.h.
-#elif defined(__APPLE__) && !DEDICATED
+#elif (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
     // [CHOSEN, not recovered] Owned flock descriptor; closed on destruction or exec.
     int lockFd;
 #endif

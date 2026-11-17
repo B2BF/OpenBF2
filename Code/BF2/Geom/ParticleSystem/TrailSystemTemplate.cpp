@@ -307,7 +307,7 @@ void RD9_THUNK n2_s37(void* self RD9_THUNK_EDX, const float* v)
     const float z=v[2],y=v[1],x=v[0];
     F(self,0x1B0)=y; F(self,0x1AC)=x; F(self,0x1B4)=z;
     float* p = &psmDescriptor2<float>(self, 0x1AC);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] The squared sum spills once; the inverse remains live.
     using bf2x87::wide;
     const float s=static_cast<float>(wide(p[0])*wide(p[0])+wide(p[1])*wide(p[1])+wide(p[2])*wide(p[2]));
@@ -322,7 +322,7 @@ void RD9_THUNK n2_s37(void* self RD9_THUNK_EDX, const float* v)
         if (fabsf(s) < FLT_EPSILON) { p[0] = p[1] = p[2] = 0.0f; }
         else
         {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             const bf2x87::Real inv=wide(1)/bf2x87::squareRoot(wide(s));
             p[0]=static_cast<float>(inv*wide(p[0])); p[1]=static_cast<float>(inv*wide(p[1]));
             p[2]=static_cast<float>(inv*wide(p[2]));
@@ -431,7 +431,7 @@ void RD9_THUNK n2_s116(void* self RD9_THUNK_EDX, const ParticleHostString& sourc
 void RD9_THUNK n2_s122(void* self RD9_THUNK_EDX, unsigned a)
 {
     void* t = psmDescriptor2<void*>(self, 0x21C);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Both unsigned conversions remain live in the PE.
     if (t) F(self,0x1CC)=static_cast<float>(bf2x87::wide(a)
         /bf2x87::wide(static_cast<dx9rend::EngineTexture*>(t)->width));
@@ -444,7 +444,7 @@ void RD9_THUNK n2_s122(void* self RD9_THUNK_EDX, unsigned a)
 unsigned RD9_THUNK n2_s123(void* self RD9_THUNK_EDX)
 {
     void* t = psmDescriptor2<void*>(self, 0x21C);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Keep the unsigned dimension live through truncating FISTP.
     if (t) return static_cast<unsigned>(bf2x87::toIntTruncate(
         bf2x87::wide(static_cast<dx9rend::EngineTexture*>(t)->width)*bf2x87::wide(F(self,0x1CC))));
@@ -457,7 +457,7 @@ unsigned RD9_THUNK n2_s123(void* self RD9_THUNK_EDX)
 void RD9_THUNK n2_s124(void* self RD9_THUNK_EDX, unsigned a)
 {
     void* t = psmDescriptor2<void*>(self, 0x21C);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Only this setter spills its numerator to float first.
     if (t) F(self,0x1D0)=static_cast<float>(bf2x87::wide(static_cast<float>(a))
         /bf2x87::wide(static_cast<dx9rend::EngineTexture*>(t)->height));
@@ -470,7 +470,7 @@ void RD9_THUNK n2_s124(void* self RD9_THUNK_EDX, unsigned a)
 unsigned RD9_THUNK n2_s125(void* self RD9_THUNK_EDX)
 {
     void* t = psmDescriptor2<void*>(self, 0x21C);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Keep the unsigned dimension live through truncating FISTP.
     if (t) return static_cast<unsigned>(bf2x87::toIntTruncate(
         bf2x87::wide(static_cast<dx9rend::EngineTexture*>(t)->height)*bf2x87::wide(F(self,0x1D0))));

@@ -5975,6 +5975,13 @@ namespace gameswf
 		marker.m_new_shape = true;
 		sh->append_path(marker);
 		path	p(0.0f, 0.0f, idx, 0, 0);
+#if defined(BF2_LINUX_CLIENT)
+		// [CHOSEN, not recovered] Initialize the native image rectangle's flag:
+		// the five-argument constructor leaves it untouched, and a true flag
+		// makes the tessellator skip this path's edges. Linux client policy:
+		// https://github.com/kr4uzi/OpenBF2/issues/36
+		p.m_new_shape = false;
+#endif
 		const float	w20 = (float) w * 20.0f;
 		const float	h20 = (float) h * 20.0f;
 		p.m_edges.push_back(edge(0.0f, 0.0f, w20, 0.0f));

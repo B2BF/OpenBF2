@@ -3,13 +3,14 @@
 // Platform/macOS (CocoaHost.mm, MacInputScript.mm) and Platform/Windows (WinInputScript.cpp).
 // [RETIRE-WHEN: client-test-automation-replaced]
 #include "InputScript.h"
-#if !DEDICATED && (defined(__APPLE__) || defined(_WIN32))
+#if !DEDICATED && (defined(__APPLE__) || defined(_WIN32) || defined(BF2_LINUX_CLIENT))
 #if defined(_WIN32)
 #include <windows.h>                        // the redirected stdout file (GetFinalPathNameByHandleA)
 #else
 #include <fcntl.h>
 #include <sys/param.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #endif
 #include <cctype>
 #include <chrono>
@@ -100,13 +101,24 @@ std::string redirectedOutputPath()
             }
         }
     }
-#else
+#elif defined(__APPLE__)
     for (int fd : {1, 2})
     {
         struct stat st;
         char buf[MAXPATHLEN];
         if (fstat(fd, &st) == 0 && S_ISREG(st.st_mode) && fcntl(fd, F_GETPATH, buf) == 0)
             return buf;
+    }
+#else
+    for (int fd : {1, 2})
+    {
+        struct stat st;
+        char descriptor[32], path[MAXPATHLEN];
+        std::snprintf(descriptor, sizeof(descriptor), "/proc/self/fd/%d", fd);
+        if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) continue;
+        const ssize_t length = readlink(descriptor, path, sizeof(path) - 1);
+        if (length >= 0 && static_cast<std::size_t>(length) < sizeof(path) - 1)
+            return std::string(path, static_cast<std::size_t>(length));
     }
 #endif
     return std::string();
@@ -126,7 +138,7 @@ InputScript& inputScript()
     return script;
 }
 
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
 // BF2_HITCH_TRACE (Platform/macOS/HitchTrace.cpp) records each report line as a labelled moment
 // of its frame trace. This weak default serves programs built without the trace.
 extern "C" __attribute__((weak)) void openbf2HitchNote(const char*) {}
@@ -141,7 +153,7 @@ void InputScript::report(const char* fmt, ...) const
     va_end(args);
     std::fprintf(stderr, "[TEMP] [INPUT-SCRIPT] t=%.2fs frame=%lu %s\n",
                  nowSeconds() - m_startSeconds, m_frame, text);
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
     openbf2HitchNote(text);
 #endif
 }
@@ -388,6 +400,11 @@ bool InputScript::logContains(const std::string& needle)
     return false;
 }
 
+void InputScript::requestCapture(const std::string& label)
+{
+    m_captures.push_back(label.empty() ? std::string("capture") : label);
+}
+
 bool InputScript::takeCaptureRequest(std::string& label)
 {
     if (m_captures.empty())
@@ -406,7 +423,14 @@ bool InputScript::expandText(const std::u16string& text, int line)
     {
         unsigned short found = 0xFFFF;
         bool shift = false;
-        for (unsigned short code = 0; code < 0x80 && found == 0xFFFF; ++code)
+#if defined(BF2_LINUX_CLIENT)
+        // SDL scripts use DIK directly, including printable keypad keys above 0x7F. The former
+        // Cocoa-code scan reached those keys through MacKeyMap; preserve that layout coverage.
+        const unsigned short keyLimit = 0x100;
+#else
+        const unsigned short keyLimit = 0x80;
+#endif
+        for (unsigned short code = 0; code < keyLimit && found == 0xFFFF; ++code)
         {
             if (keys::isModifier(code))
                 continue;
@@ -521,7 +545,7 @@ void InputScript::tick(IInputScriptSink& sink)
         case OpButtonUp:   sink.scriptButton(s.a, false); break;
         case OpWheel:      sink.scriptWheel(s.a * 120); break;
         case OpCapture:
-            m_captures.push_back(s.text.empty() ? std::string("capture") : s.text);
+            requestCapture(s.text);
             report("line %d: capture %s", s.line, m_captures.back().c_str());
             break;
         case OpLog:

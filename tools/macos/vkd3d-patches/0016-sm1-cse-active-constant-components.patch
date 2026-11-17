@@ -1,0 +1,29 @@
+[CHOSEN, not recovered] vkd3d-shader 2.1 patch for the native clients (LGPL-2.1+, as vkd3d).
+Fix the constant comparison added by 0009: only declared components and their
+active scalar width belong to the value. A scalar uint initializes four bytes,
+not all four eight-byte union slots. Comparing the unused bytes prevented equal
+array-index constants from merging, so identical bone-matrix loads stayed live
+in separate registers and exhausted even vs_3_0's 32 temporaries.
+Compare active representations, preserving signed zero and NaN payloads. This
+changes neither shader source nor requested profile (kr4uzi/OpenBF2#36).
+
+--- a/libs/vkd3d-shader/hlsl_codegen.c
++++ b/libs/vkd3d-shader/hlsl_codegen.c
+@@ -7048,7 +7048,16 @@
+         {
+             const struct hlsl_ir_constant *x = hlsl_ir_constant((struct hlsl_ir_node *)a), *y = hlsl_ir_constant((struct hlsl_ir_node *)b);
++            size_t component_size;
+ 
+-            return !memcmp(&x->value, &y->value, sizeof(x->value));
++            if (a->data_type->class > HLSL_CLASS_VECTOR)
++                return false;
++            component_size = a->data_type->e.numeric.type == HLSL_TYPE_DOUBLE ? sizeof(double) : sizeof(uint32_t);
++            for (i = 0; i < a->data_type->e.numeric.dimx; ++i)
++            {
++                if (memcmp(&x->value.u[i], &y->value.u[i], component_size))
++                    return false;
++            }
++            return true;
+         }
+         case HLSL_IR_LOAD:
+         {

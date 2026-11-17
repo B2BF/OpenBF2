@@ -100,7 +100,12 @@ public:
         case Availability::Scoreboard: return hudManager->getScoreboard() != nullptr;
         case Availability::VoteMap: return hudManager->getVoteMap() != nullptr;
         }
-        __assume(0); // all constructor-supplied enum values covered
+        // All constructor-supplied enum values are covered.
+#if defined(_MSC_VER)
+        __assume(0);
+#else
+        __builtin_unreachable();
+#endif
     }
 
     std::string getObjectDeltaAsString() const override { return "No Delta"; }

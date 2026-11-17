@@ -1,7 +1,7 @@
 // [CHOSEN, not recovered] Owner-requested macOS client startup policy; docs/macos-port.md.
 #include "ClientPaths.h"
 
-#if defined(__APPLE__) && !DEDICATED
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
@@ -33,7 +33,14 @@ std::string makeClientDataDirectory()
     if (!home || home[0] != '/')
         pathFailure("resolve absolute home", home ? home : "", EINVAL);
 
+#if defined(BF2_LINUX_CLIENT)
+    // [CHOSEN, not recovered] Issue #36: profiles stay outside the user's retail installation.
+    const char* xdg = std::getenv("XDG_DATA_HOME");
+    const std::string path = xdg && xdg[0] == '/' ? std::string(xdg) + "/OpenBF2"
+                                               : std::string(home) + "/.local/share/OpenBF2";
+#else
     const std::string path = std::string(home) + "/Library/Application Support/OpenBF2";
+#endif
     for (std::size_t at = 1; at <= path.size(); ++at) {
         if (at != path.size() && path[at] != '/')
             continue;
@@ -64,7 +71,11 @@ int acquireClientInstanceLock()
     // folder (the working directory the setup app starts the client in), where retail writes its
     // other non-profile files; only profiles go to the client data directory (owner, 2026-11-14;
     // docs/macos-write-paths.md).
+#if defined(BF2_LINUX_CLIENT)
+    const std::string path = clientDataDirectory() + "/Client.lock";
+#else
     const std::string path = "Client.lock";
+#endif
     const int fd = open(path.c_str(), O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, 0600);
     if (fd < 0)
         pathFailure("open instance lock", path, errno);

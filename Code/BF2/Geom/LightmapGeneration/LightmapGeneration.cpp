@@ -10,7 +10,7 @@
 #ifdef BF2_IMAGE_RENDDX9
 
 #include "LightmapGeneration.h"
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../../Platform/X87Compat.h"
 #endif
 #include "ILightSampleable.h"
@@ -316,7 +316,7 @@ int normalize2(float* v)
 // FLT_EPSILON of unit length, zeroed below FLT_EPSILON, otherwise scaled.
 int normalize3(float* v)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Preserve the squared-length spill and retained inverse.
     const bf2x87::Real x(v[0]), y(v[1]), z(v[2]);
     const float lengthSquared = bf2x87::store(bf2x87::add(bf2x87::add(
@@ -548,7 +548,7 @@ bool cornersInsideFrustum(const float* corners, const Frustum& frustum)
 // is fld value, fld the exponent, _CIpow, and the unrounded x87 result is returned in ST0; the
 // callers clamp it with an fcom pair (1.0f, then 0.0f, a NaN passes), scale it where they scale, and
 // narrow only at the store.
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 // [CHOSEN, not recovered] Apple arm: the result stays bf2x87::Real until the caller's store.
 // Apple silicon has no x87 _CIpow; it uses binary64 libm, the presentation-transcendental policy.
 inline bf2x87::Real responsePow(float value, double exponent)
@@ -723,7 +723,7 @@ bool fillObjectRecord(world::IObject* object, OccluderRecord* record)
     if (!geometry)
         return false;
     const Vec3& p = record->position;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] The sum, FSQRT and comparison have no float spill.
     const bf2x87::Real x(p.x), y(p.y), z(p.z);
     if (bf2x87::greater(bf2x87::squareRoot(bf2x87::add(bf2x87::add(
@@ -738,7 +738,7 @@ bool fillObjectRecord(world::IObject* object, OccluderRecord* record)
     rotateInPlace(record->transform, record->centre);
     addAssign(record->centre, record->position);
     record->radius = boxRadius(*geometryLocalBounds(geometry));
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     if (bf2x87::greater(bf2x87::Real(record->radius), bf2x87::Real(20000)))
 #else
     if (record->radius > 20000.0f)
@@ -2582,7 +2582,14 @@ bool LightmapGeneration::traceColour(OccluderRecord* record, int objectIndex, in
                 }
                 while (remainingInBlock > 0);
             }
+#if defined(BF2_LINUX_CLIENT)
+            // [CHOSEN, not recovered] gatherLights only appended to this vector.
+            // Keep the temporary's lifetime and shrink without requiring the
+            // unused libstdc++ fill-insertion copy-assignment path.
+            { LightInfo fill; m_lights.resize(persistentLights); }
+#else
             m_lights.resize(persistentLights, LightInfo());
+#endif
             if (g_traceAborted || m_onlyNearest)
                 break;
         nextBlock:
@@ -3334,7 +3341,12 @@ bool LightmapGeneration::traceIntensity(OccluderRecord* record, int objectIndex,
                 }
                 while (remainingInBlock > 0);
             }
+#if defined(BF2_LINUX_CLIENT)
+            // Same append-then-shrink lifetime contract as the color trace.
+            { LightInfo fill; m_lights.resize(persistentLights); }
+#else
             m_lights.resize(persistentLights, LightInfo());
+#endif
             if (g_traceAborted || m_onlyNearest)
                 break;
         nextBlock:

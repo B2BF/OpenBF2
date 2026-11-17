@@ -93,7 +93,7 @@ const D3DVERTEXELEMENT9 kRainVertexElements[] =
 // fistp under a chop control word.
 inline int truncateToInt(float value)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     return bf2x87::toIntTruncate(value);
 #else
     return static_cast<int>(value);

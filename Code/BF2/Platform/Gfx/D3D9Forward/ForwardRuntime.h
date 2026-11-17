@@ -73,6 +73,10 @@ public:
         Registry::Get().map[key] = this;
     }
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** out) override {
+#if defined(BF2_GFX_DXVK)
+        // Preserve the native SDK's invalid-output result without acquiring a reference.
+        if (!out) return real_->QueryInterface(iid, nullptr);
+#endif
         void* obj = nullptr;
         HRESULT hr = real_->QueryInterface(iid, &obj);
         Lock g(Registry::Get().mutex);
@@ -115,7 +119,10 @@ inline void* AdoptUnknown(::IUnknown* r) {
     Lock g(Registry::Get().mutex);
     auto it = Registry::Get().map.find(static_cast<void*>(r));
     if (it == Registry::Get().map.end()) {
+#if !defined(BF2_GFX_DXVK)
         r->Release();
+#endif
+        // The native caller, FinishIidOut, releases the unwrapped reference once.
         return nullptr;
     }
     ++it->second->refs;

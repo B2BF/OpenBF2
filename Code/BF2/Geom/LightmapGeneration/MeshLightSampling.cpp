@@ -7,7 +7,7 @@
 // twice the new width; a resolution modifier of zero or below never ends the loader's halving.
 #ifdef BF2_IMAGE_RENDDX9
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../../Platform/X87Compat.h" // [CHOSEN, not recovered] x87 conversion results, including invalid inputs.
 #endif
 #include "MeshLightSampling.h"
@@ -46,7 +46,7 @@ const int          kPoolScratch      = 3;
 // A sample is present when a magnitude exceeds FLT_EPSILON or is unordered.
 inline bool hasPosition(const Vec3& position)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] FCOM signals invalid for unordered components.
     return !bf2x87::lessEqual(bf2x87::wide(std::fabs(position.x)), bf2x87::wide(FLT_EPSILON))
         || !bf2x87::lessEqual(bf2x87::wide(std::fabs(position.y)), bf2x87::wide(FLT_EPSILON))
@@ -72,7 +72,7 @@ inline void zeroNanPosition(Vec3& position)
 // takes the low bound.
 inline float clampValue(float value, float low, float high)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Match the shared PE 0x1000ED40 FCOMI exception flags.
     if (bf2x87::greaterEqual(bf2x87::wide(value), bf2x87::wide(high)))
         value = high;
@@ -88,7 +88,7 @@ inline float clampValue(float value, float low, float high)
 }
 
 // One packed channel: __ftol2's 64-bit truncation, its low byte kept.
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 // [CHOSEN, not recovered] Keep the x87 value through __ftol2, without a float store.
 using SampleReal = bf2x87::Real;
 inline SampleReal sampleProduct(float a, float b)
@@ -102,7 +102,7 @@ inline SampleReal sampleProduct(float a, float b) { return a * b; }
 
 inline unsigned int channelByte(SampleReal value)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     return static_cast<unsigned int>(bf2x87::toInt64Truncate(value)) & 0xFFu;
 #else
     return static_cast<unsigned int>(static_cast<long long>(value)) & 0xFFu;
@@ -178,7 +178,7 @@ void lightmapDilate(unsigned int* source, unsigned int* destination, unsigned in
 // and directlyLit is zero.
 LightSample MeshLightSampler::getSampleAt(float x, float y)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Keep the x87 products through FISTP's truncation.
     const int row = bf2x87::toIntTruncate(sampleProduct(static_cast<float>(m_textureSizeY), y));
     const int column = bf2x87::toIntTruncate(sampleProduct(static_cast<float>(m_textureSizeX), x));
@@ -369,7 +369,7 @@ bool MeshLightSampler::storeResults()
         else
         {
             const LightSample& sample = m_batch[i];
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             // [CHOSEN, not recovered] The luminance has one float argument store.
             const float luminance = clampValue(bf2x87::store(bf2x87::add(
                 bf2x87::add(sampleProduct(sample.result[2], 0.1f),
@@ -381,7 +381,7 @@ bool MeshLightSampler::storeResults()
                 0.0f, 1.0f);
 #endif
             const float lowCutoff = g_LightManager->getLightMapAmbientAlphaCutoffRange().x;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             const bool below = bf2x87::less(bf2x87::wide(luminance), bf2x87::wide(lowCutoff));
 #else
             const bool below = luminance < lowCutoff;
@@ -393,7 +393,7 @@ bool MeshLightSampler::storeResults()
             else
             {
                 const float highCutoff = g_LightManager->getLightMapAmbientAlphaCutoffRange().y;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                 const bool above = bf2x87::greaterEqual(bf2x87::wide(luminance), bf2x87::wide(highCutoff));
 #else
                 const bool above = luminance >= highCutoff;
@@ -405,7 +405,7 @@ bool MeshLightSampler::storeResults()
                     const Vec2& low = g_LightManager->getLightMapAmbientAlphaCutoffRange();
                     const Vec2& high = g_LightManager->getLightMapAmbientAlphaCutoffRange();
                     const Vec2& last = g_LightManager->getLightMapAmbientAlphaCutoffRange();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                     // [CHOSEN, not recovered] No store between the quotient and channel conversion.
                     alpha = bf2x87::div(bf2x87::sub(bf2x87::wide(luminance), bf2x87::wide(low.x)),
                         bf2x87::sub(bf2x87::wide(high.y), bf2x87::wide(last.x)));
@@ -428,7 +428,7 @@ bool MeshLightSampler::storeResults()
         else
         {
             const unsigned int r = channelByte(sampleProduct(sample.result[0], 255.0f));
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             const unsigned int a = channelByte(bf2x87::mul(alpha, bf2x87::wide(255.0f)));
 #else
             const unsigned int a = channelByte(alpha * 255.0f);

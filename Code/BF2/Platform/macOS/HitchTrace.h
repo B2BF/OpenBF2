@@ -1,4 +1,4 @@
-// [TEMP] [CHOSEN, not recovered] macOS port addition, not retail: frame-hitch trace (measurement only,
+// [TEMP] [CHOSEN, not recovered] Native client frame-hitch trace (measurement only,
 // off unless BF2_HITCH_TRACE is set).
 // BF2_HITCH_TRACE=<file> writes, as text lines:
 //   F <frame> <t> <ms> <game> <6 mainLoop section ms> then <ms> <count> per category (Category order)
@@ -15,7 +15,7 @@
 // t is seconds since the trace started. Frames longer than BF2_HITCH_TRACE_MS (default 33) are also
 // reported on stderr as "[HITCH] ...". Without the variable every call returns at once.
 #pragma once
-#if defined(__APPLE__)
+#if defined(__APPLE__) || (defined(__linux__) && defined(BF2_GFX_DXVK))
 #include <chrono>
 
 namespace bf2hitch {
@@ -23,7 +23,7 @@ namespace bf2hitch {
 enum Category {
     FxRequest,      // effect request up to its entry: capture, cache lookup/read, skeleton, or a synchronous build
     FxWait,         // first use of a deferred effect: waiting for (or running) its native build
-    ShaderCreate,   // device shader objects of an effect (MSL interface patches)
+    ShaderCreate,   // device shader objects of an effect (includes MSL interface patches on macOS)
     MetalLibrary,   // newLibraryWithSource (MSL -> AIR)
     MetalPipeline,  // newRenderPipelineStateWithDescriptor
     MetalState,     // depth-stencil and sampler state objects

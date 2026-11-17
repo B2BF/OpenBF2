@@ -11,7 +11,7 @@
 #include "../RendDX9/ShaderParameter.h"
 #include "../../RendDX9Abi/BfMemory.h"
 #include "../../RendDX9Abi/PluginEntry.h"
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h"
 #endif
 #include <cfloat>
@@ -38,7 +38,7 @@ namespace {
 // PE 0x1024B294. Borrowed, lazily cached, and never cleared at level teardown.
 world::IHeightmapCluster* s_circleHeightmapCluster;
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 // [CHOSEN, not recovered] Keep the PE's x87 intermediates on both native processors.
 using CircleReal = bf2x87::Real;
 CircleReal real(float value) { return bf2x87::wide(value); }

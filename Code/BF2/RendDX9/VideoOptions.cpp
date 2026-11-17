@@ -34,8 +34,13 @@
 #include <new>          // videoOptionsConstruct's placement construction
 #if defined(__APPLE__)
 #include "../Platform/macOS/CpuInfo.h" // [CHOSEN, not recovered] sysctl instead of CPUID/RDTSC.
+#elif defined(BF2_LINUX_CLIENT)
+#include <sys/sysinfo.h>
+#include <cstdint>
+#endif
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
 #include "../Platform/X87Compat.h"
-#include "../Platform/macOS/CocoaHost.h"
+#include "../Platform/Host/ClientHost.h"
 #else
 #include <intrin.h>     // __rdtsc / __cpuid - the CPU-speed benchmark inside detectQualityLevel (+0x34)
 #endif
@@ -301,9 +306,9 @@ void videoOptionsChangeResolution(VideoOptions* vo, const Mode40* mode)
     //     sizing frame is added whatever the window's style (a fixed-frame or fullscreen popup
     //     window gets the same arithmetic), and hWndInsertAfter is 0 (HWND_TOP) without
     //     SWP_NOZORDER, so the window is also raised - as shipped.
-#if defined(__APPLE__)
-    // [CHOSEN, not recovered] Cocoa accepts client dimensions and owns frame decoration.
-    macos::CocoaHost::instance().resizeClient(b->modeWidth, b->modeHeight);
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
+    // [CHOSEN, not recovered] The native host accepts client dimensions and owns frame decoration.
+    host::ClientHost::instance().resizeClient(b->modeWidth, b->modeHeight);
 #else
     const int sizeFrameX = ::GetSystemMetrics(SM_CXSIZEFRAME);          // 0x20
     const int windowWidth = b->modeWidth + sizeFrameX * 2;
@@ -1152,7 +1157,7 @@ int RD9_THUNK videoOptions_applyQualityPreset(void* self RD9_THUNK_EDX, int pres
     return 0;
 }
 
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
 // [CHOSEN, not recovered] Report the actual CPU without inventing x86 CPUID
 // registers or equating a host timer tick with a CPU clock. Until the renderer
 // has native quality calibration, an unavailable frequency refuses this probe.
@@ -1160,6 +1165,24 @@ int RD9_THUNK videoOptions_applyQualityPreset(void* self RD9_THUNK_EDX, int pres
 // refusal with measured native quality calibration, validated on Intel and M2 renderers.
 double cpuBenchmarkSpeed()
 {
+#if defined(BF2_LINUX_CLIENT)
+    // [CHOSEN, not recovered] Issue #36 uses the existing native frequency proxy.
+    // Linux CPUFreq publishes cpuinfo_max_freq in kHz; it is not a measured score.
+    // [RETIRE-WHEN: linux-quality-calibration] Replace this proxy with measured
+    // renderer quality calibration validated on Linux x86-64 and ARM64.
+    unsigned long long frequencyKHZ = 0;
+    FILE* source = std::fopen("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq", "r");
+    const bool available = source && std::fscanf(source, "%llu", &frequencyKHZ) == 1 && frequencyKHZ;
+    if (source) std::fclose(source);
+    if (!available) {
+        std::fprintf(stderr, "[CHOSEN, not recovered] dice::hfe::dx9rend::VideoOptions::cpuBenchmarkSpeed: "
+                             "Linux CPU frequency unavailable; measurement refused\n");
+        std::fflush(stderr);
+        return 0.0;
+    }
+    std::fprintf(stderr, "[CHOSEN, not recovered] VideoOptions CPU: CPUFreq maximum %llu kHz\n", frequencyKHZ);
+    return static_cast<double>(frequencyKHZ) * 0.001;
+#else
     bf2macos::CpuInfo cpu;
     if (!bf2macos::readCpuInfo(cpu) || !cpu.frequencyHz) {
         // PE 0x1000EF85 returns zero when the shipped measurement is unavailable.
@@ -1171,6 +1194,7 @@ double cpuBenchmarkSpeed()
     std::fprintf(stderr, "[CHOSEN, not recovered] VideoOptions CPU: %s, sysctl frequency %llu Hz\n",
         cpu.name, static_cast<unsigned long long>(cpu.frequencyHz));
     return static_cast<double>(cpu.frequencyHz) * 0.000001;
+#endif
 }
 
 int cpuBenchmarkScore()
@@ -1180,6 +1204,12 @@ int cpuBenchmarkScore()
 
 double cpuFamilyMultiplier()
 {
+#if defined(BF2_LINUX_CLIENT)
+    // The existing native heuristic has no calibrated entry for Linux CPUs.
+    std::fprintf(stderr, "[CHOSEN, not recovered] dice::hfe::dx9rend::VideoOptions::cpuFamilyMultiplier: "
+                         "Linux CPU calibration unavailable; using unidentified-CPU multiplier\n");
+    std::fflush(stderr);
+#else
     bf2macos::CpuInfo cpu;
     if (!bf2macos::readCpuInfo(cpu)) {
         // PE 0x1000F13D uses the float 0.2 fallback when CPU identification is unavailable.
@@ -1187,6 +1217,7 @@ double cpuFamilyMultiplier()
                              "native CPU identity unavailable; using unidentified-CPU multiplier\n");
         std::fflush(stderr);
     }
+#endif
     // The native sysctl probe does not produce the shipped x86 vendor-table key.
     // Keep the existing port's unknown-vendor multiplier until native calibration.
     return 0.2f;
@@ -1321,6 +1352,15 @@ unsigned int systemRamMB()
     std::size_t length = sizeof(bytes);
     if (sysctlbyname("hw.memsize", &bytes, &length, nullptr, 0) != 0 || length != sizeof(bytes))
         return 256u;
+    unsigned int mb = static_cast<unsigned int>((bytes + 0x7FFFF) >> 20);
+    if (mb & 3u) mb += 4u - (mb & 3u);
+    return mb;
+#elif defined(BF2_LINUX_CLIENT)
+    // [CHOSEN, not recovered] Issue #36 uses native physical RAM, with the same
+    // 256 MB refusal value as the existing native probe if the OS query fails.
+    struct sysinfo memory = {};
+    if (::sysinfo(&memory) != 0) return 256u;
+    const std::uint64_t bytes = static_cast<std::uint64_t>(memory.totalram) * memory.mem_unit;
     unsigned int mb = static_cast<unsigned int>((bytes + 0x7FFFF) >> 20);
     if (mb & 3u) mb += 4u - (mb & 3u);
     return mb;
@@ -1612,7 +1652,7 @@ int __fastcall videoOptions_slot34(void* /*self*/, void*)
 #endif
 {
     const int          benchmark = cpuBenchmarkScore();
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(BF2_NATIVE_X87)
     // [CHOSEN, not recovered] Retain x87 multiply/truncate behavior with the native CPU probe.
     const int cpuScore = bf2x87::toIntTruncate(
         bf2x87::mul(bf2x87::wide(cpuFamilyMultiplier()), bf2x87::wide(benchmark)));

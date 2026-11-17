@@ -14,7 +14,7 @@
 #include "../Math/Frustum.h"
 #include "../RendMisc/IRenderView.h"
 #include "../RendDX9/RendDX9Base.h"
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h"
 #endif
 #include <cfenv>
@@ -347,7 +347,7 @@ int textCoordinate(float value)
         fldcw saved
     }
     return result;
-#elif defined(__APPLE__)
+#elif (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Existing native x87 conversion policy.
     return bf2x87::integer<int>(bf2x87::wide(value));
 #else
@@ -368,7 +368,7 @@ bool DebugTextWriter::project(Vec3& position)
 {
     dx9rend::IRenderView* const view = dx9rend::rendererGetRenderViewDup();
     const Plane3& plane = view->getFrustumPtr()->m_planes[4];
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Preserve x87 operation order and the explicit single stores
     // using the established native extended policy; retail PC=24 identity is not established.
     using namespace bf2x87;
@@ -389,7 +389,7 @@ bool DebugTextWriter::project(Vec3& position)
     const Mat4 source = inverse;
     fullInvert(source, inverse);
     const float* const m = inverse.m;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const float z = store(add(add(add(mul(wide(m[10]), wide(original.z)),
                                      mul(wide(m[6]), wide(original.y))),
                                  mul(wide(m[2]), wide(original.x))), wide(m[14])));
@@ -406,7 +406,7 @@ bool DebugTextWriter::project(Vec3& position)
 #endif
     const float* const p = view->getProjectionMatrixPtr()->m;
     // Retail divides by projected Z, rather than the homogeneous W component.
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const Real projectedZ = add(add(add(mul(wide(y), wide(p[6])),
                                        mul(wide(z), wide(p[10]))),
                                    mul(wide(x), wide(p[2]))), wide(p[14]));

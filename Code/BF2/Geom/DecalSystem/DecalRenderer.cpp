@@ -18,7 +18,7 @@
 #include "../../RendDX9/ShaderParameter.h"
 #include "../../RendMisc/IRenderView.h"
 #include "../../RendMisc/IRenderer.h"
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../../Platform/X87Compat.h"
 #endif
 #include <string>
@@ -397,7 +397,7 @@ void DecalRenderer::addObject(dx9rend::IRenderView& view, DecalObject* object, D
          j = (j + 1) & object->ringMask())
     {
         DecalRecord* const record = object->ringRecords()[j];
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] The subtraction/division retain x87 precision until the argument spill.
         const float t = bf2x87::store((bf2x87::wide(record->age)
             - bf2x87::wide(decalManager()->fadeOutTime()))

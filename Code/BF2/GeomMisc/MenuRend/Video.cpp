@@ -28,10 +28,13 @@
 #include <limits.h>
 #include <mach-o/dyld.h>
 #include <unistd.h>
+#elif defined(__linux__) && defined(BF2_LINUX_CLIENT)
+#include <limits.h>
+#include <unistd.h>
 #endif
 
 // [CHOSEN, not recovered] The images that play Bink movies: x86 imports binkw32.dll; the macOS
-// client and Windows x64 implement the same entry points on the vendored FFmpeg Bink decoders
+// client, Windows x64 and Linux client implement the same entry points on the vendored FFmpeg Bink decoders
 // (BF2_BINK_PORT: RendDX9Abi/BinkFFmpeg.cpp, Code/BF2/External/ffmpeg-bink/README.md; owner decision 2026-11-07).
 #if defined(_M_IX86) || BF2_BINK_PORT
 #define BF2_VIDEO_BINK 1
@@ -430,7 +433,7 @@ bool Video::open(const char* path)
     close();
     if (!path)
         return false;
-#if !defined(_WIN32) && !defined(__APPLE__)
+#if !defined(_WIN32) && !defined(__APPLE__) && !BF2_BINK_PORT
     // [FRONTIER] [TEMP] [CHOSEN, not recovered] See initSound: no Bink runtime outside Windows.
     // [RETIRE-WHEN: posix-bink-decoder]
     std::fprintf(stderr, "[FRONTIER] dice::hfe::geom::Video::open(\"%s\") reached: no Bink runtime "
@@ -477,15 +480,24 @@ bool Video::open(const char* path)
         }
     }
 #else
-    // [CHOSEN, not recovered] macOS: the same two roots, the executable's directory and then the
+    // [CHOSEN, not recovered] Native ports: the executable's directory and then the
     // working directory (the content root the client runs in), each with a '/' appended.
     char exeDir[PATH_MAX + 1];
     exeDir[0] = 0;
     {
         char exePath[PATH_MAX];
+#if defined(__APPLE__)
         uint32_t size = sizeof(exePath);
         if (::_NSGetExecutablePath(exePath, &size) == 0)
+#else
+        // [CHOSEN, not recovered] Linux client executable root (issue #36).
+        const ssize_t length = ::readlink("/proc/self/exe", exePath, sizeof(exePath) - 1);
+        if (length > 0 && static_cast<size_t>(length) < sizeof(exePath) - 1)
+#endif
         {
+#if !defined(__APPLE__)
+            exePath[length] = 0;
+#endif
             const char* cut = ::strrchr(exePath, '/');
             if (cut)
             {
@@ -560,11 +572,11 @@ void Video::doFrame()
 // (+0x28) before open; SwiffRender's '?' arm does not, so a menu started with +restart (intros
 // skipped) plays its background silent, as retail does. The shipped body answers true
 // unconditionally and no caller reads it.
-// [CHOSEN, not recovered] macOS and x64 select the port's sound output through the same call
-// (BinkFFmpeg.cpp: AudioQueue on macOS, DirectSound on x64).
+// [CHOSEN, not recovered] Native clients select the port's sound output through the same call
+// (BinkFFmpeg.cpp: AudioQueue on macOS, DirectSound on x64, SDL3 on Linux under issue #36).
 bool Video::initSound()
 {
-#if !defined(_WIN32) && !defined(__APPLE__)
+#if !defined(_WIN32) && !defined(__APPLE__) && !BF2_BINK_PORT
     // [FRONTIER] [TEMP] [CHOSEN, not recovered] Native POSIX ports have no Bink runtime (binkw32.dll
     // is Windows-only), so a movie cannot be played. [RETIRE-WHEN: posix-bink-decoder] Replace with
     // a licensed Bink runtime or a replacement decoder chosen by the owner (docs/macos-port.md, S2.8).

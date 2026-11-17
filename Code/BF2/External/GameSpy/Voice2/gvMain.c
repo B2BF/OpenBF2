@@ -21,6 +21,8 @@ http://gamespy.net
 		#include "gvPS2Audio.h"
 	#elif defined(_MACOSX)
 		#include "gvOSXAudio.h"
+	#elif defined(_LINUX) && defined(BF2_LINUX_CLIENT)
+		#include "gvSDLAudio.h"
 	#elif defined(_PSP)
 		#include "gvPSPAudio.h"
 	#elif defined(_PS3)
@@ -80,11 +82,18 @@ void gvThink(void)
 **********/
 GVBool gvSetCodec(GVCodec codec)
 {
+#if defined(_LINUX) && defined(BF2_LINUX_CLIENT) && !defined(GV_NO_DEFAULT_HARDWARE)
+	/* [CHOSEN, not recovered] Release old codec-owned playback state before replacement. */
+	gviHardwarePrepareCodecChange();
+#endif
 	return gviSetCodec(codec);
 }
 
 void gvSetCustomCodec(GVCustomCodecInfo * info)
 {
+#if defined(_LINUX) && defined(BF2_LINUX_CLIENT) && !defined(GV_NO_DEFAULT_HARDWARE)
+	gviHardwarePrepareCodecChange();
+#endif
 	gviSetCustomCodec(info);
 }
 
@@ -103,6 +112,9 @@ void gvGetCodecInfo(int * samplesPerFrame, int * encodedFrameSize, int * bitsPer
 ****************/
 void gvSetSampleRate(GVRate sampleRate)
 {
+#if defined(_LINUX) && defined(BF2_LINUX_CLIENT) && !defined(GV_NO_DEFAULT_HARDWARE)
+	gviHardwarePrepareCodecChange();
+#endif
 	gviSetSampleRate(sampleRate);
 }
 

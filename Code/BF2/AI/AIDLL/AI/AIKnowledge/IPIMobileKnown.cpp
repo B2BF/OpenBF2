@@ -1,6 +1,6 @@
 // so and AIDLL_w32ded.dll .
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../../../../Platform/X87Compat.h" // [CHOSEN, not recovered]
 #endif
 #include "IPIMobileKnown.h"
@@ -133,7 +133,7 @@ void IPIMobileKnown::getPositionEstimate(double time, Vec3& position)
     position.y = scaledY;
     position.z = scaledZ;
 #else
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain x87-width values on both Mac architectures.
     // [PLATFORM] ELF rounds age before security and retains one x87-wide scale for X/Y/Z.
     const float age = static_cast<float>(m_time - time);

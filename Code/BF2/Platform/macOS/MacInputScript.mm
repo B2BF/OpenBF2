@@ -53,7 +53,7 @@ bool lookup(const std::string& name, unsigned short& code)
     return false;
 }
 
-// NSEvent.characters for keys UCKeyTranslate reports as control characters (CocoaHost's
+// NSEvent.characters for keys UCKeyTranslate reports as control characters (ClientHost's
 // keyCharacter drops them). Function keys carry private-use characters the host strips anyway.
 std::u16string controlCharacters(unsigned short code)
 {

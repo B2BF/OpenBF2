@@ -57,6 +57,17 @@
       }
     },
     {
+      "name": "linux-client",
+      "inherits": "linux-x64",
+      "displayName": "BF2 native Linux SDL3 / DXVK client",
+      "description": "Native x86-64 or ARM64 toolchain; requires matching SDL3, DXVK Native and effect compiler dependencies. See docs/linux-vulkan-client.md.",
+      "binaryDir": "${sourceDir}/out/build/linux-client",
+      "cacheVariables": {
+        "BF2_LINUX_CLIENT": "ON",
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
       "name": "macos-x64",
       "displayName": "BF2 native macOS dedicated port",
       "description": "AppleClang on macOS: x86_64 build with Unix Makefiles. Needs the Command Line Tools and cmake.",
@@ -129,6 +140,18 @@
         "bf2",
         "dice_py_check"
       ]
+    },
+    {
+      "name": "linux-client",
+      "displayName": "Build the native SDL3 / DXVK client",
+      "configurePreset": "linux-client",
+      "targets": ["bf2_client"]
+    },
+    {
+      "name": "linux-client-checks",
+      "displayName": "Build and run native Linux client checks",
+      "configurePreset": "linux-client",
+      "targets": ["bf2_linux_client_checks"]
     },
     {
       "name": "macos-universal",

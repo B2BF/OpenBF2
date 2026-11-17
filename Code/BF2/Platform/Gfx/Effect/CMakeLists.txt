@@ -1,4 +1,4 @@
-# [CHOSEN, not recovered] Engine-independent library; only the macOS build enters here.
+# [CHOSEN, not recovered] Engine-independent native effect libraries; Linux: kr4uzi/OpenBF2#36.
 get_filename_component(BF2_FX_REPO "${CMAKE_CURRENT_SOURCE_DIR}/../../../../.." ABSOLUTE)
 add_library(bf2_fx_runtime STATIC Cache.cpp Runtime.cpp)
 target_include_directories(bf2_fx_runtime PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -15,39 +15,67 @@ target_compile_features(bf2_fx_native PUBLIC cxx_std_17)
 target_compile_definitions(bf2_fx_native PRIVATE DEDICATED=0 BF2_IMAGE_RENDDX9=1)
 target_compile_options(bf2_fx_native PRIVATE
     "SHELL:-include ${BF2_ROOT}/Core/BuildConfig.h" -Wall -Wextra -Werror -Wno-deprecated-declarations)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    find_package(OpenSSL REQUIRED COMPONENTS Crypto)
+    target_link_libraries(bf2_fx_runtime PRIVATE OpenSSL::Crypto)
+    foreach(_target bf2_fx_runtime bf2_fx_native)
+        target_compile_definitions(${_target} PRIVATE BF2_GFX_DXVK=1)
+        # Existing compact statements trigger GCC's indentation heuristic; Clang accepts them.
+        target_compile_options(${_target} PRIVATE $<$<CXX_COMPILER_ID:GNU>:-Wno-misleading-indentation>)
+    endforeach()
+endif()
 # [CHOSEN, not recovered] Native effect compiler for the client:
 # vkd3d-shader (patched, LGPL-2.1+) and MojoShader (s1c patches, zlib), both built offline by
-# tools/macos/nativefx/build.sh into out/build/nativefx. They are required: there is
+# tools/macos/nativefx/build.sh or tools/linux/build-nativefx.py. They are required: there is
 # no alternate effect compiler or offline-cache-only client configuration.
 set(_native_default "${BF2_FX_REPO}/out/build/nativefx")
-if(CMAKE_OSX_ARCHITECTURES MATCHES "arm64")
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(_native_default "${BF2_FX_REPO}/out/build/nativefx-linux-${CMAKE_SYSTEM_PROCESSOR}")
+elseif(CMAKE_OSX_ARCHITECTURES MATCHES "arm64")
     if(CMAKE_OSX_ARCHITECTURES MATCHES "x86_64")
         string(APPEND _native_default "-universal")
     else()
         string(APPEND _native_default "-arm64")
     endif()
 endif()
-set(BF2_FX_NATIVE_DEPS "${_native_default}" CACHE PATH "vkd3d/MojoShader build of tools/macos/nativefx/build.sh")
+set(BF2_FX_NATIVE_DEPS "${_native_default}" CACHE PATH "Architecture-matched patched vkd3d/MojoShader build")
 set(_nd "${BF2_FX_NATIVE_DEPS}")
 set(BF2_FX_NATIVE_AVAILABLE OFF)
 if(EXISTS "${_nd}/vkd3d/.libs/libvkd3d-shader.a" AND EXISTS "${_nd}/vkd3d/.libs/libvkd3d-common.a"
         AND EXISTS "${_nd}/vkd3d-src/include/vkd3d_shader.h" AND EXISTS "${_nd}/mojo/libmojoshader.a"
         AND EXISTS "${_nd}/mojo-src/mojoshader.h")
     set(BF2_FX_NATIVE_AVAILABLE ON)
-    # [CHOSEN, not recovered] Check actual archive slices, including overridden paths.
-    # A universal build needs every requested slice in all three static dependencies.
-    set(_native_archs ${CMAKE_OSX_ARCHITECTURES})
-    if(NOT _native_archs)
-        set(_native_archs ${CMAKE_SYSTEM_PROCESSOR})
-    endif()
-    foreach(_lib vkd3d/.libs/libvkd3d-shader.a vkd3d/.libs/libvkd3d-common.a mojo/libmojoshader.a)
-        execute_process(COMMAND lipo "${_nd}/${_lib}" -verify_arch ${_native_archs}
-            RESULT_VARIABLE _slice_result OUTPUT_QUIET ERROR_VARIABLE _slice_error)
-        if(NOT _slice_result EQUAL 0)
-            set(BF2_FX_NATIVE_AVAILABLE OFF)
-            message(STATUS "Native effect dependency ${_lib}: ${_slice_error}")
+    if(APPLE)
+        # [CHOSEN, not recovered] Check actual archive slices, including overridden paths.
+        # A universal build needs every requested slice in all three static dependencies.
+        set(_native_archs ${CMAKE_OSX_ARCHITECTURES})
+        if(NOT _native_archs)
+            set(_native_archs ${CMAKE_SYSTEM_PROCESSOR})
         endif()
-    endforeach()
+        foreach(_lib vkd3d/.libs/libvkd3d-shader.a vkd3d/.libs/libvkd3d-common.a mojo/libmojoshader.a)
+            execute_process(COMMAND lipo "${_nd}/${_lib}" -verify_arch ${_native_archs}
+                RESULT_VARIABLE _slice_result OUTPUT_QUIET ERROR_VARIABLE _slice_error)
+            if(NOT _slice_result EQUAL 0)
+                set(BF2_FX_NATIVE_AVAILABLE OFF)
+                message(STATUS "Native effect dependency ${_lib}: ${_slice_error}")
+            endif()
+        endforeach()
+    else()
+        # Link real entry points from every archive. This also works during cross compilation;
+        # no target binary is executed and an incompatible ARM64/x86-64 archive fails here.
+        include(CheckCXXSourceCompiles)
+        include(CMakePushCheckState)
+        cmake_push_check_state(RESET)
+        set(CMAKE_REQUIRED_INCLUDES "${_nd}/vkd3d-src/include" "${_nd}/mojo-src")
+        set(CMAKE_REQUIRED_LIBRARIES "${_nd}/vkd3d/.libs/libvkd3d-shader.a"
+            "${_nd}/vkd3d/.libs/libvkd3d-common.a" "${_nd}/mojo/libmojoshader.a" m)
+        unset(BF2_FX_NATIVE_LINKS CACHE)
+        check_cxx_source_compiles("#include <vkd3d_shader.h>\n#include <mojoshader.h>\nint main() {\nunsigned a = 0, b = 0;\nreturn !vkd3d_shader_get_version(&a, &b) || !MOJOSHADER_version();\n}" BF2_FX_NATIVE_LINKS)
+        cmake_pop_check_state()
+        if(NOT BF2_FX_NATIVE_LINKS)
+            set(BF2_FX_NATIVE_AVAILABLE OFF)
+        endif()
+    endif()
 endif()
 # [CHOSEN, not recovered] A deps build made before the current vkd3d patches still links, but its
 # compiler refuses what the patches fixed (macos_metal_device closureHigherProfileChecks fails with
@@ -68,8 +96,8 @@ if(BF2_FX_NATIVE_AVAILABLE)
         endif()
         message(WARNING "BF2_FX_NATIVE_DEPS=${_nd} was not built from the current tools/macos/vkd3d-patches "
             "(no vkd3d-src/.bf2-patches record, or missing: ${_missing}). Native effect builds can refuse what "
-            "those patches fix. Rebuild with: sh tools/macos/nativefx/build.sh (into a new directory, keeping "
-            "the existing one).")
+            "those patches fix. Rebuild with the platform's nativefx builder into a new directory, "
+            "keeping the existing one; see docs/building.md and docs/linux-vulkan-client.md.")
     endif()
 endif()
 set(BF2_FX_NATIVE_AVAILABLE ${BF2_FX_NATIVE_AVAILABLE} PARENT_SCOPE)
@@ -86,6 +114,10 @@ if(NOT BF2_FX_NATIVE_AVAILABLE AND BF2_MACOS_LINK_RENDDX9)
         "mojo/libmojoshader.a and mojo-src/mojoshader.h.\n"
         "All libraries must contain every requested architecture. There is no Wine cache fallback.")
 endif()
+if(NOT BF2_FX_NATIVE_AVAILABLE AND BF2_LINUX_EFFECT_CHECKS)
+    message(FATAL_ERROR "Linux effect checks require toolchain-compatible native dependencies at ${_nd}. "
+        "Build them with tools/linux/build-nativefx.py; see docs/linux-vulkan-client.md.")
+endif()
 if(BF2_FX_NATIVE_AVAILABLE)
     set(_inc "${CMAKE_CURRENT_BINARY_DIR}/native-generated")
     add_custom_command(OUTPUT "${_inc}/refusals.inc"
@@ -94,10 +126,11 @@ if(BF2_FX_NATIVE_AVAILABLE)
         DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/data/d3dx-refusals.txt" "${CMAKE_CURRENT_SOURCE_DIR}/refusals.cmake"
         COMMENT "BF2FX D3DX refusal table")
     # Toolchain identity: every input that changes native output.
-    file(GLOB _id_inputs "${BF2_FX_REPO}/tools/macos/vkd3d-patches/*.patch"
+    file(GLOB _id_inputs CONFIGURE_DEPENDS "${BF2_FX_REPO}/tools/macos/vkd3d-patches/*.patch"
         "${BF2_FX_REPO}/tools/macos/d3dxfx/patches/*.patch" "${CMAKE_CURRENT_SOURCE_DIR}/Native*.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/Fx*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/D3DAsm.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/*.h"
-        "${CMAKE_CURRENT_SOURCE_DIR}/data/d3dx-refusals.txt")
+        "${CMAKE_CURRENT_SOURCE_DIR}/data/d3dx-refusals.txt" "${CMAKE_CURRENT_SOURCE_DIR}/Cache.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt")
     list(SORT _id_inputs)
     # [CHOSEN, not recovered] The linked archives are inputs too: the patch files above say what
     # the deps should contain, not what a given BF2_FX_NATIVE_DEPS build contains. A stale deps
@@ -105,25 +138,84 @@ if(BF2_FX_NATIVE_AVAILABLE)
     # its refusals poison the cache for good builds. Rebuilt archives reconfigure.
     set(_id_libs "${_nd}/vkd3d/.libs/libvkd3d-shader.a" "${_nd}/vkd3d/.libs/libvkd3d-common.a"
         "${_nd}/mojo/libmojoshader.a")
-    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${_id_libs})
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${_id_libs} ${_id_inputs})
     set(_id "vkd3d-2.1")
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        string(APPEND _id "-dxvk-d3d9-bytecode")
+    endif()
     foreach(f IN LISTS _id_inputs _id_libs)
         file(SHA256 "${f}" _h)
         string(APPEND _id "${_h}")
     endforeach()
-    string(SHA256 _id "${_id}")
+    # Exact compiler configuration is part of equivalence evidence. The manifest itself is
+    # excluded here, then added separately to the persistent effect-cache identity below.
+    string(TOUPPER "${CMAKE_BUILD_TYPE}" _native_config)
+    get_directory_property(_native_directory_options COMPILE_OPTIONS)
+    get_directory_property(_native_directory_definitions COMPILE_DEFINITIONS)
+    file(SHA256 "${CMAKE_CXX_COMPILER}" _native_host_compiler)
+    string(APPEND _id "|${CMAKE_SYSTEM_NAME}|${CMAKE_SYSTEM_PROCESSOR}|${CMAKE_OSX_ARCHITECTURES}|${CMAKE_OSX_DEPLOYMENT_TARGET}"
+        "|${CMAKE_CXX_COMPILER_ID}|${CMAKE_CXX_COMPILER_VERSION}|${_native_host_compiler}|${CMAKE_BUILD_TYPE}"
+        "|${CMAKE_CXX_FLAGS}|${CMAKE_CXX_FLAGS_${_native_config}}|${_native_directory_options}|${_native_directory_definitions}")
+    string(SHA256 _compiler_fingerprint "${_id}")
+    set(BF2_FX_EQUIVALENCE_MANIFEST "" CACHE FILEPATH "Opt-in local native full/trim equivalence manifest")
+    set(_equivalence_text "")
+    if(BF2_FX_EQUIVALENCE_MANIFEST)
+        if(CMAKE_CONFIGURATION_TYPES)
+            message(FATAL_ERROR "Native equivalence manifests require a single-configuration build")
+        endif()
+        if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            message(FATAL_ERROR "Native equivalence manifests currently apply only to the Linux DXVK backend")
+        endif()
+        if(EXISTS "${BF2_FX_EQUIVALENCE_MANIFEST}")
+            file(SIZE "${BF2_FX_EQUIVALENCE_MANIFEST}" _equivalence_size)
+            if(_equivalence_size GREATER 16777216)
+                message(FATAL_ERROR "Native equivalence manifest exceeds the 16 MiB bound")
+            endif()
+            file(READ "${BF2_FX_EQUIVALENCE_MANIFEST}" _equivalence_text)
+            set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${BF2_FX_EQUIVALENCE_MANIFEST}")
+        else()
+            message(WARNING "Native equivalence manifest is absent; retaining full compilation")
+        endif()
+    endif()
+    string(SHA256 _equivalence_hash "${_equivalence_text}")
+    string(SHA256 _id "${_compiler_fingerprint}|${_equivalence_hash}")
     string(SUBSTRING "${_id}" 0 24 _id)
-    add_library(bf2_fx_native_compiler STATIC Native.cpp NativeMojo.cpp NativeVkd3d.cpp "${_inc}/refusals.inc")
+    string(REPLACE "\\" "\\\\" _equivalence_literal "${_equivalence_text}")
+    string(REPLACE "\"" "\\\"" _equivalence_literal "${_equivalence_literal}")
+    string(REPLACE "\n" "\\n\"\n\"" _equivalence_literal "${_equivalence_literal}")
+    string(REPLACE "\r" "\\r" _equivalence_literal "${_equivalence_literal}")
+    file(CONFIGURE OUTPUT "${_inc}/equivalence.inc" CONTENT "\"${_equivalence_literal}\"\n" @ONLY)
+    file(CONFIGURE OUTPUT "${_inc}/compiler-fingerprint.txt" CONTENT "${_compiler_fingerprint}\n" @ONLY)
+    add_library(bf2_fx_native_compiler STATIC Native.cpp NativeMojo.cpp NativeVkd3d.cpp NativeEquivalence.cpp "${_inc}/refusals.inc")
     target_include_directories(bf2_fx_native_compiler PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
         PRIVATE "${_inc}" "${_nd}/vkd3d-src/include" "${_nd}/mojo-src")
     target_compile_features(bf2_fx_native_compiler PUBLIC cxx_std_17)
     target_compile_definitions(bf2_fx_native_compiler PRIVATE DEDICATED=0 BF2_IMAGE_RENDDX9=1
-        MOJOSHADER_EFFECT_SUPPORT BF2_FX_NATIVE_IDENTITY="${_id}")
+        MOJOSHADER_EFFECT_SUPPORT BF2_FX_NATIVE_IDENTITY="${_id}"
+        BF2_FX_COMPILER_FINGERPRINT="${_compiler_fingerprint}")
     target_compile_options(bf2_fx_native_compiler PRIVATE
         "SHELL:-include ${BF2_ROOT}/Core/BuildConfig.h" -Wall -Wextra -Werror -Wno-deprecated-declarations)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        target_compile_definitions(bf2_fx_native_compiler PRIVATE BF2_GFX_DXVK=1)
+        target_compile_options(bf2_fx_native_compiler PRIVATE $<$<CXX_COMPILER_ID:GNU>:-Wno-misleading-indentation>)
+    endif()
     target_link_libraries(bf2_fx_native_compiler PUBLIC bf2_fx_native bf2_fx_runtime
         "${_nd}/vkd3d/.libs/libvkd3d-shader.a" "${_nd}/vkd3d/.libs/libvkd3d-common.a" "${_nd}/mojo/libmojoshader.a")
+    add_executable(bf2_fx_equivalence EXCLUDE_FROM_ALL "${BF2_FX_REPO}/tools/linux/nativefx-equivalence.cpp")
+    target_link_libraries(bf2_fx_equivalence PRIVATE bf2_fx_native_compiler)
+    target_compile_definitions(bf2_fx_equivalence PRIVATE DEDICATED=0 BF2_IMAGE_RENDDX9=1)
+    target_compile_options(bf2_fx_equivalence PRIVATE "SHELL:-include ${BF2_ROOT}/Core/BuildConfig.h")
     message(STATUS "BF2FX native effect compiler: ${_id}")
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_library(bf2_dxvk_effect STATIC ../Metal/Effect.cpp
+            ../../macOS/HitchTrace.cpp ../../macOS/Warmup.cpp)
+        target_compile_features(bf2_dxvk_effect PRIVATE cxx_std_17)
+        target_compile_definitions(bf2_dxvk_effect PRIVATE
+            DEDICATED=0 BF2_IMAGE_RENDDX9=1 BF2_GFX_DXVK=1 BF2_FX_NATIVE=1)
+        target_compile_options(bf2_dxvk_effect PRIVATE "SHELL:-include ${BF2_ROOT}/Core/BuildConfig.h"
+            -Wall -Wextra -Werror $<$<CXX_COMPILER_ID:GNU>:-Wno-misleading-indentation>)
+        target_link_libraries(bf2_dxvk_effect PUBLIC bf2_fx_native_compiler)
+    endif()
 endif()
 option(BF2_FX_DEVELOPER_ORACLE "Enable optional developer oracle tools/tests, not used by the client" OFF)
 if(BF2_FX_DEVELOPER_ORACLE)

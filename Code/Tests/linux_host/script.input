@@ -1,0 +1,28 @@
+# [TEMP] Linux SDL sink contract fixture; it creates no window or server.
+wait-frames 1
+key-down IDKey_LeftShift
+key-down a
+key-up a
+key-up leftshift
+key-down enter
+key-up enter
+key-down escape
+key-up escape
+key-down f13
+key-up f13
+key-down f14
+key-up f14
+key-down f15
+key-up f15
+move 40 20
+button-down 0
+button-up 0
+wheel 1
+capture menu / one
+wait-frames 1
+move-rel 6 -3
+key-down ctrl
+key-down c
+key-up c
+key-up ctrl
+quit

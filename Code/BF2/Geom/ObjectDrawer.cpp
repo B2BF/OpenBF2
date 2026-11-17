@@ -27,7 +27,7 @@
 #include "../RendMisc/IRenderView.h"
 #include "../GeomMisc/Debug.h"
 #include "../GeomMisc/DebugRenderer.h"
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h"
 #endif
 #include "../Scene/Object/ObjectPredicator.h"
@@ -310,7 +310,7 @@ void objectDrawerVisualDistanceUpdate(ObjectDrawer* self, ObjectDrawerSet& set, 
         const Mat4& objectMatrix = object->getVisualAbsoluteTransformation();  // PE +0x8C
 
         const float dx = viewMatrix->m[12] - objectMatrix.m[12];
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] Only x is spilled before the x87 sum z*z + y*y + x*x.
         using namespace bf2x87;
         const Real dy = sub(wide(viewMatrix->m[13]), wide(objectMatrix.m[13]));
@@ -512,7 +512,7 @@ Plane3& plane3AssignNormalized(Plane3& destination, const Plane3& source)
     Vec3& n = destination.normal;
     n = source.normal;
     const double epsilon = 1.1920928955078125e-7;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Keep the squared length and the scale in x87 precision.
     typedef bf2x87::Real Real;
     const float lengthSquared = static_cast<float>((Real(n.x) * Real(n.x) + Real(n.y) * Real(n.y))
@@ -890,7 +890,7 @@ void objectDrawerClearOccluders(ObjectDrawer* self)
 
 void objectDrawerNormalizeOccluderNormal(Vec3& normal)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Preserve the normalization helper's retained x87 inverse.
     using namespace bf2x87;
     const float lengthSquared = store(add(add(mul(wide(normal.x), wide(normal.x)),
@@ -941,7 +941,7 @@ void objectDrawerDebugOccluders(ObjectDrawer* self, ObjectDrawerSet& objects)
         const int recordCount = reinterpret_cast<Count>(occlusionGeometrySlot(geometry, 0xE8))(geometry);
         if (!recordCount) continue;
         const Vec3& position = object->getAbsolutePosition();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] The PE retains all three differences and both squares in x87.
         using namespace bf2x87;
         const Real dx = sub(wide(position.x),wide(camera[0]));
@@ -973,7 +973,7 @@ void objectDrawerDebugOccluders(ObjectDrawer* self, ObjectDrawerSet& objects)
                 const Vec3& c = record->points[second.points[0]];
                 const Vec3& d = record->points[second.points[1]];
                 Vec3 e1, e2, size, minimum, center;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                 e1 = Vec3{store(bf2x87::abs(sub(wide(a.x),wide(b.x)))), store(bf2x87::abs(sub(wide(a.y),wide(b.y)))), store(bf2x87::abs(sub(wide(a.z),wide(b.z))))};
                 e2 = Vec3{store(bf2x87::abs(sub(wide(c.x),wide(d.x)))), store(bf2x87::abs(sub(wide(c.y),wide(d.y)))), store(bf2x87::abs(sub(wide(c.z),wide(d.z))))};
                 size.x = store(add(wide(e1.x),wide(zero.x)));
@@ -1002,7 +1002,7 @@ void objectDrawerDebugOccluders(ObjectDrawer* self, ObjectDrawerSet& objects)
                     return lessValue(firstMin,secondMin) ? firstMin : (lessValue(cv,dv) ? cv : dv);
                 };
                 minimum = Vec3{minimumValue(a.x,b.x,c.x,d.x),minimumValue(a.y,b.y,c.y,d.y),minimumValue(a.z,b.z,c.z,d.z)};
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                 const float halfZ1 = store(mul(wide(e1.z),wide(0.5f)));
                 center.x = store(add(mul(wide(e1.x),wide(0.5f)),wide(minimum.x)));
                 center.y = store(add(mul(wide(e1.y),wide(0.5f)),wide(minimum.y)));
@@ -1035,7 +1035,7 @@ void objectDrawerDebugOccluders(ObjectDrawer* self, ObjectDrawerSet& objects)
 // Builds camera-facing source and silhouette planes from nearby world-space occluders.
 // Requires a render view and the StaticMesh face/edge/point records to remain valid for the call.
 // [CHOSEN, not recovered] The native port retains the x87 values until the observed float stores.
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 using OcclusionScalar = bf2x87::Real;
 #else
 using OcclusionScalar = double;

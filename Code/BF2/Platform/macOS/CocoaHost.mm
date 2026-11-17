@@ -1,5 +1,5 @@
-// [CHOSEN, not recovered] macOS port: Cocoa implementation of CocoaHost. Compile with ARC
-// (-fobjc-arc). See CocoaHost.h for the contract and docs/macos-s2-4.md for the design.
+// [CHOSEN, not recovered] macOS port: Cocoa implementation of ClientHost. Compile with ARC
+// (-fobjc-arc). See ClientHost.h for the contract and docs/macos-s2-4.md for the design.
 
 #include <algorithm>
 #include <cmath>
@@ -9,10 +9,14 @@
 #include <vector>
 #include <unistd.h>                         // getppid: the launcher's pid (activation retries)
 
-#include "CocoaHost.h"
+#include "../Host/ClientHost.h"
+#include "../Host/KeyMap.h"
+#include "CocoaHostTestHooks.h"
+#include "CocoaText.h"
+#include "MacKeyMap.h"
 #include "MacRawMouse.h"
-#include "MacInputScript.h"          // [TEMP] BF2_INPUT_SCRIPT (docs/macos-c-input-script.md)
-#include "MacCursorFile.h"
+#include "../InputScript.h"         // [TEMP] BF2_INPUT_SCRIPT (docs/macos-c-input-script.md)
+#include "../Host/CursorFile.h"
 
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
@@ -31,13 +35,18 @@ extern "C" UInt32 KBGetLayoutType(SInt16 keyboardType);
 namespace {
 const UInt32 kLayoutTypeISO = 0x49534F20u;  // 'ISO '
 
+bool currentKeyboardIsISO()
+{
+    return KBGetLayoutType(static_cast<SInt16>(LMGetKbdType())) == kLayoutTypeISO;
+}
+
 unsigned int msFromSeconds(NSTimeInterval seconds)
 {
     return static_cast<unsigned int>(static_cast<unsigned long long>(seconds * 1000.0));
 }
 } // namespace
 
-using dice::hfe::macos::CocoaHost;
+using dice::hfe::host::ClientHost;
 
 namespace {
 // [CHOSEN, not recovered] A cursor token (the counterpart of an HCURSOR). The two shape tokens
@@ -46,14 +55,14 @@ namespace {
 struct HostCursor
 {
     bool custom = false;
-    dice::hfe::macos::CursorAnimation anim;
+    dice::hfe::host::CursorAnimation anim;
     int totalJiffies = 0;
     CGFloat builtScale = 0.0;           // points per frame pixel the cursors were built for
     CGFloat builtBacking = 0.0;
     NSArray<NSCursor*>* cursors = nil;  // one per frame; NSNull-free, empty when building failed
 };
 
-// The view's cursor rect asks the host for the cursor it shows (defined after CocoaHost::Impl).
+// The view's cursor rect asks the host for the cursor it shows (defined after ClientHost::Impl).
 NSCursor* currentViewCursor();
 } // namespace
 
@@ -126,9 +135,9 @@ NSCursor* currentViewCursor();
 
 namespace dice {
 namespace hfe {
-namespace macos {
+namespace host {
 
-struct CocoaHost::Impl : IInputScriptSink
+struct ClientHost::Impl : inputscript::IInputScriptSink
 {
     OpenBF2HostDelegate* delegate = nil;
     OpenBF2HostWindow*   window   = nil;
@@ -196,7 +205,7 @@ struct CocoaHost::Impl : IInputScriptSink
     // and its windows non-key, so the engine's focus gate drops every click. When that state
     // lasts, the host trusts the system's answer until NSApp catches up or the user leaves.
     bool   systemActive = false; // a fullscreen start waiting for activation (createWindow)
-    CocoaHost* owner = nullptr;       // for becameActive's deferred setFullscreen
+    ClientHost* owner = nullptr;       // for becameActive's deferred setFullscreen
     double activationStarted = 0.0;  // systemUptime of the first request
     double activationLastTry = 0.0;
     float scriptX = 0.0f, scriptY = 0.0f;
@@ -340,7 +349,7 @@ struct CocoaHost::Impl : IInputScriptSink
         move.y = static_cast<float>((b.size.height - p.y) * backHeight / b.size.height);
         move.insideView = true;
         move.captured = relativeMouse && hasFocus();
-        move.timeMs = CocoaHost::tickCountMs();
+        move.timeMs = ClientHost::tickCountMs();
         if (!mouseInView)
         {
             mouseInView = true;
@@ -688,7 +697,7 @@ struct CocoaHost::Impl : IInputScriptSink
         if (!capsReleasePending)
             return;
         capsReleasePending = false;
-        capsRelease.timeMs = CocoaHost::tickCountMs();
+        capsRelease.timeMs = ClientHost::tickCountMs();
         for (IHostEventListener* l : snapshot())
             l->onKey(capsRelease);
     }
@@ -696,29 +705,23 @@ struct CocoaHost::Impl : IInputScriptSink
     void handleKey(NSEvent* event, bool down)
     {
         HostKeyEvent key;
-        key.keyCode   = event.keyCode;
+        key.dik       = macos::dikFromMacKeyCode(event.keyCode, eventIsISO(event));
         key.down      = down;
         key.repeat    = down && event.isARepeat;
-        key.isoLayout = eventIsISO(event);
         key.modifiers = modifiers = static_cast<unsigned int>(event.modifierFlags);
         key.timeMs    = msFromSeconds(event.timestamp);
-        updateAsyncEnter(key.keyCode, key.down, key.repeat);
+        updateAsyncEnter(event.keyCode, key.down, key.repeat);
         for (IHostEventListener* l : snapshot())
             l->onKey(key);
         if (!down)
             return;
         HostTextEvent text;
-        text.keyCode   = event.keyCode;
+        text.dik       = key.dik;
         text.modifiers = key.modifiers;
         text.repeat    = key.repeat;
         NSString* chars = event.characters;
         for (NSUInteger i = 0; i < chars.length; ++i)
-        {
-            const unichar c = [chars characterAtIndex:i];
-            if (c >= 0xF700 && c <= 0xF8FF)          // NSUpArrowFunctionKey and friends
-                continue;
-            text.characters.push_back(c);
-        }
+            macos::appendNormalizedCocoaText(text, [chars characterAtIndex:i]);
         if (text.characters.empty())
             return;
         for (IHostEventListener* l : snapshot())
@@ -734,9 +737,8 @@ struct CocoaHost::Impl : IInputScriptSink
         const unsigned int previous = modifiers;
         modifiers = flags;
         HostKeyEvent key;
-        key.keyCode   = keyCode;
+        key.dik       = macos::dikFromMacKeyCode(keyCode, eventIsISO(event));
         key.repeat    = false;
-        key.isoLayout = eventIsISO(event);
         key.modifiers = flags;
         key.timeMs    = msFromSeconds(event.timestamp);
 
@@ -748,10 +750,10 @@ struct CocoaHost::Impl : IInputScriptSink
         case 0x3C: deviceMask = HostModRightShift;   genericMask = HostModShift;   break;
         case 0x3B: deviceMask = HostModLeftControl;  genericMask = HostModControl; break;
         case 0x3E: deviceMask = HostModRightControl; genericMask = HostModControl; break;
-        case 0x3A: deviceMask = HostModLeftOption;   genericMask = HostModOption;  break;
-        case 0x3D: deviceMask = HostModRightOption;  genericMask = HostModOption;  break;
-        case 0x37: deviceMask = HostModLeftCommand;  genericMask = HostModCommand; break;
-        case 0x36: deviceMask = HostModRightCommand; genericMask = HostModCommand; break;
+        case 0x3A: deviceMask = HostModLeftAlt;      genericMask = HostModAlt;     break;
+        case 0x3D: deviceMask = HostModRightAlt;     genericMask = HostModAlt;     break;
+        case 0x37: deviceMask = HostModLeftSuper;    genericMask = HostModSuper;   break;
+        case 0x36: deviceMask = HostModRightSuper;   genericMask = HostModSuper;   break;
         case 0x3F: genericMask = HostModFunction; break;
         case 0x39:                                   // Caps Lock: a lock-state toggle
             if ((flags ^ previous) & HostModCapsLock)
@@ -903,10 +905,10 @@ struct CocoaHost::Impl : IInputScriptSink
     // engine) thread. Without focus they are discarded, as the routed NSEvents are.
     void drainRawMouse()
     {
-        RawMouseSample samples[256];
+        macos::RawMouseSample samples[256];
         for (;;)
         {
-            const std::size_t n = rawMouseDrain(samples, 256);
+            const std::size_t n = macos::rawMouseDrain(samples, 256);
             if (n == 0)
                 break;
             if (!hasFocus() || scripted)
@@ -950,7 +952,7 @@ struct CocoaHost::Impl : IInputScriptSink
         }
         drainRawMouse();
         if (scripted)
-            inputScript().tick(*this);
+            inputscript::inputScript().tick(*this);
         return quit;
     }
 
@@ -965,10 +967,10 @@ struct CocoaHost::Impl : IInputScriptSink
         case 0x3C: deviceMask = HostModRightShift;   genericMask = HostModShift;   break;
         case 0x3B: deviceMask = HostModLeftControl;  genericMask = HostModControl; break;
         case 0x3E: deviceMask = HostModRightControl; genericMask = HostModControl; break;
-        case 0x3A: deviceMask = HostModLeftOption;   genericMask = HostModOption;  break;
-        case 0x3D: deviceMask = HostModRightOption;  genericMask = HostModOption;  break;
-        case 0x37: deviceMask = HostModLeftCommand;  genericMask = HostModCommand; break;
-        case 0x36: deviceMask = HostModRightCommand; genericMask = HostModCommand; break;
+        case 0x3A: deviceMask = HostModLeftAlt;      genericMask = HostModAlt;     break;
+        case 0x3D: deviceMask = HostModRightAlt;     genericMask = HostModAlt;     break;
+        case 0x37: deviceMask = HostModLeftSuper;    genericMask = HostModSuper;   break;
+        case 0x36: deviceMask = HostModRightSuper;   genericMask = HostModSuper;   break;
         default: break;
         }
         if (deviceMask)
@@ -980,30 +982,28 @@ struct CocoaHost::Impl : IInputScriptSink
                 // The generic flag stays while the other side's key is held.
                 const unsigned int sides = genericMask == HostModShift   ? (HostModLeftShift | HostModRightShift)
                                          : genericMask == HostModControl ? (HostModLeftControl | HostModRightControl)
-                                         : genericMask == HostModOption  ? (HostModLeftOption | HostModRightOption)
-                                                                         : (HostModLeftCommand | HostModRightCommand);
+                                         : genericMask == HostModAlt     ? (HostModLeftAlt | HostModRightAlt)
+                                                                         : (HostModLeftSuper | HostModRightSuper);
                 if (!(modifiers & sides)) modifiers &= ~genericMask;
             }
         }
         HostKeyEvent key;
-        key.keyCode   = keyCode;
+        key.dik       = macos::dikFromMacKeyCode(keyCode, false); // scripts name ANSI positions
         key.down      = down;
         key.repeat    = false;
-        key.isoLayout = false;                   // scripts name ANSI positions
         key.modifiers = modifiers;
-        key.timeMs    = CocoaHost::tickCountMs();
-        updateAsyncEnter(key.keyCode, key.down, key.repeat);
+        key.timeMs    = ClientHost::tickCountMs();
+        updateAsyncEnter(keyCode, key.down, key.repeat);
         for (IHostEventListener* l : snapshot())
             l->onKey(key);
         if (!down || deviceMask)
             return;
         HostTextEvent chars;
-        chars.keyCode   = keyCode;
+        chars.dik       = key.dik;
         chars.modifiers = modifiers;
         chars.repeat    = false;
         for (char16_t c : text)
-            if (!(c >= 0xF700 && c <= 0xF8FF))
-                chars.characters.push_back(static_cast<unsigned short>(c));
+            macos::appendNormalizedCocoaText(chars, static_cast<unsigned short>(c));
         if (chars.characters.empty())
             return;
         for (IHostEventListener* l : snapshot())
@@ -1028,7 +1028,7 @@ struct CocoaHost::Impl : IInputScriptSink
         move.y = y;
         move.insideView = x >= 0 && y >= 0 && x < backWidth && y < backHeight;
         move.captured = relativeMouse && hasFocus();
-        move.timeMs = CocoaHost::tickCountMs();
+        move.timeMs = ClientHost::tickCountMs();
         mouseInView = move.insideView;
         for (IHostEventListener* l : snapshot())
             l->onMouseMove(move);
@@ -1057,7 +1057,7 @@ struct CocoaHost::Impl : IInputScriptSink
             HostRawMouseEvent raw;
             raw.dx = dx;
             raw.dy = dy;
-            raw.timeMs = CocoaHost::tickCountMs();
+            raw.timeMs = ClientHost::tickCountMs();
             for (IHostEventListener* l : snapshot())
                 l->onRawMouseMove(raw);
         }
@@ -1083,7 +1083,7 @@ struct CocoaHost::Impl : IInputScriptSink
         button.x = scriptX;
         button.y = scriptY;
         button.captured = relativeMouse && hasFocus();
-        button.timeMs = CocoaHost::tickCountMs();
+        button.timeMs = ClientHost::tickCountMs();
         for (IHostEventListener* l : snapshot())
             l->onMouseButton(button);
     }
@@ -1093,23 +1093,17 @@ struct CocoaHost::Impl : IInputScriptSink
         HostMouseWheelEvent wheel;
         wheel.delta = delta;
         wheel.captured = relativeMouse && hasFocus();
-        wheel.timeMs = CocoaHost::tickCountMs();
+        wheel.timeMs = ClientHost::tickCountMs();
         for (IHostEventListener* l : snapshot())
             l->onMouseWheel(wheel);
     }
 
     std::u16string scriptKeyCharacter(unsigned short keyCode, bool shift) override
     {
-        // [TEMP] Scripts name ANSI positions (isoLayout = false in the scripted key path), but
-        // keyCharacter translates with the machine's keyboard type. On an ISO keyboard macOS swaps
-        // the two codes: the key left of 1 is kVK_ISO_Section (0x0A), the key beside left Shift
-        // kVK_ANSI_Grave (0x32). Swap them back so a scripted key's character belongs to the same
-        // physical key as its DIK (`grave`: DIK_GRAVE and the console key's own character, which
-        // BF2Console::updateConsole swallows when it is U+00A7, as retail 0x812E540 does).
-        CocoaHost& host = CocoaHost::instance();
-        if (host.isISOKeyboard() && (keyCode == 0x0A || keyCode == 0x32))
-            keyCode = keyCode == 0x0A ? 0x32 : 0x0A;
-        return host.keyCharacter(keyCode, shift ? HostModShift : 0u);
+        // [TEMP] Scripts name ANSI positions. DIK identifies that physical key before the
+        // current layout maps it back to Cocoa, including ISO grave/OEM_102 swapping.
+        return ClientHost::instance().keyCharacter(macos::dikFromMacKeyCode(keyCode, false),
+                                                   shift ? HostModShift : 0u);
     }
 
     void scriptQuit() override
@@ -1118,17 +1112,17 @@ struct CocoaHost::Impl : IInputScriptSink
             requestClose();
     }
 
-    static bool rawMouseAvailable() { return rawMouseCount() > 0; }
+    static bool rawMouseAvailable() { return macos::rawMouseCount() > 0; }
 };
 
-} // namespace macos
+} // namespace host
 } // namespace hfe
 } // namespace dice
 
 @implementation OpenBF2HostDelegate
 {
 @public
-    dice::hfe::macos::CocoaHost::Impl* impl;
+    dice::hfe::host::ClientHost::Impl* impl;
 }
 - (void)syncFocus
 {
@@ -1149,7 +1143,7 @@ struct CocoaHost::Impl : IInputScriptSink
 - (BOOL)windowShouldClose:(NSWindow*)sender
 {
     (void)sender;
-    CocoaHost::instance().requestQuit();
+    ClientHost::instance().requestQuit();
     return NO;                                   // the engine tears the window down itself
 }
 - (void)windowDidBecomeKey:(NSNotification*)note     { (void)note; [self syncFocus]; }
@@ -1167,26 +1161,26 @@ struct CocoaHost::Impl : IInputScriptSink
 - (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication*)sender
 {
     (void)sender;
-    CocoaHost::instance().requestQuit();
+    ClientHost::instance().requestQuit();
     return NSTerminateCancel;                    // shutdown runs through the engine, not exit()
 }
 - (void)quitRequested:(id)sender
 {
     (void)sender;
-    CocoaHost::instance().requestQuit();
+    ClientHost::instance().requestQuit();
 }
 @end
 
 namespace dice {
 namespace hfe {
-namespace macos {
+namespace host {
 
-} // namespace macos
+} // namespace host
 } // namespace hfe
 } // namespace dice
 
 namespace {
-CocoaHost::Impl* s_hostImpl = nullptr;   // the singleton's state, for the view's cursor rect
+ClientHost::Impl* s_hostImpl = nullptr;   // the singleton's state, for the view's cursor rect
 NSCursor* currentViewCursor()
 {
     return s_hostImpl ? s_hostImpl->rectCursor : nil;
@@ -1195,18 +1189,18 @@ NSCursor* currentViewCursor()
 
 namespace dice {
 namespace hfe {
-namespace macos {
+namespace host {
 
-CocoaHost& CocoaHost::instance()
+ClientHost& ClientHost::instance()
 {
-    static CocoaHost* host = new CocoaHost();    // lives for the process, like the Win32 class
+    static ClientHost* host = new ClientHost();    // lives for the process, like the Win32 class
     return *host;
 }
 
-CocoaHost::CocoaHost() : m_impl(new Impl()) { s_hostImpl = m_impl; m_impl->owner = this; }
-CocoaHost::~CocoaHost() { delete m_impl; }
+ClientHost::ClientHost() : m_impl(new Impl()) { s_hostImpl = m_impl; m_impl->owner = this; }
+ClientHost::~ClientHost() { delete m_impl; }
 
-bool CocoaHost::initApplication()
+bool ClientHost::initApplication()
 {
     if (m_impl->appInitialized)
         return true;
@@ -1247,19 +1241,19 @@ bool CocoaHost::initApplication()
         [NSApp setMainMenu:menuBar];
 
         [NSApp finishLaunching];
-        m_impl->scripted = inputScript().loadFromEnvironment();   // [TEMP] BF2_INPUT_SCRIPT
+        m_impl->scripted = inputscript::inputScript().loadFromEnvironment();   // [TEMP] BF2_INPUT_SCRIPT
         {
             const char* realFocus = std::getenv("BF2_INPUT_SCRIPT_REAL_FOCUS");
             m_impl->scriptedFocus = m_impl->scripted && !(realFocus && realFocus[0] == '1');
         }
-        rawMouseStart();                         // GCMouse connections, observed for the run
+        macos::rawMouseStart();                         // GCMouse connections, observed for the run
     }
     m_impl->appInitialized = true;
     m_impl->appActive = (m_impl->scriptedFocus || [NSApp isActive]) ? true : false;
     return true;
 }
 
-bool CocoaHost::createWindow(const HostWindowDesc& desc)
+bool ClientHost::createWindow(const HostWindowDesc& desc)
 {
     if (!initApplication() || m_impl->window)
         return false;
@@ -1331,7 +1325,7 @@ bool CocoaHost::createWindow(const HostWindowDesc& desc)
     return true;
 }
 
-void CocoaHost::destroyWindow()
+void ClientHost::destroyWindow()
 {
     if (!m_impl->window)
         return;
@@ -1356,14 +1350,12 @@ void CocoaHost::destroyWindow()
     m_impl->applyCursor();                       // window gone: unhide and re-associate
 }
 
-bool  CocoaHost::hasWindow() const    { return m_impl->window != nil; }
-void* CocoaHost::nativeWindow() const { return (__bridge void*)m_impl->window; }
-void* CocoaHost::nativeView() const   { return (__bridge void*)m_impl->view; }
-void* CocoaHost::metalLayer() const   { return (__bridge void*)m_impl->layer; }
-int   CocoaHost::clientWidth() const  { return m_impl->backWidth; }
-int   CocoaHost::clientHeight() const { return m_impl->backHeight; }
+bool  ClientHost::hasWindow() const    { return m_impl->window != nil; }
+void* ClientHost::rendererWindowHandle() const { return (__bridge void*)m_impl->view; }
+int   ClientHost::clientWidth() const  { return m_impl->backWidth; }
+int   ClientHost::clientHeight() const { return m_impl->backHeight; }
 
-void CocoaHost::show(bool visible)
+void ClientHost::show(bool visible)
 {
     if (!m_impl->window)
         return;
@@ -1379,21 +1371,21 @@ void CocoaHost::show(bool visible)
     m_impl->visible = visible;
 }
 
-bool CocoaHost::isVisible() const { return m_impl->window != nil && m_impl->visible; }
+bool ClientHost::isVisible() const { return m_impl->window != nil && m_impl->visible; }
 
-void CocoaHost::minimize()
+void ClientHost::minimize()
 {
     if (m_impl->window)
         [m_impl->window miniaturize:nil];
 }
 
-void CocoaHost::setTitle(const std::string& title)
+void ClientHost::setTitle(const std::string& title)
 {
     if (m_impl->window)
         m_impl->window.title = [NSString stringWithUTF8String:title.c_str()] ?: @"";
 }
 
-void CocoaHost::resizeClient(int width, int height)
+void ClientHost::resizeClient(int width, int height)
 {
     if (!m_impl->window || width <= 0 || height <= 0)
         return;
@@ -1413,7 +1405,7 @@ void CocoaHost::resizeClient(int width, int height)
     m_impl->notifyResize();
 }
 
-void CocoaHost::setFullscreen(bool fullscreen)
+void ClientHost::setFullscreen(bool fullscreen)
 {
     if (!m_impl->window || fullscreen == m_impl->fullscreen)
         return;
@@ -1450,61 +1442,61 @@ void CocoaHost::setFullscreen(bool fullscreen)
     m_impl->notifyResize();
 }
 
-bool CocoaHost::isFullscreen() const { return m_impl->fullscreen; }
-bool CocoaHost::hasFocus() const     { return m_impl->hasFocus(); }
-bool CocoaHost::isAppActive() const  { return m_impl->appActive; }
-unsigned int CocoaHost::deactivationCount() const { return m_impl->deactivations; }
+bool ClientHost::isFullscreen() const { return m_impl->fullscreen; }
+bool ClientHost::hasFocus() const     { return m_impl->hasFocus(); }
+bool ClientHost::isAppActive() const  { return m_impl->appActive; }
+unsigned int ClientHost::deactivationCount() const { return m_impl->deactivations; }
 
-bool CocoaHost::pumpEvents()                     { return m_impl->pump(0.0); }
-bool CocoaHost::waitEvents(double timeoutSeconds){ return m_impl->pump(timeoutSeconds); }
-bool CocoaHost::quitRequested() const            { return m_impl->quit; }
-void CocoaHost::postQuitMessage()                { m_impl->quit = true; }
+bool ClientHost::pumpEvents()                     { return m_impl->pump(0.0); }
+bool ClientHost::waitEvents(double timeoutSeconds){ return m_impl->pump(timeoutSeconds); }
+bool ClientHost::quitRequested() const            { return m_impl->quit; }
+void ClientHost::postQuitMessage()                { m_impl->quit = true; }
 
-void CocoaHost::requestQuit()
+void ClientHost::requestQuit()
 {
     if (!m_impl->quit)
         m_impl->requestClose();
 }
 
-void CocoaHost::addListener(IHostEventListener* listener)
+void ClientHost::addListener(IHostEventListener* listener)
 {
     if (listener && std::find(m_impl->listeners.begin(), m_impl->listeners.end(), listener)
                     == m_impl->listeners.end())
         m_impl->listeners.push_back(listener);
 }
 
-void CocoaHost::removeListener(IHostEventListener* listener)
+void ClientHost::removeListener(IHostEventListener* listener)
 {
     m_impl->listeners.erase(std::remove(m_impl->listeners.begin(), m_impl->listeners.end(), listener),
                             m_impl->listeners.end());
 }
 
-int CocoaHost::showCursor(bool show)
+int ClientHost::showCursor(bool show)
 {
     m_impl->cursorCounter += show ? 1 : -1;
     m_impl->applyCursor();
     return m_impl->cursorCounter;
 }
 
-void CocoaHost::setCursorHiddenInView(bool hidden)
+void ClientHost::setCursorHiddenInView(bool hidden)
 {
     m_impl->cursorHiddenInView = hidden;
     m_impl->applyCursor();
 }
 
-void CocoaHost::setCursorShape(HostCursorShape shape)
+void ClientHost::setCursorShape(HostCursorShape shape)
 {
     // AppKit has no public busy cursor; both shapes show the arrow (docs/macos-s2-4.md).
     setCursor(cursorHandle(shape));
 }
 
-void* CocoaHost::cursorHandle(HostCursorShape shape)
+void* ClientHost::cursorHandle(HostCursorShape shape)
 {
     static HostCursor shapes[2];
     return &shapes[shape == HostCursorBusy ? 1 : 0];
 }
 
-void* CocoaHost::loadCursorFromFile(const char* path)
+void* ClientHost::loadCursorFromFile(const char* path)
 {
     if (!path || !*path)
         return nullptr;
@@ -1531,7 +1523,7 @@ void* CocoaHost::loadCursorFromFile(const char* path)
     return loaded.back().get();
 }
 
-void CocoaHost::setCursor(void* handle)
+void ClientHost::setCursor(void* handle)
 {
     if (!handle)
     {
@@ -1552,15 +1544,15 @@ void CocoaHost::setCursor(void* handle)
     m_impl->updateCursorImage();
 }
 
-void CocoaHost::setRelativeMouseMode(bool enabled)
+void ClientHost::setRelativeMouseMode(bool enabled)
 {
     m_impl->relativeMouse = enabled;
     m_impl->applyCursor();
 }
 
-bool CocoaHost::relativeMouseMode() const { return m_impl->relativeMouse; }
+bool ClientHost::relativeMouseMode() const { return m_impl->relativeMouse; }
 
-unsigned short CocoaHost::consumeAsyncEnterState()
+unsigned short ClientHost::consumeAsyncEnterState()
 {
     // [CHOSEN, not recovered] Cocoa supplies the consuming press bit. Quartz
     // supplies hardware state independently of gameswf delivery/focus. Scripted
@@ -1573,20 +1565,35 @@ unsigned short CocoaHost::consumeAsyncEnterState()
     m_impl->enterPressed = false;
     return state;
 }
-bool CocoaHost::rawMouseAvailable() const { return rawMouseCount() > 0; }
+bool ClientHost::rawMouseAvailable() const { return macos::rawMouseCount() > 0; }
 
-unsigned int CocoaHost::modifierFlags() const
+unsigned int ClientHost::modifierFlags() const
 {
     return static_cast<unsigned int>([NSEvent modifierFlags]);
 }
 
-bool CocoaHost::isISOKeyboard() const
+bool ClientHost::controlShortcutDown() const
 {
-    return KBGetLayoutType(static_cast<SInt16>(LMGetKbdType())) == kLayoutTypeISO;
+    return (modifierFlags() & (HostModControl | HostModSuper)) != 0;
 }
 
-std::u16string CocoaHost::keyCharacter(unsigned short keyCode, unsigned int modifiers) const
+const char* ClientHost::keyDisplayName(unsigned char dik) const
 {
+    switch (dik) {
+    case 56:  return "Option";
+    case 184: return "Right Option";
+    case 219: return "Command";
+    case 220: return "Right Command";
+    case 69:  return "Clear";
+    default:  return dikDisplayName(dik);
+    }
+}
+
+std::u16string ClientHost::keyCharacter(unsigned char dik, unsigned int modifiers) const
+{
+    const unsigned short keyCode = macos::macKeyCodeFromDik(dik, currentKeyboardIsISO());
+    if (keyCode == 0xFFFF)
+        return {};
     // UCKeyTranslate takes the Carbon modifier byte (shiftKey >> 8, alphaLock >> 8).
     UInt32 modifierState = 0;
     if (modifiers & HostModShift)    modifierState |= (shiftKey >> 8) & 0xFF;
@@ -1616,7 +1623,7 @@ std::u16string CocoaHost::keyCharacter(unsigned short keyCode, unsigned int modi
     return result;
 }
 
-bool CocoaHost::setClipboardText(const std::string& text)
+bool ClientHost::setClipboardText(const std::string& text)
 {
     @autoreleasepool
     {
@@ -1631,7 +1638,7 @@ bool CocoaHost::setClipboardText(const std::string& text)
     }
 }
 
-bool CocoaHost::getClipboardText(std::string& text) const
+bool ClientHost::getClipboardText(std::string& text) const
 {
     @autoreleasepool
     {
@@ -1660,7 +1667,7 @@ static int builtInPanelRefreshHz()
     return 0;
 }
 
-std::vector<HostDisplayModeInfo> CocoaHost::displayModes() const
+std::vector<HostDisplayModeInfo> ClientHost::displayModes() const
 {
     std::vector<HostDisplayModeInfo> modes;
     const void* keys[] = { kCGDisplayShowDuplicateLowResolutionModes };
@@ -1699,7 +1706,7 @@ std::vector<HostDisplayModeInfo> CocoaHost::displayModes() const
     return modes;
 }
 
-HostDisplayModeInfo CocoaHost::desktopMode() const
+HostDisplayModeInfo ClientHost::desktopMode() const
 {
     HostDisplayModeInfo info = { 0, 0, 0, 32 };
     CGDisplayModeRef mode = CGDisplayCopyDisplayMode(CGMainDisplayID());
@@ -1716,7 +1723,7 @@ HostDisplayModeInfo CocoaHost::desktopMode() const
     return info;
 }
 
-void CocoaHost::preventDisplaySleep(bool prevent)
+void ClientHost::preventDisplaySleep(bool prevent)
 {
     if (prevent == m_impl->sleepAssertionHeld)
         return;
@@ -1733,7 +1740,7 @@ void CocoaHost::preventDisplaySleep(bool prevent)
     }
 }
 
-bool CocoaHost::openURL(const std::string& url)
+bool ClientHost::openURL(const std::string& url)
 {
     @autoreleasepool
     {
@@ -1747,43 +1754,68 @@ bool CocoaHost::openURL(const std::string& url)
     }
 }
 
-#if defined(OPENBF2_HOST_TEST_SEAMS)
-void CocoaHost::overrideFocusForTest(bool windowKey, bool appActive)
-{
-    m_impl->setFocusState(windowKey, appActive);
-}
-
-void CocoaHost::enableHeadlessForTest()
-{
-    m_impl->testHeadless = true;
-}
-
-void CocoaHost::injectEventForTest(void* nsEvent)
-{
-    @autoreleasepool
-    {
-        m_impl->flushCapsRelease();             // pumpEvents' order: pending Caps Lock release first
-        m_impl->route((__bridge NSEvent*)nsEvent);
-    }
-}
-
-void CocoaHost::pumpRawMouseForTest()
-{
-    m_impl->drainRawMouse();
-}
-
-void CocoaHost::cursorStateForTest(bool& hidden, bool& disassociated) const
-{
-    hidden = m_impl->cursorHidden;
-    disassociated = m_impl->mouseDisassociated;
-}
-#endif
-
-unsigned int CocoaHost::tickCountMs()
+unsigned int ClientHost::tickCountMs()
 {
     return msFromSeconds([[NSProcessInfo processInfo] systemUptime]);
 }
 
+} // namespace host
+
+#if defined(OPENBF2_HOST_TEST_SEAMS)
+namespace macos {
+
+void* CocoaHostTestHooks::nativeWindow(host::ClientHost& host)
+{
+    return (__bridge void*)host.m_impl->window;
+}
+
+void* CocoaHostTestHooks::nativeView(host::ClientHost& host)
+{
+    return (__bridge void*)host.m_impl->view;
+}
+
+void* CocoaHostTestHooks::metalLayer(host::ClientHost& host)
+{
+    return (__bridge void*)host.m_impl->layer;
+}
+
+bool CocoaHostTestHooks::isISOKeyboard(const host::ClientHost&)
+{
+    return currentKeyboardIsISO();
+}
+
+void CocoaHostTestHooks::overrideFocusForTest(host::ClientHost& host, bool windowKey, bool appActive)
+{
+    host.m_impl->setFocusState(windowKey, appActive);
+}
+
+void CocoaHostTestHooks::enableHeadlessForTest(host::ClientHost& host)
+{
+    host.m_impl->testHeadless = true;
+}
+
+void CocoaHostTestHooks::injectEventForTest(host::ClientHost& host, void* nsEvent)
+{
+    @autoreleasepool
+    {
+        host.m_impl->flushCapsRelease();        // pumpEvents' order: pending Caps Lock release first
+        host.m_impl->route((__bridge NSEvent*)nsEvent);
+    }
+}
+
+void CocoaHostTestHooks::pumpRawMouseForTest(host::ClientHost& host)
+{
+    host.m_impl->drainRawMouse();
+}
+
+void CocoaHostTestHooks::cursorStateForTest(const host::ClientHost& host, bool& hidden, bool& disassociated)
+{
+    hidden = host.m_impl->cursorHidden;
+    disassociated = host.m_impl->mouseDisassociated;
+}
+
 } // namespace macos
+#endif
+
 } // namespace hfe
 } // namespace dice

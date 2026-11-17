@@ -6,7 +6,7 @@
 #   ../../../out/build/macos-host-test/macos_host_test --seconds 3
 #
 # It links the production host (Code/BF2/Platform/macOS) and the production input devices
-# (Code/BF2/IO/Input/Mac*) with a control-map fixture. [RETIRE-WHEN: macos-client-window]
+# (Code/BF2/IO/Input/Native*) with a control-map fixture. [RETIRE-WHEN: macos-client-window]
 # Remove once the bf2_client target opens its window through the host on macOS.
 cmake_minimum_required(VERSION 3.21)
 # GCMouse (MacRawMouse.mm) needs macOS 11, the port's minimum.
@@ -28,10 +28,11 @@ add_executable(macos_host_test
     "${BF2_ROOT}/Platform/macOS/MacInputScript.mm"
     "${BF2_ROOT}/Platform/InputScript.cpp"
     "${BF2_ROOT}/Platform/macOS/MacKeyMap.cpp"
-    "${BF2_ROOT}/IO/Input/MacInputDeviceManager.cpp"
-    "${BF2_ROOT}/IO/Input/MacKeyboardDevice.cpp"
-    "${BF2_ROOT}/IO/Input/MacMouseDevice.cpp"
-    "${BF2_ROOT}/IO/Input/MacGameControllerDevice.cpp")
+    "${BF2_ROOT}/Platform/Host/KeyMap.cpp"
+    "${BF2_ROOT}/IO/Input/NativeInputDeviceManager.cpp"
+    "${BF2_ROOT}/IO/Input/NativeKeyboardDevice.cpp"
+    "${BF2_ROOT}/IO/Input/NativeMouseDevice.cpp"
+    "${BF2_ROOT}/IO/Input/NativeGameControllerDevice.cpp")
 
 set_target_properties(macos_host_test PROPERTIES CXX_STANDARD 14 CXX_EXTENSIONS ON
                                                  OBJCXX_STANDARD 14 OBJCXX_EXTENSIONS ON)

@@ -119,7 +119,13 @@ int OpenALProvider::open(const std::string& name)
             close();
             return 2;
         }
+#if defined(__linux__) && defined(BF2_LINUX_CLIENT)
+        // [CHOSEN, not recovered] Keep the saved provider indices, but let OpenAL Soft
+        // select the native default output instead of a Windows driver name (issue #36).
+        m_device = alc_OpenDevice(0);
+#else
         m_device = alc_OpenDevice(p.deviceName.c_str());
+#endif
         flags = getOpenALFlags() & ~1;
     }
     setOpenALFlags(flags);

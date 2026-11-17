@@ -65,9 +65,9 @@ SetConsoleClassDefaults::SetConsoleClassDefaults(const char* objectName, unsigne
 
 #endif // BF2_IMAGE_RENDDX9
 
-// [CHOSEN, not recovered] The macOS static image calls the host's identical
+// [CHOSEN, not recovered] The native static image calls the host's identical
 // ConsoleObjects methods directly; the per-DLL bridge remains unchanged on Windows.
-#if defined(BF2_IMAGE_RENDDX9) && !(defined(__APPLE__) && defined(BF2_STATIC_PLUGINS))
+#if defined(BF2_IMAGE_RENDDX9) && !defined(BF2_STATIC_PLUGINS)
 
 #include "../BF2/Core/ConsoleObjects.h"
 

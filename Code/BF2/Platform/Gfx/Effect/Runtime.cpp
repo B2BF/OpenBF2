@@ -1,5 +1,5 @@
 // [CHOSEN, not recovered] Port implementation using the local MojoShader FX2/CTAB contract.
-#if defined(__APPLE__)
+#if defined(__APPLE__) || (defined(__linux__) && defined(BF2_GFX_DXVK))
 #include "Runtime.h"
 #include "../Unsupported.h"
 #include <algorithm>

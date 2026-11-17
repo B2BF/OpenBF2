@@ -14,7 +14,7 @@
 #include "../GeomMisc/Debug.h"
 #include "../Math/Mat4.h"
 #include "../RendDX9/RendDX9Math.h"       // rendmath::constructIdentity, the PE 0x10077A30 product
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h"
 #endif
 #include "../Physics/HeightmapCluster.h"      // world::IHeightmapCluster (+0x68)

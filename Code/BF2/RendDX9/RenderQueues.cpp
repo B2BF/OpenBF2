@@ -163,7 +163,7 @@ static_assert(sizeof(RaShaderConstants) == Ra::kRaShaderConstantsSize, "native b
 #if !defined(_M_IX86)
 // A retail offset that names no word of the block, or a word read as the wrong kind: stop rather
 // than guess where it lives in the native layout.
-__declspec(noreturn) void raConstantsBadOffset(const void* block, unsigned int retailByteOffset)
+[[noreturn]] void raConstantsBadOffset(const void* block, unsigned int retailByteOffset)
 {
     RD9_FRONTIER_AT("dice::hfe::dx9rend::RaShaderConstants - retail offset (slot) is not a word "
                     "of the 0xAFC-byte block, or not a word of the kind accessed",

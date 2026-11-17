@@ -1,5 +1,5 @@
 // All instructions read from BF2.exe. No matching dedicated ELF Data class.
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../../Platform/X87Compat.h" // [CHOSEN, not recovered] x87 conversion results, including invalid inputs.
 #endif
 #include "Data.h"
@@ -518,7 +518,7 @@ bool IntRefData::setFloat(System*, float value)
 {
     // Round half away from zero, then the ordinary truncating x86 cast
     // (fnstcw / or 0C00h / fistp / fldcw). A NaN takes the negative arm.
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     *m_value = bf2x87::toIntTruncate(value < 0.0f ? value - 0.5f : value + 0.5f);
 #else
     *m_value = static_cast<int>(value < 0.0f ? value - 0.5f : value + 0.5f);

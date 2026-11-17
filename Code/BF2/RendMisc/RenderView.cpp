@@ -677,7 +677,7 @@ void RenderView::rebuildProjection()
         const double cotHalf = 1.0 / ::tan(static_cast<double>(m_fov) * 0.5);
         const float  m00     = static_cast<float>(cotHalf * m_aspect);
         // (near + far) / far stays on the x87 stack until the store (0x101C293A..0x101C29A3).
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] the extended sum and quotient.
         const float  q       = bf2x87::store(bf2x87::div(
             bf2x87::add(bf2x87::wide(m_nearPlane), bf2x87::wide(m_farPlane)), bf2x87::wide(m_farPlane)));

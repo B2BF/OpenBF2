@@ -327,7 +327,7 @@ bool NametagManager::isPlayerSoldierDown(world::IPlayer* player)
 // PE 0x1012C510
 void NametagManager::projectOntoView(Vec4& position, dx9rend::IRenderView* view)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain the x87 expressions and their explicit float/double spills.
     using namespace bf2x87;
     const float invHalfWidth = store(div(wide(1), mul(wide(view->getViewport()[2]), wide(0.5f))));
@@ -476,7 +476,7 @@ void NametagManager::updateObjectItem(NametagItem* item)
 
     const float dx = vehiclePosition.x - position.x;
     const float dz = vehiclePosition.z - position.z;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int distance = bf2x87::toIntTruncate(std::sqrt(dz * dz + dx * dx));     // fistp, truncating
 #else
     const int distance = static_cast<int>(std::sqrt(dz * dz + dx * dx));     // fistp, truncating
@@ -484,7 +484,7 @@ void NametagManager::updateObjectItem(NametagItem* item)
     if (distanceChanged(distance, item->m_distance))
     {
         item->m_dirty = true;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         item->m_distance = bf2x87::toIntTruncate(static_cast<float>(distance) + 0.5f);
 #else
         item->m_distance = static_cast<int>(static_cast<float>(distance) + 0.5f);
@@ -836,7 +836,7 @@ void NametagManager::updatePlayerItemPosition(NametagItem* item)
             const Vec3& vehiclePosition = vehicle->getAbsolutePosition();    // PE +0x68
             const float dx = cameraMatrix.m[12] - vehiclePosition.x;
             const float dz = cameraMatrix.m[14] - vehiclePosition.z;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             const int distance = bf2x87::toIntTruncate(std::sqrt(dz * dz + dx * dx));   // fistp
 #else
             const int distance = static_cast<int>(std::sqrt(dz * dz + dx * dx));   // fistp

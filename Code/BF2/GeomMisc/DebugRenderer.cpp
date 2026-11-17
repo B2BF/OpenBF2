@@ -12,7 +12,7 @@
 #include "../RendMisc/IRenderer.h"
 #include "../../RendDX9Abi/PluginEntry.h"
 #include "../../RendDX9Abi/BfMemory.h"
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h"
 #endif
 #include <cmath>
@@ -236,7 +236,7 @@ void DebugRenderer::queueGeometry(unsigned int classId, const Mat4& transform, c
     if (technique != "") geometryTechnique(geometry, technique);
     const Mat4* camera = static_cast<dx9rend::IRenderer*>(dx9rend::g_rendererBase)->getRenderViewDup()->getViewMatrixPtr();
     GeometrySortKey key;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Existing native x87 arithmetic policy, with the PE's single stores.
     using namespace bf2x87;
     const float x = store(sub(wide(camera->m[12]), wide(transform.m[12])));
@@ -251,7 +251,7 @@ void DebugRenderer::queueGeometry(unsigned int classId, const Mat4& transform, c
 #endif
     const float xy = transform.m[0] < transform.m[5] ? transform.m[5] : transform.m[0];
     const float scale = xy < transform.m[10] ? transform.m[10] : xy;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     key.distance = bf2x87::store(distance);
 #else
     key.distance = distance;
@@ -356,7 +356,7 @@ void DebugRenderer::queueFrustum(const Frustum& frustum, unsigned int colour, un
         const Vec3* c2 = &rendmath::frustumCornerForPlane(frustum, 2, face);
         sum.x += c2->x; sum.y += c2->y; sum.z += c2->z;
         const Vec3* c3 = &rendmath::frustumCornerForPlane(frustum, 3, face);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] x/y remain extended across all six marker vertices.
         using namespace bf2x87;
         const Real cx = mul(add(wide(sum.x),wide(c3->x)),wide(0.25f));
@@ -409,7 +409,7 @@ void debugRendererQueueBounds(const float* bounds)
     transform.m[5] = bounds[4] - bounds[1];
     transform.m[10] = bounds[5] - bounds[2];
     // PE 0x1016EBC0 stores the z sum before multiplying each component by one half.
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Native extended expression/store policy.
     using namespace bf2x87;
     const float z = store(add(wide(bounds[5]),wide(bounds[2])));

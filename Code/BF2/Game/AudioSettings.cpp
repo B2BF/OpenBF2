@@ -10,7 +10,11 @@
 #if defined(_WIN32)
 #include <windows.h>
 #else
+#if defined(__APPLE__)
 #include <sys/sysctl.h>               // [CHOSEN, not recovered] hw.memsize for the GlobalMemoryStatus arm
+#elif defined(__linux__)
+#include <sys/sysinfo.h>
+#endif
 #include <cstdint>
 #endif
 #include <cstdio>
@@ -36,9 +40,17 @@ int physicalMemoryMegabytes()
         // arithmetic follows, so a machine with 4 GB or more wraps to 0 MB and selects "Low", as
         // the retail client does on such a machine.
         std::uint64_t physical = 0;
+#if defined(__APPLE__)
         std::size_t length = sizeof(physical);
         if (sysctlbyname("hw.memsize", &physical, &length, 0, 0) != 0)
             physical = 0;
+#elif defined(__linux__)
+        // [CHOSEN, not recovered] Native Linux memory query (issue #36); the legacy
+        // saturation, DWORD overflow and quality threshold below remain unchanged.
+        struct sysinfo memory;
+        if (::sysinfo(&memory) == 0)
+            physical = static_cast<std::uint64_t>(memory.totalram) * memory.mem_unit;
+#endif
         const std::uint32_t totalPhys = physical > 0xFFFFFFFFull ? 0xFFFFFFFFu
                                                                  : static_cast<std::uint32_t>(physical);
         int megabytes = static_cast<int>(static_cast<std::uint32_t>(totalPhys + 0x7FFFFu) >> 20);

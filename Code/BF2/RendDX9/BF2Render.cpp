@@ -5604,7 +5604,7 @@ int bitsPerPixel(unsigned int d3dFormat);   // RendDX9Types.cpp - D3DFORMAT -> b
 
 namespace {
 
-#if !defined(__APPLE__)
+#if defined(_WIN32)
 // PE 0x1000CEE0: narrows an adapter display mode into the 40-byte mode record (width, height and
 // refresh as words, the bit depth through bitsPerPixel of the format); the member vectors
 // default-construct.
@@ -5619,8 +5619,8 @@ Mode40 modeFromAdapterMode(const D3DDISPLAYMODE& mode)
 }
 #endif
 
-#if defined(__APPLE__)
-// [CHOSEN, not recovered] G3 main-screen mode metadata. The native backend never
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
+// [CHOSEN, not recovered] Native screen metadata (Linux: issue #36). The host never
 // switches display modes; records describe render sizes, not exclusive modes.
 // [RETIRE-WHEN: macos-display-mode-policy] Validate this G3 policy on Intel and M2;
 // settle the plan's fractional-resolution/Retina policy before retiring the debt.

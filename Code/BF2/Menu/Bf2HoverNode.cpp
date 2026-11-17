@@ -1,5 +1,5 @@
 // HUD hover-node layout and updates. [INFERRED] Source placement.
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h" // [CHOSEN, not recovered] x87 conversion results, including invalid inputs.
 #endif
 #include "Bf2HoverNode.h"
@@ -152,14 +152,14 @@ bool Bf2HoverNode::updateSelf(System*, const NodeState*, const Rect*, float delt
         const double deltaZ = m_anchorZ < 0.0f                          // see the note above
             ? static_cast<double>(positionZ) - m_anchorZ
             : static_cast<double>(positionZ) + m_anchorZ;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         m_yPos = bf2x87::toIntTruncate(static_cast<double>(yScale) * deltaZ) + m_middleY;  // +2C
 #else
         m_yPos = static_cast<int>(static_cast<double>(yScale) * deltaZ) + m_middleY;  // +2C
 #endif
         const float xScale = static_cast<float>(m_boundsWidthInt) / m_width;
         const float positionX = vehicle->getAbsolutePosition().x;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         m_xPos = m_middleX
                - bf2x87::toIntTruncate((static_cast<double>(positionX) - m_anchorX) * xScale);  // +28
 #else
@@ -169,23 +169,23 @@ bool Bf2HoverNode::updateSelf(System*, const NodeState*, const Rect*, float delt
     }
 
     // Runs whether or not the indicator is shown.
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int left = bf2x87::toIntTruncate(m_boundsX);                       // __ftol2
 #else
     const int left = static_cast<int>(m_boundsX);                       // __ftol2
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     bool outside = m_xPos < left || m_xPos > bf2x87::toIntTruncate(m_boundsWidth) + left;
 #else
     bool outside = m_xPos < left || m_xPos > static_cast<int>(m_boundsWidth) + left;
 #endif
     if (!outside) {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const int top = bf2x87::toIntTruncate(m_boundsY);                    // __ftol2
 #else
         const int top = static_cast<int>(m_boundsY);                    // __ftol2
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         outside = m_yPos < top || m_yPos > bf2x87::toIntTruncate(m_boundsHeight) + top;
 #else
         outside = m_yPos < top || m_yPos > static_cast<int>(m_boundsHeight) + top;

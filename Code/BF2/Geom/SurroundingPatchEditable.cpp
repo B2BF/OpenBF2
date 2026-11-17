@@ -13,7 +13,7 @@
 #include "XpLightManager.h"                   // LightManager +0xEC / +0xF0 - the burn's shadow bracket (R3)
 #include "HemiMapManager/HemiMapDependencies.h"   // the three renderers' enable seams (R3)
 #include "../GeomMisc/Debug.h"
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h"
 #endif
 
@@ -164,7 +164,7 @@ inline int texelPitch(const D3DLOCKED_RECT& locked)
     return static_cast<int>(static_cast<unsigned int>(locked.Pitch) >> 2);
 }
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 // [INFERRED] Shared spelling of the three brushes' FCOS/clamp/strength arithmetic.
 // [CHOSEN, not recovered] Native widths use the existing bf2x87 transcendental policy.
 bf2x87::Real surroundingBrushWeight(bf2x87::Real distance, float inverse, int strength)
@@ -340,7 +340,7 @@ void SurroundingPatchEditable::init(int newSlot)
 void SurroundingPatchEditable::setupEditorPlacement()
 {
     TerrainEditable* const te = editableTerrain;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] FISTP's invalid result and 32-bit integer wrap on native ports.
     secondaryScaleX = bf2x87::toIntTruncate(bf2x87::Real(te->m_secondaryWorldScale.x));
     span = static_cast<int>(static_cast<unsigned int>(bf2x87::toIntTruncate(
@@ -412,7 +412,7 @@ void SurroundingPatchEditable::setupEditorPlacement()
     center.x = static_cast<float>(static_cast<double>(span) * 0.5 + center.x);
     center.z = static_cast<float>(static_cast<double>(span) * 0.5 + center.z);
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     endX = static_cast<int>(static_cast<unsigned int>(originX) + static_cast<unsigned int>(span));
     endZ = static_cast<int>(static_cast<unsigned int>(originZ) + static_cast<unsigned int>(span));
 #else
@@ -448,7 +448,7 @@ void SurroundingPatchEditable::computeBounds()
     const float scaleX = secondary.x;
     const float scaleZ = secondary.z;
     ::dice::hfe::world::IHeightmapCluster* const cluster = heightmapClusterByName();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Keep the x86 allocation/count arithmetic in 32 bits.
     const int count = static_cast<int>(static_cast<unsigned int>(sideCount) * static_cast<unsigned int>(sideCount));
 #else
@@ -460,7 +460,7 @@ void SurroundingPatchEditable::computeBounds()
         if (storage)
         {
             points = static_cast<Vec3*>(storage);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             const int last = static_cast<int>(static_cast<unsigned int>(count) - 1u);
             if (last >= 0)
             {
@@ -500,7 +500,7 @@ void SurroundingPatchEditable::computeBounds()
                 int x = 0;
                 do
                 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                     const float worldZ = static_cast<float>(static_cast<int>(static_cast<unsigned int>(z) + static_cast<unsigned int>(originZ)));
                     const float worldX = static_cast<float>(static_cast<int>(static_cast<unsigned int>(x) + static_cast<unsigned int>(originX)));
 #else
@@ -508,7 +508,7 @@ void SurroundingPatchEditable::computeBounds()
                     const float worldX = static_cast<float>(x + originX);
 #endif
                     const float height = cluster->getHeightInWorldCoords(worldX, worldZ);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                     // [CHOSEN, not recovered] Retain FILD products until their actual stores.
                     if (bf2x87::less(bf2x87::Real(fileMaxY), bf2x87::Real(height)))
                         fileMaxY = height;
@@ -538,7 +538,7 @@ void SurroundingPatchEditable::computeBounds()
                 }
                 while (x < spanPlusOne);
             }
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             z = static_cast<int>(static_cast<unsigned int>(z) + static_cast<unsigned int>(secondaryScaleX));
 #else
             z += secondaryScaleX;
@@ -546,7 +546,7 @@ void SurroundingPatchEditable::computeBounds()
         }
         while (z < spanPlusOne);
     }
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const DWORD sphereCount = static_cast<unsigned int>(sideCount) * static_cast<unsigned int>(sideCount);
 #else
     const DWORD sphereCount = static_cast<DWORD>(sideCount * sideCount);
@@ -1116,7 +1116,7 @@ void SurroundingPatchEditable::rotateTexture(dx9rend::EngineTexture** texture, b
 // PE 0x101A2E80
 void SurroundingPatchEditable::paintColor(float x, float z, float radius, int strength, unsigned int color)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Preserve the inspected x87 loads, spills and comparisons.
     const float xr = bf2x87::store(bf2x87::sub(bf2x87::Real(x), bf2x87::Real(originX)));
     const float zr = bf2x87::store(bf2x87::sub(bf2x87::Real(z), bf2x87::Real(originZ)));
@@ -1124,14 +1124,14 @@ void SurroundingPatchEditable::paintColor(float x, float z, float radius, int st
     const float xr = x - static_cast<float>(originX);                         // +0x24
     const float zr = z - static_cast<float>(originZ);                         // +0x28
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     if (!bf2x87::greater(bf2x87::add(bf2x87::Real(xr), bf2x87::Real(radius)), bf2x87::Real(0)))
 #else
     if (!(xr + radius > 0.0f))
 #endif
         return;
     const float spanF = static_cast<float>(span);                             // +0x38
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     if (!bf2x87::less(bf2x87::sub(bf2x87::Real(xr), bf2x87::Real(radius)), bf2x87::Real(spanF)) ||
         !bf2x87::greater(bf2x87::add(bf2x87::Real(zr), bf2x87::Real(radius)), bf2x87::Real(0)) ||
         !bf2x87::less(bf2x87::sub(bf2x87::Real(zr), bf2x87::Real(radius)), bf2x87::Real(spanF)) || !m_colormapReady)
@@ -1142,7 +1142,7 @@ void SurroundingPatchEditable::paintColor(float x, float z, float radius, int st
     if (!m_colormapEdit)
         makeColormapEditCopy();
     const int size = editableTerrain->m_surroundingTextureSize;               // +0x50
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const bf2x87::Real scale = bf2x87::div(bf2x87::Real(size), bf2x87::Real(span));
     const float xs = bf2x87::store(bf2x87::mul(bf2x87::Real(xr), bf2x87::Real(scale)));
     const float zs = bf2x87::store(bf2x87::mul(bf2x87::Real(zr), bf2x87::Real(scale)));
@@ -1155,7 +1155,7 @@ void SurroundingPatchEditable::paintColor(float x, float z, float radius, int st
     const float rs = scale * radius;
     const float inverse = 1.0f / rs;
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     int x0 = bf2x87::toIntTruncate(bf2x87::sub(bf2x87::Real(xs), bf2x87::Real(rs)));
 #else
     int x0 = static_cast<int>(xs - rs);
@@ -1164,7 +1164,7 @@ void SurroundingPatchEditable::paintColor(float x, float z, float radius, int st
         x0 = 0;
     int xEnd = size;
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const int top = ceilChop(bf2x87::store(bf2x87::add(bf2x87::Real(xs), bf2x87::Real(rs))));
 #else
         const int top = ceilChop(xs + rs);
@@ -1172,7 +1172,7 @@ void SurroundingPatchEditable::paintColor(float x, float z, float radius, int st
         if (size >= top)
             xEnd = top;
     }
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     int z0 = bf2x87::toIntTruncate(bf2x87::sub(bf2x87::Real(zs), bf2x87::Real(rs)));
 #else
     int z0 = static_cast<int>(zs - rs);
@@ -1181,7 +1181,7 @@ void SurroundingPatchEditable::paintColor(float x, float z, float radius, int st
         z0 = 0;
     int zEnd = size;
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const int top = ceilChop(bf2x87::store(bf2x87::add(bf2x87::Real(zs), bf2x87::Real(rs))));
 #else
         const int top = ceilChop(zs + rs);
@@ -1200,7 +1200,7 @@ void SurroundingPatchEditable::paintColor(float x, float z, float radius, int st
 
     for (int px = x0; px < xEnd; ++px)
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const bf2x87::Real dx = bf2x87::sub(bf2x87::Real(px), bf2x87::Real(xs));
         const float dxSquared = bf2x87::store(bf2x87::mul(dx, dx));
 #else
@@ -1209,7 +1209,7 @@ void SurroundingPatchEditable::paintColor(float x, float z, float radius, int st
 #endif
         for (int pz = z0; pz < zEnd; ++pz)
         {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             const bf2x87::Real dz = bf2x87::sub(bf2x87::Real(pz), bf2x87::Real(zs));
             const bf2x87::Real distance = bf2x87::squareRoot(bf2x87::add(bf2x87::mul(dz, dz), bf2x87::Real(dxSquared)));
             if (bf2x87::greater(distance, bf2x87::Real(rs)))
@@ -1219,7 +1219,7 @@ void SurroundingPatchEditable::paintColor(float x, float z, float radius, int st
             if (distance > rs)
 #endif
                 continue;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             const float t = bf2x87::store(surroundingBrushWeight(distance, inverse, strength));
             const unsigned int* const original = colormapBits + px + pz * texelPitch(colormapLocked);
             unsigned int* const edit = editBits + px + pz * texelPitch(editLocked);
@@ -1267,7 +1267,7 @@ void SurroundingPatchEditable::paintColor(float x, float z, float radius, int st
 // PE 0x101A3200
 void SurroundingPatchEditable::paintDetail(float x, float z, float radius, int strength, unsigned int color)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Preserve the inspected x87 loads, spills and comparisons.
     const float xr = bf2x87::store(bf2x87::sub(bf2x87::Real(x), bf2x87::Real(originX)));
     const float zr = bf2x87::store(bf2x87::sub(bf2x87::Real(z), bf2x87::Real(originZ)));
@@ -1275,14 +1275,14 @@ void SurroundingPatchEditable::paintDetail(float x, float z, float radius, int s
     const float xr = x - static_cast<float>(originX);
     const float zr = z - static_cast<float>(originZ);
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     if (!bf2x87::greater(bf2x87::add(bf2x87::Real(xr), bf2x87::Real(radius)), bf2x87::Real(0)))
 #else
     if (!(xr + radius > 0.0f))
 #endif
         return;
     const float spanF = static_cast<float>(span);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     if (!bf2x87::less(bf2x87::sub(bf2x87::Real(xr), bf2x87::Real(radius)), bf2x87::Real(spanF)) ||
         !bf2x87::greater(bf2x87::add(bf2x87::Real(zr), bf2x87::Real(radius)), bf2x87::Real(0)) ||
         !bf2x87::less(bf2x87::sub(bf2x87::Real(zr), bf2x87::Real(radius)), bf2x87::Real(spanF)))
@@ -1291,7 +1291,7 @@ void SurroundingPatchEditable::paintDetail(float x, float z, float radius, int s
 #endif
         return;
     const int size = editableTerrain->m_surroundingTextureSize;               // +0x50
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const bf2x87::Real scale = bf2x87::div(bf2x87::Real(size), bf2x87::Real(spanF));
     const int xCentre = bf2x87::toIntTruncate(bf2x87::mul(bf2x87::Real(xr), scale));
     const int zCentre = bf2x87::toIntTruncate(bf2x87::mul(bf2x87::Real(zr), scale));
@@ -1305,7 +1305,7 @@ void SurroundingPatchEditable::paintDetail(float x, float z, float radius, int s
     const float inverse = 1.0f / rs;
 #endif
     const float xs = static_cast<float>(xCentre);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     int x0 = bf2x87::toIntTruncate(bf2x87::Real(std::ceil(bf2x87::storeDouble(
         bf2x87::sub(bf2x87::Real(xCentre), bf2x87::Real(rs))))));
 #else
@@ -1315,7 +1315,7 @@ void SurroundingPatchEditable::paintDetail(float x, float z, float radius, int s
         x0 = 0;
     int xEnd = size;
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const int top = bf2x87::toIntTruncate(bf2x87::add(bf2x87::Real(xs), bf2x87::Real(rs)));
 #else
         const int top = static_cast<int>(xs + rs);
@@ -1324,7 +1324,7 @@ void SurroundingPatchEditable::paintDetail(float x, float z, float radius, int s
             xEnd = top;
     }
     const float zs = static_cast<float>(zCentre);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     int z0 = bf2x87::toIntTruncate(bf2x87::Real(std::ceil(bf2x87::storeDouble(
         bf2x87::sub(bf2x87::Real(zCentre), bf2x87::Real(rs))))));
 #else
@@ -1334,7 +1334,7 @@ void SurroundingPatchEditable::paintDetail(float x, float z, float radius, int s
         z0 = 0;
     int zEnd = size;
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const int top = bf2x87::toIntTruncate(bf2x87::add(bf2x87::Real(zs), bf2x87::Real(rs)));
 #else
         const int top = static_cast<int>(zs + rs);
@@ -1350,7 +1350,7 @@ void SurroundingPatchEditable::paintDetail(float x, float z, float radius, int s
 
     for (int px = x0; px < xEnd; ++px)
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const bf2x87::Real dx = bf2x87::sub(bf2x87::Real(px), bf2x87::Real(xs));
         const float dxSquared = bf2x87::store(bf2x87::mul(dx, dx));
 #else
@@ -1359,7 +1359,7 @@ void SurroundingPatchEditable::paintDetail(float x, float z, float radius, int s
 #endif
         for (int pz = z0; pz < zEnd; ++pz)
         {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             const bf2x87::Real dz = bf2x87::sub(bf2x87::Real(pz), bf2x87::Real(zs));
             const bf2x87::Real distance = bf2x87::squareRoot(bf2x87::add(bf2x87::mul(dz, dz), bf2x87::Real(dxSquared)));
             if (bf2x87::greater(distance, bf2x87::Real(rs)))
@@ -1369,7 +1369,7 @@ void SurroundingPatchEditable::paintDetail(float x, float z, float radius, int s
             if (distance > rs)
 #endif
                 continue;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             const bf2x87::Real weight = bf2x87::abs(surroundingBrushWeight(distance, inverse, strength));
             const float t = bf2x87::store(weight);
             if (!bf2x87::greater(weight, bf2x87::Real(0)))
@@ -1418,7 +1418,7 @@ void SurroundingPatchEditable::paintDetail(float x, float z, float radius, int s
 // PE 0x101A5AB0
 void SurroundingPatchEditable::paintColorFromTexture(float x, float z, float radius, int strength, int layer)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Preserve the inspected x87 loads, spills and comparisons.
     const float xr = bf2x87::store(bf2x87::sub(bf2x87::Real(x), bf2x87::Real(originX)));
     const float zr = bf2x87::store(bf2x87::sub(bf2x87::Real(z), bf2x87::Real(originZ)));
@@ -1426,14 +1426,14 @@ void SurroundingPatchEditable::paintColorFromTexture(float x, float z, float rad
     const float xr = x - static_cast<float>(originX);
     const float zr = z - static_cast<float>(originZ);
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     if (!bf2x87::greater(bf2x87::add(bf2x87::Real(xr), bf2x87::Real(radius)), bf2x87::Real(0)))
 #else
     if (!(xr + radius > 0.0f))
 #endif
         return;
     const float spanF = static_cast<float>(span);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     if (!bf2x87::less(bf2x87::sub(bf2x87::Real(xr), bf2x87::Real(radius)), bf2x87::Real(spanF)) ||
         !bf2x87::greater(bf2x87::add(bf2x87::Real(zr), bf2x87::Real(radius)), bf2x87::Real(0)) ||
         !bf2x87::less(bf2x87::sub(bf2x87::Real(zr), bf2x87::Real(radius)), bf2x87::Real(spanF)) || !m_colormapReady)
@@ -1444,7 +1444,7 @@ void SurroundingPatchEditable::paintColorFromTexture(float x, float z, float rad
     if (!m_colormapEdit)
         makeColormapEditCopy();
     const int size = editableTerrain->m_surroundingTextureSize;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const float scale = bf2x87::store(bf2x87::div(bf2x87::Real(size), bf2x87::Real(span)));
     const float xs = bf2x87::store(bf2x87::mul(bf2x87::Real(xr), bf2x87::Real(scale)));
     const float zs = bf2x87::store(bf2x87::mul(bf2x87::Real(zr), bf2x87::Real(scale)));
@@ -1457,7 +1457,7 @@ void SurroundingPatchEditable::paintColorFromTexture(float x, float z, float rad
     const float rs = scale * radius;
     const float inverse = 1.0f / rs;
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     int x0 = bf2x87::toIntTruncate(bf2x87::sub(bf2x87::Real(xs), bf2x87::Real(rs)));
 #else
     int x0 = static_cast<int>(xs - rs);
@@ -1466,7 +1466,7 @@ void SurroundingPatchEditable::paintColorFromTexture(float x, float z, float rad
         x0 = 0;
     int xEnd = size;
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const int top = ceilChop(bf2x87::store(bf2x87::add(bf2x87::Real(xs), bf2x87::Real(rs))));
 #else
         const int top = ceilChop(xs + rs);
@@ -1474,7 +1474,7 @@ void SurroundingPatchEditable::paintColorFromTexture(float x, float z, float rad
         if (size >= top)
             xEnd = top;
     }
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     int z0 = bf2x87::toIntTruncate(bf2x87::sub(bf2x87::Real(zs), bf2x87::Real(rs)));
 #else
     int z0 = static_cast<int>(zs - rs);
@@ -1483,7 +1483,7 @@ void SurroundingPatchEditable::paintColorFromTexture(float x, float z, float rad
         z0 = 0;
     int zEnd = size;
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const int top = ceilChop(bf2x87::store(bf2x87::add(bf2x87::Real(zs), bf2x87::Real(rs))));
 #else
         const int top = ceilChop(zs + rs);
@@ -1511,7 +1511,7 @@ void SurroundingPatchEditable::paintColorFromTexture(float x, float z, float rad
     for (int px = x0; px < xEnd; ++px)
     {
         const float pxF = static_cast<float>(px);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const bf2x87::Real dx = bf2x87::sub(bf2x87::Real(px), bf2x87::Real(xs));
         const float dxSquared = bf2x87::store(bf2x87::mul(dx, dx));
 #else
@@ -1521,7 +1521,7 @@ void SurroundingPatchEditable::paintColorFromTexture(float x, float z, float rad
         for (int pz = z0; pz < zEnd; ++pz)
         {
             const float pzF = static_cast<float>(pz);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             const bf2x87::Real dz = bf2x87::sub(bf2x87::Real(pz), bf2x87::Real(zs));
             const bf2x87::Real distance = bf2x87::squareRoot(bf2x87::add(bf2x87::mul(dz, dz), bf2x87::Real(dxSquared)));
             const float storedDistance = bf2x87::store(distance);
@@ -1532,7 +1532,7 @@ void SurroundingPatchEditable::paintColorFromTexture(float x, float z, float rad
             if (distance > rs)
 #endif
                 continue;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             const bf2x87::Real inverseScaleRetained = bf2x87::div(bf2x87::Real(1), bf2x87::Real(scale));
             const float inverseScale = bf2x87::store(inverseScaleRetained);
             int u = bf2x87::toIntTruncate(bf2x87::Real(std::floor(bf2x87::storeDouble(bf2x87::add(
@@ -1546,7 +1546,7 @@ void SurroundingPatchEditable::paintColorFromTexture(float x, float z, float rad
             u = u % textureWidth;
             if (u < 0)
                 u += textureWidth;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             int v = bf2x87::toIntTruncate(bf2x87::Real(std::floor(bf2x87::storeDouble(bf2x87::add(
                 bf2x87::mul(bf2x87::add(bf2x87::mul(bf2x87::Real(inverseScale), bf2x87::Real(pzF)),
                     bf2x87::Real(originZ)), bf2x87::Real(record->colorTextureTiling.y)), bf2x87::Real(0.5f))))));
@@ -1557,7 +1557,7 @@ void SurroundingPatchEditable::paintColorFromTexture(float x, float z, float rad
             v = v % textureHeight;
             if (v < 0)
                 v += textureWidth;                                            // shipped defect: adds width.
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             const float t = bf2x87::store(surroundingBrushWeight(bf2x87::Real(storedDistance), inverse, strength));
             const unsigned int* const source = textureBits + u + v * texelPitch(textureLocked);
             const unsigned int* const original = colormapBits + px + pz * texelPitch(colormapLocked);

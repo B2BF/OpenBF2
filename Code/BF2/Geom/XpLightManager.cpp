@@ -103,7 +103,7 @@ namespace world {
 // RendDX9 is a separate shipped image from BF2.exe. Both ABI builds now construct typed
 // BundledMesh collision filters and need this non-pure base slot. PE1012C350 / ELF8163FC0
 // are unconditional true; emit the recovered body locally as the original DLL did.
-#if !(defined(__APPLE__) && defined(BF2_STATIC_PLUGINS))
+#if !defined(BF2_STATIC_PLUGINS)
 bool ObjectPredicator::predicateSurface(int)
 {
     return true;
@@ -429,7 +429,7 @@ void fillPowerLut(dx9rend::EngineTexture* texture, int count,
         const double value = std::pow(static_cast<double>(i) * scale, static_cast<double>(exponent));
         const float green = static_cast<float>(value * rgb.y);
         const float blue = static_cast<float>(value * rgb.z);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] the x87 red product and the fistp conversions.
         using namespace bf2x87;
         const int red = toIntTruncate(mul(wide(255.0f), mul(wide(value), wide(rgb.x))));
@@ -471,7 +471,7 @@ int shadowNormalizeInPlace(Vec3& value);
 // PE 0x101C3A30.
 inline unsigned int packNormalDirection(const Vec3& value)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Each floor argument is stored as binary64 by the x87 caller.
     const int red = bf2x87::toIntTruncate(bf2x87::wide(std::floor(
         bf2x87::storeDouble(bf2x87::wide(value.x) * 127.0f + 0.5f))) + 128.0f);
@@ -493,7 +493,7 @@ void normalCubeDirection(Vec3& direction, unsigned int face, unsigned int side,
                          unsigned int x, unsigned int y)
 {
     const float denominator = static_cast<float>(side - 1);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] The integer loads and quotient stay extended until each coordinate store.
     const float u = bf2x87::store(bf2x87::wide(static_cast<int>(x)) / denominator * 2.0f - 1.0f);
     const float v = bf2x87::store(bf2x87::wide(static_cast<int>(y)) / denominator * 2.0f - 1.0f);
@@ -1182,7 +1182,7 @@ void constructShadowSweepClassifier(ShadowSweepClassifier& classifier,
 
 // The sweep's plane distance, (n.z * p.z + n.y * p.y) + n.x * p.x + d as shipped; the x87 body
 // compares the unrounded sum against the stored float radius.
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 // [CHOSEN, not recovered] the x87 sum, kept unrounded for the compares.
 typedef bf2x87::Real SweepDistance;
 inline SweepDistance sweepPlaneDistance(const Plane3& plane, const Vec3& point)
@@ -1275,7 +1275,7 @@ void filterShadowCandidates(const ShadowSweepClassifier& classifier,
 // PE 0x101682C0, identical to the shared PE 0x100777A0 instantiation.
 int shadowNormalizeInPlace(Vec3& v)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] PE 0x100777A0 stores the sum, retaining the reciprocal for all stores.
     const float lengthSquared = bf2x87::store(bf2x87::wide(v.x) * v.x
         + bf2x87::wide(v.y) * v.y + bf2x87::wide(v.z) * v.z);
@@ -1291,7 +1291,7 @@ int shadowNormalizeInPlace(Vec3& v)
         v.z = 0.0f;
         return -20001;
     }
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const bf2x87::Real inverse = bf2x87::wide(1.0f) / bf2x87::squareRoot(bf2x87::wide(lengthSquared));
     v.x = bf2x87::store(inverse * v.x);
     v.y = bf2x87::store(inverse * v.y);
@@ -1594,7 +1594,7 @@ void shiftShadowFrustumTowardLight(Frustum& frustum, float distance)
     const float x = normal.x * distance;
     const float y = normal.y * distance;                                   // [ebp-0x1C]
     const float z = normal.z * distance;                                   // [ebp-0x18]
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] the x product stays on the x87 stack for the m[12] add
     // (0x10166419..0x101664B9); only y and z are stored first.
     transformation.m[12] = bf2x87::store(bf2x87::add(
@@ -1642,7 +1642,7 @@ void buildShadowCandidateSet(void* self, Mat4& lightBasis, ShadowSweepClassifier
         static_cast<IDebugRenderer*>(g_DebugRenderer)->queueFrustum(shadowFrustum, 0, 0);
         Frustum debugCamera(cameraFrustum);
         Mat4 shifted = debugCamera.m_transformation;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] Preserve the explicit z-product single store on native Apple.
         using namespace bf2x87;
         const Real x = mul(wide(shifted.m[8]),wide(-0.5f));
@@ -1886,7 +1886,7 @@ struct ShadowProjectionLayout
         {
             const float sign = shadowAngleSign(angles[i]);
             const float magnitude = std::fabs(angles[i]);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             // [CHOSEN, not recovered] FSIN result multiplied before the single store.
             destination[i] = bf2x87::store(bf2x87::sinValue(bf2x87::wide(magnitude)) * sign);
 #else
@@ -1939,7 +1939,7 @@ struct ShadowProjectionLayout
         for (unsigned int i = 0; i < 4; ++i)
         {
             const float sign = shadowAngleSign(angles[i]);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             // [CHOSEN, not recovered] The doubled square, root and both products stay on the stack.
             const bf2x87::Real square = bf2x87::wide(angles[i]) * angles[i];
             scaled[i] = bf2x87::store(bf2x87::squareRoot(square + square) * 0.75f * sign);
@@ -2021,7 +2021,7 @@ struct ShadowProjectionLayout
             nearScale = maximum * maximum;
         }
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] The near test compares the unstored squared distance.
         const bf2x87::Real distanceWide = bf2x87::wide(delta.z) * delta.z
             + bf2x87::wide(delta.y) * delta.y + bf2x87::wide(delta.x) * delta.x;
@@ -2037,7 +2037,7 @@ struct ShadowProjectionLayout
             inside = false;
 
         const float clampedDistance = shadowClampValue(distanceSquared, saved[4], saved[5]);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] The unstored product is compared; its stored value is kept.
         const bf2x87::Real scaledWide = bf2x87::wide(clampedDistance) * nearScale;
         const float scaledDistance = bf2x87::store(scaledWide);
@@ -2053,7 +2053,7 @@ struct ShadowProjectionLayout
 
         shadowNormalizeInPlace(horizontal);
         shadowNormalizeInPlace(vertical);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         float horizontalValue = bf2x87::store(bf2x87::wide(horizontal.z) * axisX.normal.z
             + bf2x87::wide(horizontal.y) * axisX.normal.y
             + bf2x87::wide(horizontal.x) * axisX.normal.x);
@@ -2099,7 +2099,7 @@ struct ShadowProjectionLayout
             bounds[4] = fallbackLimits[4];
         if (bounds[5] < bounds[4])
         {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             // [CHOSEN, not recovered] The root sum is squared before the single store.
             const bf2x87::Real farRoot = bf2x87::squareRoot(bf2x87::wide(fallbackLimits[5]))
                                    + bf2x87::squareRoot(bf2x87::wide(bounds[4]));
@@ -2119,7 +2119,7 @@ struct ShadowProjectionLayout
         left = std::acos(shadowClampValue(bounds[0], -1.0f, 1.0f));
         right = std::acos(shadowClampValue(bounds[1], -1.0f, 1.0f));
         bottom = std::acos(shadowClampValue(bounds[2], -1.0f, 1.0f));
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] The vertical span subtracts from the unstored top angle.
         const bf2x87::Real topWide =
             bf2x87::wide(std::acos(static_cast<double>(shadowClampValue(bounds[3], -1.0f, 1.0f))));
@@ -2135,7 +2135,7 @@ struct ShadowProjectionLayout
         if (!adjust)
         {
             const float widest = extents[1] < extents[0] ? extents[0] : extents[1];
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             extents[2] = bf2x87::store(
                 bf2x87::cosValue(bf2x87::wide(widest) * 0.5f) * extents[2]);
 #else
@@ -2164,7 +2164,7 @@ struct ShadowProjectionLayout
     static Mat4 yawPitchRoll(float yaw, float pitch, float roll)
     {
         Mat4 result = Mat4::getIdentity();
-#if defined(__APPLE__) || defined(RENDDX9ABI_D3DX9FALLBACK_H)
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT) || defined(RENDDX9ABI_D3DX9FALLBACK_H)
         // [CHOSEN, not recovered] These D3DX subsets omit D3DXMatrixRotationYawPitchRoll.
         const float sy = std::sin(yaw),   cy = std::cos(yaw);
         const float sp = std::sin(pitch), cp = std::cos(pitch);
@@ -2199,7 +2199,7 @@ struct ShadowProjectionLayout
         float aspect = 1.0f;
         if (extents[0] > FLT_EPSILON)
             aspect = extents[1] / extents[0];
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] Both aim angles are stored once.
         const float pitch = bf2x87::store((bf2x87::wide(bottom) + top) * 0.5f - 1.5707964f);
         const float yaw = bf2x87::store((bf2x87::wide(left) + right) * -0.5f + 1.5707964f);
@@ -2444,7 +2444,7 @@ void pointCollect(XpCuller* culler, double, std::vector<world::IObject*>& destin
     const float dx = controlledPosition.x - sourcePosition.x;
     const float dy = controlledPosition.y - sourcePosition.y;
     const float dz = controlledPosition.z - sourcePosition.z;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] The root of the unstored sum is compared.
     const bf2x87::Real distance = bf2x87::squareRoot(bf2x87::wide(dx) * dx
         + bf2x87::wide(dz) * dz + bf2x87::wide(dy) * dy);
@@ -2633,7 +2633,7 @@ void RD9_THUNK spotFillRecordSlot(void* self RD9_THUNK_EDX, unsigned char* recor
     const float degreesToRadians = 0.01745329251994329577f;
     const float inner = culler->light->source->getConeAngle1();
     const float outer = culler->light->source->getConeAngle2();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Each degree product feeds FCOS unstored.
     *reinterpret_cast<float*>(record + 0x3C) =
         bf2x87::store(bf2x87::cosValue(bf2x87::wide(inner) * degreesToRadians));
@@ -3610,7 +3610,7 @@ void buildSpotProjection(void* manager, ShadowBuildContext& context,
 // PE 0x10079720.
 void makeFrustumPerspectiveMatrix(const Frustum& frustum, Mat4& output)
 {
-#if defined(__APPLE__) || defined(RENDDX9ABI_D3DX9FALLBACK_H)
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT) || defined(RENDDX9ABI_D3DX9FALLBACK_H)
     // [CHOSEN, not recovered] These D3DX subsets omit the perspective helper.
     const float aspect = 1.0f / frustum.m_aspect;
     const float halfFov = frustum.m_fov * 0.5f;
@@ -3636,7 +3636,7 @@ void materializeShadowRecords(void* manager, XpLight* light, ShadowBuildContext&
     const auto degenerate = [](const float* extents) {
         if (extents[0] <= FLT_EPSILON || extents[1] <= FLT_EPSILON)
             return true;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] PE 0x1016252F / 0x1016259B compare the retained depth difference.
         return bf2x87::wide(extents[3]) - extents[2] <= bf2x87::wide(FLT_EPSILON);
 #else
@@ -3931,7 +3931,7 @@ void assignPointShadowAtlas(void* manager, LightShadowRecord& record)
     device->SetScissorRect(&scissor);
 
     const float inverseAtlas = 1.0f / static_cast<float>(atlasSize);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] FILD keeps signed sizes and unsigned coordinates exact until stores.
     const float scale = bf2x87::store(bf2x87::wide(tileSize) / bf2x87::wide(atlasSize));
     const float u = bf2x87::store(bf2x87::wide(static_cast<unsigned int>(x)) * inverseAtlas);
@@ -4128,7 +4128,7 @@ Mat4 multiplyShadowMatrices(const Mat4& lhs, const Mat4& rhs)
 
 Vec3 transformShadowCoord(const Vec3& point, const Mat4& matrix)
 {
-#if defined(__APPLE__) || defined(RENDDX9ABI_D3DX9FALLBACK_H)
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT) || defined(RENDDX9ABI_D3DX9FALLBACK_H)
     // [CHOSEN, not recovered] The native/no-SDK subsets omit this D3DX entry point.
     const float inverseW = 1.0f / (point.x * matrix.m[3] + point.y * matrix.m[7]
         + point.z * matrix.m[11] + matrix.m[15]);
@@ -4150,7 +4150,7 @@ Vec3 transformShadowCoord(const Vec3& point, const Mat4& matrix)
 
 Vec3 transformShadowNormal(const Vec3& value, const Mat4& matrix)
 {
-#if defined(__APPLE__) || defined(RENDDX9ABI_D3DX9FALLBACK_H)
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT) || defined(RENDDX9ABI_D3DX9FALLBACK_H)
     // [CHOSEN, not recovered] The native/no-SDK subsets omit this D3DX entry point.
     const Vec3 result = {
         value.x * matrix.m[0] + value.y * matrix.m[4] + value.z * matrix.m[8],
@@ -4336,7 +4336,7 @@ void collectDirectionalCasterBounds(void* manager, const Mat4& inverseView,
         if (sphereArm)
         {
             const Vec3& centre = objectAbsolutePosition(object);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             // [CHOSEN, not recovered] The scaled radius is retained through all six stores.
             const bf2x87::Real radius = bf2x87::wide(objectVisualRadius(object)) * sphereScale;
             Vec3 low = { bf2x87::store(bf2x87::wide(centre.x) - radius),
@@ -4372,7 +4372,7 @@ void collectDirectionalCasterBounds(void* manager, const Mat4& inverseView,
 
 float shadowProductDifference(float a, float b, float c, float d)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Both x87 products survive until the single difference store.
     return bf2x87::store(bf2x87::wide(a) * b - bf2x87::wide(c) * d);
 #else
@@ -4392,7 +4392,7 @@ bool intersectShadowPlanes(const Plane3& a, const Plane3& b, const Plane3& c, Ve
     const Vec3 cb = { shadowProductDifference(b.normal.z, c.normal.y, b.normal.y, c.normal.z),
                       shadowProductDifference(b.normal.x, c.normal.z, b.normal.z, c.normal.x),
                       shadowProductDifference(b.normal.y, c.normal.x, c.normal.y, b.normal.x) };
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] The determinant has one final single-precision store.
     const float determinant = bf2x87::store(bf2x87::wide(ab.z) * c.normal.z
         + bf2x87::wide(ab.y) * c.normal.y + bf2x87::wide(ab.x) * c.normal.x);
@@ -4408,7 +4408,7 @@ bool intersectShadowPlanes(const Plane3& a, const Plane3& b, const Plane3& c, Ve
     const Vec3 dAB = { ab.x * c.d, ab.y * c.d, ab.z * c.d };
     const Vec3 dAC = { ac.x * b.d, ac.y * b.d, ac.z * b.d };
     const Vec3 dCB = { cb.x * a.d, cb.y * a.d, cb.z * a.d };
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Keep the reciprocal in x87 precision until the output stores.
     const bf2x87::Real inverse = bf2x87::div(bf2x87::wide(1.0f), bf2x87::wide(determinant));
     const float sumX = bf2x87::store((bf2x87::wide(dAC.x) + dAB.x) + dCB.x);
@@ -4568,7 +4568,7 @@ struct ShadowReceiverFrustum
         for (unsigned int i = 0; i < 6; ++i)
         {
             Plane3& p = planes[i];
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             // [CHOSEN, not recovered] Preserve the x87 reciprocal through the four stores.
             const bf2x87::Real length = bf2x87::squareRoot(
                 bf2x87::wide(p.normal.x) * p.normal.x
@@ -4621,7 +4621,7 @@ Mat4 calculateDirectionalShadowMatrix(void* manager)
     Vec3 axis = { shadowProductDifference(light.y, -1.0f, light.z, 0.0f),
                   shadowProductDifference(light.z, 0.0f, light.x, -1.0f),
                   shadowProductDifference(light.x, 0.0f, light.y, 0.0f) };
-#if defined(__APPLE__) || defined(RENDDX9ABI_D3DX9FALLBACK_H)
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT) || defined(RENDDX9ABI_D3DX9FALLBACK_H)
     // [CHOSEN, not recovered] The native/no-SDK subsets omit D3DXVec3Normalize.
     const float axisLength = std::sqrt(dot3(axis, axis));
     if (axisLength != 0.0f)
@@ -4668,7 +4668,7 @@ Mat4 calculateDirectionalShadowMatrix(void* manager)
         Mat4 translate = Mat4::getIdentity();
         translate.m[14] = 1.0f - nearDistance;
         lightBasis = multiplyShadowMatrices(lightBasis, translate);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] The subtract/add pair has one final x87 store.
         farDistance = bf2x87::store(bf2x87::wide(farDistance) - nearDistance + 1.0f);
 #else
@@ -4685,7 +4685,7 @@ Mat4 calculateDirectionalShadowMatrix(void* manager)
         nearDistance, farDistance);
     transformShadowPoints(receiver, 8, ortho);
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] The far averages and x delta remain on the x87 stack.
     const float nearX = bf2x87::store(((bf2x87::wide(receiver[3].x) + receiver[2].x)
         + receiver[1].x + receiver[0].x) * 0.25f);
@@ -4759,7 +4759,7 @@ Mat4 calculateDirectionalShadowMatrix(void* manager)
     fittedBounds.maximum.y *= scaleY;
 
     const float width = fittedBounds.maximum.x - fittedBounds.minimum.x;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] q is spilled, but its unrounded value feeds all eight slopes.
     const bf2x87::Real focusWidth = bf2x87::wide(g_LightManager->getShadowTSMFocus()) * width;
     const bf2x87::Real wideQ = (bf2x87::wide(width) * focusWidth * 0.39999998f)
@@ -4778,7 +4778,7 @@ Mat4 calculateDirectionalShadowMatrix(void* manager)
     for (unsigned int i = 0; i < 8; ++i)
     {
         const float numerator = scaleY * receiver[i].y;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] Each denominator has exactly one single-precision store.
         const float denominator = bf2x87::store(bf2x87::wide(scaleX) * receiver[i].x - wideProjectionX);
 #else
@@ -4786,7 +4786,7 @@ Mat4 calculateDirectionalShadowMatrix(void* manager)
 #endif
         if (!shadowFloatHasExponent(numerator) || !shadowFloatHasExponent(denominator))
             continue;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] Compare the retained quotient before narrowing either limit.
         const bf2x87::Real slope = bf2x87::wide(numerator) / denominator;
         if (bf2x87::wide(maximumSlope) < slope)
@@ -4807,7 +4807,7 @@ Mat4 calculateDirectionalShadowMatrix(void* manager)
     flip.m[12] = projectionX;
     fitted = multiplyShadowMatrices(fitted, flip);
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] The shear is stored only after updating the slope limit.
     const bf2x87::Real wideShear = (bf2x87::wide(std::fabs(minimumSlope))
         + maximumSlope) * 0.5f - maximumSlope;
@@ -4829,7 +4829,7 @@ Mat4 calculateDirectionalShadowMatrix(void* manager)
     // [ebp-0x1B0] plus 0x30. Every other element is zero apart from m[0], m[3], m[5] and m[10]
     // (0x101638F6..0x1016399D).
     Mat4 projective = Mat4::getZero();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Preserve the shared denominator and depth ratio until stores.
     const bf2x87::Real denominator = bf2x87::wide(p) - q;
     projective.m[0] = bf2x87::store(bf2x87::wide(p) / denominator);
@@ -4874,7 +4874,7 @@ Mat4 calculateDirectionalShadowMatrix(void* manager)
     if (shadowFloatHasExponent(cropWidth) && shadowFloatHasExponent(cropHeight))
     {
         Mat4 cropMatrix = Mat4::getIdentity();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] Both crop reciprocals survive until the matrix stores.
         const bf2x87::Real inverseWidth = bf2x87::wide(1.0f) / cropWidth;
         const bf2x87::Real inverseHeight = bf2x87::wide(1.0f) / cropHeight;
@@ -6655,7 +6655,7 @@ float sampleSimpleShadowMapFiltered(void* self, float x, float z)
     const float d = query(static_cast<int>(upperXAgain),
                          static_cast<int>(std::floor(static_cast<double>(nextZ))));
     x = static_cast<float>(static_cast<double>(x) - std::floor(static_cast<double>(x)));
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retail keeps the bilinear expression in x87 until the caller stores it.
     typedef bf2x87::Real Real;
     const Real fractionZ = Real(z) - Real(std::floor(static_cast<double>(z)));
@@ -7563,7 +7563,7 @@ LightDistanceMap* LightManager::getVisibleLightsByDistance(unsigned int required
     {
         world::LightSource* const light = *it;
         const Vec3& position = light->getAbsolutePosition();
-#if defined(__APPLE__) || defined(BF2_TEST_SOFT_EXTENDED)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87)) || defined(BF2_TEST_SOFT_EXTENDED)
         // [CHOSEN, not recovered] Preserve the PE's explicit x store and the retained y/z
         // intermediates through the native extended-arithmetic policy.
         const float x = bf2x87::store(bf2x87::sub(bf2x87::wide(camera->m[12]),
@@ -9111,7 +9111,7 @@ namespace {
 inline Vec3 blendExpansionColor(const Vec3& low, const Vec3& high, float blend,
                                float inverse, bool roundHighY)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Preserve the x87 stores between vector operations.
     typedef bf2x87::Real Real;
     const float lowX = bf2x87::store(Real(low.x) * Real(blend));
@@ -9171,7 +9171,7 @@ void LightManager::updateExpansionLighting()
     manager->setSunSpecColor(blendExpansionColor(low, *high, blend, inverse, true));
 
     Terrain* const terrain = static_cast<Terrain*>(g_Terrain);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Terrain's low z product remains in x87 until the sum.
     typedef bf2x87::Real Real;
     const float lowX = bf2x87::store(Real(terrain->m_giColorLow.x) * Real(blend));
@@ -9225,7 +9225,7 @@ float xpLightRadius(const XpLight* light)
     const float radius = light->source->getVisualBoundingRadius();
     if (sourceTemplate->getIsDynamic())
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         return bf2x87::store(bf2x87::mul(bf2x87::wide(xpLightManager()->getDynamicLightRangeScale()),
                                        bf2x87::wide(radius)));
 #else
@@ -10093,7 +10093,7 @@ void xpLightFillRecord(const XpLight* light, const Mat4& inverse,
     // PE 0x1018FBC0. [INFERRED] placement beside the existing XpLight.cpp bodies.
     const Mat4& transform = light->source->getAbsoluteTransformation();
     const Vec3 direction = { transform.m[8], transform.m[9], transform.m[10] };
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain x87 intermediates until the three stores.
     typedef bf2x87::Real Real;
 #else
@@ -10119,7 +10119,7 @@ void xpLightFillRecord(const XpLight* light, const Mat4& inverse,
             output.direction[0] = output.direction[1] = output.direction[2] = 0.0f;
         else
         {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             const Real scale = Real(1.0f) / bf2x87::squareRoot(Real(lengthSquared));
 #else
             const Real scale = 1.0f / std::sqrt(lengthSquared);

@@ -179,7 +179,7 @@ void TextureAtlas::build(ITextureAtlasConfiguration* configuration)
         int subGroupIndex = 0;
         while (m_pending.size() != 0)
         {
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
             // [CHOSEN, not recovered] Decimal conversion through the native CRT.
             m_pages.push_back(Group(group->name + std::to_string(subGroupIndex), 0, 0,
                                     group->format, group->miplevels, group->border));

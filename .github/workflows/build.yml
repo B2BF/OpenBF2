@@ -2,12 +2,22 @@ name: Build packages
 
 on:
   workflow_call:
+    inputs:
+      linux_only:
+        description: Skip Windows and macOS for a focused manual Linux validation
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
+env:
+  LINUX_SETUP_REPOSITORY: kr4uzi/openbf2-setup
+  LINUX_SETUP_REVISION: 3d3e6b4313f8ca52748b05391d87b6d7a6aa127d # v0.4.0
+
 jobs:
   windows:
+    if: ${{ !inputs.linux_only }}
     name: Windows ${{ matrix.arch }}
     runs-on: windows-2022
     timeout-minutes: 120
@@ -245,9 +255,17 @@ jobs:
           retention-days: 14
 
   linux:
-    name: Linux x64
+    name: Linux x64 ${{ matrix.role }}
     runs-on: ubuntu-22.04
-    timeout-minutes: 90
+    timeout-minutes: ${{ matrix.timeout }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - role: server
+            timeout: 90
+          - role: client
+            timeout: 360
     env:
       CMAKE_BUILD_PARALLEL_LEVEL: 2
     steps:
@@ -257,21 +275,26 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - name: Install build dependencies
+      - name: Install server build dependencies
+        if: matrix.role == 'server'
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y cmake ninja-build g++ libncurses-dev
 
-      - name: Configure
+      - name: Configure the server
+        if: matrix.role == 'server'
         run: cmake --preset linux-x64 -B out/build/ci-linux-x64 -DBF2_GAME_DIR:PATH="$GITHUB_WORKSPACE/out/no-game-content"
 
       - name: Build the dedicated server and check the Python runtime
+        if: matrix.role == 'server'
         run: cmake --build out/build/ci-linux-x64 --target bf2 dice_py_check_run
 
       - name: Package Linux binaries
+        if: matrix.role == 'server'
         run: python3 Code/Build/package_release.py --platform linux-x64 --build-dir out/build/ci-linux-x64 --output-dir out/packages --revision "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY"
 
-      - name: Upload Linux packages
+      - name: Upload the Linux server build
+        if: matrix.role == 'server'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: packages-linux-x64
@@ -282,11 +305,170 @@ jobs:
           compression-level: 0
           retention-days: 14
 
-      # The Linux release package, openbf2-linux.zip: the same files in a platform-named archive.
-      - name: Assemble the Linux package
-        run: python3 Code/Build/package_release.py --release linux --packages-dir out/packages --output-dir out/release --revision "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY"
+      - name: Upload Linux server build diagnostics
+        if: failure() && matrix.role == 'server'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: diagnostics-linux-x64
+          path: |
+            out/build/ci-linux-x64/CMakeFiles/CMakeConfigureLog.yaml
+            out/build/ci-linux-x64/CMakeFiles/CMake*.log
+          if-no-files-found: ignore
+          retention-days: 7
 
-      - name: Upload the Linux release package
+      # [CHOSEN, not recovered] Issue #36: the client leg embeds the Vulkan
+      # engine in the separately maintained graphical installer/launcher.
+      - name: Check out the Linux setup application
+        if: matrix.role == 'client'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.LINUX_SETUP_REPOSITORY }}
+          ref: ${{ env.LINUX_SETUP_REVISION }}
+          path: out/linux-setup
+          persist-credentials: false
+
+      - name: Install OCI and ELF inspection tools
+        if: matrix.role == 'client'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y podman binutils patchelf gcc
+
+      - name: Check Linux packaging fixtures
+        if: matrix.role == 'client'
+        run: |
+          python3 Code/Tests/test_linux_release_sdk_image.py
+          python3 Code/Tests/test_linux_release_artifacts.py --setup-package out/linux-setup/linux/package.py
+
+      - name: Restore the pinned SDK image
+        if: matrix.role == 'client'
+        id: sdk-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/openbf2-linux-sdk.oci
+          key: linux-sdk-x64-v1-${{ hashFiles('tools/linux/release/Containerfile', 'tools/linux/release/sdk*', 'tools/linux/release/build-sdk.py') }}
+
+      - name: Build and export the baseline SDK
+        if: matrix.role == 'client' && steps.sdk-cache.outputs.cache-hit != 'true'
+        run: |
+          podman build --format oci --layers \
+            --build-arg "SDK_SOURCE_REVISION=$GITHUB_SHA" \
+            --tag localhost/openbf2-linux-sdk:ci \
+            --file tools/linux/release/Containerfile tools/linux/release
+          podman save --format oci-archive \
+            --output "$RUNNER_TEMP/openbf2-linux-sdk.oci" localhost/openbf2-linux-sdk:ci
+
+      - name: Load the cached SDK
+        if: matrix.role == 'client' && steps.sdk-cache.outputs.cache-hit == 'true'
+        run: podman load --input "$RUNNER_TEMP/openbf2-linux-sdk.oci"
+
+      - name: Verify the SDK manifest identity
+        if: matrix.role == 'client'
+        id: sdk
+        run: python3 tools/linux/release/sdk-image.py "$RUNNER_TEMP/openbf2-linux-sdk.oci" --github-output "$GITHUB_OUTPUT"
+
+      - name: Cache the completed SDK before building the client
+        if: matrix.role == 'client' && steps.sdk-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/openbf2-linux-sdk.oci
+          key: ${{ steps.sdk-cache.outputs.cache-primary-key }}
+
+      - name: Build, audit and package the Linux application
+        if: matrix.role == 'client'
+        env:
+          SDK_IMAGE: ${{ steps.sdk.outputs.image_id }}
+          SDK_REFERENCE: ${{ steps.sdk.outputs.reference }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/linux-release"
+          podman run --rm \
+            --volume "$GITHUB_WORKSPACE:/work/engine:rw" \
+            --volume "$RUNNER_TEMP/linux-release:/work/release:rw" \
+            --env BF2_RELEASE_JOBS=2 \
+            "$SDK_IMAGE" bash /work/engine/tools/linux/release/build-client.sh \
+            /work/engine /work/engine/out/linux-setup /work/release/result "$SDK_REFERENCE"
+
+      - name: Upload the Linux client application
+        if: matrix.role == 'client'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: packages-linux-client
+          path: |
+            ${{ runner.temp }}/linux-release/result/packages/openbf2-linux-x86_64-client.tar.gz
+            ${{ runner.temp }}/linux-release/result/packages/openbf2-linux-x86_64-client.tar.gz.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload Linux client build diagnostics
+        if: failure() && matrix.role == 'client'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: diagnostics-linux-client-x64
+          path: |
+            ${{ runner.temp }}/linux-release/result/nativefx/logs/*.log
+            ${{ runner.temp }}/linux-release/result/engine-build/CMakeFiles/CMakeConfigureLog.yaml
+            ${{ runner.temp }}/linux-release/result/engine-build/Testing/Temporary/*.log
+            ${{ runner.temp }}/linux-release/result/setup-build/compile/CMakeFiles/CMakeConfigureLog.yaml
+            ${{ runner.temp }}/linux-release/result/setup-build/compile/Testing/Temporary/*.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  linux-package:
+    name: Linux package
+    needs: linux
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out the event commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Download the Linux server build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: packages-linux-x64
+          path: out/packages/server
+
+      - name: Download the Linux client application
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: packages-linux-client
+          path: out/packages/client
+
+      - name: Assemble the Linux server package
+        run: python3 Code/Build/package_release.py --release linux --packages-dir out/packages/server --output-dir out/release --revision "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY"
+
+      - name: Verify the Linux client application
+        working-directory: out/packages/client
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import tarfile
+          from pathlib import Path
+
+          name = "openbf2-linux-x86_64-client.tar.gz"
+          assert {path.name for path in Path.cwd().iterdir()} == {name, name + ".sha256"}, "Unexpected client artifact files"
+          digest = hashlib.sha256()
+          with open(name, "rb") as source:
+              for block in iter(lambda: source.read(1024 * 1024), b""):
+                  digest.update(block)
+          assert Path(name + ".sha256").read_text() == f"{digest.hexdigest()}  {name}\n", "Wrong client checksum"
+          with tarfile.open(name, "r:gz") as archive:
+              names = archive.getnames()
+              assert len(names) == len(set(names)), "Duplicate Linux client archive members"
+              for entry in ("bin/OpenBF2", "bin/bf2_client", "lib/libdice_py.so", "lib/libaidll.so", "lib/libdxvk_d3d9.so.0"):
+                  assert archive.getmember("OpenBF2/" + entry).isfile(), "Linux client archive lacks regular file " + entry
+              info = json.load(archive.extractfile("OpenBF2/share/openbf2/release.json"))
+              assert info["engine_revision"] == os.environ["GITHUB_SHA"], "Wrong Linux client revision"
+              assert info["setup_revision"] == os.environ["LINUX_SETUP_REVISION"], "Wrong Linux setup revision"
+              assert info["architecture"] == "x86_64" and info["glibc"] == "2.35", "Wrong Linux client baseline"
+          PY
+
+      - name: Upload the Linux server release package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-linux
@@ -297,16 +479,16 @@ jobs:
           compression-level: 0
           retention-days: 14
 
-      - name: Upload Linux build diagnostics
-        if: failure()
+      - name: Upload the Linux client release package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: diagnostics-linux-x64
+          name: release-linux-client
           path: |
-            out/build/ci-linux-x64/CMakeFiles/CMakeConfigureLog.yaml
-            out/build/ci-linux-x64/CMakeFiles/CMake*.log
-          if-no-files-found: ignore
-          retention-days: 7
+            out/packages/client/openbf2-linux-x86_64-client.tar.gz
+            out/packages/client/openbf2-linux-x86_64-client.tar.gz.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
 
   # [CHOSEN, not recovered] The macOS port: the renderer-on Metal client, the dedicated server and the
   # AI library, one leg per architecture on the Apple-silicon runner, macos-15 (x86_64 is cross-compiled, as the
@@ -318,6 +500,7 @@ jobs:
   # stays ad-hoc and uses no secrets (docs/ci-releases.md). The per-architecture ZIPs are CI
   # artifacts only and not notarized: releases ship the notarized disk image (macos-app).
   macos:
+    if: ${{ !inputs.linux_only }}
     name: macOS ${{ matrix.arch }}
     runs-on: macos-15
     timeout-minutes: 150
@@ -444,7 +627,7 @@ jobs:
     environment: ${{ (github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')) && 'release' || '' }}
     env:
       SETUP_REPOSITORY: kr4uzi/openbf2-setup
-      SETUP_REVISION: fb6dc8fe8d7b81e41d0b737925891e92568cb61c # v0.3.1
+      SETUP_REVISION: 3d3e6b4313f8ca52748b05391d87b6d7a6aa127d # v0.4.0
       BF2_RELEASE_SIGNING: ${{ (github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')) && 'true' || 'false' }}
     steps:
       # The client entitlements, the signing helper and the packager (for the build-info); the app

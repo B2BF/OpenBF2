@@ -4,7 +4,7 @@
 // effect enums use (render states 0..102 in MOJOSHADER_renderStateType order, then
 // texture-stage 103.., transforms/material/lights 121.., shaders 146/147, shader constants
 // 148..163, Texture 164, sampler states 165..177, Sampler 178).
-#if defined(__APPLE__)
+#if defined(__APPLE__) || (defined(__linux__) && defined(BF2_GFX_DXVK))
 #include "FxStates.h"
 #include "FxParser.h"
 #include <cstring>

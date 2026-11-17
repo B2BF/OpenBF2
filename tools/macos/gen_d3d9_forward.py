@@ -81,6 +81,16 @@ class Iface:
 
 class Model:
     def __init__(self, d3d_text, d3dx_text):
+        self.native = not d3dx_text
+        self.dispatch = dict(DISPATCH)
+        if self.native:
+            # ResourceTracer and TextureManager query these base interfaces. The
+            # most-derived wrapper must retain identity through either IID.
+            self.dispatch["IDirect3DResource9"] = ("GetType", [
+                ("D3DRTYPE_SURFACE", "IDirect3DSurface9"),
+                ("D3DRTYPE_VERTEXBUFFER", "IDirect3DVertexBuffer9"),
+                ("D3DRTYPE_INDEXBUFFER", "IDirect3DIndexBuffer9"),
+            ] + DISPATCH["IDirect3DBaseTexture9"][1])
         d3d_text = re.sub(r"//[^\n]*", "", d3d_text)
         d3dx_text = re.sub(r"//[^\n]*", "", d3dx_text)
         # Everything before `using D3DCOLOR` is the non-Windows platform stand-in block.
@@ -109,7 +119,8 @@ class Model:
         self.value_macros = [n for n in re.findall(r"^#define\s+(\w+)\s+\S", api, re.M)
                              if not n.startswith("BF2_")]
         self.constexprs = []
-        for line in re.findall(r"^constexpr\s+\w+\s+(.*?);", api, re.M):
+        for line in re.findall(r"^constexpr\s+\w+\s+(.*?);", api,
+                               re.M | (re.S if self.native else 0)):
             self.constexprs += re.findall(r"(\w+)\s*=", line)
         # Free functions: `RET WINAPI Name(args);`
         self.functions = []
@@ -122,14 +133,15 @@ class Model:
                 mm = re.match(r"(.*?)(\w+)$", a)
                 args.append((mm.group(1).strip(), mm.group(2)))
             self.functions.append((f.group(1).strip(), f.group(2), args))
-        self.d3dx_version = re.search(r"#define\s+D3DX_SDK_VERSION\s+(\d+)", api).group(1)
+        version = re.search(r"#define\s+D3DX_SDK_VERSION\s+(\d+)", api)
+        self.d3dx_version = version.group(1) if version else None
         self.check()
 
     def check(self):
-        assert self.d3dx_version == "25", "D3DX_MODULE assumes D3DX_SDK_VERSION 25"
+        assert self.d3dx_version in (None, "25"), "D3DX_MODULE assumes D3DX_SDK_VERSION 25"
         for n, i in self.ifaces.items():
             assert i.base is None or i.base in self.ifaces or i.base == "IUnknown", n
-        for n in DISPATCH:
+        for n in self.dispatch:
             assert n in self.ifaces
 
     # name classification
@@ -166,7 +178,7 @@ class Model:
         return [n for n in self.ifaces if n not in SKIP_WRAP and n not in bases]
 
     def wrappable(self):
-        return [n for n in self.ifaces if n not in SKIP_WRAP and (n in self.concrete() or n in DISPATCH)]
+        return [n for n in self.ifaces if n not in SKIP_WRAP and (n in self.concrete() or n in self.dispatch)]
 
     def render(self, t, ns):
         """Type text with every subset-declared identifier qualified by `ns::`.
@@ -255,14 +267,16 @@ def gen_wrappers(m):
     for n in wr:
         L.append(f"sub::{n}* Adopt_{n}(real::{n}* r);")
         L.append(f"real::{n}* Real_{n}(sub::{n}* p);")
-    L += ["real::ID3DXEffectStateManager* MakeStateManagerAdapter(sub::ID3DXEffectStateManager* mgr);", ""]
+    if m.d3dx_version:
+        L += ["real::ID3DXEffectStateManager* MakeStateManagerAdapter(sub::ID3DXEffectStateManager* mgr);", ""]
     for n in m.concrete():
         L += gen_wrapper_class(m, n)
-    L += gen_adapter(m)
+    if m.d3dx_version:
+        L += gen_adapter(m)
     for n in m.concrete():
         L += [f"sub::{n}* Adopt_{n}(real::{n}* r) {{ return AdoptT<Fwd_{n}, sub::{n}>(r); }}",
               f"real::{n}* Real_{n}(sub::{n}* p) {{ return p ? static_cast<Fwd_{n}*>(p)->real_ : nullptr; }}"]
-    for n, (disc, cases) in DISPATCH.items():
+    for n, (disc, cases) in m.dispatch.items():
         L += [f"sub::{n}* Adopt_{n}(real::{n}* r) {{", "    if (!r) return nullptr;",
               f"    switch (r->{disc}()) {{"]
         for e, c in cases:
@@ -277,14 +291,14 @@ def gen_wrappers(m):
     L += ["", "// Table of the interfaces QueryInterface and GetContainer can hand out.",
           "struct IidEntry { const GUID& (*iid)(); void* (*adopt)(void*); };"]
     for n in wr:
-        if n in DISPATCH:
+        if n in m.dispatch and not m.native:
             continue
         L.append(f"static const GUID& Iid_{n}() {{ return {iid_macro(n)}; }}")
         L.append(f"static void* AdoptVoid_{n}(void* p) {{ return Adopt_{n}(static_cast<real::{n}*>(p)); }}")
     L += ["static const GUID& Iid_IUnknown() { return BF2_FWD_IID_IUnknown; }",
           "static void* AdoptVoid_IUnknown(void* p) { return AdoptUnknown(static_cast<::IUnknown*>(p)); }",
           "static const IidEntry kIids[] = {", "    { &Iid_IUnknown, &AdoptVoid_IUnknown },"]
-    L += [f"    {{ &Iid_{n}, &AdoptVoid_{n} }}," for n in wr if n not in DISPATCH]
+    L += [f"    {{ &Iid_{n}, &AdoptVoid_{n} }}," for n in wr if n not in m.dispatch or m.native]
     L += ["};",
           "void* WrapByIid(REFIID iid, void* real) {",
           "    for (const IidEntry& e : kIids)",
@@ -340,7 +354,8 @@ def gen_adapter(m):
 # ----------------------------------------------------------------------------- free functions
 def gen_functions(m):
     wr = set(m.wrappable())
-    L = [HEADER + GUARD_OPEN, '#include "../../D3DX9Subset.h"', "", "// Bridges exported by ForwardWrappers.cpp (void* only: that TU names the subset in a namespace).",
+    subset = "D3DX9Subset.h" if m.d3dx_version else "D3D9Subset.h"
+    L = [HEADER + GUARD_OPEN, f'#include "../../{subset}"', "", "// Bridges exported by ForwardWrappers.cpp (void* only: that TU names the subset in a namespace).",
          'extern "C" void* bf2fwd_GetProc(const char* module, const char* name);']
     for n in sorted(wr):
         L.append(f'extern "C" void* bf2fwd_adopt_{n}(void* r);')
@@ -389,6 +404,10 @@ def gen_checks(m):
     for e, vals in m.enums.items():
         L.append(f'static_assert(sizeof(sub::{e}) == sizeof(real::{e}), "size of enum {e}");')
         for v in vals:
+            if m.native and v == "D3DFMT_FORCE_DWORD":
+                # DXVK's MinGW header uses 0xffffffff; the subset uses 0x7fffffff.
+                # Both force a 32-bit enum. Neither is a usable surface format.
+                continue
             L.append(f'static_assert(static_cast<long long>(sub::{v}) == static_cast<long long>(real::{v}), "{v}");')
     L += ["", "#ifdef BF2_FWD_SDK_MACROS   // Windows: ForwardMacroValues.inc captured the SDK values"]
     for n in m.value_macros:
@@ -405,11 +424,11 @@ def gen_names(m):
     for n in sorted(m.declared() - m.aliases - set(m.constexprs)):
         L.append(f"using ::{n};")
     L.append("}")
-    L.append("#define BF2_FWD_IID_IUnknown __uuidof(::IUnknown)")
+    L.append("#define BF2_FWD_IID_IUnknown " + ("IID_IUnknown" if m.native else "__uuidof(::IUnknown)"))
     for n in m.ifaces:
         if n in PASS_THROUGH:
             continue
-        L.append(f"#define {iid_macro(n)} " + (f"IID_{n}" if n.startswith("ID3DX") else f"__uuidof(::{n})"))
+        L.append(f"#define {iid_macro(n)} " + (f"IID_{n}" if m.native or n.startswith("ID3DX") else f"__uuidof(::{n})"))
     return "\n".join(L) + "\n"
 
 
@@ -547,7 +566,7 @@ def gen_fakeobjects(m):
             L.append("    }")
         L += ["};", ""]
     for n in wr:
-        concrete = DISPATCH[n][1][0][1] if n in DISPATCH else n
+        concrete = m.dispatch[n][1][0][1] if n in m.dispatch else n
         L.append(f"inline real::{n}* NewFake(Tag<real::{n}>) {{ return new Fake_{concrete}(); }}")
     L += ["}", ""]
     return "\n".join(L)
@@ -565,6 +584,11 @@ def build_all(m, fixture):
         "ForwardUndef.inc": gen_undef(m),
         "ForwardMacroValues.inc": gen_macro_values(m),
     }
+    if m.native:
+        # Recursive discovery in other images must not compile a second backend.
+        for name in ("ForwardWrappers.cpp", "ForwardFunctions.cpp"):
+            files[name] = files[name].replace(GUARD_OPEN,
+                "#if defined(__linux__) && defined(BF2_GFX_FORWARD_TU) && defined(BF2_GFX_DXVK)\n", 1)
     fx = {}
     if fixture:
         fx = {"FakeSdk.h": gen_fakesdk(m), "ForwardSdk.h": gen_fixture_sdk(m), "FakeObjects.h": gen_fakeobjects(m)}
@@ -575,9 +599,14 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--out-dir", type=Path, default=OUT_DEFAULT)
     ap.add_argument("--fixture-dir", type=Path)
+    ap.add_argument("--d3d9-only", action="store_true",
+                    help="DXVK Native: forward D3D9 only; D3DX stays in the portable runtime")
     ap.add_argument("--check", action="store_true", help="fail if --out-dir differs from a fresh generation")
     a = ap.parse_args()
-    m = Model((GFX / "D3D9Subset.h").read_text(), (GFX / "D3DX9Subset.h").read_text())
+    if a.d3d9_only and a.out_dir == OUT_DEFAULT:
+        ap.error("--d3d9-only requires a separate --out-dir; preserve the Windows wrappers")
+    m = Model((GFX / "D3D9Subset.h").read_text(),
+              "" if a.d3d9_only else (GFX / "D3DX9Subset.h").read_text())
     files, fx = build_all(m, a.fixture_dir is not None)
     if a.check:
         bad = [n for n, t in files.items() if not (a.out_dir / n).exists() or (a.out_dir / n).read_text() != t]

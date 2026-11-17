@@ -22,7 +22,7 @@
 #include "../Math/Frustum.h"
 #include "../Math/LocalBoundingBox.h"
 #include "../GeomMisc/Debug.h"
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Math/PortableX87.h"     // bf2x87::Real, trig
 #endif
 
@@ -39,7 +39,7 @@ void geometryRendererMatrixProduct(Mat4& output, const Mat4& left, const Mat4& r
 
 namespace rendmath {
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 // [CHOSEN, not recovered] x87 extended values between the PE's float stores.
 typedef bf2x87::Real Real;
 inline Real squareRootOf(Real value) { return bf2x87::squareRoot(value); }
@@ -1042,7 +1042,7 @@ inline Mat4& multiplyAssign(Mat4& m, const Mat4& rhs)
 // float 0x42652EE0 (.data 0x10238748, read only by PE 0x10077F50), the radians-to-degrees factor.
 const float kRadiansToDegrees = 57.2957764f;
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 // [CHOSEN, not recovered] fpatan: atan2(y, x) on the x87 values.
 inline Real arcTangent(Real y, Real x) { return bf2x87::atanValue(y, x); }
 #else

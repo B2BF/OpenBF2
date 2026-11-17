@@ -1,7 +1,7 @@
 // Bit-level serialization and compressed vector and quaternion codecs.
 
 #include "BitStream.h"
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h" // [CHOSEN, not recovered] x86 conversion results on both Mac architectures.
 #endif
 #include <math.h>       // sqrtf, atan2f, acosf, sinf, cosf, fabsf — the vector and normal encoders
@@ -354,7 +354,7 @@ void BitStream::writeCompressedVectorWithTable(const Vec3& v, const Vec3& ref, f
 
     for (int i = 0; i < 3; ++i)
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         int q = bf2x87::toIntTruncate(d[i] * invScale);
 #else
         int q = (int)(d[i] * invScale);          // cvttss2si — truncates toward zero
@@ -470,7 +470,7 @@ void BitStream::writeCompressedVector2(const Vec3& v, const Vec3& ref, float sca
     const float        d[3]  = { dx, dy, dz };
     for (int i = 0; i < 3; ++i)
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         int q = bf2x87::toIntTruncate(d[i] * invScale);
 #else
         int q = (int)(d[i] * invScale);
@@ -568,7 +568,7 @@ void BitStream::writeNormalAngle(float angle, int nbits)
 
     // The nonnegative angle mapping uses the full width for magnitude, with truncating conversion.
     const unsigned int max = (1u << nbits) - 1u;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     unsigned int q = static_cast<unsigned int>(bf2x87::toIntTruncate(unit * (float)max));
 #else
     unsigned int q = (unsigned int)(unit * (float)max);
@@ -670,7 +670,7 @@ void BitStream::writeQuatComponent(float v, int nbits)
     if (unit < 0.0f) unit = 0.0f;
 
     const unsigned int max = (1u << nbits) - 1u;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     unsigned int qv = static_cast<unsigned int>(bf2x87::toIntTruncate(unit * (float)max));
 #else
     unsigned int qv = (unsigned int)(unit * (float)max);   // fnstcw/or 0xC00/fistp == a truncating cast
@@ -737,7 +737,7 @@ void writeUnitQuatComponent(BitStream& s, float v, int nbits)
     else if (unit > 1.0f) unit = 1.0f;
 
     const unsigned int max = (1u << nbits) - 1u;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const unsigned int qv = static_cast<unsigned int>(bf2x87::toIntTruncate(unit * (float)max));
 #else
     const unsigned int qv = (unsigned int)(unit * (float)max);   // truncating cast (fnstcw/0xC00/fistp)
@@ -827,7 +827,7 @@ Vec3 BitStream::shrinkNormalVector(const Vec3& v, int nbits)
         float unit = (normalised + 1.0f) * 0.5f;
         if (unit < 0.0f)      unit = 0.0f;
         else if (unit > 1.0f) unit = 1.0f;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const float q = static_cast<float>(bf2x87::toIntTruncate(unit * (float)max)) / (float)max;
 #else
         const float q = (float)((int)(unit * (float)max)) / (float)max;   // truncate, then dequantise

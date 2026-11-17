@@ -3,8 +3,8 @@
 #if !DEDICATED
 #if defined(_WIN32)
 #include <windows.h>
-#elif defined(__APPLE__)
-#include "../Platform/macOS/CocoaHost.h"   // [CHOSEN, not recovered] cursor, modifiers, clipboard
+#elif (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
+#include "../Platform/Host/ClientHost.h"   // [CHOSEN, not recovered] cursor, modifiers, clipboard
 #endif
 #include "MainMenuLogic.h"
 #include "IMenuTeamManager.h"
@@ -170,9 +170,9 @@ bool MainMenuLogic::init()
     m_scaleY = movieHeight / static_cast<float>(height);
     io::IInputDevice* mouse = static_cast<io::IInputDeviceManager*>(io::inputDeviceManager)->getInputDevice(io::IDFMouse);
     mouse->deActivate();                                                      // +0x20, unguarded in the binary
-#if defined(__APPLE__)
-    macos::CocoaHost::instance().showCursor(true);                            // [CHOSEN] ShowCursor(TRUE)
-    macos::CocoaHost::instance().setCursor(m_host->getCursor(0));             // +0x6C, SetCursor
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
+    host::ClientHost::instance().showCursor(true);                            // [CHOSEN] ShowCursor(TRUE)
+    host::ClientHost::instance().setCursor(m_host->getCursor(0));             // +0x6C, SetCursor
 #else
     ShowCursor(TRUE);
     SetCursor(static_cast<HCURSOR>(m_host->getCursor(0)));                    // +0x6C
@@ -204,9 +204,9 @@ void MainMenuLogic::deactivate()
     }
     m_swiffActive = false;
     m_frameActive = false;
-#if defined(__APPLE__)
-    macos::CocoaHost::instance().setCursor(0);                                // [CHOSEN] SetCursor(0)
-    macos::CocoaHost::instance().showCursor(false);                           //   ShowCursor(FALSE)
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
+    host::ClientHost::instance().setCursor(0);                                // [CHOSEN] SetCursor(0)
+    host::ClientHost::instance().showCursor(false);                           //   ShowCursor(FALSE)
 #else
     SetCursor(0);
     ShowCursor(FALSE);
@@ -229,8 +229,8 @@ bool MainMenuLogic::beginFrame()
 {
     ui::ISwiffHost* host = m_host;
     const int busy = host->getBusy();                                         // +0x2B8
-#if defined(__APPLE__)
-    macos::CocoaHost::instance().setCursor(host->getCursor(busy));            // +0x6C, [CHOSEN] SetCursor
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
+    host::ClientHost::instance().setCursor(host->getCursor(busy));            // +0x6C, [CHOSEN] SetCursor
 #else
     SetCursor(static_cast<HCURSOR>(host->getCursor(busy)));                   // +0x6C
 #endif
@@ -296,17 +296,17 @@ bool MainMenuLogic::handleInput(io::GameInput&)
 
 // 0x4A2E10 (263 B): with Ctrl held (and not Alt), 'v' pastes CF_TEXT into the player's text
 // input, 'c' and 'x' copy the player's text out; any other Ctrl character is swallowed.
-#if defined(__APPLE__)
-// [CHOSEN, not recovered] macOS: the same arms on the Cocoa host. Control or Command counts as
-// Ctrl and Option as Alt (BF2.cpp's controlKeyDown/altKeyDown); the clipboard text is
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
+// [CHOSEN, not recovered] Native host clipboard shortcuts. The backend supplies the Control
+// shortcut policy (Command also counts on macOS); the clipboard text is
 // Windows-1252, the CF_TEXT counterpart. A clipboard the host cannot open or read is skipped, as
 // a failed OpenClipboard or an absent CF_TEXT is.
 bool MainMenuLogic::handleClipboardShortcut(char character)
 {
-    macos::CocoaHost& host = macos::CocoaHost::instance();
+    host::ClientHost& host = host::ClientHost::instance();
     const unsigned int modifiers = host.modifierFlags();
-    const bool control = (modifiers & (macos::HostModControl | macos::HostModCommand)) != 0;
-    const bool alt = (modifiers & macos::HostModOption) != 0;
+    const bool control = host.controlShortcutDown();
+    const bool alt = (modifiers & host::HostModAlt) != 0;
     if (!control || (control && alt))
         return false;
     if (character != 'v')

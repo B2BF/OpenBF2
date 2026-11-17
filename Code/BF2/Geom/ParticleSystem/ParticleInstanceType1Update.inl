@@ -131,7 +131,7 @@ int psmType1AdvanceParticle(void* self,float* particle,int index,float step,unsi
         unsigned int selected=current;
         if (!(difference>=0))
         {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             selected=current-static_cast<unsigned int>(bf2x87::toIntTruncate(-3.0*difference))-1u;
 #else
             selected=current-static_cast<unsigned int>(static_cast<int>(-3.0*difference))-1u;

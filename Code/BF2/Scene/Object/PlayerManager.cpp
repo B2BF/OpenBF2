@@ -3,7 +3,7 @@
 // Use typed IPlayer calls so destructor-slot differences between PE and ELF remain correct.
 // Source placement [INFERRED].
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../../Platform/X87Compat.h" // [CHOSEN, not recovered]
 #endif
 #include "PlayerManager.h"
@@ -730,7 +730,7 @@ int PlayerManager::getTeamToAddPlayer(float team1Weight, float team2Weight)
     const float target2 = static_cast<float>(team2Weight * reciprocalWeightSum);
     const float error2 = static_cast<float>(static_cast<long double>(team2AsFloat) / total - target2);
 #else
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain x87-width values on both Mac architectures.
     const float team1AsFloat = static_cast<float>(team1Count);
     const float totalAsFloat = static_cast<float>(team1Count + team2Count);
@@ -769,7 +769,7 @@ int PlayerManager::getTeamToAddPlayer(float team1Weight, float team2Weight)
         const long double actualBotRatio = static_cast<long double>(team1BotsAsFloat) /
             configuredBotCount * 100.0L;
 #else
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain x87-width values on both Mac architectures.
         const int configuredBotCount = serverSettings->getCoopBotCount();
         const float team1BotsAsFloat = static_cast<float>(team1BotCount);
@@ -805,7 +805,7 @@ int PlayerManager::getTeamToAddPlayer(float team1Weight, float team2Weight)
         (static_cast<long double>(team1Count) / secondTotal - target1) -
         (static_cast<long double>(team2Count + 1) / secondTotal - target2));
 #else
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain x87-width values on both Mac architectures.
     const bf2x87::Real target1 = static_cast<bf2x87::Real>(team1Weight) / weightSum;
     const bf2x87::Real target2 = static_cast<bf2x87::Real>(team2Weight) / weightSum;

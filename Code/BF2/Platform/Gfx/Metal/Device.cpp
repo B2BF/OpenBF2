@@ -2,7 +2,7 @@
 // Native C++ objects implement the public subset; no retail DLL/vtable is bridged.
 #if defined(__APPLE__) && defined(BF2_IMAGE_RENDDX9)
 #include "../D3D9Subset.h"
-#include "../../macOS/CocoaHost.h"
+#include "../../Host/ClientHost.h"
 #include "MetalBridge.h"
 #include "DrawBridge.h"
 #include "FFVertex.h"
@@ -126,10 +126,10 @@ public:
     }
     // [TEMP] BF2_TEST_DISPLAY_MODES="WxH@Hz,..." replaces the host's mode list so a display without
     // the requested mode (the M2's built-in panel has no 800x600) can be reproduced on another Mac.
-    static std::vector<dice::hfe::macos::HostDisplayModeInfo> hostModes() {
+    static std::vector<dice::hfe::host::HostDisplayModeInfo> hostModes() {
         const char* test = std::getenv("BF2_TEST_DISPLAY_MODES");
-        if (!test || !*test) return dice::hfe::macos::CocoaHost::instance().displayModes();
-        std::vector<dice::hfe::macos::HostDisplayModeInfo> out;
+        if (!test || !*test) return dice::hfe::host::ClientHost::instance().displayModes();
+        std::vector<dice::hfe::host::HostDisplayModeInfo> out;
         for (const char* p = test; *p;) {
             int w = 0, h = 0, hz = 0, used = 0;
             if (std::sscanf(p, "%dx%d@%d%n", &w, &h, &hz, &used) != 3 || used <= 0) break;
@@ -186,7 +186,7 @@ public:
     HRESULT STDMETHODCALLTYPE GetAdapterDisplayMode(UINT a,D3DDISPLAYMODE* out) override {
         mainThread("IDirect3D9::GetAdapterDisplayMode");
         if (a || !out) return D3DERR_INVALIDCALL;
-        const auto m = dice::hfe::macos::CocoaHost::instance().desktopMode();
+        const auto m = dice::hfe::host::ClientHost::instance().desktopMode();
         if (m.width <= 0 || m.height <= 0) return D3DERR_NOTAVAILABLE;
         *out = {UINT(m.width),UINT(m.height),UINT(m.refreshHz),D3DFMT_X8R8G8B8}; return D3D_OK;
     }
@@ -280,17 +280,17 @@ public:
            HWND focus, DWORD flags) : parent(p), native(f), pp(params) {
         parent->AddRef();
         creation = {0,D3DDEVTYPE_HAL,focus,flags};
-        focusLosses = dice::hfe::macos::CocoaHost::instance().deactivationCount();
+        focusLosses = dice::hfe::host::ClientHost::instance().deactivationCount();
         describe();
     }
     // True while the device is lost to an application deactivation (see focusLosses).
     bool lostToFocus() {
         if (!focusLost && !pp.Windowed &&
-            dice::hfe::macos::CocoaHost::instance().deactivationCount() != focusLosses)
+            dice::hfe::host::ClientHost::instance().deactivationCount() != focusLosses)
             focusLost = true;
         return focusLost;
     }
-    static bool applicationActive() { return dice::hfe::macos::CocoaHost::instance().isAppActive(); }
+    static bool applicationActive() { return dice::hfe::host::ClientHost::instance().isAppActive(); }
     ~Device() { releaseFvfDeclarations(); bf2metal::destroyFrame(native); parent->Release(); }
     void describe() {
         bf2metal::dimensions(native, pp.BackBufferWidth, pp.BackBufferHeight);
@@ -465,7 +465,7 @@ public:
         const HWND window = pp.hDeviceWindow;
         pp = p; pp.hDeviceWindow = window; pp.BackBufferCount = 1;
         focusLost = false;
-        focusLosses = dice::hfe::macos::CocoaHost::instance().deactivationCount();
+        focusLosses = dice::hfe::host::ClientHost::instance().deactivationCount();
         describe();
         // Windows writes the actual size, count and format back, as CreateDevice does
         // (Wine's test_reset records this); the caller's window field is left as passed.

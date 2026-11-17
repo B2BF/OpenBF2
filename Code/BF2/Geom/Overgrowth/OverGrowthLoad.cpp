@@ -1,7 +1,7 @@
 // Vegetation resource loading, atlas adoption and editor export.
 // preLoad loads only the atlas; resource pre/post-load performs level initialization.
 #ifdef BF2_IMAGE_RENDDX9
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../../Platform/X87Compat.h"
 #endif
 #include "OverGrowth.h"
@@ -512,7 +512,7 @@ void OverGrowth::initialize()
 
     {
         const Vec3& scale = m_heightmap->getScale();                               // +0x54
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] The unsigned FILD conversion stays exact until the product store.
         m_extentX = bf2x87::store(bf2x87::mul(bf2x87::Real(m_mapWidth), bf2x87::Real(scale.x)));
 #else
@@ -521,7 +521,7 @@ void OverGrowth::initialize()
     }
     {
         const Vec3& scale = m_heightmap->getScale();                               // +0x54 again
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         m_extentZ = bf2x87::store(bf2x87::mul(bf2x87::Real(m_mapHeight), bf2x87::Real(scale.z)));
 #else
         m_extentZ = static_cast<float>(m_mapHeight) * scale.z;

@@ -1,7 +1,8 @@
-// [CHOSEN, not recovered] Native (Wine-free) effect compilation for the macOS client:
+// [CHOSEN, not recovered] Native (Wine-free) effect compilation for macOS and Linux clients:
 // vkd3d-shader (LGPL-2.1+, LICENSE.vkd3d) compiles each shader to D3D9 bytecode, the effect
-// parser/builder (FxBuild.h) produces the Description, MojoShader translates to MSL.
-// Build setup: docs/building.md (macOS).
+// parser/builder (FxBuild.h) produces the Description, MojoShader reflects the bytecode.
+// macOS also translates to MSL; Linux supplies bytecode to DXVK (kr4uzi/OpenBF2#36).
+// Build setup: docs/building.md and docs/linux-vulkan-client.md.
 #pragma once
 #include "Cache.h"
 #include "FxBuild.h"
@@ -17,6 +18,8 @@ namespace native {
 // dllHash = identityHash() and translator = identity().
 const std::string& identity();
 const std::string& identityHash();
+// Source/dependency/configuration fingerprint, excluding local equivalence evidence.
+const std::string& compilerFingerprint();
 
 // D3DX acceptance of an effect request, from the offline refusal table (keys of every attempt
 // D3DX was measured on, independent of toolchains).

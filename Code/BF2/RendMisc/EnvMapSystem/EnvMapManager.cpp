@@ -14,7 +14,7 @@
 #include "../../../RendDX9Abi/Frontier.h"
 #include "../../../RendDX9Abi/PluginEntry.h"
 #include "../../../RendDX9Abi/D3dx9Sdk.h"
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../../Platform/X87Compat.h"
 #endif
 #if defined(_WIN32)
@@ -178,7 +178,7 @@ EnvMapEntry* EnvMapManager::findOrCreateMapEntry(const Vec3* position)
            std::fabs(static_cast<double>(candidate->position.z)-position->z)<=epsilon)
             return n->second;
     }
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Preserve FISTP's integer-indefinite result on the native port.
     const int z=bf2x87::toIntTruncate(bf2x87::wide(position->z));
     const int y=bf2x87::toIntTruncate(bf2x87::wide(position->y));
@@ -375,7 +375,7 @@ bool EnvMapManager::generateEnvMaps()
     {
         EnvMapObject* const object=*item;
         const Vec3& position=object->m_entry->position;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] Preserve FISTP's integer-indefinite result on the native port.
         const int z=bf2x87::toIntTruncate(bf2x87::wide(position.z));
         const int y=bf2x87::toIntTruncate(bf2x87::wide(position.y));
@@ -406,7 +406,7 @@ void EnvMapManager::update(float)
     {
         EnvMapEntry* value=n->second;
         const float x=transform->m[12]-value->position.x;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] Only x spills before the x87 distance expression.
         using namespace bf2x87;
         const Real y=sub(wide(transform->m[13]),wide(value->position.y));

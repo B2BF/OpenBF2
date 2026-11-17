@@ -1,0 +1,29 @@
+# [CHOSEN, not recovered] Linux distribution SDK; issue #36.
+FROM docker.io/library/ubuntu@sha256:45e9ddc6895604674618a409ca9f73d301da8fdb75fe330e8e9a27b3b219e4ad
+ARG SDK_SOURCE_REVISION
+ARG BF2_SDK_JOBS=2
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get -y upgrade && apt-get install -y --no-install-recommends \
+    build-essential ca-certificates curl xz-utils pkg-config ninja-build python3 \
+    python3-setuptools git patch rsync binutils patchelf ripgrep make autoconf \
+    automake libtool bison flex mingw-w64-tools libjson-perl libssl-dev \
+    libvulkan-dev spirv-headers libncurses-dev libjpeg-dev libpng-dev \
+    libpulse-dev libasound2-dev libdbus-1-dev libfontconfig1-dev libfreetype6-dev \
+    libx11-dev libx11-xcb-dev libxext-dev libxfixes-dev libxi-dev libxrender-dev \
+    libxrandr-dev libxcursor-dev libxss-dev libxtst-dev libxkbcommon-dev libxkbcommon-x11-dev \
+    libxcb-cursor-dev libxcb-keysyms1-dev libxcb-image0-dev libxcb-icccm4-dev \
+    libxcb-render-util0-dev libxcb-randr0-dev libxcb-xinerama0-dev \
+    libxcb-xfixes0-dev libxcb-sync-dev libxcb-shape0-dev libxcb-shm0-dev \
+    libxcb-glx0-dev libxcb-util-dev libgl1-mesa-dev libegl1-mesa-dev \
+    libgles2-mesa-dev libgbm-dev libdrm-dev libwayland-dev wayland-protocols \
+    libudev-dev
+COPY sdk-sources.json build-sdk.py /opt/openbf2-sdk-recipe/
+RUN python3 /opt/openbf2-sdk-recipe/build-sdk.py \
+    --revision "$SDK_SOURCE_REVISION" --jobs "$BF2_SDK_JOBS"
+ENV PATH="/opt/cmake/bin:/opt/rust/bin:/opt/openbf2-sdk/bin:${PATH}" \
+    CMAKE_PREFIX_PATH=/opt/openbf2-sdk \
+    PKG_CONFIG_PATH=/opt/openbf2-sdk/lib/pkgconfig \
+    LD_LIBRARY_PATH=/opt/openbf2-sdk/lib
+LABEL org.opencontainers.image.title="OpenBF2 Linux x86-64 release SDK" \
+      org.opencontainers.image.source="https://github.com/kr4uzi/OpenBF2" \
+      org.opencontainers.image.revision="$SDK_SOURCE_REVISION"

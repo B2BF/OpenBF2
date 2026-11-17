@@ -1,5 +1,5 @@
 // [CHOSEN, not recovered] D3DX9 effect source reader for the macOS port. See FxParser.h.
-#if defined(__APPLE__)
+#if defined(__APPLE__) || (defined(__linux__) && defined(BF2_GFX_DXVK))
 #include "FxParser.h"
 #include <algorithm>
 #include <cctype>

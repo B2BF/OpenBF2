@@ -1,6 +1,6 @@
 // Owns overgrowth geometry, resources, settings, and instance tables.
 #ifdef BF2_IMAGE_RENDDX9
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../../Platform/X87Compat.h" // [CHOSEN, not recovered] x87 conversion results, including invalid inputs.
 #endif
 #include "OverGrowth.h"
@@ -435,7 +435,7 @@ void OverGrowth::setViewDistance(float distance)
     const float cellSize = extent / static_cast<float>(cells);                         // 100CBAA8 fdivr
     m_cellSize = cellSize;                                                             // 100CBAAF fst
     const float inverse = 1.0f / cellSize;                                             // 100CBAB2 fdivr 1.0
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     m_patchCountX = bf2x87::toIntTruncate((m_extentX * inverse + 1.0f) * 0.5f) * 2;
     m_patchCountZ = bf2x87::toIntTruncate((m_extentZ * inverse + 1.0f) * 0.5f) * 2;
 #else
@@ -991,17 +991,17 @@ void OverGrowth::paintMaterial(float x, float z, float radius, unsigned char mat
     const float gridX = x / heightmap->getScale().x + static_cast<float>(sizeX / 2);         // +0x54, three
     const float gridZ = z / heightmap->getScale().z + static_cast<float>(sizeZ / 2);         // calls, in
     const float gridRadius = radius / heightmap->getScale().x;                                // this order
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int centreX = bf2x87::toIntTruncate(gridX);          // fistp under a truncating control word
 #else
     const int centreX = static_cast<int>(gridX);          // fistp under a truncating control word
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int centreZ = bf2x87::toIntTruncate(gridZ);
 #else
     const int centreZ = static_cast<int>(gridZ);
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int reach = bf2x87::toIntTruncate(gridRadius);       // __ftol2
 #else
     const int reach = static_cast<int>(gridRadius);       // __ftol2
@@ -1041,17 +1041,17 @@ void OverGrowth::paintShadowmap(float x, float z, float radius, unsigned char va
     const float gridX = x / heightmap->getScale().x + static_cast<float>(sizeX / 2);
     const float gridZ = z / heightmap->getScale().z + static_cast<float>(sizeZ / 2);
     const float gridRadius = radius / heightmap->getScale().x;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int centreX = bf2x87::toIntTruncate(gridX);
 #else
     const int centreX = static_cast<int>(gridX);
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int centreZ = bf2x87::toIntTruncate(gridZ);
 #else
     const int centreZ = static_cast<int>(gridZ);
 #endif
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int reach = bf2x87::toIntTruncate(gridRadius);
 #else
     const int reach = static_cast<int>(gridRadius);

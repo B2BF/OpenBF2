@@ -1,6 +1,6 @@
-// [CHOSEN, not recovered] The CRT pure-virtual handler for the macOS renderer image. Every D3DX
+// [CHOSEN, not recovered] The CRT pure-virtual handler for the native renderer image. Every D3DX
 // link boundary this file once stopped at now has a native implementation (D3DX*.cpp, Effect.cpp).
-#if defined(__APPLE__) && defined(BF2_IMAGE_RENDDX9)
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && defined(BF2_IMAGE_RENDDX9)
 #include "../D3DX9Subset.h"
 #include <cstdio>
 #include <cstdlib>

@@ -1,0 +1,3 @@
+# Match the Mach-O-style lists consumed by prelink-plugin.py.
+__ZN*16bf2PluginFixture*
+__ZT*N16bf2PluginFixture*

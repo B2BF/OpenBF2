@@ -1,17 +1,20 @@
-// [CHOSEN, not recovered] Owner-requested macOS port: native ID3DXEffect, ID3DXEffectCompiler
+// [CHOSEN, not recovered] Native macOS/Linux ID3DXEffect, ID3DXEffectCompiler
 // and D3DXCreateEffect* over native compilation, the FxNative cache and the s2 CPU runtime.
 // Semantics follow the public D3DX9 API reference; nothing
 // here is recovered from the retail image and no D3DX/Wine implementation was copied.
-#if defined(__APPLE__) && defined(BF2_IMAGE_RENDDX9)
+// Linux reuses the facade with DXVK bytecode shaders; see kr4uzi/OpenBF2#36.
+#if (defined(__APPLE__) || (defined(__linux__) && defined(BF2_GFX_DXVK))) && defined(BF2_IMAGE_RENDDX9)
 #include "../../macOS/HitchTrace.h" // [CHOSEN] BF2_HITCH_TRACE (port addition, measurement)
 #include "../../macOS/Warmup.h"   // [CHOSEN] +warmupLevel progress (port addition)
 #include "../D3DX9Subset.h"
 #include "../Effect/Runtime.h"
+#if defined(__APPLE__)
 #include "EffectShaders.h"
 #include "RefTrace.h" // [TEMP] [RETIRE-WHEN: rend-deinit-reftrace]
+#endif
 #include "../Unsupported.h"
 #if !defined(BF2_FX_NATIVE)
-#error "The macOS effect facade requires the native compiler (BF2_FX_NATIVE)"
+#error "The native effect facade requires the native compiler (BF2_FX_NATIVE)"
 #endif
 #include "../Effect/NativeMojo.h"
 #include "../Effect/Native.h"
@@ -151,7 +154,14 @@ std::string nativeRoot()
 {
     if (const char* e = std::getenv("BF2_FX_NATIVE_CACHE")) if (*e) return e;
     const char* home = std::getenv("HOME");
+#if defined(__APPLE__)
     return home && *home ? std::string(home) + "/Library/Application Support/OpenBF2/FxNative" : std::string();
+#else
+    // [CHOSEN, not recovered] Linux cache location; backend identity also separates entries.
+    if (const char* cache = std::getenv("XDG_CACHE_HOME"))
+        if (*cache == '/') return std::string(cache) + "/openbf2/FxNative";
+    return home && *home ? std::string(home) + "/.cache/openbf2/FxNative" : std::string();
+#endif
 }
 struct NativeStats { unsigned hits = 0, refusedTable = 0, refusedRule = 0, deferred = 0, synchronous = 0, unknown = 0; };
 NativeStats& nativeStats() { static NativeStats s; return s; }
@@ -203,6 +213,12 @@ HRESULT nativeEntry(const char* api, LPCVOID source, UINT size, const std::vecto
             return kCompileFailure;
         }
     }
+#if defined(__linux__) && defined(BF2_GFX_DXVK)
+    // A .cfx request can come from another backend or compiler build. Compile its source with
+    // this backend and use this identity even when the envelope carries an older one (#36).
+    request.dllHash = nt::identityHash();
+    request.translator = nt::identity();
+#endif
     auto publish = [&](const bf2fx::Entry& e) {
         if (root.empty()) return;
         const auto published = bf2fx::publish(root, request, e);
@@ -318,11 +334,28 @@ double number(std::uint32_t w, std::uint32_t type)
     return type == bf2fx::Float ? double(bitsFloat(w)) : type == bf2fx::Bool ? double(w != 0) : double(std::int32_t(w));
 }
 std::int32_t toInt(double v) { return !std::isfinite(v) || v < INT32_MIN || v >= 2147483648.0 ? INT32_MIN : std::int32_t(v); }
-// D3D state DWORD from an FX2 value: float-typed states take float bits, others integers.
-DWORD stateWord(const bf2fx::Value& v, bool floatState)
+DWORD colorByte(float value)
+{
+    if (!(value > 0.0f)) return 0;
+    if (value >= 1.0f) return 255;
+    // D3D9's default single-precision arithmetic, with two rounding steps (no FMA).
+    volatile float scaled = value * 255.0f;
+    volatile float rounded = scaled + 0.5f;
+    return DWORD(rounded);
+}
+// D3D state DWORD from an FX2 value: packed color, float bits, or an integer.
+DWORD stateWord(const bf2fx::Value& v, bool floatState, bool colorState = false)
 {
     // [CHOSEN, not recovered] A state value without data (no shipped pass has one, E16) sets 0.
     if (v.words.empty()) { refuse("ID3DXEffect::BeginPass", "state value without data (0 used): " + v.type.name); return 0; }
+    // [CHOSEN, not recovered] Public D3DX9_25 state-manager goldens, issue #36:
+    // TextureFactor/FogColor float4 expressions supply RGBA, packed as D3DCOLOR ARGB.
+    // FX2 and native expression descriptions use 1x4 and 4x1 respectively.
+    if (colorState && v.type.type == bf2fx::Float && v.type.elements <= 1 &&
+        ((v.type.rows == 1 && v.type.columns == 4) || (v.type.rows == 4 && v.type.columns == 1)) &&
+        v.words.size() == 4)
+        return (colorByte(bitsFloat(v.words[3])) << 24) | (colorByte(bitsFloat(v.words[0])) << 16) |
+               (colorByte(bitsFloat(v.words[1])) << 8) | colorByte(bitsFloat(v.words[2]));
     const double n = number(v.words[0], v.type.type);
     return floatState ? floatBits(float(n)) : DWORD(toInt(n));
 }
@@ -930,8 +963,9 @@ struct Applier final : bf2fx::Callbacks {
                  const std::shared_ptr<void>& texture) override;
     bool validate(const bf2fx::Pass&, const bf2fx::Description&) override { return true; }
 };
-// D3DX technique validation: every statically assigned shader must have a translated program
-// within the device's shader model. Selector shaders are checked through their candidates.
+// D3DX technique validation: every statically assigned shader must fit the supported shader
+// model. Metal additionally needs its translated program; DXVK consumes the D3D9 bytecode.
+// Selector shaders are checked through their candidates.
 struct Validator final : bf2fx::Callbacks {
     void state(std::uint32_t, std::uint32_t, const bf2fx::Value&) override {}
     void shader(std::uint32_t, const bf2fx::Shader*) override {}
@@ -942,7 +976,12 @@ struct Validator final : bf2fx::Callbacks {
             if (s.id != 146 && s.id != 147) continue;
             if (!s.value.expression.empty() || s.value.words.empty()) continue;
             for (const auto& shader : d.shaders) if (shader.object == s.value.words[0] && !shader.selectorKind) {
-                if (!shader.bytecode.empty() && (shader.msl.empty() || shader.major > 3)) return false;
+                if (!shader.bytecode.empty()) {
+                    if (shader.major > 3) return false;
+#if defined(__APPLE__)
+                    if (shader.msl.empty()) return false;
+#endif
+                }
             }
         }
         return true;
@@ -994,8 +1033,12 @@ public:
     ID3DXEffectPool* poolObject = nullptr; // the pool passed to D3DXCreateEffect, referenced
     Effect(IDirect3DDevice9* d, bf2fx::Entry& entry, DWORD f, Deferred pending = {})
         : EffectBase(entry, f), device(d), deferred(std::move(pending)), traceKey(entry.key.substr(0, 12)) {
+#if defined(__APPLE__)
         { bf2metal::reftrace::Owned o; device->AddRef(); }
         bf2metal::reftrace::born(this, "ID3DXEffect", [](const void*) { return 1ul; });
+#else
+        device->AddRef();
+#endif
         shaderOwner = shared;
         if (!runtime.description().techniques.empty()) current = 0;
         if (deferred) unsettledEffects().insert(this);
@@ -1031,15 +1074,20 @@ public:
         if (poolObject) poolObject->Release();
         for (auto& s : shaders) if (s.second) s.second->Release();
         if (manager) manager->Release();
+#if defined(__APPLE__)
         bf2metal::reftrace::died(this);
-        bf2metal::reftrace::Owned o; device->Release();
+        bf2metal::reftrace::Owned o;
+#endif
+        device->Release();
     }
     HRESULT createShaders() {
         bf2hitch::Scope timed(bf2hitch::ShaderCreate);
         for (const auto& s : shaderOwner->shaders) {
             if (s.selectorKind || s.bytecode.empty()) continue;
+#if defined(__APPLE__)
             std::shared_ptr<const bf2fx::Shader> record(shaderOwner, &s);
             bf2metal::ShaderOffer offer(record);
+#endif
             const auto* code = reinterpret_cast<const DWORD*>(s.bytecode.data());
             HRESULT hr;
             if (s.stage == bf2fx::VertexShader) {
@@ -1103,7 +1151,7 @@ public:
         return static_cast<IDirect3DBaseTexture9*>(owner.get());
     }
     void applyState(std::uint32_t id, std::uint32_t index, const bf2fx::Value& v) {
-        if (id < 103) { const unsigned s = kRenderStates[id]; renderState(s, stateWord(v, floatRenderState(s))); return; }
+        if (id < 103) { const unsigned s = kRenderStates[id]; renderState(s, stateWord(v, floatRenderState(s), s == 34 || s == 60)); return; }
         if (id < 121) { const unsigned s = kStageStates[id - 103]; stageState(index, s, stateWord(v, floatStageState(s))); return; }
         if (id >= 148 && id <= 163) {
             // F, B, I, then the untyped float form sized by its value, then 1..4 registers.
@@ -1397,9 +1445,11 @@ public:
         if (!begun || active >= 0 || pass >= runtime.description().techniques[std::size_t(current)].passes.size())
             return D3DERR_INVALIDCALL;
         active = int(pass);
+#if defined(__APPLE__)
         if (bf2metal::drawTraceEnabled() || bf2hitch::enabled())
             bf2metal::setDrawTraceLabel((traceKey + " " + runtime.description().techniques[std::size_t(current)].name + "#" +
                                          std::to_string(pass)).c_str());
+#endif
         return apply(false);
     }
     HRESULT STDMETHODCALLTYPE CommitChanges() override {
@@ -1409,7 +1459,9 @@ public:
     }
     HRESULT STDMETHODCALLTYPE EndPass() override {
         if (active < 0) return D3DERR_INVALIDCALL; active = -1;
+#if defined(__APPLE__)
         if (bf2metal::drawTraceEnabled()) bf2metal::setDrawTraceLabel(nullptr);
+#endif
         return D3D_OK;
     }
     HRESULT STDMETHODCALLTYPE End() override {
@@ -1536,6 +1588,7 @@ extern "C" HRESULT WINAPI D3DXCreateEffectCompiler(LPCSTR pSrcData, UINT SrcData
     return D3D_OK;
 }
 
+#if defined(__APPLE__)
 namespace bf2metal {
 void createFinishedEffectShaders()
 {
@@ -1568,4 +1621,5 @@ std::shared_ptr<const bf2fx::Shader> translateRuntimeShader(const std::uint32_t*
 #endif
 }
 } // namespace bf2metal
+#endif
 #endif

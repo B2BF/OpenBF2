@@ -29,7 +29,8 @@ add_executable(macos_metal_device
     "${BF2_ROOT}/Platform/macOS/MacRawMouse.mm"
     "${BF2_ROOT}/Platform/macOS/MacInputScript.mm"
     "${BF2_ROOT}/Platform/InputScript.cpp"
-    "${BF2_ROOT}/Platform/macOS/MacKeyMap.cpp")
+    "${BF2_ROOT}/Platform/macOS/MacKeyMap.cpp"
+    "${BF2_ROOT}/Platform/Host/KeyMap.cpp")
 set_target_properties(macos_metal_device PROPERTIES CXX_STANDARD 17 OBJCXX_STANDARD 17)
 target_compile_definitions(macos_metal_device PRIVATE DEDICATED=0 BF2_IMAGE_RENDDX9=1 BF2_PLATFORM_POSIX
     BF2_METAL_DEVICE_TESTING=1 BF2_FX_NATIVE=1)

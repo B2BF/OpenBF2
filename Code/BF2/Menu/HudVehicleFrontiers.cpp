@@ -1,6 +1,6 @@
 // Vehicle HUD layout, occupant display and warning handling.
 // [RETIRE-WHEN: hud-vehicle-leaf-frontiers] Complete and validate the corresponding HudVehicleFrontiers operation.
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h" // [CHOSEN, not recovered] x87 conversion results, including invalid inputs.
 #endif
 #include "HudVehicleInformation.h"
@@ -557,7 +557,7 @@ void HudVehicleInformation::updateVehicleAngles(world::IObject* vehicle)
         const double vx = velocity.x;
         const double vy = velocity.y;
         const double vz = velocity.z;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const int speed = bf2x87::toIntTruncate(std::sqrt((vx * vx + vy * vy) + vz * vz));   // fsqrt, fistp
 #else
         const int speed = static_cast<int>(std::sqrt((vx * vx + vy * vy) + vz * vz));   // fsqrt, fistp

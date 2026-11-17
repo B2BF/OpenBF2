@@ -8,7 +8,7 @@ namespace geom {
 
 namespace {
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 // [CHOSEN, not recovered] Keep the x87 register values until the observed stores on native hosts.
 typedef bf2x87::Real RoadScalar;
 typedef bf2x87::Real RoadDouble;
@@ -20,7 +20,7 @@ typedef double RoadDouble;
 template <typename T, typename U>
 bool roadLess(T a, U b)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] These sites use FCOM, including its invalid flag for quiet NaNs.
     return bf2x87::less(RoadScalar(a), RoadScalar(b));
 #else
@@ -31,7 +31,7 @@ bool roadLess(T a, U b)
 template <typename T, typename U>
 bool roadLessEqual(T a, U b)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] FCOM equality/range tests through the native arithmetic backend.
     return bf2x87::lessEqual(RoadScalar(a), RoadScalar(b));
 #else
@@ -41,7 +41,7 @@ bool roadLessEqual(T a, U b)
 
 RoadScalar roadSquareRoot(RoadScalar value)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] The shared native FSQRT policy.
     return bf2x87::squareRoot(value);
 #else
@@ -77,7 +77,7 @@ void lerpVec3(Vec3& out, const Vec3& a, const Vec3& b, float t)
 {
     const Vec3 start = a;
     out = start;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Preserve the asymmetric FSTP spills before the three additions.
     const RoadScalar dx = RoadScalar(b.x) - out.x;
     const RoadScalar dy = RoadScalar(b.y) - start.y;
@@ -195,7 +195,7 @@ bool segmentsIntersect(const Vec3& a, const Vec3& b, const Vec3& c, const Vec3& 
 {
     const RoadScalar denominator = (RoadScalar(d.z) - c.z) * (RoadScalar(b.x) - a.x)
                                  - (RoadScalar(d.x) - c.x) * (RoadScalar(b.z) - a.z);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const RoadScalar magnitude = bf2x87::abs(denominator);
 #else
     const RoadScalar magnitude = std::fabs(denominator);
@@ -541,7 +541,7 @@ void earClip(RoadPolygon& polygon, const std::vector<RoadEditableVertex>& vertic
 // Returns a tolerance-adjusted polygon extremum on the even grid.
 // Requires a nonempty polygon. Minima round down; maxima round up. Ties and NaN replace
 // minima, while maxima change only on a strict increase.
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 // [CHOSEN, not recovered] Native equivalent of the qword libm argument, FISTP and 32-bit wrap.
 int roadGridRound(float value, float tolerance, bool maximum)
 {
@@ -555,7 +555,7 @@ int roadGridRound(float value, float tolerance, bool maximum)
 
 int roadGridStep(int value, int step)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Preserve the ADD/SUB wrap on the native compiler.
     return bf2x87::lowWord(static_cast<long long>(value) + step);
 #else
@@ -565,7 +565,7 @@ int roadGridStep(int value, int step)
 
 float roadGridOffset(int value, float offset)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] FILD, add/subtract, then the first float store.
     return bf2x87::store(RoadScalar(value) + offset);
 #else
@@ -583,7 +583,7 @@ int extremeMinZ(RoadPolygon polygon, const std::vector<RoadEditableVertex>& vert
         if (!roadLess(minimum, z))
             minimum = z;
     }
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     return roadGridRound(minimum, tolerance, false);
 #else
     const int n = static_cast<int>(std::floor(static_cast<double>(minimum + tolerance)));
@@ -602,7 +602,7 @@ int extremeMaxX(RoadPolygon polygon, const std::vector<RoadEditableVertex>& vert
         if (roadLess(maximum, x))
             maximum = x;
     }
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     return roadGridRound(maximum, tolerance, true);
 #else
     int n = static_cast<int>(std::ceil(static_cast<double>(maximum - tolerance)));
@@ -624,7 +624,7 @@ int extremeMaxZ(RoadPolygon polygon, const std::vector<RoadEditableVertex>& vert
         if (roadLess(maximum, z))
             maximum = z;
     }
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     return roadGridRound(maximum, tolerance, true);
 #else
     int n = static_cast<int>(std::ceil(static_cast<double>(maximum - tolerance)));
@@ -646,7 +646,7 @@ int extremeMinX(RoadPolygon polygon, const std::vector<RoadEditableVertex>& vert
         if (!roadLess(minimum, x))
             minimum = x;
     }
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     return roadGridRound(minimum, tolerance, false);
 #else
     const int n = static_cast<int>(std::floor(static_cast<double>(minimum + tolerance)));
@@ -731,7 +731,7 @@ float roadProjectionRatio(const Vec3& origin, const Vec3& point, const Vec3& edg
     return static_cast<float>(numerator / roadSquareRoot(RoadScalar(z) * z + RoadScalar(x) * x));
 }
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 // [CHOSEN, not recovered] Native storage for the tessellator's register values and float spills.
 struct RoadDeviation
 {
@@ -837,7 +837,7 @@ bool clipPolygon(const Vec3& a, const Vec3& b, std::vector<RoadPolygon>& pieces,
         }
 
         // The qword parameter stays in the register through subtraction, FABS and comparison.
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         if (!roadLess(bf2x87::abs(RoadDouble(t) - 1.0), 0.01))
 #else
         if (!(std::fabs(t - 1.0) < 0.01))
@@ -1655,7 +1655,7 @@ int RoadEditable::tessellate(std::vector<RoadEditableVertex>& vertices, std::vec
             bool keep = false;
             for (unsigned int j = nextRow; j <= i; ++j)
             {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                 const RoadDeviation leftDeviation = roadDeviation(firstAnchor.position, left[j].position,
                                                                    left[i + 1].position, false);
                 const RoadDeviation rightDeviation = roadDeviation(secondAnchor.position, right[j].position,
@@ -1693,7 +1693,7 @@ int RoadEditable::tessellate(std::vector<RoadEditableVertex>& vertices, std::vec
                     keep = true;
                     break;
                 }
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                 const float rightError = roadDeviationError(rightDeviation, 0);
 #else
                 const float rightError = lengthSumZYX(c2x, c2y, c2z) / lengthSumZYX(fx, fy, fz);
@@ -1865,7 +1865,7 @@ int RoadEditable::tessellate(std::vector<RoadEditableVertex>& vertices, std::vec
             bool keep = false;
             for (unsigned int j = nextRow; j <= i; ++j)
             {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                 const RoadDeviation leftDeviation = roadDeviation(firstAnchor.position, left[j].position,
                                                                    left[i + 1].position, false);
                 const RoadDeviation rightDeviation = roadDeviation(thirdAnchor.position, right[j].position,
@@ -1903,7 +1903,7 @@ int RoadEditable::tessellate(std::vector<RoadEditableVertex>& vertices, std::vec
                     keep = true;
                     break;
                 }
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                 const float rightError = roadDeviationError(rightDeviation, 1);
 #else
                 const float rightError = lengthSumXZY(c2x, c2y, c2z) / lengthSumXZY(fx, fy, fz);

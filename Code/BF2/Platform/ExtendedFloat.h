@@ -1,4 +1,4 @@
-// [CHOSEN, not recovered] Arithmetic for the macOS port's retained x87 intermediates.
+// [CHOSEN, not recovered] Arithmetic for native ports' retained x87 intermediates.
 #ifndef BF2_PLATFORM_EXTENDEDFLOAT_H
 #define BF2_PLATFORM_EXTENDEDFLOAT_H
 
@@ -14,7 +14,7 @@ class ExtendedFloat;
 inline ExtendedFloat abs(ExtendedFloat value);
 
 // A binary extended value, with a 64-bit significand and x87 exponent range.
-// Used only on Apple silicon (and by the Intel differential fixture). This is
+// Used when host long double is not x87 extended, including Apple and Linux ARM64. This is
 // value arithmetic, not an x87 stack/control-word emulator. Operations obey the
 // current C rounding direction; precision is always 64 bits. No fused operations.
 class ExtendedFloat {
@@ -146,6 +146,38 @@ public:
         const int exp = se & 0x7fff;
         if (exp == 0x7fff) *this = raw(se >> 15, sig & 0x7fffffffffffffffULL, special);
         else *this = pack(se >> 15, sig, (exp ? exp - 16383 : -16382) - 63);
+#elif defined(__LDBL_MANT_DIG__) && __LDBL_MANT_DIG__ == 113
+        // [CHOSEN, not recovered] Linux ARM64 (issue #36): AAPCS64 long double is IEEE binary128,
+        // with sign at 127, exponent at 112..126, and fraction at 0..111. Loading its bits avoids
+        // rounding through binary64 before pack applies the native x87 precision policy.
+        // Format: https://docs.oracle.com/cd/E77782_01/html/E77791/z4000ac019878.html
+        static_assert(sizeof(value) == sizeof(UInt) &&
+                      std::numeric_limits<long double>::max_exponent == 16384,
+                      "binary128 long double required");
+        UInt bits;
+        std::memcpy(&bits, &value, sizeof bits);
+        const bool negative = (bits >> 127) != 0;
+        const int exponent = static_cast<int>((bits >> 112) & 0x7fff);
+        const UInt fraction = bits & ((UInt(1) << 112) - 1);
+        const UInt discardedMask = (UInt(1) << 49) - 1;
+        if (exponent == 0x7fff) {
+            if (!fraction) *this = infinity(negative);
+            else {
+                if (!(fraction & (UInt(1) << 111))) std::feraiseexcept(FE_INVALID);
+                // Keep the leading payload bits and a sticky bit, then quiet the converted NaN.
+                const std::uint64_t payload = static_cast<std::uint64_t>(fraction >> 49) |
+                    ((fraction & discardedMask) != 0) | (1ULL << 62);
+                *this = raw(negative, payload, special);
+            }
+        } else {
+            const UInt sig = exponent ? fraction | (UInt(1) << 112) : fraction;
+            *this = pack(negative, sig, (exponent ? exponent - 16383 : -16382) - 112);
+            if (fraction & discardedMask) {
+                // Conversion detects tininess after rounding. Exact subnormals raise no underflow.
+                const bool tiny = isFinite() && (!significand_ || exponent_ < -16382);
+                std::feraiseexcept(FE_INEXACT | (tiny ? FE_UNDERFLOW : 0));
+            }
+        }
 #else
         *this = ExtendedFloat(static_cast<double>(value));
 #endif

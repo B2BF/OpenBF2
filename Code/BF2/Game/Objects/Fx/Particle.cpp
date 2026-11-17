@@ -3,12 +3,12 @@
 // Geometry setup is client-only. Preserve NaN lifetime handling and fatal checks for invalid lifetime,
 // unsupported light-source attachment, rejected mesh attachment and invalid geometry part.
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../../../Platform/X87Compat.h" // [CHOSEN, not recovered] x87 conversion results, including invalid inputs.
+#endif
 #if defined(BF2_STATIC_PLUGINS) && !defined(_MSC_VER)
 // [CHOSEN, not recovered] One native scale-interface declaration in every image.
 #include "../../../Geom/IScaleable.h"
-#endif
 #endif
 #include "Particle.h"
 #include "ParticleTemplate.h"
@@ -343,7 +343,7 @@ void Particle::init()
             // [PLATFORM] BF2.exe multiplies the x87 sample by the count (fimul), floors it as a
             // double (msvcr71 floor) and truncates; the ELF uses floorf on the float product.
             const float sample = sampleDistribution(partDistribution);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             const int part = bf2x87::toIntTruncate(std::floor(static_cast<double>(sample)
                                                          * static_cast<double>(partCount)));
 #else
@@ -452,7 +452,7 @@ void Particle::handleUpdate(float deltaTime, unsigned int)
         if (clamped > 1.0f)                        // PE `test ah, 41h; jne` / ELF fcmovnbe
             clamped = 1.0f;
         const float scaled = clamped * 100.0f;     // 101 curve positions, 0..100
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         sample = bf2x87::toIntTruncate(scaled);         // truncation (PE fistp under a chop control word)
 #else
         sample = static_cast<int>(scaled);         // truncation (PE fistp under a chop control word)

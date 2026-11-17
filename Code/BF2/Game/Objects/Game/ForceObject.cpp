@@ -1,6 +1,6 @@
 // Force-object lifecycle and input-driven force application.
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../../../Platform/X87Compat.h" // [CHOSEN, not recovered] x87 conversion results, including invalid inputs.
 #endif
 #include "ForceObject.h"
@@ -88,7 +88,7 @@ void ForceObject::handleUpdate(float, unsigned int)
         {
             // getTickCount() is called before the multiply in the image (0x82A77F3), and the
             // cast is the ordinary truncating float->int (fistp under a round-to-zero control word).
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             m_dword144 = WorldPref::getTickCount()
                        + bf2x87::toIntTruncate(30.0f * m_template->startDelay);
 #else

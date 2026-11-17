@@ -3,7 +3,7 @@
 
 #ifdef BF2_IMAGE_RENDDX9
 
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../../Platform/X87Compat.h" // [CHOSEN, not recovered] x87 conversion results, including invalid inputs.
 #endif
 #include "DecalObject.h"
@@ -158,7 +158,7 @@ float clampValue(float value, float low, float high)
 // -20001, discarded by every caller here); otherwise each component is scaled by 1 / sqrt(|v|^2).
 int normalizeInPlace(Vec3& v)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] PE 0x100777A0 spills the squared length, but not its reciprocal root.
     using bf2x87::wide;
     using bf2x87::store;
@@ -178,7 +178,7 @@ int normalizeInPlace(Vec3& v)
         v.z = 0.0f;
         return -20001;
     }
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const bf2x87::Real inverse = wide(1.0f) / bf2x87::squareRoot(wide(lengthSquared));
     v.x = store(inverse * wide(v.x));
     v.y = store(inverse * wide(v.y));
@@ -201,7 +201,7 @@ Plane3 planeFromPoints(const Vec3& a, const Vec3& b, const Vec3& c)
     plane.normal.x = 0.0f;
     plane.normal.y = 0.0f;
     plane.normal.z = 0.0f;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Only the Z differences spill before the cross product.
     using bf2x87::wide;
     using bf2x87::store;
@@ -229,7 +229,7 @@ Plane3 planeFromPoints(const Vec3& a, const Vec3& b, const Vec3& c)
 #endif
     normalizeInPlace(normal);
     plane.normal = normal;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     plane.d = store(-(wide(normal.x) * wide(a.x) + wide(normal.y) * wide(a.y)
                    + wide(normal.z) * wide(a.z)));
 #else
@@ -252,7 +252,7 @@ void planeAssign(Plane3& destination, const Plane3& source)
 
 Vec3 edgeNormal(const Vec3& from, const Vec3& to, const Vec3& faceNormal)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] PE 0x101AD390 retains the X/Y edge differences.
     using bf2x87::wide;
     using bf2x87::store;
@@ -333,7 +333,7 @@ unsigned char computeOutcode(const Vec3& point, const std::vector<Plane3>& plane
     for (unsigned int i = 0; i < planes.size(); ++i)
     {
         const Plane3& plane = planes[i];
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] PE 0x101AECD0 compares the retained dot product.
         const bf2x87::Real distance =
             bf2x87::wide(plane.normal.z) * bf2x87::wide(point.z)
@@ -359,7 +359,7 @@ void emitVertex(DecalRecord* record, const DecalVertex& source, const Plane3& fa
     target = source;
     if (s_projectOntoFacePlane)
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] PE 0x101AD751..0x101AD797 spills only the Y/Z pushes.
         using bf2x87::wide;
         using bf2x87::store;
@@ -407,7 +407,7 @@ void setupQuad(QuadSetup& setup, const DecalRecord* record, const IDecalTemplate
     const float rotationDraw = randomSymmetric();
     const float randomRotation = decalTemplate->getRandomRotation() * rotationDraw;   // +0x44
     // The product stays in st(0) through fcos / fsin (never stored first).
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] FCOS and FSIN receive the retained angle, not its float rounding.
     using bf2x87::wide;
     using bf2x87::store;
@@ -431,7 +431,7 @@ void setupQuad(QuadSetup& setup, const DecalRecord* record, const IDecalTemplate
     {
         // fistp in truncation mode, then an unsigned divide by the frames across - no guard
         // against a zero divisor, as shipped.
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const unsigned int frame =
             static_cast<unsigned int>(bf2x87::toIntTruncate(record->startFrame));
 #else
@@ -440,7 +440,7 @@ void setupQuad(QuadSetup& setup, const DecalRecord* record, const IDecalTemplate
 #endif
         const unsigned int column = frame % decal_template_state::animationFrameCountX(decalTemplate);
         const Vec2& extent = decal_template_state::uvExtent(decalTemplate);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         setup.originU = store(wide(column) * wide(extent.x)
             + wide(decal_template_state::uvOffset(decalTemplate).x));
         setup.originV = store(wide(frame - column)
@@ -689,7 +689,7 @@ unsigned int DecalObject::add(const Mat4* transform, const IDecalTemplate* decal
                               float scale, world::ICollisionMesh* collisionMesh,
                               world::CollisionFaceInfo* faceInfo)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     using bf2x87::wide;
     using bf2x87::store;
 #endif
@@ -717,7 +717,7 @@ unsigned int DecalObject::add(const Mat4* transform, const IDecalTemplate* decal
     // truncated (fistp, chop) and packed 0xFFrrggbb. Hex-Rays drops the clamp's answer; the
     // instruction stream uses it for all three channels.
     const float colorDraw = randomSymmetric();
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Preserve the one argument spill before the clamp call.
     const float intensity = clampValue(store(wide(decalTemplate->getRandomColorIntensity())
         * wide(colorDraw) + wide(1.0f)), 0.0f, 1.0f);
@@ -726,19 +726,19 @@ unsigned int DecalObject::add(const Mat4* transform, const IDecalTemplate* decal
         decalTemplate->getRandomColorIntensity() * colorDraw + 1.0f, 0.0f, 1.0f);   // +0x1C
 #endif
     const Vec4& color = decal_template_state::color(decalTemplate);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int red = bf2x87::toIntTruncate(wide(intensity) * wide(color.x) * wide(255.0f));
 #else
     const int red = static_cast<int>(intensity * color.x * 255.0f);
 #endif
     unsigned int packed = (static_cast<unsigned int>(red) | 0xFFFFFF00u) << 8;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int green = bf2x87::toIntTruncate(wide(intensity) * wide(color.y) * wide(255.0f));
 #else
     const int green = static_cast<int>(intensity * color.y * 255.0f);
 #endif
     packed = (packed | (static_cast<unsigned int>(green) & 0xFFu)) << 8;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const int blue = bf2x87::toIntTruncate(wide(intensity) * wide(color.z) * wide(255.0f));
 #else
     const int blue = static_cast<int>(intensity * color.z * 255.0f);
@@ -750,7 +750,7 @@ unsigned int DecalObject::add(const Mat4* transform, const IDecalTemplate* decal
     {
         const int frameDraw = randomInteger();
         // (draw * (count - 1)) * 2^-24, the count unsigned: a zero count wraps to 2^32 - 1.
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         record->startFrame = store(wide(frameDraw)
             * wide(decal_template_state::animationFrameCount(decalTemplate) - 1u)
             * wide(5.9604644775390625e-08f));
@@ -912,7 +912,7 @@ void DecalObject::buildProjected(DecalRecord* record, const Mat4* transform,
                                  world::ICollisionMesh* collisionMesh,
                                  world::CollisionFaceInfo* faceInfo)
 {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Preserve the x87 expression order and explicit float stores.
     using bf2x87::wide;
     using bf2x87::store;
@@ -925,7 +925,7 @@ void DecalObject::buildProjected(DecalRecord* record, const Mat4* transform,
     {
         const DecalVertex& source = s_quadTemplate[i];
         DecalVertex& corner = s_quad[i];
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         corner.position.x = store(wide(setup.cosine) * wide(source.position.x) - wide(setup.sine) * wide(source.position.z));
         corner.position.z = store(wide(setup.sine) * wide(source.position.x) + wide(setup.cosine) * wide(source.position.z));
         const bf2x87::Real size = (wide(decalTemplate->getSize()) + wide(setup.randomSize)) * wide(scale);
@@ -943,7 +943,7 @@ void DecalObject::buildProjected(DecalRecord* record, const Mat4* transform,
         corner.u = source.u;
         corner.v = source.v;
         const Vec2& extent = decal_template_state::uvExtent(decalTemplate);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         corner.u = store((wide(corner.u) + wide(1.0f)) * wide(extent.x) * wide(0.5f));
         corner.v = store((wide(corner.v) + wide(1.0f)) * wide(extent.y) * wide(0.5f));
 #else
@@ -956,7 +956,7 @@ void DecalObject::buildProjected(DecalRecord* record, const Mat4* transform,
         const float x = corner.position.x;
         const float y = corner.position.y;
         const float z = corner.position.z;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const float tz = store(wide(m.m[10]) * wide(z) + wide(y) * wide(m.m[6]) + wide(m.m[2]) * wide(x) + wide(m.m[14]));
         const float ty = store(wide(m.m[9]) * wide(z) + wide(m.m[5]) * wide(y) + wide(m.m[1]) * wide(x) + wide(m.m[13]));
         const float tx = store(wide(m.m[0]) * wide(x) + wide(m.m[8]) * wide(z) + wide(y) * wide(m.m[4]) + wide(m.m[12]));
@@ -1172,7 +1172,7 @@ bool DecalObject::buildClipPlanes(unsigned int face, const Vec3& direction, floa
 
     if (maxAngle > 0.0f)                                                   // `test ah, 41h; jnz`
     {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] Spill the clamp argument; retain the angle limit product.
         const float cosine = clampValue(clampValue(bf2x87::store(
             bf2x87::wide(normal.z) * bf2x87::wide(direction.z)
@@ -1194,7 +1194,7 @@ bool DecalObject::buildClipPlanes(unsigned int face, const Vec3& direction, floa
 
     Plane3 edge0;
     edge0.normal = edgeNormal(p0, p1, normal);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     using bf2x87::wide;
     using bf2x87::store;
     edge0.d = store(-(wide(edge0.normal.x) * wide(p0.x) + wide(edge0.normal.y) * wide(p0.y)
@@ -1204,7 +1204,7 @@ bool DecalObject::buildClipPlanes(unsigned int face, const Vec3& direction, floa
 #endif
     Plane3 edge1;
     edge1.normal = edgeNormal(p1, p2, normal);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     edge1.d = store(-(wide(edge1.normal.x) * wide(p1.x) + wide(edge1.normal.z) * wide(p1.z)
                    + wide(edge1.normal.y) * wide(p1.y)));
 #else
@@ -1212,7 +1212,7 @@ bool DecalObject::buildClipPlanes(unsigned int face, const Vec3& direction, floa
 #endif
     Plane3 edge2;
     edge2.normal = edgeNormal(p2, p0, normal);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     edge2.d = store(-(wide(edge2.normal.x) * wide(p2.x) + wide(edge2.normal.z) * wide(p2.z)
                    + wide(edge2.normal.y) * wide(p2.y)));
 #else
@@ -1262,7 +1262,7 @@ void DecalObject::collectClipPlanes(unsigned int face, const Vec3& direction, fl
     edges[0].normal = edgeNormal(p0, p1, normal);
     edges[1].normal = edgeNormal(p1, p2, normal);
     edges[2].normal = edgeNormal(p2, p0, normal);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     {
         using bf2x87::wide;
         using bf2x87::store;
@@ -1291,7 +1291,7 @@ void DecalObject::collectClipPlanes(unsigned int face, const Vec3& direction, fl
         const DecalFace& other = faces[next];
         const Vec3 neighbourNormal = planeFromPoints(vertices[other.v0], vertices[other.v1],
                                                      vertices[other.v2]).normal;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         const float cosine = clampValue(clampValue(bf2x87::store(
             bf2x87::wide(neighbourNormal.z) * bf2x87::wide(direction.z)
             + bf2x87::wide(neighbourNormal.y) * bf2x87::wide(direction.y)
@@ -1380,7 +1380,7 @@ int DecalObject::clipPolygon(const DecalVertex* input, unsigned int count,
                 const float dx = b.position.x - a.position.x;
                 const float dy = b.position.y - a.position.y;
                 const float dz = b.position.z - a.position.z;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
                 // [CHOSEN, not recovered] Retain denominator, ratio and UV deltas; preserve spills.
                 using bf2x87::wide;
                 using bf2x87::store;

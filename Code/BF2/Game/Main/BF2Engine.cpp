@@ -27,7 +27,7 @@
 #include "../ControlSettings.h"             // IControlSettings::setMappingInput - the (10,12) handler
 #include "../GlobalSettings.h"              // IGlobalSettings::getNamePrefix - the clan tag applyProfileNameSettings reads
 #include "../IGameServer.h"
-#if defined(__APPLE__) && !DEDICATED
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
 #include "../../Platform/macOS/Warmup.h"   // [CHOSEN] +warmupLevel (port addition)
 #include "../../Platform/macOS/HitchTrace.h" // [CHOSEN] BF2_HITCH_TRACE (port addition, measurement)
 #endif                 // recovered secondary interface; startServer is +0x1C
@@ -86,7 +86,7 @@
 #include "../Objects/Fx/PersistentExplosionEffectManager.h"
 #endif
 #include "../../Sound/BfSound.h"
-#if defined(__APPLE__) && !DEDICATED
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
 #include "../../Sound/SoundEngine/BfSoundEngine.h"   // [TEMP] SoundStats for BF2_PLAY_TRACE
 #endif            // IBfSound* g_bfSound - the client's menu/movie arms
 #include "../../IO/Input/Input.h"           // io::IInputManager / IInputDeviceManager - the client's input arms
@@ -114,16 +114,16 @@
 #include "../../IO/Input/PlayerInput.h"     // updateInput's per-tick copy
 #if defined(_WIN32)
 #include <shellapi.h>                       // ShellExecuteA - restartBF2 / activateMod / browseModHomepage
-#elif defined(__APPLE__)
+#elif (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
 // [CHOSEN, not recovered] macOS: the cursor, minimize, URL and relaunch counterparts.
-#include "../../Platform/macOS/CocoaHost.h"
+#include "../../Platform/Host/ClientHost.h"
 #include "../../Platform/macOS/MacSystem.h"
 #include "../../Platform/macOS/ClientPaths.h"
 #include <unistd.h>
 #endif
 #endif
 
-#if !DEDICATED && (defined(_WIN32) || defined(__APPLE__))
+#if !DEDICATED && (defined(_WIN32) || defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
 #include "../../Platform/InputScript.h"     // [TEMP] aim / walk-to query (BF2_INPUT_SCRIPT)
 #include <cctype>
 #include <cstdio>
@@ -305,7 +305,7 @@ void hostTrace(const char* step, int value)
 #else
 #define BF2_HOST_TRACE_SITE(step, value) ((void)0)
 #endif
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
 // [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: macos-ingame-play-validated]
 // BF2_PLAY_TRACE=1: once a second, one read-only stderr line about the local player (alive,
 // vehicle template and seat root, position, view direction), the players alive per team, and
@@ -478,7 +478,7 @@ inline void end(int ticks, bool inGame)
 } // namespace frametrace
 #define BF2_FRAME_MARK(s) frametrace::mark(frametrace::s)
 #endif
-#if !DEDICATED && (defined(_WIN32) || defined(__APPLE__))
+#if !DEDICATED && (defined(_WIN32) || defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
 // [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: client-test-automation-replaced]
 // The input script's aim / face / walk-to query (Platform/InputScript.h): read-only.
 bool scriptQuery(const char* target, float viewPos[3], float viewFwd[3], float targetPos[3])
@@ -663,7 +663,7 @@ SingleInstanceGuard::SingleInstanceGuard()
 #elif defined(_WIN32) && !DEDICATED
     handle = 0;                                                     // the editor: no guard, never a second instance
     isFirstInstance = true;
-#elif defined(__APPLE__) && !DEDICATED
+#elif (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
     // [CHOSEN, not recovered] Same first/second-instance gate, using a per-user advisory lock.
     lockFd = macos::acquireClientInstanceLock();
     isFirstInstance = lockFd >= 0;
@@ -674,7 +674,7 @@ SingleInstanceGuard::~SingleInstanceGuard()
 {
 #if BF2_ENGINE_INSTANCE_MUTEX
     ReleaseMutex(handle);                                           // not CloseHandle - as shipped (0x4083F0)
-#elif defined(__APPLE__) && !DEDICATED
+#elif (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
     // [CHOSEN, not recovered] Keep the inode so contenders always lock the same file.
     if (lockFd >= 0)
         close(lockFd);
@@ -2105,8 +2105,10 @@ bool BF2Engine::mainLoop()
     // Runs one frame per call. A pending quit returns false before any frame work.
     if (quitNextFrameFlag)
         return false;
-#if defined(__APPLE__) && !DEDICATED
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
     frametrace::begin();                                            // [TEMP] BF2_FRAME_TRACE
+#endif
+#if defined(__APPLE__) && !DEDICATED
     bf2warmup::tick();                                              // [CHOSEN] +warmupLevel: progress / exit
     // [CHOSEN, not recovered] +warmupLevel only: a listen server draws no world until the local
     // player presses JOIN GAME on the map-loaded screen, and the first world frame builds effects
@@ -2267,8 +2269,8 @@ bool BF2Engine::mainLoop()
     {
         if (s_cursorShown)
         {
-#if defined(__APPLE__)
-            macos::CocoaHost::instance().showCursor(false);   // [CHOSEN, not recovered] ShowCursor(FALSE)
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
+            host::ClientHost::instance().showCursor(false);   // [CHOSEN, not recovered] ShowCursor(FALSE)
 #else
             ShowCursor(FALSE);
 #endif
@@ -2299,10 +2301,10 @@ bool BF2Engine::mainLoop()
         {
             if (byte70)
             {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
                 // [CHOSEN, not recovered] the host's counter has ShowCursor's semantics.
-                if (macos::CocoaHost::instance().showCursor(true) == 1)
-                    macos::CocoaHost::instance().showCursor(false);
+                if (host::ClientHost::instance().showCursor(true) == 1)
+                    host::ClientHost::instance().showCursor(false);
 #else
                 if (ShowCursor(TRUE) == 1)
                     ShowCursor(FALSE);
@@ -2336,7 +2338,7 @@ bool BF2Engine::mainLoop()
         if ((!isDedicated() && ticks > 0 && !game) || g_bfSound->getForceUpdate())
             g_bfSound->update(ticks);                               // IBfSound: the one-int update (PE slot +0x18)
     }
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
     if (game && !isDedicated())
         playTraceTick();                                            // [TEMP] BF2_PLAY_TRACE
 #endif
@@ -2536,7 +2538,7 @@ bool BF2Engine::mainLoop()
     // externally detectable. CheckServerAliveThread is the producer side.
     if (isDedicated())                                              // BF2.exe 0x40CA80: `if (sub_440510() && sub_440510())` -
         markAsStillRunning();                                       // the call site's test and the inlined body's own
-#if defined(__APPLE__) && !DEDICATED
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
     frametrace::end(ticks, game != 0 && menuLogic == 0);            // [TEMP] BF2_FRAME_TRACE
 #endif
 
@@ -2692,7 +2694,7 @@ bool BF2Engine::filterGameInput(io::GameInput& input)
         menuLogic->handleInput(input);                      // IMenuLogic +0x38
         return false;
     }
-#if defined(_WIN32) || defined(__APPLE__)               // [CHOSEN, not recovered] macOS fills the ring too
+#if defined(_WIN32) || (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))               // [CHOSEN, not recovered] macOS fills the ring too
     menuKeyCount = 0;                                       // the WM_KEYDOWN ring (Game/Main/BF2.cpp) is dropped
     menuKeyRead  = menuKeyWrite;                            //   every frame the menu is down
 #endif
@@ -3319,10 +3321,10 @@ void BF2Engine::playSound(const std::string&)                              {}
 void BF2Engine::browseModHomepage(const std::string& url)
 {
 #if !DEDICATED
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
     // [CHOSEN, not recovered] ShowWindow(SW_MINIMIZE) and ShellExecuteA("open", url).
-    macos::CocoaHost::instance().minimize();
-    if (!macos::CocoaHost::instance().openURL(url))
+    host::ClientHost::instance().minimize();
+    if (!host::ClientHost::instance().openURL(url))
         return;
 #else
     ShowWindow(window->getHwnd(), SW_MINIMIZE);             // Window vslot +0x2C
@@ -3340,7 +3342,7 @@ void BF2Engine::browseModHomepage(const std::string& url)
 void BF2Engine::restartBF2()
 {
 #if !DEDICATED
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
     // [CHOSEN, not recovered] GetModuleFileNameA + ShellExecuteA(exe, commandLine).
     if (!macos::relaunchExecutable(commandLine))
         return;

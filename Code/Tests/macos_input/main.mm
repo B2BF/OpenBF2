@@ -1,7 +1,7 @@
 // [TEMP] macOS input review harness. Runs the Cocoa host headless
-// (CocoaHost::enableHeadlessForTest: no window, no NSApplication, the real cursor untouched),
+// (CocoaHostTestHooks::enableHeadlessForTest: no window, no NSApplication, the real cursor untouched),
 // routes NSEvents built from CoreGraphics events through it exactly as pumpEvents routes them,
-// drives MacInputDeviceManager with InputManager::update's protocol (update(-1) polls, then one
+// drives NativeInputDeviceManager with InputManager::update's protocol (update(-1) polls, then one
 // positive pass per input tick, 10.0 on the last) and checks what the engine-facing device
 // interfaces report against the DirectInput semantics of the recovered DX8 devices
 // (KeyboardDevice.cpp, MouseDevice.cpp). [RETIRE-WHEN: macos-client-window]
@@ -10,10 +10,12 @@
 #include <ApplicationServices/ApplicationServices.h>
 #include <Carbon/Carbon.h>
 
-#include "../../BF2/IO/Input/MacInputDeviceManager.h"
-#include "../../BF2/Platform/macOS/CocoaHost.h"
+#include "../../BF2/IO/Input/NativeInputDeviceManager.h"
+#include "../../BF2/Platform/Host/ClientHost.h"
+#include "../../BF2/Platform/macOS/CocoaHostTestHooks.h"
 #include "../../BF2/Platform/macOS/MacKeyMap.h"
 #include "../../BF2/Platform/macOS/MacRawMouse.h"
+#include "../native_host/WindowMessageRecorder.h"
 #include "../../BF2/Core/Ids.h"
 
 #include <cmath>
@@ -28,7 +30,8 @@
 namespace dice { namespace hfe { namespace io { void installControlMapFixture(); extern IBase* inputDeviceManager; } } }
 
 using namespace dice::hfe;
-using macos::CocoaHost;
+using host::ClientHost;
+using macos::CocoaHostTestHooks;
 
 namespace {
 
@@ -63,7 +66,7 @@ void inject(CGEventRef cg)
 {
     NSEvent* e = [NSEvent eventWithCGEvent:cg];
     CFRelease(cg);
-    CocoaHost::instance().injectEventForTest((__bridge void*)e);
+    CocoaHostTestHooks::injectEventForTest(ClientHost::instance(), (__bridge void*)e);
 }
 
 void key(unsigned short keyCode, bool down, bool repeat = false, SInt16 kbType = kKeyboardANSI,
@@ -139,7 +142,7 @@ io::IAdvancedInputDevice* mouse()
 // one input tick: the poll, then the final pass (10.0).
 void frame()
 {
-    CocoaHost::instance().pumpRawMouseForTest();
+    CocoaHostTestHooks::pumpRawMouseForTest(ClientHost::instance());
     g_manager->update(-1.0f);
     g_manager->update(10.0f);
 }
@@ -147,7 +150,7 @@ void frame()
 // A GCMouse report as MacRawMouse's mouseMovedHandler publishes it (y already down positive).
 void raw(float dx, float dy, int offsetMs = 0)
 {
-    macos::rawMousePublish(dx, dy, CocoaHost::tickCountMs() + offsetMs);
+    macos::rawMousePublish(dx, dy, ClientHost::tickCountMs() + offsetMs);
 }
 
 // The focus part of BF2::handleInGameWinMessages: setHasFocus(window focus, mask), the mouse bit
@@ -161,7 +164,7 @@ void engineFocus(bool focus)
 
 void setFocus(bool focus)
 {
-    CocoaHost::instance().overrideFocusForTest(focus, focus);
+    CocoaHostTestHooks::overrideFocusForTest(ClientHost::instance(), focus, focus);
     engineFocus(focus);
 }
 
@@ -171,16 +174,16 @@ void settle()
     frame(); frame();
 }
 
-// Records the mouse events every host listener sees, as BF2Window_macos's WindowMessageSource does.
-struct MouseLog final : macos::IHostEventListener
+// Records the mouse events every host listener sees, as BF2Window_native's WindowMessageSource does.
+struct MouseLog final : host::IHostEventListener
 {
     int moves = 0, buttons = 0, wheels = 0;
     int capturedMoves = 0, capturedButtons = 0, capturedWheels = 0;
-    void onMouseMove(const macos::HostMouseMoveEvent& e) override { ++moves; capturedMoves += e.captured; }
-    void onMouseButton(const macos::HostMouseButtonEvent& e) override { ++buttons; capturedButtons += e.captured; }
-    void onMouseWheel(const macos::HostMouseWheelEvent& e) override { ++wheels; capturedWheels += e.captured; }
+    void onMouseMove(const host::HostMouseMoveEvent& e) override { ++moves; capturedMoves += e.captured; }
+    void onMouseButton(const host::HostMouseButtonEvent& e) override { ++buttons; capturedButtons += e.captured; }
+    void onMouseWheel(const host::HostMouseWheelEvent& e) override { ++wheels; capturedWheels += e.captured; }
     double rawX = 0.0, rawY = 0.0;
-    void onRawMouseMove(const macos::HostRawMouseEvent& e) override { rawX += e.dx; rawY += e.dy; }
+    void onRawMouseMove(const host::HostRawMouseEvent& e) override { rawX += e.dx; rawY += e.dy; }
     void reset() { *this = MouseLog(); }
 };
 
@@ -330,8 +333,8 @@ void testFocusLoss()
     check(!keyboard()->keyDown(io::IDKey_W) && !keyboard()->keyPressed(io::IDKey_W), "no stale W after regain");
 
     key(kVK_ANSI_S, true);
-    CocoaHost::instance().overrideFocusForTest(false, false);   // lost and regained within one pump
-    CocoaHost::instance().overrideFocusForTest(true, true);
+    CocoaHostTestHooks::overrideFocusForTest(ClientHost::instance(), false, false);   // lost and regained within one pump
+    CocoaHostTestHooks::overrideFocusForTest(ClientHost::instance(), true, true);
     frame();
     check(!keyboard()->keyDown(io::IDKey_S), "a press before a loss inside one pump is dropped");
     key(kVK_ANSI_S, false);
@@ -444,7 +447,7 @@ void testCapturedMouse(MouseLog& log)
     button(0, false);
     wheelLines(1);
     frame();
-    CocoaHost::instance().cursorStateForTest(hidden, disassociated);
+    CocoaHostTestHooks::cursorStateForTest(ClientHost::instance(), hidden, disassociated);
     check(hidden && disassociated, "in-game: cursor hidden and held (relative mode)");
     check(log.moves == 1 && log.buttons == 2 && log.wheels == 1, "in-game: the host reports the events");
     check(log.capturedMoves == 1 && log.capturedButtons == 2 && log.capturedWheels == 1,
@@ -457,7 +460,7 @@ void testCapturedMouse(MouseLog& log)
     button(0, false);
     wheelLines(1);
     frame();
-    CocoaHost::instance().cursorStateForTest(hidden, disassociated);
+    CocoaHostTestHooks::cursorStateForTest(ClientHost::instance(), hidden, disassociated);
     check(!hidden && !disassociated, "menu: cursor visible and free");
     check(log.capturedMoves == 0 && log.capturedButtons == 0 && log.capturedWheels == 0,
           "menu: no mouse event is captured");
@@ -473,7 +476,7 @@ void testRawMouse(MouseLog& log)
 {
     begin("GCMouse deltas drive the in-game mouse");
     macos::rawMouseSetCountForTest(2);          // two mice
-    check(CocoaHost::instance().rawMouseAvailable(), "raw mouse available with a GCMouse connected");
+    check(ClientHost::instance().rawMouseAvailable(), "raw mouse available with a GCMouse connected");
     log.reset();
     move(100, 100);                             // the NSEvent of the same motion, accelerated
     raw(5.0f, 3.0f);                            // mouse A
@@ -494,7 +497,7 @@ void testRawMouse(MouseLog& log)
     frame();
     raw(7.0f, 0.0f, 5);
     raw(1.0f, 0.0f, 60);
-    CocoaHost::instance().pumpRawMouseForTest();
+    CocoaHostTestHooks::pumpRawMouseForTest(ClientHost::instance());
     g_manager->update(-1.0f);
     g_manager->update(0.03f);
     check(mouse()->readAxis(io::IDAxis_0, true) == 7.0f, "first tick sees the older raw report");
@@ -502,16 +505,16 @@ void testRawMouse(MouseLog& log)
     check(mouse()->readAxis(io::IDAxis_0, true) == 1.0f, "last tick sees the newer one");
 
     // Focus: raw reports arriving without focus are discarded.
-    CocoaHost::instance().overrideFocusForTest(false, false);
+    CocoaHostTestHooks::overrideFocusForTest(ClientHost::instance(), false, false);
     raw(50.0f, 50.0f);
     frame();
-    CocoaHost::instance().overrideFocusForTest(true, true);
+    CocoaHostTestHooks::overrideFocusForTest(ClientHost::instance(), true, true);
     frame();
     check(mouse()->readAxis(io::IDAxis_0, true) == 0.0f, "raw motion without focus is dropped");
 
     // Disconnect at run time: back to the NSEvent deltas; pending raw reports are ignored.
     macos::rawMouseSetCountForTest(0);
-    check(!CocoaHost::instance().rawMouseAvailable(), "no raw mouse after the last disconnect");
+    check(!ClientHost::instance().rawMouseAvailable(), "no raw mouse after the last disconnect");
     raw(9.0f, 9.0f);
     move(4, 2);
     frame();
@@ -540,12 +543,12 @@ void testRawMouseThreads(MouseLog& log)
     std::atomic<int> accepted(0);
     std::thread producer([&]() {
         for (int i = 0; i < burst; ++i)
-            while (!macos::rawMousePublish(1.0f, -1.0f, CocoaHost::tickCountMs()))
+            while (!macos::rawMousePublish(1.0f, -1.0f, ClientHost::tickCountMs()))
                 std::this_thread::yield();      // full ring: the handler would drop; the test waits
         while (!burstDone.load()) std::this_thread::yield();
         for (int i = 0; i < paced; ++i)
         {
-            macos::rawMousePublish(1.0f, -1.0f, CocoaHost::tickCountMs());
+            macos::rawMousePublish(1.0f, -1.0f, ClientHost::tickCountMs());
             while (accepted.load() <= i) std::this_thread::yield();
         }
         done.store(true);
@@ -586,14 +589,14 @@ void testRawMouseThreads(MouseLog& log)
 static void testAsyncEnter()
 {
     begin("asynchronous Enter held/consuming press bits");
-    CocoaHost& host = CocoaHost::instance();
+    ClientHost& host = ClientHost::instance();
     (void)host.consumeAsyncEnterState();
     key(kVK_Return, true);
     check(host.consumeAsyncEnterState() == 0x8001, "first Enter query sees held and press");
     check(host.consumeAsyncEnterState() == 0x8000, "second Enter query consumes the press bit");
     key(kVK_Return, true, true);
     check(host.consumeAsyncEnterState() == 0x8000, "auto-repeat creates no second press");
-    host.overrideFocusForTest(false, false); host.overrideFocusForTest(true, true);
+    CocoaHostTestHooks::overrideFocusForTest(host, false, false); CocoaHostTestHooks::overrideFocusForTest(host, true, true);
     key(kVK_Return, true);
     check(host.consumeAsyncEnterState() == 0x8001, "fresh down after an undelivered off-focus release creates a press");
     key(kVK_Return, false);
@@ -611,14 +614,44 @@ static void testAsyncEnter()
     key(kVK_ANSI_A, false);
 }
 
+void testHostBoundary()
+{
+    begin("Cocoa labels and actual window-message text delivery");
+    ClientHost& host = ClientHost::instance();
+    struct Label { unsigned char dik; const char* text; };
+    const Label labels[] = {{56,"Option"}, {184,"Right Option"}, {219,"Command"},
+                            {220,"Right Command"}, {69,"Clear"}};
+    for (const auto& label : labels)
+        check(host.keyDisplayName(label.dik) && std::string(host.keyDisplayName(label.dik)) == label.text,
+              "Cocoa retains native key names");
+    // controlShortcutDown polls AppKit's global flags; injected events cannot validate that query.
+    WindowMessageRecorder messages;
+    host.addListener(&messages);
+    struct TextKey { unsigned short key, character; CGEventFlags modifiers; };
+    const TextKey keys[] = {{kVK_ANSI_C,3,kCGEventFlagMaskControl}, {kVK_ANSI_KeypadEnter,3,0},
+                            {kVK_Delete,0x7F,0}, {kVK_ANSI_V,'v',kCGEventFlagMaskCommand}};
+    for (const auto& value : keys) {
+        CGEventRef event = CGEventCreateKeyboardEvent(0, value.key, true);
+        CGEventSetFlags(event, value.modifiers);
+        CGEventSetIntegerValueField(event, kCGKeyboardEventKeyboardType, kKeyboardANSI);
+        CGEventKeyboardSetUnicodeString(event, 1, &value.character);
+        inject(event);
+        key(value.key, false);
+    }
+    check(messages.values(hostmsg::WM_CHAR) == std::vector<unsigned int>({3,13,8,22}),
+          "real Cocoa event routing preserves Ctrl-C, keypad Enter, Backspace and Command-V");
+    host.removeListener(&messages);
+    settle();
+}
+
 int main(int argc, char** argv)
 {
     std::setvbuf(stdout, 0, _IONBF, 0);
     @autoreleasepool
     {
-        CocoaHost& host = CocoaHost::instance();
-        host.enableHeadlessForTest();
-        host.overrideFocusForTest(true, true);
+        ClientHost& host = ClientHost::instance();
+        CocoaHostTestHooks::enableHeadlessForTest(host);
+        CocoaHostTestHooks::overrideFocusForTest(host, true, true);
         if (argc == 2 && std::string(argv[1]) == "--async-enter-only")
         {
             testAsyncEnter();
@@ -630,7 +663,7 @@ int main(int argc, char** argv)
 
         io::installControlMapFixture();
         g_manager = static_cast<io::IInputDeviceManager*>(
-            io::MacInputDeviceManager::create(io::IID_IInputDeviceManager, 0));
+            io::NativeInputDeviceManager::create(io::IID_IInputDeviceManager, 0));
         io::inputDeviceManager = g_manager;
         unsigned int mask = 1087;               // BF2Engine::init: inputManager->init(1087)
         const bool all = g_manager->initDevices(&mask);
@@ -654,6 +687,8 @@ int main(int argc, char** argv)
         testRawMouse(log);
         testRawMouseThreads(log);
         testAsyncEnter();
+
+        testHostBoundary();
 
         host.removeListener(&log);
         g_manager->release();

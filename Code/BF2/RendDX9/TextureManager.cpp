@@ -884,8 +884,8 @@ EngineTexture* TextureManager::loadTextureFromFile(const std::string& name, Engi
     {
         void* probe = ::renddx9abi::engineAlloc(0x7C);
         stream.read(probe, 0x7C);
-#if defined(__APPLE__)
-        // [CHOSEN, not recovered] ImageIO needs the actual JPEG bytes, whose
+#if defined(__APPLE__) || defined(BF2_LINUX_CLIENT)
+        // [CHOSEN, not recovered] Native codecs need the actual JPEG bytes, whose
         // variable-length headers do not fit the retail DDS streaming probe.
         const auto* signature = static_cast<const unsigned char*>(probe);
         if (signature[0] == 0xff && signature[1] == 0xd8 && stream.getSize() >= 0x7C)

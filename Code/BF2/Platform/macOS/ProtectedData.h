@@ -1,11 +1,13 @@
-// [CHOSEN, not recovered] macOS port: the CryptProtectData/CryptUnprotectData counterpart for the
+// [CHOSEN, not recovered] Native CryptProtectData/CryptUnprotectData counterpart for the
 // profile password (Game/PasswordCodec.cpp) and the CD key (Game/MatchMaking/Client/CdKeyStore.cpp).
-// Owner decision and options: docs/macos-port.md, "Protected profile data (DPAPI)".
+// Owner decision: docs/macos-port.md, "Protected profile data (DPAPI)"; Linux: issue #36.
 //
 // A protected blob is "OBF2", a version byte (1), a 16-byte IV, the AES-256-CBC (PKCS#7)
 // ciphertext and an HMAC-SHA256 over everything before it. The two 256-bit keys are random and
-// live in one per-user key file, ~/Library/Application Support/OpenBF2/ProtectedData.key (mode
-// 0600 in a 0700 directory), created on the first protect. Like DPAPI, the data is bound to this
+// live in one per-user key file (mode 0600 in a 0700 directory), created on the first protect.
+// macOS uses ~/Library/Application Support/OpenBF2/ProtectedData.key; Linux uses
+// $XDG_DATA_HOME/OpenBF2/ProtectedData.key, defaulting to ~/.local/share/OpenBF2/ProtectedData.key.
+// Like DPAPI, the data is bound to this
 // user on this machine: a copied profile does not reveal the secret without the key file. A
 // Windows DPAPI blob is not readable here (nor is this blob on Windows); both sides take their
 // shipped decode-failure path.

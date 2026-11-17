@@ -45,7 +45,7 @@ namespace memory { void memory_update_modules(const char*) { } }
 #    include "BF2Console.h"                          // IMenuLogic::getConsole()->getConsoleActive()
 #    include "../../Platform/Windows/WinInputScript.h" // [TEMP] BF2_INPUT_SCRIPT host
 #  endif
-#elif defined(__APPLE__) && !DEDICATED
+#elif (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
 // [CHOSEN, not recovered] macOS client: the Cocoa host stands in for the Win32 message pump and
 // entry chain (docs/macos-s2-4.md). The headers mirror the Win32 client list above.
 #  include <cstdlib>                                 // exit(0) on a posted quit
@@ -56,7 +56,7 @@ namespace memory { void memory_update_modules(const char*) { } }
 #  include "../../Sound/NullSound.h"                 // ISoundEngine::setMasterVolume
 #  include "../../Menu/IMenuLogic.h"                 // menuLogic - the active menu
 #  include "BF2Console.h"                            // IMenuLogic::getConsole()->getConsoleActive()
-#  include "../../Platform/macOS/CocoaHost.h"
+#  include "../../Platform/Host/ClientHost.h"
 #endif
 
 // Rebuilds the single command-line string the engine expects. The C runtime has already stripped the
@@ -115,7 +115,7 @@ static BOOL CALLBACK lockLoadedModule(PCSTR moduleName, LoadedModuleBase moduleB
 static void trimOtherProcessesAndFileCache();
 static int  bf2MessageHandler(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 #  endif
-#elif defined(__APPLE__) && !DEDICATED
+#elif (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
 class IBase;
 namespace io { extern IBase* inputManager; }        // Core/Globals.cpp defines it as IBase*
 
@@ -190,7 +190,7 @@ bool BF2::init(const std::string& commandLine)
     // when BF2Engine::init ran with isDedicated() false; `+dedicated 1` leaves it null.
     if (Window* window = m_engine->getWindow())
         window->addMessageHandler(bf2MessageHandler);
-#elif defined(__APPLE__) && !DEDICATED
+#elif (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
     // [CHOSEN, not recovered] The same registration for the macOS window.
     if (Window* window = m_engine->getWindow())
         window->addMessageHandler(bf2MessageHandler);
@@ -267,11 +267,11 @@ void BF2::handleInGameWinMessages()
 #  endif
         }
     }
-#elif defined(__APPLE__) && !DEDICATED
+#elif (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
     // [CHOSEN, not recovered] The Cocoa pump in place of PeekMessage/DispatchMessage: it drains
     // every pending event and reports a posted quit as WM_QUIT does. The focus and mute logic
     // below repeats the Win32 arm above unchanged.
-    if (macos::CocoaHost::instance().pumpEvents())
+    if (host::ClientHost::instance().pumpEvents())
     {
         restoreDesktopSettings();
         exit(0);                                    // no engine shutdown, as on Win32
@@ -301,7 +301,7 @@ void BF2::handleInGameWinMessages()
 } // namespace dice
 
 
-#if defined(__APPLE__) && !DEDICATED
+#if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
 
 // [CHOSEN, not recovered] macOS client: the desktop-state and window-message pieces of the
 // Win32 chain below, on the Cocoa host. There was no retail macOS image; see docs/macos-s2-4.md.
@@ -316,7 +316,7 @@ using namespace hostmsg;
 // cursor is released in case a relative-mode mouse still held it.
 static void restoreDesktopSettings()
 {
-    macos::CocoaHost& host = macos::CocoaHost::instance();
+    host::ClientHost& host = host::ClientHost::instance();
     host.setRelativeMouseMode(false);
     host.preventDisplaySleep(false);
 }
@@ -353,16 +353,15 @@ static int pushMenuKey(char key)
 }
 
 // GetAsyncKeyState(VK_CONTROL) / (VK_MENU). [CHOSEN] Command counts as Ctrl, so Command-C/V/X
-// work as the Mac shortcuts; BF2Window_macos.cpp turns Command+letter into the control character.
+// work as the Mac shortcuts; the Cocoa backend normalizes Command+letter before host dispatch.
 static bool controlKeyDown()
 {
-    return (macos::CocoaHost::instance().modifierFlags() &
-            (macos::HostModControl | macos::HostModCommand)) != 0;
+    return host::ClientHost::instance().controlShortcutDown();
 }
 
 static bool altKeyDown()
 {
-    return (macos::CocoaHost::instance().modifierFlags() & macos::HostModOption) != 0;
+    return (host::ClientHost::instance().modifierFlags() & host::HostModAlt) != 0;
 }
 
 // The Win32 bf2MessageHandler with the same arms. Omitted: the Caps Lock switch-off on
@@ -447,10 +446,11 @@ static int bf2MessageHandler(HWND /*hwnd*/, UINT message, WPARAM wParam, LPARAM 
 
 // The bf2Main/bf2WinMain shape of the Win32 client entry: desktop state saved, BF2 created, the
 // pump-and-mainLoop loop, the handler removed, BF2 deleted, desktop state restored.
-static int bf2MacMain(const std::string& commandLine)
+static int bf2NativeMain(const std::string& commandLine)
 {
-    macos::CocoaHost& host = macos::CocoaHost::instance();
-    host.initApplication();                         // NSApplication before any window exists
+    host::ClientHost& host = host::ClientHost::instance();
+    if (!host.initApplication())                    // native application before any window exists
+        return 42;
     host.preventDisplaySleep(true);                 // SPI_SETSCREENSAVEACTIVE 0 counterpart
 
     g_system->restoreFPUExceptions();
@@ -956,18 +956,18 @@ int main(int argc, char** argv)
 
 #endif // dedicated - the headless console entry
 
-#elif defined(__APPLE__) && !DEDICATED
+#elif (defined(__APPLE__) || defined(BF2_LINUX_CLIENT)) && !DEDICATED
 #include <cstdio>
 #include <cstdlib>
 #include <execinfo.h>
 #include <csignal>
 
 // [CHOSEN, not recovered] The macOS client entry point: the argv join of the POSIX main, then
-// the Win32 client's entry chain (bf2MacMain above).
+// the Win32 client's entry chain (bf2NativeMain above).
 // [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: macos-startup-stable] Coordinator diagnostic:
 // with BF2_EXIT_TRACE set, print the stack of whoever calls exit(). lldb cannot attach through
 // the sandbox-exec run harness. Registered first, so it runs last, still inside exit().
-static void bf2MacExitTrace()
+static void bf2NativeExitTrace()
 {
     void* frames[64];
     const int count = backtrace(frames, 64);
@@ -978,7 +978,7 @@ static void bf2MacExitTrace()
 // [TEMP] [CHOSEN, not recovered] [RETIRE-WHEN: macos-startup-stable] Coordinator diagnostic:
 // with BF2_ABORT_TRACE set, stdout is unbuffered (the harness redirects it to client.log, and a
 // fully buffered stdout loses its last lines at abort()) and SIGABRT prints the aborting stack.
-static void bf2MacAbortTrace(int)
+static void bf2NativeAbortTrace(int)
 {
     void* frames[64];
     const int count = backtrace(frames, 64);
@@ -990,11 +990,11 @@ static void bf2MacAbortTrace(int)
 int main(int argc, const char** argv)
 {
     if (std::getenv("BF2_EXIT_TRACE"))
-        std::atexit(bf2MacExitTrace);
+        std::atexit(bf2NativeExitTrace);
     if (std::getenv("BF2_ABORT_TRACE"))
     {
         std::setvbuf(stdout, 0, _IONBF, 0);
-        std::signal(SIGABRT, bf2MacAbortTrace);
+        std::signal(SIGABRT, bf2NativeAbortTrace);
     }
     dice::hfe::g_system = new dice::hfe::System();
 
@@ -1002,7 +1002,7 @@ int main(int argc, const char** argv)
     for (int i = 1; i < argc; ++i)
         appendCommandLineArg(commandLine, argv[i], i == 1);
 
-    const int result = dice::hfe::bf2MacMain(commandLine);
+    const int result = dice::hfe::bf2NativeMain(commandLine);
     if (result == 42)
         std::cerr << "fatal error: argument parsing failed" << std::endl;
     if (dice::hfe::g_system)

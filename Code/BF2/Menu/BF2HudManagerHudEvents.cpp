@@ -1,5 +1,5 @@
 // HUD event payload handling. [INFERRED] Source split. Unimplemented leaves stop when invoked.
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
 #include "../Platform/X87Compat.h" // [CHOSEN, not recovered]
 #endif
 #include "BF2HudManager.h"
@@ -69,7 +69,7 @@ float stingerDelay(const char* name)
                 fstp delay
             }
 #else
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain x87-width values on both Mac architectures.
             delay = static_cast<float>(static_cast<bf2x87::Real>(sample[2]) + sample[1] + sample[0]);
 #else

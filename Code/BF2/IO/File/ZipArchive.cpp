@@ -11,6 +11,9 @@
 #include "../Stream/MemStream.h"    // IMemStream - the small-file open target
 
 #include <cstring>                  // memset, memcpy
+#if defined(BF2_LINUX_CLIENT) && !DEDICATED
+#include "../../Platform/Linux/ClientFilePaths.h"
+#endif
 
 namespace dice {
 namespace hfe {
@@ -81,7 +84,15 @@ ZipArchive::FileHandle::~FileHandle()
 // name; only on success is the 64 KB staging buffer allocated.
 bool ZipArchive::FileHandle::init(const std::string& archiveName)
 {
+#if defined(BF2_LINUX_CLIENT) && !DEDICATED
+    // [CHOSEN, not recovered] This minizip open bypasses UnixFileSystem. Resolve only the disk
+    // spelling; archive keys, entry lookup and FileManager's mount order stay unchanged.
+    std::string physicalName = archiveName;
+    linuxclient::resolveClientPath(physicalName);
+    fileHandle = unzOpen(physicalName.c_str());
+#else
     fileHandle = unzOpen(archiveName.c_str());
+#endif
     if (!fileHandle)
         return false;
 

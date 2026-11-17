@@ -1,5 +1,5 @@
 // [TEMP] [CHOSEN, not recovered] macOS port test tool: the scripted input engine
-// (Platform/InputScript.h, docs/macos-c-input-script.md) under the names CocoaHost uses.
+// (Platform/InputScript.h, docs/macos-c-input-script.md) under the names ClientHost uses.
 // MacInputScript.mm holds its kVK_ key table. [RETIRE-WHEN: client-test-automation-replaced]
 #ifndef PLATFORM_MACOS_MACINPUTSCRIPT_H
 #define PLATFORM_MACOS_MACINPUTSCRIPT_H

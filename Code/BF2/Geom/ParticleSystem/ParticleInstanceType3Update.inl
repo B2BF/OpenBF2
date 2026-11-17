@@ -172,7 +172,7 @@ int psmType3AdvanceParticle(void* self, unsigned char* record, int index, float 
         // 10181B64 `test ah,1; jnz`: less-than OR unordered walks back through the history.
         if (!(difference>=0))
         {
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
             const int back=bf2x87::toIntTruncate(-3.0*difference);                  // RC=11 fistp
 #else
             const int back=static_cast<int>(-3.0*difference);                  // RC=11 fistp
@@ -373,7 +373,7 @@ void psmType3Update(void* self, float dt)
     psmType3RefreshTransform(self);
     psmInstanceB<Vec3>(self,0xB4)=psmInstanceB<Vec3>(self,0xA4);
     const double total=static_cast<double>(elapsed)+psmInstanceB<float>(self,0xD0);
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     const unsigned int steps=static_cast<unsigned int>(bf2x87::toIntTruncate(100.0*total));
 #else
     const unsigned int steps=static_cast<unsigned int>(static_cast<int>(100.0*total));
