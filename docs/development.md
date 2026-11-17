@@ -172,6 +172,11 @@ and golden fixtures free of credentials and personal data.
 
 ## Finishing a change
 
+Before opening or updating a PR, use the [local CI command](local-ci.md) to verify
+the committed revision. It runs the Linux workflow locally and reports other
+platforms and production signing as unverified. An optional fast pre-push guard
+checks saved results without starting builds.
+
 Update the affected source comments and engineer guide when behavior or evidence changes.
 State each temporary boundary's removal conditions beside its marker, and remove it only
 after the required implementation and tests are complete. Remove harness overrides that

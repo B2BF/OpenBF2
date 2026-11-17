@@ -1,0 +1,67 @@
+diff --git a/pkg/artifacts/artifacts_v4.go b/pkg/artifacts/artifacts_v4.go
+--- a/pkg/artifacts/artifacts_v4.go
++++ b/pkg/artifacts/artifacts_v4.go
+@@ -261,7 +261,7 @@ func (r artifactV4Routes) verifySignature(ctx *ArtifactContext, endp string) (int64,
+ 	sig := ctx.Req.URL.Query().Get("sig")
+ 	expires := ctx.Req.URL.Query().Get("expires")
+ 	artifactName := ctx.Req.URL.Query().Get("artifactName")
+-	dsig, _ := base64.URLEncoding.DecodeString(sig)
++	dsig, _ := base64.RawURLEncoding.DecodeString(strings.TrimRight(sig, "="))
+ 	taskID, _ := strconv.ParseInt(rawTaskID, 10, 64)
+ 
+ 	expecedsig := r.buildSignature(endp, expires, artifactName, taskID)
+@@ -286,7 +286,7 @@ func (r *artifactV4Routes) parseProtbufBody(ctx *ArtifactContext, req protoreflect.Pr
+ 		ctx.Error(http.StatusInternalServerError, "Error decode request body")
+ 		return false
+ 	}
+-	err = protojson.Unmarshal(body, req)
++	err = (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(body, req)
+ 	if err != nil {
+ 		log.Errorf("Error decode request body: %v", err)
+ 		ctx.Error(http.StatusInternalServerError, "Error decode request body")
+diff --git a/cmd/root.go b/cmd/root.go
+--- a/cmd/root.go
++++ b/cmd/root.go
+@@ -155,6 +155,9 @@ func configLocations() []string {
+ }
+ 
+ func args(rootCmd *cobra.Command) []string {
++	if os.Getenv("OPENBF2_ACT_NO_CONFIG") == "1" {
++		return os.Args[1:]
++	}
+ 	actrc := configLocations()
+ 	flags := []*pflag.FlagSet{rootCmd.Flags(), rootCmd.PersistentFlags()}
+ 	return actrcArgs(flags, actrc[:len(actrc)-1], actrc[len(actrc)-1], os.Args[1:])
+diff --git a/pkg/runner/run_context.go b/pkg/runner/run_context.go
+--- a/pkg/runner/run_context.go
++++ b/pkg/runner/run_context.go
+@@ -1072,6 +1072,11 @@ func isLocalCheckout(ghc *model.GithubContext, step *model.Step) bool {
+ 		return false
+ 	}
+ 	if repository, ok := step.With["ref"]; ok && repository != ghc.Ref {
++		// Only the wrapper that verifies and freezes this exact local commit opts in.
++		if ghc.Sha != "" && os.Getenv("OPENBF2_ACT_FROZEN_SHA") == ghc.Sha &&
++			(repository == ghc.Sha || repository == "${{ github.sha }}") {
++			return true
++		}
+ 		return false
+ 	}
+ 	return true
+diff --git a/pkg/runner/step_action_remote.go b/pkg/runner/step_action_remote.go
+--- a/pkg/runner/step_action_remote.go
++++ b/pkg/runner/step_action_remote.go
+@@ -57,6 +57,14 @@ func (sar *stepActionRemote) prepareActionExecutor() common.Executor {
+ 			return nil
+ 		}
+ 
++		// checkout requires a token input even for public repositories. The
++		// local wrapper disables Git Authorization headers for anonymous reads.
++		if os.Getenv("OPENBF2_ACT_PUBLIC_CHECKOUT") == "1" && sar.remoteAction.IsCheckout() && github.Token == "" {
++			if sar.Step.With == nil {
++				sar.Step.With = make(map[string]string)
++			}
++			sar.Step.With["token"] = "openbf2-public-checkout"
++		}
+ 		for _, action := range sar.RunContext.Config.ReplaceGheActionWithGithubCom {
+ 			if strings.EqualFold(fmt.Sprintf("%s/%s", sar.remoteAction.Org, sar.remoteAction.Repo), action) {
+ 				sar.remoteAction.URL = "https://github.com"

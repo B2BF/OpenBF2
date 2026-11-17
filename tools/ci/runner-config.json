@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "act_version": "0.2.98-openbf2.1",
+  "act_commit": "4a64dea3f051935e0d8c3aa133124722bc50f770",
+  "act_archive_sha256": "3bc5a52d490ea30f6af011dcb03859553282527422339eaa35bd515d0023d514",
+  "go_version": "1.26.10",
+  "go_archive_sha256": "ccfe7ae822d2c2f41f4fe7c956199967a4dac22d0ee0d2b2bfdb440aab3b20c5",
+  "runner_base": "ghcr.io/catthehacker/ubuntu@sha256:5293ebab0135fff038758bf1aa04780c936f330b92fdf966c60c722dab5c140b",
+  "architecture": "linux/amd64",
+  "workflow": ".github/workflows/ci.yml",
+  "concurrent_jobs": 1,
+  "workflow_timeout_seconds": 32400,
+  "preflight_timeout_seconds": 900
+}

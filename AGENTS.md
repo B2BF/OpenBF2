@@ -340,6 +340,23 @@ input. Recover retail protocol transitions from original server/client packet ev
 instructions; intentional changes follow the issue-discussed design. Keep packet captures and
 golden fixtures free of credentials and personal data.
 
+### Local CI before push or PR handoff
+
+Follow [Local CI](docs/local-ci.md) before an authorized CI-triggering push or PR handoff
+([issue #47](https://github.com/kr4uzi/OpenBF2/issues/47)). On a supported Linux host, check
+`python3 tools/ci/local-ci.py status` and run `python3 tools/ci/local-ci.py run` when matching
+verification is missing. Reuse results for unchanged inputs. The full gate requires a clean,
+committed tree; commit only when authorized, otherwise report that verification is pending.
+
+For the human's PR handoff, `python3 tools/ci/local-ci.py prepare-pr --no-browser` verifies
+the inputs and prints the PR link. The human creates/submits the PR. `preflight` checks
+runner mechanics only; it does not replace the full gate. Report unavailable platforms,
+signing and other untested paths as unverified.
+
+The pre-push hook is opt-in and only checks saved results; it never starts builds. Do not
+assume it is installed. Local success does not authorize a push or a hosted CI dispatch/rerun;
+respect the user's existing authorization before actions that spend GitHub runner time.
+
 ## Documentation and reporting
 
 - New engineer guides live in `docs/` and explain the build, architecture and contribution process.
