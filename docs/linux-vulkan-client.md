@@ -62,7 +62,7 @@ Upstream's quit fix, widescreen HUD/FOV policy, water-buffer guard and BFHQ grou
 are inherited from the base rather than submitted again. The quit fix has no remaining
 Linux-specific production hunk. The native host still uses the existing renderer
 interfaces; no networking protocol or retail content-format change is introduced here.
-Windows/macOS and full Linux ARM64 build/runtime checks remain outstanding, as do
+Windows/macOS runtime and full Linux ARM64 build/runtime checks remain outstanding, as do
 the broader gameplay acceptance cases listed below.
 
 ## Build the presentation check
@@ -272,7 +272,14 @@ Host/input refactor validation:
   setting and opt-in scripted input. Console and movement captures were inspected. Concurrent
   compilation makes this a functional check, not a performance comparison. The subsequent
   extended-key search change is covered by the interpreter regression above.
-- macOS AppKit/Metal and MSVC x86/x64 builds remain pending. Live keyboard-layout variations,
+- [CI run 43982705017](https://github.com/kr4uzi/OpenBF2/actions/runs/43982705017)
+  at `471975829b86ea8584af041efecf6fbb6588ad3e` passed the Windows x86/x64 build
+  jobs and both macOS architecture build jobs, including client/server links and
+  their configured image checks, plus Windows aggregation and universal macOS
+  application build/tests/packaging. The native shader-equivalence helper is excluded
+  from engine discovery and belongs only to its effect-compiler target.
+  These build results do not establish Windows/macOS gameplay acceptance.
+- Live keyboard-layout variations,
   UI rebinding, physical-controller behavior and a new human focus/capture review were not
   exercised. Synthetic tests cover the shared focus and captured-mouse message rules.
 
