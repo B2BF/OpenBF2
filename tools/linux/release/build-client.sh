@@ -41,7 +41,8 @@ Path(sys.argv[1]).write_text(json.dumps(sys.argv[2:], indent=2) + "\n")
 PY
 maps="-ffile-prefix-map=$engine=. -ffile-prefix-map=$output=./build -ffile-prefix-map=$sdk=./sdk -ffile-prefix-map=$sources=./sources"
 flags="-march=x86-64 -mtune=generic $maps"
-env CFLAGS="$flags" CXXFLAGS="$flags" CPPFLAGS="$flags" \
+# vkd3d needs the SDK's pinned Vulkan headers, newer than the baseline OS headers.
+env CFLAGS="$flags" CXXFLAGS="$flags" CPPFLAGS="$flags -I$sdk/include" \
   python3 "$engine/tools/linux/build-nativefx.py" \
     --vkd3d-source "$sources/vkd3d-2.1" \
     --mojo-source "$sources/mojoshader" \

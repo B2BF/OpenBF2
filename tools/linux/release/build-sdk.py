@@ -264,6 +264,15 @@ def main():
     run("meson", "install", "-C", BUILD / "dxvk")
     owners.update({path: "DXVK" for path in snapshot() - before})
 
+    # vkd3d 2.1 needs newer Vulkan headers than Jammy supplies. Install these
+    # after the libraries so their configure environment remains unchanged.
+    for name in ("Vulkan-Headers", "SPIRV-Headers"):
+        item = next(item for item in lock["sources"] if item["name"] == name)
+        before = snapshot()
+        shutil.copytree(SOURCES / item["destination"] / "include", PREFIX / "include",
+                        dirs_exist_ok=True)
+        owners.update({path: name for path in snapshot() - before})
+
     # A successful configure can silently omit a platform plugin. Fail at SDK
     # construction, before an unusable runtime reaches the release workflow.
     for pattern in ("lib/libSDL3.so.*", "lib/libopenal.so.*", "lib/libdxvk_d3d9.so*",
