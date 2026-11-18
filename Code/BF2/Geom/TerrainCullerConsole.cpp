@@ -81,7 +81,7 @@ void RD9_THUNK updateCullerBaseCells(TerrainCuller* self RD9_THUNK_EDX, TerrainC
             node->bounds.refresh();
 #if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] FUCOM compares the integer without a binary32 narrowing.
-        node->fileByteEE = bf2x87::wide(node->bounds.extent.x) == bf2x87::wide(self->param14);
+        node->fileByteEE = bf2x87::wideExact(node->bounds.extent.x) == bf2x87::wideExact(self->param14);
 #else
         node->fileByteEE = node->bounds.extent.x == self->param14;
 #endif
@@ -105,7 +105,7 @@ void RD9_THUNK setCullerBaseCellSize(TerrainCuller* self RD9_THUNK_EDX, int valu
     // [CHOSEN, not recovered] Keep the retained x87 product and FCOM unordered result.
     const bf2x87::Real maximum = bf2x87::mul(bf2x87::wide(owner->m_patchSize),
                                            bf2x87::wide(owner->m_primaryWorldScale.x));
-    if (bf2x87::less(maximum, bf2x87::wide(value)))
+    if (bf2x87::less(maximum, bf2x87::wideExact(value)))
         return;
 #else
     if (owner->m_patchSize * owner->m_primaryWorldScale.x < value)

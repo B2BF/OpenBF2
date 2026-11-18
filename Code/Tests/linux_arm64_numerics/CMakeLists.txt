@@ -33,11 +33,20 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$")
     add_executable(bf2_arm_numerics_soft "${BF2_ARM_TEST_ROOT}/Tests/macos_numerics.cpp")
     bf2_arm_test(bf2_arm_numerics_soft 0)
     target_compile_definitions(bf2_arm_numerics_soft PRIVATE BF2_TEST_SOFT_EXTENDED=1)
+    # The binary32 client arm of ARM64, checked against the host x87 at 24-bit precision.
+    add_executable(bf2_arm_portable_x87_float "${BF2_ARM_TEST_ROOT}/Tests/portable_x87.cpp"
+        "${BF2_ARM_TEST_ROOT}/BF2/Math/Mat4Inverse.cpp")
+    bf2_arm_test(bf2_arm_portable_x87_float 0)
+    target_compile_definitions(bf2_arm_portable_x87_float PRIVATE BF2_TEST_CLIENT_FLOAT=1)
 endif()
 add_executable(bf2_arm_numerics "${BF2_ARM_TEST_ROOT}/Tests/macos_numerics.cpp")
 bf2_arm_test(bf2_arm_numerics 0)
 add_executable(bf2_arm_portable_x87 "${BF2_ARM_TEST_ROOT}/Tests/portable_x87.cpp" "${BF2_ARM_TEST_ROOT}/BF2/Math/Mat4Inverse.cpp")
 bf2_arm_test(bf2_arm_portable_x87 0)
+# The client's exact arm (binary32 is the ARM64 client default).
+add_executable(bf2_arm_portable_x87_exact "${BF2_ARM_TEST_ROOT}/Tests/portable_x87.cpp" "${BF2_ARM_TEST_ROOT}/BF2/Math/Mat4Inverse.cpp")
+bf2_arm_test(bf2_arm_portable_x87_exact 0)
+target_compile_definitions(bf2_arm_portable_x87_exact PRIVATE BF2X87_CLIENT_EXACT_EXTENDED=1)
 add_executable(bf2_arm_bitstream "${BF2_ARM_TEST_ROOT}/Tests/macos_bitstream_numeric.cpp"
     "${BF2_ARM_TEST_ROOT}/BF2/IO/BitStream.cpp" "${BF2_ARM_TEST_ROOT}/BF2/Core/Debug.cpp" "${BF2_ARM_TEST_ROOT}/BF2/Core/StringUtil.cpp")
 bf2_arm_test(bf2_arm_bitstream 1)

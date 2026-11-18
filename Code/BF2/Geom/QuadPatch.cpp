@@ -284,7 +284,7 @@ void QuadPatchDetailLayer::buildLodTableTree(unsigned char* tableBytes, int quad
     const int stride = terrain->m_patchSize + 1;
 #if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Preserve the retained FILD/FMUL value before the native comparison.
-    if (bf2x87::greater(bf2x87::wide(terrain->m_culler->param10),
+    if (bf2x87::greater(bf2x87::wideExact(terrain->m_culler->param10),
                        bf2x87::mul(bf2x87::wide(size), bf2x87::wide(terrain->m_primaryWorldScale.x))))
 #else
     if (static_cast<double>(terrain->m_culler->param10) >
@@ -3483,7 +3483,7 @@ template<class A, class B> bool shadowRangeLess(A a, B b)
 {
 #if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Retain FILD precision and FCOM's invalid exception.
-    return bf2x87::less(bf2x87::wide(a), bf2x87::wide(b));
+    return bf2x87::less(bf2x87::wideExact(a), bf2x87::wideExact(b));
 #else
     return a < b;
 #endif
@@ -3493,7 +3493,7 @@ template<class T> int shadowRangeInt(T value)
 {
 #if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] Masked invalid FISTP produces the integer indefinite.
-    return bf2x87::toIntTruncate(bf2x87::wide(value));
+    return bf2x87::toIntTruncate(bf2x87::wideExact(value));
 #else
     return static_cast<int>(value);
 #endif

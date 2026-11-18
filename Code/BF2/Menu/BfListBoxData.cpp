@@ -55,7 +55,7 @@ int truncateListWidth(double value)
     unsigned short original, truncating;
     int result;
     // [CHOSEN, not recovered] Preserve x87 truncating int32 with integer indefinite.
-    result = bf2x87::integer<int>(bf2x87::wide(value));
+    result = bf2x87::integer<int>(bf2x87::wideExact(value));
     return result;
 #endif
 }

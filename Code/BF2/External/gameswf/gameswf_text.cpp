@@ -2212,7 +2212,7 @@ namespace gameswf
 				const bool	is_w = name == "_width";
 				const double	v = val.to_number();
 				const bf2x87::Real cur = extent_pixels(is_w);
-				if (bf2x87::Real(v) == cur) return true;
+				if (bf2x87::wideExact(v) == cur) return true;
 				matrix	m = get_matrix();
 				float&	s = is_w ? m.m_[0][0] : m.m_[1][1];
 				// 0x1008977E..0x100897CE / 0x10089852..0x100898A2:
@@ -2241,7 +2241,7 @@ namespace gameswf
 				// Unregister before conversion: an object conversion can run code.
 				if (m_tab_index >= 0 && m_tab_index < s_tab_table.size() && s_tab_table[m_tab_index] == this)
 					s_tab_table[m_tab_index] = NULL;
-				m_tab_index = bf2x87::lowWord(bf2x87::toInt64Truncate(bf2x87::Real(val.to_number())));
+				m_tab_index = bf2x87::lowWord(bf2x87::toInt64Truncate(bf2x87::wideExact(val.to_number())));
 				// As in 0x10089A3B, negative/invalid indices are unchecked here.
 				register_text_tab(m_tab_index, this);
 				return true;

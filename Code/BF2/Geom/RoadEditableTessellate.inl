@@ -22,7 +22,7 @@ bool roadLess(T a, U b)
 {
 #if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] These sites use FCOM, including its invalid flag for quiet NaNs.
-    return bf2x87::less(RoadScalar(a), RoadScalar(b));
+    return bf2x87::less(bf2x87::wideExact(a), bf2x87::wideExact(b));
 #else
     return a < b;
 #endif
@@ -33,7 +33,7 @@ bool roadLessEqual(T a, U b)
 {
 #if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
     // [CHOSEN, not recovered] FCOM equality/range tests through the native arithmetic backend.
-    return bf2x87::lessEqual(RoadScalar(a), RoadScalar(b));
+    return bf2x87::lessEqual(bf2x87::wideExact(a), bf2x87::wideExact(b));
 #else
     return a <= b;
 #endif

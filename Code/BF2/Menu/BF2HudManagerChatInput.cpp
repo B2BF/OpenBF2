@@ -54,7 +54,7 @@ int chatSecondsRemaining(double deadline, double now)
     unsigned short original, truncating;
     int result;
     // [CHOSEN, not recovered] Preserve x87 extended subtraction and truncation.
-    result = bf2x87::integer<int>(bf2x87::sub(bf2x87::wide(deadline), bf2x87::wide(now)));
+    result = bf2x87::integer<int>(bf2x87::sub(bf2x87::wideExact(deadline), bf2x87::wideExact(now)));
     return result;
 #endif
 }

@@ -1,4 +1,8 @@
 // [TEMP] [CHOSEN, not recovered] Numeric scaffolding; no engine or game content.
+// The exact ExtendedFloat arm (the dedicated server's), also in client test images.
+#if !defined(BF2X87_CLIENT_EXACT_EXTENDED)
+#define BF2X87_CLIENT_EXACT_EXTENDED 1
+#endif
 #include "../BF2/Platform/X87Compat.h"
 #include "../BF2/Platform/ExtendedFloat.h"
 #include <climits>

@@ -6362,9 +6362,9 @@ static void publishGeneralFloat(const gameswf::fn_call& fn, GsFloatGetter getter
 
 // The HUD / minimap / map-icon transparency getters (10033840 / 100337B0 / 10033720, 132 B each): the
 // stored alpha (0..255) back to the menu's 0..1 transparency - `fmul flt_100DAD24; fsubr
-// flt_100D7EA0`: 1.0 - value * (1/255 as a float), rounded once more to double. Both float operands
-// are exact in a double, so the product is exact and only the subtraction rounds, as under the
-// shipped 53-bit control word.
+// flt_100D7EA0`: 1.0 - value * (1/255 as a float), as a double. The menu thread's x87 runs at 24-bit
+// precision once the D3D9 device exists (no D3DCREATE_FPU_PRESERVE), so retail rounds the product and
+// the difference to binary32; this binary64 arm [CHOSEN, not recovered] rounds only the subtraction.
 static void publishGeneralTransparency(const gameswf::fn_call& fn, GsFloatGetter getter)
 {
     const float value = (generalSettingsOf(generalSettingsSingleton())->*getter)();

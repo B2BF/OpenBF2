@@ -92,7 +92,7 @@ int voteMinutes(float seconds)
     unsigned short saved, truncated;
     int result;
     // [CHOSEN, not recovered] Preserve x87 truncation without changing caller rounding mode.
-    result = bf2x87::integer<int>(bf2x87::wide(rounded));
+    result = bf2x87::integer<int>(bf2x87::wideExact(rounded));
     return result;
 #endif
 }
