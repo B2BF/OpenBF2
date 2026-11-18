@@ -18,6 +18,9 @@
 #include "../../RendDX9/RendDX9Base.h"                // the TextureManager + atlas-cache seams
 #include "../../RendDX9/Texture.h"                    // EngineTexture, textureDims, textureAddRef
 #include "../../RendDX9/TextureAtlas/TextureAtlas.h"  // TextureAtlasEntry
+#include "../FontSystem/HiDpiFontTexture.h"
+#include <algorithm>
+#include <cmath>
 #if !defined(_MSC_VER) || !defined(_M_IX86)
 #include "../../Math/PortableX87.h"
 #endif
@@ -85,7 +88,7 @@ public:
     }
 
     // The trivial accessor pairs, one line each - see the vtable for their shipped addresses.
-    void*         engineTexture() const  { return m_texture; }                   // not a slot
+    void*         engineTexture() const;                                        // not a slot
     const char*   getName() const        { return m_name.c_str(); }              // +0x20
     // PE 0x10089500
     void          setUserObject(void* p) { m_userObject = p; }                   // +0x24
@@ -94,8 +97,8 @@ public:
     float         getUvHeightCopy() const{ return m_uvHeightCopy; }              // +0x30
     int           getPixelWidth() const  { return m_pixelWidth; }                // +0x34
     int           getPixelHeight() const { return m_pixelHeight; }               // +0x38
-    int           getPageWidth() const   { return m_pageWidth; }                 // +0x3C
-    int           getPageHeight() const  { return m_pageHeight; }                // +0x40
+    int           getPageWidth() const;                                          // +0x3C
+    int           getPageHeight() const;                                         // +0x40
     // PE 0x10089560
     unsigned char setByte66(unsigned char v) { m_byte66 = v; return v; }         // +0x44
     unsigned char getByte66() const      { return m_byte66; }                    // +0x48
@@ -134,6 +137,13 @@ private:
     // +0x80/+0x84 - resolved by beginShape/applyCanvas: two pageW*pageH byte buffers.
     unsigned char* m_savedAlpha;  // +0x80  ctor: 0 - the texture's alpha, captured once
     unsigned char* m_canvas;      // +0x84  ctor: 0 - the CPU drawing canvas the plot/fill write
+
+    void configureHiDpiFont(const std::string& path);
+    void refreshHiDpiFont();
+    void clearHiDpiFont();
+    std::string m_hidpiFontPath;
+    dx9rend::EngineTexture* m_hidpiFontAtlas = nullptr;
+    int m_hidpiFontScale = 0;
 };
 
 
@@ -381,6 +391,7 @@ void MemeTexture::dtor()
         ::renddx9abi::engineFree(m_canvas);
         m_canvas = 0;
     }
+    m_hidpiFontPath.~basic_string();
     m_name.~basic_string();
     m_string10.~basic_string();
 }
@@ -421,6 +432,7 @@ void MemeTexture::setTexture(const char* name, const char* prefix, int flags)
         return;
     }
 
+    clearHiDpiFont();
     m_name = name;
 
     std::string full(prefix);          // the shipped ctor(PBD) - a null prefix would crash there too
@@ -509,14 +521,99 @@ void MemeTexture::setTexture(const char* name, const char* prefix, int flags)
 
     ::renddx9abi::logf("Meme::Texture::setTexture(\"%s%s\"): loader path -> 0x%p %dx%d",
                        prefix, name, m_texture, m_pixelWidth, m_pixelHeight);
+    configureHiDpiFont(full);
 }
 
+// [CHOSEN, not recovered] Rebuild the font pages used by HudElementsSpawn.con
+// and HudElementsMap.con (kr4uzi/OpenBF2#42). Keep the original texture separately
+// and let the quad drawer sample the new page with the existing normalized UVs.
+void MemeTexture::configureHiDpiFont(const std::string& path)
+{
+    if (!m_texture)
+        return;
+
+    std::string base;
+    dx9rend::pathStripExtension(base, path);
+    std::replace(base.begin(), base.end(), '\\', '/');
+    std::string lookup = base;
+    dx9rend::pathToLower(lookup);
+    if (lookup.compare(0, 6, "fonts/") != 0)
+        return;
+
+    const std::string name = lookup.substr(lookup.find_last_of('/') + 1);
+    if (name != "hudfontlocalbold_9" && name != "commanderchatfontlocal_6")
+        return;
+
+    m_hidpiFontPath = base;
+    refreshHiDpiFont();
+}
+
+void MemeTexture::refreshHiDpiFont()
+{
+    if (m_hidpiFontPath.empty())
+        return;
+
+    // BFMeme lays out the HUD in 800×600 units. Scale the atlas by the output height.
+    const int height = dx9rend::readIntSetting("GSWindowSizeY", 600);
+    const float scale = static_cast<float>(height) / 600.0f;
+    const int multiple = (std::max)(1, (std::min)(4, static_cast<int>(std::ceil(scale - 0.05f))));
+    if (multiple != m_hidpiFontScale)
+    {
+        dx9rend::textureReleaseRef(m_hidpiFontAtlas);
+        m_hidpiFontScale = multiple;
+    }
+    if (multiple == 1 || m_hidpiFontAtlas)
+    {
+        hidpiRemovePending(this);
+        return;
+    }
+
+    void* atlas = nullptr;
+    const int result = hidpiBuildFontTexture(m_hidpiFontPath, nullptr, multiple, &atlas);
+    if (result == 0)
+        hidpiAddPending(this, [](void* owner) { static_cast<MemeTexture*>(owner)->refreshHiDpiFont(); });
+    else
+        hidpiRemovePending(this);
+    m_hidpiFontAtlas = static_cast<dx9rend::EngineTexture*>(atlas);
+}
+
+void MemeTexture::clearHiDpiFont()
+{
+    if (m_hidpiFontPath.empty())
+        return;
+    hidpiRemovePending(this);
+    dx9rend::textureReleaseRef(m_hidpiFontAtlas);
+    m_hidpiFontPath.clear();
+    m_hidpiFontScale = 0;
+}
+
+void* MemeTexture::engineTexture() const
+{
+    if (m_hidpiFontAtlas)
+        return m_hidpiFontAtlas;
+    return m_texture;
+}
+
+int MemeTexture::getPageWidth() const
+{
+    if (m_hidpiFontAtlas)
+        return static_cast<int>(dx9rend::textureDims(m_hidpiFontAtlas)[0]);
+    return m_pageWidth;
+}
+
+int MemeTexture::getPageHeight() const
+{
+    if (m_hidpiFontAtlas)
+        return static_cast<int>(dx9rend::textureDims(m_hidpiFontAtlas)[1]);
+    return m_pageHeight;
+}
 
 // PE 0x10088860. Creates an argb render target configured for recreation after device reset;
 // existing UV offsets and extents remain unchanged. `retn 0Ch`: the third argument is never read,
 // and eax holds no result on return (the last swap's answer or 1.0f's bits), hence void.
 void MemeTexture::createTexture(unsigned int w, unsigned int h, unsigned int /*unread*/)
 {
+    clearHiDpiFont();
     const int savedClass    = ::dice::hfe::dx9rend::textureManagerSwapDefaultMipClass(1);
     const int savedManaged  = ::dice::hfe::dx9rend::textureManagerSwapManaged(0);
     const int savedRecreate = ::dice::hfe::dx9rend::textureManagerSwapRecreateMode(1);
@@ -601,6 +698,7 @@ bool MemeTexture::drawOther(MemeTexture* other, void* request)
 // PE 0x10089280
 void MemeTexture::releaseTexture()
 {
+    clearHiDpiFont();
     if (!m_texture)
         return;
     ::dice::hfe::dx9rend::EngineTexture* tex =
@@ -639,6 +737,7 @@ static std::string unloadLevelPrefix()
 // PE 0x10089120
 void MemeTexture::unload()
 {
+    clearHiDpiFont();
     if (m_texture)
     {
         const std::string prefix = unloadLevelPrefix();
@@ -874,6 +973,7 @@ void MemeTexture::onDeviceReset()
         m_texture = ::dice::hfe::dx9rend::textureManagerCreateEmpty(
             static_cast<unsigned int>(m_pageWidth), static_cast<unsigned int>(m_pageHeight),
             21, 0, 1, tex);
+    refreshHiDpiFont();
 }
 
 // The wrapped EngineTexture (+0x2C) the QuadDrawer compares and binds by identity.

@@ -265,9 +265,9 @@ These `[CHOSEN, not recovered]` port additions exist only in the macOS client:
 
 ## Client and plugins
 
-The optional vanilla widescreen HUD is enabled with `+widescreenHud 1` (default
-off). The renderer's wider FOV cap and water-buffer guard apply regardless of this
-option. See [widescreen HUD](widescreen-hud.md) for attribution, scope and validation.
+Vanilla BF2 automatically fits its in-game HUD to the display. Custom mods use
+their own layouts. See [widescreen HUD](widescreen-hud.md) for attribution,
+renderer behavior and validation.
 
 Incoming VoIP packets with truncated trailers, empty payloads, or partial codec frames
 are rejected before playback or sender notification. This is intentional hardening

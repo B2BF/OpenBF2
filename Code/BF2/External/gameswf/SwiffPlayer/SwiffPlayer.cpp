@@ -46,6 +46,7 @@ static short capsLockKeyState()
 
 #include "../../../../RendDX9Abi/BfMemory.h"
 #include "../../../../RendDX9Abi/HfeAbi.h"
+#include "../../../../SwiffPlayerAbi/HiDpiGlyphs.h"
 #if !defined(_MSC_VER)
 // [CHOSEN, not recovered] Use the renderer's shared native slots and signatures.
 #include "../../../../SwiffPlayerAbi/NativeRenderCalls.h"
@@ -54,6 +55,7 @@ static short capsLockKeyState()
 #endif
 
 #include "../../../Menu/ISwiffHost.h" // native storage calls share the owner's std::string ABI
+#include "../../../Menu/MenuViewport.h"
 #include "../../../Menu/IServerBrowser.h"  // stopBrowser's list handle (+0x30 stopUpdate)
 #include "../../../Game/LocalProfileManager.h"
 #include "../../../Game/ProfileManager.h"
@@ -10310,6 +10312,23 @@ inline unsigned char pmHasPendingTransition(void* pm, void* stdStringOut) { retu
 inline void pmClear(void* pm) { reinterpret_cast<void(__thiscall*)(void*)>(rcVtbl(pm)[72/4])(pm); }   // +0x48
 #endif
 
+// [CHOSEN, not recovered] Output-to-movie pixel ratio for gameswf's draw quality (see update):
+// the larger axis ratio, as movie_root::set_display_viewport takes the larger of its two scales.
+// At the movie's native pixel size, keep its original drawing precision.
+static float swiffDisplayQualityScale(void* host, int movieW, int movieH)
+{
+    if (!host || movieW <= 0 || movieH <= 0)
+        return 1.0f;
+    unsigned vpW = 0, vpH = 0;
+    hostGetViewportSize(host, &vpW, &vpH);
+    const auto viewport = MenuViewport::fit(vpW, vpH);
+    const float sx = static_cast<float>(viewport.width) / static_cast<float>(movieW);
+    const float sy = static_cast<float>(viewport.height) / static_cast<float>(movieH);
+    float s = sx > sy ? sx : sy;
+    s = s > 1.0f ? (s < 16.0f ? s : 16.0f) : 1.0f;
+    return s;
+}
+
 // Reinterpret a float's bits as a dword (updateTime/line_style_width pass floats through dword slots).
 inline unsigned floatBits(float f) { unsigned d; ::memcpy(&d, &f, 4); return d; }
 
@@ -10689,6 +10708,11 @@ bool SwiffPlayer::loadMovie(const char* movieName)
         ::renddx9abi::logf("[SwiffPlayer] offline Connect to IP policy: main-menu instance registered");
     }
 
+    // [CHOSEN, not recovered] HiDPI menu text: this movie's outline fonts are registered;
+    // let the renderer rebuild the .dif atlases that were waiting for them.
+    if (auto* listener = static_cast<openbf2::GlyphListener*>(
+            classManager->getSimpleSingleton(openbf2::glyphListenerName)))
+        listener->movieLoaded();
     ::renddx9abi::logf("[SwiffPlayer::loadMovie] returning true");
     SWF_LIST_TRACE("loadMovie '%s'", movieName ? movieName : "");   // [TEMP] c-swf-disconnect
     return true;
@@ -10763,7 +10787,10 @@ void SwiffPlayer::update(float deltaTime)
     }
 
     gameswf::movie_interface* mi = static_cast<gameswf::movie_interface*>(movie_instance);
+    // Flatten curves for the pixels occupied by the movie.
+    gameswf::set_display_quality_scale(swiffDisplayQualityScale(swiff_host, movie_width, movie_height));
     mi->set_display_viewport(0, 0, movie_width, movie_height);      // typed (2006 4-arg)
+    gameswf::set_display_quality_scale(1.0f);
     mi->advance(deltaTime);
     // [CHOSEN, not recovered] Observe the authored request after its actions,
     // before display. Neither cached loginStatus nor its native getter changes.
@@ -10946,24 +10973,25 @@ void SwiffPlayer::renderSetPairState(const std::string& textureName, int techniq
 }
 #endif
 
-// notify_mouse. Scales the raw (x,y) from the SwiffHost viewport into movie space,
-// clamps, feeds the movie and the renderer.
+// Convert drawable pixels to movie coordinates. Margins are outside the movie even
+// while dragging, so a button release there reaches Flash as a release outside.
 void SwiffPlayer::notifyMouse(int x, int y, int buttons)
 {
     unsigned vpW = 1, vpH = 1;
     if (swiff_host)
         hostGetViewportSize(swiff_host, &vpW, &vpH);               // +0x1DC, two out-params
-    if (vpW == 0) vpW = 1;
-    if (vpH == 0) vpH = 1;
-
-    const double sx = static_cast<double>(static_cast<unsigned>(getMovieWidth()))  / static_cast<double>(vpW);
-    const double sy = static_cast<double>(static_cast<unsigned>(getMovieHeight())) / static_cast<double>(vpH);
-    int mx = static_cast<int>(static_cast<double>(x) * sx);
-    int my = static_cast<int>(sy * static_cast<double>(y));
-    if (mx < 0) mx = 0;
-    if (mx > movie_width)  mx = movie_width;
-    if (my < 0) my = 0;
-    if (my > movie_height) my = movie_height;
+    const auto viewport = MenuViewport::fit(vpW, vpH);
+    int mx = -32768, my = -32768;
+    if (x >= 0 && y >= 0 && static_cast<unsigned>(x) >= viewport.x && static_cast<unsigned>(y) >= viewport.y)
+    {
+        const unsigned localX = static_cast<unsigned>(x) - viewport.x;
+        const unsigned localY = static_cast<unsigned>(y) - viewport.y;
+        if (localX < viewport.width && localY < viewport.height)
+        {
+            mx = static_cast<int>(double(localX) * getMovieWidth() / viewport.width);
+            my = static_cast<int>(double(localY) * getMovieHeight() / viewport.height);
+        }
+    }
     mouse_x = mx;
     mouse_y = my;
     // [TEMP] RW-89 mouse tracer (BF2_SWIFFPLAYER_ASLOG): every button transition the host delivers,

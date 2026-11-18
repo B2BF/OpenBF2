@@ -18,6 +18,14 @@
 #include "../../Platform/X87Compat.h"
 #include "gameswf_styles.h"
 #include "gameswf_tesselate.h"
+#include "base/smart_ptr.h"
+#include "../../../SwiffPlayerAbi/HiDpiGlyphs.h"	// [CHOSEN, not recovered] HiDPI menu text
+#include <ctype.h>
+#include <string.h>
+#include <algorithm>
+#include <map>
+#include <string>
+#include <vector>
 #include "gameswf_render.h"
 
 
@@ -1262,6 +1270,7 @@ namespace fontlib
 	// Release all the fonts we know about.
 	{
 		s_fonts.clear();
+		openbf2::clearMovieGlyphs();
 	}
 
 
@@ -1417,9 +1426,220 @@ namespace fontlib
 	}
 #endif // 0
 
+
+	// [CHOSEN, not recovered] Movies own their fonts. The renderer can borrow
+	// outlines while loading an atlas without extending the movie's GPU lifetime.
+	using HiDpiFontList = std::vector<weak_ptr<font>>;
+	using HiDpiFontRegistry = std::map<std::string, HiDpiFontList>;
+	static HiDpiFontRegistry& hidpi_registry()
+	{
+		static HiDpiFontRegistry registry;
+		return registry;
+	}
+
+	static void pruneExpiredFonts(HiDpiFontList& fonts)
+	{
+		fonts.erase(std::remove_if(fonts.begin(), fonts.end(), [](weak_ptr<font>& entry) {
+			return entry == static_cast<font*>(nullptr);
+		}), fonts.end());
+	}
+
+	static unsigned int&	hidpi_generation()
+	{
+		static unsigned int	s_generation = 0;
+		return s_generation;
+	}
+
+	static std::string	hidpi_key(const char* name)
+	{
+		std::string	key(name ? name : "");
+		for (size_t i = 0; i < key.size(); i++)
+		{
+			key[i] = (char) tolower((unsigned char) key[i]);
+		}
+		return key;
+	}
+
+	void	hidpi_register_exported_font(const char* export_name, font* f)
+	{
+		if (f == NULL || f->get_glyph_count() == 0)
+		{
+			return;
+		}
+		HiDpiFontList& list = hidpi_registry()[hidpi_key(export_name)];
+		pruneExpiredFonts(list);
+		for (size_t i = 0; i < list.size(); i++)
+		{
+			if (list[i] == f) return;
+		}
+		list.push_back(f);
+		++hidpi_generation();
+	}
+
+	// Keep one font per name for atlas matching when there is no matching SWF export.
+	void	hidpi_register_font(font* f)
+	{
+		if (f == NULL || f->get_glyph_count() == 0)
+		{
+			return;
+		}
+		HiDpiFontList& list = hidpi_registry()["*"];
+		pruneExpiredFonts(list);
+		const std::string	name(f->get_name() ? f->get_name() : "");
+		for (size_t i = 0; i < list.size(); i++)
+		{
+			smart_ptr<font> g = list[i];
+			if (g.get_ptr() == f) return;
+			if (name == (g->get_name() ? g->get_name() : ""))
+			{
+				if (f->get_glyph_count() > g->get_glyph_count())
+				{
+					list[i] = f;
+					++hidpi_generation();
+				}
+				return;
+			}
+		}
+		list.push_back(f);
+		++hidpi_generation();
+	}
+
+	static smart_ptr<font> hidpi_font(const char* export_name, int index)
+	{
+		auto it =
+			hidpi_registry().find(hidpi_key(export_name));
+		if (it == hidpi_registry().end() || index < 0 || index >= (int) it->second.size())
+		{
+			return NULL;
+		}
+		return it->second[index];
+	}
+
+	// Union of the tesselator's fill trapezoids on a supersampled grid (sample centres at
+	// +0.5); the glyph outlines are single-style fills, as render_glyph assumes.
+	struct hidpi_coverage_accepter : tesselate::trapezoid_accepter
+	{
+		unsigned char*	m_samples;
+		int	m_w, m_h;		// grid size in samples
+		float	m_scale;		// samples per EM unit
+		float	m_ox, m_oy;		// origin in samples
+
+		virtual void	accept_trapezoid(int style, const tesselate::trapezoid& tr)
+		{
+			const float	y0 = tr.m_y0 * m_scale + m_oy;
+			const float	y1 = tr.m_y1 * m_scale + m_oy;
+			if (!(y1 > y0)) return;
+			int	j0 = (int) ceilf(y0 - 0.5f);
+			int	j1 = (int) ceilf(y1 - 0.5f);
+			if (j0 < 0) j0 = 0;
+			if (j1 > m_h) j1 = m_h;
+			for (int j = j0; j < j1; j++)
+			{
+				const float	f = ((float) j + 0.5f - y0) / (y1 - y0);
+				const float	xl = (tr.m_lx0 + (tr.m_lx1 - tr.m_lx0) * f) * m_scale + m_ox;
+				const float	xr = (tr.m_rx0 + (tr.m_rx1 - tr.m_rx0) * f) * m_scale + m_ox;
+				int	i0 = (int) ceilf(xl - 0.5f);
+				int	i1 = (int) ceilf(xr - 0.5f);
+				if (i0 < 0) i0 = 0;
+				if (i1 > m_w) i1 = m_w;
+				if (i1 > i0) memset(m_samples + j * m_w + i0, 1, i1 - i0);
+			}
+		}
+
+		virtual void	accept_line_strip(int style, const point coords[], int coord_count)
+		{
+		}
+	};
+
+	bool	hidpi_raster_glyph(const char* export_name, int index, Uint16 code, float em_px,
+				   float ox, float oy, float* out, int w, int h, int ss)
+	{
+		if (out == NULL || w <= 0 || h <= 0) return false;
+		memset(out, 0, sizeof(float) * w * h);
+		smart_ptr<font> f = hidpi_font(export_name, index);
+		if (!f.get_ptr() || ss < 1 || !(em_px > 0.0f)) return false;
+		const int	glyph_index = f->get_glyph_index(code);
+		if (glyph_index < 0) return false;
+		shape_character_def*	glyph = f->get_glyph(glyph_index);
+		if (glyph == NULL) return false;
+
+		const int	sw = w * ss;
+		const int	sh = h * ss;
+		std::vector<unsigned char>	samples(sw * sh, 0);
+		hidpi_coverage_accepter	accepter;
+		accepter.m_samples = &samples[0];
+		accepter.m_w = sw;
+		accepter.m_h = sh;
+		accepter.m_scale = em_px * (float) ss / 1024.0f;	// DefineFont2: 1024 units per EM
+		accepter.m_ox = ox * (float) ss;
+		accepter.m_oy = oy * (float) ss;
+		// A tenth of a sample of curve error.
+		glyph->tesselate(0.1f / accepter.m_scale, &accepter);
+
+		const float	inv = 1.0f / (float) (ss * ss);
+		bool	any = false;
+		for (int y = 0; y < h; y++)
+		{
+			for (int x = 0; x < w; x++)
+			{
+				int	sum = 0;
+				for (int j = 0; j < ss; j++)
+				{
+					const unsigned char*	row = &samples[(y * ss + j) * sw + x * ss];
+					for (int i = 0; i < ss; i++) sum += row[i];
+				}
+				out[y * w + x] = (float) sum * inv;
+				if (sum) any = true;
+			}
+		}
+		return any;
+	}
+
 }	// end namespace fontlib
 }	// end namespace gameswf
 
+
+// [CHOSEN, not recovered] The renderer-facing half of SwiffPlayerAbi/HiDpiGlyphs.h.
+static unsigned int glyphGeneration()
+{
+	return gameswf::fontlib::hidpi_generation();
+}
+
+static const char* glyphName(const char* exportName, int index)
+{
+	smart_ptr<gameswf::font> f = gameswf::fontlib::hidpi_font(exportName, index);
+	return f.get_ptr() && f->get_name() ? f->get_name() : "";
+}
+
+static int glyphCandidates(const char* exportName)
+{
+	auto it =
+		gameswf::fontlib::hidpi_registry().find(gameswf::fontlib::hidpi_key(exportName));
+	if (it == gameswf::fontlib::hidpi_registry().end()) return 0;
+	gameswf::fontlib::pruneExpiredFonts(it->second);
+	return static_cast<int>(it->second.size());
+}
+
+static bool rasterGlyph(const char* exportName, int index, unsigned short code,
+					float emPx, float ox, float oy, float* out, int w, int h, int ss)
+{
+	return gameswf::fontlib::hidpi_raster_glyph(exportName, index, code, emPx, ox, oy, out, w, h, ss);
+}
+
+
+namespace openbf2 {
+HiDpiGlyphs& movieGlyphs()
+{
+    static HiDpiGlyphs glyphs = { &glyphGeneration, &glyphCandidates, &glyphName, &rasterGlyph };
+    return glyphs;
+}
+
+void clearMovieGlyphs()
+{
+    gameswf::fontlib::hidpi_registry().clear();
+    ++gameswf::fontlib::hidpi_generation();
+}
+} // namespace openbf2
 
 // Local Variables:
 // mode: C++

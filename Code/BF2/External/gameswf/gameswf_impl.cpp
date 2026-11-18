@@ -151,6 +151,14 @@ namespace gameswf
 		s_use_cache_files = use_cache;
 	}
 
+	// [CHOSEN, not recovered] See gameswf.h; consumed by movie_root::set_display_viewport.
+	static float	s_display_quality_scale = 1.0f;
+
+	void	set_display_quality_scale(float scale)
+	{
+		s_display_quality_scale = (scale > 1.0f) ? scale : 1.0f;
+	}
+
 
 	// Keep a table of loader functions for the different tag types.
 	static hash<int, loader_function>	s_tag_loaders;
@@ -1197,6 +1205,12 @@ namespace gameswf
 				bf2x87::mul(bf2x87::sub(bf2x87::Real(m_def->m_frame_size.m_y_max),
 					bf2x87::Real(m_def->m_frame_size.m_y_min)), bf2x87::Real(0.05f))));
 			m_pixel_scale = bf2x87::less(scale_x, bf2x87::Real(scale_y)) ? scale_y : bf2x87::store(scale_x);
+			// [CHOSEN, not recovered] Host output larger than the movie (4K/Retina):
+			// flatten curves for the real pixel size. Exactly 1 keeps the retail value.
+			if (s_display_quality_scale != 1.0f)
+			{
+				m_pixel_scale *= s_display_quality_scale;
+			}
 		}
 
 
@@ -2248,6 +2262,7 @@ namespace gameswf
 		f->read(in, tag_type, m);
 
 		m->add_font(font_id, f);
+		fontlib::hidpi_register_font(f);	// [CHOSEN, not recovered] HiDPI menu text
 
 		// Automatically keeping fonts in fontlib is
 		// problematic.  The app should be responsible for
@@ -6305,6 +6320,8 @@ namespace gameswf
 			{
 				// Expose this font for export.
 				m->export_resource(id, tu_string(symbol_name), f);
+				// [CHOSEN, not recovered] HiDPI menu text: outlines for the renderer's .dif fonts.
+				fontlib::hidpi_register_exported_font(symbol_name, f);
 			}
 			else if (character_def* ch = m->get_character_def(id))
 			{

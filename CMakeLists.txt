@@ -346,7 +346,7 @@ set(bf2_client_only_sources
     "${BF2_ROOT}/Menu/BfNewListBoxNode.cpp" # recovered list-node storage; publication withheld
     "${BF2_ROOT}/Menu/BfListBoxData.cpp"    # descriptor-attested shared chat/list data; node hooks open
     "${BF2_ROOT}/Menu/Ref2System.cpp"       # recovered UI root construction; publication still gated
-    "${BF2_ROOT}/Menu/HudWidescreen.cpp"    # issue #33: opt-in native vanilla HUD policy
+    "${BF2_ROOT}/Menu/HudWidescreen.cpp"    # issue #33: native vanilla HUD policy
     "${BF2_ROOT}/Menu/Font.cpp"
     "${BF2_ROOT}/Menu/DifFontMetadata.cpp"
     "${BF2_ROOT}/Menu/FontLoader.cpp"

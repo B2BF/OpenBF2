@@ -7,6 +7,7 @@
 #include "../Platform/Host/ClientHost.h"   // [CHOSEN, not recovered] cursor, modifiers, clipboard
 #endif
 #include "MainMenuLogic.h"
+#include "MenuViewport.h"
 #include "IMenuTeamManager.h"
 #include "ISwiffHost.h"
 #include "ISwiffPlayer.h"
@@ -163,11 +164,7 @@ bool MainMenuLogic::init()
     unsigned int width = 800;
     unsigned int height = 600;
     m_host->getViewportSize(&width, &height);                                 // +0x1DC
-    const float movieWidth  = static_cast<float>(static_cast<unsigned int>(m_player->getMovieWidth()));    // +0x68
-    const float movieHeight = static_cast<float>(static_cast<unsigned int>(m_player->getMovieHeight()));   // +0x6C
-    m_player->setScale(static_cast<float>(width) / movieWidth, static_cast<float>(height) / movieHeight);   // +0x10
-    m_scaleX = movieWidth / static_cast<float>(width);
-    m_scaleY = movieHeight / static_cast<float>(height);
+    scaleMovie(width, height);
     io::IInputDevice* mouse = static_cast<io::IInputDeviceManager*>(io::inputDeviceManager)->getInputDevice(io::IDFMouse);
     mouse->deActivate();                                                      // +0x20, unguarded in the binary
 #if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
@@ -391,15 +388,21 @@ BF2Console* MainMenuLogic::getConsole() const { return m_console; }
 
 // 0x4A2C80 (176 B): BF2Engine::handleEvent(11, 2)'s packed size - the player rescaled to the new
 // viewport, the scales cached, and the host's +0x2C8 flag raised.
+void MainMenuLogic::scaleMovie(unsigned int width, unsigned int height)
+{
+    const auto viewport = ui::MenuViewport::fit(width, height);
+    const int movieWidth = m_player->getMovieWidth();
+    const int movieHeight = m_player->getMovieHeight();
+    if (!viewport.width || !viewport.height || movieWidth <= 0 || movieHeight <= 0)
+        return;
+    m_player->setScale(float(viewport.width) / movieWidth, float(viewport.height) / movieHeight);
+    m_scaleX = float(movieWidth) / viewport.width;
+    m_scaleY = float(movieHeight) / viewport.height;
+}
+
 void MainMenuLogic::onResize(unsigned int width, unsigned int height)
 {
-    const float w = static_cast<float>(width);
-    const float h = static_cast<float>(height);
-    const float movieWidth  = static_cast<float>(static_cast<unsigned int>(m_player->getMovieWidth()));
-    const float movieHeight = static_cast<float>(static_cast<unsigned int>(m_player->getMovieHeight()));
-    m_player->setScale(w / movieWidth, h / movieHeight);
-    m_scaleX = movieWidth / w;
-    m_scaleY = movieHeight / h;
+    scaleMovie(width, height);
     m_player->getSwiffHost()->setFlagEC4(true);                               // +0x5C, then +0x2C8
 }
 

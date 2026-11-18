@@ -47,7 +47,13 @@ namespace gameswf
 		// Load a stream containing previously-saved cachded font
 		// data, including glyph texture info.
 		void	input_cached_data(tu_file* in, const array<font*>& fonts, movie_definition_sub* owner);
-		
+
+		// [CHOSEN, not recovered] HiDPI menu text (SwiffPlayerAbi/HiDpiGlyphs.h): remember an
+		// ExportAssets font under its export name for the renderer's .dif atlas rebuild.
+		void	hidpi_register_exported_font(const char* export_name, font* f);
+		// Every DefineFont2 with outlines, for fonts without an export name.
+		void	hidpi_register_font(font* f);
+
 	}	// end namespace fontlib
 }	// end namespace gameswf
 

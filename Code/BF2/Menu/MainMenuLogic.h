@@ -44,6 +44,7 @@ public:
     virtual void nullsub60();                                     // +0x60  nullsub_2
 
 private:
+    void scaleMovie(unsigned int width, unsigned int height);
     friend struct MainMenuLogicFixture;                           // [TEMP] the fixtures' member view
     bool handleClipboardShortcut(char character);                 // Ctrl-V / Ctrl-C / Ctrl-X
 

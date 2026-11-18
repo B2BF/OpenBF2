@@ -32,7 +32,7 @@ public:
     bool         handleInput(io::GameInput& input) override;
     void         setConsole(BF2Console* console) override;        // 0x4A2C60 (shared)
     BF2Console*  getConsole() const override;                     // 0x80D430 - `return 0`, see .cpp
-    void         onResize(unsigned int width, unsigned int height) override;   // empty
+    void         onResize(unsigned int width, unsigned int height) override;
     void         onEscape() override;
     void         onMouseMove(int x, int y) override;
     void         onMouseButtonDown() override;

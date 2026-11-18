@@ -28,16 +28,11 @@ int main()
     int firstToken, secondToken;
     auto* first = reinterpret_cast<dice::meme::System*>(&firstToken);
     auto* second = reinterpret_cast<dice::meme::System*>(&secondToken);
-    ws::configureMod("mods/bf2");
     ws::attach(first);
-    check(!ws::requested() && !ws::enabled(first), "disabled by default");
-    check(ws::setRequested("1"), "explicit opt in");
-    check(!ws::setRequested("true") && !ws::setRequested("-1")
-        && !ws::setRequested("1.0") && !ws::setRequested("") && ws::requested(),
-        "invalid option cannot change the requested state");
+    check(!ws::enabled(first), "no HUD policy before mod selection");
     ws::configureMod("mods/xpack");
     ws::attach(first);
-    check(!ws::enabled(first) && ws::requested(), "unsupported mod retains request for next restart");
+    check(!ws::enabled(first), "Special Forces uses its own layout");
     ws::configureMod("Mods\\BF2\\");
     ws::attach(first);
     check(ws::enabled(first) && dice::meme::transformBoundsFilter, "vanilla HUD installs policy");
@@ -96,9 +91,13 @@ int main()
     ws::attach(first);
     check(ws::width(first) == 800, "recreated HUD starts without stale resolution");
     ws::detach(first);
-    ws::setRequested("0");
+    ws::configureMod("mods/custom");
     ws::attach(first);
-    check(!ws::enabled(first), "explicit opt out");
+    check(!ws::enabled(first), "a custom mod does not inherit the vanilla layout");
+    ws::configureMod("mods/bf2");
+    ws::attach(first);
+    check(ws::enabled(first), "returning to vanilla automatically restores its layout");
+    ws::detach(first);
     std::printf("Widescreen HUD policy: %u/%u checks passed.\n", checks-failures, checks);
     return failures ? 1 : 0;
 }
