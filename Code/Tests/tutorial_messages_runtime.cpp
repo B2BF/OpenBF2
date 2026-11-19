@@ -4,6 +4,7 @@
 // No sockets, renderer, application startup or content.
 #include <cstdio>
 #include <cstring>
+#include <unistd.h>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -32,6 +33,39 @@ void check(bool value, const char* description)
         ++failures;
         std::fprintf(stderr, "FAIL: %s\n", description);
     }
+}
+
+// Runs one parse with std::cout and the stderr descriptor captured.
+struct ParseResult {
+    bool accepted;
+    std::string usage, diagnostics;
+};
+ParseResult parseCaptured(dice::hfe::BF2Engine* engine, const char* command)
+{
+    ParseResult result{};
+    std::ostringstream usage;
+    std::streambuf* previous = std::cout.rdbuf(usage.rdbuf());
+    std::fflush(stderr);
+    std::FILE* file = std::tmpfile();
+    const int capture = file ? fileno(file) : -1;
+    const int saved = dup(STDERR_FILENO);
+    if (capture >= 0)
+        dup2(capture, STDERR_FILENO);
+    result.accepted = engine->parseParameters(command);
+    std::fflush(stderr);
+    if (capture >= 0) {
+        dup2(saved, STDERR_FILENO);
+        char buffer[4096];
+        lseek(capture, 0, SEEK_SET);
+        for (ssize_t n; (n = read(capture, buffer, sizeof buffer)) > 0;)
+            result.diagnostics.append(buffer, static_cast<size_t>(n));
+    }
+    if (file)
+        std::fclose(file);
+    close(saved);
+    std::cout.rdbuf(previous);
+    result.usage = usage.str();
+    return result;
 }
 
 // Case 21 only tests for a non-null player: this opaque presence token is never dereferenced.
@@ -70,27 +104,38 @@ extern "C" int bf2TutorialMessagesMain(int, char**)
     check(engine->parseParameters(""), "no arguments accept the profile-controlled default");
     check(!settings->boolExists("GSCommandLineShowTutorialMessages"), "no argument publishes no override");
     // Exercise the real parser and repository with each launch form independently. The
-    // maintainers' argv evidence has no +help; append the reported suffix to that line.
+    // maintainers' argv evidence has no +tutorialMessages; append it to that line.
+    enum : int { Usage = -1, Refused = -2 };
     struct ParserCase {
         const char* command;
-        int overrideValue; // -1 means usage/refusal and no session entry.
+        int overrideValue; // Usage: retail help text; Refused: +tutorialMessages diagnostic.
     };
     const ParserCase parserCases[] = {
-        { "+help 0", 0 },
-        { "+help 1", 1 },
-        { "+help", -1 },
-        { "+?", -1 },
-        { "+restart 1 +help 0 +playerName LoopBot +fullscreen 0", 0 },
+        { "+tutorialMessages 0", 0 },
+        { "+tutorialMessages 1", 1 },
+        { "+tutorialMessages \"0\"", 0 },
+        { "+tutorialMessages \"1\"", 1 },
+        { "+restart 1 +tutorialMessages 0 +playerName LoopBot +fullscreen 0", 0 },
         { "+modPath mods/bf2 +fullscreen 0 +szx 800 +szy 600 +restart 1"
-          " +joinServer 127.0.0.1 +port 16890 +playerName LoopBot +help 0", 0 },
+          " +joinServer 127.0.0.1 +port 16890 +playerName LoopBot +tutorialMessages 0", 0 },
         { "+modPath mods/bf2 +fullscreen 0 +szx 800 +szy 600 +restart 1"
-          " +help 0 +joinServer 127.0.0.1 +port 16890 +playerName LoopBot", 0 },
-        { "+help \"0\"", 0 },
-        { "+help \"1\"", 1 },
-        { "+help +fullscreen 0", -1 },
-        { "+? 0", -1 },
-        { "+help 2", -1 },
-        { "+ranked 0 +help 0", 0 },
+          " +tutorialMessages 0 +joinServer 127.0.0.1 +port 16890 +playerName LoopBot", 0 },
+        { "+ranked 0 +tutorialMessages 0", 0 },
+        { "+tutorialMessages 2", Refused },
+        { "+tutorialMessages", Refused },
+        { "+tutorialMessages +fullscreen 0", Refused },
+        { "+tutorialMessages \"\"", Refused },
+        // +help and +? are retail again: every form prints usage and ends start-up.
+        { "+help", Usage },
+        { "+help 0", Usage },
+        { "+help 1", Usage },
+        { "+help \"0\"", Usage },
+        { "+help 2", Usage },
+        { "+help +fullscreen 0", Usage },
+        { "+fullscreen 0 +help 0", Usage },
+        { "+?", Usage },
+        { "+? 0", Usage },
+        { "+? 1", Usage },
     };
     for (const ParserCase& item : parserCases) {
         settings->boolErase("GSCommandLineShowTutorialMessages");
@@ -104,17 +149,16 @@ extern "C" int bf2TutorialMessagesMain(int, char**)
             settings->boolSet("skipMovies", false);
             settings->boolSet("GSFullScreen", true);
         }
-        std::ostringstream usage;
-        std::streambuf* previous = std::cout.rdbuf(usage.rdbuf());
-        const bool accepted = engine->parseParameters(item.command);
-        std::cout.rdbuf(previous);
+        const ParseResult parsed = parseCaptured(engine, item.command);
         const bool expectsOverride = item.overrideValue >= 0;
         const bool hasOverride = settings->boolExists("GSCommandLineShowTutorialMessages");
-        check(accepted == expectsOverride && hasOverride == expectsOverride &&
+        const bool printedUsage = parsed.usage.find("Usage: BF2.exe <options>") != std::string::npos;
+        const bool refusal = parsed.diagnostics.find("+tutorialMessages: expected 0 or 1\n") != std::string::npos;
+        check(parsed.accepted == expectsOverride && hasOverride == expectsOverride &&
               (!hasOverride || settings->boolGet("GSCommandLineShowTutorialMessages", true) ==
                                (item.overrideValue == 1)) &&
-              (expectsOverride ? usage.str().empty() :
-               usage.str().find("Usage: BF2.exe <options>") != std::string::npos),
+              printedUsage == (item.overrideValue == Usage) &&
+              refusal == (item.overrideValue == Refused),
               item.command);
         if (std::strstr(item.command, "+joinServer")) {
             check(settings->stringGet("GSJoinAddress", "") == "127.0.0.1" &&
@@ -127,13 +171,18 @@ extern "C" int bf2TutorialMessagesMain(int, char**)
                   "full launch line retains surrounding option values");
         }
         if (std::strstr(item.command, "+ranked"))
-            check(settings->boolGet("GSRanked", false), "+ranked ignores its value even beside +help 0");
+            check(settings->boolGet("GSRanked", false), "+ranked ignores its value even beside +tutorialMessages 0");
     }
     settings->boolErase("GSCommandLineShowTutorialMessages");
-    check(!engine->parseParameters("+help"), "bare +help retains usage and exit");
-    check(!engine->parseParameters("+?"), "+? retains usage and exit");
-    check(!engine->parseParameters("+help 2"), "invalid help value retains usage and exit");
-    check(!settings->boolExists("GSCommandLineShowTutorialMessages"), "usage never creates an override");
+    check(!parseCaptured(engine, "+help").accepted, "bare +help retains usage and exit");
+    check(!parseCaptured(engine, "+?").accepted, "+? retains usage and exit");
+    check(!parseCaptured(engine, "+help 0").accepted, "+help 0 is usage again");
+    check(!parseCaptured(engine, "+help 1").accepted, "+help 1 is usage again");
+    check(!parseCaptured(engine, "+tutorialMessages 2").accepted, "invalid tutorialMessages value ends start-up");
+    check(!settings->boolExists("GSCommandLineShowTutorialMessages"), "usage and refusal never create an override");
+    check(engine->parseParameters("+fullscreen 0 +restart 1"), "unrelated options are accepted");
+    check(!settings->boolExists("GSCommandLineShowTutorialMessages"),
+          "without the switch no override exists, so the profile applies");
     GeneralSettings first, second;
     g_generalSettings = &first;
     mainConsoleObjects->registerConsoleObjects(settingsConsoleObjects());
@@ -224,15 +273,15 @@ extern "C" int bf2TutorialMessagesMain(int, char**)
     check(help.tryMessage(21, 0.0f) && hud->published == 2, "ON restores tutorial publication");
 
     const std::string profileOn = second.getSettingsScript();
-    check(engine->parseParameters("+restart +help 0 +playerName TutorialTester +fullscreen 0"),
-          "+help 0 parses alongside other launch options");
+    check(engine->parseParameters("+restart +tutorialMessages 0 +playerName TutorialTester +fullscreen 0"),
+          "+tutorialMessages 0 parses alongside other launch options");
     check(settings->boolExists("GSCommandLineShowTutorialMessages") &&
           !settings->boolGet("GSCommandLineShowTutorialMessages", true) &&
           settings->boolGet("skipMovies", false) && !settings->boolGet("GSFullScreen", true),
           "override and neighboring launch options are published");
     Rand = initialRandom;
     check(help.tryMessage(21, 0.0f) && hud->published == 2 && hud->localized == 2 && hud->replaced == 2,
-          "+help 0 suppresses text despite profile ON");
+          "+tutorialMessages 0 suppresses text despite profile ON");
     check(Rand.m_seed == afterOn.m_seed, "command-line suppression retains the shared random draw");
     check(second.getSettingsScript() == profileOn, "OFF override never serializes over profile ON");
     second.setDefaultValues();
@@ -244,16 +293,18 @@ extern "C" int bf2TutorialMessagesMain(int, char**)
     g_generalSettings = &second;
     second.setShowTutorialMessages(false);
     const std::string profileOff = second.getSettingsScript();
-    check(engine->parseParameters("+help 1"), "+help 1 is accepted");
-    check(help.tryMessage(21, 0.0f) && hud->published == 3, "+help 1 forces text despite profile OFF");
+    check(engine->parseParameters("+tutorialMessages 1"), "+tutorialMessages 1 is accepted");
+    check(help.tryMessage(21, 0.0f) && hud->published == 3, "+tutorialMessages 1 forces text despite profile OFF");
     check(second.getSettingsScript() == profileOff, "ON override never serializes over profile OFF");
     execute(profileOff);
     check(engine->parseParameters("+fullscreen 0") && help.tryMessage(21, 0.0f) && hud->published == 4,
           "session override survives profile replay and unrelated parameter parsing");
-    check(engine->parseParameters("+help 0 +help 1") && help.tryMessage(21, 0.0f) && hud->published == 5,
-          "last repeated help option wins ON");
-    check(engine->parseParameters("+help 1 +help 0") && help.tryMessage(21, 0.0f) && hud->published == 5,
-          "last repeated help option wins OFF");
+    check(engine->parseParameters("+tutorialMessages 0 +tutorialMessages 1") && help.tryMessage(21, 0.0f) &&
+          hud->published == 5, "last repeated tutorialMessages option wins ON");
+    check(engine->parseParameters("+tutorialMessages 1 +tutorialMessages 0") && help.tryMessage(21, 0.0f) &&
+          hud->published == 5, "last repeated tutorialMessages option wins OFF");
+    check(!parseCaptured(engine, "+help 1").accepted && help.tryMessage(21, 0.0f) && hud->published == 5,
+          "+help 1 no longer forces text; the earlier session override stays OFF");
     // Model a fresh session by removing only the session repository entry.
     settings->boolErase("GSCommandLineShowTutorialMessages");
     check(help.tryMessage(21, 0.0f) && hud->published == 5, "without an override profile OFF decides again");

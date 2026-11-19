@@ -395,7 +395,7 @@ class ReleasePackageTests(unittest.TestCase):
             '"C:\\OpenBF2\\openbf2-windows\\x86\\BF2.exe" +modPath mods/bf2 +fullscreen 0',
             '"C:\\OpenBF2\\openbf2-windows\\server\\bf2_w32ded.exe" +modPath mods/bf2',
             '"C:\\OpenBF2\\openbf2-windows\\editor\\BF2Editor.exe" +loadMod bf2',
-            "+help 0", "Start in", "No original EXE or DLL is replaced", "+modPath selects a mod",
+            "+tutorialMessages 0", "Start in", "No original EXE or DLL is replaced", "+modPath selects a mod",
             "pylib-2.3.4.zip",
             # x64 client
             "does not use the game folder's 32-bit DLLs", "bundled 64-bit BF2OpenAL.dll",
