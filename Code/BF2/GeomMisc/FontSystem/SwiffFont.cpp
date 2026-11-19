@@ -18,9 +18,14 @@
 #include "../Debug.h"
 #include "../../RendDX9/RendDX9Base.h"
 #include "../../RendDX9/ShaderParameter.h"
+#include "../../Menu/MenuViewport.h"
 #include "../../RendDX9/Texture.h"             // EngineTexture
 
 #include "../../../RendDX9Abi/D3dx9Sdk.h"
+#include "../../../SwiffPlayerAbi/HiDpiGlyphs.h"   // [CHOSEN, not recovered] HiDPI menu text
+#include "HiDpiFontTexture.h"
+#include <algorithm>
+#include <ctype.h>
 
 #include <stddef.h>
 #include <string.h>
@@ -163,7 +168,7 @@ public:
     // sub_100A4420 - open "<path>.dif", parse it, load "<path>.dds", build the projection, and
     // resolve the FontRenderer singleton. Returns false when the .dif is missing (the shipped
     // FontSystem.cpp:356 "Font X doesn't exist" diagnostic).
-    bool load();
+    bool load(const ui::MenuViewport& viewport);
 
     // Glyph lookup; native callers fold nonbreaking space as the original layout/emitter do.
     const DifGlyph* glyph(unsigned short ch) const;
@@ -195,6 +200,12 @@ public:
     const float* projection() const { return m_projection; }
     void*        fontRenderer() const { return m_fontRenderer; }
     void drawSelection(NativeFontView* font, const float* matrix, float width);
+
+    // [CHOSEN, not recovered] HiDPI menu text (SwiffPlayerAbi/HiDpiGlyphs.h): after setScale, a
+    // font scaled up for the display whose name a loaded SWF exports gets its atlas rebuilt from
+    // that SWF's outlines at an integer multiple of the authored resolution. Metrics, layout,
+    // quads and normalised texel rectangles are unchanged.
+    void hidpiUpgrade();
 
     void addRef() { ++m_refCount; }
     int  release();
@@ -229,6 +240,9 @@ private:
     float        m_projVp[4];        // [TEMP] RW-89: the viewport the projection was built from
     void*        m_fontRenderer;
     bool         m_deviceDetached;  // [CHOSEN] detachDevice has run
+    // [CHOSEN, not recovered] HiDPI menu text state. A replaced atlas
+    // stays referenced until detachDevice: the FontRenderer may still hold it for a pending batch.
+    void*        m_hidpiRetired = 0;
 };
 
 // PE 0x100A34D0
@@ -526,15 +540,20 @@ void DifFont::detachDevice()
         ::dice::hfe::dx9rend::textureReleaseRef(atlas);
         m_atlas = 0;
     }
+    hidpiRemovePending(this);
+    if (m_hidpiRetired)     // [CHOSEN, not recovered] HiDPI menu text: the replaced shipped atlas
+    {
+        ::dice::hfe::dx9rend::EngineTexture* retired =
+            static_cast< ::dice::hfe::dx9rend::EngineTexture*>(m_hidpiRetired);
+        ::dice::hfe::dx9rend::textureReleaseRef(retired);
+        m_hidpiRetired = 0;
+    }
 }
 
 
-// sub_100A4420, faithfully: parse the .dif, load the .dds atlas, build the ortho projection from the
-// device's current viewport, resolve the FontRenderer. The projection is the shipped one:
-//     m00 =  2 / vpHeight-ish ... (see below) - it maps the font's pixel space to clip space using
-// the back buffer viewport (device GetViewport), the same values the shipped code reads at v33..v36.
+// Load the glyph metrics and atlas. Project menu-local pixels into the Flash viewport.
 
-bool DifFont::load()
+bool DifFont::load(const ui::MenuViewport& viewport)
 {
     const std::string path = m_directory + m_key;
     const std::string difPath = path + ".dif";
@@ -571,22 +590,15 @@ bool DifFont::load()
     m_atlas = ::dice::hfe::dx9rend::textureManagerGetTexture(std::string(ddsPath));
     ::dice::hfe::dx9rend::resourceManagerSetReady(deferSaved ? 1 : 0);
 
-    // Builds the viewport orthographic projection, with translation in the fourth matrix row.
-    void* device = ::dice::hfe::dx9rend::renderDevice();
-    if (device)
+    // Positions are local to the menu. The device viewport supplies the screen offset.
+    if (viewport.width && viewport.height)
     {
-        D3DVIEWPORT9 vp;
-        ::memset(&vp, 0, sizeof(vp));
-        static_cast<IDirect3DDevice9*>(device)->GetViewport(&vp);
-        const float w = static_cast<float>(vp.Width  ? vp.Width  : 1);
-        const float h = static_cast<float>(vp.Height ? vp.Height : 1);
-        for (int i = 0; i < 16; ++i) m_projection[i] = (i % 5 == 0) ? 1.0f : 0.0f;
-        m_projection[0]  =  2.0f / w;
-        m_projection[5]  = -2.0f / h;
-        m_projection[12] = 2.0f * static_cast<float>(vp.X) / w - 1.0f;
-        m_projection[13] = 1.0f - 2.0f * static_cast<float>(vp.Y) / h;
-        m_projVp[0] = (float) vp.X; m_projVp[1] = (float) vp.Y;     // [TEMP] RW-89 tracer only
-        m_projVp[2] = (float) vp.Width; m_projVp[3] = (float) vp.Height;
+        m_projection[0]  =  2.0f / viewport.width;
+        m_projection[5]  = -2.0f / viewport.height;
+        m_projection[12] = -1.0f;
+        m_projection[13] = 1.0f;
+        m_projVp[0] = float(viewport.x); m_projVp[1] = float(viewport.y);
+        m_projVp[2] = float(viewport.width); m_projVp[3] = float(viewport.height);
     }
 
     // Register only after loading succeeds; requires the renderer's listener registry.
@@ -603,6 +615,559 @@ bool DifFont::load()
                        m_atlas,
                        (int) m_projVp[0], (int) m_projVp[1], (int) m_projVp[2], (int) m_projVp[3]);
     return true;
+}
+
+
+// [CHOSEN, not recovered] HiDPI menu text. See SwiffPlayerAbi/HiDpiGlyphs.h.
+// A .dif font's shipped atlas is the reference: each glyph's coverage centroid (horizontal) and
+// one baseline for the font (vertical) place a SWF outline inside the glyph's own texel
+// rectangle, and the EM size is the one whose outlines best reproduce the bitmaps. Candidates
+// are the fonts exported under the .dif's name, then every outline font the loaded movies define.
+// A font no candidate reproduces (another typeface,
+// effects such as outlines, digit-segment fonts) keeps its shipped atlas. Characters without an
+// outline keep their bitmap, resampled. Fit each loaded atlas against the current movie outlines.
+namespace {
+
+struct HiDpiGlyph
+{
+    unsigned short code;
+    float top;                  // .dif vertical offset: the cell's top below the line top
+    int   x, y, w, h;           // texel rectangle
+    float cx, cy;               // bitmap coverage centroid in the rectangle (texel centres +0.5)
+    float inkH;                 // rows with coverage >= 0.5
+    std::vector<float> bitmap;  // w*h coverage
+};
+
+// One candidate's glyph references at EM = 1 px: centroid from the pen origin and ink height.
+struct HiDpiRef
+{
+    std::vector<unsigned char> has;
+    std::vector<float> cx, cy, inkH;
+};
+
+const float kHiDpiRefEm = 64.0f;
+const float kHiDpiMaxError = 0.20f;     // matching typefaces score well below, others well above
+
+bool hidpiReadDif(const std::string& base, unsigned int maxDimension,
+                  unsigned int& W, unsigned int& H, float& size,
+                  std::vector<HiDpiGlyph>& glyphs)
+{
+    ::renddx9abi::EngineFileData file = ::renddx9abi::readEngineFile((base + ".dif").c_str());
+    if (!file.ok())
+        return false;
+    std::istringstream in(std::string(reinterpret_cast<const char*>(file.data), file.size));
+    ::renddx9abi::freeEngineFile(file);
+    unsigned int version = 0;
+    W = H = 0;
+    size = 0.0f;
+    bool haveGlyphs = false;
+    while (in)
+    {
+        std::string word;
+        in >> word;
+        if (word.empty())
+            break;
+        if (word == "header")
+        {
+            if (W != 0)
+                return false;
+            in >> version;
+            char name[33] = {};
+            in >> name[0];
+            in.putback(name[0]);
+            in.getline(name, 33);
+            in >> W;
+            if (version > 1u) in >> H; else H = W;
+            in >> size;
+            if (!in || W == 0 || H == 0 || W > maxDimension || H > maxDimension ||
+                !(size > 0.0f && size <= static_cast<float>(maxDimension)))
+                return false;
+        }
+        else if (word == "glyphs")
+        {
+            if (haveGlyphs || W == 0 || H == 0)
+                return false;
+            unsigned int n = 0;
+            in >> n;
+            if (!in || n > 65536)
+                return false;
+            // Allow shared cells, but bound the coverage buffers for overlapping mod glyphs.
+            size_t remainingPixels = static_cast<size_t>(W) * H * 2;
+            for (; n && in; --n)
+            {
+                unsigned int code = 0, x = 0, y = 0, x2 = 0, y2 = 0;
+                float l = 0, wd = 0, r = 0;
+                int top = 0;
+                in >> code >> l >> wd >> r >> top >> x >> y >> x2 >> y2;
+                if (!in || code > 65535 || x2 > W || y2 > H)
+                    return false;
+                if (x2 <= x || y2 <= y)
+                    continue;
+                const size_t cells = static_cast<size_t>(x2 - x) * (y2 - y);
+                if (cells > remainingPixels)
+                    return false;
+                remainingPixels -= cells;
+                HiDpiGlyph g;
+                g.code = (unsigned short) code; g.top = (float) top;
+                g.x = (int) x; g.y = (int) y; g.w = (int) (x2 - x); g.h = (int) (y2 - y);
+                g.cx = g.cy = g.inkH = 0.0f;
+                glyphs.push_back(g);
+            }
+            haveGlyphs = true;
+        }
+        else if (word == "kerning")
+        {
+            unsigned int n = 0;
+            in >> n;
+            for (; n && in; --n)
+            {
+                unsigned int a = 0, b = 0;
+                float k = 0;
+                in >> a >> b >> k;
+            }
+        }
+    }
+    return haveGlyphs && W && H;
+}
+
+// The atlas's coverage. Every .dif atlas is uncompressed A4R4G4B4; white ones only (a coloured
+// one carries an outline or shadow effect the outlines cannot reproduce).
+bool hidpiReadAtlas(const std::string& base, unsigned int W, unsigned int H, std::vector<float>& alpha)
+{
+    ::renddx9abi::EngineFileData dds = ::renddx9abi::readEngineFile((base + ".dds").c_str());
+    if (!dds.ok())
+        return false;
+    const size_t pixelCount = static_cast<size_t>(W) * H;
+    bool usable = dds.size >= 128 + pixelCount * 2 && ::memcmp(dds.data, "DDS ", 4) == 0;
+    unsigned int hdr[31] = {};
+    if (usable)
+    {
+        ::memcpy(hdr, dds.data + 4, sizeof(hdr));
+        usable = hdr[0] == 124 && hdr[18] == 32 && hdr[2] == H && hdr[3] == W &&
+                 (!(hdr[1] & 8) || hdr[4] == W * 2) && hdr[19] == 0x41 && hdr[21] == 16 &&
+                 hdr[22] == 0x0F00 && hdr[23] == 0x00F0 && hdr[24] == 0x000F && hdr[25] == 0xF000;
+    }
+    if (usable)
+    {
+        alpha.resize(pixelCount);
+        const unsigned char* px = dds.data + 128;
+        for (size_t i = 0; i < pixelCount && usable; ++i)
+        {
+            const unsigned int p = (unsigned int) px[2 * i] | ((unsigned int) px[2 * i + 1] << 8);
+            const unsigned int a = p >> 12;
+            if (a && (p & 0x0FFF) != 0x0FFF)
+                usable = false;
+            alpha[i] = (float) a / 15.0f;
+        }
+    }
+    ::renddx9abi::freeEngineFile(dds);
+    return usable;
+}
+
+void hidpiMeasure(std::vector<HiDpiGlyph>& glyphs, const std::vector<float>& alpha, unsigned int W)
+{
+    for (HiDpiGlyph& q : glyphs)
+    {
+        q.bitmap.resize((size_t) q.w * q.h);
+        double m = 0, sx = 0, sy = 0;
+        int rows = 0;
+        for (int y = 0; y < q.h; ++y)
+        {
+            float rowMax = 0.0f;
+            for (int x = 0; x < q.w; ++x)
+            {
+                const float a = alpha[(size_t) (q.y + y) * W + q.x + x];
+                q.bitmap[(size_t) y * q.w + x] = a;
+                m += a; sx += a * (x + 0.5); sy += a * (y + 0.5);
+                if (a > rowMax) rowMax = a;
+            }
+            if (rowMax >= 0.5f) ++rows;
+        }
+        q.inkH = (float) rows;
+        if (m > 0.0) { q.cx = (float) (sx / m); q.cy = (float) (sy / m); }
+        else q.inkH = -1.0f;    // no ink
+    }
+}
+
+void hidpiReference(const openbf2::HiDpiGlyphs& outlines, const char* list, int cand, const std::vector<HiDpiGlyph>& glyphs, HiDpiRef& ref,
+                    std::vector<float>& scratch)
+{
+    const int w = (int) (kHiDpiRefEm * 2.0f) + 8, h = (int) (kHiDpiRefEm * 2.0f) + 8;
+    const float ox = kHiDpiRefEm * 0.5f + 4.0f, oy = kHiDpiRefEm * 1.4f + 4.0f;
+    ref.has.assign(glyphs.size(), 0);
+    ref.cx.assign(glyphs.size(), 0.0f);
+    ref.cy.assign(glyphs.size(), 0.0f);
+    ref.inkH.assign(glyphs.size(), 0.0f);
+    scratch.resize((size_t) w * h);
+    for (size_t i = 0; i < glyphs.size(); ++i)
+    {
+        if (!outlines.raster(list, cand, glyphs[i].code, kHiDpiRefEm, ox, oy, &scratch[0], w, h, 1))
+            continue;
+        double m = 0, sx = 0, sy = 0;
+        int rows = 0;
+        for (int y = 0; y < h; ++y)
+        {
+            float rowMax = 0.0f;
+            for (int x = 0; x < w; ++x)
+            {
+                const float a = scratch[(size_t) y * w + x];
+                m += a; sx += a * (x + 0.5); sy += a * (y + 0.5);
+                if (a > rowMax) rowMax = a;
+            }
+            if (rowMax >= 0.5f) ++rows;
+        }
+        if (m <= 0.0)
+            continue;
+        ref.has[i] = 1;
+        ref.cx[i] = (float) ((sx / m - ox) / kHiDpiRefEm);
+        ref.cy[i] = (float) ((sy / m - oy) / kHiDpiRefEm);
+        ref.inkH[i] = (float) rows / kHiDpiRefEm;
+    }
+}
+
+float hidpiMedian(std::vector<float>& v)
+{
+    std::nth_element(v.begin(), v.begin() + v.size() / 2, v.end());
+    return v[v.size() / 2];
+}
+
+// Relative squared error of a candidate at EM size em over glyphs[0..count); fills the baseline.
+float hidpiEvaluate(const openbf2::HiDpiGlyphs& outlines, const char* list, int cand, float em, const std::vector<HiDpiGlyph>& glyphs,
+                    size_t count, const HiDpiRef& ref, float* baseline, std::vector<float>& scratch)
+{
+    std::vector<float> bases;
+    for (size_t i = 0; i < count; ++i)
+        if (ref.has[i])
+            bases.push_back(glyphs[i].top + glyphs[i].cy - ref.cy[i] * em);
+    if (bases.empty() || bases.size() < count / 2)
+        return 1e9f;
+    const float base = hidpiMedian(bases);
+    *baseline = base;
+    double err = 0, norm = 0;
+    for (size_t i = 0; i < count; ++i)
+    {
+        const HiDpiGlyph& q = glyphs[i];
+        const size_t n = (size_t) q.w * q.h;
+        for (size_t k = 0; k < n; ++k) norm += (double) q.bitmap[k] * q.bitmap[k];
+        if (!ref.has[i])
+        {
+            for (size_t k = 0; k < n; ++k) err += (double) q.bitmap[k] * q.bitmap[k];
+            continue;
+        }
+        scratch.resize(n);
+        outlines.raster(list, cand, q.code, em, q.cx - ref.cx[i] * em, base - q.top,
+                                &scratch[0], q.w, q.h, 4);
+        for (size_t k = 0; k < n; ++k)
+        {
+            const double d = (double) scratch[k] - q.bitmap[k];
+            err += d * d;
+        }
+    }
+    return norm > 0 ? (float) (err / norm) : 1e9f;
+}
+
+// The EM size whose outline ink heights best match the bitmaps' (median ratio).
+float hidpiEstimateEm(const std::vector<HiDpiGlyph>& glyphs, const HiDpiRef& ref, float nominal)
+{
+    std::vector<float> ems;
+    for (size_t i = 0; i < glyphs.size(); ++i)
+        if (ref.has[i] && glyphs[i].inkH >= 4.0f && ref.inkH[i] > 0.05f)
+            ems.push_back(glyphs[i].inkH / ref.inkH[i]);
+    return ems.size() >= 4 ? hidpiMedian(ems) : nominal;
+}
+
+struct HiDpiChoice { int cand; float em, base, err; };
+
+// Quick (a few sizes around the estimate, first 24 glyphs) or full (fine search, all glyphs).
+HiDpiChoice hidpiFit(const openbf2::HiDpiGlyphs& outlines, const char* list, int cand, const std::vector<HiDpiGlyph>& fit, float nominal,
+                     bool quick, float startEm, std::vector<float>& scratch)
+{
+    HiDpiChoice best = { cand, 0.0f, 0.0f, 1e9f };
+    HiDpiRef ref;
+    hidpiReference(outlines, list, cand, fit, ref, scratch);
+    const float em0 = startEm > 0.0f ? startEm : hidpiEstimateEm(fit, ref, nominal);
+    if (quick)
+    {
+        const size_t count = fit.size() < 24 ? fit.size() : 24;
+        for (float k = 0.92f; k <= 1.081f; k += 0.04f)
+        {
+            float b = 0.0f;
+            const float e = hidpiEvaluate(outlines, list, cand, em0 * k, fit, count, ref, &b, scratch);
+            if (e < best.err) { best.err = e; best.em = em0 * k; best.base = b; }
+        }
+        return best;
+    }
+    for (float k = 0.96f; k <= 1.0401f; k += 0.005f)
+    {
+        float b = 0.0f;
+        const float e = hidpiEvaluate(outlines, list, cand, em0 * k, fit, fit.size(), ref, &b, scratch);
+        if (e < best.err) { best.err = e; best.em = em0 * k; best.base = b; }
+    }
+    return best;
+}
+
+void* hidpiCreateTexture(const std::vector<unsigned int>& pixels, unsigned int w, unsigned int h)
+{
+    IDirect3DDevice9* device = static_cast<IDirect3DDevice9*>(::dice::hfe::dx9rend::renderDevice());
+    IDirect3DTexture9* tex = 0;
+    if (!device || device->CreateTexture(w, h, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &tex, nullptr) != 0 || !tex)
+        return 0;
+    IDirect3DSurface9* surface = 0;
+    tex->GetSurfaceLevel(0, &surface);
+    RECT rect = { 0, 0, (LONG) w, (LONG) h };
+    const bool loaded = surface && D3DXLoadSurfaceFromMemory(surface, 0, 0, &pixels[0], D3DFMT_A8R8G8B8,
+                                                             w * 4, 0, &rect, 0xFFFFFFFF, 0) == 0;
+    if (surface)
+        surface->Release();
+    void* storage = loaded ? ::renddx9abi::engineAlloc(sizeof(::dice::hfe::dx9rend::EngineTexture)) : 0;
+    if (!storage)
+    {
+        tex->Release();
+        return 0;
+    }
+    ::dice::hfe::dx9rend::EngineTexture* engine = ::dice::hfe::dx9rend::textureCtor(storage);
+    engine->pool = 1;           // D3DPOOL_MANAGED: device-loss listeners leave it alone
+    const unsigned int desc[7] = { w, h, 1, 1, (unsigned int) D3DFMT_A8R8G8B8, 3, 0x7FFFFFFF };
+    ::dice::hfe::dx9rend::textureAttach(engine, tex, desc);
+    tex->Release();
+    return engine;
+}
+
+struct PendingFont
+{
+    void* owner;
+    void (*retry)(void*);
+    unsigned int generation;
+};
+
+const openbf2::HiDpiGlyphs* movieOutlines()
+{
+    return static_cast<const openbf2::HiDpiGlyphs*>(
+        classManager->getSimpleSingleton(openbf2::glyphServiceName));
+}
+
+std::vector<PendingFont>& hidpiPending()
+{
+    static std::vector<PendingFont> s_pending;
+    return s_pending;
+}
+
+void hidpiProcessPending()
+{
+    const auto* outlines = movieOutlines();
+    if (!outlines) return;
+    const unsigned int generation = outlines->generation();
+    // A successful retry removes its entry.
+    const auto pending = hidpiPending();
+    for (const auto& entry : pending)
+    {
+        auto& live = hidpiPending();
+        auto found = std::find_if(live.begin(), live.end(),
+            [&](const PendingFont& p) { return p.owner == entry.owner; });
+        if (found != live.end() && found->generation != generation)
+        {
+            found->generation = generation;
+            entry.retry(entry.owner);
+        }
+    }
+}
+
+} // namespace
+
+// 1: *outTexture holds a new reference to the rebuilt atlas. 0: no matching outlines yet (retry
+// once more movies are loaded). -1: never (disabled, unreadable or coloured atlas).
+int hidpiBuildFontTexture(const std::string& base, const char* exportName, int N, void** outTexture)
+{
+    *outTexture = 0;
+    if (N < 2)
+        return -1;
+    const auto* provider = movieOutlines();
+    if (!provider)
+        return 0;
+    const openbf2::HiDpiGlyphs& outlines = *provider;
+    const char* exportList = (exportName && *exportName) ? exportName : 0;
+    const int exportCount = exportList ? outlines.candidates(exportList) : 0;
+    const int starCount = outlines.candidates("*");
+    if (!exportCount && !starCount)
+        return 0;
+    unsigned int W = 0, H = 0;
+    float size = 0.0f;
+    std::vector<HiDpiGlyph> glyphs;
+    std::vector<float> alpha;
+    const unsigned int maxAtlasDimension = 4096;
+    if (!hidpiReadDif(base, maxAtlasDimension / N, W, H, size, glyphs) ||
+        !hidpiReadAtlas(base, W, H, alpha))
+        return -1;
+    hidpiMeasure(glyphs, alpha, W);
+    std::vector<HiDpiGlyph> fit;
+    for (const HiDpiGlyph& q : glyphs)
+        if (q.inkH >= 0.0f && q.code > 32 && q.code < 127)
+            fit.push_back(q);
+    // Letters and digits first: the quick screen uses the first 24.
+    std::stable_sort(fit.begin(), fit.end(), [](const HiDpiGlyph& a, const HiDpiGlyph& b) {
+        const bool an = isalnum(a.code) != 0, bn = isalnum(b.code) != 0;
+        return an && !bn;
+    });
+    if (fit.size() < 12)
+        return -1;
+
+    const float nominal = size;
+
+    std::vector<float> scratch;
+    const char* list = 0;
+    HiDpiChoice choice = { -1, 0.0f, 0.0f, 1e9f };
+    for (int i = 0; i < exportCount && i < 4; ++i)
+    {
+        const HiDpiChoice q = hidpiFit(outlines, exportList, i, fit, nominal, true, 0.0f, scratch);
+        const HiDpiChoice f = hidpiFit(outlines, exportList, i, fit, nominal, false, q.em, scratch);
+        if (f.err < choice.err) { choice = f; list = exportList; }
+    }
+    if (choice.err > kHiDpiMaxError)
+    {
+        std::vector<HiDpiChoice> quick;
+        for (int i = 0; i < starCount; ++i)
+            quick.push_back(hidpiFit(outlines, "*", i, fit, nominal, true, 0.0f, scratch));
+        std::sort(quick.begin(), quick.end(),
+                  [](const HiDpiChoice& a, const HiDpiChoice& b) { return a.err < b.err; });
+        for (size_t i = 0; i < quick.size() && i < 2; ++i)
+        {
+            if (quick[i].err >= 1e9f)
+                break;
+            const HiDpiChoice f = hidpiFit(outlines, "*", quick[i].cand, fit, nominal, false, quick[i].em, scratch);
+            if (f.err < choice.err) { choice = f; list = "*"; }
+        }
+    }
+    if (choice.cand < 0 || choice.err > kHiDpiMaxError)
+        return 0;
+
+    // The atlas at N x: the shipped bitmap resampled, then every glyph with an outline redrawn.
+    const unsigned int HW = W * N, HH = H * N;
+    std::vector<unsigned int> pixels((size_t) HW * HH);
+    for (unsigned int Y = 0; Y < HH; ++Y)
+    {
+        const float sy = ((float) Y + 0.5f) / (float) N - 0.5f;
+        int y0 = (int) floorf(sy);
+        const float fy = sy - (float) y0;
+        int y1 = y0 + 1;
+        if (y0 < 0) y0 = 0;
+        if (y1 > (int) H - 1) y1 = (int) H - 1;
+        for (unsigned int X = 0; X < HW; ++X)
+        {
+            const float sx = ((float) X + 0.5f) / (float) N - 0.5f;
+            int x0 = (int) floorf(sx);
+            const float fx = sx - (float) x0;
+            int x1 = x0 + 1;
+            if (x0 < 0) x0 = 0;
+            if (x1 > (int) W - 1) x1 = (int) W - 1;
+            const float a = (alpha[(size_t) y0 * W + x0] * (1 - fx) + alpha[(size_t) y0 * W + x1] * fx) * (1 - fy)
+                          + (alpha[(size_t) y1 * W + x0] * (1 - fx) + alpha[(size_t) y1 * W + x1] * fx) * fy;
+            pixels[(size_t) Y * HW + X] = ((unsigned int) (a * 255.0f + 0.5f) << 24) | 0x00FFFFFFu;
+        }
+    }
+    HiDpiRef ref;
+    hidpiReference(outlines, list, choice.cand, glyphs, ref, scratch);
+    unsigned int fromOutlines = 0, withInk = 0;
+    for (size_t i = 0; i < glyphs.size(); ++i)
+    {
+        const HiDpiGlyph& q = glyphs[i];
+        if (q.inkH < 0.0f)
+            continue;
+        ++withInk;
+        if (!ref.has[i])
+            continue;
+        const int cw = q.w * N, ch = q.h * N;
+        scratch.resize((size_t) cw * ch);
+        if (!outlines.raster(list, choice.cand, q.code, choice.em * (float) N,
+                                     (q.cx - ref.cx[i] * choice.em) * (float) N,
+                                     (choice.base - q.top) * (float) N, &scratch[0], cw, ch, 4))
+            continue;
+        for (int y = 0; y < ch; ++y)
+            for (int x = 0; x < cw; ++x)
+            {
+                float a = scratch[(size_t) y * cw + x];
+                if (a > 1.0f) a = 1.0f;
+                pixels[(size_t) (q.y * N + y) * HW + q.x * N + x] =
+                    ((unsigned int) (a * 255.0f + 0.5f) << 24) | 0x00FFFFFFu;
+            }
+        ++fromOutlines;
+    }
+    void* texture = hidpiCreateTexture(pixels, HW, HH);
+    if (!texture)
+        return -1;
+    *outTexture = texture;
+    ::renddx9abi::logf("[FontSystem] HiDPI \"%s\": SWF %s \"%s\", EM %.2f px, baseline %.2f, error %.3f; "
+                       "atlas %ux%u -> %ux%u, %u of %u glyphs from outlines",
+                       base.c_str(), list == exportList ? exportName : "*",
+                       outlines.name(list, choice.cand), choice.em, choice.base, choice.err,
+                       W, H, HW, HH, fromOutlines, withInk);
+    return 1;
+}
+
+void hidpiAddPending(void* owner, void (*retry)(void*))
+{
+    auto& pending = hidpiPending();
+    for (const auto& entry : pending)
+        if (entry.owner == owner)
+            return;
+    if (pending.empty())
+    {
+        static openbf2::GlyphListener listener = { &hidpiProcessPending };
+        classManager->registerSimpleSingleton(openbf2::glyphListenerName, &listener);
+    }
+    const auto* outlines = movieOutlines();
+    pending.push_back({ owner, retry, outlines ? outlines->generation() : 0u });
+}
+
+void hidpiRemovePending(void* owner)
+{
+    auto& pending = hidpiPending();
+    for (auto it = pending.begin(); it != pending.end(); ++it)
+    {
+        if (it->owner == owner)
+        {
+            pending.erase(it);
+            if (pending.empty())
+                classManager->unregisterSimpleSingleton(openbf2::glyphListenerName);
+            return;
+        }
+    }
+}
+
+void DifFont::hidpiUpgrade()
+{
+    if (!m_atlas || m_scaleX <= 1.05f || m_deviceDetached)
+        return;
+    // "<export name>_<pixel height>"
+    std::string name = m_key;
+    {
+        const size_t us = name.rfind('_');
+        bool digits = us != std::string::npos && us + 1 < name.size();
+        for (size_t i = us + 1; digits && i < name.size(); ++i)
+            if (name[i] < '0' || name[i] > '9')
+                digits = false;
+        if (digits) name.resize(us); else name.clear();
+    }
+    int N = (int) ceilf(m_scaleX - 0.05f);
+    if (N < 2) N = 2;
+    if (N > 4) N = 4;
+    void* hi = 0;
+    const int result = hidpiBuildFontTexture(m_directory + m_key, name.c_str(), N, &hi);
+    if (result == 0)
+    {
+        hidpiAddPending(this, [](void* self) { static_cast<DifFont*>(self)->hidpiUpgrade(); });
+        return;
+    }
+    hidpiRemovePending(this);
+    if (result < 0 || !hi)
+        return;
+    if (m_hidpiRetired)
+    {
+        ::dice::hfe::dx9rend::EngineTexture* retired =
+            static_cast< ::dice::hfe::dx9rend::EngineTexture*>(m_hidpiRetired);
+        ::dice::hfe::dx9rend::textureReleaseRef(retired);
+    }
+    m_hidpiRetired = m_atlas;
+    m_atlas = hi;
 }
 
 
@@ -1937,8 +2502,8 @@ private:
     void     init();                                  // sub_100A0A80 - clear, then register (11)
     void     clear();                                 // sub_100A0B30 - drop every cached font
     bool     reloadFonts(int width, int height);      // sub_100A0F10
-    DifFont* loadFont(const char* key, int width);    // sub_100A0480 (+ sub_100A0350's insert)
-    DifFont* createLoadedFont(std::string directory, const char* key);
+    DifFont* loadFont(const char* key, const ui::MenuViewport& viewport);
+    DifFont* createLoadedFont(std::string directory, const char* key, const ui::MenuViewport& viewport);
     unsigned short* buildLexiconCharacters();
     bool     readLexiconCharacters(const std::string& path,
                                    std::map<unsigned short, bool>& characters);
@@ -2002,10 +2567,13 @@ void RD9_THUNK FontSystem::handleRendererEvent(void* listener RD9_THUNK_EDX, int
 
 // sub_100A0F10 (329 B, `retn 8`). The keys are snapshotted (the shipped std::vector<std::string>,
 // map order), every font destroyed (see clear()'s ) and the cache emptied, then every key is loaded
-// again through the loader with the new width. `height` is never read. The answer is true only
+// again through the loader for the resized menu viewport. The answer is true only
 // when every reload succeeded; the one caller discards it.
-bool FontSystem::reloadFonts(int width, int /*height*/)
+bool FontSystem::reloadFonts(int width, int height)
 {
+    const auto viewport = ui::MenuViewport::fit(width, height);
+    if (!viewport.width || !viewport.height)
+        return false;
     std::vector<std::string> keys;
     for (auto it = m_cache.begin(); it != m_cache.end(); ++it)
     {
@@ -2017,7 +2585,7 @@ bool FontSystem::reloadFonts(int width, int /*height*/)
 
     bool ok = true;                                                    // [ebp-1] = 1
     for (const std::string& key : keys)
-        if (!loadFont(key.c_str(), width))                             // sub_100A0480(key, width, 0)
+        if (!loadFont(key.c_str(), viewport))
             ok = false;
     return ok;
 }
@@ -2035,7 +2603,9 @@ DifFont* FontSystem::getFont(const char* name)
         else
         {
             const std::string requested(name);
-            result = loadFont(requested.c_str(), 0);
+            const int width = dx9rend::readIntSetting("GSWindowSizeX", 800);
+            const int height = dx9rend::readIntSetting("GSWindowSizeY", 600);
+            result = loadFont(requested.c_str(), ui::MenuViewport::fit(width, height));
         }
     }
     return result;
@@ -2157,7 +2727,7 @@ bool FontSystem::readLexiconCharacters(const std::string& path,
 }
 
 // PE 0x100A0350
-DifFont* FontSystem::createLoadedFont(std::string directory, const char* key)
+DifFont* FontSystem::createLoadedFont(std::string directory, const char* key, const ui::MenuViewport& viewport)
 {
     void* const storage = ::renddx9abi::engineAlloc(sizeof(DifFont));
     DifFont* font = 0;
@@ -2168,7 +2738,7 @@ DifFont* FontSystem::createLoadedFont(std::string directory, const char* key)
     }
     if (!font)
         return 0;
-    if (!font->load())
+    if (!font->load(viewport))
     {
         font->release();
         return 0;
@@ -2179,17 +2749,10 @@ DifFont* FontSystem::createLoadedFont(std::string directory, const char* key)
     return font;
 }
 
-// Finds and loads a font for the requested width; zero uses the current display resolution.
-DifFont* FontSystem::loadFont(const char* key, int width)
+// Select the font assets and scale using the drawable width of the Flash menu.
+DifFont* FontSystem::loadFont(const char* key, const ui::MenuViewport& viewport)
 {
-    // Selects the language and resolution directory. Zero width reads the current display setting.
-    // Uses reference width 800 below 1024; the 800 directory is selected only for an exact width of 800.
-    int res = width;
-    if (res == 0)
-    {
-        res = ::dice::hfe::dx9rend::readIntSetting("GSWindowSizeX", 800);
-        (void)::dice::hfe::dx9rend::readIntSetting("GSWindowSizeY", 600);
-    }
+    const unsigned res = viewport.width;
     float reference = 800.0f;
     const char* resFolder = "";
     if (res == 800)
@@ -2220,7 +2783,7 @@ DifFont* FontSystem::loadFont(const char* key, int width)
     DifFont* font = 0;
     for (unsigned int i = 0; i < nc; ++i)
     {
-        if (DifFont* const f = createLoadedFont(std::string(cand[i]), key))
+        if (DifFont* const f = createLoadedFont(std::string(cand[i]), key, viewport))
         {
             font = f;
             break;
@@ -2235,6 +2798,7 @@ DifFont* FontSystem::loadFont(const char* key, int width)
         return 0;
     }
     font->setScale(fontScale, fontScale);      // sub_100A3450, both components from the x ratio
+    font->hidpiUpgrade();                       // [CHOSEN, not recovered] HiDPI menu text
 
     return font;
 }

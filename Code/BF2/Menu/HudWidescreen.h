@@ -1,4 +1,4 @@
-// [CHOSEN, not recovered] Opt-in vanilla HUD layout, issue #33.
+// [CHOSEN, not recovered] Vanilla HUD layout, issues #33 and #45.
 // Inspired by marekzajac97/BF2-HUD-fix (GPL-3.0); see docs/widescreen-hud.md for credit and scope.
 #ifndef MENU_HUDWIDESCREEN_H
 #define MENU_HUDWIDESCREEN_H
@@ -7,9 +7,6 @@
 #include <string>
 namespace dice { namespace meme { class System; struct Rect; } }
 namespace dice { namespace hfe { namespace hud { namespace widescreen {
-// Process startup only. Invalid values leave the request unchanged and return false.
-bool setRequested(const std::string& value);
-bool requested();
 // Select the vanilla policy after all startup arguments have been parsed.
 void configureMod(const std::string& modPath);
 // Attach before constructing the HUD tree; detach on close/destruction. UI thread only.

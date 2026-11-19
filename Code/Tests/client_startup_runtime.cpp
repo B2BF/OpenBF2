@@ -709,6 +709,9 @@ int main()
               "mouse moves and presses reach the player with the codes 0, 1, 0, 2");
         logic->onResize(1600, 1200);
         check(g_swiffPlayer.scaleX == 2.0f && g_swiffPlayer.scaleY == 2.0f && host->getFlagEC4(), "resize rescales the player and raises the host's +0x2C8 flag");
+        logic->onResize(3440, 1440);
+        check(g_swiffPlayer.scaleX == 2.4f && g_swiffPlayer.scaleY == 2.4f,
+              "the 800x600 menu fits a centered 1920x1440 canvas on ultrawide");
         io::GameInput gameInput;
         menuKeyBuffer[menuKeyWrite++] = 'a'; ++menuKeyCount;
         g_swiffPlayer.chars.clear(); g_swiffPlayer.keyStates.clear(); devices.keyboard.released.push_back(30);

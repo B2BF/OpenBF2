@@ -7,6 +7,7 @@
 #include "../Platform/Host/ClientHost.h"   // [CHOSEN, not recovered] cursor and key characters
 #endif
 #include "BetweenRoundsLogic.h"
+#include "MenuViewport.h"
 #include "IMenuTeamManager.h"
 #include "ISwiffHost.h"
 #include "ISwiffPlayer.h"
@@ -133,10 +134,7 @@ bool BetweenRoundsLogic::init()
     unsigned int width = 800;
     unsigned int height = 600;
     m_host->getViewportSize(&width, &height);                                 // +0x1DC
-    const float movieWidth  = static_cast<float>(static_cast<unsigned int>(m_player->getMovieWidth()));    // +0x68
-    const float movieHeight = static_cast<float>(static_cast<unsigned int>(m_player->getMovieHeight()));   // +0x6C
-    m_player->setScale(static_cast<float>(width) / movieWidth,
-                       static_cast<float>(height) / movieHeight);             // +0x10
+    onResize(width, height);
     // 0x4A3995 dispatches this through the object's OWN vtable slot +0x3C rather than calling the
     // body directly; a plain virtual call from source is that.
     setConsole(bf2Engine->bf2Console);                                        // BF2Engine +0x14
@@ -260,9 +258,17 @@ void BetweenRoundsLogic::setConsole(BF2Console* console) { m_console = console; 
 // Returns null even when a console has been assigned.
 BF2Console* BetweenRoundsLogic::getConsole() const { return 0; }
 
-// 0x5A59F0 is nullsub_1. This screen does not rescale with the window; the scale init computed
-// stands for the whole load. MainMenuLogic's slot rescales the player and caches the inverses.
-void BetweenRoundsLogic::onResize(unsigned int, unsigned int) {}
+// [CHOSEN, not recovered] Keep the loading movie and its Join button in the menu viewport (#45).
+void BetweenRoundsLogic::onResize(unsigned int width, unsigned int height)
+{
+    const auto viewport = ui::MenuViewport::fit(width, height);
+    if (!m_player || !viewport.width || !viewport.height)
+        return;
+    const int movieWidth = m_player->getMovieWidth();
+    const int movieHeight = m_player->getMovieHeight();
+    if (movieWidth > 0 && movieHeight > 0)
+        m_player->setScale(float(viewport.width) / movieWidth, float(viewport.height) / movieHeight);
+}
 
 // Handles Escape once for this menu instance; subsequent presses have no effect.
 void BetweenRoundsLogic::onEscape()

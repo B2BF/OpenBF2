@@ -16,20 +16,17 @@ in a source build.
 
 ## Use and scope
 
-Start the rebuilt client with `+widescreenHud 1`. The default is `0`; only those two
-values are accepted. This is a process startup option, not a console command or a
-menu-supplied setting. Mod restarts preserve the request, but it activates only
-for the vanilla `mods/bf2` layout. Special Forces and other mod HUDs need their own
-reviewed layout policies. Unmodified retail clients do not understand the option.
+The rebuilt client applies this layout automatically when it starts vanilla
+`mods/bf2`, including on a mod restart. Special Forces and custom mods use their
+own layouts. See the [decision on issue #45](https://github.com/kr4uzi/OpenBF2/issues/45#issuecomment-6984306389).
 
-The option widens the HUD projection to match the active pixel viewport while
+Vanilla BF2 widens the HUD projection to match the active pixel viewport while
 keeping its height at 600 logical units. Ratios at or below 4:3 retain the 800×600
 projection. It does not alter the front-end menu or change archives.
 World-marker/high-DPI behavior is outside this scope and must be checked in the
 native visual acceptance pass.
 
-Two renderer changes apply by default, independently of `+widescreenHud` and the
-mod's HUD layout:
+Two renderer changes apply in all mods:
 
 - `RenderView::setAdjustedFov` raises the wide-screen cap from 16:9 to 2560:1080.
   At 1920×1080 the result is unchanged; 2560×1080 keeps the requested vertical
@@ -43,7 +40,7 @@ mod's HUD layout:
 
 ## Implementation contracts
 
-- `HudWidescreen.cpp` owns the optional per-System policy, vanilla node lists and
+- `HudWidescreen.cpp` owns the per-System policy, vanilla node lists and
   mod gate. A closed/destroyed HUD loses its state; a recreated HUD starts fresh.
 - `Ref2System` samples the active render view before HUD input, animation and
   paint. Zero/invalid viewports retain the last valid width during minimization.
@@ -73,8 +70,8 @@ Paths below are relative to the repository root.
 
 | Files | Responsibility |
 | --- | --- |
-| `Code/BF2/Menu/HudWidescreen.{h,cpp}` | Optional policy, attribution, vanilla node lists and lifecycle |
-| `Code/BF2/Game/Main/BF2Engine.cpp` | Startup parsing and preserving the option on restart |
+| `Code/BF2/Menu/HudWidescreen.{h,cpp}` | HUD layout policy, attribution, vanilla node lists and lifecycle |
+| `Code/BF2/Game/Main/BF2Engine.cpp` | Select the HUD policy from the active mod at startup |
 | `Code/BF2/Menu/Ref2System.{h,cpp}` | Viewport refresh, projection and teardown |
 | `Code/BF2/Menu/BF2HudManager{Init,Input,Update}.cpp` | Attach the HUD, refresh before animation/input, extend pointer bounds |
 | `Code/BF2/Menu/Bf2HudBuilder.cpp` | Named anchor construction and parenting |
@@ -89,8 +86,8 @@ Paths below are relative to the repository root.
 
 ## Validation
 
-The content-free policy target exercises default/off behavior, strict option
-values, mod gating, independent HUD lifetimes, resize/minimize handling and
+The content-free policy target exercises automatic vanilla selection, mod
+gating, independent HUD lifetimes, resize/minimize handling and
 golden canvas/edge/fullscreen geometry for 4:3, 5:4, 16:10, 16:9, 2560×1080 and 32:9.
 Its System identities and callback storage are test scaffolding; it does not
 exercise the renderer, builder scripts, event traversal or gameplay.
@@ -109,7 +106,7 @@ visual/input pass with real vanilla content at the ratios above. Check chat,
 tickets, ammo, squad/VOIP lists, warnings, minimap and expanded/spawn/commander
 maps; test pointer access and clicking at both screen edges. Exercise maximum
 weapon deviation, TV overlays, white-out, resolution switching, HUD reload and
-mod restart. Compare default-off behavior and an unsupported mod. If a local
+mod restart. Compare vanilla behavior and an unsupported mod. If a local
 server is needed, explicitly configure an unused port other than 16567.
 
 Check the world camera at 16:9, 2560:1080 and 32:9, including zoomed views, and

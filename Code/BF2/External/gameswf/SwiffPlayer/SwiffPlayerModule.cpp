@@ -5,6 +5,7 @@
 #ifdef BF2_IMAGE_SWIFFPLAYER
 
 #include "SwiffPlayerModule.h"
+#include "../../../../SwiffPlayerAbi/HiDpiGlyphs.h"
 #include "SwiffPlayer.h"
 
 #include "../../../../RendDX9Abi/HfeAbi.h"
@@ -113,6 +114,7 @@ inline void eventManagerUnregister(int category, void* handler)
 // register the event-handler subobject for core-module event category 10, priority 0.
 bool SwiffModule::init()
 {
+    classManager->registerSimpleSingleton(openbf2::glyphServiceName, &openbf2::movieGlyphs());
     eventManagerRegister(10, static_cast<ECCoreEventHandler*>(this), 0);
     return true;
 }
@@ -120,6 +122,8 @@ bool SwiffModule::init()
 // the mirror.
 bool SwiffModule::close()
 {
+    classManager->unregisterSimpleSingleton(openbf2::glyphServiceName);
+    openbf2::clearMovieGlyphs();
     eventManagerUnregister(10, static_cast<ECCoreEventHandler*>(this));
     return true;
 }

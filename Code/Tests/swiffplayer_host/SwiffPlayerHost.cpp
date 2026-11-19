@@ -5,6 +5,7 @@
 // Shared typedefs cannot independently validate calling conventions; captured streams support regression comparison, not retail pixel parity.
 
 #define WIN32_LEAN_AND_MEAN
+#include <map>
 #include <windows.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -721,9 +722,16 @@ public:
     virtual IBase* getSingleton(const std::string& name)
     { for (int i = 0; i < m_singletonCount; ++i) if (!strcmp(m_singletonNames[i], name.c_str())) return m_singletonSlots[i] ? *m_singletonSlots[i] : 0; return 0; }
     virtual void  reserved_getSingletonAs()               { fatal("getSingletonAs"); }
-    virtual void  registerSimpleSingleton(const renddx9abi::HostString&, void*) { fatal("registerSimpleSingleton"); }
-    virtual void  reserved_unregisterSimpleSingleton()    { fatal("unregisterSimpleSingleton"); }
-    virtual void* getSimpleSingleton(const renddx9abi::HostString&) const { fatal("getSimpleSingleton"); return 0; }
+    std::map<renddx9abi::HostString, void*> simpleSingletons;
+    virtual void registerSimpleSingleton(const renddx9abi::HostString& name, void* value)
+    { simpleSingletons.emplace(name, value); }
+    virtual void unregisterSimpleSingleton(const renddx9abi::HostString& name)
+    { simpleSingletons.erase(name); }
+    virtual void* getSimpleSingleton(const renddx9abi::HostString& name) const
+    {
+        const auto found = simpleSingletons.find(name);
+        return found == simpleSingletons.end() ? nullptr : found->second;
+    }
     virtual void  reserved_getPrintableSingletonList()    { fatal("getPrintableSingletonList"); }
     virtual void  reserved_getAllClassIncludingSubstring(){ fatal("getAllClassIncludingSubstring"); }
     virtual void  reserved_initSingletons()               { fatal("initSingletons"); }

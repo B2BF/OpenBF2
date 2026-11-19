@@ -312,7 +312,6 @@ RESERVED = {"class-manager": {
     "15": "bool setSingletonClass(const std::string &, unsigned int)",
     "16": "bool getSingletonClass(const std::string &, unsigned int &)",
     "20": "void *getSingletonAs(const std::string &, unsigned int)",
-    "22": "void unregisterSimpleSingleton(const std::string &)",
     "23": "void *getSimpleSingleton(const std::string &) const",
     "24": "std::string getPrintableSingletonList() const",
     "25": "void getAllClassIncludingSubstring(const std::string &, std::vector<std::string> &) const",

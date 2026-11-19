@@ -58,7 +58,7 @@ struct RegistryFixture : dice::hfe::IClassManager
     SWIFF_TEST_UNEXPECTED(void, unregisterSingleton, (const renddx9abi::HostString&), )
     SWIFF_TEST_UNEXPECTED(void, reserved_getSingletonAs, (), )
     SWIFF_TEST_UNEXPECTED(void, registerSimpleSingleton, (const renddx9abi::HostString&, void*), )
-    SWIFF_TEST_UNEXPECTED(void, reserved_unregisterSimpleSingleton, (), )
+    SWIFF_TEST_UNEXPECTED(void, unregisterSimpleSingleton, (const renddx9abi::HostString&), )
     SWIFF_TEST_UNEXPECTED(void*, getSimpleSingleton, (const renddx9abi::HostString&), const)
     SWIFF_TEST_UNEXPECTED(void, reserved_getPrintableSingletonList, (), )
     SWIFF_TEST_UNEXPECTED(void, reserved_getAllClassIncludingSubstring, (), )

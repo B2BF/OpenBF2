@@ -548,6 +548,14 @@ namespace gameswf
 	// Enable/disable attempts to read cache files (.gsc) when
 	// loading movies.
 	void	set_use_cache_files(bool use_cache);
+
+	// [CHOSEN, not recovered] Draw-quality multiplier for the next
+	// movie_interface::set_display_viewport(): the root's pixel scale
+	// (text/shape/morph tessellation tolerance and the glyph-texture
+	// cutoff) is multiplied by it. The host keeps passing the movie-size
+	// viewport, so layout and mouse mapping are unchanged; only curve
+	// flattening follows the real output size. 1 = retail.
+	void	set_display_quality_scale(float scale);
 	
 	// @@ Hm, need to think about these creation API's.  Perhaps
 	// divide it into "low level" and "high level" calls.  Also,

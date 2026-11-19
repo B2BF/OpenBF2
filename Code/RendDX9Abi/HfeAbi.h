@@ -90,7 +90,7 @@ public:
     // std::string&, void*), ELF +0x54). LightmapGeneration's creator calls it.
     virtual void  registerSimpleSingleton(const renddx9abi::HostString& name,
                                           void* object) = 0;                // +0x50  read 0x100A8759
-    virtual void  reserved_unregisterSimpleSingleton() = 0;                 // +0x54
+    virtual void  unregisterSimpleSingleton(const renddx9abi::HostString& name) = 0;                 // +0x54
     // Returns the object published under `name`, or null (Core/ClassManager.h:
     // getSimpleSingleton(const std::string&) const, ELF +0x5C). Renderer::renderScene and
     // renderFrame look up "AI" through it.

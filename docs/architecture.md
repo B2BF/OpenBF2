@@ -130,6 +130,24 @@ receive-thread completion. A successful startup test therefore also checks clean
 immediate port reuse, and reload. Record the configuration and paths exercised with every
 test result; the presence of these methods does not establish runtime coverage.
 
+## Client menu fonts
+
+The main, pause and between-rounds Flash menus use a centered 4:3 viewport.
+The menu renderer clears unused pixels to black, and the player translates pointer
+coordinates into the same rectangle. The selected display mode still supplies
+the full backbuffer for the game world and its HUD.
+See [issue #45](https://github.com/kr4uzi/OpenBF2/issues/45).
+
+The rebuilt clients automatically draw menu text at the output resolution. When a
+bitmap font is enlarged, RendDX9 matches its shipped atlas against glyph outlines
+from the loaded SWF movies. A match supplies a higher-resolution texture with the
+original glyph positions, advances and kerning. Unmatched fonts and glyphs retain
+their bitmap appearance. The spawn and commander HUD font pages use the same matcher.
+SwiffPlayer and RendDX9 exchange outlines through the engine's named singleton
+registry, which also works when Windows loads the two plugins as separate DLLs.
+SWF curve precision follows the ratio of output pixels to movie pixels.
+See [issue #42](https://github.com/kr4uzi/OpenBF2/issues/42).
+
 ## Client menu disconnect
 
 The stock `mainMenu.swf` disconnect page queues `dice.bf2.Logic.disconnectGame`

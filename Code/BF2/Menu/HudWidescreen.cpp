@@ -16,7 +16,6 @@
 
 namespace dice { namespace hfe { namespace hud { namespace widescreen {
 namespace {
-bool s_requested = false;
 bool s_vanilla = false;
 std::map<meme::System*, float> s_widths;
 
@@ -58,13 +57,6 @@ void filter(meme::System* system, meme::Node* node, meme::Rect& bounds)
 }
 }
 
-bool setRequested(const std::string& value)
-{
-    if (value != "0" && value != "1") return false;
-    s_requested = value == "1";
-    return true;
-}
-bool requested() { return s_requested; }
 void configureMod(const std::string& modPath)
 {
     std::string path = modPath;
@@ -75,16 +67,14 @@ void configureMod(const std::string& modPath)
     while (!path.empty() && path.back() == '/') path.pop_back();
     s_vanilla = path == "mods/bf2" ||
         (path.size() > 9 && path.compare(path.size() - 9, 9, "/mods/bf2") == 0);
-    if (s_requested) {
-        std::fprintf(stderr, "widescreen HUD: %s\n", s_vanilla
-            ? "vanilla layout enabled (BF2-HUD-fix inspired)"
-            : "disabled for this mod; only the vanilla BF2 layout is supported");
+    if (s_vanilla) {
+        std::fputs("widescreen HUD: vanilla layout enabled (BF2-HUD-fix inspired)\n", stderr);
         std::fflush(stderr);
     }
 }
 void attach(meme::System* system)
 {
-    if (!system || !s_requested || !s_vanilla) return;
+    if (!system || !s_vanilla) return;
     s_widths[system] = 800.0f;
     meme::transformBoundsFilter = &filter;
 }
