@@ -32,6 +32,11 @@ void check(bool value, int line)
 #define CHECK(value) check((value), __LINE__)
 float fromBits(std::uint32_t bits) { float value; std::memcpy(&value,&bits,4); return value; }
 std::uint32_t bits(float value) { std::uint32_t result; std::memcpy(&result,&value,4); return result; }
+double fromBits64(std::uint64_t bits) { double value; std::memcpy(&value,&bits,8); return value; }
+std::uint64_t bits64(double value) { std::uint64_t result; std::memcpy(&result,&value,8); return result; }
+// GCC ignores FENV_ACCESS and folds the loads of constant signaling NaNs; read them from memory.
+float opaque(float value) { volatile float held = value; return held; }
+double opaque(double value) { volatile double held = value; return held; }
 void same(float actual, float expected)
 {
     CHECK((std::isnan(actual) && std::isnan(expected)) || bits(actual)==bits(expected));
@@ -234,9 +239,44 @@ int main()
     packedRotation(nan,si,ci); CHECK(si==0 && ci==0);
     float zoomValue,inverseZoom; zoom(1,0.5f,1,zoomValue,inverseZoom); CHECK(zoomValue==1 && inverseZoom==1);
     zoom(inf,0.5f,1,zoomValue,inverseZoom); CHECK(std::isnan(zoomValue) && std::isnan(inverseZoom));
-    bool flag=false; value=fromBits(0x7f800001);
+    bool flag=false;
+#if defined(BF2X87_NATIVE_EXTENDED)
+    // The native arm leaves FLD to the compiler, which may elide the FLD/FSTP of a value that is
+    // only stored (GCC does); a constant input is checked here as before.
+    value=fromBits(0x7f800001);
     std::feclearexcept(FE_ALL_EXCEPT);
     same(consoleFloat(&value,&flag),nan); CHECK(flag && std::fetestexcept(FE_INVALID));
+#else
+    // FLD quiets a signaling NaN and raises invalid, also where no operation follows the load
+    // (wideQuiet in the binary32 arm).
+    value=opaque(fromBits(0x7f800001));
+    std::feclearexcept(FE_ALL_EXCEPT);
+    CHECK(bits(consoleFloat(&value,&flag))==0x7fc00001U); CHECK(flag && std::fetestexcept(FE_INVALID));
+    value=opaque(fromBits(0xffbfffffU)); std::feclearexcept(FE_ALL_EXCEPT);
+    CHECK(bits(consoleFloat(&value,&flag))==0xffffffffU && std::fetestexcept(FE_INVALID));
+    std::feclearexcept(FE_ALL_EXCEPT);
+    CHECK(bits(store(decoded(opaque(fromBits(0x7f800001)))))==0x7fc00001U && std::fetestexcept(FE_INVALID));
+    std::feclearexcept(FE_ALL_EXCEPT);
+    CHECK(bits(store(decoded(opaque(fromBits(0xff800001U)))))==0xffc00001U && std::fetestexcept(FE_INVALID));
+    std::feclearexcept(FE_ALL_EXCEPT);
+    CHECK(bits64(storeDouble(wideQuiet(opaque(fromBits64(0x7ff0000000000001ULL)))))==0x7ff8000000000001ULL);
+    CHECK(std::fetestexcept(FE_INVALID));
+    std::feclearexcept(FE_ALL_EXCEPT);
+    CHECK(bits64(storeDouble(wideQuiet(opaque(fromBits64(0xfff7ffffffffffffULL)))))==0xffffffffffffffffULL);
+    CHECK(std::fetestexcept(FE_INVALID));
+#endif
+    // Quiet NaNs, infinities and denormals load without an exception.
+    const float passed[] = {nan,fromBits(0xffc00001U),inf,-inf,large,fromBits(1),-0.0f};
+    for (float sample:passed) {
+        value=opaque(sample); std::feclearexcept(FE_ALL_EXCEPT);
+        CHECK(bits(consoleFloat(&value,&flag))==bits(sample) && !std::fetestexcept(FE_INVALID));
+    }
+    const double passedDouble[] = {std::numeric_limits<double>::quiet_NaN(),
+        std::numeric_limits<double>::infinity(),fromBits64(0xfff8000000000001ULL),fromBits64(1),-0.0};
+    for (double sample:passedDouble) {
+        std::feclearexcept(FE_ALL_EXCEPT);
+        CHECK(bits64(storeDouble(wideQuiet(opaque(sample))))==bits64(sample) && !std::fetestexcept(FE_INVALID));
+    }
 
     // Exercise every scalar family with NaN, signed zeros, infinities, halves,
     // and extreme magnitudes. Expected cases are stated above; here check the

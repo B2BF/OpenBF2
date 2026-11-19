@@ -97,6 +97,43 @@ template<class T> inline Operand wideExact(T value)
 {
     return Operand(value);
 }
+// A load whose value reaches a store, a select or a returned Real without an arithmetic operation.
+// FLD of a signaling NaN raises invalid and loads it quiet. Where Real is binary32, an arithmetic
+// operation does the same, and compare() and integer() raise invalid for every NaN; but a value
+// that only passes through goes through no instruction at all: the optimizer folds float -> double -> float (GCC at -O2, Clang
+// without -frounding-math) and storeDouble() is the identity, so the signaling NaN would be stored
+// unchanged and invalid never raised. The binary32 arm performs the FLD step explicitly here; it
+// is a range check and a branch that is not taken, on these loads only. Elsewhere the same as
+// wideExact(): ExtendedFloat quiets the value itself, and the native arm leaves FLD to the compiler.
+template<class T> inline Operand wideQuiet(T value)
+{
+    return Operand(value);
+}
+#if defined(BF2X87_CLIENT_FLOAT)
+inline Real wideQuiet(float value)
+{
+    std::uint32_t bits;
+    std::memcpy(&bits, &value, sizeof(bits));
+    // Signaling NaNs lie between the infinity and the first quiet NaN.
+    if ((bits & 0x7fffffffU) - 0x7f800001U < 0x003fffffU) {
+        std::feraiseexcept(FE_INVALID);
+        bits |= 0x00400000U;
+        std::memcpy(&value, &bits, sizeof(bits));
+    }
+    return value;
+}
+inline Operand wideQuiet(double value)
+{
+    std::uint64_t bits;
+    std::memcpy(&bits, &value, sizeof(bits));
+    if ((bits & 0x7fffffffffffffffULL) - 0x7ff0000000000001ULL < 0x0007ffffffffffffULL) {
+        std::feraiseexcept(FE_INVALID);
+        bits |= 0x0008000000000000ULL;
+        std::memcpy(&value, &bits, sizeof(bits));
+    }
+    return value;
+}
+#endif
 // MSVC is exempt: its long double is binary64, which is retail BF2.exe's own compiler semantics, and
 // the Windows arms never enter bf2x87 (inline x87 on x86, SSE2 on x64). MSVC defines no
 // __LDBL_MANT_DIG__, so it never selects the soft Real either - as before this check existed.

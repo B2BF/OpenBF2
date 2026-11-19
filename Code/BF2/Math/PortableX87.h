@@ -58,7 +58,7 @@ inline float center(float origin, float dimension)
 inline float multiplyAdd(float value, float factor, float translation)
 { return store(add(mul(wide(value), wide(factor)), wide(translation))); }
 inline Real decoded(float value)
-{ const Real loaded = wide(value); return less(loaded,0) ? -add(loaded, 1.0L) : loaded; }
+{ const Real loaded = wideQuiet(value); return less(loaded,0) ? -add(loaded, 1.0L) : loaded; }
 inline bool sumNotLess(float a, float b, float limit)
 { return notLess(add(wide(a), wide(b)), wide(limit)); }
 inline void fadeInPlace(float& current, float delta, float duration, bool increase)
@@ -265,7 +265,7 @@ inline void zoom(float radians, float halfScale, float reference, float& zoomOut
 }
 inline float consoleFloat(const float* input, bool* returnFlag)
 {
-    const Real loaded = wide(*input);
+    const Real loaded = wideQuiet(*input);
     *returnFlag = true;
     return store(loaded);
 }
