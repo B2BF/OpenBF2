@@ -190,7 +190,7 @@ gpiStartConnect(
 	///////////////////////
 	if (inet_addr(GPConnectionManagerHostname) == INADDR_NONE)
 	{
-		host = gethostbyname(GPConnectionManagerHostname);
+		host = gsiGetHostByName(GPConnectionManagerHostname); // [CHOSEN, not recovered] OpenBF2 resolver seam
 		if(host == NULL)
 			// [CHOSEN, not recovered] OpenBF2 local change (LOCAL_CHANGES.md): "manager", as in the SDK
 			// revision BF2 shipped with; ProfileManager::reportError compares this text.

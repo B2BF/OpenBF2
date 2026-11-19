@@ -5,10 +5,11 @@
 // in the tab-separated O/H/D layout, for every stats web endpoint the game requests: getplayerinfo
 // (the three BFHQ queries and info=rank), getawardsinfo, getunlocksinfo, getbackendinfo, getrankinfo,
 // ranknotification, getleaderboard (all 31 boards and the player row), searchforplayers, the
-// selectunlock and createplayer posts, and VerifyPlayer. The host is formed as the game forms it
-// with +gamespy test.openbf2 (http://BF2Web.test.openbf2/ASP/). The statistics connection
-// (StatsManager, gamestats.<domain>) and the stage-net player-info request (PlayerStatsManager) are
-// covered too.
+// selectunlock and createplayer posts, and VerifyPlayer. The URLs and Host headers are retail
+// (http://BF2Web.gamespy.com/ASP/); +gamespyRedirect test.openbf2 resolves each name with its domain
+// replaced (BF2Web.test.openbf2). The statistics connection (StatsManager,
+// battlefield2.gamestats.gamespy.com) and the stage-net player-info request (PlayerStatsManager)
+// are covered too.
 //
 // The bodies below are written by hand from what each parser reads (KeyParser.cpp, PlayerRankInfo.cpp
 // and the callers' key names). Every value is invented test data: no backend output and no game data.
@@ -450,7 +451,7 @@ std::vector<Request> takeRequests()
 }
 
 // Exactly one request arrived; its method, target and Host are as expected.
-Request checkOneRequest(const std::string& method, const std::string& target, const std::string& host = "BF2Web.test.openbf2")
+Request checkOneRequest(const std::string& method, const std::string& target, const std::string& host = "BF2Web.gamespy.com")
 {
     const std::vector<Request> requests = takeRequests();
     checkEqual(static_cast<long>(requests.size()), 1, "requests that arrived");
@@ -692,7 +693,7 @@ void checkLeaderboard()
         const bool answered = board->getLeaderBoard(query, false);
         const std::vector<Request> requests = takeRequests();
         if (answered && requests.size() == 1 && requests[0].target == "/ASP/getleaderboard.aspx?" + query
-            && requests[0].host == "BF2Web.test.openbf2" && board->getNumPlayers() == 57 && board->getNumKeyMaps() == 2)
+            && requests[0].host == "BF2Web.gamespy.com" && board->getNumPlayers() == 57 && board->getNumKeyMaps() == 2)
             ++arrived;
         else
             std::printf("  board %u (%s) not as expected\n", static_cast<unsigned>(i), query.c_str());
@@ -832,7 +833,7 @@ void checkStageNet()
     const std::vector<Request> requests = takeRequests();
     check(requests.size() == 1 && requests[0].target.find("/bf2/getplayerinfo.aspx?pid=&getarg=pID,pID,cID,") == 0,
           "GET /bf2/getplayerinfo.aspx?pid=&getarg=pID,pID,cID,...");
-    check(requests.size() == 1 && requests[0].host == "stage-net.test.openbf2", "Host stage-net.test.openbf2");
+    check(requests.size() == 1 && requests[0].host == "stage-net.gamespy.com", "Host stage-net.gamespy.com");
     checkEqual(manager.getKeys()[2].numberValue, 3, "the third key (cID) holds the third value");
     checkEqual(manager.getKeys()[9].textValue, "10", "the hostname key keeps its text");
     manager.disconnect();
@@ -867,13 +868,13 @@ int main()
 {
     g_system = new System();
     std::string error;
-    if (!onlineProvider::setDomain(kDomain, error))
+    if (!onlineProvider::setRedirect(kDomain, error))
     {
-        std::printf("FAIL: +gamespy %s refused: %s\n", kDomain, error.c_str());
+        std::printf("FAIL: +gamespyRedirect %s refused: %s\n", kDomain, error.c_str());
         return 1;
     }
     onlineProvider::prepareGameSpySdk();
-    std::printf("domain %s, stats web %s\n", onlineProvider::domain().c_str(), onlineProvider::statsWebUrl().c_str());
+    std::printf("%s\n", onlineProvider::describe().c_str());
 
     g_webFd = openListener(kWebPort);
     if (g_webFd < 0)

@@ -639,6 +639,18 @@ HOSTENT * getlocalhost(void);
 int IsPrivateIP(IN_ADDR * addr);
 gsi_u32 gsiGetBroadcastIP(void);
 
+// [CHOSEN, not recovered] OpenBF2 resolver seam (LOCAL_CHANGES.md). Every host-name lookup of the
+// SDK modules the game links goes through gsiRedirectHostname. Without an installed redirect it
+// returns hostname itself and the lookup is the SDK's own. A redirect returns the name to look up
+// instead (normally a dotted IPv4 address, which the system answers without DNS), hostname to
+// leave it unchanged, or NULL to make the lookup fail. The returned string must stay valid for the
+// process. The redirect can be called from the SDK's resolver thread.
+typedef const char * (*gsiHostRedirectFunc)(const char * hostname);
+void gsiSetHostRedirect(gsiHostRedirectFunc redirect);
+const char * gsiRedirectHostname(const char * hostname);
+// gethostbyname of gsiRedirectHostname(hostname); NULL when the redirect makes the lookup fail.
+HOSTENT * gsiGetHostByName(const char * hostname);
+
 
 #if defined(_PSP)
 	#define gethostbyaddr(a,b,c)   NULL

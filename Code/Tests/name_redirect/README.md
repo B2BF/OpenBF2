@@ -4,9 +4,9 @@
 it must not be shipped. It lets a locally built `bf2` or `bf2_client` reach local test
 services for its online names without changing `/etc/hosts` or DNS.
 
-The game forms every online host name as `<service>.<domain>`. The default domain is
-`gamespy.com`, and `+gamespy <domain>` replaces it. Examples are `BF2Web.<domain>`,
-`gpcm.<domain>`, `gpsp.<domain>` and `battlefield2.master.<domain>`. The library replaces
+The game's online host names are retail, `<service>.gamespy.com`, and `+gamespyRedirect <domain>`
+resolves each of them as `<service>.<domain>`. Examples are `BF2Web.<domain>`, `gpcm.<domain>`,
+`gpsp.<domain>` and `battlefield2.master.<domain>`. The library replaces
 `getaddrinfo`, `gethostbyname` and `connect` in the process it is loaded into:
 
 | Variable | Effect |
@@ -33,7 +33,7 @@ outside `bin_macos`. The target is excluded from the default build.
 OPENBF2_TEST_REDIRECT_DOMAIN=test.openbf2 \
 OPENBF2_TEST_REDIRECT_HTTP_PORT=18080 \
 DYLD_INSERT_LIBRARIES=out/build/<tag>/test_tools/libbf2_test_name_redirect.dylib \
-out/build/<tag>/bin_macos/bf2_client +gamespy test.openbf2 +noSound 1
+out/build/<tag>/bin_macos/bf2_client +gamespyRedirect test.openbf2 +noSound 1
 ```
 
 `DYLD_INSERT_LIBRARIES` only works on binaries that are not built with the hardened runtime,
@@ -49,12 +49,12 @@ when it starts, so the game process it launches never sees them. Set the variabl
 /usr/bin/sandbox-exec -f profile.sb /usr/bin/env \
     DYLD_INSERT_LIBRARIES=$PWD/out/build/<tag>/test_tools/libbf2_test_name_redirect.dylib \
     OPENBF2_TEST_REDIRECT_DOMAIN=test.openbf2 \
-    out/build/<tag>/bin_macos/bf2_client +gamespy test.openbf2
+    out/build/<tag>/bin_macos/bf2_client +gamespyRedirect test.openbf2
 ```
 
 The loopback harness does this with `--name-redirect <domain>`
 (`tools/macos/loopback/loopback.py`). That option builds nothing: build
-`bf2_test_name_redirect` first. The option also adds `+gamespy <domain>` to both command
+`bf2_test_name_redirect` first. The option also adds `+gamespyRedirect <domain>` to both command
 lines. It lets the sandbox profiles reach the GameSpy service ports on loopback only, plus
 the HTTP port given by `--name-redirect-http-port`.
 

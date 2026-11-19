@@ -224,7 +224,7 @@ void ghiDoHostLookup
 
 #if defined(GSI_NO_THREADS)
 		//blocking version - no threads
-		host = gethostbyname(server);
+		host = gsiGetHostByName(server); // [CHOSEN, not recovered] OpenBF2 resolver seam
 
 		if(host == NULL)
 		{

@@ -1,7 +1,6 @@
 // Path: attested by the Win32 __FILE__ at the URL-validation diagnostic.
 // Contents: ELF 0x82BDED0..0x82BE8B0 / PE 0x560F00..0x5617D0, read in both ports.
 #include "HTTPRequest.h"
-#include "../MatchMaking/OnlineProvider.h"   // [CHOSEN, not recovered] the services' domain
 #include "../../External/GameSpy/ghttp/ghttp.h"
 #include "../../Core/Debug.h"
 #include <cstdio>
@@ -177,11 +176,11 @@ std::string HTTPRequest::getGameSpyUrl() const
     // BF2.exe (0x59C8C0), bf2_w32ded.exe (0x561760) and the 1.5.3153.0 Linux ELFs (ia-32
     // 0x82BE800).
     // The ELF this file was first read from had BF2Web.game.bf2.us in the same two places.
-    // [CHOSEN, not recovered] The domain is onlineProvider's: gamespy.com unless +gamespy
-    // replaced it. The validateUrlNotSpoofed call is skipped on every platform: retail's Windows
+    // [CHOSEN, not recovered] The validateUrlNotSpoofed call is skipped on every platform: retail's Windows
     // hosts-file check (BF2.exe 0x59C670, bf2_w32ded.exe 0x561500) accepts only GameSpy's own
     // address block 212.77.171.x and otherwise ends the process (Debug type 7), and the hosts file
-    // is a normal way to point these names at a replacement service.
-    return onlineProvider::statsWebUrl();
+    // is a normal way to point these names at a replacement service. A provider is chosen with
+    // +gamespyRedirect (MatchMaking/OnlineProvider.h), which keeps this URL and its Host header.
+    return "http://BF2Web.gamespy.com/ASP/";
 }
 } }

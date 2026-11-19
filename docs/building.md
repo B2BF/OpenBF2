@@ -577,43 +577,95 @@ controls belong to `Code/Build/bootmain.cpp` and do not limit production run tar
 
 ### Online services
 
-Every image forms the GameSpy service names as retail does, with `gamespy.com` as the
-domain. Those services no longer exist, so an unconfigured client or server finds no online
-service. When the names do not resolve, logins report the connection failure, the internet
-server list stays empty, LAN play is unaffected, and a server with `sv.internet 1` stops at
-start-up with the fatal "cannot communicate with the required internet backends"
-diagnostic.
-
-`+gamespy <domain>` (`[CHOSEN, not recovered]`, option id 75, client and dedicated
-servers) replaces the domain for all services of a provider that serves the same names:
-
-| Service | Host |
-|---|---|
-| Availability check, UDP 27900 | `battlefield2.available.<domain>` |
-| Master: heartbeats UDP 27900, CD-key validation UDP 29910 | `battlefield2.master.<domain>` |
-| Server list, TCP 28910 | `battlefield2.ms14.<domain>` |
-| Presence login / search, TCP 29900 / 29901 | `gpcm.<domain>` / `gpsp.<domain>` |
-| Game statistics, TCP 29920 | `battlefield2.gamestats.<domain>` |
-| NAT negotiation, UDP 27901 | `battlefield2.natneg1.<domain>` to `natneg3` |
-| Stats web requests, HTTP | `BF2Web.<domain>/ASP/`, `stage-net.<domain>/bf2/` |
-
-The value must be a domain name; an address or an unusable value ends start-up with a
-message. The option is read from the command line only, and a client that restarts itself
-to change mods passes it on. At start-up each image prints one line to stderr that names
-the host of every service (`online services: domain ...`). Retail's Windows hosts-file check
+Every image forms the GameSpy service names, URLs and HTTP Host headers exactly as retail
+does, with `gamespy.com` (and `dice.se` for the menu image pusher). Those services no longer
+exist, so an unconfigured client or server finds no online service. When the names do not
+resolve, logins report the connection failure, the internet server list stays empty, LAN play
+is unaffected, and a server with `sv.internet 1` stops at start-up with the fatal "cannot
+communicate with the required internet backends" diagnostic. Retail's Windows hosts-file check
 for `BF2Web.gamespy.com`, which ended the game when the hosts file named that host, is skipped,
-so the hosts file can point the names at a replacement service. The implementation is in
+so the hosts file can also point the names at a replacement service.
+
+| Service | Host | Label option (client) |
+|---|---|---|
+| Availability check, UDP 27900 | `battlefield2.available.gamespy.com` | `+gamespyRedirectavailable` |
+| Server list, TCP 28910 | `battlefield2.ms14.gamespy.com` | `+gamespyRedirectms14` |
+| Heartbeats UDP 27900, CD-key validation UDP 29910 (same address) | `battlefield2.master.gamespy.com` | `+gamespyRedirectmaster` |
+| Presence login, TCP 29900 | `gpcm.gamespy.com` | `+gamespyRedirectgpcm` |
+| Presence search, TCP 29901 | `gpsp.gamespy.com` | `+gamespyRedirectgpsp` |
+| Game statistics, TCP 29920 | `battlefield2.gamestats.gamespy.com` | `+gamespyRedirectgamestats` |
+| Stats web requests (BFHQ), HTTP | `BF2Web.gamespy.com` | `+gamespyRedirectBF2Web` |
+| Player info request, HTTP | `stage-net.gamespy.com` | `+gamespyRedirectstage-net` |
+| Menu images, HTTP | `eapusher.dice.se` | `+gamespyRedirecteapusher` |
+| NAT negotiation, UDP 27901 | `battlefield2.natneg1.gamespy.com` to `natneg3` | `+gamespyRedirectnatneg1` to `+gamespyRedirectnatneg3` |
+
+The SDK's stand-alone CD-key server `key.gamespy.com` is never looked up (keys are validated at
+the heartbeat address), so it has no label option.
+
+The options below (`[CHOSEN, not recovered]`, command line only) change only the address a name
+resolves to, inside the process. The names, URLs and Host headers stay retail, which providers
+that check the Host header need. The implementation is in
 `Code/BF2/Game/MatchMaking/OnlineProvider.h`.
+
+`+gamespyRedirect <value>` (option id 77, client and dedicated servers) covers every name that
+contains `gamespy` or is under `dice.se` (case ignored):
+
+- An IPv4 address: the names resolve to it.
+- A domain `D`: each name is resolved with its retail domain replaced by `D`, through the
+  system resolver, at every lookup: `gpcm.gamespy.com` as `gpcm.D`,
+  `battlefield2.ms14.gamespy.com` as `battlefield2.ms14.D`, `eapusher.dice.se` as `eapusher.D`.
+  If that name does not resolve, the lookup fails; the retail name is not tried. A name that
+  contains `gamespy` without being under `gamespy.com` is looked up unchanged.
+
+`+gamespyRedirect<label> <value>` (option ids 79 to 90, client images only) covers the names
+whose label directly before the retail domain is `<label>` (the table above; the option name
+is spelled exactly as the label, the name is compared without case). The value is an IPv4
+address, or a host name that the names then resolve as, at every lookup. A label option takes
+precedence over `+gamespyRedirect`; a name neither covers is looked up unchanged.
+
+- An empty or unusable value (not an IPv4 address or host name, for example with spaces,
+  quotes or `+`) ends start-up with a message (`+gamespyRedirectgpcm: ...`).
+- Nothing is resolved at start-up: each option only hands the GameSpy SDK another name to look
+  up, through `gsiRedirectHostname` (see `Code/BF2/External/GameSpy/LOCAL_CHANGES.md`), and the
+  SDK resolves it at every lookup.
+- Each name the SDK looks up is reported once on stderr (`online services: redirecting <name> to
+  <address or host> (+<option>)` or `online services: forwarding <name>`). The start-up line
+  lists the options in effect, and a client that restarts itself for a mod passes them on.
+- Without any option nothing is installed and every lookup is the SDK's own.
+- Engine lookups of server addresses typed by the player, ban lists and PunkBuster are not
+  redirected. Menu images from `http://` URLs are downloaded through the SDK's HTTP code, so
+  `eapusher.dice.se` is redirected.
+
+Migration: the former `+gamespy <domain>` is gone; use `+gamespyRedirect <domain>`, which
+reaches the same hosts. The difference is that URLs and Host headers now stay retail
+(`Host: BF2Web.gamespy.com`), so a provider that expected its own names in the Host header must
+accept the retail ones.
+
+Some providers answer only requests that carry the gamespy.com names and serve the stats from
+another host than the login and server list (for example BF2Hub). An example, not verified
+against a live service:
+
+```sh
++gamespyRedirect <login host address> +gamespyRedirectgamestats <stats host> +gamespyRedirectBF2Web <stats host> +gamespyRedirecteapusher <stats host>
+```
+
+Ranked play on BF2Hub is not supported. BF2Hub needs its licensed snapshot protocol and does
+not support the standard `VerifyPlayer.aspx` request, so servers that use it must run with
+`sv.ranked 0`.
 
 Connections to the server list, the presence managers and the stats web service give up after
 5 seconds (`[CHOSEN, not recovered]`, see `Code/BF2/External/GameSpy/LOCAL_CHANGES.md`); retail
 waited for the operating system's TCP timeout when a name resolved to an address that never
 answers.
 
-`bf2_online_provider_check` (macOS, built on request) checks the names for the retail
-domain and for another one against the linked SDK, and the connect timeouts against a
-loopback listener that never accepts. It replaces the resolver inside the test process and
-uses loopback listeners only, so it contacts no other machine.
+`bf2_online_provider_check` (macOS, built on request) checks against the linked SDK the retail
+state and the parser options (`+gamespy` is no longer one), `+gamespyRedirect` with an address
+and with a domain (each name resolved at every lookup, a failing proxied name, every service and
+stats web request reaching the target with retail Host headers), every label option with
+addresses and host names (precedence, refused values, the restart arguments, every service
+reaching its label's target), and the connect timeouts against a loopback listener that never
+accepts. It replaces the resolver inside the test process and uses loopback listeners only, so
+it contacts no other machine.
 
 For the x86 focused suite, use `bf2_run_checks`. The existing batch gates remain
 available through `bf2_syntaxcheck` and `bf2_gap_report`. The latter invokes the full

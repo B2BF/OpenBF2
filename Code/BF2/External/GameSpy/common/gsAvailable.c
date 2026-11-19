@@ -43,7 +43,7 @@ static int get_sockaddrin(const char * hostname, int port, SOCKADDR_IN * saddr)
 	
 	if(saddr->sin_addr.s_addr == INADDR_NONE)
 	{
-		HOSTENT * host = gethostbyname(hostname);
+		HOSTENT * host = gsiGetHostByName(hostname); // [CHOSEN, not recovered] OpenBF2 resolver seam
 		if(!host)
 			return 0;
 		saddr->sin_addr.s_addr = *(unsigned int *)host->h_addr_list[0];

@@ -15,17 +15,17 @@ Use `--help` for all options. `--selftest` prints sample player, awards, and
 leaderboard responses and exits. Weapon 0 is the assault rifle, kit 1 is Assault,
 and map 0 is Kubra Dam.
 
-Start a locally built client with `+gamespy test.openbf2` and the test-only name redirect
+Start a locally built client with `+gamespyRedirect test.openbf2` and the test-only name redirect
 library (`Code/Tests/name_redirect/README.md`), on macOS:
 
 ```sh
 OPENBF2_TEST_REDIRECT_DOMAIN=test.openbf2 \
 OPENBF2_TEST_REDIRECT_HTTP_PORT=18123 \
 DYLD_INSERT_LIBRARIES=out/build/<tag>/test_tools/libbf2_test_name_redirect.dylib \
-out/build/<tag>/bin_macos/bf2_client +gamespy test.openbf2 +noSound 1
+out/build/<tag>/bin_macos/bf2_client +gamespyRedirect test.openbf2 +noSound 1
 ```
 
-The stats host `BF2Web.test.openbf2` then resolves to `127.0.0.1`, and its port 80 is moved
+The stats host `BF2Web.gamespy.com` is then resolved as `BF2Web.test.openbf2`, which resolves to `127.0.0.1`, and its port 80 is moved
 to the fixture. Login, server browsing and joining use their own `*.test.openbf2` names,
 which this fixture does not serve. Log in through the normal client flow. Player statistics
 are cached for an hour, so restart the client after changing fixture values.

@@ -900,7 +900,7 @@ static int get_sockaddrin(char *host, int port, struct sockaddr_in *saddr, struc
 	
 	if (saddr->sin_addr.s_addr == INADDR_NONE && strcmp(host,broadcast_t) != 0)
 	{
-		hent = gethostbyname(host);
+		hent = gsiGetHostByName(host); // [CHOSEN, not recovered] OpenBF2 resolver seam
 		if (!hent)
 			return 0;
 		saddr->sin_addr.s_addr = *(u_long *)hent->h_addr_list[0];

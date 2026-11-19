@@ -74,7 +74,7 @@ gpiStartProfileSearch(
 	
 	// Get the server host.
 	///////////////////////
-	host = gethostbyname(GPSearchManagerHostname);
+	host = gsiGetHostByName(GPSearchManagerHostname); // [CHOSEN, not recovered] OpenBF2 resolver seam
 	if(host == NULL)
 		// [CHOSEN, not recovered] OpenBF2 local change (LOCAL_CHANGES.md): "manager", as in the SDK
 		// revision BF2 shipped with; ProfileManager::reportError compares this text.

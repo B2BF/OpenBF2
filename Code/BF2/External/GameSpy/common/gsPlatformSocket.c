@@ -683,3 +683,26 @@ gsi_u32 gsiGetBroadcastIP(void)
 #pragma warning ( default: 4127 )
 #endif // _MSC_VER
 
+
+// [CHOSEN, not recovered] OpenBF2 resolver seam; see gsPlatformSocket.h and LOCAL_CHANGES.md.
+static gsiHostRedirectFunc gsiHostRedirect = NULL;
+
+void gsiSetHostRedirect(gsiHostRedirectFunc redirect)
+{
+	gsiHostRedirect = redirect;
+}
+
+const char * gsiRedirectHostname(const char * hostname)
+{
+	if(!gsiHostRedirect || !hostname)
+		return hostname;
+	return gsiHostRedirect(hostname);
+}
+
+HOSTENT * gsiGetHostByName(const char * hostname)
+{
+	const char * lookup = gsiRedirectHostname(hostname);
+	if(!lookup)
+		return NULL;
+	return gethostbyname(lookup);
+}
