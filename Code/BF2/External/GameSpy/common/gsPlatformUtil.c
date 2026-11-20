@@ -81,7 +81,7 @@ typedef struct GSIResolveHostnameInfo
 		#endif
 
 		// do the gethostbyname
-		hostent = gethostbyname(handle->hostname);
+		hostent = gsiGetHostByName(handle->hostname); // [CHOSEN, not recovered] OpenBF2 resolver seam
 		if(hostent)
 		{
 			// got the ip
@@ -132,7 +132,7 @@ static void *gsiResolveHostnameThread(void * arg)
 	gsiEnterCriticalSection(&aHostnameCrit);
 	
 	//retval = getaddrinfo(handle->hostname, NULL, NULL, &aHostAddr);
-	aHostAddr = gethostbyname(handle->hostname);
+	aHostAddr = gsiGetHostByName(handle->hostname); // [CHOSEN, not recovered] OpenBF2 resolver seam
 	if (aHostAddr != 0)
 	{
 		char * ip;
@@ -182,7 +182,11 @@ static void gsiResolveHostnameThread(void * arg)
 	hints.ai_socktype = SOCK_STREAM;
 
 	// DNS lookup (works with pthreads)
-	error = getaddrinfo(handle->hostname, "http", &hints, &result);
+	// [CHOSEN, not recovered] OpenBF2 resolver seam (gsiRedirectHostname, LOCAL_CHANGES.md).
+	{
+		const char * lookup = gsiRedirectHostname(handle->hostname);
+		error = lookup ? getaddrinfo(lookup, "http", &hints, &result) : EAI_NONAME;
+	}
 
 	if (!error)
 	{
@@ -318,7 +322,7 @@ int gsiStartResolvingHostname(const char * hostname, GSIResolveHostnameHandle * 
 		"(NON-Asynchrounous) DNS lookup starting\n");
 	
 	// do the lookup now
-	hostent = gethostbyname(hostname);
+	hostent = gsiGetHostByName(hostname); // [CHOSEN, not recovered] OpenBF2 resolver seam
 	if(hostent == NULL)
 		return -1;
 

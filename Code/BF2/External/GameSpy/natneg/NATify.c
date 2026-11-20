@@ -87,7 +87,7 @@ unsigned int NameToIp(const char *name)
 
 	if (ret == INADDR_NONE)
 	{
-		hent = gethostbyname(name);
+		hent = gsiGetHostByName(name); // [CHOSEN, not recovered] OpenBF2 resolver seam
 		if (!hent)
 			return 0;
 		ret = *(unsigned int *)hent->h_addr_list[0];

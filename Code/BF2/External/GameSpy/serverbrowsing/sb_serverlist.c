@@ -507,7 +507,7 @@ static SBError ServerListConnect(SBServerList *slist)
 	saddr.sin_addr.s_addr = inet_addr(masterHostname);
 	if (saddr.sin_addr.s_addr == INADDR_NONE)
 	{
-		hent = gethostbyname(masterHostname);
+		hent = gsiGetHostByName(masterHostname); // [CHOSEN, not recovered] OpenBF2 resolver seam
 		if (!hent)
 			return sbe_dnserror; 
 		memcpy(&saddr.sin_addr.s_addr,hent->h_addr_list[0], sizeof(saddr.sin_addr.s_addr));

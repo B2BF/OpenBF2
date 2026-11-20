@@ -1,25 +1,17 @@
-// [CHOSEN, not recovered] Prepares the linked GameSpy SDK for the process: the online services'
-// host names (OnlineProvider.h) go into the SDK's own run-time host-name variables.
+// [CHOSEN, not recovered] Prepares the linked GameSpy SDK for the process: the redirects of
+// +gamespyRedirect and +gamespyRedirect<label> (OnlineProvider.h) go into the SDK's resolver seam.
 #include "OnlineProvider.h"
 
-#include <cstring>
+#include <cstdio>
+#include <mutex>
+#include <set>
+#include <string>
 #if !defined(_WIN32)
 #include <csignal>
 #endif
 
 extern "C" {
-#include "../../External/GameSpy/common/gsCommon.h"
-#include "../../External/GameSpy/common/gsAvailable.h"   // GSIACHostname
-#include "../../External/GameSpy/qr2/qr2.h"              // qr2_hostname
-#include "../../External/GameSpy/gcdkey/gcdkeys.h"       // gcd_hostname
-#include "../../External/GameSpy/gstats/gstats.h"        // StatsServerHostname
-#include "../../External/GameSpy/natneg/natneg.h"        // Matchup1Hostname, Matchup2Hostname
-extern char* Matchup3Hostname;                           // natneg.c; not declared in natneg.h
-#if !DEDICATED
-#include "../../External/GameSpy/gp/gp.h"                // GPConnectionManagerHostname and
-                                                         // GPSearchManagerHostname
-extern char* SBOverrideMasterServer;                     // sb_serverlist.c (sb_internal.h)
-#endif
+#include "../../External/GameSpy/common/gsCommon.h"   // gsiSetHostRedirect (gsPlatformSocket.h)
 }
 
 namespace dice {
@@ -28,11 +20,51 @@ namespace onlineProvider {
 
 namespace {
 
-// Every SDK host-name array is char[64]; setDomain admits no domain that forms a longer name.
-void copyName(char (&destination)[64], const std::string& name)
+// The redirect's state. Lookups run on the game thread and on the SDK's resolver thread.
+std::mutex& redirectLock()
 {
-    std::strncpy(destination, name.c_str(), sizeof(destination) - 1);
-    destination[sizeof(destination) - 1] = '\0';
+    static std::mutex lock;
+    return lock;
+}
+
+// Every name handed to the SDK to look up instead. An entry is added once and never changed or
+// removed, so the pointer handed to the SDK stays valid for the process.
+std::set<std::string>& lookupNames()
+{
+    static std::set<std::string> names;
+    return names;
+}
+
+// Names already logged, so that each name is reported once.
+std::set<std::string>& loggedNames()
+{
+    static std::set<std::string> names;
+    return names;
+}
+
+void logOnce(const std::string& key, const std::string& line)
+{
+    if (!loggedNames().insert(key).second)
+        return;
+    std::fprintf(stderr, "online services: %s\n", line.c_str());
+    std::fflush(stderr);
+}
+
+// The SDK's gsiHostRedirectFunc: the name redirectLookup chooses, which the SDK then resolves
+// itself at this and every later lookup (an address without DNS, a host name through the system
+// resolver), or hostname itself for a name no option covers.
+const char* redirectHostname(const char* hostname)
+{
+    std::string option;
+    const std::string lookup = redirectLookup(hostname, &option);
+    std::lock_guard<std::mutex> guard(redirectLock());
+    if (lookup.empty())
+    {
+        logOnce(hostname, std::string("forwarding ") + hostname);
+        return hostname;
+    }
+    logOnce(hostname, std::string("redirecting ") + hostname + " to " + lookup + " (+" + option + ")");
+    return lookupNames().insert(lookup).first->c_str();
 }
 
 } // namespace
@@ -47,32 +79,11 @@ void prepareGameSpySdk()
     std::signal(SIGPIPE, SIG_IGN);
 #endif
 
-    if (!isOverridden())
-        return;
-
-    // The pointer variables take storage that outlives every SDK call.
-    static char natNeg[3][64];
-#if !DEDICATED
-    static char serverList[64];
-#endif
-
-    copyName(GSIACHostname, availableHost());
-    copyName(qr2_hostname, masterHost());
-    copyName(gcd_hostname, cdKeyHost());
-    copyName(StatsServerHostname, gameStatsServerName());
-    copyName(natNeg[0], natNegHost(1));
-    copyName(natNeg[1], natNegHost(2));
-    copyName(natNeg[2], natNegHost(3));
-    Matchup1Hostname = natNeg[0];
-    Matchup2Hostname = natNeg[1];
-    Matchup3Hostname = natNeg[2];
-#if !DEDICATED
-    // Server browsing and presence are linked into client images only.
-    copyName(GPConnectionManagerHostname, connectionManagerHost());
-    copyName(GPSearchManagerHostname, searchManagerHost());
-    copyName(serverList, serverListHost());
-    SBOverrideMasterServer = serverList;
-#endif
+    if (hasRedirect())
+    {
+        redirectLock();             // constructed here, before the SDK can start its resolver thread
+        gsiSetHostRedirect(&redirectHostname);
+    }
 }
 
 } // namespace onlineProvider

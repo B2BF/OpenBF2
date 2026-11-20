@@ -683,7 +683,7 @@ static int get_sockaddrin(const char *host, int port, struct sockaddr_in *saddr,
 	
 	if (saddr->sin_addr.s_addr == INADDR_NONE && strcmp(host,"255.255.255.255") != 0)
 	{
-		hent = gethostbyname(host);
+		hent = gsiGetHostByName(host); // [CHOSEN, not recovered] OpenBF2 resolver seam
 		if (!hent)
 			return 0;
 		saddr->sin_addr.s_addr = *(unsigned int *)hent->h_addr_list[0];

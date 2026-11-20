@@ -3,9 +3,9 @@
 // and persistence code, plus the fixture's backend info, search and name validation answers, built on
 // request as bf2_swiff_leaderboard_check (POSIX). Starts the local stats fixture
 // (stats_fixture/bf2_stats_fixture.py) on 127.0.0.1:18124 and stops it before returning.
-// The stats host is formed as the game forms it with +gamespy test.openbf2. gethostbyname and
-// getaddrinfo below answer 127.0.0.1 for *.test.openbf2 and refuse every other name; connect
-// sends 127.0.0.1:80 to the fixture's port. No name leaves the process.
+// The stats URLs are retail; +gamespyRedirect test.openbf2 resolves BF2Web.gamespy.com as
+// BF2Web.test.openbf2. gethostbyname and getaddrinfo below answer 127.0.0.1 for *.test.openbf2 and
+// refuse every other name; connect sends 127.0.0.1:80 to the fixture's port. No name leaves the process.
 // Injected cache objects avoid unrelated singleton/script paths; the collaborators the checks do
 // not reach are scaffolding stubs that end the process if called.
 #include <arpa/inet.h>
@@ -295,11 +295,12 @@ int main(int argc, char** argv)
         return 2;
     }
     std::string error;
-    if (!onlineProvider::setDomain(kDomain, error))
+    if (!onlineProvider::setRedirect(kDomain, error))
     {
-        std::printf("FAIL: +gamespy %s refused: %s\n", kDomain, error.c_str());
+        std::printf("FAIL: +gamespyRedirect %s refused: %s\n", kDomain, error.c_str());
         return 1;
     }
+    onlineProvider::prepareGameSpySdk();
     if (!startServer(argv[1], argv[2]))
     {
         std::printf("FAIL: the stats fixture did not come up on 127.0.0.1:%d\n", kPort);

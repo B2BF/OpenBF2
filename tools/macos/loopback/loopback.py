@@ -158,7 +158,7 @@ p.add_argument('--client-env', action='append', default=[], metavar='KEY=VALUE',
 p.add_argument('--name-redirect', metavar='DOMAIN',
                help='[TEMP] test-only: load <build>/test_tools/libbf2_test_name_redirect.dylib (build target '
                     'bf2_test_name_redirect first) into server and client, so DOMAIN and *.DOMAIN resolve to '
-                    '127.0.0.1, and add +gamespy DOMAIN to both command lines. The sandbox profiles then also '
+                    '127.0.0.1, and add +gamespyRedirect DOMAIN to both command lines. The sandbox profiles then also '
                     'allow the GameSpy service ports on loopback (Code/Tests/name_redirect/README.md)')
 p.add_argument('--name-redirect-http-port', type=int, metavar='PORT',
                help='[TEMP] with --name-redirect: TCP connections to 127.0.0.1:80 (the stats web host) go to '
@@ -411,7 +411,7 @@ def stamp(msg):
 
 server_extra = (['+ai', '1'] if args.ai else []) + shlex.split(args.server_extra)
 if args.name_redirect:
-    server_extra = ['+gamespy', args.name_redirect] + server_extra
+    server_extra = ['+gamespyRedirect', args.name_redirect] + server_extra
 senv = dict(os.environ, LB_OWNER_HOME=str(OWNER_HOME), LB_RUN_OUT=str(OUT), LB_GAME_ROOT=str(content),
             TERM='xterm')
 if redirect_wrap:
@@ -613,7 +613,7 @@ if (args.no_server or (run / 'server.playing').exists()) and not args.no_client 
                 + ['-k', 'quit 1', '--']
                 if args.lldb else [])
     command = sandbox(run / 'client.sb') + debugger + redirect_wrap + [str(client_bin)] + (
-        ['+gamespy', args.name_redirect] if args.name_redirect else []) + ['+modPath', 'mods/' + args.mod, '+fullscreen', '1' if args.fullscreen else '0'] + ([] if args.profile_resolution else
+        ['+gamespyRedirect', args.name_redirect] if args.name_redirect else []) + ['+modPath', 'mods/' + args.mod, '+fullscreen', '1' if args.fullscreen else '0'] + ([] if args.profile_resolution else
         ['+szx', '800', '+szy', '600']) + ([] if args.movies else ['+restart', '1']) + [
         ] + ([] if args.no_join else ['+joinServer', '127.0.0.1', '+port', '16890']) + (
         ['+password', args.client_password if args.client_password is not None else args.server_password]

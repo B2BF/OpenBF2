@@ -1,14 +1,24 @@
-// [TEMP] [CHOSEN, not recovered] Test fixture for the online services' domain
-// (Code/BF2/Game/MatchMaking/OnlineProvider.h): the names formed for the retail domain and for a
-// +gamespy value, and that the linked GameSpy SDK and the persistence classes look those
-// names up. Built on request (bf2_online_provider_check); POSIX only.
+// [TEMP] [CHOSEN, not recovered] Test fixture for the redirects of the online service names
+// (Code/BF2/Game/MatchMaking/OnlineProvider.h): the retail names, +gamespyRedirect with an address
+// or a domain, the +gamespyRedirect<label> options, and that the linked GameSpy SDK and the
+// persistence classes look the redirected names up while URLs and Host headers stay retail.
+// Built on request (bf2_online_provider_check); POSIX only.
 //
 // The process never asks a real resolver and never sends beyond loopback: gethostbyname and
 // getaddrinfo below replace the C library's for every object linked into this executable, record
-// each name asked for, and answer "not found" or 127.0.0.1. The services' ports are fixed by the
-// SDK (27900, 27901, 28910, 29900, 29901, 29910, 29920); a listener that cannot bind its port is
-// reported as skipped and the name checks still run. The web requests go to port 80, which an
-// unprivileged process cannot bind on loopback: connect below sends them to 127.0.0.1:18080.
+// each name asked for, and answer "not found" or 127.0.0.1; names under .target.test answer
+// g_targetAddress (127.0.0.1 unless a scenario changes it, without sending anything). The
+// services' ports are fixed by the SDK (27900, 27901, 28910, 29900, 29901, 29910, 29920); a
+// listener that cannot bind its port is reported as skipped and the name checks still run. The
+// web requests go to port 80, which an unprivileged process cannot bind on loopback: connect below
+// sends them to 127.0.0.1:18080.
+//
+// "names" checks the retail state and the parser options (+gamespy is gone); "redirect-*" checks
+// +gamespyRedirect with an address and with a domain (each name resolved at every lookup with its
+// retail domain replaced); "label-*" checks every +gamespyRedirect<label> option with addresses
+// and host-name targets, its precedence over +gamespyRedirect, and every service reaching its
+// label's target; the "*-web" scenarios check every stats web request keeping its retail Host
+// header.
 //
 // The "silent-tcp" scenario checks the local connect timeouts (GameSpy/LOCAL_CHANGES.md) against
 // loopback listeners whose backlog is full, so connects to them are never answered.
@@ -20,6 +30,7 @@
 #include "../BF2/Game/Persistence/PlayerStatsManager.h"
 #include "../BF2/Game/GameServer/ServerSettings.h"
 #include "../BF2/Game/IGame.h"
+#include "../BF2/Game/Utility/SimpleParser.h"
 
 extern "C" {
 #include "../BF2/External/GameSpy/common/gsCommon.h"
@@ -39,6 +50,7 @@ extern char* SBOverrideMasterServer;
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <list>
 #include <string>
 #include <vector>
 
@@ -73,6 +85,15 @@ using namespace dice::hfe;
 pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
 std::vector<std::string> g_lookups;      // every name asked for, in order
 bool g_resolve = false;                  // false: not found; true: 127.0.0.1
+in_addr_t g_targetAddress = htonl(INADDR_LOOPBACK);   // the answer for names under .target.test
+
+// Redirect targets of the scenarios: names ending in ".target.test" always answer g_targetAddress.
+bool isTargetName(const char* name)
+{
+    static const char suffix[] = ".target.test";
+    const std::size_t n = name ? std::strlen(name) : 0;
+    return n > sizeof(suffix) - 1 && std::strcmp(name + n - (sizeof(suffix) - 1), suffix) == 0;
+}
 
 void recordLookup(const char* name)
 {
@@ -98,7 +119,10 @@ std::vector<std::string> takeLookups()
 extern "C" struct hostent* gethostbyname(const char* name)
 {
     recordLookup(name);
-    if (!g_resolve)
+    // A dotted address is answered without a lookup, as the C library does (the redirect hands
+    // the SDK its target in this form); every other name follows g_resolve.
+    const in_addr_t numeric = name ? inet_addr(name) : INADDR_NONE;
+    if (!g_resolve && numeric == INADDR_NONE && !isTargetName(name))
     {
         h_errno = HOST_NOT_FOUND;
         return 0;
@@ -108,7 +132,7 @@ extern "C" struct hostent* gethostbyname(const char* name)
     static char* noAliases[1];
     static char canonical[256];
     static struct hostent entry;
-    address.s_addr = htonl(INADDR_LOOPBACK);
+    address.s_addr = numeric != INADDR_NONE ? numeric : isTargetName(name) ? g_targetAddress : htonl(INADDR_LOOPBACK);
     addresses[0] = reinterpret_cast<char*>(&address);
     addresses[1] = 0;
     noAliases[0] = 0;
@@ -124,12 +148,13 @@ extern "C" struct hostent* gethostbyname(const char* name)
 extern "C" int getaddrinfo(const char* node, const char*, const struct addrinfo*, struct addrinfo** result)
 {
     recordLookup(node);
-    if (!g_resolve)
+    const in_addr_t numeric = node ? inet_addr(node) : INADDR_NONE;
+    if (!g_resolve && numeric == INADDR_NONE && !isTargetName(node))
         return EAI_NONAME;
     struct addrinfo* info = static_cast<struct addrinfo*>(std::calloc(1, sizeof(struct addrinfo)));
     struct sockaddr_in* address = static_cast<struct sockaddr_in*>(std::calloc(1, sizeof(struct sockaddr_in)));
     address->sin_family = AF_INET;
-    address->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    address->sin_addr.s_addr = numeric != INADDR_NONE ? numeric : isTargetName(node) ? g_targetAddress : htonl(INADDR_LOOPBACK);
     info->ai_family = AF_INET;
     info->ai_socktype = SOCK_STREAM;
     info->ai_addrlen = sizeof(struct sockaddr_in);
@@ -483,88 +508,123 @@ void runPlayerStats()
 
 // ---- scenarios --------------------------------------------------------------------------------
 
-// The names formed, the option's validation, and the SDK variables written.
+// The retail names every lookup starts from.
+const char* const kRetailNames[] = {
+    "battlefield2.available.gamespy.com", "battlefield2.ms14.gamespy.com", "battlefield2.master.gamespy.com",
+    "gpcm.gamespy.com", "gpsp.gamespy.com", "battlefield2.gamestats.gamespy.com", "BF2Web.gamespy.com",
+    "stage-net.gamespy.com", "eapusher.dice.se", "battlefield2.natneg1.gamespy.com",
+    "battlefield2.natneg2.gamespy.com", "battlefield2.natneg3.gamespy.com",
+};
+const int kRetailNameCount = sizeof(kRetailNames) / sizeof(kRetailNames[0]);
+
+// The label options, in id order, as BF2Engine::parseParameters registers them.
+const char* const kExpectedLabels[] = {
+    "available", "ms14", "master", "gpcm", "gpsp", "gamestats", "BF2Web", "stage-net", "eapusher",
+    "natneg1", "natneg2", "natneg3",
+};
+
+// Registers the online options exactly as BF2Engine::parseParameters does (+gamespy is gone).
+void addOnlineOptions(SimpleParser& parser)
+{
+    parser.add(77, "gamespyRedirect", "");
+    for (int i = 0; i < onlineProvider::labelCount(); ++i)
+        parser.add(79 + i, onlineProvider::labelOption(i), onlineProvider::labelHelp(i));
+}
+
+// No option: the retail names everywhere, the label table, and the parser options.
 void scenarioNames()
 {
     using namespace onlineProvider;
-    std::puts("names: retail domain");
-    checkEqual(domain(), "gamespy.com", "domain");
-    check(!isOverridden(), "not overridden");
-    checkEqual(availableHost(), "battlefield2.available.gamespy.com", "available");
-    checkEqual(masterHost(), "battlefield2.master.gamespy.com", "master");
-    checkEqual(serverListHost(), "battlefield2.ms14.gamespy.com", "server list");
-    checkEqual(natNegHost(1), "battlefield2.natneg1.gamespy.com", "natneg1");
-    checkEqual(natNegHost(2), "battlefield2.natneg2.gamespy.com", "natneg2");
-    checkEqual(natNegHost(3), "battlefield2.natneg3.gamespy.com", "natneg3");
-    checkEqual(connectionManagerHost(), "gpcm.gamespy.com", "gpcm");
-    checkEqual(searchManagerHost(), "gpsp.gamespy.com", "gpsp");
-    checkEqual(cdKeyHost(), "key.gamespy.com", "key");
-    checkEqual(gameStatsServerName(), "gamestats.gamespy.com", "StatsServerHostname value");
-    checkEqual(gameStatsHost(), "battlefield2.gamestats.gamespy.com", "gamestats");
-    checkEqual(statsWebUrl(), "http://BF2Web.gamespy.com/ASP/", "stats web");
-    checkEqual(playerInfoUrl(), "http://stage-net.gamespy.com/bf2/getplayerinfo.aspx?pid=", "player info");
+    std::puts("names: no option, nothing installed");
+    check(!hasRedirect(), "no redirect");
     checkEqual(commandLineArguments(), "", "restart arguments");
-    std::printf("  %s\n", describe(true).c_str());
-
-    std::puts("names: the SDK's variables are untouched for the retail domain");
+    checkEqual(describe(), "online services: retail names, resolved unchanged", "start-up line");
+    const char* retailName = "gpcm.gamespy.com";
+    check(gsiRedirectHostname(retailName) == retailName, "gsiRedirectHostname returns the name itself");
     prepareGameSpySdk();
+    check(gsiRedirectHostname(retailName) == retailName, "still the name itself after prepareGameSpySdk");
+    for (int i = 0; i < kRetailNameCount; ++i)
+        checkEqual(redirectLookup(kRetailNames[i]), "", std::string(kRetailNames[i]) + " unchanged");
+
+    std::puts("names: the SDK's host-name variables stay retail");
     check(GSIACHostname[0] == 0 && qr2_hostname[0] == 0 && gcd_hostname[0] == 0, "available, master and key overrides empty");
     checkEqual(StatsServerHostname, "gamestats.gamespy.com", "SDK StatsServerHostname");
     checkEqual(GPConnectionManagerHostname, "gpcm.gamespy.com", "SDK GPConnectionManagerHostname");
     checkEqual(GPSearchManagerHostname, "gpsp.gamespy.com", "SDK GPSearchManagerHostname");
     check(!SBOverrideMasterServer && !Matchup1Hostname && !Matchup2Hostname && !Matchup3Hostname, "server list and natneg overrides null");
-
-    std::puts("names: values +gamespy refuses");
-    const std::string tooLong = std::string(36, 'a') + ".test";   // 41 characters
-    const char* refused[] = { "", "1.2.3.4", "bad host", "a..b", ".example.test", "example.test.", "exa_mple.test",
-                              "http://example.test", "example.test/ASP", "example.test:80", tooLong.c_str() };
-    for (unsigned i = 0; i < sizeof(refused) / sizeof(refused[0]); ++i)
     {
-        std::string error;
-        const bool accepted = setDomain(refused[i], error);
-        check(!accepted && !error.empty() && domain() == "gamespy.com" && !isOverridden(),
-              std::string("refused \"") + refused[i] + "\": " + error);
+        HTTPRequest request;
+        checkEqual(request.getGameSpyUrl(), "http://BF2Web.gamespy.com/ASP/", "HTTPRequest::getGameSpyUrl");
     }
 
-    std::puts("names: +gamespy gamespy.com is the retail domain");
-    std::string error;
-    check(setDomain("gamespy.com", error) && !isOverridden(), "accepted, not an override");
+    std::puts("names: the label options");
+    checkEqual(std::to_string(labelCount()), "12", "label count");
+    for (int i = 0; i < labelCount() && i < 12; ++i)
+    {
+        checkEqual(label(i), kExpectedLabels[i], "label " + std::to_string(i));
+        checkEqual(labelOption(i), std::string("gamespyRedirect") + kExpectedLabels[i], "option " + std::to_string(79 + i));
+    }
+    for (int i = 0; i < kRetailNameCount; ++i)
+        checkEqual(std::to_string(labelOf(kRetailNames[i])), std::to_string(i), std::string(kRetailNames[i]) + ": label index");
+    checkEqual(std::to_string(labelOf("bf2web.GAMESPY.com")), "6", "bf2web.GAMESPY.com: case ignored");
+    checkEqual(std::to_string(labelOf("gamestats.gamespy.com")), "5", "gamestats.gamespy.com (StatsServerHostname as set)");
+    checkEqual(std::to_string(labelOf("master.gamespy.com")), "2", "master.gamespy.com (qr2's unused MASTER_ADDR)");
+    const char* noLabel[] = { "key.gamespy.com", "peerchat.gamespy.com", "motd.gamespy.com", "gamespy.com",
+                              "battlefield2.ms13.gamespy.com", "battlefield2.natneg4.gamespy.com", "gpcm.example.test",
+                              "gpcm.notgamespy.com", "eapusher.gamespy.com", "gpcm.dice.se", "eapusher.example.test",
+                              "BF2Web.gamespy.com.example.test", "logos.example.test" };
+    for (unsigned i = 0; i < sizeof(noLabel) / sizeof(noLabel[0]); ++i)
+        checkEqual(std::to_string(labelOf(noLabel[i])), "-1", std::string(noLabel[i]) + ": no label option");
 
-    std::puts("names: the longest domain fits the SDK's 64-byte variables");
-    const std::string longest = std::string(35, 'a') + ".test";   // 40 characters
-    check(setDomain(longest, error) && availableHost().size() == 63 && gameStatsHost().size() == 63, "40 characters accepted, 63-character names");
-
-    std::puts("names: +gamespy example.test");
-    check(setDomain("example.test", error) && isOverridden(), "accepted");
-    checkEqual(commandLineArguments(), " +gamespy example.test", "restart arguments");
-    prepareGameSpySdk();
-    checkEqual(GSIACHostname, "battlefield2.available.example.test", "SDK GSIACHostname");
-    checkEqual(qr2_hostname, "battlefield2.master.example.test", "SDK qr2_hostname");
-    checkEqual(gcd_hostname, "key.example.test", "SDK gcd_hostname");
-    checkEqual(StatsServerHostname, "gamestats.example.test", "SDK StatsServerHostname");
-    checkEqual(GPConnectionManagerHostname, "gpcm.example.test", "SDK GPConnectionManagerHostname");
-    checkEqual(GPSearchManagerHostname, "gpsp.example.test", "SDK GPSearchManagerHostname");
-    checkEqual(SBOverrideMasterServer ? SBOverrideMasterServer : "(null)", "battlefield2.ms14.example.test", "SDK SBOverrideMasterServer");
-    checkEqual(Matchup1Hostname ? Matchup1Hostname : "(null)", "battlefield2.natneg1.example.test", "SDK Matchup1Hostname");
-    checkEqual(Matchup2Hostname ? Matchup2Hostname : "(null)", "battlefield2.natneg2.example.test", "SDK Matchup2Hostname");
-    checkEqual(Matchup3Hostname ? Matchup3Hostname : "(null)", "battlefield2.natneg3.example.test", "SDK Matchup3Hostname");
-    checkEqual(statsWebUrl(), "http://BF2Web.example.test/ASP/", "stats web");
-    checkEqual(playerInfoUrl(), "http://stage-net.example.test/bf2/getplayerinfo.aspx?pid=", "player info");
-    std::printf("  %s\n", describe(true).c_str());
+    std::puts("names: +gamespy is no option any more; the parser skips it");
+    SimpleParser parser('+');
+    addOnlineOptions(parser);
+    std::list<std::pair<int, std::string> > keys;
+    parser.parseString("+gamespy example.test +gamespyRedirectgpcm 10.0.0.4 +gamespyRedirectstage-net 10.0.0.8"
+                       " +gamespyRedirect 10.9.9.9 +gamespyRedirectbf2web 10.0.0.7", keys);
+    std::string parsed;
+    for (std::list<std::pair<int, std::string> >::const_iterator k = keys.begin(); k != keys.end(); ++k)
+        parsed += (parsed.empty() ? "" : ",") + std::to_string(k->first) + "=" + k->second;
+    checkEqual(parsed, "82=10.0.0.4,86=10.0.0.8,77=10.9.9.9",
+               "only the redirect options parse (+gamespy and the misspelt +gamespyRedirectbf2web are skipped)");
+    check(!hasRedirect(), "parsing alone changes nothing");
 }
 
-// Every service, with the names the given domain forms. With resolve false no name resolves (the
-// state of a domain without these hosts) and each service must give up at once; with resolve true
-// every name is 127.0.0.1 and the first packet or connection of each service must arrive there.
-void scenarioServices(const char* domainName, bool resolve)
+// What each service looks up (consecutive repeats count once, as lookedUp() reports them), and the
+// names in the web requests' URLs and Host headers.
+struct ExpectedLookups
+{
+    std::string available, master, serverList, gpcm, gpsp, gameStats, natNeg, statsWeb, playerInfo;
+    std::string statsWebName, playerInfoName;
+};
+
+// The names retail forms, with domain d in place of gamespy.com, each looked up as it is.
+ExpectedLookups formedLookups(const std::string& d)
+{
+    ExpectedLookups e;
+    e.available = "battlefield2.available." + d;
+    e.master = "battlefield2.master." + d;
+    e.serverList = "battlefield2.ms14." + d;
+    e.gpcm = "gpcm." + d;
+    e.gpsp = "gpsp." + d;
+    e.gameStats = "battlefield2.gamestats." + d;
+    e.natNeg = "battlefield2.natneg1." + d + ",battlefield2.natneg2." + d + ",battlefield2.natneg3." + d;
+    e.statsWeb = e.statsWebName = "BF2Web." + d;
+    e.playerInfo = e.playerInfoName = "stage-net." + d;
+    return e;
+}
+
+// Every service, with the retail names. With resolve false no name resolves (the state today)
+// and each service must give up at once; with resolve true the first packet or connection of each
+// service must arrive at 127.0.0.1. Without expected every name resolves there; with expected (a
+// redirect) the mock answers only addresses and names under .target.test, so only what the
+// redirect hands the SDK reaches the listeners.
+void scenarioServices(bool resolve, const ExpectedLookups* expected = 0)
 {
     using namespace onlineProvider;
-    const std::string d(domainName);
-    std::string error;
-    if (d != domain())
-        check(setDomain(d, error), "+gamespy " + d);
+    const ExpectedLookups e = expected ? *expected : formedLookups("gamespy.com");
     prepareGameSpySdk();
-    g_resolve = resolve;
+    g_resolve = resolve && !expected;
     if (resolve)
         startListeners();
     const double started = now();
@@ -574,7 +634,7 @@ void scenarioServices(const char* domainName, bool resolve)
 
     std::puts("availability check");
     check(availabilityCheck() == GSIACAvailable, "result is available");
-    checkEqual(lookedUp(), "battlefield2.available." + d, "looked up");
+    checkEqual(lookedUp(), e.available, "looked up");
     if (resolve)
     {
         checkArrived("available+heartbeat", "the availability request");
@@ -586,7 +646,7 @@ void scenarioServices(const char* domainName, bool resolve)
     std::puts("master: heartbeats (qr2) and CD-key validation (gcd_init_qr2)");
     qr2_t record = 0;
     const qr2_error_t qr2Result = startQr2(&record);
-    checkEqual(lookedUp(), "battlefield2.master." + d, "looked up");
+    checkEqual(lookedUp(), e.master, "looked up");
     if (!resolve)
         check(qr2Result == e_qrdnserror, "qr2_init reports the lookup failure");
     else
@@ -618,7 +678,7 @@ void scenarioServices(const char* domainName, bool resolve)
     std::puts("server list");
     ServerBrowser browser = 0;
     const SBError listResult = startServerList(&browser);
-    checkEqual(lookedUp(), "battlefield2.ms14." + d, "looked up");
+    checkEqual(lookedUp(), e.serverList, "looked up");
     if (!resolve)
         check(listResult == sbe_dnserror, "the update reports the lookup failure");
     else
@@ -633,7 +693,7 @@ void scenarioServices(const char* domainName, bool resolve)
     gpSetCallback(&connection, GP_ERROR, &gpIgnore, 0);
     const GPResult loginResult = gpConnectUniqueNickA(&connection, "nobody", "nothing", GP_NO_FIREWALL,
                                                       resolve ? GP_NON_BLOCKING : GP_BLOCKING, &gpIgnore, 0);
-    checkEqual(lookedUp(), "gpcm." + d, "login looked up");
+    checkEqual(lookedUp(), e.gpcm, "login looked up");
     if (!resolve)
         checkEqual(gpError(&connection), "Could not resolve connection manager host name.", "login error");
     else
@@ -647,7 +707,7 @@ void scenarioServices(const char* domainName, bool resolve)
     gpSetCallback(&connection, GP_ERROR, &gpIgnore, 0);
     const GPResult searchResult = gpGetUserNicksA(&connection, "nobody@example.invalid", "nothing",
                                                   resolve ? GP_NON_BLOCKING : GP_BLOCKING, &gpIgnore, 0);
-    checkEqual(lookedUp(), "gpsp." + d, "search looked up");
+    checkEqual(lookedUp(), e.gpsp, "search looked up");
     if (!resolve)
         checkEqual(gpError(&connection), "Could not resolve search manager host name.", "search error");
     else
@@ -661,7 +721,7 @@ void scenarioServices(const char* domainName, bool resolve)
 
     std::puts("game statistics (StatsManager::connect)");
     const bool statsConnected = statsManagerConnect();
-    checkEqual(lookedUp(), "battlefield2.gamestats." + d, "looked up");
+    checkEqual(lookedUp(), e.gameStats, "looked up");
     if (!resolve)
         check(!statsConnected, "connect() reports failure");
     else
@@ -674,7 +734,7 @@ void scenarioServices(const char* domainName, bool resolve)
 
     std::puts("NAT negotiation");
     const NegotiateError negotiate = NNBeginNegotiation(1234, 1, &negotiateProgress, &negotiateCompleted, 0);
-    checkEqual(lookedUp(), "battlefield2.natneg1." + d + ",battlefield2.natneg2." + d + ",battlefield2.natneg3." + d, "looked up");
+    checkEqual(lookedUp(), e.natNeg, "looked up");
     if (!resolve)
         check(negotiate == ne_dnserror, "negotiation reports the lookup failure");
     else
@@ -690,7 +750,7 @@ void scenarioServices(const char* domainName, bool resolve)
     {
         WebRequest request;
         const std::string url = request.getGameSpyUrl() + "getbackendinfo.aspx";
-        checkEqual(url, "http://BF2Web." + d + "/ASP/getbackendinfo.aspx", "url");
+        checkEqual(url, "http://" + e.statsWebName + "/ASP/getbackendinfo.aspx", "url");
         request.get(url, false);
         const double end = now() + 3.0;
         while (request.isUpdating() && now() < end)
@@ -698,7 +758,7 @@ void scenarioServices(const char* domainName, bool resolve)
             request.update();
             msleep(5);
         }
-        checkEqual(lookedUp(), "BF2Web." + d, "looked up");
+        checkEqual(lookedUp(), e.statsWeb, "looked up");
         if (!resolve)
             check(request.failed, "the request failed");
         else if (listener("web").fd >= 0)
@@ -706,7 +766,7 @@ void scenarioServices(const char* domainName, bool resolve)
             checkArrived("web", "the request");
             const std::string head = firstBytes("web");
             check(head.compare(0, 29, "GET /ASP/getbackendinfo.aspx ") == 0, "request line is GET /ASP/getbackendinfo.aspx");
-            check(head.find("Host: BF2Web." + d) != std::string::npos, "Host header is BF2Web." + d);
+            check(head.find("Host: " + e.statsWebName + "\r\n") != std::string::npos, "Host header is " + e.statsWebName);
         }
         else
             check(request.failed, "the request failed (no listener)");
@@ -719,12 +779,12 @@ void scenarioServices(const char* domainName, bool resolve)
     listener("web").first.clear();
     pthread_mutex_unlock(&g_lock);
     runPlayerStats();
-    checkEqual(lookedUp(), "stage-net." + d, "looked up");
+    checkEqual(lookedUp(), e.playerInfo, "looked up");
     if (resolve && listener("web").fd >= 0)
     {
         checkArrived("web", "the request");
         check(firstBytes("web").compare(0, 34, "GET /bf2/getplayerinfo.aspx?pid=&g") == 0, "request line is GET /bf2/getplayerinfo.aspx?pid=...");
-        check(firstBytes("web").find("Host: stage-net." + d) != std::string::npos, "Host header is stage-net." + d);
+        check(firstBytes("web").find("Host: " + e.playerInfoName + "\r\n") != std::string::npos, "Host header is " + e.playerInfoName);
     }
     STEP_TIME("player info web request");
     #undef STEP_TIME
@@ -775,7 +835,6 @@ void scenarioRefused()
 {
     using namespace onlineProvider;
     std::string error;
-    check(setDomain("example.test", error), "+gamespy example.test");
     prepareGameSpySdk();
     g_resolve = true;
     char text[64];
@@ -870,7 +929,6 @@ void scenarioSilentTcp()
 {
     using namespace onlineProvider;
     std::string error;
-    check(setDomain("example.test", error), "+gamespy example.test");
     prepareGameSpySdk();
     g_resolve = true;
     SilentPort ports[] = { { "server list", 28910, -1, -1 }, { "gpcm", 29900, -1, -1 },
@@ -946,16 +1004,558 @@ void scenarioSilentTcp()
     }
 }
 
+// ---- +gamespyRedirect ----------------------------------------------------------------------------
+
+// Runs body with stderr written to a temporary file and returns what was written.
+template <typename Body>
+std::string captureStderr(Body body)
+{
+    char path[] = "/tmp/online_provider_stderrXXXXXX";
+    const int file = mkstemp(path);
+    std::fflush(stderr);
+    const int saved = dup(2);
+    dup2(file, 2);
+    body();
+    std::fflush(stderr);
+    dup2(saved, 2);
+    close(saved);
+    std::string text;
+    char data[4096];
+    lseek(file, 0, SEEK_SET);
+    for (ssize_t n; (n = read(file, data, sizeof(data))) > 0;)
+        text.append(data, static_cast<std::size_t>(n));
+    close(file);
+    unlink(path);
+    return text;
+}
+
+int countOf(const std::string& text, const std::string& part)
+{
+    int n = 0;
+    for (std::string::size_type at = text.find(part); at != std::string::npos; at = text.find(part, at + 1))
+        ++n;
+    return n;
+}
+
+std::string redirected(const char* name)
+{
+    const char* lookup = gsiRedirectHostname(name);
+    return lookup ? lookup : "(fails)";
+}
+
+// The values every redirect option refuses.
+const char* const kRefusedValues[] = { "", "bad host", "1.2.3", "1.2.3.256", "a..b", "host.test.", "\"host.test\"",
+                                       "http://host.test", "host.test:80", "host.test/x", "+gamespyRedirect",
+                                       "gpcm.gamespy.com=127.0.0.1", "host_name.test" };
+const unsigned kRefusedCount = sizeof(kRefusedValues) / sizeof(kRefusedValues[0]);
+
+std::string addressOf(const char* name)
+{
+    struct hostent* host = gsiGetHostByName(name);
+    if (!host)
+        return "(fails)";
+    char text[INET_ADDRSTRLEN] = "";
+    inet_ntop(AF_INET, host->h_addr_list[0], text, sizeof(text));
+    return text;
+}
+
+// +gamespyRedirect with an address: the values refused, the names matched, the restart arguments,
+// the start-up line, the SDK seam with and without the redirect installed, and the log.
+void scenarioRedirectNames()
+{
+    using namespace onlineProvider;
+    std::string error;
+
+    std::puts("redirect: values +gamespyRedirect refuses");
+    const std::string tooLong = std::string(226, 'a') + ".test";     // 231 characters: no room for battlefield2.available.
+    for (unsigned i = 0; i < kRefusedCount; ++i)
+    {
+        error.clear();
+        check(!setRedirect(kRefusedValues[i], error) && !error.empty() && !hasRedirect(),
+              std::string("refused \"") + kRefusedValues[i] + "\": " + error);
+    }
+    error.clear();
+    check(!setRedirect(tooLong, error) && !error.empty(), "refused a 231-character domain: " + error.substr(error.size() > 20 ? error.size() - 20 : 0));
+    check(setRedirect(std::string(225, 'a') + ".test", error), "a 230-character domain is accepted");
+
+    std::puts("redirect: +gamespyRedirect 10.1.2.3");
+    check(setRedirect("10.1.2.3", error), "+gamespyRedirect 10.1.2.3");
+    check(hasRedirect(), "redirect in effect");
+    for (int i = 0; i < kRetailNameCount; ++i)
+    {
+        std::string option;
+        const std::string lookup = redirectLookup(kRetailNames[i], &option);
+        checkEqual(lookup + " " + option, "10.1.2.3 gamespyRedirect", kRetailNames[i]);
+    }
+    checkEqual(redirectLookup("key.gamespy.com"), "10.1.2.3", "key.gamespy.com (no label, contains gamespy)");
+    checkEqual(redirectLookup("BF2Web.GameSpy.com"), "10.1.2.3", "BF2Web.GameSpy.com (case ignored)");
+    checkEqual(redirectLookup("www.dice.se"), "10.1.2.3", "www.dice.se (under dice.se)");
+    checkEqual(redirectLookup("gamespy.example.test"), "10.1.2.3", "gamespy.example.test (contains gamespy)");
+    checkEqual(redirectLookup("dice.se.example.test"), "", "dice.se.example.test (forwarded: not under dice.se)");
+    checkEqual(redirectLookup("logos.example.test"), "", "logos.example.test (forwarded)");
+    checkEqual(commandLineArguments(), " +gamespyRedirect 10.1.2.3", "restart arguments");
+    const std::string line = describe();
+    std::printf("  %s\n", line.c_str());
+    checkEqual(line, "online services: retail names; other names containing gamespy or under dice.se resolve to 10.1.2.3 (+gamespyRedirect)",
+               "the start-up line");
+    check(gsiRedirectHostname("gpcm.gamespy.com") != std::string("10.1.2.3"), "the SDK seam is unchanged before prepareGameSpySdk");
+
+    std::puts("redirect: the SDK seam after prepareGameSpySdk, logging each name once");
+    std::string results[3];
+    const std::string log = captureStderr([&]() {
+        prepareGameSpySdk();
+        for (int i = 0; i < 3; ++i)
+        {
+            results[0] = redirected("battlefield2.ms14.gamespy.com");
+            results[1] = redirected("logos.example.test");
+        }
+        results[2] = redirected("eapusher.dice.se");
+    });
+    checkEqual(results[0], "10.1.2.3", "battlefield2.ms14.gamespy.com looks up");
+    checkEqual(results[1], "logos.example.test", "logos.example.test looks up");
+    checkEqual(results[2], "10.1.2.3", "eapusher.dice.se looks up");
+    std::printf("  log:\n%s", log.c_str());
+    check(countOf(log, "redirecting battlefield2.ms14.gamespy.com to 10.1.2.3 (+gamespyRedirect)\n") == 1, "redirected name logged once");
+    check(countOf(log, "forwarding logos.example.test\n") == 1, "forwarded name logged once");
+    check(countOf(log, "redirecting eapusher.dice.se to 10.1.2.3 (+gamespyRedirect)\n") == 1, "dice.se name logged");
+    check(GSIACHostname[0] == 0 && !SBOverrideMasterServer, "the SDK's host-name variables stay untouched");
+    checkEqual(lookedUp(), "", "no resolver lookup for an address");
+    checkEqual(addressOf("gpcm.gamespy.com"), "10.1.2.3", "gsiGetHostByName(gpcm.gamespy.com)");
+    checkEqual(lookedUp(), "10.1.2.3", "the SDK looked up the address");
+}
+
+// +gamespyRedirect with a domain: each name is resolved, at every lookup, with its retail domain
+// replaced. The mock answers *.target.test with g_targetAddress.
+void scenarioRedirectDomain()
+{
+    using namespace onlineProvider;
+    std::string error;
+    check(setRedirect("provider.target.test", error), "+gamespyRedirect provider.target.test");
+
+    std::puts("domain: the names looked up instead");
+    const char* expected[] = {
+        "battlefield2.available.provider.target.test", "battlefield2.ms14.provider.target.test",
+        "battlefield2.master.provider.target.test", "gpcm.provider.target.test", "gpsp.provider.target.test",
+        "battlefield2.gamestats.provider.target.test", "BF2Web.provider.target.test", "stage-net.provider.target.test",
+        "eapusher.provider.target.test", "battlefield2.natneg1.provider.target.test",
+        "battlefield2.natneg2.provider.target.test", "battlefield2.natneg3.provider.target.test",
+    };
+    for (int i = 0; i < kRetailNameCount; ++i)
+    {
+        std::string option;
+        const std::string lookup = redirectLookup(kRetailNames[i], &option);
+        checkEqual(lookup + " " + option, std::string(expected[i]) + " gamespyRedirect", kRetailNames[i]);
+    }
+    checkEqual(redirectLookup("key.gamespy.com"), "key.provider.target.test", "key.gamespy.com");
+    checkEqual(redirectLookup("BF2Web.GameSpy.COM"), "BF2Web.provider.target.test", "BF2Web.GameSpy.COM (the label keeps its case)");
+    checkEqual(redirectLookup("gamespy.com"), "provider.target.test", "gamespy.com itself");
+    checkEqual(redirectLookup("gamespy.example.test"), "", "gamespy.example.test (no retail domain to replace: unchanged)");
+    checkEqual(redirectLookup("logos.example.test"), "", "logos.example.test (unchanged)");
+    checkEqual(commandLineArguments(), " +gamespyRedirect provider.target.test", "restart arguments");
+    const std::string line = describe();
+    std::printf("  %s\n", line.c_str());
+    check(line.find("resolve with their retail domain replaced by provider.target.test (+gamespyRedirect)") != std::string::npos,
+          "the start-up line names the domain");
+
+    std::puts("domain: resolved at every lookup, never at start-up");
+    const std::string log = captureStderr([&]() { prepareGameSpySdk(); });
+    checkEqual(lookedUp(), "", "prepareGameSpySdk resolved nothing");
+    g_targetAddress = inet_addr("10.1.1.1");
+    checkEqual(addressOf("gpcm.gamespy.com"), "10.1.1.1", "gpcm.gamespy.com resolves to the first answer");
+    g_targetAddress = inet_addr("10.2.2.2");
+    checkEqual(addressOf("gpcm.gamespy.com"), "10.2.2.2", "gpcm.gamespy.com resolves to the changed answer");
+    checkEqual(join(takeLookups()), "gpcm.provider.target.test,gpcm.provider.target.test",
+               "gpcm.provider.target.test was looked up each time; gpcm.gamespy.com never");
+    g_targetAddress = htonl(INADDR_LOOPBACK);
+
+    std::puts("domain: a proxied name that does not resolve fails the lookup");
+    check(setRedirect("nowhere.invalid", error), "+gamespyRedirect nowhere.invalid (replaces the value)");
+    checkEqual(addressOf("gpsp.gamespy.com"), "(fails)", "gsiGetHostByName(gpsp.gamespy.com) fails");
+    checkEqual(join(takeLookups()), "gpsp.nowhere.invalid", "only gpsp.nowhere.invalid was looked up");
+}
+
+// Every service with +gamespyRedirect 127.0.0.1 and the retail names: the mock resolves no name,
+// so every first packet or connection that arrives came through the redirect, and the web
+// requests keep the retail names in their Host headers.
+void scenarioRedirectServices()
+{
+    std::string error;
+    check(onlineProvider::setRedirect("127.0.0.1", error), "+gamespyRedirect 127.0.0.1");
+    ExpectedLookups e = formedLookups("gamespy.com");
+    e.available = e.master = e.serverList = e.gpcm = e.gpsp = e.gameStats = e.natNeg = e.statsWeb = e.playerInfo = "127.0.0.1";
+    scenarioServices(true, &e);
+}
+
+// Every service with +gamespyRedirect provider.target.test: each looks up its own name under that
+// domain, reaches loopback, and the web requests keep the retail Host headers.
+void scenarioRedirectDomainServices()
+{
+    std::string error;
+    check(onlineProvider::setRedirect("provider.target.test", error), "+gamespyRedirect provider.target.test");
+    ExpectedLookups e = formedLookups("provider.target.test");
+    e.statsWebName = "BF2Web.gamespy.com";
+    e.playerInfoName = "stage-net.gamespy.com";
+    const std::string log = captureStderr([&]() { scenarioServices(true, &e); });
+    std::printf("  log:\n%s", log.c_str());
+    check(countOf(log, "redirecting gpcm.gamespy.com to gpcm.provider.target.test (+gamespyRedirect)\n") == 1, "gpcm logged");
+    check(countOf(log, "redirecting BF2Web.gamespy.com to BF2Web.provider.target.test (+gamespyRedirect)\n") == 1, "BF2Web logged");
+}
+
+// The request line and Host header of every stats web request the game makes (each persistence
+// class builds its URL from getGameSpyUrl() and sends it with HTTPRequest::get or post), of the
+// player info request, and of a forwarded request, with +gamespyRedirect 127.0.0.1.
+struct WebEndpoint
+{
+    const char* path;      // after getGameSpyUrl()
+    bool post;
+    const char* caller;
+};
+
+const WebEndpoint kWebEndpoints[] = {
+    { "getbackendinfo.aspx",                         false, "PlayerUnlockInfo" },
+    { "getplayerinfo.aspx?pid=1&info=rank",          false, "PlayerStats" },
+    { "getawardsinfo.aspx?pid=1",                    false, "PlayerAwards" },
+    { "getunlocksinfo.aspx?pid=1",                   false, "PlayerUnlocks" },
+    { "selectunlock.aspx?pid=1&id=11",               true,  "PlayerUnlocks::selectUnlock" },
+    { "getrankinfo.aspx?pid=1",                      false, "PlayerRankInfo" },
+    { "ranknotification.aspx?pid=1",                 false, "PlayerRankInfo::clearNotification" },
+    { "getleaderboard.aspx?type=score&id=overall",   false, "LeaderBoard" },
+    { "searchforplayers.aspx?nick=nobody",           false, "SearchForPlayer" },
+    { "VerifyPlayer.aspx?auth=x&SoldierNick=nobody", false, "GSServerSideNameValidation" },
+    { "createplayer.aspx?pid=1&cid=US&nick=nobody",  true,  "ProfileManager::createStatsPlayer" },
+};
+
+struct PostRequest : HTTPRequest
+{
+    bool done;
+    PostRequest() : done(false) {}
+    void onPostComplete(const std::string& text) { done = true; HTTPRequest::onPostComplete(text); }
+    void onPostFailure(const std::string& text) { done = true; HTTPRequest::onPostFailure(text); }
+};
+
+void clearWeb()
+{
+    pthread_mutex_lock(&g_lock);
+    listener("web").events = 0;
+    listener("web").first.clear();
+    pthread_mutex_unlock(&g_lock);
+}
+
+void checkHead(const std::string& head, const std::string& method, const std::string& path, const std::string& host,
+               const std::string& what)
+{
+    const std::string line = method + " " + path + " HTTP/1.1\r\n";
+    check(head.compare(0, line.size(), line) == 0, what + ": request line " + method + " " + path);
+    check(countOf(head, "\r\nHost: ") == 1 && head.find("\r\nHost: " + host + "\r\n") != std::string::npos,
+          what + ": one Host header, " + host);
+}
+
+// labels: +gamespyRedirectBF2Web, +gamespyRedirectstage-net and +gamespyRedirecteapusher 127.0.0.1,
+// with +gamespyRedirect at a domain whose names never resolve, so a request that reaches the
+// listener went through the label options.
+void scenarioRedirectWeb(bool labels = false)
+{
+    using namespace onlineProvider;
+    std::string error;
+    if (!labels)
+        check(setRedirect("127.0.0.1", error), "+gamespyRedirect 127.0.0.1");
+    else
+    {
+        check(setRedirect("fallback.invalid", error), "+gamespyRedirect fallback.invalid (its names never resolve)");
+        for (int l = 0; l < labelCount(); ++l)
+            if (label(l) == std::string("BF2Web") || label(l) == std::string("stage-net") || label(l) == std::string("eapusher"))
+                check(setLabelRedirect(l, "127.0.0.1", error), "+" + labelOption(l) + " 127.0.0.1");
+    }
+    prepareGameSpySdk();
+    g_resolve = false;              // only the redirect's address can answer
+    startListeners();
+    if (listener("web").fd < 0)
+    {
+        std::puts("  skip (127.0.0.1:18080 is in use)");
+        stopListeners();
+        return;
+    }
+
+    std::puts("stats web requests: connected to 127.0.0.1, Host BF2Web.gamespy.com");
+    for (unsigned i = 0; i < sizeof(kWebEndpoints) / sizeof(kWebEndpoints[0]); ++i)
+    {
+        const WebEndpoint& endpoint = kWebEndpoints[i];
+        clearWeb();
+        takeLookups();
+        std::string url;
+        if (endpoint.post)
+        {
+            PostRequest request;
+            url = request.getGameSpyUrl() + endpoint.path;
+            request.post(url, "", false);
+            const double end = now() + 3.0;
+            while (!request.done && now() < end)
+            {
+                request.update();
+                msleep(5);
+            }
+        }
+        else
+        {
+            WebRequest request;
+            url = request.getGameSpyUrl() + endpoint.path;
+            request.get(url, false);
+            const double end = now() + 3.0;
+            while (request.isUpdating() && now() < end)
+            {
+                request.update();
+                msleep(5);
+            }
+        }
+        const std::string what = endpoint.caller;
+        checkEqual(url.substr(0, 30), "http://BF2Web.gamespy.com/ASP/", what + ": URL");
+        checkEqual(lookedUp(), "127.0.0.1", what + ": looked up");
+        checkArrived("web", what + ": the request");
+        checkHead(firstBytes("web"), endpoint.post ? "POST" : "GET", std::string("/ASP/") + endpoint.path,
+                  "BF2Web.gamespy.com", what);
+    }
+
+    std::puts("player info request: Host stage-net.gamespy.com");
+    clearWeb();
+    takeLookups();
+    runPlayerStats();
+    checkEqual(lookedUp(), "127.0.0.1", "PlayerStatsManager: looked up");
+    checkArrived("web", "PlayerStatsManager: the request");
+    check(firstBytes("web").compare(0, 32, "GET /bf2/getplayerinfo.aspx?pid=") == 0, "PlayerStatsManager: request line");
+    check(countOf(firstBytes("web"), "\r\nHost: ") == 1 && firstBytes("web").find("\r\nHost: stage-net.gamespy.com\r\n") != std::string::npos,
+          "PlayerStatsManager: one Host header, stage-net.gamespy.com");
+
+    {
+        std::puts("menu image request: connected to 127.0.0.1, Host eapusher.dice.se");
+        clearWeb();
+        takeLookups();
+        {
+            WebRequest request;
+            request.getFile("http://eapusher.dice.se/bf2/news.png", "/tmp/online_provider_unused.png", false);
+            const double end = now() + 3.0;
+            while (request.isUpdating() && now() < end)
+            {
+                request.update();
+                msleep(5);
+            }
+        }
+        unlink("/tmp/online_provider_unused.png");
+        checkEqual(lookedUp(), "127.0.0.1", "eapusher.dice.se: looked up");
+        checkArrived("web", "eapusher.dice.se: the request");
+        checkHead(firstBytes("web"), "GET", "/bf2/news.png", "eapusher.dice.se", "eapusher.dice.se");
+    }
+
+    std::puts("a request to another host is forwarded (HTTPRequest::getFile, as server logos)");
+    clearWeb();
+    takeLookups();
+    {
+        WebRequest request;
+        request.getFile("http://logos.example.test/logo.dds", "/tmp/online_provider_unused.dds", false);
+        const double end = now() + 3.0;
+        while (request.isUpdating() && now() < end)
+        {
+            request.update();
+            msleep(5);
+        }
+        check(request.failed, "it failed (the name does not resolve)");
+    }
+    checkEqual(lookedUp(), "logos.example.test", "looked up its own name");
+    stopListeners();
+}
+
+// ---- +gamespyRedirect<label> ---------------------------------------------------------------------
+
+std::string labelAddress(int i)
+{
+    return "10.0.0." + std::to_string(i + 1);
+}
+
+// Every label option with an address, refused values, precedence over +gamespyRedirect, the restart
+// arguments, the start-up line and the log.
+void scenarioLabelNames()
+{
+    using namespace onlineProvider;
+    std::string error;
+
+    std::puts("labels: values every label option refuses");
+    for (int l = 0; l < labelCount(); ++l)
+    {
+        unsigned refused = 0;
+        std::string first;
+        for (unsigned i = 0; i < kRefusedCount; ++i)
+        {
+            error.clear();
+            if (!setLabelRedirect(l, kRefusedValues[i], error) && !error.empty())
+                ++refused;
+            if (i == 0)
+                first = error;
+        }
+        check(refused == kRefusedCount && !hasRedirect(),
+              "+" + labelOption(l) + " refuses all " + std::to_string(refused) + " (empty: " + first + ")");
+    }
+    check(!setLabelRedirect(labelCount(), "10.0.0.1", error) && !setLabelRedirect(-1, "10.0.0.1", error), "no label option out of range");
+    checkEqual(commandLineArguments(), "", "restart arguments after refused values");
+
+    std::puts("labels: each option alone, without +gamespyRedirect");
+    for (int l = 0; l < labelCount(); ++l)
+        check(setLabelRedirect(l, labelAddress(l), error), "+" + labelOption(l) + " " + labelAddress(l));
+    for (int i = 0; i < kRetailNameCount; ++i)
+    {
+        std::string option;
+        const std::string lookup = redirectLookup(kRetailNames[i], &option);
+        checkEqual(lookup + " " + option, labelAddress(i) + " " + labelOption(i), kRetailNames[i]);
+    }
+    checkEqual(redirectLookup("GPCM.GameSpy.com"), "10.0.0.4", "GPCM.GameSpy.com (case ignored)");
+    checkEqual(redirectLookup("key.gamespy.com"), "", "key.gamespy.com unchanged (no label option, no +gamespyRedirect)");
+    checkEqual(redirectLookup("peerchat.gamespy.com"), "", "peerchat.gamespy.com unchanged");
+    checkEqual(redirectLookup("logos.example.test"), "", "logos.example.test unchanged");
+    checkEqual(commandLineArguments(),
+               " +gamespyRedirectavailable 10.0.0.1 +gamespyRedirectms14 10.0.0.2 +gamespyRedirectmaster 10.0.0.3"
+               " +gamespyRedirectgpcm 10.0.0.4 +gamespyRedirectgpsp 10.0.0.5 +gamespyRedirectgamestats 10.0.0.6"
+               " +gamespyRedirectBF2Web 10.0.0.7 +gamespyRedirectstage-net 10.0.0.8 +gamespyRedirecteapusher 10.0.0.9"
+               " +gamespyRedirectnatneg1 10.0.0.10 +gamespyRedirectnatneg2 10.0.0.11 +gamespyRedirectnatneg3 10.0.0.12",
+               "restart arguments");
+    const std::string line = describe();
+    std::printf("  %s\n", line.c_str());
+    for (int l = 0; l < labelCount(); ++l)
+        check(line.find(std::string("; ") + label(l) + " names resolve as " + labelAddress(l) + " (+" + labelOption(l) + ")") != std::string::npos,
+              "the start-up line names +" + labelOption(l));
+
+}
+
+// Some label options with +gamespyRedirect: precedence, the restart arguments, the start-up line,
+// the log, per-lookup resolution of a host-name target and a target that does not resolve.
+void scenarioLabelFallback()
+{
+    using namespace onlineProvider;
+    std::string error;
+    std::puts("labels: some options with +gamespyRedirect 10.9.9.9");
+    check(setRedirect("10.9.9.9", error), "+gamespyRedirect 10.9.9.9");
+    check(setLabelRedirect(3, "10.0.0.4", error), "+gamespyRedirectgpcm 10.0.0.4");
+    check(setLabelRedirect(6, "stats.target.test", error), "+gamespyRedirectBF2Web stats.target.test");
+    struct Case { const char* name; const char* lookup; const char* option; };
+    const Case cases[] = {
+        { "gpcm.gamespy.com", "10.0.0.4", "gamespyRedirectgpcm" },
+        { "BF2Web.gamespy.com", "stats.target.test", "gamespyRedirectBF2Web" },
+        { "stage-net.gamespy.com", "10.9.9.9", "gamespyRedirect" },
+        { "gpsp.gamespy.com", "10.9.9.9", "gamespyRedirect" },
+        { "eapusher.dice.se", "10.9.9.9", "gamespyRedirect" },
+        { "key.gamespy.com", "10.9.9.9", "gamespyRedirect" },
+        { "logos.example.test", "", "" },
+    };
+    for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i)
+    {
+        std::string option;
+        const std::string lookup = redirectLookup(cases[i].name, &option);
+        checkEqual(lookup + "|" + option, std::string(cases[i].lookup) + "|" + cases[i].option, cases[i].name);
+    }
+    checkEqual(commandLineArguments(), " +gamespyRedirect 10.9.9.9 +gamespyRedirectgpcm 10.0.0.4 +gamespyRedirectBF2Web stats.target.test",
+               "restart arguments");
+    const std::string line = describe();
+    std::printf("  %s\n", line.c_str());
+    checkEqual(line, "online services: retail names; gpcm names resolve as 10.0.0.4 (+gamespyRedirectgpcm); BF2Web names resolve as"
+                     " stats.target.test (+gamespyRedirectBF2Web); other names containing gamespy or under dice.se resolve to"
+                     " 10.9.9.9 (+gamespyRedirect)", "the start-up line");
+
+    std::puts("labels: the SDK seam");
+    std::string results[3];
+    const std::string log = captureStderr([&]() {
+        prepareGameSpySdk();
+        for (int i = 0; i < 2; ++i)
+        {
+            results[0] = redirected("gpcm.gamespy.com");
+            results[1] = redirected("BF2Web.gamespy.com");
+        }
+        results[2] = redirected("gpsp.gamespy.com");
+    });
+    checkEqual(results[0], "10.0.0.4", "gpcm.gamespy.com looks up");
+    checkEqual(results[1], "stats.target.test", "BF2Web.gamespy.com looks up");
+    checkEqual(results[2], "10.9.9.9", "gpsp.gamespy.com looks up");
+    std::printf("  log:\n%s", log.c_str());
+    check(countOf(log, "redirecting gpcm.gamespy.com to 10.0.0.4 (+gamespyRedirectgpcm)\n") == 1, "label option logged once");
+    check(countOf(log, "redirecting BF2Web.gamespy.com to stats.target.test (+gamespyRedirectBF2Web)\n") == 1, "host-name target logged once");
+    check(countOf(log, "redirecting gpsp.gamespy.com to 10.9.9.9 (+gamespyRedirect)\n") == 1, "fallback logged");
+    checkEqual(lookedUp(), "", "the seam itself resolves nothing");
+
+    std::puts("labels: a host-name target is resolved at every lookup");
+    g_targetAddress = inet_addr("10.3.3.3");
+    checkEqual(addressOf("BF2Web.gamespy.com"), "10.3.3.3", "BF2Web.gamespy.com resolves to the first answer");
+    g_targetAddress = inet_addr("10.4.4.4");
+    checkEqual(addressOf("BF2Web.gamespy.com"), "10.4.4.4", "BF2Web.gamespy.com resolves to the changed answer");
+    checkEqual(join(takeLookups()), "stats.target.test,stats.target.test", "stats.target.test looked up each time");
+    g_targetAddress = htonl(INADDR_LOOPBACK);
+
+    std::puts("labels: a host-name target that does not resolve fails the lookup");
+    check(setLabelRedirect(4, "missing.invalid", error), "+gamespyRedirectgpsp missing.invalid");
+    checkEqual(addressOf("gpsp.gamespy.com"), "(fails)", "gsiGetHostByName(gpsp.gamespy.com) fails");
+    checkEqual(join(takeLookups()), "missing.invalid", "neither gpsp.gamespy.com nor the fallback was tried");
+}
+
+// Every label option with its own host-name target and +gamespyRedirect at a domain whose names
+// never resolve: every packet or connection that arrives went to its label's target, which the
+// SDK looked up itself.
+void scenarioLabelServices()
+{
+    using namespace onlineProvider;
+    std::string error;
+    check(setRedirect("fallback.invalid", error), "+gamespyRedirect fallback.invalid (its names never resolve)");
+    for (int l = 0; l < labelCount(); ++l)
+        check(setLabelRedirect(l, std::string(label(l)) + ".target.test", error),
+              "+" + labelOption(l) + " " + label(l) + ".target.test");
+    ExpectedLookups e = formedLookups("gamespy.com");
+    e.available  = "available.target.test";
+    e.master     = "master.target.test";
+    e.serverList = "ms14.target.test";
+    e.gpcm       = "gpcm.target.test";
+    e.gpsp       = "gpsp.target.test";
+    e.gameStats  = "gamestats.target.test";
+    e.natNeg     = "natneg1.target.test,natneg2.target.test,natneg3.target.test";
+    e.statsWeb   = "BF2Web.target.test";
+    e.playerInfo = "stage-net.target.test";
+    const std::string log = captureStderr([&]() { scenarioServices(true, &e); });
+
+    std::puts("the name not looked up by the services above");
+    checkEqual(redirected("eapusher.dice.se"), "eapusher.target.test", "eapusher.dice.se looks up");
+    checkEqual(addressOf("eapusher.dice.se"), "127.0.0.1", "and resolves");
+    checkEqual(lookedUp(), "eapusher.target.test", "eapusher.target.test was looked up");
+
+    std::printf("  log:\n%s", log.c_str());
+    for (int i = 0; i < kRetailNameCount; ++i)
+    {
+        if (i == 8)
+            continue;   // eapusher.dice.se: no service above
+        const std::string text = std::string("redirecting ") + kRetailNames[i] + " to " + label(i) + ".target.test (+" + labelOption(i) + ")\n";
+        check(countOf(log, text) == 1, "logged once: " + text.substr(0, text.size() - 1));
+    }
+    check(log.find("fallback.invalid") == std::string::npos, "no name went to +gamespyRedirect");
+}
+
 int runScenario(const std::string& name)
 {
     if (name == "names")
         scenarioNames();
-    else if (name == "retail-domain")
-        scenarioServices("gamespy.com", false);
-    else if (name == "other-domain")
-        scenarioServices("example.test", true);
-    else if (name == "other-domain-unresolved")
-        scenarioServices("example.test", false);
+    else if (name == "retail-unresolved")
+        scenarioServices(false);
+    else if (name == "retail-resolved")
+        scenarioServices(true);
+    else if (name == "redirect-names")
+        scenarioRedirectNames();
+    else if (name == "redirect-domain")
+        scenarioRedirectDomain();
+    else if (name == "redirect-services")
+        scenarioRedirectServices();
+    else if (name == "redirect-domain-services")
+        scenarioRedirectDomainServices();
+    else if (name == "redirect-web")
+        scenarioRedirectWeb();
+    else if (name == "label-names")
+        scenarioLabelNames();
+    else if (name == "label-fallback")
+        scenarioLabelFallback();
+    else if (name == "label-services")
+        scenarioLabelServices();
+    else if (name == "label-web")
+        scenarioRedirectWeb(true);
     else if (name == "silent-host")
         scenarioSilentHost();
     else if (name == "refused")
@@ -979,7 +1579,9 @@ int main(int argc, char** argv)
     if (argc > 1)
         return runScenario(argv[1]);
 
-    const char* scenarios[] = { "names", "retail-domain", "other-domain", "other-domain-unresolved", "silent-host", "refused", "silent-tcp" };
+    const char* scenarios[] = { "names", "retail-unresolved", "retail-resolved", "redirect-names", "redirect-domain",
+                                "redirect-services", "redirect-domain-services", "redirect-web", "label-names",
+                                "label-fallback", "label-services", "label-web", "silent-host", "refused", "silent-tcp" };
     int failed = 0;
     for (unsigned i = 0; i < sizeof(scenarios) / sizeof(scenarios[0]); ++i)
     {

@@ -28,7 +28,8 @@
 //     afterward and the hooks are too late.
 //   - This loader does not itself reroute sockets. bf2hub's GameSpy/master redirection relied on an
 //     install-time patch of the host's import table that a runtime load does not reproduce; the
-//     online services' domain is selected with +gamespy (Game/MatchMaking/OnlineProvider.h).
+//     online services' addresses are selected on the command line with +gamespyRedirect and
+//     +gamespyRedirect<label> (Game/MatchMaking/OnlineProvider.h), never by a console command.
 
 #include "../../Core/ConsoleObjectMacro.h"
 

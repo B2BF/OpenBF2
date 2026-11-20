@@ -14,6 +14,7 @@ keep integration changes identifiable in the source.
 | `serverbrowsing/sb_serverlist.c`: `ServerListConnect` | `[CHOSEN, not recovered]` The master-list connect is non-blocking with a 5-second limit (`SB_CONNECT_TIMEOUT`), then blocking again as before; a timeout returns `sbe_connecterror`. | The SDK's blocking `connect` waits for the operating system's TCP timeout (75 s on macOS, about 21 s on Windows) when the name resolves to an address that never answers, with the menu frozen. |
 | `gp/gpi.h`, `gp/gpiConnect.c`: `gpiStartConnect`, `gpiCheckConnect`; `gp/gpiSearch.c`: `gpiProcessSearch` | `[CHOSEN, not recovered]` A connection-manager or search-manager connect that has not completed after 5 seconds (`GPI_CONNECT_TIMEOUT`) fails: login with `GP_LOGIN_CONNECTION_FAILED` ("The server has not answered the connection."), search with `GP_SEARCH_TIMED_OUT`. | Same as above; Battlefield 2 runs these operations blocking. |
 | `ghttp/ghttpConnection.h`, `ghttp/ghttpProcess.c`: `ghiDoConnecting` | `[CHOSEN, not recovered]` A connect that has not completed after 5 seconds (`GHI_CONNECT_TIMEOUT`) ends the request with `GHTTPConnectFailed`. | Same as above; most stats requests are blocking. |
+| `common/gsPlatformSocket.{h,c}`: new `gsiSetHostRedirect`, `gsiRedirectHostname`, `gsiGetHostByName`; the host-name lookups in `common/gsAvailable.c`, `common/gsPlatformUtil.c` (both resolver-thread arms, the `getaddrinfo` arm and the synchronous arm), `qr2/qr2.c`, `gcdkey/gcdkeys.c`, `gstats/gstats.c`, `natneg/natneg.c`, `natneg/NATify.c`, `gp/gpiConnect.c`, `gp/gpiSearch.c`, `serverbrowsing/sb_serverlist.c` and `ghttp/ghttpProcess.c` | `[CHOSEN, not recovered]` Every lookup of a service name goes through `gsiRedirectHostname`. Without an installed redirect it returns the name itself, so the lookup is unchanged. A redirect returns the name to look up instead (a dotted IPv4 address, which the system answers without DNS), or `NULL` to make the lookup fail. | `+gamespyRedirect` and the `+gamespyRedirect<label>` options (`Game/MatchMaking/OnlineProvider.h`) resolve the retail names elsewhere inside the process, keeping the names (and so the HTTP Host headers) retail. The redirect function maps each name to an address or another host name by its label itself, so the SDK passes only the name and resolves the returned name at every lookup. Not routed: `gsPlatformSocket.c` `getlocalhost` (this machine's own name); `gt2/gt2Utility.c` (linked with presence, but only given peer addresses, never a service name); and `chat` and `pinger`, which no image compiles. |
 
 Both client and dedicated-server integrations can use these shared SDK files.
 
@@ -43,13 +44,12 @@ S2.10 adds these POSIX-only changes, all [CHOSEN, not recovered]:
 - `natneg/natneg.c`, `NNProcessData`: reject input shorter than the base header before reading
   its magic/type. Packed payloads already copy with `memcpy`.
 
-The service domain is the SDK's own `GSI_DOMAIN_NAME` (`gamespy.com`). The game replaces it at
-run time without a source change: `Game/MatchMaking/OnlineProviderGameSpy.cpp` writes the service
-names into the SDK's host-name variables (`GSIACHostname`, `qr2_hostname`, `gcd_hostname`,
-`StatsServerHostname`, `GPConnectionManagerHostname`, `GPSearchManagerHostname`,
-`SBOverrideMasterServer`, `Matchup1Hostname` to `Matchup3Hostname`). A new SDK revision must keep
-these variables, the name formats `OnlineProvider.cpp` mirrors, and the master-server index hash
-of `sb_serverlist.c`.
+The service domain is the SDK's own `GSI_DOMAIN_NAME` (`gamespy.com`), and the game never
+changes it or the SDK's host-name variables: every name stays retail, and the redirects act in
+`gsiRedirectHostname` only. A new SDK revision must keep the retail name formats (the labels
+`OnlineProvider.cpp` lists, including the master-server index hash of `sb_serverlist.c`, which
+gives `ms14` for `battlefield2`) and route every new host-name lookup through
+`gsiRedirectHostname` (`gsiGetHostByName`), as listed in the table above.
 
 Changing the SDK revision requires checking the interfaces and behavior used by
 those integrations.
