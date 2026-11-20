@@ -2476,6 +2476,19 @@ if(BF2_BUILD_MACOS AND TARGET bf2_swiffplayer_static)
     target_link_libraries(bf2_swiff_offline_connect_popup_check PRIVATE
         bf2_swiffplayer_static bf2_plugin_kit_static)
 
+    # [TEMP] [CHOSEN, not recovered] Content-free PunkBuster availability and menu-greying check.
+    add_executable(bf2_swiff_punkbuster_menu_check EXCLUDE_FROM_ALL
+        Code/Tests/swiff_punkbuster_menu.cpp
+        Code/Tests/gameswf_xml/native_host_unavailable.cpp)
+    bf2_configure_static_plugin(bf2_swiff_punkbuster_menu_check BF2_IMAGE_SWIFFPLAYER)
+    target_include_directories(bf2_swiff_punkbuster_menu_check PRIVATE
+        "${BF2_EXTERNAL_ROOT}" "${BF2_EXTERNAL_ROOT}/gameswf")
+    target_link_libraries(bf2_swiff_punkbuster_menu_check PRIVATE
+        bf2_swiffplayer_static bf2_plugin_kit_static)
+    if(BUILD_TESTING)
+        add_test(NAME bf2_swiff_punkbuster_menu_check COMMAND bf2_swiff_punkbuster_menu_check)
+    endif()
+
     # [TEMP] [CHOSEN, not recovered] The __proto__ probe SWFs (tools/swf/proto_probe.py) in the
     # native gameswf must show retail 1.50's squares (docs/tracks/game/swf-proto-retail-probe.md).
     add_executable(bf2_swf_proto_probe_check EXCLUDE_FROM_ALL
@@ -2889,6 +2902,34 @@ if(APPLE)
     target_link_libraries(bf2_online_provider_check PRIVATE Threads::Threads)
     if(BUILD_TESTING)
         add_test(NAME bf2_online_provider_check COMMAND bf2_online_provider_check)
+    endif()
+endif()
+
+# [TEMP] The text of the online-account error popups (Code/Tests/profile_manager_login_error_runtime.cpp):
+# the production ProfileManager and the linked GameSpy SDK against loopback gpcm/gpsp stand-ins whose
+# login refuses the password. The fixture replaces the resolver, so no name leaves the process. Built
+# on request; the client image (DEDICATED=0).
+if(APPLE)
+    add_executable(bf2_profile_manager_login_error_check EXCLUDE_FROM_ALL
+        Code/Tests/profile_manager_login_error_runtime.cpp
+        "${BF2_ROOT}/Game/ProfileManager.cpp"
+        "${BF2_ROOT}/Game/Persistence/AntiHacks.cpp"
+        "${BF2_ROOT}/Game/Persistence/HTTPRequest.cpp"
+        "${BF2_ROOT}/Game/MatchMaking/OnlineProvider.cpp"
+        "${BF2_ROOT}/Game/MatchMaking/OnlineProviderGameSpy.cpp"
+        "${BF2_ROOT}/Core/ClassManager.cpp"
+        "${BF2_ROOT}/Core/Debug.cpp"
+        "${BF2_ROOT}/Core/StringUtil.cpp"
+        $<TARGET_OBJECTS:bf2_gamespy_objects>
+        $<TARGET_OBJECTS:bf2_gamespy_gp_objects>)
+    bf2_configure_cpp_target(bf2_profile_manager_login_error_check)
+    bf2_set_platform_compat(bf2_profile_manager_login_error_check)
+    bf2_set_image(bf2_profile_manager_login_error_check 0)
+    target_compile_definitions(bf2_profile_manager_login_error_check PRIVATE BF2_PLATFORM_POSIX _MACOSX)
+    find_package(Threads REQUIRED)
+    target_link_libraries(bf2_profile_manager_login_error_check PRIVATE Threads::Threads)
+    if(BUILD_TESTING)
+        add_test(NAME bf2_profile_manager_login_error_check COMMAND bf2_profile_manager_login_error_check)
     endif()
 endif()
 

@@ -2116,10 +2116,11 @@ char RD9_THUNK sr_fontGetExtent(void* self RD9_THUNK_EDX, void* font, int arg,
     return ok;
 }
 
-#if !defined(_MSC_VER)
-// PE 0x10152FF0. [CHOSEN, not recovered] Natively the passed-through second argument is the
-// int* out position it is (SwiffPlayer 0x10005E30 `lea edx,[ebp+0x14]`; font 0x100A48C0 stores
-// through it); the MSVC spelling keeps its 32-bit carrier.
+#if !defined(_MSC_VER) || defined(_WIN64)
+// PE 0x10152FF0. [CHOSEN, not recovered] Native (and MSVC x64, where an int cannot carry the
+// pointer): the passed-through second argument is the int* out position it is (SwiffPlayer
+// 0x10005E30 `lea edx,[ebp+0x14]`; font 0x100A48C0 stores through it). The MSVC x86 spelling
+// keeps its 32-bit carrier.
 char RD9_THUNK sr_fontForward32(void* self RD9_THUNK_EDX, void* font, int* arg,
                                  float x, float y)
 #else
@@ -2131,7 +2132,7 @@ char RD9_THUNK sr_fontForward32(void* self RD9_THUNK_EDX, void* font, int arg,
     if (s->fontsDisabled || !font)
         return 0;
     void** vtbl = *reinterpret_cast<void***>(font);
-#if !defined(_MSC_VER)
+#if !defined(_MSC_VER) || defined(_WIN64)
     typedef char (__thiscall* Fn)(void*, int*, float, float);
 #else
     typedef char (__thiscall* Fn)(void*, int, float, float);
@@ -2139,9 +2140,10 @@ char RD9_THUNK sr_fontForward32(void* self RD9_THUNK_EDX, void* font, int arg,
     return reinterpret_cast<Fn>(vtbl[32 / 4])(font, arg, x * s->scaleX, y * s->scaleY);
 }
 
-#if !defined(_MSC_VER)
+#if !defined(_MSC_VER) || defined(_WIN64)
 // PE 0x10153030 -> font +0x28 (0x10152080), which writes both outs. [CHOSEN, not recovered]
-// Natively they are the int* the SwiffPlayer forwarder 0x10005E50 passes.
+// Native (and MSVC x64): they are the int* the SwiffPlayer forwarder 0x10005E50 passes. The MSVC
+// x86 spelling keeps its 32-bit carriers.
 char RD9_THUNK sr_fontForward40(void* self RD9_THUNK_EDX, void* font, int* a, int* b)
 #else
 char RD9_THUNK sr_fontForward40(void* self RD9_THUNK_EDX, void* font, int a, int b)
@@ -2150,7 +2152,7 @@ char RD9_THUNK sr_fontForward40(void* self RD9_THUNK_EDX, void* font, int a, int
     if (static_cast<SwiffRender*>(self)->fontsDisabled || !font)
         return 0;
     void** vtbl = *reinterpret_cast<void***>(font);
-#if !defined(_MSC_VER)
+#if !defined(_MSC_VER) || defined(_WIN64)
     typedef char (__thiscall* Fn)(void*, int*, int*);
 #else
     typedef char (__thiscall* Fn)(void*, int, int);

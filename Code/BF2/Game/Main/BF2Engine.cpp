@@ -4,6 +4,7 @@
 
 #include "BF2Engine.h"
 #include "../PunkBuster/PbGlue.h"
+#include "../PunkBuster/PbAvailability.h"   // [CHOSEN, not recovered] the join's PunkBuster flag per build
 #include "PerformanceLogging.h"             // +0x74, deleted in shutdownGame and shutdownEngine (every image)
 #include "BF2EngineSetup.h"
 #include "BF2Log.h"                         // [INFERRED] path; Game/Main/BF2Log.cpp is attested
@@ -1798,7 +1799,9 @@ bool BF2Engine::startGame(bool noAutoJoin, bool startFromMenu)   // 2nd bool fro
         const std::string& joinAddress = settings->stringGet("GSJoinAddress", "127.0.0.1"); // +0x40
         const std::string& password    = settings->stringGet("GSPassword", "");             // +0x40
         int  port         = settings->intGet("GSPort", 16567);                              // +0x10
-        bool clPunkBuster = settings->boolGet("GSClPunkBuster", false);                     // +0x50
+        // [CHOSEN, not recovered] A build that cannot run PunkBuster ignores the stored preference
+        // (PbAvailability.h); retail passes it as read.
+        bool clPunkBuster = pb::clientRequest(settings->boolGet("GSClPunkBuster", false));  // +0x50
 
         // Join uses a five-second timeout; only result 1 indicates success.
         const int joinResult = gameClient->joinServer(joinAddress, port, password, 5.0f, clPunkBuster);

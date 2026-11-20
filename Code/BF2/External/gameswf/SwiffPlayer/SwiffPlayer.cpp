@@ -22,6 +22,8 @@
 #include "SwiffPlayer.h"
 #include "SwiffBitmapCache.h"
 #include "OfflineConnectPopup.h"
+#include "PunkBusterMenu.h"                     // [CHOSEN, not recovered] PunkBuster options per build
+#include "../../../Game/PunkBuster/PbAvailability.h"
 #include "../../../Core/MsvcCrtCompat.h"   // [CHOSEN, not recovered] sprintf_s, __time32_t/_time32, _time64 outside MSVC
 #if (defined(__APPLE__) || defined(BF2_LINUX_CLIENT))
 #include "../../../Platform/Host/ClientHost.h"
@@ -6622,7 +6624,18 @@ void as_generalsettings_updateLastAwardsCheckDate(const gameswf::fn_call& fn)
     generalSettingsOf(generalSettingsSingleton())->setLastAwardsCheckDate(static_cast<int>(now));   // +0xCC
 }
 
-void as_generalsettings_getAllowPunkBuster(const gameswf::fn_call& fn)           { SWF_AS_TRACE("as_generalsettings_getAllowPunkBuster");           publishGeneralBool(fn, GS_SLOT(getAllowPunkBuster, 0xD0)); }
+void as_generalsettings_getAllowPunkBuster(const gameswf::fn_call& fn)
+{
+    SWF_AS_TRACE("as_generalsettings_getAllowPunkBuster");
+    publishGeneralBool(fn, GS_SLOT(getAllowPunkBuster, 0xD0));
+    // [CHOSEN, not recovered] PunkBusterMenu.h: off and unavailable where the build has no PunkBuster.
+    if (!pb::kClientBuildSupported)
+    {
+        fn.result->set_bool(false);
+        dice::hfe::ui::disableAuthoredControl(fn.env ? fn.env->get_target() : 0, fn.env,
+                                              dice::hfe::ui::kPunkBusterCheckboxMember);
+    }
+}
 void as_generalsettings_setAllowPunkBuster(const gameswf::fn_call& fn)           { SWF_AS_TRACE("as_generalsettings_setAllowPunkBuster");           setGeneralBoolArgumentFirst(fn, GS_SLOT(setAllowPunkBuster, 0xD4)); }
 void as_generalsettings_getItemSelectionReverseItems(const gameswf::fn_call& fn) { SWF_AS_TRACE("as_generalsettings_getItemSelectionReverseItems"); publishGeneralBool(fn, GS_SLOT(getItemSelectionReverseItems, 0xD8)); }
 void as_generalsettings_setItemSelectionReverseItems(const gameswf::fn_call& fn) { SWF_AS_TRACE("as_generalsettings_setItemSelectionReverseItems"); setGeneralBoolArgumentFirst(fn, GS_SLOT(setItemSelectionReverseItems, 0xDC)); }
@@ -8263,6 +8276,14 @@ void as_multiplay_getToggleFilter(const gameswf::fn_call& fn)
     const int mask = (int) fn.arg(0).to_number();
 #endif
     fn.result->set_bool(static_cast<GeneralSettings*>(static_cast<IGeneralSettings*>(gs))->getToggleFilter(mask));
+    // [CHOSEN, not recovered] PunkBusterMenu.h: the "PunkBuster servers only" filter is off and
+    // unavailable where the build has no PunkBuster.
+    if (!pb::serverFilterApplies(mask))
+    {
+        fn.result->set_bool(false);
+        dice::hfe::ui::disableAuthoredControl(fn.env ? fn.env->get_target() : 0, fn.env,
+                                              dice::hfe::ui::kPunkBusterCheckboxMember);
+    }
 }
 // Sets a browser filter bit and its query clause from (mask, on, clause); publishes no result.
 // Requires GeneralSettings and all three arguments. Empty/"%%" clauses clear the bit
@@ -8297,6 +8318,10 @@ void as_multiplay_setToggleFilter(const gameswf::fn_call& fn)
 // which form one OR group; the free-text filter follows the generated clauses.
 static bool filterBitOn(IBase* gs, int mask)
 {
+    // [CHOSEN, not recovered] A stored "PunkBuster servers only" bit is not applied where the build
+    // has no PunkBuster (PbAvailability.h); retail reads only the stored bit.
+    if (!pb::serverFilterApplies(mask))
+        return false;
     return static_cast<GeneralSettings*>(static_cast<IGeneralSettings*>(gs))->getToggleFilter(mask);
 }
 static bool isMapSizeFilter(int mask)
