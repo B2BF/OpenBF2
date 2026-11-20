@@ -56,7 +56,7 @@ bool readRegistryString(RegKeyCategory category, const std::string& name,
     // [CHOSEN, not recovered] x64 (https://github.com/B2BF/OpenBF2/issues/7): BF2's 32-bit installer
     // writes these keys into the 32-bit registry view (WOW6432Node), which a 32-bit process reads
     // implicitly; a 64-bit process must ask for that view or it finds no keys (an empty CD key then
-    // takes translateCdKey's shipped null-blob fault at the first server challenge). Subkeys opened
+    // makes the first server challenge disconnect with reason 7). Subkeys opened
     // relative to this handle stay in the same view.
     if (RegOpenKeyExA(root, path.c_str(), 0, KEY_READ | KEY_WOW64_32KEY, &key) == ERROR_SUCCESS)
 #endif
