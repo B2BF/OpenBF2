@@ -88,6 +88,10 @@ struct Frame {
     unsigned long presents = 0;          // frames presented so far
     // DONOTWAIT presents (renderer.presentAsync, level loads): shown, and answered busy.
     unsigned long presentsNoWait = 0, presentsBusy = 0;
+    // The last DONOTWAIT frame has reached the display (its drawable's presented handler ran), and
+    // when it was presented. present() answers further DONOTWAIT calls busy until then.
+    std::shared_ptr<std::atomic<bool>> noWaitOnScreen = std::make_shared<std::atomic<bool>>(true);
+    std::chrono::steady_clock::time_point noWaitPresentedAt;
 };
 Adapter* createAdapter()
 {
@@ -554,6 +558,16 @@ PresentResult present(Frame* f,void* window,bool doNotWait)
         // Device-loss latch (g3d): a miniaturized/detached/zero-sized view or a failed
         // submission is lost until a successful Reset replaces the default targets.
         if(!renderable(f) || resized(f) || f->failed) return PresentResult::lost;
+        // [CHOSEN, not recovered] https://github.com/kr4uzi/OpenBF2/issues/41
+        // A DONOTWAIT frame is not shown before the previous one has reached
+        // the display: a level load repaints far faster than the display refreshes, with or without
+        // vsync, and each repaint the display cannot show still cost a full loading-screen draw. The
+        // busy answer makes the renderer skip that draw (RendDX9Draw rendererPresent). After 100 ms
+        // without the presented handler (an occluded window), the next frame goes out regardless.
+        if(doNotWait && !f->noWaitOnScreen->load() &&
+           std::chrono::steady_clock::now()-f->noWaitPresentedAt<std::chrono::milliseconds(100)) {
+            ++f->presentsBusy; return PresentResult::busy;
+        }
         if(f->presentation) {
             const auto status=f->presentation.status;
             if(doNotWait && status<MTLCommandBufferStatusCompleted) { ++f->presentsBusy; return PresentResult::busy; }
@@ -618,6 +632,11 @@ PresentResult present(Frame* f,void* window,bool doNotWait)
         if(f->prebuild) f->prebuild->presents=f->presents+1;
         if(++f->presents%1200==0) { prebuildSummary(f); framesSummary(f); } // traced runs only
         PresentCapture* capture=presentCaptureBegin(f);  // [TEMP] BF2_PRESENT_PNG
+        if(doNotWait) {
+            auto onScreen=std::make_shared<std::atomic<bool>>(false);
+            f->noWaitOnScreen=onScreen; f->noWaitPresentedAt=std::chrono::steady_clock::now();
+            [drawable addPresentedHandler:^(id<MTLDrawable>) { onScreen->store(true); }];
+        } else f->noWaitOnScreen->store(true);
         [f->commands presentDrawable:drawable];
         if(doNotWait) {
             commitTracked(f,f->commands); f->presentation=f->commands; f->commands=nil;
