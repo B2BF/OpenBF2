@@ -347,7 +347,9 @@ def _execute(source_snapshot, output, cache, *, fresh_sdk, preflight_only):
     run_id = str(time.time_ns())
     label = "org.openbf2.local-ci=" + uuid.uuid4().hex
     event = output / "event.json"
-    event.write_text(json.dumps({"inputs": {"linux_only": True},
+    # GitHub sends workflow_dispatch inputs as strings. act reads a JSON boolean here as false for a
+    # boolean input, and the event file takes precedence over --input, so Windows jobs would run.
+    event.write_text(json.dumps({"inputs": {"linux_only": "true"},
                                 "repository": {"full_name": repository, "default_branch": "main"}}))
     # A fresh namespace bypasses action caches as well as inner Podman build layers.
     action_cache = cache / "actions"
