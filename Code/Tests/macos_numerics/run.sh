@@ -12,7 +12,7 @@ if [ "$numeric_machine" != arm64 ]; then
     exit 1
 fi
 numeric_status=0
-for numeric_test in numerics portable_x87 bitstream_numeric; do
+for numeric_test in numerics portable_x87 portable_x87_exact bitstream_numeric; do
     printf '\nRunning %s\n' "$numeric_test"
     "./$numeric_test"
     numeric_rc=$?

@@ -23,6 +23,9 @@ for numeric_target in x86_64 arm64; do
     compile_numeric "$numeric_target" "$numeric_dest/numerics" 0 Code/Tests/macos_numerics.cpp
     compile_numeric "$numeric_target" "$numeric_dest/portable_x87" 0 \
         Code/Tests/portable_x87.cpp Code/BF2/Math/Mat4Inverse.cpp
+    # The client's exact arm on arm64 (binary32 is the default there).
+    compile_numeric "$numeric_target" "$numeric_dest/portable_x87_exact" 0 \
+        -DBF2X87_CLIENT_EXACT_EXTENDED Code/Tests/portable_x87.cpp Code/BF2/Math/Mat4Inverse.cpp
     compile_numeric "$numeric_target" "$numeric_dest/bitstream_numeric" 1 \
         Code/Tests/macos_bitstream_numeric.cpp Code/BF2/IO/BitStream.cpp \
         Code/BF2/Core/Debug.cpp Code/BF2/Core/StringUtil.cpp
@@ -33,10 +36,14 @@ compile_numeric x86_64 "$numeric_out/numerics_soft" 0 \
     -DBF2_TEST_SOFT_EXTENDED Code/Tests/macos_numerics.cpp
 compile_numeric x86_64 "$numeric_out/portable_x87_soft" 0 \
     -DBF2_TEST_SOFT_EXTENDED Code/Tests/portable_x87.cpp Code/BF2/Math/Mat4Inverse.cpp
+# The binary32 client arm of Apple silicon, checked against the host x87 at 24-bit precision.
+compile_numeric x86_64 "$numeric_out/portable_x87_float" 0 \
+    -DBF2_TEST_CLIENT_FLOAT Code/Tests/portable_x87.cpp Code/BF2/Math/Mat4Inverse.cpp
 "$numeric_out/numerics"
 "$numeric_out/numerics_soft"
 "$numeric_out/portable_x87"
 "$numeric_out/portable_x87_soft"
+"$numeric_out/portable_x87_float"
 "$numeric_out/bitstream_numeric"
 cp Code/Tests/macos_numerics/run.sh "$numeric_bundle/run.sh"
 chmod +x "$numeric_bundle/run.sh"

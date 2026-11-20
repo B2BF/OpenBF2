@@ -58,7 +58,7 @@ inline float center(float origin, float dimension)
 inline float multiplyAdd(float value, float factor, float translation)
 { return store(add(mul(wide(value), wide(factor)), wide(translation))); }
 inline Real decoded(float value)
-{ const Real loaded = wide(value); return less(loaded,0) ? -add(loaded, 1.0L) : loaded; }
+{ const Real loaded = wideQuiet(value); return less(loaded,0) ? -add(loaded, 1.0L) : loaded; }
 inline bool sumNotLess(float a, float b, float limit)
 { return notLess(add(wide(a), wide(b)), wide(limit)); }
 inline void fadeInPlace(float& current, float delta, float duration, bool increase)
@@ -90,7 +90,7 @@ inline bool chooseValue(float current, float target, float delta, float speed,
 }
 inline void fractionalDigits(double magnitude, int integral, int digits, char*& cursor)
 {
-    Real remainder = sub(wide(magnitude), wide(integral));
+    Real remainder = sub(wideExact(magnitude), wideExact(integral));
     // The original is a do/while, including its caller precondition digits > 0.
     do {
         remainder = mul(remainder, 10.0L);
@@ -101,7 +101,7 @@ inline void fractionalDigits(double magnitude, int integral, int digits, char*& 
 }
 inline bool waitRemaining(double last, double cooldown, double now, double& remaining)
 {
-    const Real next = sub(wide(cooldown), mul(sub(wide(now), wide(last)), wide(1.0 / 60.0)));
+    const Real next = sub(wideExact(cooldown), mul(sub(wideExact(now), wideExact(last)), wideExact(1.0 / 60.0)));
     if (!greaterOrUnordered(next, 0)) return false;
     remaining = storeDouble(next);
     return true;
@@ -111,7 +111,7 @@ inline bool abilityPosition(float x, float y)
 inline void beginCooldown(double now, const float& duration, float& remaining,
                           bool& reloading, float& deadline, bool supply)
 {
-    const Real next = add(wide(now), wide(duration));
+    const Real next = add(wideExact(now), wide(duration));
     remaining = duration;
     if (supply) reloading = true;
     deadline = store(next);
@@ -208,7 +208,7 @@ inline float ammoRatio(int status, float previous, bool blend)
 }
 inline void cooldown(float deadline, double now, float duration, float& remaining, float& fraction)
 {
-    const Real next = sub(wide(deadline),wide(now));
+    const Real next = sub(wide(deadline),wideExact(now));
     remaining = store(next); fraction = store(div(next,wide(duration)));
 }
 inline float glyphWidth(float third, float second, float first, float width)
@@ -265,7 +265,7 @@ inline void zoom(float radians, float halfScale, float reference, float& zoomOut
 }
 inline float consoleFloat(const float* input, bool* returnFlag)
 {
-    const Real loaded = wide(*input);
+    const Real loaded = wideQuiet(*input);
     *returnFlag = true;
     return store(loaded);
 }

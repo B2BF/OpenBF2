@@ -1057,10 +1057,10 @@ void TerrainEditable::rebuildSurroundingInRect(const float* rect)
 #if (defined(__APPLE__) || defined(BF2_NATIVE_X87))
         // [CHOSEN, not recovered] FCOM raises invalid for unordered inputs; only origin X spills.
         const auto inside = [&](float x, float z) {
-            return bf2x87::greater(bf2x87::Real(x), bf2x87::Real(minX))
-                && bf2x87::greater(bf2x87::Real(maxX), bf2x87::Real(x))
-                && bf2x87::less(bf2x87::Real(minZ), bf2x87::Real(z))
-                && bf2x87::greater(bf2x87::Real(maxZ), bf2x87::Real(z));
+            return bf2x87::greater(bf2x87::Real(x), bf2x87::wideExact(minX))
+                && bf2x87::greater(bf2x87::wideExact(maxX), bf2x87::Real(x))
+                && bf2x87::less(bf2x87::wideExact(minZ), bf2x87::Real(z))
+                && bf2x87::greater(bf2x87::wideExact(maxZ), bf2x87::Real(z));
         };
         if (inside(rect[0], rect[1]) || inside(rect[2], rect[1])
             || inside(rect[0], rect[3]) || inside(rect[2], rect[3]))

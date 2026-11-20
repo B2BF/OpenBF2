@@ -3,6 +3,22 @@
 #include "../BF2/Math/PortableX87.h"
 #include "../BF2/Math/Mat4.h"
 #include <climits>
+#if defined(BF2X87_CLIENT_FLOAT) && defined(__x86_64__) && defined(__clang__)
+// [TEMP] Oracle for the binary32 client arm: the same expression arms again, in namespace
+// bf2x87_pc24, on the host x87 (long double), run below with 24-bit precision control as the
+// retail client's main thread runs after device creation. Not original-game evidence.
+#define BF2X87_PC24_ORACLE 1
+#undef BF2_PLATFORM_X87COMPAT_H
+#undef BF2_MATH_PORTABLEX87_H
+#undef BF2_TEST_CLIENT_FLOAT
+#undef BF2X87_CLIENT_FLOAT
+#define bf2x87 bf2x87_pc24
+#include "../BF2/Platform/X87Compat.h"
+#include "../BF2/Math/PortableX87.h"
+#undef bf2x87
+#undef BF2X87_NATIVE_EXTENDED
+#define BF2X87_CLIENT_FLOAT 1
+#endif
 
 #pragma STDC FENV_ACCESS ON
 
@@ -16,6 +32,11 @@ void check(bool value, int line)
 #define CHECK(value) check((value), __LINE__)
 float fromBits(std::uint32_t bits) { float value; std::memcpy(&value,&bits,4); return value; }
 std::uint32_t bits(float value) { std::uint32_t result; std::memcpy(&result,&value,4); return result; }
+double fromBits64(std::uint64_t bits) { double value; std::memcpy(&value,&bits,8); return value; }
+std::uint64_t bits64(double value) { std::uint64_t result; std::memcpy(&result,&value,8); return result; }
+// GCC ignores FENV_ACCESS and folds the loads of constant signaling NaNs; read them from memory.
+float opaque(float value) { volatile float held = value; return held; }
+double opaque(double value) { volatile double held = value; return held; }
 void same(float actual, float expected)
 {
     CHECK((std::isnan(actual) && std::isnan(expected)) || bits(actual)==bits(expected));
@@ -71,7 +92,13 @@ int main()
     CHECK(integer<int>(2147483647.9L)==INT_MAX);
     CHECK(integer<int>(-2147483648.9L)==INT_MIN);
     CHECK(integer<std::int64_t>(std::ldexp(1.0L,63))==LLONG_MIN);
+#if defined(BF2X87_CLIENT_FLOAT)
+    // binary64 operands: an int64 above 2^53 is not exact (FILD qword is); LLONG_MAX loads as 2^63.
+    CHECK(integer<std::int64_t>(wideExact(LLONG_MAX))==LLONG_MIN);
+    CHECK(integer<std::int64_t>(wideExact(9007199254740993LL))==9007199254740992LL);
+#else
     CHECK(integer<std::int64_t>(wide(LLONG_MAX))==LLONG_MAX);
+#endif
     CHECK(integer<short>(32768)==SHRT_MIN);
     CHECK(integer<int>(1.5L)==1 && integer<int>(-1.5L)==-1);
     CHECK(integer<int>(std::floor(-1.5L))==-2);
@@ -133,7 +160,12 @@ int main()
     double remaining=37;
     // The binary64 1/60 constant is slightly low, so the retained product
     // leaves a positive wait even at exactly sixty seconds.
+#if defined(BF2X87_CLIENT_FLOAT)
+    // At 24-bit precision the product rounds to 1, so no wait remains.
+    CHECK(!waitRemaining(0,1,60,remaining));
+#else
     CHECK(waitRemaining(0,1,60,remaining) && remaining>0 && remaining<1e-15);
+#endif
     CHECK(waitRemaining(0,1,0,remaining) && remaining==1);
     CHECK(waitRemaining(0,nan,0,remaining) && std::isnan(remaining));
     CHECK(!abilityPosition(-4000,-4000)); CHECK(abilityPosition(nan,-4000));
@@ -194,15 +226,57 @@ int main()
     CHECK(sine(wide(large))==wide(large) && cosine(wide(large))==wide(large));
     short si,ci; packedRotation(0,si,ci); CHECK(si==0 && ci==32767);
     tableRotation(0,si,ci); CHECK(si==0 && ci==32767);
+#if defined(BF2X87_CLIENT_FLOAT)
+    // FSIN is exact to 64 bits, but the FMUL by 32767 rounds to 32767 at 24-bit precision.
+    tableRotation(1024,si,ci); CHECK(si==32767 && ci==0);
+    packedRotation(1.57079632679489661923f,si,ci); CHECK(si==32767 && ci==0);
+    packedRotation(-1.57079632679489661923f,si,ci); CHECK(si==-32767 && ci==0);
+#else
     tableRotation(1024,si,ci); CHECK(si==32766 && ci==0);
     packedRotation(1.57079632679489661923f,si,ci); CHECK(si==32766 && ci==0);
     packedRotation(-1.57079632679489661923f,si,ci); CHECK(si==-32766 && ci==0);
+#endif
     packedRotation(nan,si,ci); CHECK(si==0 && ci==0);
     float zoomValue,inverseZoom; zoom(1,0.5f,1,zoomValue,inverseZoom); CHECK(zoomValue==1 && inverseZoom==1);
     zoom(inf,0.5f,1,zoomValue,inverseZoom); CHECK(std::isnan(zoomValue) && std::isnan(inverseZoom));
-    bool flag=false; value=fromBits(0x7f800001);
+    bool flag=false;
+#if defined(BF2X87_NATIVE_EXTENDED)
+    // The native arm leaves FLD to the compiler, which may elide the FLD/FSTP of a value that is
+    // only stored (GCC does); a constant input is checked here as before.
+    value=fromBits(0x7f800001);
     std::feclearexcept(FE_ALL_EXCEPT);
     same(consoleFloat(&value,&flag),nan); CHECK(flag && std::fetestexcept(FE_INVALID));
+#else
+    // FLD quiets a signaling NaN and raises invalid, also where no operation follows the load
+    // (wideQuiet in the binary32 arm).
+    value=opaque(fromBits(0x7f800001));
+    std::feclearexcept(FE_ALL_EXCEPT);
+    CHECK(bits(consoleFloat(&value,&flag))==0x7fc00001U); CHECK(flag && std::fetestexcept(FE_INVALID));
+    value=opaque(fromBits(0xffbfffffU)); std::feclearexcept(FE_ALL_EXCEPT);
+    CHECK(bits(consoleFloat(&value,&flag))==0xffffffffU && std::fetestexcept(FE_INVALID));
+    std::feclearexcept(FE_ALL_EXCEPT);
+    CHECK(bits(store(decoded(opaque(fromBits(0x7f800001)))))==0x7fc00001U && std::fetestexcept(FE_INVALID));
+    std::feclearexcept(FE_ALL_EXCEPT);
+    CHECK(bits(store(decoded(opaque(fromBits(0xff800001U)))))==0xffc00001U && std::fetestexcept(FE_INVALID));
+    std::feclearexcept(FE_ALL_EXCEPT);
+    CHECK(bits64(storeDouble(wideQuiet(opaque(fromBits64(0x7ff0000000000001ULL)))))==0x7ff8000000000001ULL);
+    CHECK(std::fetestexcept(FE_INVALID));
+    std::feclearexcept(FE_ALL_EXCEPT);
+    CHECK(bits64(storeDouble(wideQuiet(opaque(fromBits64(0xfff7ffffffffffffULL)))))==0xffffffffffffffffULL);
+    CHECK(std::fetestexcept(FE_INVALID));
+#endif
+    // Quiet NaNs, infinities and denormals load without an exception.
+    const float passed[] = {nan,fromBits(0xffc00001U),inf,-inf,large,fromBits(1),-0.0f};
+    for (float sample:passed) {
+        value=opaque(sample); std::feclearexcept(FE_ALL_EXCEPT);
+        CHECK(bits(consoleFloat(&value,&flag))==bits(sample) && !std::fetestexcept(FE_INVALID));
+    }
+    const double passedDouble[] = {std::numeric_limits<double>::quiet_NaN(),
+        std::numeric_limits<double>::infinity(),fromBits64(0xfff8000000000001ULL),fromBits64(1),-0.0};
+    for (double sample:passedDouble) {
+        std::feclearexcept(FE_ALL_EXCEPT);
+        CHECK(bits64(storeDouble(wideQuiet(opaque(sample))))==bits64(sample) && !std::fetestexcept(FE_INVALID));
+    }
 
     // Exercise every scalar family with NaN, signed zeros, infinities, halves,
     // and extreme magnitudes. Expected cases are stated above; here check the
@@ -226,8 +300,14 @@ int main()
         // families, checking their caller-visible stores and branch decisions.
         project(sample,sample,1,2,1,x,y,z);
         same(x,sample); same(y,-sample); same(z,1);
-        same(distance(0,0,0,sample,0,0,1),std::fabs(sample));
-        same(distanceWithX(wide(sample),0,0,0,0,1),std::fabs(sample));
+#if defined(BF2X87_CLIENT_FLOAT)
+        // binary32 intermediates have no extended exponent range: FLT_MAX squared overflows.
+        const float reach = std::fabs(sample)==large ? inf : std::fabs(sample);
+#else
+        const float reach = std::fabs(sample);
+#endif
+        same(distance(0,0,0,sample,0,0,1),reach);
+        same(distanceWithX(wide(sample),0,0,0,0,1),reach);
         same(glyphWidth(sample,0,0,0),sample==0 ? 0.0f : sample);
         cofactor(co,sample,1,0,1,0,1,0,1,0,1,0,1);
         same(co,sample==0 ? 0.0f : sample);
@@ -249,7 +329,11 @@ int main()
         movePointer(position,0,0,1,false,1,1);
         same(position[0],sample==0 ? 0.0f : sample); same(position[1],sample==0 ? 0.0f : sample);
         movePointer(position,sample,sample,1,true,2,2);
-        same(position[0],sample); same(position[1],sample);
+#if defined(BF2X87_CLIENT_FLOAT)
+        if (std::fabs(sample)==large) { same(position[0],sample*inf); same(position[1],sample*inf); }
+        else
+#endif
+        { same(position[0],sample); same(position[1],sample); }
         value=sample; clampCoordinate(value,-1,2);
         same(value,sample < -1 ? -1.0f : sample>1 ? 1.0f : sample);
         value=sample; CHECK(subtractTimer(value,0,false)==(sample<0));
@@ -266,7 +350,7 @@ int main()
     // Verify the extended results, not only their binary32 stores. Darwin's
     // sinl/cosl agree with the host x87 instructions for these samples.
     CHECK(std::fesetround(FE_TONEAREST)==0);
-#if !defined(BF2_TEST_SOFT_EXTENDED)
+#if !defined(BF2_TEST_SOFT_EXTENDED) && !defined(BF2X87_CLIENT_FLOAT)
     std::uint32_t random=0;
     for (int i=0;i<10000;++i) {
         random=random*1664525U+1013904223U;
@@ -284,6 +368,139 @@ int main()
         for (float sample:samples) CHECK(integer<int>(wide(sample),false)==oracleInteger(sample));
     }
     CHECK(std::fesetround(rounding)==0);
+#endif
+#if defined(BF2X87_CLIENT_FLOAT)
+    // Binary32 Real: loads of int32 and double operands stay exact up to the first operation.
+    CHECK(std::fesetround(FE_TONEAREST)==0);
+    const double justBelow3 = 2.9999999999999996;
+    CHECK(toIntTruncate(justBelow3)==2 && toIntTruncate(wideExact(justBelow3))==2);
+    CHECK(toIntTruncate(wide(justBelow3))==3);              // wide() rounds to binary32 first
+    CHECK(toIntTruncate(16777217)==16777217 && integer<int>(wideExact(16777217))==16777217);
+    CHECK(less(16777216,16777217) && greater(wideExact(16777217.0),wide(16777216.0f)));
+    CHECK(!less(wide(16777216),wide(16777217)));             // both round to 2^24
+    CHECK(storeDouble(wideExact(0.1))==0.1 && store(wideExact(0.1))==0.1f);
+    CHECK(wideExact(0.1)!=wide(0.1f) && lessEqual(wide(0.1f),0.1)==false);
+    CHECK(lowUInt32(-1.0)==0xFFFFFFFFu && lowUInt32(4294967295.0)==0xFFFFFFFFu);
+    CHECK(lowUInt32(wideExact(4294967295u))==0xFFFFFFFFu);
+    CHECK(store(sub(wideExact(100000.75),wideExact(100000.0)))==0.75f);
+    CHECK(store(sub(wide(100000.75),wide(100000.0)))==0.75f);
+    CHECK(store(sub(wideExact(16777217.0),wideExact(16777216.0)))==1.0f);
+    CHECK(store(sub(wide(16777217.0),wide(16777216.0)))==0.0f);
+    // Integer conversion bounds, exact on binary64 operands.
+    std::feclearexcept(FE_ALL_EXCEPT);
+    CHECK(toIntTruncate(2147483647.0)==INT_MAX && toIntTruncate(-2147483648.0)==INT_MIN);
+    CHECK(toIntTruncate(-2147483648.9)==INT_MIN && !std::fetestexcept(FE_INVALID));
+    CHECK(toIntTruncate(2147483648.0)==INT_MIN && std::fetestexcept(FE_INVALID));
+    std::feclearexcept(FE_ALL_EXCEPT);
+    CHECK(toIntRound(2147483647.4)==INT_MAX && !std::fetestexcept(FE_INVALID));
+    CHECK(toIntRound(2147483647.5)==INT_MIN && std::fetestexcept(FE_INVALID));
+    CHECK(integer<short>(32767.9)==32767 && integer<short>(-32768.9)==-32768);
+    CHECK(integer<short>(32768.0)==SHRT_MIN && integer<short>(wide(32767.99999))==SHRT_MIN && integer<short>(32767.99999)==32767);
+    CHECK(toInt64Truncate(9007199254740991.0)==9007199254740991LL);
+    CHECK(toIntTruncate(wide(2147483520.0f))==2147483520 && toIntTruncate(wide(2147483648.0f))==INT_MIN);
+    // NaN operands: unordered, FE_INVALID for every comparison, the integer indefinite.
+    const double nanD = std::numeric_limits<double>::quiet_NaN();
+    std::feclearexcept(FE_ALL_EXCEPT);
+    CHECK(!less(nanD,0) && std::fetestexcept(FE_INVALID));
+    std::feclearexcept(FE_ALL_EXCEPT);
+    CHECK(!greaterEqual(wide(nan),wide(nan)) && std::fetestexcept(FE_INVALID));
+    std::feclearexcept(FE_ALL_EXCEPT);
+    CHECK(unordered(nanD,1) && !ordered(1,nanD) && !std::fetestexcept(FE_INVALID));
+    compare(1,nanD); CHECK(std::fetestexcept(FE_INVALID));
+    std::feclearexcept(FE_ALL_EXCEPT);
+    CHECK(toIntTruncate(nanD)==INT_MIN && std::fetestexcept(FE_INVALID));
+    CHECK(isNaN(add(nanD,1)) && isNaN(mul(wide(inf),0)) && !isFinite(div(wide(1.0f),0.0f)));
+    CHECK(isFinite(wideExact(1e300)) && !isFinite(wide(1e300)));
+    // One rounding per operation: binary32 operands give the binary32 operation.
+    same(store(add(wide(1.0f),wide(std::ldexp(1.0f,-24)))),1.0f);
+    same(store(add(wide(1.0f),wide(std::nextafter(std::ldexp(1.0f,-24),1.0f)))),std::nextafter(1.0f,2.0f));
+    same(store(div(wide(1.0f),wide(3.0f))),1.0f/3.0f);
+    same(store(mul(wide(16777215.0f),wide(16777215.0f))),16777215.0f*16777215.0f);
+    same(store(squareRoot(wide(2.0f))),std::sqrt(2.0f));
+    // Known limit: a binary64 sum is rounded twice (x87 at 24 bits would give 1 + 2^-23 here).
+    same(store(add(wideExact(1.0),wideExact(std::ldexp(1.0,-24)+std::ldexp(1.0,-60)))),1.0f);
+    char exactDigits[8]; char* exactCursor=exactDigits;
+    fractionalDigits(1234567.89,1234567,3,exactCursor); *exactCursor=0;
+    CHECK(std::strcmp(exactDigits,"889")==0);   // 24-bit products of the exact remainder
+    CHECK(std::fesetround(rounding)==0);
+#endif
+#if defined(BF2X87_PC24_ORACLE)
+    {
+        // Every non-transcendental arm against the host x87 at 24-bit precision control: equal
+        // stores and decisions for finite operands whose intermediates stay in binary32 range.
+        // (libm sinl/cosl/atan2l would run their own arithmetic at 24 bits, so trig is left out.)
+        struct Pc24 {
+            unsigned short saved;
+            Pc24() { unsigned short cw; asm volatile("fnstcw %0" : "=m"(cw)); saved = cw;
+                     cw = static_cast<unsigned short>(cw & ~0x300); asm volatile("fldcw %0" : : "m"(cw)); }
+            ~Pc24() { asm volatile("fldcw %0" : : "m"(saved)); }
+        };
+        std::uint32_t state=12345;
+        auto next=[&]() { state=state*1664525U+1013904223U; return state; };
+        auto value=[&](int span) {
+            const float mantissa=1.0f+static_cast<float>(next()>>8)*(1.0f/16777216.0f);
+            const int exponent=static_cast<int>(next()%(2*span+1))-span;
+            const float v=std::ldexp(mantissa,exponent);
+            return (next()&1) ? -v : v;
+        };
+        auto time=[&]() { return static_cast<double>(next()%100000000)+static_cast<double>(next())/4294967296.0; };
+        int mismatches=0, cases=0;
+        auto eq=[&](float a, float b) { ++cases; if (!((std::isnan(a)&&std::isnan(b))||bits(a)==bits(b))) ++mismatches; };
+        auto eqi=[&](long long a, long long b) { ++cases; if (a!=b) ++mismatches; };
+        CHECK(std::fesetround(FE_TONEAREST)==0);
+        for (int i=0;i<20000;++i) {
+            const float a=value(20), b=value(20), c=value(20), d=value(20), e=value(20), f=value(20), g=value(20);
+            float o1,o2,o3,p1,p2,p3;
+            { Pc24 pc; o1=bf2x87_pc24::multiply(a,b); o2=bf2x87_pc24::offset(a,b,c); o3=bf2x87_pc24::center(a,b); }
+            eq(multiply(a,b),o1); eq(offset(a,b,c),o2); eq(center(a,b),o3);
+            { Pc24 pc; o1=bf2x87_pc24::multiplyAdd(a,b,c); o2=bf2x87_pc24::affine(a,b,c,d,e,f,g);
+              o3=bf2x87_pc24::glyphWidth(a,b,c,d); }
+            eq(multiplyAdd(a,b,c),o1); eq(affine(a,b,c,d,e,f,g),o2); eq(glyphWidth(a,b,c,d),o3);
+            { Pc24 pc; o1=bf2x87_pc24::fade(a,b,c,true); o2=bf2x87_pc24::fade(a,b,c,false);
+              o3=bf2x87_pc24::distance(a,b,c,d,e,f,g); }
+            eq(fade(a,b,c,true),o1); eq(fade(a,b,c,false),o2); eq(distance(a,b,c,d,e,f,g),o3);
+            { Pc24 pc; o1=bf2x87_pc24::mapCoordinate(a,b,c,true); o2=bf2x87_pc24::armorRatio(a,b,c,true);
+              o3=bf2x87_pc24::effectiveDistance(a,b,c); }
+            eq(mapCoordinate(a,b,c,true),o1); eq(armorRatio(a,b,c,true),o2); eq(effectiveDistance(a,b,c),o3);
+            bool r1,r2;
+            { Pc24 pc; r1=bf2x87_pc24::sumNotLess(a,b,c); r2=bf2x87_pc24::abilityPosition(a,b); }
+            eqi(sumNotLess(a,b,c),r1); eqi(abilityPosition(a,b),r2);
+            { Pc24 pc; bf2x87_pc24::project(a,b,c,d,e,o1,o2,o3); }
+            project(a,b,c,d,e,p1,p2,p3); eq(p1,o1); eq(p2,o2); eq(p3,o3);
+            float base[5], mine[5];
+            { Pc24 pc; bf2x87_pc24::lod(a,b,c,d,base[0],base[1],base[2],base[3],base[4]); }
+            lod(a,b,c,d,mine[0],mine[1],mine[2],mine[3],mine[4]);
+            for (int k=0;k<5;++k) eq(mine[k],base[k]);
+            float t1=a, t2=a;
+            { Pc24 pc; r1=bf2x87_pc24::subtractTimer(t1,b,true); }
+            r2=subtractTimer(t2,b,true); eqi(r1,r2); eq(t1,t2);
+            float out1[3]={a,b,c}, out2[3]={a,b,c};
+            { Pc24 pc; bf2x87_pc24::pullPoint(a,b,c,d,e,f,out1); }
+            pullPoint(a,b,c,d,e,f,out2); for (int k=0;k<3;++k) eq(out1[k],out2[k]);
+            { Pc24 pc; o1=0; bf2x87_pc24::cofactor(o1,a,b,c,d,e,f,g,a,b,c,d,e); }
+            p1=0; cofactor(p1,a,b,c,d,e,f,g,a,b,c,d,e); eq(p1,o1);
+            // Double operands (times, durations): exact loads, one rounding per operation.
+            const double now=time(), last=now-static_cast<double>(next()%1000)/7.0, cool=time()/1000.0;
+            double w1=0, w2=0;
+            { Pc24 pc; r1=bf2x87_pc24::waitRemaining(last,cool,now,w1); }
+            r2=waitRemaining(last,cool,now,w2); eqi(r1,r2); if (r1&&r2) { ++cases; if (w1!=w2) ++mismatches; }
+            float rem1=0,rem2=0,dl1=0,dl2=0; bool busy1=false,busy2=false;
+            { Pc24 pc; bf2x87_pc24::beginCooldown(now,a,rem1,busy1,dl1,true); }
+            beginCooldown(now,a,rem2,busy2,dl2,true); eq(rem1,rem2); eq(dl1,dl2);
+            float fr1,fr2;
+            { Pc24 pc; bf2x87_pc24::cooldown(b,now,c,rem1,fr1); }
+            cooldown(b,now,c,rem2,fr2); eq(rem1,rem2); eq(fr1,fr2);
+            char d1[8], d2[8]; char* c1=d1; char* c2=d2;
+            const double magnitude=std::fabs(now);
+            const int integral=static_cast<int>(magnitude);
+            { Pc24 pc; bf2x87_pc24::fractionalDigits(magnitude,integral,6,c1); }
+            fractionalDigits(magnitude,integral,6,c2); *c1=0; *c2=0;
+            ++cases; if (std::strcmp(d1,d2)!=0) ++mismatches;
+        }
+        CHECK(std::fesetround(rounding)==0);
+        std::printf("pc24 oracle: %d of %d cases differ\n",mismatches,cases);
+        CHECK(mismatches==0);
+    }
 #endif
     std::printf("portable x87 arms: %d checks passed\n",checks);
 }

@@ -54,7 +54,7 @@ int floorToInt(double value)
     unsigned short original, truncating;
     int result;
     // [CHOSEN, not recovered] Preserve x87 truncating int32 with integer indefinite.
-    result = bf2x87::integer<int>(bf2x87::wide(floored));
+    result = bf2x87::integer<int>(bf2x87::wideExact(floored));
     return result;
 #endif
 }

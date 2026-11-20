@@ -4741,7 +4741,7 @@ namespace gameswf
 			// the recursive tab-order dispatch. It does not disable animation moves.
 			if (strcmp(name.c_str(), "tabIndex") == 0)
 			{
-				m_tab_index = bf2x87::lowWord(bf2x87::toInt64Truncate(bf2x87::Real(val.to_number())));
+				m_tab_index = bf2x87::lowWord(bf2x87::toInt64Truncate(bf2x87::wideExact(val.to_number())));
 				set_tab_index(m_tab_index);
 				return;
 			}
@@ -6070,7 +6070,7 @@ namespace gameswf
 		else if (fn.arg(0).get_type() == as_value::NUMBER)
 		{
 			const int target_frame = bf2x87::lowWord(bf2x87::toInt64Truncate(
-				bf2x87::sub(bf2x87::Real(fn.arg(0).to_number()), bf2x87::Real(1))));
+				bf2x87::sub(bf2x87::wideExact(fn.arg(0).to_number()), bf2x87::Real(1))));
 			sprite->goto_frame(target_frame);
 		}
 		sprite->set_play_state(movie_interface::PLAY);
@@ -6102,7 +6102,7 @@ namespace gameswf
 		else if (fn.arg(0).get_type() == as_value::NUMBER)
 		{
 			const int target_frame = bf2x87::lowWord(bf2x87::toInt64Truncate(
-				bf2x87::sub(bf2x87::Real(fn.arg(0).to_number()), bf2x87::Real(1))));
+				bf2x87::sub(bf2x87::wideExact(fn.arg(0).to_number()), bf2x87::Real(1))));
 			sprite->goto_frame(target_frame);
 		}
 		sprite->set_play_state(movie_interface::STOP);

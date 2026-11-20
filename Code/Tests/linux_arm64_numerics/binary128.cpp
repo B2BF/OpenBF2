@@ -1,5 +1,9 @@
 // [TEMP] [CHOSEN, not recovered] Linux binary128-to-native-x87 conversion contracts, issue #36.
 // Runs with the actual AArch64 long-double ABI; no engine, graphics, content or networking.
+// The exact ExtendedFloat arm (the dedicated server's), also in this client test image.
+#if !defined(BF2X87_CLIENT_EXACT_EXTENDED)
+#define BF2X87_CLIENT_EXACT_EXTENDED 1
+#endif
 #include "../../BF2/Platform/X87Compat.h"
 #include <cstdio>
 #include <cstdlib>

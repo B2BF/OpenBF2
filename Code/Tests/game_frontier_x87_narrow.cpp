@@ -1,6 +1,8 @@
 // [TEMP] Platform/X87Compat.h:42 (game frontier closure): compiled with __LDBL_MANT_DIG__ forced to 53,
 // as on a binary64 long-double port, X87Compat must select the soft extended Real instead of the
 // former abort, and that Real must keep x87 precision (1 + 2^-60 survives, which binary64 cannot).
+// Built with BF2X87_CLIENT_EXACT_EXTENDED: this check is the exact arm (a DEDICATED=0 client on such
+// a port selects binary32 otherwise, see portable_x87.cpp).
 #include "../BF2/Platform/X87Compat.h"
 #include <type_traits>
 

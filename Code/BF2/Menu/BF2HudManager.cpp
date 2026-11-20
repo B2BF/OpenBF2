@@ -142,7 +142,7 @@ int commanderWaitInteger(double remaining)
     unsigned short original, truncating;
     int result;
     // [CHOSEN, not recovered] Preserve x87 truncating int32 with integer indefinite.
-    result = bf2x87::integer<int>(bf2x87::wide(rounded));
+    result = bf2x87::integer<int>(bf2x87::wideExact(rounded));
     return result;
 #endif
 }

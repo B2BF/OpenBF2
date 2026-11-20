@@ -143,7 +143,7 @@ void formatStringDataFloat(float value, char* output, int digits)
     __int64 whole;
     int integral;
     // [CHOSEN, not recovered] Preserve x87 truncating int64 conversion and low dword.
-    whole = bf2x87::integer<std::int64_t>(bf2x87::wide(magnitude));
+    whole = bf2x87::integer<std::int64_t>(bf2x87::wideExact(magnitude));
     integral = bf2x87::lowWord(whole);
     int remaining = integral;
     if (remaining == 0) {
