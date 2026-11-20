@@ -198,11 +198,17 @@ std::string getRegistryCdKey(std::string productName)
 }
 
 // Decrypts marked keys and encrypts unmarked keys. Both dpapi results are ignored;
-// failed decryption leaves the payload unchanged. An empty unmarked key follows
-// the existing null-blob dereference path before challenge handling can reject it.
+// failed decryption leaves the payload unchanged.
 std::string translateCdKey(const std::string& storedKey)
 {
     std::string result("");
+
+    // [CHOSEN, not recovered] Retail protects an empty key too: protect refuses it, and
+    // writeHex then dereferences the null blob, so joining a server without a stored key
+    // crashes at the first challenge. Answer empty instead; GameClient::handleChallenge
+    // already disconnects with reason 7 when the key is empty.
+    if (storedKey.empty())
+        return result;
 
     bool marked;
     if (storedKey.size() > g_cdKeyMarker.size())

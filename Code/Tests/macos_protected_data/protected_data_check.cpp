@@ -100,6 +100,9 @@ int main(int argc, char** argv)
     CHECK(marked.compare(0, 5, "x9392") == 0 && marked.size() > 5 + 2 * 64);
     CHECK(translateCdKey(marked) == "ABCD-EFGH-IJKL-MNOP");
     CHECK(translateCdKey("x9392abcdef") == "abcdef");
+    // No stored key: empty, so handleChallenge disconnects (reason 7) instead of writeHex
+    // dereferencing the blob protect refused.
+    CHECK(translateCdKey("").empty());
 
     // Fixed AES-CBC/PKCS7 + HMAC vector made with openssl enc and Python hmac,
     // independently of protectData. Key bytes are 0..63, IV bytes 0xa0..0xaf.
