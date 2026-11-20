@@ -2476,6 +2476,19 @@ if(BF2_BUILD_MACOS AND TARGET bf2_swiffplayer_static)
     target_link_libraries(bf2_swiff_offline_connect_popup_check PRIVATE
         bf2_swiffplayer_static bf2_plugin_kit_static)
 
+    # [TEMP] [CHOSEN, not recovered] Content-free PunkBuster availability and menu-greying check.
+    add_executable(bf2_swiff_punkbuster_menu_check EXCLUDE_FROM_ALL
+        Code/Tests/swiff_punkbuster_menu.cpp
+        Code/Tests/gameswf_xml/native_host_unavailable.cpp)
+    bf2_configure_static_plugin(bf2_swiff_punkbuster_menu_check BF2_IMAGE_SWIFFPLAYER)
+    target_include_directories(bf2_swiff_punkbuster_menu_check PRIVATE
+        "${BF2_EXTERNAL_ROOT}" "${BF2_EXTERNAL_ROOT}/gameswf")
+    target_link_libraries(bf2_swiff_punkbuster_menu_check PRIVATE
+        bf2_swiffplayer_static bf2_plugin_kit_static)
+    if(BUILD_TESTING)
+        add_test(NAME bf2_swiff_punkbuster_menu_check COMMAND bf2_swiff_punkbuster_menu_check)
+    endif()
+
     # [TEMP] [CHOSEN, not recovered] The __proto__ probe SWFs (tools/swf/proto_probe.py) in the
     # native gameswf must show retail 1.50's squares (docs/tracks/game/swf-proto-retail-probe.md).
     add_executable(bf2_swf_proto_probe_check EXCLUDE_FROM_ALL
