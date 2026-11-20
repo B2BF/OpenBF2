@@ -1,10 +1,14 @@
 // [TEMP] [CHOSEN, not recovered] Real System.cpp/StringUtil.cpp plus the extracted
 // BF2Log::addLogEntry body. Only its owning class/File lifecycle are bounded test models.
 // This writes dumps of this fixture process using real Win32 threads and DbgHelp.
+// The last case runs the extracted crashDumpFileName and bf2WinMain bodies from BF2.cpp:
+// a real access violation reaches the SEH filter, which writes the dump through the real
+// crashDumpTargetName/writeCrashDump into a retail-shaped "<base>\dmp\" directory.
 #include <windows.h>
 #include <dbghelp.h>
 #include "Core/System.h"
 #include "Core/SystemInfo.h"
+#include "Core/StringUtil.h"
 #include "Core/Debug.h"
 #include <cstdio>
 #include <cstdlib>
@@ -22,12 +26,49 @@ void check(bool ok, const char* label) {
 }
 
 namespace dice { namespace hfe {
-// Link-only collaborator for the unused filename helper; fail if the test expands its scope.
-ISystemInfo* systemInfo() {
-    std::fputs("[FRONTIER] crash fixture dice::hfe::systemInfo reached\n", stderr);
-    std::fflush(stderr);
-    std::abort();
+// Fixed clock for crashDumpTargetName; no debugger, so bf2WinMain installs its SEH frame.
+class CrashFixtureSystemInfo : public ISystemInfo {
+public:
+    const std::string& getComputerName() const override { return name; }
+    std::string getDateTimeString() const override { return "2026-11-20 12:34:56"; }
+    unsigned int getNumberOfPageFaults() const override { return 0; }
+    unsigned int getMemoryUsage() const override { return 0; }
+    void getMemoryInfo(unsigned int& total, unsigned int& available) const override
+    { total = available = 0; }
+    bool getIsDebuggerInstalled() const override { return false; }
+private:
+    std::string name;
+};
+ISystemInfo::ISystemInfo() {}
+ISystemInfo::~ISystemInfo() {}
+ISystemInfo* systemInfo() { static CrashFixtureSystemInfo info; return &info; }
+System* g_system;
+namespace BuildNrUtil { const char* getBuildNrString() { return "1.5.3153-802.0"; } }
+
+// Desktop and engine collaborators of the extracted bf2WinMain body.
+static STICKYKEYS s_startupStickyKeys;
+static TOGGLEKEYS s_startupToggleKeys;
+static FILTERKEYS s_startupFilterKeys;
+static UINT s_startupMouseTrails;
+static BOOL s_screenSaverActive;
+static int entryRuns, entryRestores;
+static DWORD entryThread;
+static std::wstring entryDumpDirectory;
+static BOOL WINAPI fixtureSystemParametersInfo(UINT, UINT, PVOID, UINT) { return TRUE; }
+static void allowAccessibilityShortcutKeys(bool) {}
+static void restoreDesktopSettings() { ++entryRestores; }
+const wchar_t* getCrashDumpDirectory() { return entryDumpDirectory.c_str(); }
+static int __stdcall bf2Main(HINSTANCE, HINSTANCE, LPSTR)
+{
+    ++entryRuns;
+    entryThread = GetCurrentThreadId();
+    volatile int* volatile target = nullptr;
+    *target = 1;                        // the RendDX9 case: a real access violation
+    return 17;
 }
+#define SystemParametersInfoA fixtureSystemParametersInfo
+#include "crash_startup_body.inc"
+#undef SystemParametersInfoA
 namespace io {
 struct CrashFixtureFile {
     bool open = false;
@@ -96,6 +137,47 @@ void verifyDump(const std::wstring& name, EXCEPTION_POINTERS& exception,
     CloseHandle(file);
 }
 
+// The client/dedicated path: getCrashDumpDirectory() ends in "\\dmp\\" as retail's does.
+void verifyEntryDump(const std::wstring& base)
+{
+    using namespace dice::hfe;
+    g_system = new System();
+    entryDumpDirectory = base + L"\\dmp\\";
+    CreateDirectoryW((base + L"\\dmp").c_str(), nullptr);
+    char commandLine[] = "+fixture";
+    check(bf2WinMain(nullptr, nullptr, commandLine) == 42, "access violation maps to exit 42");
+    check(entryRuns == 1 && entryRestores == 1, "engine ran once and desktop was restored");
+    const std::wstring name = entryDumpDirectory + L"bf2_v1.5.3153-802.0_2026-11-20_12.34.56.dmp";
+    HANDLE file = CreateFileW(name.c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+    check(file != INVALID_HANDLE_VALUE, "SEH filter wrote <dmp>\\bf2_v<build>_<time>.dmp");
+    if (file == INVALID_HANDLE_VALUE) return;
+    LARGE_INTEGER size = {};
+    GetFileSizeEx(file, &size);
+    std::printf("Entry dump: %ls (%lld bytes)\n", name.c_str(), size.QuadPart);
+    HANDLE mapping = CreateFileMappingW(file, nullptr, PAGE_READONLY, 0, 0, nullptr);
+    void* view = mapping ? MapViewOfFile(mapping, FILE_MAP_READ, 0, 0, 0) : nullptr;
+    check(view != nullptr, "entry dump has readable content");
+    if (view) {
+        check(static_cast<const MINIDUMP_HEADER*>(view)->Signature == MINIDUMP_SIGNATURE,
+              "entry dump signature");
+        PMINIDUMP_DIRECTORY directory = nullptr;
+        void* data = nullptr;
+        ULONG streamSize = 0;
+        const bool read = MiniDumpReadDumpStream(view, ExceptionStream, &directory, &data,
+                                                 &streamSize) != FALSE;
+        check(read && streamSize >= sizeof(MINIDUMP_EXCEPTION_STREAM), "entry exception stream");
+        if (read && streamSize >= sizeof(MINIDUMP_EXCEPTION_STREAM)) {
+            const auto& stream = *static_cast<const MINIDUMP_EXCEPTION_STREAM*>(data);
+            check(stream.ExceptionRecord.ExceptionCode == EXCEPTION_ACCESS_VIOLATION,
+                  "entry dump records the access violation");
+            check(stream.ThreadId == entryThread, "entry dump names the faulting thread");
+        }
+        UnmapViewOfFile(view);
+    }
+    if (mapping) CloseHandle(mapping);
+    CloseHandle(file);
+}
+
 int wmain(int argc, wchar_t** argv)
 {
     if (argc != 2) return 2;
@@ -136,6 +218,7 @@ int wmain(int argc, wchar_t** argv)
     verifyDump(history, exception, threadId, "five\nfour\ntype6\ntype5\n");
     log.addLogEntry(DebugTypeDxAssert, "six\n");
     verifyDump(base + L"\\after.dmp", exception, threadId, "type6\nfour\nfive\nsix\n");
+    verifyEntryDump(base);
     std::printf("Crash dump runtime (%u-bit): %d checks, %d failures\n",
                 static_cast<unsigned>(sizeof(void*) * 8), checks, failures);
     return failures ? 1 : 0;
