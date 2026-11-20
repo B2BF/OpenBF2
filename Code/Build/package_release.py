@@ -195,7 +195,7 @@ def installation(platform, role, name, executable):
         "{help_note}"
         "   Replace the example paths with your own.\n"
     ).format(step=3 if platform.startswith("windows-") else 4, command=command,
-             help_note="   add +help 0 to hide the tutorial messages\n" if role.startswith("client") else "")
+             help_note="   add +tutorialMessages 0 to hide the tutorial messages\n" if role.startswith("client") else "")
     if platform.startswith("windows-"):
         text += ("   A shortcut can use the same command as Target and the installation\n"
                  "   root as Start in. No original EXE or DLL is replaced; to go back,\n"
@@ -514,7 +514,7 @@ def windows_readme(revision, source_url, included, omitted, licences):
     for folder in folders:
         text += "   {}:\n      {}\n".format(*commands[folder])
     if "x64" in folders or "x86" in folders:
-        text += "   add +help 0 to hide the clients' tutorial messages\n"
+        text += "   add +tutorialMessages 0 to hide the clients' tutorial messages\n"
     text += (
         "   Replace the example paths with your own.\n"
         "   A shortcut can use the same command as Target and the installation\n"

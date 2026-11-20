@@ -48,7 +48,7 @@
 namespace dice { namespace hfe {
 
 namespace {
-// [CHOSEN, not recovered] Owner-requested +help 0/1 outranks the profile for this session.
+// [CHOSEN, not recovered] Owner-requested +tutorialMessages 0/1 outranks the profile for this session.
 // Both tutorial publication paths share the override; General.con keeps the profile value.
 bool showTutorialMessages()
 {

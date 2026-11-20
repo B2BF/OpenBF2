@@ -1142,14 +1142,8 @@ bool BF2Engine::parseParameters(const std::string& commandLine)
     if (cmd.length() != 0)
     {
         SimpleParser parser('+');   // [INFERRED] form: the ctor is fully inlined. No call is emitted
-#if !DEDICATED
-        // [CHOSEN, not recovered] Owner-requested session override; bare +help keeps usage.
-        parser.add( 57, "help",                   "0/1 hides/shows tutorial messages; no value displays help");
-        parser.add( 58, "?",                      "Displays command-line help");
-#else
         parser.add( 57, "help",                   "Displays this help");
         parser.add( 58, "?",                      "Same as +help");
-#endif
         parser.add(  0, "dedicated",              "Start in dedicated server mode");
         parser.add(  1, "multi",                  "Allow starting multiple BF2 instances");
         parser.add(  8, "config",                 "Sets path to the ServerSettings.con file to use");
@@ -1194,6 +1188,11 @@ bool BF2Engine::parseParameters(const std::string& commandLine)
         // [CHOSEN, not recovered] Port addition, every image (OnlineProvider.h): retail has no
         // such option and always uses gamespy.com.
         parser.add( 75, "gamespy",                "Use this domain instead of gamespy.com for all online services");
+#if !DEDICATED
+        // [CHOSEN, not recovered] Owner request 2026-11-19; replaces the 2026-11-09 +help 0/1
+        // override. Id 77 is reserved by another port addition.
+        parser.add( 78, "tutorialMessages",       "Show tutorial messages this session (0 or 1; default: profile)");
+#endif
 
         // Only registered parser IDs reach these sparse switch cases.
         std::list<std::pair<int, std::string> > keyList;        // var_C8
@@ -1324,16 +1323,7 @@ bool BF2Engine::parseParameters(const std::string& commandLine)
                     break;
 
                 case 57:    // +help
-#if !DEDICATED
-                    // [CHOSEN, not recovered] Owner request 2026-11-09.
-                    // Session-only: never change GeneralSettings or serialize this override.
-                    if (value == "0" || value == "1")
-                    {
-                        settings->boolSet("GSCommandLineShowTutorialMessages", value == "1");
-                        break;
-                    }
-#endif
-                case 58:    // +? and usage forms of +help return false (0x8135EA3 xor eax,eax
+                case 58:    // +? and every form of +help return false (0x8135EA3 xor eax,eax
                             // > the single retn). Region 1 never runs, so BF2Engine::init fails and
                             // the process exits after printing the help - the shipped behaviour, and
                             // the answer to this function's old "[UNRESOLVED] return value" note.
@@ -1420,6 +1410,20 @@ bool BF2Engine::parseParameters(const std::string& commandLine)
                     break;
                 }
 
+#if !DEDICATED
+                case 78: // +tutorialMessages 0|1 - [CHOSEN, not recovered] owner request 2026-11-19,
+                         // replacing the 2026-11-09 +help 0/1 override. Session-only: outranks the
+                         // profile (PlayerVOHelp.cpp) but never changes GeneralSettings or General.con.
+                         // Not limited to the process command line, like the +help arm it replaces:
+                         // it only selects a display preference, so a later parse may change it.
+                    if (value != "0" && value != "1") {
+                        std::fprintf(stderr, "+tutorialMessages: expected 0 or 1\n");
+                        std::fflush(stderr);
+                        return false;
+                    }
+                    settings->boolSet("GSCommandLineShowTutorialMessages", value == "1");
+                    break;
+#endif
                 // 6 (+checkForAvailablePatch), 7 (+checkForPatch) and 10 (+lowPriority) are
                 // registered but share the default target 0x8133400 - they parse and do nothing.
                 default:
