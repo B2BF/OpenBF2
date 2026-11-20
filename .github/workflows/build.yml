@@ -175,8 +175,14 @@ jobs:
       - name: Check packaging fixtures
         run: python Code/Tests/test_package_release.py
 
+      # [CHOSEN, not recovered] Every package carries the Visual C++ runtime DLLs (vcruntime140*,
+      # msvcp140*) of its architecture beside its EXE, from the redist folder VsDevCmd names in
+      # VCToolsRedistDir (the one matching the toolset that built the images); see docs/ci-releases.md.
       - name: Package Windows binaries
-        run: python Code/Build/package_release.py --platform windows-${{ matrix.arch }} --build-dir out/build/ci-${{ matrix.arch }} --output-dir out/packages --revision "%GITHUB_SHA%" --repository "%GITHUB_REPOSITORY%" ${{ steps.dxsdk.outputs.found != 'true' && (matrix.arch == 'x86' && '--omit client --omit editor' || '--omit client') || '' }}
+        run: |
+          call Code\Build\vsdevcmd.cmd ${{ matrix.arch }}
+          if errorlevel 1 exit /b 1
+          python Code/Build/package_release.py --platform windows-${{ matrix.arch }} --build-dir out/build/ci-${{ matrix.arch }} --output-dir out/packages --revision "%GITHUB_SHA%" --repository "%GITHUB_REPOSITORY%" --vc-redist-dir "%VCToolsRedistDir%" ${{ steps.dxsdk.outputs.found != 'true' && (matrix.arch == 'x86' && '--omit client --omit editor' || '--omit client') || '' }}
 
       # The per-role ZIPs (and, with a client, the pinned OpenAL Soft tarball) are CI artifacts; the
       # windows-package job assembles the release package from both legs' artifacts.

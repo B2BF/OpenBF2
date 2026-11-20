@@ -106,6 +106,8 @@ macOS ZIPs or the macOS server. The Windows package's tree:
 
 ```text
 openbf2-windows/
+  (each of x64/, x86/, server/, editor/ also holds its architecture's vcruntime140*.dll and
+   msvcp140*.dll, the app-local Visual C++ runtime)
   x64/       BF2.exe, dice_py.dll, RendDX9.dll, SwiffPlayer.dll, BF2Audio.dll,
              TextureAtlasBuilder.dll, aidll.dll, BF2OpenAL.dll, OpenAL-Soft-NOTICE.txt
   x86/       BF2.exe, dice_py.dll, RendDX9.dll, SwiffPlayer.dll, BF2Audio.dll,
@@ -113,7 +115,8 @@ openbf2-windows/
   server/    bf2_w32ded.exe, dice_py.dll, AIDLL_w32ded.dll, BF2VoipServer_w32ded.dll
   editor/    BF2Editor.exe, dice_py.dll, RendDX9.dll, TextureAtlasBuilder.dll, BF2VoipServer.dll
   licenses/  Python, zlib, Minizip, TinyXML, RSA MD5, GameSpy; libogg, libvorbis, gameswf
-             (clients); FFmpeg (x64 client); OpenAL Soft (clients); ImGui, ImGuizmo (editor)
+             (clients); FFmpeg (x64 client); OpenAL Soft (clients); ImGui, ImGuizmo (editor);
+             Microsoft Visual C++ runtime (every folder)
   LICENSE  README.txt  build-info.json
 ```
 
@@ -125,10 +128,11 @@ files are merged into one `licenses/` and must be identical wherever two compone
 same one. Each client's `OpenAL-Soft-NOTICE.txt` stays beside its `BF2OpenAL.dll`. The OpenAL
 Soft tarball must match the SHA-256 in those notices; when both legs supply a copy, the copies
 must be identical. The combined `README.txt` merges the per-role READMEs: contents, Visual C++
-runtime per architecture, the x64 client's 64-bit `d3dx9_25.dll`, PunkBuster only with the x86
+runtime included per architecture, the x64 client's 64-bit `d3dx9_25.dll`, PunkBuster only with the x86
 client, CD keys, install commands per folder, the server settings, the editor's dependencies,
 the link contracts and the licence list. `build-info.json` records the revision, the source
-URL, `windows_signing`, each component (folder, per-role package, link contract) and the
+URL, `windows_signing`, each component (folder, per-role package, link contract, Visual C++
+runtime folder) and the
 SHA-256 of every runtime file under its folder path. Every input is verified before anything is
 written. The `Windows package` job runs it on Ubuntu after both Windows jobs and uploads the
 `release-windows` artifact.
@@ -148,7 +152,8 @@ and is not attached to releases.
 The Windows release package needs both clients and the editor, so a release run fails at the
 D3DX probe when neither D3DX source is usable, with an error annotation, and nothing is
 attached. The packager without `--allow-missing` refuses a missing component too, and the
-release job checks that `openbf2-windows.zip` holds all four executables and no `omitted` list.
+release job checks that `openbf2-windows.zip` holds all four executables, each with
+`vcruntime140.dll` and `msvcp140.dll` beside it, and no `omitted` list.
 A server-only archive under the same name would quietly ship a different product. The D3DX
 fallback lives in the repository (`Code/RendDX9Abi`), so a release run without a D3DX source
 points to a repository or configuration fault (for example `BF2_D3DX=sdk`). Fix it and publish
@@ -167,6 +172,8 @@ directories, so test executables, import libraries, maps, PDBs, and any locally 
 retail companions are excluded. `--omit ROLE` (repeatable) skips one package of the
 selected platform, for example `--omit client`; every other role stays
 required. CI passes it for the client and editor only when neither D3DX source is usable.
+Every Windows package also carries the app-local Visual C++ runtime beside its executable
+(below the table); the table lists the OpenBF2 files only.
 
 | ZIP filename | Runtime contents | Release package |
 | --- | --- | --- |
@@ -189,6 +196,34 @@ is strict; MSVC and runtime results await coordinator validation documented in
 [Building](building.md). Never load retail x86 AI into an x64 host.
 The x64 renderer statically links the FFmpeg-based Bink replacement; its package
 includes `FFmpeg-COPYING.LGPLv2.1.txt` alongside the other dependency notices.
+
+### Visual C++ runtime in the Windows packages
+
+`[CHOSEN, not recovered]` The Windows images use the shared MSVC runtime (`/MD`): the executable,
+`dice_py.dll` and the plugins share one CRT heap, so a static runtime (`/MT`) is not an option.
+A clean Windows has no `MSVCP140.dll`, so every Windows package (both clients, both servers, the
+editor) carries the Visual C++ runtime app-local, beside its executable, as retail shipped
+`MSVCR71.dll` in the game folder. No Visual C++ redistributable needs to be installed.
+
+- **Files.** `vcruntime140*.dll` and `msvcp140*.dll` from the newest `Microsoft.VC*.CRT`
+  folder of the package's architecture (`x86` or `x64`) below Visual Studio's
+  `VC\Redist\MSVC\<version>` folder; for 14.44 on x64 that is `vcruntime140.dll`,
+  `vcruntime140_1.dll`, `vcruntime140_threads.dll`, `msvcp140.dll`, `msvcp140_1.dll`,
+  `msvcp140_2.dll`, `msvcp140_atomic_wait.dll` and `msvcp140_codecvt_ids.dll` (x86 has no
+  `vcruntime140_1.dll`). The whole family travels because `msvcp140.dll` forwards part of
+  the C++ library to its siblings; `Code/Build/ship.ps1` stages the same set. The UCRT
+  (`ucrtbase.dll`, `api-ms-win-crt-*.dll`) is part of Windows 10 and 11 and is not copied.
+- **Input.** `package_release.py --vc-redist-dir <VC\Redist\MSVC\version>`, by default
+  `%VCToolsRedistDir%`, which VsDevCmd sets to the redist matching the toolset. CI calls
+  `Code\Build\vsdevcmd.cmd` in the packaging step and passes that folder. Packaging a Windows
+  platform fails without it, and also when a DLL is no PE image of the package's
+  architecture. The DLLs are runtime files: `build-info.json` hashes them, records the folder
+  used as `vc_runtime`, and the release package keeps them in each component's folder;
+  `--release windows` refuses a component without them.
+- **Licence.** The files are Microsoft "Distributable Code" under the Visual Studio 2022
+  license terms (Visual Studio's `Licenses\1033\Redist.txt` points to the current list,
+  `https://aka.ms/vs/17/redist.txt`). Each Windows package carries
+  `licenses/Microsoft-VC-Runtime.txt`, which names the files, their origin and those terms.
 
 ### OpenAL Soft in the Windows clients
 
@@ -243,7 +278,7 @@ and [libvorbis 1.3.7](https://github.com/xiph/vorbis/blob/v1.3.7/COPYING), resto
 their existing vendored code for binary distribution.
 
 These packages require compatible Battlefield 2 1.50 content and game Python scripts.
-Windows also needs the matching Visual C++ runtime and, for client/editor use,
+Windows packages include the Visual C++ runtime; client/editor use needs
 separately supplied Bink, D3DX25 and OpenAL components where applicable.
 Do not mix the rebuilt host's engine plugins with retail engine plugins. Follow
 [the build guide](building.md) for runtime setup and preserve original game images.
@@ -256,7 +291,8 @@ the release packages as `release-windows`, `release-linux`, `release-linux-clien
 retained for seven days; compiler console output remains in the job log. Failed jobs do not
 upload packages.
 
-For local packaging after building the matching targets:
+For local packaging after building the matching targets (Windows: in a Visual Studio
+developer prompt, which sets `VCToolsRedistDir`, or with `--vc-redist-dir`):
 
 ```powershell
 python Code/Build/package_release.py --platform windows-x86 `
@@ -287,8 +323,8 @@ platform and its folders. The procedures below are intentional packaging policy
 
 1. Extract the archive to `C:\OpenBF2`, which gives `C:\OpenBF2\openbf2-windows` with the
    `x64\`, `x86\`, `server\` and `editor\` folders. Keep every DLL beside its EXE and do not
-   move files between folders. Supply the Visual C++ runtime of the folder's architecture
-   (x64 for `x64\`; x86 for `x86\`, `server\` and `editor\`) and the client/editor
+   move files between folders. Each folder carries the Visual C++ runtime of its
+   architecture, so no redistributable needs to be installed. Supply the client/editor
    dependencies listed below.
 2. In Command Prompt, change to your retail game installation, or your 1.50
    dedicated-server installation for the server. This is the folder containing

@@ -7,6 +7,7 @@ the platform's single release ZIP from those; --release macos records the disk i
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -92,6 +93,80 @@ def openal_notice(build_info, bits):
         "under that name. Alternatively choose \"System OpenAL\" in the audio settings to use\n"
         "an installed {bits} OpenAL32.dll.\n".format(bits=bits)
     )
+
+
+# [CHOSEN, not recovered] The Microsoft Visual C++ runtime ships app-local beside every Windows
+# executable, as retail shipped MSVCR71.dll in the game folder: /MD is mandatory (the executable,
+# dice_py.dll and the plugins share one CRT heap), and a clean Windows has no MSVCP140.dll. The
+# whole vcruntime140*/msvcp140* family travels, because msvcp140.dll forwards part of the C++
+# library to msvcp140_1/_2/_atomic_wait (the same set Code/Build/ship.ps1 stages). The UCRT
+# (ucrtbase.dll, api-ms-win-crt-*.dll) is part of Windows 10/11 and is not copied.
+VC_RUNTIME_DLL = re.compile(r"(?:vcruntime140|msvcp140)[a-z0-9_]*\.dll", re.IGNORECASE)
+VC_RUNTIME_REQUIRED = ("vcruntime140.dll", "msvcp140.dll")
+VC_RUNTIME_ARCH = {"windows-x86": ("x86", 0x014C), "windows-x64": ("x64", 0x8664)}
+VC_RUNTIME_NOTICE_ENTRY = "licenses/Microsoft-VC-Runtime.txt"
+VC_RUNTIME_NOTICE = (
+    "Microsoft Visual C++ runtime\n\n"
+    "vcruntime140*.dll and msvcp140*.dll beside each Windows executable in this\n"
+    "package are the Microsoft Visual C++ 2015-2022 runtime libraries (C runtime\n"
+    "support and C++ standard library) of that executable's architecture, copied\n"
+    "unmodified from Visual Studio 2022's redistributable folder\n"
+    "VC\\Redist\\MSVC\\<version>\\<x86|x64>\\Microsoft.VC<toolset>.CRT (build-info.json\n"
+    "names the folder as vc_runtime). They are included so that no Visual C++\n"
+    "redistributable needs to be installed.\n\n"
+    "Copyright (c) Microsoft Corporation. All rights reserved.\n\n"
+    "These files are Microsoft \"Distributable Code\" under the Microsoft Visual\n"
+    "Studio 2022 license terms, as listed in Visual Studio's redistribution list\n"
+    "(Redist.txt in the Licenses folder of a Visual Studio 2022 installation;\n"
+    "current version: https://aka.ms/vs/17/redist.txt). They remain subject to\n"
+    "Microsoft's terms; OpenBF2's LICENSE does not apply to them.\n\n"
+    "Not included: the Universal C Runtime (ucrtbase.dll, api-ms-win-crt-*.dll),\n"
+    "which is part of Windows 10 and 11.\n"
+)
+
+
+def pe_machine(path):
+    """The COFF machine field of a PE image, or None when path is no PE image."""
+    with path.open("rb") as stream:
+        header = stream.read(0x40)
+        if len(header) < 0x40 or header[:2] != b"MZ":
+            return None
+        stream.seek(int.from_bytes(header[0x3C:0x40], "little"))
+        signature = stream.read(6)
+    if len(signature) < 6 or signature[:4] != b"PE\0\0":
+        return None
+    return int.from_bytes(signature[4:6], "little")
+
+
+def vc_runtime(redist_dir, platform):
+    """The app-local Visual C++ runtime for a Windows platform: the newest Microsoft.VC*.CRT folder
+    of its architecture below redist_dir (VCToolsRedistDir, which VsDevCmd sets to the redist
+    matching the toolset), as (description for build-info, {DLL name: path})."""
+    arch, machine = VC_RUNTIME_ARCH[platform]
+    if redist_dir is None:
+        raise ValueError("No Visual C++ redistributable folder for the app-local runtime: pass "
+                         "--vc-redist-dir or run in a Visual Studio developer prompt (VCToolsRedistDir)")
+    folders = {}
+    if (redist_dir / arch).is_dir():
+        for folder in (redist_dir / arch).iterdir():
+            match = re.fullmatch(r"Microsoft\.VC(\d+)\.CRT", folder.name, re.IGNORECASE)
+            if match and folder.is_dir():
+                folders[folder] = int(match.group(1))
+    if not folders:
+        raise ValueError("No {}\\Microsoft.VC*.CRT folder below the Visual C++ redistributable folder {}".format(
+            arch, redist_dir))
+    folder = max(folders, key=folders.get)
+    dlls = {path.name.lower(): path for path in sorted(folder.iterdir())
+            if VC_RUNTIME_DLL.fullmatch(path.name) and path.is_file()}
+    for name in VC_RUNTIME_REQUIRED:
+        if name not in dlls:
+            raise ValueError("{} lacks {} (Visual C++ runtime)".format(folder, name))
+    for name, path in dlls.items():
+        if path.stat().st_size == 0 or pe_machine(path) != machine:
+            raise ValueError("{} is not an {} PE image (Visual C++ runtime for {})".format(path, arch, platform))
+    version = redist_dir.resolve().name
+    description = "/".join(([version] if re.fullmatch(r"\d+(?:\.\d+)+", version) else []) + [arch, folder.name])
+    return description, dlls
 
 
 def indent(text, prefix="   "):
@@ -219,7 +294,11 @@ def role_readme(platform, role, name, executable, revision, source_url, macos_si
     """The README of one per-role package (also the Linux release package's, with its contents)."""
     diagnostic = role.endswith("-diagnostic")
     if platform.startswith("windows-"):
-        requirements = "Windows requires the matching x86/x64 Microsoft Visual C++ runtime.\n"
+        requirements = ("The Microsoft Visual C++ runtime ({bits}) is included: vcruntime140*.dll and\n"
+                        "msvcp140*.dll beside {exe}; no Visual C++ redistributable needs to be\n"
+                        "installed (licenses\\Microsoft-VC-Runtime.txt). The UCRT\n"
+                        "(api-ms-win-crt-*.dll) is part of Windows 10/11.\n").format(
+                            bits=VC_RUNTIME_ARCH[platform][0], exe=executable)
         if role.startswith("editor"):
             requirements += EDITOR_DEPENDENCIES
         elif role.startswith("client"):
@@ -278,6 +357,8 @@ def package(args):
             ", ".join(unknown), args.platform, ", ".join(roles)))
     plans = []
     companions = []
+    crt_source, crt = (vc_runtime(getattr(args, "vc_redist_dir", None), args.platform)
+                       if args.platform.startswith("windows-") else (None, {}))
     for role, (directory, names) in roles.items():
         if role in args.omit:
             print("Omitted by request: openbf2-{}-{}".format(args.platform, role))
@@ -285,6 +366,12 @@ def package(args):
         files = {name: args.build_dir / directory / name for name in names}
         files.update(common)
         package_notices = dict(notices)
+        if crt:
+            # Runtime files beside the executable: build-info.json hashes them and the Windows
+            # release package keeps them in the component's folder.
+            names = tuple(names) + tuple(crt)
+            files.update(crt)
+            package_notices[VC_RUNTIME_NOTICE_ENTRY] = VC_RUNTIME_NOTICE
         if role.startswith("client"):
             files["licenses/Ogg-COPYING.txt"] = external / "libogg-1.3.6/COPYING"
             files["licenses/Vorbis-COPYING.txt"] = external / "libvorbis-1.3.7/COPYING"
@@ -348,6 +435,7 @@ def package(args):
             "link_contract": "diagnostic /FORCE" if diagnostic else "strict",
             "windows_signing": "not configured",
             **({"macos_signing": macos_signing} if args.platform.startswith("macos-") else {}),
+            **({"vc_runtime": crt_source} if crt_source else {}),
             "runtime_files": {entry: sha256(files[entry]) for entry in names},
         }
         readme = role_readme(args.platform, role, name, names[0], args.revision, source_url, macos_signing)
@@ -422,6 +510,7 @@ LICENCES = {
     "licenses/OpenAL-Soft-COPYING.txt": "OpenAL Soft, the clients' BF2OpenAL.dll (LGPL)",
     "licenses/ImGui-LICENSE.txt": "Dear ImGui (editor)",
     "licenses/ImGuizmo-LICENSE.txt": "ImGuizmo (editor)",
+    VC_RUNTIME_NOTICE_ENTRY: "Microsoft Visual C++ runtime DLLs in every folder",
 }
 
 
@@ -483,8 +572,11 @@ def windows_readme(revision, source_url, included, omitted, licences):
                      ", ".join(folder + "\\" for folder in omitted))
     text += (
         "\nRequirements\n"
-        "- The Microsoft Visual C++ runtime of the folder's architecture: x64 for x64\\,\n"
-        "  x86 for x86\\, server\\ and editor\\.\n"
+        "- The Microsoft Visual C++ runtime is included: each folder carries\n"
+        "  vcruntime140*.dll and msvcp140*.dll of its architecture (x64 in x64\\,\n"
+        "  x86 in x86\\, server\\ and editor\\); no Visual C++ redistributable\n"
+        "  needs to be installed. The UCRT (api-ms-win-crt-*.dll) is part of\n"
+        "  Windows 10/11.\n"
         "- These Windows binaries are not code-signed.\n"
         "- The x64 client needs the 64-bit d3dx9_25.dll of the DirectX End-User Runtime\n"
         "  (System32); the x86 client and the editor use the game folder's 32-bit copy.\n"
@@ -591,6 +683,11 @@ def assemble_release(args):
             print("Not built, left out of this CI package: {}".format(package_name))
             continue
         metadata, entries = read_component(path, package_name, args.revision)
+        if role_platform.startswith("windows-"):
+            missing = [name for name in VC_RUNTIME_REQUIRED if name not in metadata["runtime_files"]]
+            if missing:
+                raise ValueError("{} lacks the app-local Visual C++ runtime ({}); package it with "
+                                 "--vc-redist-dir".format(path, ", ".join(missing)))
         prefix = folder + "/" if folder else ""
         for entry, (info, data) in sorted(entries.items()):
             if entry in ("README.txt", "build-info.json"):
@@ -608,6 +705,7 @@ def assemble_release(args):
         components.append({
             "folder": folder or ".", "package": package_name, "platform": role_platform, "role": role,
             "link_contract": metadata["link_contract"],
+            **({"vc_runtime": metadata["vc_runtime"]} if "vc_runtime" in metadata else {}),
         })
         included.append(component)
     if not included:
@@ -725,6 +823,11 @@ def main():
                              "<source-dir>/out/third_party), for the client's licence files")
     parser.add_argument("--revision", required=True, help="Full source commit SHA")
     parser.add_argument("--repository", required=True, help="GitHub owner/repository")
+    parser.add_argument("--vc-redist-dir", type=Path,
+                        default=Path(os.environ["VCToolsRedistDir"]) if os.environ.get("VCToolsRedistDir") else None,
+                        help="Windows: Visual Studio's VC\\Redist\\MSVC\\<version> folder (default: "
+                             "%%VCToolsRedistDir%%, set by VsDevCmd); the newest Microsoft.VC*.CRT folder of "
+                             "the platform's architecture supplies the app-local vcruntime140*/msvcp140* DLLs")
     parser.add_argument("--omit", action="append", default=[], metavar="ROLE",
                         help="Skip one package role of this platform (repeatable); every other "
                              "role stays required")

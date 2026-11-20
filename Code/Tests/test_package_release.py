@@ -6,12 +6,14 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
+from unittest import mock
 import zipfile
 
 
@@ -19,6 +21,35 @@ SOURCE = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("package_release", SOURCE / "Code/Build/package_release.py")
 PACKAGER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PACKAGER)
+
+# Visual Studio 2022 14.44's Microsoft.VC143.CRT contents: the app-local runtime is the
+# vcruntime140*/msvcp140* family; concrt140 and vccorlib140 stay out.
+VC_RUNTIME = {
+    "x64": {"vcruntime140.dll", "vcruntime140_1.dll", "vcruntime140_threads.dll", "msvcp140.dll",
+            "msvcp140_1.dll", "msvcp140_2.dll", "msvcp140_atomic_wait.dll", "msvcp140_codecvt_ids.dll"},
+    "x86": {"vcruntime140.dll", "vcruntime140_threads.dll", "msvcp140.dll", "msvcp140_1.dll",
+            "msvcp140_2.dll", "msvcp140_atomic_wait.dll", "msvcp140_codecvt_ids.dll"},
+}
+MACHINES = {"x86": 0x014C, "x64": 0x8664}
+
+
+def fake_pe(path, arch, label=b""):
+    """A synthetic file with just the MZ/PE headers the packager reads (the COFF machine)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"MZ" + bytes(58) + (0x40).to_bytes(4, "little") + b"PE\0\0"
+                     + MACHINES[arch].to_bytes(2, "little") + b" synthetic " + label + path.name.encode("ascii"))
+
+
+def fake_vc_redist(root):
+    """A synthetic VC\\Redist\\MSVC\\<version> folder: the newest CRT folder must win."""
+    redist = root / "vc-redist" / "14.44.35112"
+    for arch, names in VC_RUNTIME.items():
+        for name in names | {"concrt140.dll", "vccorlib140.dll"}:
+            fake_pe(redist / arch / "Microsoft.VC143.CRT" / name, arch)
+        for name in ("vcruntime140.dll", "msvcp140.dll"):
+            fake_pe(redist / arch / "Microsoft.VC142.CRT" / name, arch, b"older ")
+        fake_pe(redist / arch / "Microsoft.VC143.OpenMP" / "vcomp140.dll", arch)
+    return redist
 
 
 class PackageReleaseTests(unittest.TestCase):
@@ -29,7 +60,7 @@ class PackageReleaseTests(unittest.TestCase):
         self.args = SimpleNamespace(
             source_dir=SOURCE, build_dir=root / "build", output_dir=root / "packages",
             native_sources=root / "native", platform="windows-x64", omit=[],
-            revision="a" * 40, repository="kr4uzi/OpenBF2",
+            revision="a" * 40, repository="kr4uzi/OpenBF2", vc_redist_dir=fake_vc_redist(root),
         )
 
     def populate(self):
@@ -68,11 +99,15 @@ class PackageReleaseTests(unittest.TestCase):
         with zipfile.ZipFile(path) as archive:
             entries = {entry.removeprefix(name + "/") for entry in archive.namelist()}
             runtime = {"BF2.exe", "dice_py.dll", "RendDX9.dll", "SwiffPlayer.dll",
-                       "BF2Audio.dll", "TextureAtlasBuilder.dll", "aidll.dll", "BF2OpenAL.dll"}
+                       "BF2Audio.dll", "TextureAtlasBuilder.dll", "aidll.dll", "BF2OpenAL.dll"} | VC_RUNTIME["x64"]
             self.assertEqual({entry for entry in entries if entry.endswith((".exe", ".dll"))}, runtime)
             for license_name in ("Ogg-COPYING.txt", "Vorbis-COPYING.txt", "gameswf.txt",
-                                 "gameswf-base.txt", "FFmpeg-COPYING.LGPLv2.1.txt", "OpenAL-Soft-COPYING.txt"):
+                                 "gameswf-base.txt", "FFmpeg-COPYING.LGPLv2.1.txt", "OpenAL-Soft-COPYING.txt",
+                                 "Microsoft-VC-Runtime.txt"):
                 self.assertIn("licenses/" + license_name, entries)
+            crt = self.args.vc_redist_dir / "x64/Microsoft.VC143.CRT"
+            for entry in VC_RUNTIME["x64"]:
+                self.assertEqual(archive.read(name + "/" + entry), (crt / entry).read_bytes())
             notice = archive.read(name + "/OpenAL-Soft-NOTICE.txt").decode()
             for text in ("OpenAL Soft 0.0.0", "-DALSOFT_EAX=ON", "unmodified", "Replacing it", "System OpenAL"):
                 self.assertIn(text, notice)
@@ -107,7 +142,7 @@ class PackageReleaseTests(unittest.TestCase):
         self.package()
         name = "openbf2-windows-x64-server"
         with zipfile.ZipFile(self.args.output_dir / (name + ".zip")) as archive:
-            runtime = {"bf2_w64ded.exe", "dice_py.dll", "aidll.dll"}
+            runtime = {"bf2_w64ded.exe", "dice_py.dll", "aidll.dll"} | VC_RUNTIME["x64"]
             entries = {entry.removeprefix(name + "/") for entry in archive.namelist()}
             self.assertEqual({entry for entry in entries if entry.endswith((".exe", ".dll"))}, runtime)
             metadata = json.loads(archive.read(name + "/build-info.json"))
@@ -115,6 +150,63 @@ class PackageReleaseTests(unittest.TestCase):
             self.assertEqual(metadata["link_contract"], "strict")
             for entry, digest in metadata["runtime_files"].items():
                 self.assertEqual(hashlib.sha256(archive.read(name + "/" + entry)).hexdigest(), digest)
+
+    def test_every_windows_package_carries_its_architectures_vc_runtime(self):
+        for platform, arch in (("windows-x86", "x86"), ("windows-x64", "x64")):
+            self.args.platform = platform
+            self.args.output_dir = self.args.output_dir.parent / platform
+            self.populate()
+            self.package()
+            for role, (_, names) in PACKAGER.PACKAGES[platform].items():
+                with self.subTest(platform=platform, role=role):
+                    name = "openbf2-{}-{}".format(platform, role)
+                    with zipfile.ZipFile(self.args.output_dir / (name + ".zip")) as archive:
+                        entries = {entry.removeprefix(name + "/") for entry in archive.namelist()}
+                        metadata = json.loads(archive.read(name + "/build-info.json"))
+                        readme = archive.read(name + "/README.txt").decode()
+                        notice = archive.read(name + "/licenses/Microsoft-VC-Runtime.txt").decode()
+                        crt = {entry: archive.read(name + "/" + entry) for entry in VC_RUNTIME[arch]}
+                    # Beside the executable (top level), hashed as runtime files, newest CRT folder.
+                    self.assertEqual({entry for entry in entries if entry.endswith(".dll")
+                                      and entry.startswith(("vcruntime", "msvcp", "concrt", "vccorlib"))},
+                                     VC_RUNTIME[arch])
+                    self.assertEqual(set(metadata["runtime_files"]), set(names) | VC_RUNTIME[arch])
+                    self.assertEqual(metadata["vc_runtime"], "14.44.35112/{}/Microsoft.VC143.CRT".format(arch))
+                    for data in crt.values():
+                        self.assertEqual(int.from_bytes(data[0x44:0x46], "little"), MACHINES[arch])
+                        self.assertNotIn(b"older", data)
+                    for text in ("Microsoft Visual C++ runtime ({}) is included".format(arch),
+                                 "beside " + names[0], "no Visual C++ redistributable needs to be\ninstalled",
+                                 "licenses\\Microsoft-VC-Runtime.txt", "(api-ms-win-crt-*.dll) is part of Windows 10/11"):
+                        self.assertIn(text, readme)
+                    self.assertNotIn("requires the matching", readme)
+                    for text in ('"Distributable Code"', "Studio 2022 license terms", "https://aka.ms/vs/17/redist.txt",
+                                 "Redist.txt", "unmodified", "OpenBF2's LICENSE does not apply",
+                                 "api-ms-win-crt-*.dll", "part of Windows 10 and 11"):
+                        self.assertIn(text, notice)
+
+    def test_windows_vc_runtime_input_is_required_and_checked(self):
+        self.populate()
+        redist = self.args.vc_redist_dir
+        self.args.vc_redist_dir = None
+        with self.assertRaisesRegex(ValueError, "--vc-redist-dir.*VCToolsRedistDir"):
+            self.package()
+        self.args.vc_redist_dir = redist.parent
+        with self.assertRaisesRegex(ValueError, r"No x64\\Microsoft\.VC\*\.CRT folder"):
+            self.package()
+        self.args.vc_redist_dir = redist
+        crt = redist / "x64/Microsoft.VC143.CRT"
+        (crt / "msvcp140.dll").unlink()
+        with self.assertRaisesRegex(ValueError, "lacks msvcp140.dll"):
+            self.package()
+        # An x86 DLL in the x64 folder (or any non-PE file) is refused.
+        fake_pe(crt / "msvcp140.dll", "x86")
+        with self.assertRaisesRegex(ValueError, "msvcp140.dll is not an x64 PE image"):
+            self.package()
+        (crt / "msvcp140.dll").write_bytes(b"not a PE image")
+        with self.assertRaisesRegex(ValueError, "is not an x64 PE image"):
+            self.package()
+        self.assertFalse(self.args.output_dir.exists())
 
     def test_omit_unbuilt_windows_client_and_editor(self):
         for platform in ("windows-x86", "windows-x64"):
@@ -279,11 +371,12 @@ class PackageReleaseTests(unittest.TestCase):
 
 WINDOWS_RUNTIME = {
     "x64": {"BF2.exe", "dice_py.dll", "RendDX9.dll", "SwiffPlayer.dll", "BF2Audio.dll",
-            "TextureAtlasBuilder.dll", "aidll.dll", "BF2OpenAL.dll"},
+            "TextureAtlasBuilder.dll", "aidll.dll", "BF2OpenAL.dll"} | VC_RUNTIME["x64"],
     "x86": {"BF2.exe", "dice_py.dll", "RendDX9.dll", "SwiffPlayer.dll", "BF2Audio.dll",
-            "TextureAtlasBuilder.dll", "BF2VoipServer.dll", "BF2OpenAL.dll"},
-    "server": {"bf2_w32ded.exe", "dice_py.dll", "AIDLL_w32ded.dll", "BF2VoipServer_w32ded.dll"},
-    "editor": {"BF2Editor.exe", "dice_py.dll", "RendDX9.dll", "TextureAtlasBuilder.dll", "BF2VoipServer.dll"},
+            "TextureAtlasBuilder.dll", "BF2VoipServer.dll", "BF2OpenAL.dll"} | VC_RUNTIME["x86"],
+    "server": {"bf2_w32ded.exe", "dice_py.dll", "AIDLL_w32ded.dll", "BF2VoipServer_w32ded.dll"} | VC_RUNTIME["x86"],
+    "editor": {"BF2Editor.exe", "dice_py.dll", "RendDX9.dll", "TextureAtlasBuilder.dll",
+               "BF2VoipServer.dll"} | VC_RUNTIME["x86"],
 }
 WINDOWS_LICENCES = {
     "LICENSE", "licenses/Python-LICENSE.txt", "licenses/zlib.txt", "licenses/Minizip.txt",
@@ -291,6 +384,7 @@ WINDOWS_LICENCES = {
     "licenses/Ogg-COPYING.txt", "licenses/Vorbis-COPYING.txt", "licenses/gameswf.txt",
     "licenses/gameswf-base.txt", "licenses/FFmpeg-COPYING.LGPLv2.1.txt",
     "licenses/OpenAL-Soft-COPYING.txt", "licenses/ImGui-LICENSE.txt", "licenses/ImGuizmo-LICENSE.txt",
+    "licenses/Microsoft-VC-Runtime.txt",
 }
 
 
@@ -303,6 +397,7 @@ class ReleasePackageTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.packages = self.root / "artifacts"
         self.output = self.root / "release"
+        self.vc_redist = fake_vc_redist(self.root)
 
     def build(self, platform, omit=()):
         """One CI leg: synthetic build outputs, packaged into that leg's artifact folder."""
@@ -323,7 +418,7 @@ class ReleasePackageTests(unittest.TestCase):
         args = SimpleNamespace(
             source_dir=SOURCE, build_dir=build_dir, output_dir=self.packages / ("packages-" + platform),
             native_sources=self.root / "native", platform=platform, omit=list(omit),
-            revision="a" * 40, repository="kr4uzi/OpenBF2",
+            revision="a" * 40, repository="kr4uzi/OpenBF2", vc_redist_dir=self.vc_redist,
         )
         with contextlib.redirect_stdout(io.StringIO()):
             PACKAGER.package(args)
@@ -365,6 +460,11 @@ class ReleasePackageTests(unittest.TestCase):
         self.assertEqual(contents["x64/BF2.exe"][1], b"synthetic fixture: windows-x64 BF2.exe")
         self.assertEqual(contents["x86/BF2.exe"][1], b"synthetic fixture: windows-x86 BF2.exe")
         self.assertEqual(contents["server/dice_py.dll"][1], b"synthetic fixture: windows-x86 dice_py.dll")
+        # Each folder carries the Visual C++ runtime of its architecture.
+        for folder, arch in (("x64", "x64"), ("x86", "x86"), ("server", "x86"), ("editor", "x86")):
+            for entry in VC_RUNTIME[arch]:
+                self.assertEqual(contents[folder + "/" + entry][1],
+                                 (self.vc_redist / arch / "Microsoft.VC143.CRT" / entry).read_bytes())
         self.assertIn("any other\n64-bit OpenAL Soft build", contents["x64/OpenAL-Soft-NOTICE.txt"][1].decode())
         self.assertIn("any other\n32-bit OpenAL Soft build", contents["x86/OpenAL-Soft-NOTICE.txt"][1].decode())
         for notice in notices:
@@ -381,12 +481,17 @@ class ReleasePackageTests(unittest.TestCase):
             ("x64", "openbf2-windows-x64-client", "strict"), ("x86", "openbf2-windows-x86-client", "strict"),
             ("server", "openbf2-windows-x86-server", "strict"), ("editor", "openbf2-windows-x86-editor", "strict"),
         ])
+        self.assertEqual([c["vc_runtime"] for c in metadata["components"]],
+                         ["14.44.35112/{}/Microsoft.VC143.CRT".format(arch) for arch in ("x64", "x86", "x86", "x86")])
         # The facts of the four per-role READMEs, merged.
         for text in (
             "OpenBF2: openbf2-windows", "Source revision: " + "a" * 40, "does not contain a\nBattlefield 2 installation",
             "Do not mix rebuilt client/editor engine plugins with retail engine plugins",
             "x64\\", "x86\\", "server\\", "editor\\", "licenses\\", "build-info.json",
-            "Microsoft Visual C++ runtime", "x64 for x64\\", "x86 for x86\\, server\\ and editor\\",
+            "Microsoft Visual C++ runtime is included", "vcruntime140*.dll and msvcp140*.dll",
+            "x64 in x64\\", "x86 in x86\\, server\\ and editor\\", "no Visual C++ redistributable",
+            "The UCRT (api-ms-win-crt-*.dll) is part of\n  Windows 10/11",
+            "licenses\\Microsoft-VC-Runtime.txt", "Microsoft Visual C++ runtime DLLs in every folder",
             "not code-signed", "PunkBuster works only with the x86 client",
             "64-bit d3dx9_25.dll", "%LOCALAPPDATA%\\OpenBF2\\Registry.dat", "docs/registry-file.md",
             "other than 16567", "do not establish loading, joining or gameplay",
@@ -420,7 +525,8 @@ class ReleasePackageTests(unittest.TestCase):
             "openal-soft-<version>.tar.bz2", "LICENSE",
         ):
             self.assertIn(text, readme)
-        for text in ("NovintHFX", "This CI build lacks", "diagnostic /FORCE package", "macOS"):
+        for text in ("NovintHFX", "This CI build lacks", "diagnostic /FORCE package", "macOS",
+                     "runtime of the folder's architecture"):
             self.assertNotIn(text, readme)
         for entry in WINDOWS_LICENCES:
             self.assertIn(entry.replace("/", "\\"), readme)
@@ -476,6 +582,17 @@ class ReleasePackageTests(unittest.TestCase):
             self.assemble("windows")
         self.assertFalse(self.output.exists())
 
+    def test_windows_release_requires_the_vc_runtime(self):
+        # A per-role ZIP packaged without the app-local runtime (an older packager) is refused.
+        self.build("windows-x86")
+        with mock.patch.object(PACKAGER, "vc_runtime", return_value=(None, {})):
+            self.build("windows-x64")
+        for allow_missing in (False, True):
+            with self.assertRaisesRegex(ValueError, "openbf2-windows-x64-client.zip lacks the app-local "
+                                        "Visual C\\+\\+ runtime \\(vcruntime140.dll, msvcp140.dll\\)"):
+                self.assemble("windows", allow_missing=allow_missing)
+        self.assertFalse(self.output.exists())
+
     def test_release_rejects_another_revision(self):
         self.build("linux-x64")
         args = SimpleNamespace(release="linux", packages_dir=self.packages, output_dir=self.output,
@@ -527,6 +644,37 @@ class ReleasePackageTests(unittest.TestCase):
                                 capture_output=True, text=True)
         self.assertEqual(failed.returncode, 1)
         self.assertIn("a windows release needs every component", failed.stderr)
+
+    def test_vc_redist_dir_command_line(self):
+        # --vc-redist-dir defaults to VCToolsRedistDir (set by VsDevCmd); without either, packaging
+        # a Windows platform fails before writing anything.
+        build = self.root / "build-cli"
+        for directory, names in PACKAGER.PACKAGES["windows-x64"].values():
+            for name in names:
+                (build / directory).mkdir(parents=True, exist_ok=True)
+                (build / directory / name).write_bytes(b"synthetic " + name.encode("ascii"))
+        openal = build / "openal-soft"
+        openal.mkdir()
+        (openal / "COPYING").write_text("Synthetic LGPL text\n")
+        (openal / "openal-soft-0.0.0.tar.bz2").write_bytes(b"synthetic source tarball")
+        (openal / "BUILD.txt").write_text("Source SHA-256: {}\n".format(
+            hashlib.sha256(b"synthetic source tarball").hexdigest()))
+        command = [sys.executable, str(SOURCE / "Code/Build/package_release.py"), "--platform", "windows-x64",
+                   "--build-dir", str(build), "--output-dir", str(self.output), "--revision", "a" * 40,
+                   "--repository", "kr4uzi/OpenBF2"]
+        environment = {key: value for key, value in os.environ.items() if key.upper() != "VCTOOLSREDISTDIR"}
+        missing = subprocess.run(command, capture_output=True, text=True, env=environment)
+        self.assertEqual(missing.returncode, 1)
+        self.assertIn("No Visual C++ redistributable folder", missing.stderr)
+        self.assertFalse(self.output.exists())
+        result = subprocess.run(command, capture_output=True, text=True,
+                                env=dict(environment, VCToolsRedistDir=str(self.vc_redist) + os.sep))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with zipfile.ZipFile(self.output / "openbf2-windows-x64-client.zip") as archive:
+            self.assertIn("openbf2-windows-x64-client/msvcp140_atomic_wait.dll", archive.namelist())
+        explicit = subprocess.run(command + ["--vc-redist-dir", str(self.vc_redist)], capture_output=True,
+                                  text=True, env=environment)
+        self.assertEqual(explicit.returncode, 0, explicit.stderr)
 
     def test_macos_build_info(self):
         client = self.root / "client-universal"
