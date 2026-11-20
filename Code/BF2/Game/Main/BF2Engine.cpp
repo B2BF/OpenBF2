@@ -3108,8 +3108,21 @@ void BF2Engine::handleEvent(EventCategory category, unsigned int id, EventNode* 
     {                                                                //   the low half is read through a byte-typed pointer
         ui::ISwiffHost* host = static_cast<ui::ISwiffHost*>(classManager->getSingleton("SwiffHost"));       //   there - [UNRESOLVED] its width
         const unsigned int packed = *static_cast<const unsigned int*>(data);
-        const int x = static_cast<int>(packed >> 16);
-        const int y = static_cast<int>(packed & 0xFFFF);
+        int x = static_cast<int>(packed >> 16);
+        int y = static_cast<int>(packed & 0xFFFF);
+#if defined(_WIN32)
+        // [CHOSEN, not recovered] A windowed device takes its back buffer from the client area
+        // (zero back-buffer dimensions), and the resize before the reset can leave that area smaller
+        // than the requested mode when the desktop clamps the window. The menus and the pointer
+        // then use the back buffer the device really has. Same sizes keep the retail values.
+        RECT client;
+        if (window && !window->getFullscreen() && GetClientRect(window->getHwnd(), &client)
+            && client.right > 0 && client.bottom > 0)
+        {
+            x = client.right;
+            y = client.bottom;
+        }
+#endif
         if (menuLogic)
         {
             menuLogic->onResize(x, y);                              // IMenuLogic +0x44
