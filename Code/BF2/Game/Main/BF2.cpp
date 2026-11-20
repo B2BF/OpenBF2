@@ -42,6 +42,7 @@ namespace memory { void memory_update_modules(const char*) { } }
 #    include "../../Sound/BfSound.h"                 // g_bfSound - the focus-loss mute
 #    include "../../Sound/NullSound.h"               // ISoundEngine::setMasterVolume
 #    include "../../Menu/IMenuLogic.h"               // menuLogic - the active menu
+#    include "../../Menu/ISwiffHost.h"               // [CHOSEN] the menu viewport for the pointer
 #    include "BF2Console.h"                          // IMenuLogic::getConsole()->getConsoleActive()
 #    include "../../Platform/Windows/WinInputScript.h" // [TEMP] BF2_INPUT_SCRIPT host
 #  endif
@@ -702,11 +703,36 @@ static void toggleCapsLockOff()
     SendInput(2, inputs, sizeof(INPUT));
 }
 
+// [CHOSEN, not recovered] Retail hands the menu WM_MOUSEMOVE's client coordinates unchanged.
+// They are the menu's pixels only while the client area is exactly the SwiffHost viewport, the
+// back buffer the menu is fitted to. A windowed client area can differ: the desktop clamps a
+// window taller or wider than the screen, and a window resized without a device reset shows its
+// back buffer stretched. The pointer is scaled from the client area to the viewport the same way;
+// the native hosts already report back-buffer pixels (Platform/Host/WindowMessageSource.h).
+// Equal sizes, and positions left of or above the client area, keep the retail values.
+static void menuPointerToViewport(HWND hwnd, LPARAM lParam, int& x, int& y)
+{
+    const int clientX = static_cast<short>(LOWORD(lParam));
+    const int clientY = static_cast<short>(HIWORD(lParam));
+    ui::ISwiffHost* host = menuLogic->getSwiffHost();
+    RECT client;
+    if (!host || !hwnd || clientX < 0 || clientY < 0 || !GetClientRect(hwnd, &client)
+        || client.right <= 0 || client.bottom <= 0)
+        return;
+    unsigned int width = 0, height = 0;
+    host->getViewportSize(&width, &height);                                  // +0x1DC
+    if (!width || !height
+        || (width == static_cast<unsigned int>(client.right) && height == static_cast<unsigned int>(client.bottom)))
+        return;
+    x = static_cast<int>(static_cast<long long>(clientX) * width / client.right);
+    y = static_cast<int>(static_cast<long long>(clientY) * height / client.bottom);
+}
+
 // 0x2D0 B. Added to the window by BF2::init and called by Window::wndProc for every
 // message; the return value is ignored there. Every arm re-reads "GSDedicated" from the settings
 // repository: it is the same handler in the client's own `+dedicated 1` mode, although in that mode
 // BF2Engine::init never creates the window, so the handler is never installed. [INFERRED] name.
-static int bf2MessageHandler(HWND /*hwnd*/, UINT message, WPARAM wParam, LPARAM lParam)
+static int bf2MessageHandler(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     if (message > WM_LBUTTONDOWN)                   // 0x201
     {
@@ -737,7 +763,12 @@ static int bf2MessageHandler(HWND /*hwnd*/, UINT message, WPARAM wParam, LPARAM 
     if (message == WM_MOUSEMOVE)                    // 0x200
     {
         if (settings && !settings->boolGet("GSDedicated", false) && menuLogic)
-            menuLogic->onMouseMove(LOWORD(lParam), HIWORD(lParam));   // +0x4C: movzx ax / shr 16
+        {
+            int x = LOWORD(lParam);                 // +0x4C: movzx ax / shr 16
+            int y = HIWORD(lParam);
+            menuPointerToViewport(hwnd, lParam, x, y);
+            menuLogic->onMouseMove(x, y);
+        }
         return 0;
     }
 
