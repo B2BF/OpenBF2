@@ -75,6 +75,9 @@ jobs:
               info = json.loads(archive.read("openbf2-windows/build-info.json"))
           for entry in ("x64/BF2.exe", "x86/BF2.exe", "server/bf2_w32ded.exe", "editor/BF2Editor.exe"):
               assert "openbf2-windows/" + entry in names, "openbf2-windows.zip lacks " + entry
+              for runtime in ("vcruntime140.dll", "msvcp140.dll"):
+                  dll = entry.split("/")[0] + "/" + runtime
+                  assert "openbf2-windows/" + dll in names, "openbf2-windows.zip lacks " + dll
           assert not info.get("omitted"), "openbf2-windows.zip omits " + ", ".join(info["omitted"])
           with tarfile.open("openbf2-linux-x86_64-client.tar.gz", "r:gz") as archive:
               names = set(archive.getnames())
