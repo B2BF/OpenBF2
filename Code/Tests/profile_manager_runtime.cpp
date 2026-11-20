@@ -510,7 +510,7 @@ int main()
                   "gpInitialize carries the shipped product and namespace ids");
             initializeResult = GP_NO_ERROR;
         }
-        {   // the connect refuses: the connection is destroyed and the SDK text is translated.
+        {   // the connect refuses: the connection is disconnected (kept) and the SDK text is translated.
             ProfileManager owner;
             expectedConnection = ProfileManagerFixture::connection(owner);
             observedOwner = &owner;
@@ -519,9 +519,9 @@ int main()
             loginHost.posted.clear(); calls.clear();
             check(!owner.login("thenick", "thesecret"), "a refused connect fails the login");
             check(calls == std::vector<std::string>({"lookup", "selected", "startAvailable", "think",
-                                                     "initialize", "setCallback", "connect", "destroy",
+                                                     "initialize", "setCallback", "connect", "disconnect",
                                                      "errorString", "lookup", "post"}),
-                  "a refused connect destroys the connection before reporting");
+                  "a refused connect disconnects, keeping the connection for its error text");
             check(lastConnectNick == "thenick" && lastConnectPassword == "thesecret",
                   "connect carries the unique nick and password in the shipped order");
             check(lastCallbackFunc == GP_ERROR && lastCallbackParam == &owner,

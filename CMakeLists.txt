@@ -2892,6 +2892,34 @@ if(APPLE)
     endif()
 endif()
 
+# [TEMP] The text of the online-account error popups (Code/Tests/profile_manager_login_error_runtime.cpp):
+# the production ProfileManager and the linked GameSpy SDK against loopback gpcm/gpsp stand-ins whose
+# login refuses the password. The fixture replaces the resolver, so no name leaves the process. Built
+# on request; the client image (DEDICATED=0).
+if(APPLE)
+    add_executable(bf2_profile_manager_login_error_check EXCLUDE_FROM_ALL
+        Code/Tests/profile_manager_login_error_runtime.cpp
+        "${BF2_ROOT}/Game/ProfileManager.cpp"
+        "${BF2_ROOT}/Game/Persistence/AntiHacks.cpp"
+        "${BF2_ROOT}/Game/Persistence/HTTPRequest.cpp"
+        "${BF2_ROOT}/Game/MatchMaking/OnlineProvider.cpp"
+        "${BF2_ROOT}/Game/MatchMaking/OnlineProviderGameSpy.cpp"
+        "${BF2_ROOT}/Core/ClassManager.cpp"
+        "${BF2_ROOT}/Core/Debug.cpp"
+        "${BF2_ROOT}/Core/StringUtil.cpp"
+        $<TARGET_OBJECTS:bf2_gamespy_objects>
+        $<TARGET_OBJECTS:bf2_gamespy_gp_objects>)
+    bf2_configure_cpp_target(bf2_profile_manager_login_error_check)
+    bf2_set_platform_compat(bf2_profile_manager_login_error_check)
+    bf2_set_image(bf2_profile_manager_login_error_check 0)
+    target_compile_definitions(bf2_profile_manager_login_error_check PRIVATE BF2_PLATFORM_POSIX _MACOSX)
+    find_package(Threads REQUIRED)
+    target_link_libraries(bf2_profile_manager_login_error_check PRIVATE Threads::Threads)
+    if(BUILD_TESTING)
+        add_test(NAME bf2_profile_manager_login_error_check COMMAND bf2_profile_manager_login_error_check)
+    endif()
+endif()
+
 # [TEMP] The stats web requests and their parsers (Code/Tests/persistence_stats_runtime.cpp): every
 # endpoint the game requests, with +gamespyRedirect test.openbf2, against a loopback listener with
 # handwritten bodies. The fixture replaces the resolver, so no name leaves the process. Built on

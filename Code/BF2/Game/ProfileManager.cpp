@@ -417,7 +417,9 @@ bool ProfileManager::login(const std::string& uniqueNick, const std::string& pas
                             GP_NO_FIREWALL, GP_BLOCKING, &profileManagerGPProfileId,
                             &profileId) != GP_NO_ERROR)
     {
-        gpDestroy(&m_connection);
+        // Disconnect only: the connection keeps the server's error text for lastErrorString, and
+        // the next logout destroys it.
+        gpDisconnect(&m_connection);
         reportError(lastErrorString(), false);
         return false;
     }
