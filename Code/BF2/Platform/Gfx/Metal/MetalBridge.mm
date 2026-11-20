@@ -86,6 +86,12 @@ struct Frame {
     struct DrawCaches* draws = nullptr; // G4 open render pass and pipeline caches (DrawBridge.inc)
     struct Prebuild* prebuild = nullptr; // shader libraries and pipelines built ahead of draws (ShaderPrebuild.inc)
     unsigned long presents = 0;          // frames presented so far
+    // DONOTWAIT presents (renderer.presentAsync, level loads): shown, and answered busy.
+    unsigned long presentsNoWait = 0, presentsBusy = 0;
+    // The last DONOTWAIT frame has reached the display (its drawable's presented handler ran), and
+    // when it was presented. present() answers further DONOTWAIT calls busy until then.
+    std::shared_ptr<std::atomic<bool>> noWaitOnScreen = std::make_shared<std::atomic<bool>>(true);
+    std::chrono::steady_clock::time_point noWaitPresentedAt;
 };
 Adapter* createAdapter()
 {
@@ -290,6 +296,9 @@ static void framesSummary(Frame* f)
     std::fprintf(stderr, "[metal] frames in flight: %lu frame submissions (%.2f command buffers in flight after each), "
                  "%lu mid-frame flushes, %lu waits for a frame in flight (%.1f s)\n", f->frameSubmits,
                  double(f->inFlightAtSubmit) / double(f->frameSubmits), f->flushSubmits, f->inFlightWaits, f->inFlightWaitMs / 1000.0);
+    if (f->presentsNoWait || f->presentsBusy)
+        std::fprintf(stderr, "[metal] DONOTWAIT presents: %lu shown, %lu busy (no free drawable or the previous one still on the GPU)\n",
+                     f->presentsNoWait, f->presentsBusy);
 }
 static bool finish(Frame* f)
 {
@@ -549,9 +558,19 @@ PresentResult present(Frame* f,void* window,bool doNotWait)
         // Device-loss latch (g3d): a miniaturized/detached/zero-sized view or a failed
         // submission is lost until a successful Reset replaces the default targets.
         if(!renderable(f) || resized(f) || f->failed) return PresentResult::lost;
+        // [CHOSEN, not recovered] https://github.com/kr4uzi/OpenBF2/issues/41
+        // A DONOTWAIT frame is not shown before the previous one has reached
+        // the display: a level load repaints far faster than the display refreshes, with or without
+        // vsync, and each repaint the display cannot show still cost a full loading-screen draw. The
+        // busy answer makes the renderer skip that draw (RendDX9Draw rendererPresent). After 100 ms
+        // without the presented handler (an occluded window), the next frame goes out regardless.
+        if(doNotWait && !f->noWaitOnScreen->load() &&
+           std::chrono::steady_clock::now()-f->noWaitPresentedAt<std::chrono::milliseconds(100)) {
+            ++f->presentsBusy; return PresentResult::busy;
+        }
         if(f->presentation) {
             const auto status=f->presentation.status;
-            if(doNotWait && status<MTLCommandBufferStatusCompleted) return PresentResult::busy;
+            if(doNotWait && status<MTLCommandBufferStatusCompleted) { ++f->presentsBusy; return PresentResult::busy; }
             if(!doNotWait) [f->presentation waitUntilCompleted];
             if(f->presentation.status==MTLCommandBufferStatusError) { f->failed=true; return PresentResult::lost; }
             f->presentation=nil;
@@ -561,6 +580,19 @@ PresentResult present(Frame* f,void* window,bool doNotWait)
         if(layer.drawableSize.width<=0 || layer.drawableSize.height<=0) return PresentResult::lost;
         auto& request=f->drawableRequests[(__bridge void*)layer];
         if(!request) request=std::make_shared<DrawableRequest>();
+        // nextDrawable can block on WindowServer/vsync. Only the worker waits; a DONOTWAIT caller
+        // gets WASSTILLDRAWING and retains its pending commands. Call with request->mutex held.
+        const auto acquireAsync=[layer](const std::shared_ptr<DrawableRequest>& pending) {
+            pending->acquiring=true;
+            dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE,0),^{
+                @autoreleasepool {
+                    id<CAMetalDrawable> next=[layer nextDrawable];
+                    std::lock_guard<std::mutex> guard(pending->mutex);
+                    pending->drawable=next; pending->acquiring=false;
+                    pending->condition.notify_all();
+                }
+            });
+        };
         id<CAMetalDrawable> drawable=nil;
         {
             std::unique_lock<std::mutex> lock(request->mutex);
@@ -569,23 +601,13 @@ PresentResult present(Frame* f,void* window,bool doNotWait)
             if(!drawable && !request->acquiring) {
                 bf2hitch::Scope timed(bf2hitch::Drawable);
                 if(!doNotWait) drawable=[layer nextDrawable];
-                else {
-                    // nextDrawable can block on WindowServer/vsync. Only the worker waits;
-                    // the D3D caller gets WASSTILLDRAWING and retains its pending commands.
-                    request->acquiring=true;
-                    auto pending=request;
-                    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE,0),^{
-                        @autoreleasepool {
-                            id<CAMetalDrawable> next=[layer nextDrawable];
-                            std::lock_guard<std::mutex> guard(pending->mutex);
-                            pending->drawable=next; pending->acquiring=false;
-                            pending->condition.notify_all();
-                        }
-                    });
-                }
+                else acquireAsync(request);
             }
         }
-        if(!drawable) return doNotWait?PresentResult::busy:PresentResult::lost;
+        if(!drawable) {
+            if(doNotWait) ++f->presentsBusy;
+            return doNotWait?PresentResult::busy:PresentResult::lost;
+        }
         if(!commands(f) || !resolveBackBuffer(f)) return PresentResult::lost;
         if(drawable.texture.width==f->color.width && drawable.texture.height==f->color.height) {
             id<MTLBlitCommandEncoder> blit=[f->commands blitCommandEncoder];
@@ -610,9 +632,23 @@ PresentResult present(Frame* f,void* window,bool doNotWait)
         if(f->prebuild) f->prebuild->presents=f->presents+1;
         if(++f->presents%1200==0) { prebuildSummary(f); framesSummary(f); } // traced runs only
         PresentCapture* capture=presentCaptureBegin(f);  // [TEMP] BF2_PRESENT_PNG
+        if(doNotWait) {
+            auto onScreen=std::make_shared<std::atomic<bool>>(false);
+            f->noWaitOnScreen=onScreen; f->noWaitPresentedAt=std::chrono::steady_clock::now();
+            [drawable addPresentedHandler:^(id<MTLDrawable>) { onScreen->store(true); }];
+        } else f->noWaitOnScreen->store(true);
         [f->commands presentDrawable:drawable];
         if(doNotWait) {
             commitTracked(f,f->commands); f->presentation=f->commands; f->commands=nil;
+            // [CHOSEN, not recovered] https://github.com/kr4uzi/OpenBF2/issues/41
+            // Ask for the next drawable now, so the next DONOTWAIT present
+            // (a level load's next repaint, RendDX9Draw rendererPresent) finds it ready when the
+            // layer has one free instead of answering busy once per frame.
+            {
+                std::lock_guard<std::mutex> lock(request->mutex);
+                if(!request->drawable && !request->acquiring) acquireAsync(request);
+            }
+            ++f->presentsNoWait;
             presentCaptureWrite(capture,f->presentation);
             return PresentResult::ok;
         }

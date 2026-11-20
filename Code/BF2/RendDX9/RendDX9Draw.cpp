@@ -15,6 +15,7 @@
 #if defined(BF2_LINUX_CLIENT)
 #include "../Platform/Linux/FrameCapture.h"
 #endif
+#include "../Core/LoadStat.h"           // loadStat - rendererPresent's level-load present policy
 #if defined(_WIN32)
 #include <dxerr9.h>
 #pragma comment(lib, "dxerr9.lib")
@@ -247,7 +248,23 @@ bool rendererPresent(unsigned int mode)
         return true;
     }
     if (mode == 2)
+    {
         mode = b->presentAsync;                                  // +0x3AC
+        // [CHOSEN, not recovered] https://github.com/kr4uzi/OpenBF2/issues/41: while a level loads
+        // (LoadStat's callback is registered, GameLogic::beginLoadStats .. unregisterLoadCallback),
+        // present as with renderer.presentAsync: D3DPRESENT_DONOTWAIT. Retail repaints the loading
+        // screen on every effect load (shaderLoadingEvent, outside LoadStat's 1/30 s throttle),
+        // ~1,700 presents per level; with vsync each blocking Present waited for a free back buffer,
+        // so the load ran at the display's refresh rate. A busy device answers WASSTILLDRAWING; the
+        // retail handling below keeps the frame and presents it at the next beginScene, which skips
+        // that event's draw, so every drawn loading frame (the first and the last included) still
+        // reaches the screen. Per backend: D3D9 (Windows) answers busy while its present queue is
+        // full; the Metal device (macOS) acquires the drawable off the main thread and is busy until
+        // one is free and the previous frame was shown; DXVK Native (Linux) ignores the flag and
+        // presents as before. Presents outside a level load are unchanged.
+        if (loadStat && loadStat->m_loadCallback)
+            mode |= 1;                                           // D3DPRESENT_DONOTWAIT
+    }
 
     IDirect3DSwapChain9* chain = b->swapChains[b->currentSwapChain];   // +0xE4[+0xF0]
 
