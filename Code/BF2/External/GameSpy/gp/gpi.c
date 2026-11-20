@@ -456,14 +456,12 @@ gpiProcessConnectionManager(
 	}
 	while(loop);
 
-	// Send Keep-Alive. Just need TCP to ack the data
-	/////////////////////////////////////////////////	
-	if ( now - iconnection->kaTransmit > KEEPALIVE_TIMEOUT )
-	{
-		// keep alive packet will be sent next think
-		gpiAppendStringToBuffer(connection, &iconnection->outputBuffer, "\\ka\\\\final\\");
-		iconnection->kaTransmit = now;
-	}
+	// No client keep-alive. This SDK revision sends "\ka\\final\" when the connection has been idle
+	// for KEEPALIVE_TIMEOUT; the GP revision in retail BF2.exe 1.50 does not: its only "\ka\" string
+	// (0x506354) is in the incoming-message table, and "\ka\\final\" does not occur in the image.
+	// Servers written against retail answer the unknown command with a fatal error - BF2Hub's gpcm
+	// replies "\error\\err\0\fatal\\errmsg\Not implemented", which logs the player out. The
+	// server's own "\ka\" is still read above. kaTransmit is kept so the bookkeeping stays as is.
 
 	return GP_NO_ERROR;
 }
