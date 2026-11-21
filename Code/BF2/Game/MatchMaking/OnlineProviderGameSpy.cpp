@@ -1,5 +1,5 @@
-// [CHOSEN, not recovered] Prepares the linked GameSpy SDK for the process: the redirects of
-// +gamespyRedirect and +gamespyRedirect<label> (OnlineProvider.h) go into the SDK's resolver seam.
+// [CHOSEN, not recovered] Prepares the linked GameSpy SDK for the process: the redirects of the
+// +onlineProviderConfig provider file (OnlineProvider.h) go into the SDK's resolver seam.
 #include "OnlineProvider.h"
 
 #include <cstdio>
@@ -52,18 +52,18 @@ void logOnce(const std::string& key, const std::string& line)
 
 // The SDK's gsiHostRedirectFunc: the name redirectLookup chooses, which the SDK then resolves
 // itself at this and every later lookup (an address without DNS, a host name through the system
-// resolver), or hostname itself for a name no option covers.
+// resolver), or hostname itself for a name no entry of the file covers.
 const char* redirectHostname(const char* hostname)
 {
-    std::string option;
-    const std::string lookup = redirectLookup(hostname, &option);
+    std::string source;
+    const std::string lookup = redirectLookup(hostname, &source);
     std::lock_guard<std::mutex> guard(redirectLock());
     if (lookup.empty())
     {
         logOnce(hostname, std::string("forwarding ") + hostname);
         return hostname;
     }
-    logOnce(hostname, std::string("redirecting ") + hostname + " to " + lookup + " (+" + option + ")");
+    logOnce(hostname, std::string("redirecting ") + hostname + " to " + lookup + " (" + source + ")");
     return lookupNames().insert(lookup).first->c_str();
 }
 

@@ -180,7 +180,7 @@ std::string HTTPRequest::getGameSpyUrl() const
     // hosts-file check (BF2.exe 0x59C670, bf2_w32ded.exe 0x561500) accepts only GameSpy's own
     // address block 212.77.171.x and otherwise ends the process (Debug type 7), and the hosts file
     // is a normal way to point these names at a replacement service. A provider is chosen with
-    // +gamespyRedirect (MatchMaking/OnlineProvider.h), which keeps this URL and its Host header.
+    // +onlineProviderConfig (MatchMaking/OnlineProvider.h), which keeps this URL and its Host header.
     return "http://BF2Web.gamespy.com/ASP/";
 }
 } }
