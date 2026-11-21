@@ -5,7 +5,8 @@
  * Loaded with DYLD_INSERT_LIBRARIES into bf2 or bf2_client. With OPENBF2_TEST_REDIRECT_DOMAIN set
  * (for example test.openbf2), every host name equal to that domain or ending in ".<domain>" resolves
  * to 127.0.0.1. Every other name goes to the system resolver unchanged. Started with
- * +gamespyRedirect <domain>, the game resolves its retail names as BF2Web.<domain>, gpcm.<domain>,
+ * +onlineProviderConfig and a provider file whose "*" entry is <domain> (docs/building.md, "Online
+ * services"), the game resolves its retail names as BF2Web.<domain>, gpcm.<domain>,
  * battlefield2.master.<domain>, ... and so reaches all of its online services on loopback without
  * a hosts-file or DNS change.
  *

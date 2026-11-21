@@ -4,8 +4,9 @@
 it must not be shipped. It lets a locally built `bf2` or `bf2_client` reach local test
 services for its online names without changing `/etc/hosts` or DNS.
 
-The game's online host names are retail, `<service>.gamespy.com`, and `+gamespyRedirect <domain>`
-resolves each of them as `<service>.<domain>`. Examples are `BF2Web.<domain>`, `gpcm.<domain>`,
+The game's online host names are retail, `<service>.gamespy.com`, and a provider file
+(`+onlineProviderConfig <file>`, [Online services](../../../docs/building.md#online-services))
+whose `"*"` entry is a domain resolves each of them as `<service>.<domain>`. Examples are `BF2Web.<domain>`, `gpcm.<domain>`,
 `gpsp.<domain>` and `battlefield2.master.<domain>`. The library replaces
 `getaddrinfo`, `gethostbyname` and `connect` in the process it is loaded into:
 
@@ -29,11 +30,14 @@ outside `bin_macos`. The target is excluded from the default build.
 
 ## Run
 
+Write a provider file for the test domain, then start the game with it:
+
 ```sh
+printf '{"schema": 1, "provider": "Local test", "services": {"*": "test.openbf2"}}\n' > "$PWD/test-provider.json"
 OPENBF2_TEST_REDIRECT_DOMAIN=test.openbf2 \
 OPENBF2_TEST_REDIRECT_HTTP_PORT=18080 \
 DYLD_INSERT_LIBRARIES=out/build/<tag>/test_tools/libbf2_test_name_redirect.dylib \
-out/build/<tag>/bin_macos/bf2_client +gamespyRedirect test.openbf2 +noSound 1
+out/build/<tag>/bin_macos/bf2_client +onlineProviderConfig "$PWD/test-provider.json" +noSound 1
 ```
 
 `DYLD_INSERT_LIBRARIES` only works on binaries that are not built with the hardened runtime,
@@ -49,14 +53,16 @@ when it starts, so the game process it launches never sees them. Set the variabl
 /usr/bin/sandbox-exec -f profile.sb /usr/bin/env \
     DYLD_INSERT_LIBRARIES=$PWD/out/build/<tag>/test_tools/libbf2_test_name_redirect.dylib \
     OPENBF2_TEST_REDIRECT_DOMAIN=test.openbf2 \
-    out/build/<tag>/bin_macos/bf2_client +gamespyRedirect test.openbf2
+    out/build/<tag>/bin_macos/bf2_client +onlineProviderConfig "$PWD/test-provider.json"
 ```
 
 The loopback harness does this with `--name-redirect <domain>`
 (`tools/macos/loopback/loopback.py`). That option builds nothing: build
-`bf2_test_name_redirect` first. The option also adds `+gamespyRedirect <domain>` to both command
-lines. It lets the sandbox profiles reach the GameSpy service ports on loopback only, plus
-the HTTP port given by `--name-redirect-http-port`.
+`bf2_test_name_redirect` first. The option also writes the provider file
+`online-provider.json` (`"*"`: the domain) into the run directory and adds
+`+onlineProviderConfig <that file>` to both command lines. It lets the sandbox profiles read that
+file and reach the GameSpy service ports on loopback only, plus the HTTP port given by
+`--name-redirect-http-port`.
 
 The headless checks `bf2_persistence_stats_check` and `bf2_swiff_leaderboard_check` do not
 need this library. They replace the resolver inside their own process.

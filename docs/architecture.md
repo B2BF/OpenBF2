@@ -252,7 +252,7 @@ takes effect when the module is loaded **before** Python initialization — load
 
 This loader does not itself reroute sockets. bf2hub's GameSpy/master-server redirection relied on an
 install-time patch of the host's import table that a runtime load does not reproduce; select the
-provider with `+gamespyRedirect` instead (see [Online services](building.md#online-services)).
+provider with `+onlineProviderConfig` instead (see [Online services](building.md#online-services)).
 
 ## The editor
 

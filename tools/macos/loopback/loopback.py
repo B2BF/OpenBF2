@@ -15,6 +15,7 @@ Never binds or probes 16567; refuses to start when 16890/29911 are taken.
 """
 import argparse
 import datetime
+import json
 import os
 import pathlib
 import pwd
@@ -158,8 +159,10 @@ p.add_argument('--client-env', action='append', default=[], metavar='KEY=VALUE',
 p.add_argument('--name-redirect', metavar='DOMAIN',
                help='[TEMP] test-only: load <build>/test_tools/libbf2_test_name_redirect.dylib (build target '
                     'bf2_test_name_redirect first) into server and client, so DOMAIN and *.DOMAIN resolve to '
-                    '127.0.0.1, and add +gamespyRedirect DOMAIN to both command lines. The sandbox profiles then also '
-                    'allow the GameSpy service ports on loopback (Code/Tests/name_redirect/README.md)')
+                    '127.0.0.1, write the provider file online-provider.json (services "*": DOMAIN) into the run '
+                    'directory and add +onlineProviderConfig <that file> to both command lines. The sandbox profiles '
+                    'then also allow reading that file and the GameSpy service ports on loopback '
+                    '(Code/Tests/name_redirect/README.md)')
 p.add_argument('--name-redirect-http-port', type=int, metavar='PORT',
                help='[TEMP] with --name-redirect: TCP connections to 127.0.0.1:80 (the stats web host) go to '
                     '127.0.0.1:PORT instead')
@@ -314,7 +317,19 @@ if args.interface_ip:
     # The game and query sockets stay bound to --interface-ip (a host-only bridge), see SETTINGS.
     profile = run / 'server.sb'
     profile.write_text(profile.read_text() + '(allow network-outbound (remote ip "*:*"))\n')
+provider_file = None
 if args.name_redirect:
+    # The provider file both images read (+onlineProviderConfig, docs/building.md "Online services"):
+    # every GameSpy and dice.se name is looked up with its retail domain replaced by the test domain,
+    # which the name redirect library answers with 127.0.0.1. The profiles allow reading it
+    # explicitly (they allow every read today; the rule keeps the file readable if they tighten).
+    provider_file = run / 'online-provider.json'
+    provider_file.write_text(json.dumps({'schema': 1, 'provider': 'loopback name redirect',
+                                         'services': {'*': args.name_redirect}}, indent=2) + '\n')
+    read_rule = '(allow file-read* (literal "%s"))\n' % str(provider_file).replace('\\', '\\\\').replace('"', '\\"')
+    for name in (('client.sb',) if args.no_server else ('server.sb', 'client.sb')):
+        profile = run / name
+        profile.write_text(profile.read_text() + read_rule)
     # The GameSpy services' fixed ports and the stats web port, on loopback only (the server profile
     # already allows every loopback peer).
     ports = [80, 27900, 27901, 28910, 29900, 29901, 29910, 29920] + (
@@ -410,8 +425,8 @@ def stamp(msg):
     print('[%7.1fs] %s' % (time.monotonic() - t0, msg), flush=True)
 
 server_extra = (['+ai', '1'] if args.ai else []) + shlex.split(args.server_extra)
-if args.name_redirect:
-    server_extra = ['+gamespyRedirect', args.name_redirect] + server_extra
+if provider_file:
+    server_extra = ['+onlineProviderConfig', str(provider_file)] + server_extra
 senv = dict(os.environ, LB_OWNER_HOME=str(OWNER_HOME), LB_RUN_OUT=str(OUT), LB_GAME_ROOT=str(content),
             TERM='xterm')
 if redirect_wrap:
@@ -613,7 +628,7 @@ if (args.no_server or (run / 'server.playing').exists()) and not args.no_client 
                 + ['-k', 'quit 1', '--']
                 if args.lldb else [])
     command = sandbox(run / 'client.sb') + debugger + redirect_wrap + [str(client_bin)] + (
-        ['+gamespyRedirect', args.name_redirect] if args.name_redirect else []) + ['+modPath', 'mods/' + args.mod, '+fullscreen', '1' if args.fullscreen else '0'] + ([] if args.profile_resolution else
+        ['+onlineProviderConfig', str(provider_file)] if provider_file else []) + ['+modPath', 'mods/' + args.mod, '+fullscreen', '1' if args.fullscreen else '0'] + ([] if args.profile_resolution else
         ['+szx', '800', '+szy', '600']) + ([] if args.movies else ['+restart', '1']) + [
         ] + ([] if args.no_join else ['+joinServer', '127.0.0.1', '+port', '16890']) + (
         ['+password', args.client_password if args.client_password is not None else args.server_password]

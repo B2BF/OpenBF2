@@ -586,68 +586,170 @@ communicate with the required internet backends" diagnostic. Retail's Windows ho
 for `BF2Web.gamespy.com`, which ended the game when the hosts file named that host, is skipped,
 so the hosts file can also point the names at a replacement service.
 
-| Service | Host | Label option (client) |
+| Service | Host | `services` key |
 |---|---|---|
-| Availability check, UDP 27900 | `battlefield2.available.gamespy.com` | `+gamespyRedirectavailable` |
-| Server list, TCP 28910 | `battlefield2.ms14.gamespy.com` | `+gamespyRedirectms14` |
-| Heartbeats UDP 27900, CD-key validation UDP 29910 (same address) | `battlefield2.master.gamespy.com` | `+gamespyRedirectmaster` |
-| Presence login, TCP 29900 | `gpcm.gamespy.com` | `+gamespyRedirectgpcm` |
-| Presence search, TCP 29901 | `gpsp.gamespy.com` | `+gamespyRedirectgpsp` |
-| Game statistics, TCP 29920 | `battlefield2.gamestats.gamespy.com` | `+gamespyRedirectgamestats` |
-| Stats web requests (BFHQ), HTTP | `BF2Web.gamespy.com` | `+gamespyRedirectBF2Web` |
-| Player info request, HTTP | `stage-net.gamespy.com` | `+gamespyRedirectstage-net` |
-| Menu images, HTTP | `eapusher.dice.se` | `+gamespyRedirecteapusher` |
-| NAT negotiation, UDP 27901 | `battlefield2.natneg1.gamespy.com` to `natneg3` | `+gamespyRedirectnatneg1` to `+gamespyRedirectnatneg3` |
+| Availability check, UDP 27900 | `battlefield2.available.gamespy.com` | `available` |
+| Server list, TCP 28910 (client) | `battlefield2.ms14.gamespy.com` | `ms14` |
+| Heartbeats UDP 27900, CD-key validation UDP 29910 (same address) | `battlefield2.master.gamespy.com` | `master` |
+| Presence login, TCP 29900 (client) | `gpcm.gamespy.com` | `gpcm` |
+| Presence search, TCP 29901 (client) | `gpsp.gamespy.com` | `gpsp` |
+| Game statistics, TCP 29920 | `battlefield2.gamestats.gamespy.com` | `gamestats` |
+| Stats web requests (BFHQ), HTTP | `BF2Web.gamespy.com` | `BF2Web` |
+| Player info request, HTTP | `stage-net.gamespy.com` | `stage-net` |
+| Menu images, HTTP (client) | `eapusher.dice.se` | `eapusher` |
+| NAT negotiation, UDP 27901 | `battlefield2.natneg1.gamespy.com` to `natneg3` | `natneg1` to `natneg3` |
 
 The SDK's stand-alone CD-key server `key.gamespy.com` is never looked up (keys are validated at
-the heartbeat address), so it has no label option.
+the heartbeat address), so it has no key. Dedicated servers link neither the server list nor
+the presence code and show no menu, so they never look up the names marked "(client)".
 
-The options below (`[CHOSEN, not recovered]`, command line only) change only the address a name
-resolves to, inside the process. The names, URLs and Host headers stay retail, which providers
-that check the Host header need. The implementation is in
-`Code/BF2/Game/MatchMaking/OnlineProvider.h`.
+#### The provider file: `+onlineProviderConfig <path>`
 
-`+gamespyRedirect <value>` (option id 77, client and dedicated servers) covers every name that
-contains `gamespy` or is under `dice.se` (case ignored):
+`[CHOSEN, not recovered]` One command-line option selects the online provider. It names a JSON
+file that changes only the name the game looks up for each retail name, inside the process. The
+names, URLs and Host headers stay retail (`Host: BF2Web.gamespy.com`), which providers that
+check the Host header need. The implementation is in
+`Code/BF2/Game/MatchMaking/OnlineProvider.h`. This section is the interface for the setup
+application, which ships provider files and passes the selected one.
 
-- An IPv4 address: the names resolve to it.
-- A domain `D`: each name is resolved with its retail domain replaced by `D`, through the
-  system resolver, at every lookup: `gpcm.gamespy.com` as `gpcm.D`,
-  `battlefield2.ms14.gamespy.com` as `battlefield2.ms14.D`, `eapusher.dice.se` as `eapusher.D`.
-  If that name does not resolve, the lookup fails; the retail name is not tried. A name that
-  contains `gamespy` without being under `gamespy.com` is looked up unchanged.
+The option:
 
-`+gamespyRedirect<label> <value>` (option ids 79 to 90, client images only) covers the names
-whose label directly before the retail domain is `<label>` (the table above; the option name
-is spelled exactly as the label, the name is compared without case). The value is an IPv4
-address, or a host name that the names then resolve as, at every lookup. A label option takes
-precedence over `+gamespyRedirect`; a name neither covers is looked up unchanged.
+- `+onlineProviderConfig <path>` (option id 91) is registered in client and dedicated server
+  images. Without it nothing is installed and every lookup is the GameSpy SDK's own.
+- It is accepted from the process command line only. A later parse, for example a
+  menu-supplied command line, ignores it with
+  `+onlineProviderConfig: ignored outside the process command line`. No console command or
+  settings file can set it. Given twice on the command line, start-up ends
+  (`given more than once`).
+- The file is read once, while the command line is parsed at start-up, before any online
+  service starts. Changes to the file take effect at the next start.
+- The path goes to the C library's `fopen` exactly as given: no character is changed or
+  refused, so backslashes, a drive letter and its colon are kept. It may be absolute or
+  relative; a relative path is resolved against the process's working directory at start-up
+  (OpenBF2's code does not change directory before reading it; an app started from the macOS
+  Finder has `/` as its working directory). Pass an absolute path.
+- The path is one value after the option. On macOS and Linux, pass the option and the path as
+  two separate arguments; the entry point joins the arguments and puts double quotes around an
+  argument that contains a space or tab, for example
+  `+onlineProviderConfig "/Users/Jane/Library/Application Support/OpenBF2/Setup/Provider-BF2Hub.json"`.
+  The Windows dedicated server joins its arguments the same way. The Windows client receives the
+  raw command line, so the launcher must put the path in double quotes when it contains white
+  space:
+  `+onlineProviderConfig "C:\Users\Jane Doe\AppData\Local\OpenBF2\Setup\Provider-BF2Hub.json"`.
+  Option and path joined into one argument do not work (the entry point would quote both
+  together, and the parser would read a wrong path).
+- Limits of the retail command-line parser, which reads every option value: the path must be
+  at most 255 bytes (a longer value overruns the parser's buffer, a retail defect kept), it must
+  not contain a double quote, and on Windows it must be representable in the system's ANSI code
+  page (the client's command line is ANSI).
+- Mod restart: when the client restarts itself to activate a mod (with or without joining a
+  server), the new command line carries ` +onlineProviderConfig <path>` with the same path, in
+  double quotes when it contains white space. The restarted client reads the file again, so the
+  file must still be there.
 
-- An empty or unusable value (not an IPv4 address or host name, for example with spaces,
-  quotes or `+`) ends start-up with a message (`+gamespyRedirectgpcm: ...`).
-- Nothing is resolved at start-up: each option only hands the GameSpy SDK another name to look
-  up, through `gsiRedirectHostname` (see `Code/BF2/External/GameSpy/LOCAL_CHANGES.md`), and the
-  SDK resolves it at every lookup.
-- Each name the SDK looks up is reported once on stderr (`online services: redirecting <name> to
-  <address or host> (+<option>)` or `online services: forwarding <name>`). The start-up line
-  lists the options in effect, and a client that restarts itself for a mod passes them on.
-- Without any option nothing is installed and every lookup is the SDK's own.
-- Engine lookups of server addresses typed by the player, ban lists and PunkBuster are not
-  redirected. Menu images from `http://` URLs are downloaded through the SDK's HTTP code, so
-  `eapusher.dice.se` is redirected.
+The file is one JSON object in UTF-8 (RFC 8259), for example the file the setup ships for
+BF2Hub:
 
-Migration: the former `+gamespy <domain>` is gone; use `+gamespyRedirect <domain>`, which
-reaches the same hosts. The difference is that URLs and Host headers now stay retail
-(`Host: BF2Web.gamespy.com`), so a provider that expected its own names in the Host header must
-accept the retail ones.
-
-Some providers answer only requests that carry the gamespy.com names and serve the stats from
-another host than the login and server list (for example BF2Hub). An example, not verified
-against a live service:
-
-```sh
-+gamespyRedirect <login host address> +gamespyRedirectgamestats <stats host> +gamespyRedirectBF2Web <stats host> +gamespyRedirecteapusher <stats host>
+```json
+{
+  "schema": 1,
+  "provider": "BF2Hub",
+  "services": { "*": "bf2hub.p.bf2.org" }
+}
 ```
+
+With it, `gpcm.gamespy.com` is looked up as `gpcm.bf2hub.p.bf2.org`,
+`battlefield2.available.gamespy.com` as `battlefield2.available.bf2hub.p.bf2.org`,
+`BF2Web.gamespy.com` as `BF2Web.bf2hub.p.bf2.org` and `eapusher.dice.se` as
+`eapusher.bf2hub.p.bf2.org`. The OpenSpy file is the same with `"provider": "OpenSpy"` and
+`"*": "openspy.p.bf2.org"`. A name that does not resolve under the provider's domain fails its
+lookup; the retail name is not tried.
+
+The rules:
+
+- `"schema"`: required. It must be the number `1`, written `1`; any other value (`2`, `1.0`,
+  `"1"`) refuses the file, so that a later format is never misread.
+- `"provider"`: optional display name, used only in the log lines. ASCII letters, digits, space,
+  `-` and `.`, at most 64 characters; anything else refuses the file. An empty string counts as
+  no name.
+- `"services"`: required object with at least one entry. Each value is a string: a dotted IPv4
+  address or a DNS name of letters, digits and `-` in dot-separated labels (no trailing dot, no
+  port, no URL, no spaces).
+  - Key `"*"`: the fallback for every name that contains `gamespy` or is under `dice.se`
+    (compared without case) and has no entry of its own. An IPv4 address: those names resolve
+    to it. A domain of at most 230 characters: each name is looked up with its retail domain
+    (`gamespy.com` or `dice.se`) replaced by it, `gpcm.gamespy.com` as `gpcm.<domain>`,
+    `battlefield2.ms14.gamespy.com` as `battlefield2.ms14.<domain>`. A name that contains
+    `gamespy` without being under `gamespy.com` is looked up unchanged.
+  - Every other key is one of the labels in the table above, spelled exactly as there and
+    compared with case: `available`, `ms14`, `master`, `gpcm`, `gpsp`, `gamestats`, `BF2Web`,
+    `stage-net`, `natneg1`, `natneg2`, `natneg3`, `eapusher`. It covers the names whose label
+    directly before the retail domain is that label (the name itself compared without case). An
+    IPv4 address: those names resolve to it. A host name of at most 253 characters: those names
+    are looked up as that host.
+  - A label entry takes precedence over `"*"`, whatever their order in the file. A name no entry
+    covers is looked up unchanged.
+  - Any other key in `"services"`, including a label in another case such as `"bf2web"`, refuses
+    the file; the message names the key.
+- `"valid_to"` and every other top-level key: ignored by the game, whatever their value.
+- Strict JSON: at most 64 KiB (65536 bytes); one object and nothing after its closing brace but
+  white space; no comments, trailing commas, single quotes or unquoted keys; valid UTF-8 and
+  escapes. A UTF-8 byte order mark at the start is accepted. A key that occurs twice at the top
+  level or inside `"services"` refuses the file, as does a value of the wrong type (for example
+  `"schema": "1"`, `"provider": 5`, `"services": []`, `"gpcm": 10`).
+- Every entry applies in every image. A dedicated server honours the label entries like a
+  client; the entries for the names marked "(client)" in the table are simply never looked up
+  there, so one file serves both.
+
+A file that cannot be used ends start-up with one line on stderr that names the option, the
+file and the reason, and the process exits with code 42, for example:
+
+```text
++onlineProviderConfig "/path/Provider.json": cannot be opened (No such file or directory)
++onlineProviderConfig "/path/Provider.json": not valid JSON at line 3, column 5: expected ',' or '}'
++onlineProviderConfig "/path/Provider.json": "schema" must be the number 1, this file has 2
++onlineProviderConfig "/path/Provider.json": unknown key "bf2web" in "services" (the keys are ...)
++onlineProviderConfig "/path/Provider.json": services.gpcm: "gpcm.example.org:29900" is not an IPv4 address or host name
+```
+
+Continuing would send logins and heartbeats to a provider the user did not ask for.
+
+Logging: the start-up line names the provider, the file and the entries in effect, for example
+`online services: provider BF2Hub, file /path/Provider.json; retail names; other names containing
+gamespy or under dice.se resolve with their retail domain replaced by bf2hub.p.bf2.org
+(services.*)`; without the option it reads `online services: retail names, resolved unchanged`.
+Each name the SDK looks up is reported once on stderr, as `online services: redirecting <name> to
+<address or host> (services.<key>)` or `online services: forwarding <name>`.
+
+Nothing is resolved at start-up: the file only hands the GameSpy SDK another name to look up,
+through `gsiRedirectHostname` (see `Code/BF2/External/GameSpy/LOCAL_CHANGES.md`), and the SDK
+resolves it at every lookup. Engine lookups of server addresses typed by the player, ban lists
+and PunkBuster are not redirected. Menu images from `http://` URLs are downloaded through the
+SDK's HTTP code, so `eapusher.dice.se` is redirected.
+
+Some providers serve the stats from another host than the login and server list. A file for
+such a split provider, with example names, not verified against a live service:
+
+```json
+{
+  "schema": 1,
+  "provider": "Example split",
+  "services": {
+    "*": "192.0.2.10",
+    "gamestats": "stats.example.org",
+    "BF2Web": "stats.example.org",
+    "eapusher": "stats.example.org"
+  }
+}
+```
+
+Migration: the former `+gamespyRedirect <value>` and `+gamespyRedirect<label> <value>` options
+are gone (their option ids 77 and 79 to 90 stay unused, like id 75 of the earlier
+`+gamespy <domain>`). The parser skips options it does not know without a message, so a launcher
+that still passes them starts the game with the retail names. Write their values into a file
+instead: `+gamespyRedirect <value>` becomes `"*": "<value>"`, and
+`+gamespyRedirect<label> <value>` becomes `"<label>": "<value>"` with the label spelled exactly
+as in the table (the option name was compared without case, the key is not).
 
 Ranked play on BF2Hub is not supported. BF2Hub needs its licensed snapshot protocol and does
 not support the standard `VerifyPlayer.aspx` request, so servers that use it must run with
@@ -659,13 +761,18 @@ waited for the operating system's TCP timeout when a name resolved to an address
 answers.
 
 `bf2_online_provider_check` (macOS, built on request) checks against the linked SDK the retail
-state and the parser options (`+gamespy` is no longer one), `+gamespyRedirect` with an address
-and with a domain (each name resolved at every lookup, a failing proxied name, every service and
-stats web request reaching the target with retail Host headers), every label option with
-addresses and host names (precedence, refused values, the restart arguments, every service
-reaching its label's target), and the connect timeouts against a loopback listener that never
-accepts. It replaces the resolver inside the test process and uses loopback listeners only, so
-it contacts no other machine.
+state and the parser options (`+gamespy`, `+gamespyRedirect` and `+gamespyRedirect<label>` are
+no longer options), every rule of the provider file (each refusal with its reason, the size
+limit, the byte order mark, ignored keys, case-sensitive labels, a refused file changing
+nothing), the setup's two shipped files, the path forms (a macOS path with spaces through the
+entry point's joining and the mod restart's splitting, Windows paths with drive letters and
+backslashes at string level), the `"*"` entry with an address and with a domain (each name
+resolved at every lookup, a failing proxied name, every service and stats web request reaching
+the target with retail Host headers), every label entry with addresses and host names
+(precedence, refused values, the restart arguments, every service reaching its label's target),
+and the connect timeouts against a loopback listener that never accepts. It replaces the
+resolver inside the test process, uses loopback listeners only, so it contacts no other machine,
+and writes its files into a temporary directory that it removes.
 
 For the x86 focused suite, use `bf2_run_checks`. The existing batch gates remain
 available through `bf2_syntaxcheck` and `bf2_gap_report`. The latter invokes the full

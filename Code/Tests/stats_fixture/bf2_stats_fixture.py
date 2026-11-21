@@ -6,9 +6,9 @@ chosen numbers while no ranked server feeds the real service. It listens on 127.
 only in-memory state (unlock selections, a cleared rank notification), writes nothing, and talks to
 no other host.
 
-Point a locally built client (or dedicated server) at it with +gamespyRedirect <test domain> and the
-test-only name redirect (Code/Tests/name_redirect): the stats host BF2Web.gamespy.com is resolved as
-BF2Web.<test domain>, which resolves to 127.0.0.1, and OPENBF2_TEST_REDIRECT_HTTP_PORT=<port> moves
+Point a locally built client (or dedicated server) at it with +onlineProviderConfig <file>, a provider
+file whose "*" entry is <test domain> (docs/building.md, "Online services"), and the test-only name
+redirect (Code/Tests/name_redirect): the stats host BF2Web.gamespy.com is resolved as BF2Web.<test domain>, which resolves to 127.0.0.1, and OPENBF2_TEST_REDIRECT_HTTP_PORT=<port> moves
 its port 80 to this fixture.
 
 What it answers - the three getplayerinfo.aspx queries SwiffHost::fetchPlayerStats (BF2.exe 0x49D450)
@@ -476,7 +476,7 @@ def main():
     server = http.server.ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(profile, state))
     print("[fixture] BF2 stats fixture on http://127.0.0.1:%d/ASP/  (score %d, weapon %d: %d kills / %d deaths)"
           % (a.port, a.score, a.weapon, a.kills, a.deaths), flush=True)
-    print("[fixture] start the client with +gamespyRedirect test.openbf2 and the test name redirect "
+    print("[fixture] start the client with +onlineProviderConfig <file> (services \"*\": \"test.openbf2\") and the test name redirect "
           "(OPENBF2_TEST_REDIRECT_HTTP_PORT=%d)  - Ctrl+C stops" % a.port, flush=True)
     try:
         server.serve_forever()

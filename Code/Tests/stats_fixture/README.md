@@ -15,14 +15,16 @@ Use `--help` for all options. `--selftest` prints sample player, awards, and
 leaderboard responses and exits. Weapon 0 is the assault rifle, kit 1 is Assault,
 and map 0 is Kubra Dam.
 
-Start a locally built client with `+gamespyRedirect test.openbf2` and the test-only name redirect
-library (`Code/Tests/name_redirect/README.md`), on macOS:
+Start a locally built client with a provider file whose `"*"` entry is `test.openbf2`
+(`+onlineProviderConfig`, see [Online services](../../../docs/building.md#online-services)) and
+the test-only name redirect library (`Code/Tests/name_redirect/README.md`), on macOS:
 
 ```sh
+printf '{"schema": 1, "provider": "Local test", "services": {"*": "test.openbf2"}}\n' > "$PWD/test-provider.json"
 OPENBF2_TEST_REDIRECT_DOMAIN=test.openbf2 \
 OPENBF2_TEST_REDIRECT_HTTP_PORT=18123 \
 DYLD_INSERT_LIBRARIES=out/build/<tag>/test_tools/libbf2_test_name_redirect.dylib \
-out/build/<tag>/bin_macos/bf2_client +gamespyRedirect test.openbf2 +noSound 1
+out/build/<tag>/bin_macos/bf2_client +onlineProviderConfig "$PWD/test-provider.json" +noSound 1
 ```
 
 The stats host `BF2Web.gamespy.com` is then resolved as `BF2Web.test.openbf2`, which resolves to `127.0.0.1`, and its port 80 is moved

@@ -14,7 +14,7 @@ This roadmap leads from the current state to 1.0.0. The versions after 0.3.0 are
 
 The main goal is playing online again: with a GameSpy replacement provider, and ranked play against a self-hosted backend.
 
-1. **Online with a provider.** The provider is selected with `+gamespyRedirect` (an address or a domain, per-label options for split providers); the names stay the retail `gamespy.com` ones.
+1. **Online with a provider.** The provider is selected with `+onlineProviderConfig <file>`, a JSON file whose `"*"` entry is an address or a domain (the setup ships files for the bf2.org domains of BF2Hub and OpenSpy) and whose per-label entries serve split providers; the names stay the retail `gamespy.com` ones.
    - Testing against a local GameSpy emulator: a test-only name redirect that leaves system DNS untouched, plus the protocol fixes the emulator needs (account creation, keepalive and status messages, challenge format).
    - A dedicated server registers on the internet list, clients see it in the server browser, and a player joins with the CD-key check.
    - Account creation, login and profile flows, checked by hand.
