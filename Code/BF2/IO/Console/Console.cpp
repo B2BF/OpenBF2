@@ -444,15 +444,20 @@ int OldConsole::handleCommand(const std::string& cmd, std::string& result, Acces
 
         // As retail: operands go through getArgs, so quotes are stripped and every operand is
         // expanded, and a condition that fails to evaluate reports its error and opens no block.
-        auto evaluateCondition = [this, &kin](bool& cond, std::string& error) {
+        auto evaluateCondition = [this, &kin](const char* missingExpression, bool& cond, std::string& error) {
             std::string operands[13], raw[13];
             const int expandFrom = (m_currentLevel && m_currentLevel->m_unknown18) ? 11 : 1;
             const int count = getArgs(kin, operands, raw, 13, error, expandFrom - 1);
             if (count < 0)
                 return false;
-            if (count == 0 || count > 3)
+            if (count == 0)
             {
-                error = "Error: Syntax error in expression!";
+                error = missingExpression;
+                return false;
+            }
+            if (count > 3)
+            {
+                error = "Syntax error in boolean expression!";
                 return false;
             }
             return calcBooleanExpr(operands[0], operands[1], operands[2], cond, error);
@@ -467,7 +472,7 @@ int OldConsole::handleCommand(const std::string& cmd, std::string& result, Acces
             }
             bool cond = false;
             std::string error;
-            if (!evaluateCondition(cond, error))
+            if (!evaluateCondition("\"if\" requires a expression!", cond, error))
             {
                 result = error;
                 return 2;
@@ -486,7 +491,7 @@ int OldConsole::handleCommand(const std::string& cmd, std::string& result, Acces
             if (stack.back().branchTaken) { stack.back().executing = false; return 1; }
             bool cond = false;
             std::string error;
-            if (!evaluateCondition(cond, error))
+            if (!evaluateCondition("\"elseIf\" requires a expression!", cond, error))
             {
                 result = error;
                 return 2;
@@ -545,6 +550,84 @@ int OldConsole::handleCommand(const std::string& cmd, std::string& result, Acces
                 m_exitCallBack(m_exitCallBackData);        // +0x15C
             result = "*** Game will exit! **";
             return 0;
+        }
+
+        // var and const declare in the current scope, as retail. The declared name is the one token
+        // left unexpanded. Redeclaring a var overwrites it and reports it but succeeds; redeclaring a
+        // const keeps the old value and fails.
+        const bool isVar = compareIgnoreCase(kw, "var") == 0;
+        if (isVar || compareIgnoreCase(kw, "const") == 0)
+        {
+            std::string tokens[13], raw[13];
+            const int expandFrom = (m_currentLevel && m_currentLevel->m_unknown18) ? 11 : 1;
+            const int count = getArgs(kin, tokens, raw, 13, result, expandFrom);
+            if (count < 0)
+                return 2;
+            const bool assigns = count == 3 && raw[1] == "=";
+            if (isVar)
+            {
+                if (count != 1 && !assigns)
+                {
+                    result = "\"var\" syntax: (variableName [= initValue])!";
+                    return 2;
+                }
+                if (compareIgnoreCase(raw[0].c_str(), "v_", 2) != 0)
+                {
+                    result = "The variable name must begin with \"v_\"!";
+                    return 2;
+                }
+                if (!addVariable(raw[0], tokens[2]))
+                    result = "Variable redefinition \"" + raw[0] + "\"!";
+                return 1;
+            }
+            if (!assigns)
+            {
+                result = "\"const\" syntax: (constName = value)!";
+                return 2;
+            }
+            if (compareIgnoreCase(raw[0].c_str(), "c_", 2) != 0)
+            {
+                result = "The constant name must begin with \"c_\"!";
+                return 2;
+            }
+            if (!addConstant(raw[0], tokens[2]))
+            {
+                result = "Constant redefinition \"" + raw[0] + "\"!";
+                return 2;
+            }
+            return 1;
+        }
+
+        // A line starting with a v_ or c_ name evaluates it into the result; `v_name = value` assigns
+        // an existing variable. Constants cannot be assigned.
+        const bool isVariable = compareIgnoreCase(kw.c_str(), "v_", 2) == 0;
+        if (isVariable || compareIgnoreCase(kw.c_str(), "c_", 2) == 0)
+        {
+            std::string tokens[13], raw[13];
+            const int expandFrom = (m_currentLevel && m_currentLevel->m_unknown18) ? 11 : 1;
+            const int count = getArgs(kin, tokens, raw, 13, result, expandFrom - 1);
+            if (count < 0)
+                return 2;
+            if (!isVariable && count != 0)
+            {
+                result = "Wrong syntax!";
+                return 2;
+            }
+            std::string error;
+            if (!exchangeVarsAndConsts(kw, result, error))
+            {
+                result = error;
+                return 2;
+            }
+            if (tokens[0].empty())
+                return 0;
+            if (count != 2 || tokens[0] != "=")
+            {
+                result = "Wrong syntax!";
+                return 2;
+            }
+            setVariable(kw, tokens[1]);
+            return 1;
         }
 
         // Parses the filename and up to eight script arguments, stripping quotes and expanding variables and constants.
