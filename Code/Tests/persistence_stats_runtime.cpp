@@ -6,8 +6,9 @@
 // (the three BFHQ queries and info=rank), getawardsinfo, getunlocksinfo, getbackendinfo, getrankinfo,
 // ranknotification, getleaderboard (all 31 boards and the player row), searchforplayers, the
 // selectunlock and createplayer posts, and VerifyPlayer. The URLs and Host headers are retail
-// (http://BF2Web.gamespy.com/ASP/); +gamespyRedirect test.openbf2 resolves each name with its domain
-// replaced (BF2Web.test.openbf2). The statistics connection (StatsManager,
+// (http://BF2Web.gamespy.com/ASP/); a provider file whose "*" entry is test.openbf2 (the text of an
+// +onlineProviderConfig file, given to onlineProvider::loadConfigText) resolves each name with its
+// domain replaced (BF2Web.test.openbf2). The statistics connection (StatsManager,
 // battlefield2.gamestats.gamespy.com) and the stage-net player-info request (PlayerStatsManager)
 // are covered too.
 //
@@ -868,9 +869,10 @@ int main()
 {
     g_system = new System();
     std::string error;
-    if (!onlineProvider::setRedirect(kDomain, error))
+    const std::string provider = std::string("{\"schema\": 1, \"services\": {\"*\": \"") + kDomain + "\"}}";
+    if (!onlineProvider::loadConfigText(provider, "(provider file of this check)", error))
     {
-        std::printf("FAIL: +gamespyRedirect %s refused: %s\n", kDomain, error.c_str());
+        std::printf("FAIL: the provider file with \"*\": \"%s\" refused: %s\n", kDomain, error.c_str());
         return 1;
     }
     onlineProvider::prepareGameSpySdk();

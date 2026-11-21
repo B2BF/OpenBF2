@@ -2876,11 +2876,12 @@ if(APPLE)
     endif()
 endif()
 
-# [TEMP] The redirects of the online service names (Code/Tests/online_provider_runtime.cpp):
-# +gamespyRedirect and +gamespyRedirect<label>, the names the linked GameSpy SDK and the persistence
-# classes then look up, and the retail URLs and Host headers. The fixture replaces the resolver, so no name leaves the process, and
-# listens on the services' own loopback ports. Built on request; the client image (DEDICATED=0),
-# which links every service.
+# [TEMP] The redirects of the online service names (Code/Tests/online_provider_runtime.cpp): the
+# +onlineProviderConfig file and its rules, the names the linked GameSpy SDK and the persistence
+# classes then look up, and the retail URLs and Host headers. The fixture replaces the resolver, so
+# no name leaves the process, listens on the services' own loopback ports, and writes its provider
+# files into a temporary directory it removes. MacSystem.cpp gives it the client's restart
+# splitting. Built on request; the client image (DEDICATED=0), which links every service.
 if(APPLE)
     add_executable(bf2_online_provider_check EXCLUDE_FROM_ALL
         Code/Tests/online_provider_runtime.cpp
@@ -2890,6 +2891,7 @@ if(APPLE)
         "${BF2_ROOT}/Game/Persistence/StatsManager.cpp"
         "${BF2_ROOT}/Game/Persistence/PlayerStatsManager.cpp"
         "${BF2_ROOT}/Game/Utility/SimpleParser.cpp"
+        "${BF2_ROOT}/Platform/macOS/MacSystem.cpp"
         "${BF2_ROOT}/Core/StringUtil.cpp"
         $<TARGET_OBJECTS:bf2_gamespy_objects>
         $<TARGET_OBJECTS:bf2_gamespy_sb_objects>
@@ -2899,7 +2901,7 @@ if(APPLE)
     bf2_set_image(bf2_online_provider_check 0)
     target_compile_definitions(bf2_online_provider_check PRIVATE BF2_PLATFORM_POSIX _MACOSX)
     find_package(Threads REQUIRED)
-    target_link_libraries(bf2_online_provider_check PRIVATE Threads::Threads)
+    target_link_libraries(bf2_online_provider_check PRIVATE Threads::Threads "-framework CoreFoundation")
     if(BUILD_TESTING)
         add_test(NAME bf2_online_provider_check COMMAND bf2_online_provider_check)
     endif()
@@ -2934,7 +2936,7 @@ if(APPLE)
 endif()
 
 # [TEMP] The stats web requests and their parsers (Code/Tests/persistence_stats_runtime.cpp): every
-# endpoint the game requests, with +gamespyRedirect test.openbf2, against a loopback listener with
+# endpoint the game requests, with a provider file whose "*" entry is test.openbf2, against a loopback listener with
 # handwritten bodies. The fixture replaces the resolver, so no name leaves the process. Built on
 # request; the client image (DEDICATED=0), which holds the profile manager's createplayer post.
 if(APPLE)
@@ -2976,7 +2978,7 @@ endif()
 
 # [TEMP] SwiffHost's leaderboard and awards caches (Code/Tests/swiff_leaderboard_runtime.cpp) through
 # the real persistence classes, against the local stats fixture (Code/Tests/stats_fixture) on
-# 127.0.0.1:18124, with +gamespyRedirect test.openbf2. The fixture replaces the
+# 127.0.0.1:18124, with a provider file whose "*" entry is test.openbf2. The fixture replaces the
 # resolver, so no name leaves the process. Built on request; needs Python 3 for the fixture.
 if(APPLE)
     add_executable(bf2_swiff_leaderboard_check EXCLUDE_FROM_ALL

@@ -1,8 +1,8 @@
 // [TEMP] [CHOSEN, not recovered] Test fixture for the redirects of the online service names
-// (Code/BF2/Game/MatchMaking/OnlineProvider.h): the retail names, +gamespyRedirect with an address
-// or a domain, the +gamespyRedirect<label> options, and that the linked GameSpy SDK and the
-// persistence classes look the redirected names up while URLs and Host headers stay retail.
-// Built on request (bf2_online_provider_check); POSIX only.
+// (Code/BF2/Game/MatchMaking/OnlineProvider.h): the retail names, the +onlineProviderConfig file
+// with its "*" entry at an address or a domain and its label entries, the file's refusal rules,
+// and that the linked GameSpy SDK and the persistence classes look the redirected names up while
+// URLs and Host headers stay retail. Built on request (bf2_online_provider_check); POSIX only.
 //
 // The process never asks a real resolver and never sends beyond loopback: gethostbyname and
 // getaddrinfo below replace the C library's for every object linked into this executable, record
@@ -13,12 +13,14 @@
 // web requests go to port 80, which an unprivileged process cannot bind on loopback: connect below
 // sends them to 127.0.0.1:18080.
 //
-// "names" checks the retail state and the parser options (+gamespy is gone); "redirect-*" checks
-// +gamespyRedirect with an address and with a domain (each name resolved at every lookup with its
-// retail domain replaced); "label-*" checks every +gamespyRedirect<label> option with addresses
-// and host-name targets, its precedence over +gamespyRedirect, and every service reaching its
+// "names" checks the retail state and the parser options (+gamespy, +gamespyRedirect and
+// +gamespyRedirect<label> are gone); "file" checks every rule of the provider file and the restart
+// arguments; "setup-files" checks the setup application's shipped files and the path forms it
+// passes (a macOS path with spaces, Windows paths at string level); "redirect-*" checks the "*" entry with an address and with a domain (each name
+// resolved at every lookup with its retail domain replaced); "label-*" checks every label entry
+// with addresses and host-name targets, its precedence over "*", and every service reaching its
 // label's target; the "*-web" scenarios check every stats web request keeping its retail Host
-// header.
+// header. The provider files are written into a temporary directory that main creates and removes.
 //
 // The "silent-tcp" scenario checks the local connect timeouts (GameSpy/LOCAL_CHANGES.md) against
 // loopback listeners whose backlog is full, so connects to them are never answered.
@@ -31,6 +33,7 @@
 #include "../BF2/Game/GameServer/ServerSettings.h"
 #include "../BF2/Game/IGame.h"
 #include "../BF2/Game/Utility/SimpleParser.h"
+#include "../BF2/Platform/macOS/MacSystem.h"
 
 extern "C" {
 #include "../BF2/External/GameSpy/common/gsCommon.h"
@@ -55,6 +58,7 @@ extern char* SBOverrideMasterServer;
 #include <vector>
 
 #include <arpa/inet.h>
+#include <dirent.h>
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <netdb.h>
@@ -62,6 +66,7 @@ extern char* SBOverrideMasterServer;
 #include <pthread.h>
 #include <sys/select.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -517,18 +522,30 @@ const char* const kRetailNames[] = {
 };
 const int kRetailNameCount = sizeof(kRetailNames) / sizeof(kRetailNames[0]);
 
-// The label options, in id order, as BF2Engine::parseParameters registers them.
+// The labels a "services" key can name, in onlineProvider's order.
 const char* const kExpectedLabels[] = {
     "available", "ms14", "master", "gpcm", "gpsp", "gamestats", "BF2Web", "stage-net", "eapusher",
     "natneg1", "natneg2", "natneg3",
 };
 
-// Registers the online options exactly as BF2Engine::parseParameters does (+gamespy is gone).
+// Registers the online option exactly as BF2Engine::parseParameters does (+gamespy,
+// +gamespyRedirect and +gamespyRedirect<label> are gone).
 void addOnlineOptions(SimpleParser& parser)
 {
-    parser.add(77, "gamespyRedirect", "");
-    for (int i = 0; i < onlineProvider::labelCount(); ++i)
-        parser.add(79 + i, onlineProvider::labelOption(i), onlineProvider::labelHelp(i));
+    parser.add(91, "onlineProviderConfig", "Read the online service provider from this JSON file");
+}
+
+// What the parser reads from text: "id=value,...".
+std::string parsedOptions(const std::string& text)
+{
+    SimpleParser parser('+');
+    addOnlineOptions(parser);
+    std::list<std::pair<int, std::string> > keys;
+    parser.parseString(text, keys);
+    std::string parsed;
+    for (std::list<std::pair<int, std::string> >::const_iterator k = keys.begin(); k != keys.end(); ++k)
+        parsed += (parsed.empty() ? "" : ",") + std::to_string(k->first) + "=" + k->second;
+    return parsed;
 }
 
 // No option: the retail names everywhere, the label table, and the parser options.
@@ -557,13 +574,10 @@ void scenarioNames()
         checkEqual(request.getGameSpyUrl(), "http://BF2Web.gamespy.com/ASP/", "HTTPRequest::getGameSpyUrl");
     }
 
-    std::puts("names: the label options");
+    std::puts("names: the labels");
     checkEqual(std::to_string(labelCount()), "12", "label count");
     for (int i = 0; i < labelCount() && i < 12; ++i)
-    {
         checkEqual(label(i), kExpectedLabels[i], "label " + std::to_string(i));
-        checkEqual(labelOption(i), std::string("gamespyRedirect") + kExpectedLabels[i], "option " + std::to_string(79 + i));
-    }
     for (int i = 0; i < kRetailNameCount; ++i)
         checkEqual(std::to_string(labelOf(kRetailNames[i])), std::to_string(i), std::string(kRetailNames[i]) + ": label index");
     checkEqual(std::to_string(labelOf("bf2web.GAMESPY.com")), "6", "bf2web.GAMESPY.com: case ignored");
@@ -574,19 +588,15 @@ void scenarioNames()
                               "gpcm.notgamespy.com", "eapusher.gamespy.com", "gpcm.dice.se", "eapusher.example.test",
                               "BF2Web.gamespy.com.example.test", "logos.example.test" };
     for (unsigned i = 0; i < sizeof(noLabel) / sizeof(noLabel[0]); ++i)
-        checkEqual(std::to_string(labelOf(noLabel[i])), "-1", std::string(noLabel[i]) + ": no label option");
+        checkEqual(std::to_string(labelOf(noLabel[i])), "-1", std::string(noLabel[i]) + ": no label");
 
-    std::puts("names: +gamespy is no option any more; the parser skips it");
-    SimpleParser parser('+');
-    addOnlineOptions(parser);
-    std::list<std::pair<int, std::string> > keys;
-    parser.parseString("+gamespy example.test +gamespyRedirectgpcm 10.0.0.4 +gamespyRedirectstage-net 10.0.0.8"
-                       " +gamespyRedirect 10.9.9.9 +gamespyRedirectbf2web 10.0.0.7", keys);
-    std::string parsed;
-    for (std::list<std::pair<int, std::string> >::const_iterator k = keys.begin(); k != keys.end(); ++k)
-        parsed += (parsed.empty() ? "" : ",") + std::to_string(k->first) + "=" + k->second;
-    checkEqual(parsed, "82=10.0.0.4,86=10.0.0.8,77=10.9.9.9",
-               "only the redirect options parse (+gamespy and the misspelt +gamespyRedirectbf2web are skipped)");
+    std::puts("names: +gamespy, +gamespyRedirect and +gamespyRedirect<label> are no options any more");
+    checkEqual(parsedOptions("+gamespy example.test +gamespyRedirectgpcm 10.0.0.4 +gamespyRedirectstage-net 10.0.0.8"
+                             " +gamespyRedirect 10.9.9.9 +onlineProviderConfig /tmp/provider.json +gamespyRedirectBF2Web 10.0.0.7"),
+               "91=/tmp/provider.json", "only +onlineProviderConfig parses");
+    checkEqual(parsedOptions("+gamespyRedirect 10.9.9.9"), "", "+gamespyRedirect alone parses nothing");
+    checkEqual(parsedOptions("+onlineProviderConfig \"/tmp/a b/provider.json\" +gamespyRedirectgpcm 10.0.0.4"),
+               "91=/tmp/a b/provider.json", "a path in double quotes keeps its space");
     check(!hasRedirect(), "parsing alone changes nothing");
 }
 
@@ -1004,7 +1014,7 @@ void scenarioSilentTcp()
     }
 }
 
-// ---- +gamespyRedirect ----------------------------------------------------------------------------
+// ---- the provider file ----------------------------------------------------------------------------
 
 // Runs body with stderr written to a temporary file and returns what was written.
 template <typename Body>
@@ -1043,12 +1053,6 @@ std::string redirected(const char* name)
     return lookup ? lookup : "(fails)";
 }
 
-// The values every redirect option refuses.
-const char* const kRefusedValues[] = { "", "bad host", "1.2.3", "1.2.3.256", "a..b", "host.test.", "\"host.test\"",
-                                       "http://host.test", "host.test:80", "host.test/x", "+gamespyRedirect",
-                                       "gpcm.gamespy.com=127.0.0.1", "host_name.test" };
-const unsigned kRefusedCount = sizeof(kRefusedValues) / sizeof(kRefusedValues[0]);
-
 std::string addressOf(const char* name)
 {
     struct hostent* host = gsiGetHostByName(name);
@@ -1059,33 +1063,471 @@ std::string addressOf(const char* name)
     return text;
 }
 
-// +gamespyRedirect with an address: the values refused, the names matched, the restart arguments,
+// The temporary directory main creates and removes; every provider file goes in here.
+std::string g_fileDir;
+int g_fileCount = 0;
+
+// Writes bytes to a new file in g_fileDir (or in its subdirectory sub) and returns its path.
+std::string writeFile(const std::string& bytes, const std::string& sub = std::string())
+{
+    std::string dir = g_fileDir;
+    if (!sub.empty())
+    {
+        dir += "/" + sub;
+        mkdir(dir.c_str(), 0700);
+    }
+    char name[64];
+    std::snprintf(name, sizeof(name), "/provider-%d-%d.json", static_cast<int>(getpid()), ++g_fileCount);
+    const std::string path = dir + name;
+    std::FILE* file = std::fopen(path.c_str(), "wb");
+    if (!file || std::fwrite(bytes.data(), 1, bytes.size(), file) != bytes.size())
+        check(false, "writing " + path);
+    if (file)
+        std::fclose(file);
+    return path;
+}
+
+// value as a JSON string.
+std::string jsonString(const std::string& value)
+{
+    std::string text("\"");
+    for (std::string::size_type i = 0; i < value.size(); ++i)
+    {
+        const unsigned char c = static_cast<unsigned char>(value[i]);
+        if (c == '"' || c == '\\')
+            text += std::string("\\") + static_cast<char>(c);
+        else if (c < 0x20)
+        {
+            char escaped[8];
+            std::snprintf(escaped, sizeof(escaped), "\\u%04X", c);
+            text += escaped;
+        }
+        else
+            text += static_cast<char>(c);
+    }
+    return text + "\"";
+}
+
+// A schema 1 provider file with these "services" members (the JSON between the braces).
+std::string providerText(const std::string& services)
+{
+    return "{\"schema\": 1, \"services\": {" + services + "}}";
+}
+
+// Writes text to a new file and loads it with onlineProvider::loadConfigFile.
+bool loadText(const std::string& text, std::string& error, std::string* path = 0)
+{
+    const std::string file = writeFile(text);
+    if (path)
+        *path = file;
+    error.clear();
+    return onlineProvider::loadConfigFile(file, error);
+}
+
+// Loads a provider file with these "services" members and checks that it is accepted.
+std::string useServices(const std::string& services, const std::string& what)
+{
+    std::string error, path;
+    check(loadText(providerText(services), error, &path), what + (error.empty() ? "" : ": " + error));
+    return path;
+}
+
+// The values every "services" entry refuses.
+const char* const kRefusedValues[] = { "", "bad host", "1.2.3", "1.2.3.256", "a..b", "host.test.", "\"host.test\"",
+                                       "http://host.test", "host.test:80", "host.test/x", "+gamespyRedirect",
+                                       "gpcm.gamespy.com=127.0.0.1", "host_name.test", "h\xC3\xB6st.test" };
+const unsigned kRefusedCount = sizeof(kRefusedValues) / sizeof(kRefusedValues[0]);
+
+// A file that must be refused: its text and a part of the expected reason.
+struct Refusal
+{
+    const char* what;
+    std::string text;
+    const char* reason;
+};
+
+void checkRefused(const Refusal& refusal)
+{
+    std::string error;
+    const bool loaded = loadText(refusal.text, error);
+    check(!loaded && error.find(refusal.reason) != std::string::npos,
+          std::string(refusal.what) + ": " + (loaded ? "accepted" : error));
+}
+
+// [TEMP] A copy of appendCommandLineArg in Code/BF2/Game/Main/BF2.cpp (a static function there): how
+// the POSIX entry points, and the Windows console entry point, join argv into the one command line
+// the engine parses. Keep it equal to the original.
+void appendCommandLineArg(std::string& out, const char* arg, bool first)
+{
+    if (!first)
+        out += ' ';
+    const std::string value(arg ? arg : "");
+    if (value.empty() || value.find_first_of(" \t") != std::string::npos)
+    {
+        out += '"';
+        out += value;
+        out += '"';
+    }
+    else
+    {
+        out += value;
+    }
+}
+
+std::string joinArguments(const std::vector<std::string>& arguments)
+{
+    std::string commandLine;
+    for (std::size_t i = 0; i < arguments.size(); ++i)
+        appendCommandLineArg(commandLine, arguments[i].c_str(), i == 0);
+    return commandLine;
+}
+
+// The arguments as the macOS and Linux client start itself again (macos::relaunchExecutable splits
+// the restart command line with macos::splitCommandLine), joined again by the new process's main.
+std::string relaunchedCommandLine(const std::string& restartCommandLine)
+{
+    return joinArguments(macos::splitCommandLine(restartCommandLine));
+}
+
+// The files and paths the setup application passes: its two shipped provider files, an absolute
+// macOS path with spaces given as one argument after the option, and Windows paths with a drive
+// letter and backslashes (string level: how WinMain's command line and the mod restart carry them).
+void scenarioSetupFiles()
+{
+    using namespace onlineProvider;
+    std::string error, path;
+
+    std::puts("setup: the shipped provider files");
+    struct Shipped { const char* text; const char* provider; const char* domain; };
+    const Shipped shipped[] = {
+        { "{\"schema\": 1, \"provider\": \"BF2Hub\", \"services\": {\"*\": \"bf2hub.p.bf2.org\"}}", "BF2Hub", "bf2hub.p.bf2.org" },
+        { "{\"schema\": 1, \"provider\": \"OpenSpy\", \"services\": {\"*\": \"openspy.p.bf2.org\"}}", "OpenSpy", "openspy.p.bf2.org" },
+    };
+    for (unsigned f = 0; f < sizeof(shipped) / sizeof(shipped[0]); ++f)
+    {
+        const std::string domain = shipped[f].domain;
+        const std::string name = shipped[f].provider;
+        check(loadText(shipped[f].text, error, &path), name + " file accepted" + (error.empty() ? "" : ": " + error));
+        for (int i = 0; i < kRetailNameCount; ++i)
+        {
+            const std::string retail = kRetailNames[i];
+            const std::string::size_type dot = retail.rfind(retail.compare(retail.size() - 7, 7, "dice.se") == 0 ? ".dice.se" : ".gamespy.com");
+            std::string source;
+            checkEqual(redirectLookup(retail, &source) + " " + source, retail.substr(0, dot) + "." + domain + " services.*",
+                       name + ": " + retail);
+        }
+        checkEqual(describe(), "online services: provider " + name + ", file " + path + "; retail names; other names containing"
+                               " gamespy or under dice.se resolve with their retail domain replaced by " + domain + " (services.*)",
+                   name + ": the start-up line");
+        const std::string userFile = std::string(shipped[f].text, std::strlen(shipped[f].text) - 1)
+                                   + ", \"valid_to\": \"2026-12-01T00:00:00Z\", \"generated\": \"2026-11-21T10:00:00Z\", \"note\": {\"by\": [\"user\"]}}";
+        check(loadText(userFile, error), name + " file with valid_to and other top-level keys accepted" + (error.empty() ? "" : ": " + error));
+        checkEqual(redirectLookup("gpcm.gamespy.com"), "gpcm." + domain, name + " with valid_to: gpcm.gamespy.com");
+    }
+
+    std::puts("setup: a macOS path with spaces, one argument after the option");
+    const std::string bf2hub = shipped[0].text;
+    path = writeFile(bf2hub, "Library");
+    const std::string setupDir = g_fileDir + "/Library/Application Support/OpenBF2/Setup";
+    mkdir((g_fileDir + "/Library/Application Support").c_str(), 0700);
+    mkdir((g_fileDir + "/Library/Application Support/OpenBF2").c_str(), 0700);
+    mkdir(setupDir.c_str(), 0700);
+    const std::string macPath = setupDir + "/Provider-BF2Hub.json";
+    check(rename(path.c_str(), macPath.c_str()) == 0, "the file is at " + macPath);
+    std::vector<std::string> argv;
+    argv.push_back("+onlineProviderConfig");
+    argv.push_back(macPath);
+    argv.push_back("+modPath");
+    argv.push_back("mods/bf2");
+    const std::string joined = joinArguments(argv);
+    checkEqual(joined, "+onlineProviderConfig \"" + macPath + "\" +modPath mods/bf2", "main joins argv, quoting the path");
+    checkEqual(parsedOptions(joined), "91=" + macPath, "the parser reads the path unchanged");
+    error.clear();
+    check(loadConfigFile(macPath, error), "the file at that path is loaded" + (error.empty() ? "" : ": " + error));
+    const std::string restart = "+modPath mods/fh2 +multi 1 +restart 1" + commandLineArguments() + " +fullscreen 0";
+    checkEqual(commandLineArguments(), " +onlineProviderConfig \"" + macPath + "\"", "the mod restart carries the path, quoted");
+    checkEqual(parsedOptions(relaunchedCommandLine(restart)), "91=" + macPath,
+               "the restarted macOS/Linux client reads the same path (split, then joined by main)");
+    std::vector<std::string> split = macos::splitCommandLine(restart);
+    checkEqual(split.size() > 7 ? split[7] : std::string(), macPath, "the restart passes the path as one argument");
+    checkEqual(describe().substr(0, 47 + macPath.size()), "online services: provider BF2Hub, file " + macPath + "; retail",
+               "the start-up line names the path");
+
+    std::puts("setup: backslashes and a colon in a POSIX path are not altered");
+    const std::string oddDir = g_fileDir + "/C:\\Users\\X";
+    mkdir(oddDir.c_str(), 0700);
+    const std::string oddPath = oddDir + "/Provider.json";
+    if (std::FILE* file = std::fopen(oddPath.c_str(), "wb"))
+    {
+        std::fwrite(bf2hub.data(), 1, bf2hub.size(), file);
+        std::fclose(file);
+    }
+    error.clear();
+    check(loadConfigFile(oddPath, error), "loaded " + oddPath + (error.empty() ? "" : ": " + error));
+    checkEqual(commandLineArguments(), " +onlineProviderConfig " + oddPath, "restart arguments keep the backslashes");
+    checkEqual(parsedOptions(relaunchedCommandLine(commandLineArguments())), "91=" + oddPath, "and the relaunch keeps them");
+
+    std::puts("setup: Windows paths (string level)");
+    const char* const windowsPaths[] = {
+        "C:\\Users\\X\\AppData\\Local\\OpenBF2\\Setup\\Provider-BF2Hub.json",
+        "C:\\Users\\Jane Doe\\AppData\\Local\\OpenBF2\\Setup\\Provider-BF2Hub.json",
+    };
+    for (unsigned w = 0; w < sizeof(windowsPaths) / sizeof(windowsPaths[0]); ++w)
+    {
+        const std::string windowsPath = windowsPaths[w];
+        const bool space = windowsPath.find(' ') != std::string::npos;
+        // The launcher quotes the path in the command line WinMain receives.
+        checkEqual(parsedOptions("+onlineProviderConfig \"" + windowsPath + "\" +modPath mods/bf2"), "91=" + windowsPath,
+                   "WinMain command line, quoted: " + windowsPath);
+        if (!space)
+            checkEqual(parsedOptions("+onlineProviderConfig " + windowsPath + " +modPath mods/bf2"), "91=" + windowsPath,
+                       "WinMain command line, unquoted: " + windowsPath);
+        // The Windows console entry point (x64 dedicated server) joins argv like main.
+        std::vector<std::string> args;
+        args.push_back("+onlineProviderConfig");
+        args.push_back(windowsPath);
+        checkEqual(parsedOptions(joinArguments(args)), "91=" + windowsPath, "console entry point: " + windowsPath);
+        check(loadConfigText(bf2hub, windowsPath, error), "the provider text under that path name");
+        const std::string expected = space ? " +onlineProviderConfig \"" + windowsPath + "\"" : " +onlineProviderConfig " + windowsPath;
+        checkEqual(commandLineArguments(), expected, "restart arguments");
+        // ShellExecuteA hands the restart command line to the new process's WinMain unchanged.
+        checkEqual(parsedOptions("+modPath mods/fh2 +multi 1 +restart 1" + commandLineArguments() + " +fullscreen 0"),
+                   "91=" + windowsPath, "the restarted Windows client reads the same path");
+    }
+}
+
+// Every rule of the provider file: what it refuses, with the reason; what it accepts; that a
+// refused file changes nothing; and the restart arguments with and without a space in the path.
+void scenarioFile()
+{
+    using namespace onlineProvider;
+    std::string error;
+    const std::string star = "\"services\": {\"*\": \"provider.example.org\"}";
+
+    std::puts("file: the file itself");
+    check(!loadConfigFile("", error) && error == "a file path is required", "empty path: " + error);
+    const std::string missing = g_fileDir + "/missing.json";
+    error.clear();
+    check(!loadConfigFile(missing, error) && error == "cannot be opened (No such file or directory)", "missing file: " + error);
+    const std::string directory = g_fileDir + "/a-directory.json";
+    mkdir(directory.c_str(), 0700);
+    error.clear();
+    check(!loadConfigFile(directory, error) && error.compare(0, 10, "cannot be ") == 0, "a directory: " + error);
+    if (geteuid() != 0)
+    {
+        const std::string locked = writeFile(providerText("\"*\": \"provider.example.org\""));
+        chmod(locked.c_str(), 0);
+        error.clear();
+        check(!loadConfigFile(locked, error) && error == "cannot be opened (Permission denied)", "an unreadable file: " + error);
+    }
+    else
+        std::puts("  skip the unreadable file (running as root)");
+
+    std::puts("file: not one strict JSON object");
+    const std::string nested = "{\"schema\": 1, " + star + ", \"deep\": " + std::string(100, '[') + std::string(100, ']') + "}";
+    const Refusal syntax[] = {
+        { "empty file",                 "",                                                     "not valid JSON at line 1, column 1: unexpected end of the text" },
+        { "white space only",           " \r\n\t",                                              "not valid JSON at line 2, column 2: unexpected end of the text" },
+        { "not JSON",                   "schema=1",                                             "not valid JSON at line 1, column 1: unexpected character" },
+        { "unterminated object",        "{\"schema\": 1, " + star,                              "not valid JSON at line 1, column 56: expected ',' or '}'" },
+        { "trailing comma",             "{\"schema\": 1, " + star + ",}",                       "expected a key in double quotes" },
+        { "single quotes",              "{'schema': 1, " + star + "}",                          "expected a key in double quotes" },
+        { "unquoted key",               "{schema: 1, " + star + "}",                            "expected a key in double quotes" },
+        { "comment",                    "// provider\n{\"schema\": 1, " + star + "}",           "not valid JSON at line 1, column 1" },
+        { "missing colon",              "{\"schema\" 1, " + star + "}",                         "expected ':'" },
+        { "leading zero",               "{\"schema\": 01, " + star + "}",                       "expected ',' or '}'" },
+        { "number without digits",      "{\"schema\": 1., " + star + "}",                       "malformed number" },
+        { "NaN",                        "{\"schema\": NaN, " + star + "}",                      "unexpected character" },
+        { "raw tab in a string",        "{\"schema\": 1, \"services\": {\"*\": \"a\tb.test\"}}", "control character in a string" },
+        { "unknown escape",             "{\"schema\": 1, \"services\": {\"*\": \"a\\x.test\"}}", "unknown escape in a string" },
+        { "short \\u escape",           "{\"schema\": 1, \"services\": {\"*\": \"\\u12\"}}",    "malformed \\u escape" },
+        { "unpaired surrogate",         "{\"schema\": 1, \"services\": {\"*\": \"\\ud800.test\"}}", "unpaired surrogate" },
+        { "lone low surrogate",         "{\"schema\": 1, \"services\": {\"*\": \"\\udc00.test\"}}", "unpaired surrogate" },
+        { "invalid UTF-8 byte",         "{\"schema\": 1, \"provider\": \"\xFF\", " + star + "}", "malformed UTF-8" },
+        { "overlong UTF-8",             "{\"schema\": 1, \"provider\": \"\xC0\xAF\", " + star + "}", "malformed UTF-8" },
+        { "UTF-8 surrogate",            "{\"schema\": 1, \"provider\": \"\xED\xA0\x80\", " + star + "}", "malformed UTF-8" },
+        { "truncated UTF-8",            "{\"schema\": 1, \"provider\": \"\xE2\x82\", " + star + "}", "malformed UTF-8" },
+        { "unterminated string",        "{\"schema\": 1, \"services\": {\"*\": \"a.test}}",     "unterminated string" },
+        { "text after the object",      "{\"schema\": 1, " + star + "} x",                      "text after the end of the JSON value" },
+        { "two objects",                "{\"schema\": 1, " + star + "}{}",                      "text after the end of the JSON value" },
+        { "NUL after the object",       std::string("{\"schema\": 1, " + star + "}") + '\0',    "text after the end of the JSON value" },
+        { "byte order mark twice",      "\xEF\xBB\xBF\xEF\xBB\xBF{\"schema\": 1, " + star + "}", "unexpected character" },
+        { "an array",                   "[{\"schema\": 1, " + star + "}]",                      "the file holds an array, not a JSON object" },
+        { "a string",                   "\"schema\"",                                           "the file holds a string, not a JSON object" },
+        { "values nested too deeply",   nested,                                                 "values nested too deeply" },
+    };
+    for (unsigned i = 0; i < sizeof(syntax) / sizeof(syntax[0]); ++i)
+        checkRefused(syntax[i]);
+    check(!hasRedirect(), "no refused file is in effect");
+    checkEqual(commandLineArguments(), "", "no restart arguments");
+
+    std::puts("file: larger than 64 KiB");
+    std::string big = "{\"schema\": 1, " + star + ", \"padding\": \"";
+    big += std::string(65536 - big.size() - 2, 'x') + "\"}";
+    check(big.size() == 65536, "a file of exactly 65536 bytes is written");
+    std::string bigPath;
+    check(loadText(big, error, &bigPath), "a file of 65536 bytes is accepted" + (error.empty() ? "" : ": " + error));
+    checkRefused({ "a file of 65537 bytes", big + " ", "larger than 64 KiB" });
+    checkRefused({ "a file of 200 KiB", big + std::string(200 * 1024, ' '), "larger than 64 KiB" });
+
+    std::puts("file: the keys and their types");
+    const Refusal rules[] = {
+        { "no schema",                  "{" + star + "}",                                       "\"schema\" is required" },
+        { "schema 2",                   "{\"schema\": 2, " + star + "}",                        "\"schema\" must be the number 1, this file has 2" },
+        { "schema 1.0",                 "{\"schema\": 1.0, " + star + "}",                      "\"schema\" must be the number 1, this file has 1.0" },
+        { "schema 1e0",                 "{\"schema\": 1e0, " + star + "}",                      "this file has 1e0" },
+        { "schema \"1\"",               "{\"schema\": \"1\", " + star + "}",                    "this file has the string \"1\"" },
+        { "schema true",                "{\"schema\": true, " + star + "}",                     "this file has a boolean" },
+        { "schema null",                "{\"schema\": null, " + star + "}",                     "this file has null" },
+        { "schema 2 before everything else", "{\"services\": {\"newservice\": 5}, \"provider\": 7, \"schema\": 2}",
+                                                                                                "\"schema\" must be the number 1, this file has 2" },
+        { "key Schema only",            "{\"Schema\": 1, " + star + "}",                        "\"schema\" is required" },
+        { "provider a number",          "{\"schema\": 1, \"provider\": 5, " + star + "}",       "\"provider\" must be a string, not a number" },
+        { "provider null",              "{\"schema\": 1, \"provider\": null, " + star + "}",    "\"provider\" must be a string, not null" },
+        { "provider with '/'",          "{\"schema\": 1, \"provider\": \"Open/Spy\", " + star + "}", "\"provider\" \"Open/Spy\" may hold only letters, digits, spaces, '-' and '.'" },
+        { "provider with '_'",          "{\"schema\": 1, \"provider\": \"Open_Spy\", " + star + "}", "may hold only" },
+        { "provider with a tab",        "{\"schema\": 1, \"provider\": \"Open\\tSpy\", " + star + "}", "may hold only" },
+        { "provider not ASCII",         "{\"schema\": 1, \"provider\": \"B\xC3\xA4r\", " + star + "}", "may hold only" },
+        { "provider of 65 characters",  "{\"schema\": 1, \"provider\": \"" + std::string(65, 'p') + "\", " + star + "}", "\"provider\" is longer than 64 characters" },
+        { "no services",                "{\"schema\": 1, \"provider\": \"Name\"}",              "\"services\" is required" },
+        { "services an array",          "{\"schema\": 1, \"services\": [\"provider.example.org\"]}", "\"services\" must be an object, not an array" },
+        { "services a string",          "{\"schema\": 1, \"services\": \"provider.example.org\"}", "\"services\" must be an object, not a string" },
+        { "services empty",             "{\"schema\": 1, \"services\": {}}",                    "\"services\" has no entry" },
+        { "services key bf2web",        providerText("\"bf2web\": \"10.0.0.7\""),               "unknown key \"bf2web\" in \"services\"" },
+        { "services key GPCM",          providerText("\"GPCM\": \"10.0.0.4\""),                 "unknown key \"GPCM\" in \"services\"" },
+        { "services key Stage-net",     providerText("\"Stage-net\": \"10.0.0.8\""),            "unknown key \"Stage-net\"" },
+        { "services key key",           providerText("\"key\": \"10.0.0.1\""),                  "unknown key \"key\"" },
+        { "services key ms13",          providerText("\"ms13\": \"10.0.0.1\""),                 "unknown key \"ms13\"" },
+        { "services empty key",         providerText("\"\": \"10.0.0.1\""),                     "unknown key \"\" in \"services\"" },
+        { "services key gpcm.gamespy.com", providerText("\"gpcm.gamespy.com\": \"10.0.0.1\""),  "unknown key \"gpcm.gamespy.com\"" },
+        { "unknown key after a good one", providerText("\"gpcm\": \"10.0.0.4\", \"natneg4\": \"10.0.0.1\""), "unknown key \"natneg4\"" },
+        { "unknown key lists the keys", providerText("\"x\": \"10.0.0.1\""),
+          "(the keys are \"*\" and the labels available, ms14, master, gpcm, gpsp, gamestats, BF2Web, stage-net, eapusher, natneg1, natneg2, natneg3, spelled exactly)" },
+        { "services value a number",    providerText("\"gpcm\": 10"),                           "services.gpcm must be a string, not a number" },
+        { "services value null",        providerText("\"*\": null"),                            "services.* must be a string, not null" },
+        { "services value an object",   providerText("\"BF2Web\": {\"host\": \"a.test\"}"),     "services.BF2Web must be a string, not an object" },
+        { "services value an array",    providerText("\"master\": [\"a.test\"]"),               "services.master must be a string, not an array" },
+        { "duplicate schema",           "{\"schema\": 1, \"schema\": 1, " + star + "}",          "duplicate key \"schema\"" },
+        { "duplicate services",         "{\"schema\": 1, " + star + ", " + star + "}",           "duplicate key \"services\"" },
+        { "duplicate ignored key",      "{\"schema\": 1, \"valid_to\": \"a\", \"valid_to\": \"b\", " + star + "}", "duplicate key \"valid_to\"" },
+        { "duplicate in services",      providerText("\"gpcm\": \"10.0.0.4\", \"gpcm\": \"10.0.0.5\""), "duplicate key \"gpcm\" in \"services\"" },
+        { "duplicate * in services",    providerText("\"*\": \"10.0.0.4\", \"*\": \"10.0.0.4\""), "duplicate key \"*\" in \"services\"" },
+        { "duplicate spelt with \\u",   providerText("\"gpcm\": \"10.0.0.4\", \"\\u0067pcm\": \"10.0.0.5\""), "duplicate key \"gpcm\" in \"services\"" },
+    };
+    for (unsigned i = 0; i < sizeof(rules) / sizeof(rules[0]); ++i)
+        checkRefused(rules[i]);
+
+    std::puts("file: the values every entry refuses (the former options' rules)");
+    unsigned refused = 0, tried = 0;
+    for (int l = -1; l < labelCount(); ++l)
+    {
+        const std::string key = l < 0 ? std::string("*") : std::string(label(l));
+        for (unsigned i = 0; i < kRefusedCount; ++i, ++tried)
+        {
+            const bool ok = !loadText(providerText(jsonString(key) + ": " + jsonString(kRefusedValues[i])), error)
+                         && error.compare(0, key.size() + 11, "services." + key + ": ") == 0;
+            refused += ok;
+            if (!ok || (l == 3 && i < 2))
+                check(ok, "services." + key + " " + jsonString(kRefusedValues[i]) + ": " + error);
+        }
+    }
+    check(refused == tried, "every entry refused all " + std::to_string(kRefusedCount) + " values (" + std::to_string(refused) + " of " + std::to_string(tried) + ")");
+    checkRefused({ "services.* domain of 231 characters", providerText("\"*\": \"" + std::string(226, 'a') + ".test\""), "is too long" });
+    checkRefused({ "services.gpcm host of 254 characters", providerText("\"gpcm\": \"" + std::string(249, 'a') + ".test\""), "is too long" });
+    checkRefused({ "services.gpcm numeric name", providerText("\"gpcm\": \"10.0.0\""), "is not an IPv4 address or host name" });
+
+    std::puts("file: a refused file changes nothing");
+    std::string path;
+    check(loadText(providerText("\"*\": \"10.1.2.3\""), error, &path), "a good file is loaded");
+    checkRefused({ "then a refused one", providerText("\"*\": \"10.9.9.9\", \"bf2web\": \"10.0.0.7\""), "unknown key \"bf2web\"" });
+    checkEqual(redirectLookup("gpcm.gamespy.com"), "10.1.2.3", "the good file is still in effect");
+    checkEqual(commandLineArguments(), " +onlineProviderConfig " + path, "and its path is passed on");
+
+    std::puts("file: what it accepts");
+    // The format sample agreed with the setup application.
+    check(loadText("{\n  \"schema\": 1,\n  \"provider\": \"OpenSpy\",\n"
+                   "  \"services\": { \"*\": \"openspy.p.bf2.org\", \"gpcm\": \"gpcm.openspy.net\" },\n"
+                   "  \"valid_to\": \"2026-12-01T00:00:00Z\"\n}\n", error, &path), "the agreed sample" + (error.empty() ? "" : ": " + error));
+    checkEqual(redirectLookup("gpcm.gamespy.com"), "gpcm.openspy.net", "sample: gpcm.gamespy.com");
+    checkEqual(redirectLookup("battlefield2.available.gamespy.com"), "battlefield2.available.openspy.p.bf2.org", "sample: the availability name");
+    checkEqual(describe(), "online services: provider OpenSpy, file " + path + "; retail names; gpcm names resolve as gpcm.openspy.net"
+                           " (services.gpcm); other names containing gamespy or under dice.se resolve with their retail domain"
+                           " replaced by openspy.p.bf2.org (services.*)", "sample: the start-up line");
+
+    check(loadText("\xEF\xBB\xBF" "{\"schema\":1,\"services\":{\"*\":\"10.2.2.2\"}}", error), "a byte order mark" + (error.empty() ? "" : ": " + error));
+    checkEqual(redirectLookup("gpsp.gamespy.com"), "10.2.2.2", "byte order mark: in effect");
+    check(loadText("\xEF\xBB\xBF \r\n\t{\"schema\":1,\"services\":{\"*\":\"10.2.2.3\"}} \r\n\t", error), "a byte order mark and white space around the object" + (error.empty() ? "" : ": " + error));
+
+    check(loadText("{\"valid_to\": \"2026-12-01T00:00:00Z\", \"generated\": \"x\", \"Schema\": 9, \"Services\": {\"bad\": 1},"
+                   " \"extra\": {\"a\": [1, -2.5e+3, true, false, null, {\"b\": {\"c\": \"\\u00e4\\ud83d\\ude00\"}}], \"a\": 0},"
+                   " \"schema\": 1, \"services\": {\"*\": \"10.3.3.3\"}, \"zzz\": []}", error),
+          "ignored top-level keys of every type (and duplicates inside them)" + (error.empty() ? "" : ": " + error));
+    checkEqual(redirectLookup("gpsp.gamespy.com"), "10.3.3.3", "ignored keys: in effect");
+
+    check(loadText("{\"schema\": 1, \"provider\": \"" + std::string(64, 'p') + "\", \"services\": {\"*\": \"10.4.4.4\"}}", error),
+          "a provider name of 64 characters" + (error.empty() ? "" : ": " + error));
+    check(loadText("{\"schema\": 1, \"provider\": \"BF2Hub 1.0-beta\", \"services\": {\"*\": \"10.4.4.4\"}}", error, &path),
+          "provider \"BF2Hub 1.0-beta\"" + (error.empty() ? "" : ": " + error));
+    checkEqual(describe(), "online services: provider BF2Hub 1.0-beta, file " + path + "; retail names; other names containing gamespy"
+                           " or under dice.se resolve to 10.4.4.4 (services.*)", "the start-up line names the provider and the file");
+    check(loadText("{\"schema\": 1, \"provider\": \"\", \"services\": {\"*\": \"10.4.4.4\"}}", error, &path),
+          "an empty provider name" + (error.empty() ? "" : ": " + error));
+    checkEqual(describe(), "online services: file " + path + "; retail names; other names containing gamespy or under dice.se resolve to 10.4.4.4 (services.*)",
+               "an empty provider name counts as none");
+
+    std::puts("file: labels spelt exactly, precedence over \"*\" in any order, escapes");
+    check(loadText(providerText("\"BF2Web\": \"10.0.0.7\", \"stage-net\": \"10.0.0.8\", \"\\u0067pcm\": \"gpcm\\u002eexample.org\", \"*\": \"10.9.9.9\""), error),
+          "BF2Web, stage-net, gpcm spelt with \\u, then \"*\"" + (error.empty() ? "" : ": " + error));
+    std::string source;
+    checkEqual(redirectLookup("gpcm.gamespy.com", &source) + " " + source, "gpcm.example.org services.gpcm", "gpcm.gamespy.com");
+    checkEqual(redirectLookup("bf2web.GAMESPY.com", &source) + " " + source, "10.0.0.7 services.BF2Web", "bf2web.GAMESPY.com (names compared without case)");
+    checkEqual(redirectLookup("stage-net.gamespy.com", &source) + " " + source, "10.0.0.8 services.stage-net", "stage-net.gamespy.com");
+    checkEqual(redirectLookup("gpsp.gamespy.com", &source) + " " + source, "10.9.9.9 services.*", "gpsp.gamespy.com (no entry: \"*\")");
+    check(loadText(providerText("\"gpcm\": \"10.0.0.4\""), error), "a label entry alone" + (error.empty() ? "" : ": " + error));
+    checkEqual(redirectLookup("gpcm.gamespy.com"), "10.0.0.4", "gpcm.gamespy.com");
+    checkEqual(redirectLookup("gpsp.gamespy.com"), "", "gpsp.gamespy.com unchanged (no \"*\")");
+
+    std::puts("file: the restart arguments");
+    check(loadText(providerText("\"*\": \"10.5.5.5\""), error, &path), "a file in the temporary directory");
+    checkEqual(commandLineArguments(), " +onlineProviderConfig " + path, "a path without white space is not quoted");
+    checkEqual(parsedOptions(commandLineArguments()), "91=" + path, "the parser reads it back");
+    path = writeFile(providerText("\"*\": \"10.6.6.6\""), "with space");
+    error.clear();
+    check(loadConfigFile(path, error), "a file in a directory with a space: " + path + (error.empty() ? "" : ": " + error));
+    checkEqual(commandLineArguments(), " +onlineProviderConfig \"" + path + "\"", "a path with a space is quoted");
+    checkEqual(parsedOptions("+modPath mods/bf2 +multi 1 +restart 1" + commandLineArguments() + " +fullscreen 0"),
+               "91=" + path, "the parser reads it back from a restart command line");
+    checkEqual(describe(), "online services: file " + path + "; retail names; other names containing gamespy or under dice.se resolve to 10.6.6.6 (services.*)",
+               "the start-up line names the file");
+}
+
+// The "*" entry with an address: the values refused, the names matched, the restart arguments,
 // the start-up line, the SDK seam with and without the redirect installed, and the log.
 void scenarioRedirectNames()
 {
     using namespace onlineProvider;
     std::string error;
 
-    std::puts("redirect: values +gamespyRedirect refuses");
+    std::puts("redirect: values \"*\" refuses");
     const std::string tooLong = std::string(226, 'a') + ".test";     // 231 characters: no room for battlefield2.available.
     for (unsigned i = 0; i < kRefusedCount; ++i)
     {
-        error.clear();
-        check(!setRedirect(kRefusedValues[i], error) && !error.empty() && !hasRedirect(),
+        const bool refused = !loadText(providerText("\"*\": " + jsonString(kRefusedValues[i])), error);
+        check(refused && error.compare(0, 12, "services.*: ") == 0 && !hasRedirect(),
               std::string("refused \"") + kRefusedValues[i] + "\": " + error);
     }
-    error.clear();
-    check(!setRedirect(tooLong, error) && !error.empty(), "refused a 231-character domain: " + error.substr(error.size() > 20 ? error.size() - 20 : 0));
-    check(setRedirect(std::string(225, 'a') + ".test", error), "a 230-character domain is accepted");
+    check(!loadText(providerText("\"*\": \"" + tooLong + "\""), error) && !error.empty(),
+          "refused a 231-character domain: " + error.substr(error.size() > 20 ? error.size() - 20 : 0));
+    useServices("\"*\": \"" + std::string(225, 'a') + ".test\"", "a 230-character domain is accepted");
 
-    std::puts("redirect: +gamespyRedirect 10.1.2.3");
-    check(setRedirect("10.1.2.3", error), "+gamespyRedirect 10.1.2.3");
+    std::puts("redirect: \"*\": \"10.1.2.3\"");
+    const std::string path = useServices("\"*\": \"10.1.2.3\"", "services.* 10.1.2.3");
     check(hasRedirect(), "redirect in effect");
     for (int i = 0; i < kRetailNameCount; ++i)
     {
-        std::string option;
-        const std::string lookup = redirectLookup(kRetailNames[i], &option);
-        checkEqual(lookup + " " + option, "10.1.2.3 gamespyRedirect", kRetailNames[i]);
+        std::string source;
+        const std::string lookup = redirectLookup(kRetailNames[i], &source);
+        checkEqual(lookup + " " + source, "10.1.2.3 services.*", kRetailNames[i]);
     }
     checkEqual(redirectLookup("key.gamespy.com"), "10.1.2.3", "key.gamespy.com (no label, contains gamespy)");
     checkEqual(redirectLookup("BF2Web.GameSpy.com"), "10.1.2.3", "BF2Web.GameSpy.com (case ignored)");
@@ -1093,10 +1535,10 @@ void scenarioRedirectNames()
     checkEqual(redirectLookup("gamespy.example.test"), "10.1.2.3", "gamespy.example.test (contains gamespy)");
     checkEqual(redirectLookup("dice.se.example.test"), "", "dice.se.example.test (forwarded: not under dice.se)");
     checkEqual(redirectLookup("logos.example.test"), "", "logos.example.test (forwarded)");
-    checkEqual(commandLineArguments(), " +gamespyRedirect 10.1.2.3", "restart arguments");
+    checkEqual(commandLineArguments(), " +onlineProviderConfig " + path, "restart arguments");
     const std::string line = describe();
     std::printf("  %s\n", line.c_str());
-    checkEqual(line, "online services: retail names; other names containing gamespy or under dice.se resolve to 10.1.2.3 (+gamespyRedirect)",
+    checkEqual(line, "online services: file " + path + "; retail names; other names containing gamespy or under dice.se resolve to 10.1.2.3 (services.*)",
                "the start-up line");
     check(gsiRedirectHostname("gpcm.gamespy.com") != std::string("10.1.2.3"), "the SDK seam is unchanged before prepareGameSpySdk");
 
@@ -1115,22 +1557,21 @@ void scenarioRedirectNames()
     checkEqual(results[1], "logos.example.test", "logos.example.test looks up");
     checkEqual(results[2], "10.1.2.3", "eapusher.dice.se looks up");
     std::printf("  log:\n%s", log.c_str());
-    check(countOf(log, "redirecting battlefield2.ms14.gamespy.com to 10.1.2.3 (+gamespyRedirect)\n") == 1, "redirected name logged once");
+    check(countOf(log, "redirecting battlefield2.ms14.gamespy.com to 10.1.2.3 (services.*)\n") == 1, "redirected name logged once");
     check(countOf(log, "forwarding logos.example.test\n") == 1, "forwarded name logged once");
-    check(countOf(log, "redirecting eapusher.dice.se to 10.1.2.3 (+gamespyRedirect)\n") == 1, "dice.se name logged");
+    check(countOf(log, "redirecting eapusher.dice.se to 10.1.2.3 (services.*)\n") == 1, "dice.se name logged");
     check(GSIACHostname[0] == 0 && !SBOverrideMasterServer, "the SDK's host-name variables stay untouched");
     checkEqual(lookedUp(), "", "no resolver lookup for an address");
     checkEqual(addressOf("gpcm.gamespy.com"), "10.1.2.3", "gsiGetHostByName(gpcm.gamespy.com)");
     checkEqual(lookedUp(), "10.1.2.3", "the SDK looked up the address");
 }
 
-// +gamespyRedirect with a domain: each name is resolved, at every lookup, with its retail domain
+// The "*" entry with a domain: each name is resolved, at every lookup, with its retail domain
 // replaced. The mock answers *.target.test with g_targetAddress.
 void scenarioRedirectDomain()
 {
     using namespace onlineProvider;
-    std::string error;
-    check(setRedirect("provider.target.test", error), "+gamespyRedirect provider.target.test");
+    const std::string path = useServices("\"*\": \"provider.target.test\"", "services.* provider.target.test");
 
     std::puts("domain: the names looked up instead");
     const char* expected[] = {
@@ -1142,19 +1583,19 @@ void scenarioRedirectDomain()
     };
     for (int i = 0; i < kRetailNameCount; ++i)
     {
-        std::string option;
-        const std::string lookup = redirectLookup(kRetailNames[i], &option);
-        checkEqual(lookup + " " + option, std::string(expected[i]) + " gamespyRedirect", kRetailNames[i]);
+        std::string source;
+        const std::string lookup = redirectLookup(kRetailNames[i], &source);
+        checkEqual(lookup + " " + source, std::string(expected[i]) + " services.*", kRetailNames[i]);
     }
     checkEqual(redirectLookup("key.gamespy.com"), "key.provider.target.test", "key.gamespy.com");
     checkEqual(redirectLookup("BF2Web.GameSpy.COM"), "BF2Web.provider.target.test", "BF2Web.GameSpy.COM (the label keeps its case)");
     checkEqual(redirectLookup("gamespy.com"), "provider.target.test", "gamespy.com itself");
     checkEqual(redirectLookup("gamespy.example.test"), "", "gamespy.example.test (no retail domain to replace: unchanged)");
     checkEqual(redirectLookup("logos.example.test"), "", "logos.example.test (unchanged)");
-    checkEqual(commandLineArguments(), " +gamespyRedirect provider.target.test", "restart arguments");
+    checkEqual(commandLineArguments(), " +onlineProviderConfig " + path, "restart arguments");
     const std::string line = describe();
     std::printf("  %s\n", line.c_str());
-    check(line.find("resolve with their retail domain replaced by provider.target.test (+gamespyRedirect)") != std::string::npos,
+    check(line.find("resolve with their retail domain replaced by provider.target.test (services.*)") != std::string::npos,
           "the start-up line names the domain");
 
     std::puts("domain: resolved at every lookup, never at start-up");
@@ -1169,41 +1610,39 @@ void scenarioRedirectDomain()
     g_targetAddress = htonl(INADDR_LOOPBACK);
 
     std::puts("domain: a proxied name that does not resolve fails the lookup");
-    check(setRedirect("nowhere.invalid", error), "+gamespyRedirect nowhere.invalid (replaces the value)");
+    useServices("\"*\": \"nowhere.invalid\"", "services.* nowhere.invalid (another file replaces the first)");
     checkEqual(addressOf("gpsp.gamespy.com"), "(fails)", "gsiGetHostByName(gpsp.gamespy.com) fails");
     checkEqual(join(takeLookups()), "gpsp.nowhere.invalid", "only gpsp.nowhere.invalid was looked up");
 }
 
-// Every service with +gamespyRedirect 127.0.0.1 and the retail names: the mock resolves no name,
-// so every first packet or connection that arrives came through the redirect, and the web
-// requests keep the retail names in their Host headers.
+// Every service with "*" at 127.0.0.1 and the retail names: the mock resolves no name, so every
+// first packet or connection that arrives came through the redirect, and the web requests keep
+// the retail names in their Host headers.
 void scenarioRedirectServices()
 {
-    std::string error;
-    check(onlineProvider::setRedirect("127.0.0.1", error), "+gamespyRedirect 127.0.0.1");
+    useServices("\"*\": \"127.0.0.1\"", "services.* 127.0.0.1");
     ExpectedLookups e = formedLookups("gamespy.com");
     e.available = e.master = e.serverList = e.gpcm = e.gpsp = e.gameStats = e.natNeg = e.statsWeb = e.playerInfo = "127.0.0.1";
     scenarioServices(true, &e);
 }
 
-// Every service with +gamespyRedirect provider.target.test: each looks up its own name under that
-// domain, reaches loopback, and the web requests keep the retail Host headers.
+// Every service with "*" at provider.target.test: each looks up its own name under that domain,
+// reaches loopback, and the web requests keep the retail Host headers.
 void scenarioRedirectDomainServices()
 {
-    std::string error;
-    check(onlineProvider::setRedirect("provider.target.test", error), "+gamespyRedirect provider.target.test");
+    useServices("\"*\": \"provider.target.test\"", "services.* provider.target.test");
     ExpectedLookups e = formedLookups("provider.target.test");
     e.statsWebName = "BF2Web.gamespy.com";
     e.playerInfoName = "stage-net.gamespy.com";
     const std::string log = captureStderr([&]() { scenarioServices(true, &e); });
     std::printf("  log:\n%s", log.c_str());
-    check(countOf(log, "redirecting gpcm.gamespy.com to gpcm.provider.target.test (+gamespyRedirect)\n") == 1, "gpcm logged");
-    check(countOf(log, "redirecting BF2Web.gamespy.com to BF2Web.provider.target.test (+gamespyRedirect)\n") == 1, "BF2Web logged");
+    check(countOf(log, "redirecting gpcm.gamespy.com to gpcm.provider.target.test (services.*)\n") == 1, "gpcm logged");
+    check(countOf(log, "redirecting BF2Web.gamespy.com to BF2Web.provider.target.test (services.*)\n") == 1, "BF2Web logged");
 }
 
 // The request line and Host header of every stats web request the game makes (each persistence
 // class builds its URL from getGameSpyUrl() and sends it with HTTPRequest::get or post), of the
-// player info request, and of a forwarded request, with +gamespyRedirect 127.0.0.1.
+// player info request, and of a forwarded request, with "*" at 127.0.0.1.
 struct WebEndpoint
 {
     const char* path;      // after getGameSpyUrl()
@@ -1250,22 +1689,16 @@ void checkHead(const std::string& head, const std::string& method, const std::st
           what + ": one Host header, " + host);
 }
 
-// labels: +gamespyRedirectBF2Web, +gamespyRedirectstage-net and +gamespyRedirecteapusher 127.0.0.1,
-// with +gamespyRedirect at a domain whose names never resolve, so a request that reaches the
-// listener went through the label options.
+// labels: the entries BF2Web, stage-net and eapusher at 127.0.0.1, with "*" at a domain whose names
+// never resolve, so a request that reaches the listener went through the label entries.
 void scenarioRedirectWeb(bool labels = false)
 {
     using namespace onlineProvider;
-    std::string error;
     if (!labels)
-        check(setRedirect("127.0.0.1", error), "+gamespyRedirect 127.0.0.1");
+        useServices("\"*\": \"127.0.0.1\"", "services.* 127.0.0.1");
     else
-    {
-        check(setRedirect("fallback.invalid", error), "+gamespyRedirect fallback.invalid (its names never resolve)");
-        for (int l = 0; l < labelCount(); ++l)
-            if (label(l) == std::string("BF2Web") || label(l) == std::string("stage-net") || label(l) == std::string("eapusher"))
-                check(setLabelRedirect(l, "127.0.0.1", error), "+" + labelOption(l) + " 127.0.0.1");
-    }
+        useServices("\"*\": \"fallback.invalid\", \"BF2Web\": \"127.0.0.1\", \"stage-net\": \"127.0.0.1\", \"eapusher\": \"127.0.0.1\"",
+                    "services.* fallback.invalid (its names never resolve), BF2Web, stage-net and eapusher 127.0.0.1");
     prepareGameSpySdk();
     g_resolve = false;              // only the redirect's address can answer
     startListeners();
@@ -1363,99 +1796,91 @@ void scenarioRedirectWeb(bool labels = false)
     stopListeners();
 }
 
-// ---- +gamespyRedirect<label> ---------------------------------------------------------------------
+// ---- the label entries -----------------------------------------------------------------------------
 
 std::string labelAddress(int i)
 {
     return "10.0.0." + std::to_string(i + 1);
 }
 
-// Every label option with an address, refused values, precedence over +gamespyRedirect, the restart
-// arguments, the start-up line and the log.
+// Every label entry with an address, refused values, the restart arguments, the start-up line.
 void scenarioLabelNames()
 {
     using namespace onlineProvider;
     std::string error;
 
-    std::puts("labels: values every label option refuses");
+    std::puts("labels: values every label entry refuses");
     for (int l = 0; l < labelCount(); ++l)
     {
         unsigned refused = 0;
         std::string first;
+        const std::string prefix = std::string("services.") + label(l) + ": ";
         for (unsigned i = 0; i < kRefusedCount; ++i)
         {
-            error.clear();
-            if (!setLabelRedirect(l, kRefusedValues[i], error) && !error.empty())
+            if (!loadText(providerText(jsonString(label(l)) + ": " + jsonString(kRefusedValues[i])), error)
+                && error.compare(0, prefix.size(), prefix) == 0)
                 ++refused;
             if (i == 0)
                 first = error;
         }
         check(refused == kRefusedCount && !hasRedirect(),
-              "+" + labelOption(l) + " refuses all " + std::to_string(refused) + " (empty: " + first + ")");
+              std::string("services.") + label(l) + " refuses all " + std::to_string(refused) + " (empty: " + first + ")");
     }
-    check(!setLabelRedirect(labelCount(), "10.0.0.1", error) && !setLabelRedirect(-1, "10.0.0.1", error), "no label option out of range");
-    checkEqual(commandLineArguments(), "", "restart arguments after refused values");
+    checkEqual(commandLineArguments(), "", "restart arguments after refused files");
 
-    std::puts("labels: each option alone, without +gamespyRedirect");
+    std::puts("labels: every entry, without \"*\"");
+    std::string services;
     for (int l = 0; l < labelCount(); ++l)
-        check(setLabelRedirect(l, labelAddress(l), error), "+" + labelOption(l) + " " + labelAddress(l));
+        services += std::string(l ? ", " : "") + jsonString(label(l)) + ": " + jsonString(labelAddress(l));
+    const std::string path = useServices(services, "every label entry at its own address");
     for (int i = 0; i < kRetailNameCount; ++i)
     {
-        std::string option;
-        const std::string lookup = redirectLookup(kRetailNames[i], &option);
-        checkEqual(lookup + " " + option, labelAddress(i) + " " + labelOption(i), kRetailNames[i]);
+        std::string source;
+        const std::string lookup = redirectLookup(kRetailNames[i], &source);
+        checkEqual(lookup + " " + source, labelAddress(i) + " services." + label(i), kRetailNames[i]);
     }
-    checkEqual(redirectLookup("GPCM.GameSpy.com"), "10.0.0.4", "GPCM.GameSpy.com (case ignored)");
-    checkEqual(redirectLookup("key.gamespy.com"), "", "key.gamespy.com unchanged (no label option, no +gamespyRedirect)");
+    checkEqual(redirectLookup("GPCM.GameSpy.com"), "10.0.0.4", "GPCM.GameSpy.com (the name compared without case)");
+    checkEqual(redirectLookup("key.gamespy.com"), "", "key.gamespy.com unchanged (no label entry, no \"*\")");
     checkEqual(redirectLookup("peerchat.gamespy.com"), "", "peerchat.gamespy.com unchanged");
     checkEqual(redirectLookup("logos.example.test"), "", "logos.example.test unchanged");
-    checkEqual(commandLineArguments(),
-               " +gamespyRedirectavailable 10.0.0.1 +gamespyRedirectms14 10.0.0.2 +gamespyRedirectmaster 10.0.0.3"
-               " +gamespyRedirectgpcm 10.0.0.4 +gamespyRedirectgpsp 10.0.0.5 +gamespyRedirectgamestats 10.0.0.6"
-               " +gamespyRedirectBF2Web 10.0.0.7 +gamespyRedirectstage-net 10.0.0.8 +gamespyRedirecteapusher 10.0.0.9"
-               " +gamespyRedirectnatneg1 10.0.0.10 +gamespyRedirectnatneg2 10.0.0.11 +gamespyRedirectnatneg3 10.0.0.12",
-               "restart arguments");
+    checkEqual(commandLineArguments(), " +onlineProviderConfig " + path, "restart arguments: the file, not its entries");
     const std::string line = describe();
     std::printf("  %s\n", line.c_str());
     for (int l = 0; l < labelCount(); ++l)
-        check(line.find(std::string("; ") + label(l) + " names resolve as " + labelAddress(l) + " (+" + labelOption(l) + ")") != std::string::npos,
-              "the start-up line names +" + labelOption(l));
-
+        check(line.find(std::string("; ") + label(l) + " names resolve as " + labelAddress(l) + " (services." + label(l) + ")") != std::string::npos,
+              std::string("the start-up line names services.") + label(l));
 }
 
-// Some label options with +gamespyRedirect: precedence, the restart arguments, the start-up line,
-// the log, per-lookup resolution of a host-name target and a target that does not resolve.
+// Some label entries with "*": precedence (the "*" entry written last), the start-up line, the log,
+// per-lookup resolution of a host-name target and a target that does not resolve.
 void scenarioLabelFallback()
 {
     using namespace onlineProvider;
-    std::string error;
-    std::puts("labels: some options with +gamespyRedirect 10.9.9.9");
-    check(setRedirect("10.9.9.9", error), "+gamespyRedirect 10.9.9.9");
-    check(setLabelRedirect(3, "10.0.0.4", error), "+gamespyRedirectgpcm 10.0.0.4");
-    check(setLabelRedirect(6, "stats.target.test", error), "+gamespyRedirectBF2Web stats.target.test");
-    struct Case { const char* name; const char* lookup; const char* option; };
+    std::puts("labels: some entries with \"*\": \"10.9.9.9\"");
+    const std::string path = useServices("\"gpcm\": \"10.0.0.4\", \"BF2Web\": \"stats.target.test\", \"*\": \"10.9.9.9\"",
+                                         "gpcm 10.0.0.4, BF2Web stats.target.test, * 10.9.9.9");
+    struct Case { const char* name; const char* lookup; const char* source; };
     const Case cases[] = {
-        { "gpcm.gamespy.com", "10.0.0.4", "gamespyRedirectgpcm" },
-        { "BF2Web.gamespy.com", "stats.target.test", "gamespyRedirectBF2Web" },
-        { "stage-net.gamespy.com", "10.9.9.9", "gamespyRedirect" },
-        { "gpsp.gamespy.com", "10.9.9.9", "gamespyRedirect" },
-        { "eapusher.dice.se", "10.9.9.9", "gamespyRedirect" },
-        { "key.gamespy.com", "10.9.9.9", "gamespyRedirect" },
+        { "gpcm.gamespy.com", "10.0.0.4", "services.gpcm" },
+        { "BF2Web.gamespy.com", "stats.target.test", "services.BF2Web" },
+        { "stage-net.gamespy.com", "10.9.9.9", "services.*" },
+        { "gpsp.gamespy.com", "10.9.9.9", "services.*" },
+        { "eapusher.dice.se", "10.9.9.9", "services.*" },
+        { "key.gamespy.com", "10.9.9.9", "services.*" },
         { "logos.example.test", "", "" },
     };
     for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i)
     {
-        std::string option;
-        const std::string lookup = redirectLookup(cases[i].name, &option);
-        checkEqual(lookup + "|" + option, std::string(cases[i].lookup) + "|" + cases[i].option, cases[i].name);
+        std::string source;
+        const std::string lookup = redirectLookup(cases[i].name, &source);
+        checkEqual(lookup + "|" + source, std::string(cases[i].lookup) + "|" + cases[i].source, cases[i].name);
     }
-    checkEqual(commandLineArguments(), " +gamespyRedirect 10.9.9.9 +gamespyRedirectgpcm 10.0.0.4 +gamespyRedirectBF2Web stats.target.test",
-               "restart arguments");
+    checkEqual(commandLineArguments(), " +onlineProviderConfig " + path, "restart arguments");
     const std::string line = describe();
     std::printf("  %s\n", line.c_str());
-    checkEqual(line, "online services: retail names; gpcm names resolve as 10.0.0.4 (+gamespyRedirectgpcm); BF2Web names resolve as"
-                     " stats.target.test (+gamespyRedirectBF2Web); other names containing gamespy or under dice.se resolve to"
-                     " 10.9.9.9 (+gamespyRedirect)", "the start-up line");
+    checkEqual(line, "online services: file " + path + "; retail names; gpcm names resolve as 10.0.0.4 (services.gpcm); BF2Web names"
+                     " resolve as stats.target.test (services.BF2Web); other names containing gamespy or under dice.se resolve to"
+                     " 10.9.9.9 (services.*)", "the start-up line");
 
     std::puts("labels: the SDK seam");
     std::string results[3];
@@ -1472,9 +1897,9 @@ void scenarioLabelFallback()
     checkEqual(results[1], "stats.target.test", "BF2Web.gamespy.com looks up");
     checkEqual(results[2], "10.9.9.9", "gpsp.gamespy.com looks up");
     std::printf("  log:\n%s", log.c_str());
-    check(countOf(log, "redirecting gpcm.gamespy.com to 10.0.0.4 (+gamespyRedirectgpcm)\n") == 1, "label option logged once");
-    check(countOf(log, "redirecting BF2Web.gamespy.com to stats.target.test (+gamespyRedirectBF2Web)\n") == 1, "host-name target logged once");
-    check(countOf(log, "redirecting gpsp.gamespy.com to 10.9.9.9 (+gamespyRedirect)\n") == 1, "fallback logged");
+    check(countOf(log, "redirecting gpcm.gamespy.com to 10.0.0.4 (services.gpcm)\n") == 1, "label entry logged once");
+    check(countOf(log, "redirecting BF2Web.gamespy.com to stats.target.test (services.BF2Web)\n") == 1, "host-name target logged once");
+    check(countOf(log, "redirecting gpsp.gamespy.com to 10.9.9.9 (services.*)\n") == 1, "fallback logged");
     checkEqual(lookedUp(), "", "the seam itself resolves nothing");
 
     std::puts("labels: a host-name target is resolved at every lookup");
@@ -1486,22 +1911,21 @@ void scenarioLabelFallback()
     g_targetAddress = htonl(INADDR_LOOPBACK);
 
     std::puts("labels: a host-name target that does not resolve fails the lookup");
-    check(setLabelRedirect(4, "missing.invalid", error), "+gamespyRedirectgpsp missing.invalid");
+    useServices("\"gpcm\": \"10.0.0.4\", \"gpsp\": \"missing.invalid\", \"*\": \"10.9.9.9\"", "another file with gpsp missing.invalid");
     checkEqual(addressOf("gpsp.gamespy.com"), "(fails)", "gsiGetHostByName(gpsp.gamespy.com) fails");
     checkEqual(join(takeLookups()), "missing.invalid", "neither gpsp.gamespy.com nor the fallback was tried");
 }
 
-// Every label option with its own host-name target and +gamespyRedirect at a domain whose names
-// never resolve: every packet or connection that arrives went to its label's target, which the
-// SDK looked up itself.
+// Every label entry with its own host-name target and "*" at a domain whose names never resolve:
+// every packet or connection that arrives went to its label's target, which the SDK looked up
+// itself.
 void scenarioLabelServices()
 {
     using namespace onlineProvider;
-    std::string error;
-    check(setRedirect("fallback.invalid", error), "+gamespyRedirect fallback.invalid (its names never resolve)");
+    std::string services = "\"*\": \"fallback.invalid\"";
     for (int l = 0; l < labelCount(); ++l)
-        check(setLabelRedirect(l, std::string(label(l)) + ".target.test", error),
-              "+" + labelOption(l) + " " + label(l) + ".target.test");
+        services += ", " + jsonString(label(l)) + ": " + jsonString(std::string(label(l)) + ".target.test");
+    useServices(services, "services.* fallback.invalid (its names never resolve), every label at <label>.target.test");
     ExpectedLookups e = formedLookups("gamespy.com");
     e.available  = "available.target.test";
     e.master     = "master.target.test";
@@ -1524,16 +1948,20 @@ void scenarioLabelServices()
     {
         if (i == 8)
             continue;   // eapusher.dice.se: no service above
-        const std::string text = std::string("redirecting ") + kRetailNames[i] + " to " + label(i) + ".target.test (+" + labelOption(i) + ")\n";
+        const std::string text = std::string("redirecting ") + kRetailNames[i] + " to " + label(i) + ".target.test (services." + label(i) + ")\n";
         check(countOf(log, text) == 1, "logged once: " + text.substr(0, text.size() - 1));
     }
-    check(log.find("fallback.invalid") == std::string::npos, "no name went to +gamespyRedirect");
+    check(log.find("fallback.invalid") == std::string::npos, "no name went to \"*\"");
 }
 
 int runScenario(const std::string& name)
 {
     if (name == "names")
         scenarioNames();
+    else if (name == "file")
+        scenarioFile();
+    else if (name == "setup-files")
+        scenarioSetupFiles();
     else if (name == "retail-unresolved")
         scenarioServices(false);
     else if (name == "retail-resolved")
@@ -1571,15 +1999,48 @@ int runScenario(const std::string& name)
     return g_failures ? 1 : 0;
 }
 
+// Removes path and everything below it.
+void removeTree(const std::string& path)
+{
+    if (DIR* dir = opendir(path.c_str()))
+    {
+        while (struct dirent* entry = readdir(dir))
+        {
+            const std::string name = entry->d_name;
+            if (name == "." || name == "..")
+                continue;
+            const std::string child = path + "/" + name;
+            struct stat info;
+            if (lstat(child.c_str(), &info) == 0 && S_ISDIR(info.st_mode))
+                removeTree(child);
+            else
+                unlink(child.c_str());
+        }
+        closedir(dir);
+    }
+    rmdir(path.c_str());
+}
+
 } // namespace
 
 int main(int argc, char** argv)
 {
     setvbuf(stdout, 0, _IOLBF, 0);
+    char dir[] = "/tmp/online_provider_filesXXXXXX";
+    if (!mkdtemp(dir))
+    {
+        std::printf("cannot create a temporary directory: %s\n", std::strerror(errno));
+        return 1;
+    }
+    g_fileDir = dir;
     if (argc > 1)
-        return runScenario(argv[1]);
+    {
+        const int result = runScenario(argv[1]);
+        removeTree(g_fileDir);
+        return result;
+    }
 
-    const char* scenarios[] = { "names", "retail-unresolved", "retail-resolved", "redirect-names", "redirect-domain",
+    const char* scenarios[] = { "names", "file", "setup-files", "retail-unresolved", "retail-resolved", "redirect-names", "redirect-domain",
                                 "redirect-services", "redirect-domain-services", "redirect-web", "label-names",
                                 "label-fallback", "label-services", "label-web", "silent-host", "refused", "silent-tcp" };
     int failed = 0;
@@ -1597,6 +2058,13 @@ int main(int argc, char** argv)
             std::printf("== %s FAILED\n", scenarios[i]);
             ++failed;
         }
+    }
+    removeTree(g_fileDir);
+    struct stat info;
+    if (stat(g_fileDir.c_str(), &info) == 0)
+    {
+        std::printf("the temporary directory %s was not removed\n", g_fileDir.c_str());
+        ++failed;
     }
     std::printf("%s\n", failed ? "ONLINE-PROVIDER FAILED" : "ONLINE-PROVIDER OK");
     return failed ? 1 : 0;

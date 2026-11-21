@@ -3,8 +3,9 @@
 // and persistence code, plus the fixture's backend info, search and name validation answers, built on
 // request as bf2_swiff_leaderboard_check (POSIX). Starts the local stats fixture
 // (stats_fixture/bf2_stats_fixture.py) on 127.0.0.1:18124 and stops it before returning.
-// The stats URLs are retail; +gamespyRedirect test.openbf2 resolves BF2Web.gamespy.com as
-// BF2Web.test.openbf2. gethostbyname and getaddrinfo below answer 127.0.0.1 for *.test.openbf2 and
+// The stats URLs are retail; a provider file whose "*" entry is test.openbf2 (the text of an
+// +onlineProviderConfig file, given to onlineProvider::loadConfigText) resolves BF2Web.gamespy.com
+// as BF2Web.test.openbf2. gethostbyname and getaddrinfo below answer 127.0.0.1 for *.test.openbf2 and
 // refuse every other name; connect sends 127.0.0.1:80 to the fixture's port. No name leaves the process.
 // Injected cache objects avoid unrelated singleton/script paths; the collaborators the checks do
 // not reach are scaffolding stubs that end the process if called.
@@ -295,9 +296,10 @@ int main(int argc, char** argv)
         return 2;
     }
     std::string error;
-    if (!onlineProvider::setRedirect(kDomain, error))
+    const std::string provider = std::string("{\"schema\": 1, \"services\": {\"*\": \"") + kDomain + "\"}}";
+    if (!onlineProvider::loadConfigText(provider, "(provider file of this check)", error))
     {
-        std::printf("FAIL: +gamespyRedirect %s refused: %s\n", kDomain, error.c_str());
+        std::printf("FAIL: the provider file with \"*\": \"%s\" refused: %s\n", kDomain, error.c_str());
         return 1;
     }
     onlineProvider::prepareGameSpySdk();
