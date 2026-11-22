@@ -442,6 +442,22 @@ int OldConsole::handleCommand(const std::string& cmd, std::string& result, Acces
 
         const bool skipping = !stack.empty() && !stack.back().executing;
 
+        // As retail: operands go through getArgs, so quotes are stripped and every operand is
+        // expanded, and a condition that fails to evaluate reports its error and opens no block.
+        auto evaluateCondition = [this, &kin](bool& cond, std::string& error) {
+            std::string operands[13], raw[13];
+            const int expandFrom = (m_currentLevel && m_currentLevel->m_unknown18) ? 11 : 1;
+            const int count = getArgs(kin, operands, raw, 13, error, expandFrom - 1);
+            if (count < 0)
+                return false;
+            if (count == 0 || count > 3)
+            {
+                error = "Error: Syntax error in expression!";
+                return false;
+            }
+            return calcBooleanExpr(operands[0], operands[1], operands[2], cond, error);
+        };
+
         if (compareIgnoreCase(kw, "if") == 0)
         {
             if (skipping)
@@ -449,12 +465,13 @@ int OldConsole::handleCommand(const std::string& cmd, std::string& result, Acces
                 ++stack.back().skipNesting;              // nested if in a dead branch: count only
                 return 1;
             }
-            std::string lhs, op, rhs, value;
-            kin >> lhs; kin >> op; kin >> rhs;
-            if (exchangeVariable(lhs, value) || exchangeConstant(lhs, value)) lhs = value;
-            if (exchangeVariable(rhs, value) || exchangeConstant(rhs, value)) rhs = value;
+            bool cond = false;
             std::string error;
-            const bool cond = console_expr(lhs, op, rhs, error);
+            if (!evaluateCondition(cond, error))
+            {
+                result = error;
+                return 2;
+            }
             BranchState next;
             next.executing = cond;
             next.branchTaken = cond;
@@ -467,12 +484,13 @@ int OldConsole::handleCommand(const std::string& cmd, std::string& result, Acces
             if (skipping && stack.back().skipNesting > 0) return 1;
             if (stack.empty()) { result = "Can not have an \"elseIf\" without an \"if\"!"; return 2; }
             if (stack.back().branchTaken) { stack.back().executing = false; return 1; }
-            std::string lhs, op, rhs, value;
-            kin >> lhs; kin >> op; kin >> rhs;
-            if (exchangeVariable(lhs, value) || exchangeConstant(lhs, value)) lhs = value;
-            if (exchangeVariable(rhs, value) || exchangeConstant(rhs, value)) rhs = value;
+            bool cond = false;
             std::string error;
-            const bool cond = console_expr(lhs, op, rhs, error);
+            if (!evaluateCondition(cond, error))
+            {
+                result = error;
+                return 2;
+            }
             stack.back().executing = cond;
             stack.back().branchTaken = cond;
             return 1;
