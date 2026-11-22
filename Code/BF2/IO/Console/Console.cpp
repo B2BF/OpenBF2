@@ -366,13 +366,28 @@ int OldConsole::handleCommand(const std::string& cmd, std::string& result, Acces
     }
 
     // read: the command is searched for '>' — output redirection.
+    // Only the first '>' is considered, and only when it starts the line or follows whitespace, so
+    // "->" is never a redirect. ">>" appends. The filename length is the end index, not end - start,
+    // as shipped; the substring clamps at the end of the line.
     std::string line = cmd;
-    const std::string::size_type redirect = line.find('>');
+    std::string::size_type redirect = line.find('>');
+    if (redirect != std::string::npos && redirect != 0 && !std::isspace(line[redirect - 1]))
+        redirect = std::string::npos;
     if (redirect != std::string::npos)
     {
-        // [CHOSEN] the split. The binary parses a filename and an append flag into
-        // m_outputRedirectFile / m_outputRedirectAppend; the exact tokenisation was not read.
-        m_outputRedirectFile = line.substr(redirect + 1);
+        m_outputRedirectAppend = false;
+        std::string::size_type start = redirect + 1;
+        if (start < line.size() && line[start] == '>')
+        {
+            m_outputRedirectAppend = true;
+            ++start;
+        }
+        while (start < line.size() && (line[start] == ' ' || line[start] == '\t'))
+            ++start;
+        std::string::size_type end = start + 1;
+        while (end < line.size() && line[end] != ' ' && line[end] != '\t')
+            ++end;
+        m_outputRedirectFile = line.substr(start, end);
         line = line.substr(0, redirect);
     }
 
@@ -387,6 +402,10 @@ int OldConsole::handleCommand(const std::string& cmd, std::string& result, Acces
 
     // [CHOSEN] `rem` handling here. The real function has a full keyword table.
     if (line.find("rem ", 0) == 0 || line == "rem")
+        return 1;
+
+    // After "return" every remaining line of the script is accepted unexecuted, block keywords included.
+    if (m_currentLevel && m_currentLevel->m_returned)
         return 1;
 
     // Handles conditional branches and script execution. Skipped branches only process nesting keywords.
@@ -540,6 +559,18 @@ int OldConsole::handleCommand(const std::string& cmd, std::string& result, Acces
         {
             result = "Can not have a \"endNoExecution\" without a \"beginNoExecution\"!";
             return 2;
+        }
+
+        // return ends the current script; the top level has no script to end.
+        if (compareIgnoreCase(kw, "return") == 0)
+        {
+            if (m_depth == 0)
+            {
+                result = "\"return\" not allowed on the highest level!";
+                return 2;
+            }
+            m_currentLevel->m_returned = true;
+            return 1;
         }
 
         // quit and exit invoke the optional exit callback, then report the same message unconditionally.
@@ -703,11 +734,29 @@ int OldConsole::handleCommand(const std::string& cmd, std::string& result, Acces
                 std::string rawArgs[12];
                 const int expandFrom = (m_currentLevel && m_currentLevel->m_unknown18) ? 11 : 1;
                 std::string argError;
-                const int argc = getArgs(in, args, rawArgs, 12, argError, expandFrom - 1);
+                int argc = getArgs(in, args, rawArgs, 12, argError, expandFrom - 1);
                 if (argc < 0)
                 {
                     result = argError;
                     return 0;
+                }
+
+                // "-> v_name" captures the method's result into a variable and is not passed on.
+                std::string captureVariable;
+                for (int i = 0; i < argc; ++i)
+                {
+                    if (compareIgnoreCase(rawArgs[i].c_str(), "->") != 0)
+                        continue;
+                    if (argc < i + 2) { result = "A variable is required after \"->\"!"; return 2; }
+                    if (argc > i + 3) { result = "There can only be one variable after \"->\"!"; return 2; }
+                    if (compareIgnoreCase(rawArgs[i + 1].c_str(), "v_", 2) != 0)
+                    {
+                        result = "The variable after \"->\" must have a name that begins with \"v_\"!";
+                        return 2;
+                    }
+                    captureVariable = rawArgs[i + 1];
+                    argc = i;
+                    break;
                 }
 
                 if (!binding->isActive())                          // vtbl +0x30
@@ -759,6 +808,8 @@ int OldConsole::handleCommand(const std::string& cmd, std::string& result, Acces
                 g_executingConsole = this;
 
                 result = binding->execute(args, argc);             // vtbl +0x58, returns by value
+                if (!captureVariable.empty() && !setVariable(captureVariable, result))
+                    addVariable(captureVariable, result);
 
                 // Status 0 exposes the binding's result to output or redirection; status 1 would suppress it.
                 // An empty result remains silent through output().
@@ -820,7 +871,7 @@ void OldConsole::Level::reset()
     m_ifOpen      = false;
     m_elseSeen    = false;
 
-    m_unknown40 = false;
+    m_returned = false;
 }
 
 // Constructs the console at full access with empty global scope and enabled echo/error output.
