@@ -582,6 +582,8 @@ if errorlevel 1 set /a RC+=1
 @rem PythonHost.cpp needs the CPython 2.3.4 headers (%PYINC%, now set at the top of this file).
 cl %FLAGS% %PYINC% "%~dp0..\BF2\Game\Python\PythonHost.cpp"
 if errorlevel 1 set /a RC+=1
+cl %FLAGS% %PYINC% "%~dp0..\BF2\Game\Python\PythonHostConsole.cpp"
+if errorlevel 1 set /a RC+=1
 @rem NetClient.cpp, GameClient.cpp (2026-09-14) and CdKeyStore.cpp (the CD-key store handleChallenge
 @rem reads, 2026-09-14) are CLIENT-ONLY bodies, whole-file #if !DEDICATED: under /DDEDICATED=1 each
 @rem compiles to an empty translation unit, and that is what these rows prove - the guard holds and

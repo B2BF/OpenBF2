@@ -819,6 +819,37 @@ void PythonHost::handleEvent(ScriptEvent eventId, PyObject* args)
     }
 }
 
+// The `pythonHost.sendCommand` console method: fires script event 33 (ConsoleSendCommand) with
+// (command, (args...)). The argument tuple ends at the last non-empty argument; empty ones before
+// it stay as ''. No initialized check, unlike buildArgs. Always returns true.
+bool PythonHost::consoleSendCommand(std::string command, std::string a1, std::string a2,
+                                    std::string a3, std::string a4, std::string a5,
+                                    std::string a6, std::string a7, std::string a8)
+{
+    const std::string* const args[8] = { &a1, &a2, &a3, &a4, &a5, &a6, &a7, &a8 };
+
+    PyObject* const event = PyTuple_New(2);
+    PyTuple_SetItem(event, 0, PyString_FromString(command.c_str()));        // steals
+
+    int count = 0;
+    for (int i = 7; i >= 0; --i)
+    {
+        if (!args[i]->empty())
+        {
+            count = i + 1;
+            break;
+        }
+    }
+    PyObject* const commandArgs = PyTuple_New(count);
+    for (int i = 0; i < count; ++i)
+        PyTuple_SetItem(commandArgs, i, PyString_FromString(args[i]->c_str()));
+    PyTuple_SetItem(event, 1, commandArgs);
+
+    handleEvent(static_cast<ScriptEvent>(33), event);
+    Py_XDECREF(event);
+    return true;
+}
+
 // Invalidates the Python player wrapper after native lookup removal but before
 // deletion. Allocates arguments even before initialization and skips a missing
 // converter. The original successful call result is deliberately not released.
