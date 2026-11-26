@@ -260,8 +260,8 @@ public:
         bool m_ifOpen;
         bool m_elseSeen;
 
-        // +0x40. Zeroed by reset() as a byte. [UNRESOLVED] role.
-        bool m_unknown40;
+        // +0x40. Set by "return"; handleCommand then skips the rest of this level's script.
+        bool m_returned;
     };
 
 private:
