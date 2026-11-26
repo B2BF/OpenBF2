@@ -17,6 +17,7 @@ std::list<ConsoleObject*>& gameConsoleObjects();            // Game/Main/GameCon
 std::list<ConsoleObject*>& openBf2ConsoleObjects();         // Game/Main/OpenBF2Console.cpp [CHOSEN, not recovered]
 #endif
 std::list<ConsoleObject*>& serverSettingsConsoleObjects();  // Game/GameServer/ServerSettingsConsole.cpp
+std::list<ConsoleObject*>& pythonHostConsoleObjects();      // Game/Python/PythonHostConsole.cpp
 std::list<ConsoleObject*>& mapListConsoleObjects();         // Game/MapListConsole.cpp
 std::list<ConsoleObject*>& gameLogicConsoleObjects();       // Game/GameLogic/GameLogicConsole.cpp
 std::list<ConsoleObject*>& combatAreaConsoleObjects();      // Game/GameLogic/CombatAreaConsole.cpp
@@ -973,6 +974,8 @@ bool ModuleGame::init()
     // 0x8B1704C is the hudInformationLayer TU's list (map/sv/python/renderer/SquadManager
     // defaults); this tree's recovered sv bindings live in Game/GameServer/ServerSettingsConsole.cpp.
     consoleObjects()->registerConsoleObjects(serverSettingsConsoleObjects());
+    // pythonHost.sendCommand, which content scripts use to hand commands to Python.
+    consoleObjects()->registerConsoleObjects(pythonHostConsoleObjects());
     // Map-list bindings execute maplist.con commands.
     consoleObjects()->registerConsoleObjects(mapListConsoleObjects());
     // the `GameLogic` object - and it is load-bearing, not cosmetic: `gameLogic.setKit` is
@@ -1111,6 +1114,7 @@ bool ModuleGame::close()
     eventManager->unregisterEventHandler((EventCategory)10, this);
     consoleObjects()->unregisterConsoleObjects(listAt(0x8B1704C));
     consoleObjects()->unregisterConsoleObjects(serverSettingsConsoleObjects());
+    consoleObjects()->unregisterConsoleObjects(pythonHostConsoleObjects());
     consoleObjects()->unregisterConsoleObjects(mapListConsoleObjects());
     consoleObjects()->unregisterConsoleObjects(gameLogicConsoleObjects());
     consoleObjects()->unregisterConsoleObjects(combatAreaConsoleObjects());
